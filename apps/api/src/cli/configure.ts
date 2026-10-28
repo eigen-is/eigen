@@ -56,7 +56,7 @@ export const CONFIGURE_OPTIONS = {
     'relay-user': { type: 'string' },
     'relay-password-env': { type: 'string' },
     yes: { type: 'boolean' },
-    // The update step's: only adds the keys the env file lacks, with their defaults; no existing line changes.
+    // For the update step: it only adds the keys the env file lacks, with their defaults, and changes no line.
     backfill: { type: 'boolean' },
 } as const;
 export const CONFIGURE_USAGE = `Usage: ./eigen setup [flags]
@@ -77,130 +77,6 @@ in brackets; - clears an optional answer; a choice is answered with its number.
   --relay-password-env <VAR>   Read the relay password from this environment variable
   --yes                        Keep the current or default answer for every flag not given
   --help                       Show this help`;
-
-const NO_CONTROL = /^\P{Cc}*$/u;
-
-function cleanDomain(value: string): string {
-    return value
-        .replace(/^https?:\/\//, '')
-        .replace(/\/.*$/, '')
-        .toLowerCase();
-}
-
-function isPort(value: string): boolean {
-    return /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
-}
-
-function isDottedDomain(value: string): boolean {
-    return /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(cleanDomain(value));
-}
-
-function validateDomain(value: string): string | undefined {
-    if (cleanDomain(value) !== 'localhost' && !isDottedDomain(value)) {
-        return 'Enter a web address, like eigen.example.com, without https:// or a path.';
-    }
-}
-
-// User addresses need a dot in their domain, so a mail domain cannot be localhost.
-function validateMailDomain(value: string): string | undefined {
-    if (!isDottedDomain(value)) {
-        return 'Enter a mail domain with a dot, like example.com. To try Eigen locally, use eigen.localhost.';
-    }
-}
-
-function validateEmail(value: string): string | undefined {
-    if (!validateEmailAddress(value) || !NO_CONTROL.test(value))
-        return 'Enter an email address like admin@example.com.';
-}
-
-function validateText(value: string): string | undefined {
-    if (!NO_CONTROL.test(value)) return 'Remove the control characters from this answer.';
-}
-
-function validateAddress(value: string): string | undefined {
-    const [host = '', port = '', extra] = value.split(':');
-    const octets = host.split('.');
-    const validHost = octets.length === 4 && octets.every((octet) => /^\d{1,3}$/.test(octet) && +octet < 256);
-    if (!validHost || !isPort(port) || extra !== undefined)
-        return 'Enter an IPv4 address and port, like 127.0.0.1:8080.';
-}
-
-function validateRelay(value: string): string | undefined {
-    if (value === '') return;
-    const [host = '', port = String(DEFAULT_RELAY_PORT), extra] = value.split(':');
-    if (!/^[a-z0-9][a-z0-9.-]*$/i.test(host) || !isPort(port) || extra !== undefined) {
-        return 'Enter the relay as host:port, like smtp-relay.brevo.com:587.';
-    }
-}
-
-// The server config that setup wrote, read straight from its file. The server-config module would open its store.
-const SERVER_CONFIG = join(DATA, SERVER_DIR, SERVER_FILES.config);
-
-// Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the
-// API's boot.
-function readSetMailDomain(): string | undefined {
-    try {
-        return JSON.parse(readFileSync(SERVER_CONFIG, 'utf8')).mailDomain || undefined;
-    } catch {
-        return undefined;
-    }
-}
-
-function cidrRange(cidr: string): [number, number] {
-    const [ip = '', prefix = '32'] = cidr.split('/');
-    const start = ip.split('.').reduce((sum, octet) => sum * 256 + Number(octet), 0);
-    return [start, start + 2 ** (32 - Number(prefix)) - 1];
-}
-
-// A rerun reuses the live network's subnet, or the running containers are orphaned. Undefined when all are taken.
-export function chooseSubnet(networks: DockerNetwork[], project: string): string | undefined {
-    const live = networks.find(
-        (network) => network.Name === `${project}_eigen` && network.Labels?.['com.docker.compose.project'] === project,
-    );
-    const liveSubnet = live?.IPAM.Config?.[0]?.Subnet;
-    if (liveSubnet) return liveSubnet;
-    const occupied = networks
-        .flatMap((network) => network.IPAM.Config ?? [])
-        .flatMap((config) => (config.Subnet && /^[\d.]+\/\d+$/.test(config.Subnet) ? [cidrRange(config.Subnet)] : []));
-    return SUBNET_CANDIDATES.find((candidate) => {
-        const [start, end] = cidrRange(candidate);
-        return !occupied.some(([takenStart, takenEnd]) => start <= takenEnd && takenStart <= end);
-    });
-}
-
-export function configureEntries(existing: Map<string, string>, answers: ConfigureAnswers): Map<string, string> {
-    const entries = new Map(existing);
-    const [staticHost = '', staticPort = ''] = answers.staticAddress.split(':');
-    entries.set('DOMAIN', answers.domain);
-    entries.set('MAIL_DOMAIN', answers.mailDomain);
-    entries.set('ACME_EMAIL', answers.contactEmail);
-    entries.set('COMPOSE_PROFILES', `${answers.behindProxy ? 'static' : 'edge'}${answers.mail ? ',mail' : ''}`);
-    entries.set('MAIL_ENABLED', answers.mail ? '1' : '0');
-    entries.set('EIGEN_STATIC_HOST', staticHost);
-    entries.set('EIGEN_STATIC_PORT', staticPort);
-    // Compose has no default for either, whether or not the mail profile runs unbound: this is their one default.
-    const subnet = answers.subnet ?? DEFAULT_SUBNET;
-    entries.set('EIGEN_SUBNET', subnet);
-    if (!entries.has('EIGEN_UNBOUND_IP')) entries.set('EIGEN_UNBOUND_IP', subnet.replace(/\.0\/\d+$/, '.254'));
-
-    // Postfix relays through these with hosted mail, the API without it.
-    const relay = answers.relay ?? { host: '', port: '', user: '', password: '' };
-    for (const [key, value] of [
-        ['SMTP_RELAY_HOST', relay.host],
-        ['SMTP_RELAY_PORT', relay.port],
-        ['SMTP_RELAY_USER', relay.user],
-        ['SMTP_RELAY_PASSWORD', relay.password],
-    ] as const) {
-        if (value) entries.set(key, value);
-        else entries.delete(key);
-    }
-
-    entries.set('API_URL', `https://${answers.domain}`);
-    for (const [key, value] of Object.entries(APP_URLS)) {
-        if (!entries.has(key)) entries.set(key, value);
-    }
-    return entries;
-}
 
 export async function configure(
     flags: ReturnType<typeof parseArgs<{ options: typeof CONFIGURE_OPTIONS }>>['values'],
@@ -493,4 +369,128 @@ export async function configure(
         );
     }
     ui.outro('Configuration saved.');
+}
+
+const NO_CONTROL = /^\P{Cc}*$/u;
+
+function cleanDomain(value: string): string {
+    return value
+        .replace(/^https?:\/\//, '')
+        .replace(/\/.*$/, '')
+        .toLowerCase();
+}
+
+function isPort(value: string): boolean {
+    return /^\d{1,5}$/.test(value) && +value > 0 && +value < 65536;
+}
+
+function isDottedDomain(value: string): boolean {
+    return /^(?!-)[a-z0-9-]{1,63}(\.[a-z0-9-]{1,63})+$/.test(cleanDomain(value));
+}
+
+function validateDomain(value: string): string | undefined {
+    if (cleanDomain(value) !== 'localhost' && !isDottedDomain(value)) {
+        return 'Enter a web address, like eigen.example.com, without https:// or a path.';
+    }
+}
+
+// User addresses need a dot in their domain, so a mail domain cannot be localhost.
+function validateMailDomain(value: string): string | undefined {
+    if (!isDottedDomain(value)) {
+        return 'Enter a mail domain with a dot, like example.com. To try Eigen locally, use eigen.localhost.';
+    }
+}
+
+function validateEmail(value: string): string | undefined {
+    if (!validateEmailAddress(value) || !NO_CONTROL.test(value))
+        return 'Enter an email address like admin@example.com.';
+}
+
+function validateText(value: string): string | undefined {
+    if (!NO_CONTROL.test(value)) return 'Remove the control characters from this answer.';
+}
+
+function validateAddress(value: string): string | undefined {
+    const [host = '', port = '', extra] = value.split(':');
+    const octets = host.split('.');
+    const validHost = octets.length === 4 && octets.every((octet) => /^\d{1,3}$/.test(octet) && +octet < 256);
+    if (!validHost || !isPort(port) || extra !== undefined)
+        return 'Enter an IPv4 address and port, like 127.0.0.1:8080.';
+}
+
+function validateRelay(value: string): string | undefined {
+    if (value === '') return;
+    const [host = '', port = String(DEFAULT_RELAY_PORT), extra] = value.split(':');
+    if (!/^[a-z0-9][a-z0-9.-]*$/i.test(host) || !isPort(port) || extra !== undefined) {
+        return 'Enter the relay as host:port, like smtp-relay.brevo.com:587.';
+    }
+}
+
+// The server config that setup wrote, read straight from its file. The server-config module would open its store.
+const SERVER_CONFIG = join(DATA, SERVER_DIR, SERVER_FILES.config);
+
+// Setup records the domain every account's address was made on; an unreadable data folder leaves the check to the
+// API's boot.
+function readSetMailDomain(): string | undefined {
+    try {
+        return JSON.parse(readFileSync(SERVER_CONFIG, 'utf8')).mailDomain || undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+function cidrRange(cidr: string): [number, number] {
+    const [ip = '', prefix = '32'] = cidr.split('/');
+    const start = ip.split('.').reduce((sum, octet) => sum * 256 + Number(octet), 0);
+    return [start, start + 2 ** (32 - Number(prefix)) - 1];
+}
+
+// A rerun reuses the live network's subnet, or the running containers are orphaned. Undefined when all are taken.
+export function chooseSubnet(networks: DockerNetwork[], project: string): string | undefined {
+    const live = networks.find(
+        (network) => network.Name === `${project}_eigen` && network.Labels?.['com.docker.compose.project'] === project,
+    );
+    const liveSubnet = live?.IPAM.Config?.[0]?.Subnet;
+    if (liveSubnet) return liveSubnet;
+    const occupied = networks
+        .flatMap((network) => network.IPAM.Config ?? [])
+        .flatMap((config) => (config.Subnet && /^[\d.]+\/\d+$/.test(config.Subnet) ? [cidrRange(config.Subnet)] : []));
+    return SUBNET_CANDIDATES.find((candidate) => {
+        const [start, end] = cidrRange(candidate);
+        return !occupied.some(([takenStart, takenEnd]) => start <= takenEnd && takenStart <= end);
+    });
+}
+
+export function configureEntries(existing: Map<string, string>, answers: ConfigureAnswers): Map<string, string> {
+    const entries = new Map(existing);
+    const [staticHost = '', staticPort = ''] = answers.staticAddress.split(':');
+    entries.set('DOMAIN', answers.domain);
+    entries.set('MAIL_DOMAIN', answers.mailDomain);
+    entries.set('ACME_EMAIL', answers.contactEmail);
+    entries.set('COMPOSE_PROFILES', `${answers.behindProxy ? 'static' : 'edge'}${answers.mail ? ',mail' : ''}`);
+    entries.set('MAIL_ENABLED', answers.mail ? '1' : '0');
+    entries.set('EIGEN_STATIC_HOST', staticHost);
+    entries.set('EIGEN_STATIC_PORT', staticPort);
+    // Compose has no default for either, whether or not the mail profile runs unbound: this is their one default.
+    const subnet = answers.subnet ?? DEFAULT_SUBNET;
+    entries.set('EIGEN_SUBNET', subnet);
+    if (!entries.has('EIGEN_UNBOUND_IP')) entries.set('EIGEN_UNBOUND_IP', subnet.replace(/\.0\/\d+$/, '.254'));
+
+    // Postfix relays through these with hosted mail, the API without it.
+    const relay = answers.relay ?? { host: '', port: '', user: '', password: '' };
+    for (const [key, value] of [
+        ['SMTP_RELAY_HOST', relay.host],
+        ['SMTP_RELAY_PORT', relay.port],
+        ['SMTP_RELAY_USER', relay.user],
+        ['SMTP_RELAY_PASSWORD', relay.password],
+    ] as const) {
+        if (value) entries.set(key, value);
+        else entries.delete(key);
+    }
+
+    entries.set('API_URL', `https://${answers.domain}`);
+    for (const [key, value] of Object.entries(APP_URLS)) {
+        if (!entries.has(key)) entries.set(key, value);
+    }
+    return entries;
 }

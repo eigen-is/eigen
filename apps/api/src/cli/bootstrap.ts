@@ -5,13 +5,14 @@
 
 import { chmodSync, existsSync, mkdirSync, readdirSync, renameSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { API_IMAGE_KEY } from '../lib/config/release';
 import { readEnvFile, writeEnvFile } from './env-file';
 import { ENV_PATH, installOwner, ownAs, ROOT, VERSION } from './install';
 import { createUi } from './ui';
 
+// The demo reset ships so a release install can be a demo box.
 const EXECUTABLES = ['eigen', 'scripts/demo-reset.sh'];
 const BUNDLE_FILES = [...EXECUTABLES, 'docker-compose.yml', '.env.example'];
-// The demo reset ships so a release install can be a demo box.
 const BUNDLE_DIRS = ['docker/fail2ban', 'scripts/systemd'];
 export const BOOTSTRAP_OPTIONS = { out: { type: 'string' }, force: { type: 'boolean' } } as const;
 export const BOOTSTRAP_USAGE = `Usage: bootstrap [--out <dir>] [--force]
@@ -71,7 +72,7 @@ export async function bootstrap(flags: { out?: string; force?: boolean }): Promi
                 ...existing,
                 ['EIGEN_REGISTRY', registry],
                 ['EIGEN_VERSION', version],
-                ['EIGEN_API_IMAGE', `${registry}/api:${version}`],
+                [API_IMAGE_KEY, `${registry}/api:${version}`],
             ]),
         );
         ownAs(envPath, owner);

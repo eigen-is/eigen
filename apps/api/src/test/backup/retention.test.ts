@@ -1,17 +1,17 @@
 import { describe, expect, test } from 'bun:test';
 import type { BackupReason } from '@workspace/lib/types/backup';
 import { BUCKET_PARTIAL_SUFFIX, buildServerArchiveName } from '../../lib/backup/paths';
-import type { RetainedArchive } from '../../lib/backup/retention';
+import type { RetentionCandidate } from '../../lib/backup/retention';
 import { pruneBucketArchives, pruneServerArchives } from '../../lib/backup/retention';
 
 // One archive a night at 02:00 UTC, `night` days after 1 September.
-function archive(reason: BackupReason, night: number, good = true): RetainedArchive {
+function archive(reason: BackupReason, night: number, good = true): RetentionCandidate {
     const at = new Date(Date.UTC(2026, 8, 1 + night, 2, 0, 0));
     return { name: buildServerArchiveName(reason, 'full', at), reason, at, good, done: good };
 }
 
 // The backups folder lists its archives newest first.
-const prune = (archives: RetainedArchive[], keep: number, running?: string) =>
+const prune = (archives: RetentionCandidate[], keep: number, running?: string) =>
     pruneServerArchives(
         archives.toSorted((a, b) => b.at.getTime() - a.at.getTime()),
         keep,

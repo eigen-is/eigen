@@ -4,9 +4,7 @@
 import { MAX_REQUEST_BODY_BYTES } from '@workspace/lib/constants/mount';
 import { app } from './app';
 import { drainBackupJobs } from './lib/backup/jobs';
-import { wipeBackupStaging } from './lib/backup/paths';
-import { recoverInterruptedRestores } from './lib/backup/recovery';
-import { recoverInterruptedServerBackups } from './lib/backup/server-archives';
+import { recoverBackupsAfterRestart } from './lib/backup/recovery';
 import { isProduction } from './lib/config/env';
 import { assertMailDomainUnchanged, isSetupRequired } from './lib/config/server-config';
 import { documentTransformRunner } from './lib/document/transform/runner';
@@ -28,15 +26,7 @@ const SHUTDOWN_DRAIN_BUDGET_MS = 20_000;
 // that hangs, such as on a stalled bucket, is given up after it, so the upload time above stays whole.
 const SHUTDOWN_DELIVERY_BOUND_MS = 10_000;
 
-// Both before the server listens: a request that resolved a home while the recovery was still
-// deciding about it would open a half-written folder as if it were the home. A restore that died
-// between moving the home aside and installing the archive left a note in its staging folder, so
-// that is read first, before the wipe takes the staging folders with it. Then they are cleared: a
-// backup, verify or restore interrupted by a restart leaves a half-written folder nothing resumes.
-recoverInterruptedRestores();
-wipeBackupStaging();
-// A server backup killed mid-run left its record running; it becomes a failed attempt.
-await recoverInterruptedServerBackups().catch((error) => console.error('[backup] recovering server records:', error));
+await recoverBackupsAfterRestart();
 
 await assertMailDomainUnchanged();
 await pinDefaultTeam().catch((error) => console.error('[org] pinning the default team:', error));

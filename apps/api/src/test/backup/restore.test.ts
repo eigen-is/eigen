@@ -20,7 +20,6 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
-import { restoreShares } from '../../lib/backup/materialize';
 import * as pathsModule from '../../lib/backup/paths';
 import {
     ARCHIVE_AVATAR_DIR,
@@ -29,7 +28,7 @@ import {
     buildHomeFolderName,
     getBackupsDir,
 } from '../../lib/backup/paths';
-import { restoreHome } from '../../lib/backup/restore';
+import { restoreHome, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -647,6 +646,24 @@ describe('Backup restoreHome', () => {
             /another home|not for/i,
         );
         expect(safetyCopies(ctx.bob.user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
+        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+
+    test('a name that is no archive, or an archive that is not there, is refused before anything is touched', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const copies = safetyCopies(target.id, PRE_RESTORE_SUFFIX).length;
+        await expect(
+            restoreHome('not-an-archive.tar.zst', target.id, `restore-badname-${Date.now()}`),
+        ).rejects.toMatchObject({
+            status: 400,
+            message: 'Not a backup artifact name',
+        });
+        const missing = buildArtifactName(target.id, new Date(Date.UTC(2001, 0, 1)));
+        await expect(restoreHome(missing, target.id, `restore-missing-${Date.now()}`)).rejects.toMatchObject({
+            status: 404,
+            message: 'Artifact not found',
+        });
+        expect(safetyCopies(target.id, PRE_RESTORE_SUFFIX).length).toBe(copies);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 

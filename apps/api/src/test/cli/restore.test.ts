@@ -19,7 +19,7 @@ import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/ba
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
-import { copyArchiveMember, createArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
+import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
@@ -201,7 +201,7 @@ async function craft(
     const work = scratch('restore-craft-');
     const { members, manifest: original } = await readServerManifest(source);
     const target = join(work, basename(source));
-    const writer = await createArchiveWriter(target);
+    const writer = await createServerArchiveWriter(target);
     try {
         for (const [index, member] of members.slice(0, -1).entries()) {
             if (drop(member.name)) continue;

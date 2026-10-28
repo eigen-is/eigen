@@ -10,8 +10,7 @@ import type { BackableOwner } from './paths';
 import { requireBackableOwner } from './paths';
 
 // The owner an ownerId names, once it is one a backup can be of. The guest refusal needs the user
-// row, which is why this is the async half of requireBackableOwner; callers go
-// through it, so the refusal is spelled once.
+// row, which is why this is the async half of requireBackableOwner.
 export async function requireBackableHome(ownerId: string): Promise<BackableOwner> {
     const owner = parseOwnerId(ownerId);
     requireBackableOwner(owner);

@@ -812,6 +812,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackupJob` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupLevel` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupProgress` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupReason` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupSafetyCopy` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupVerifyRecord` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |

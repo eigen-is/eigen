@@ -1,3 +1,6 @@
+// The in-process jobs that run on a timer, such as the cleanup of inactive guests and the tick that starts the nightly
+// server backup. The server registers them once at boot, and each one is only the call into its own domain.
+
 import { cleanupInactiveGuests } from '../auth/guest-cleanup';
 import { serverBackupTick } from '../backup/schedule';
 import { scheduleInterval } from './scheduler';

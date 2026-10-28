@@ -1,6 +1,5 @@
-// The home archives in the backups folder: what the admin pane lists, where an uploaded archive lands, and what a
-// delete takes with it. The backup routes call it. It also owns the folders a restore leaves beside a home, the
-// safety copies.
+// The home archives in the backups folder: what the admin pane lists, how a name becomes a path, where an uploaded
+// archive lands, and what a delete takes with it. The backup routes call it, and so does a restore that reads one.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -30,7 +29,7 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
         } catch {
             continue; // deleted while this folder was being read
         }
-        // Nothing known about this archive yet: run a verify. One bad file must not blank the whole page.
+        // A sidecar that does not read lists the archive as unverified, so one bad file does not blank the page.
         const sidecar = await readSidecar(artifactPath);
         const manifest = sidecar?.manifest;
         artifacts.push({
@@ -65,26 +64,16 @@ export function resolveArtifact(name: string): { artifactPath: string; ownerId: 
     return { artifactPath: path.join(backupsDirPath(), name), ownerId: parsed.ownerId };
 }
 
+// The same, for an artifact that has to be there already, such as one to delete, verify or restore.
+export function requireArtifact(name: string): { artifactPath: string; ownerId: string } {
+    const artifact = resolveArtifact(name);
+    if (!fs.existsSync(artifact.artifactPath)) throw new ApiError(404, 'Artifact not found');
+    return artifact;
+}
+
 // One answer for a name the backups folder already holds, wherever it is noticed: before the body
 // is read, when the link lands, and when a filesystem with no links falls back to a rename.
 const ALREADY_THERE = 'That artifact is already in the backups folder';
-
-// Lands an uploaded body under its final name without overwriting an artifact that appeared while
-// the body was streaming (another upload of the same name, or a job's own pack). A hard link fails
-// when the name is taken, which is the point. Not every filesystem has links: a ./backups bind
-// mount from CIFS/SMB rejects link outright, and there a check-then-rename is the best on offer.
-function landUploadedArtifact(tempPath: string, artifactPath: string): void {
-    try {
-        fs.linkSync(tempPath, artifactPath);
-        return;
-    } catch (error) {
-        const code = errnoOf(error);
-        if (code === 'EEXIST') throw new ApiError(409, ALREADY_THERE);
-        if (code !== 'EPERM' && code !== 'ENOSYS' && code !== 'EXDEV') throw error;
-    }
-    if (fs.existsSync(artifactPath)) throw new ApiError(409, ALREADY_THERE);
-    fs.renameSync(tempPath, artifactPath);
-}
 
 // An uploaded archive, from a body the route has only checked the length of to a listed artifact
 // with a sidecar: stream it into staging, land it under its final name, and read the manifest out
@@ -122,6 +111,23 @@ export async function landUpload(body: ReadableStream<Uint8Array>, name: string,
         // Anything that is not a readable .tar.zst fails deep inside the decompressor.
         throw new ApiError(400, 'That upload is not a readable Eigen backup archive');
     }
+}
+
+// Lands an uploaded body under its final name without overwriting an artifact that appeared while
+// the body was streaming (another upload of the same name, or a job's own pack). A hard link fails
+// when the name is taken, which is the point. Not every filesystem has links: a ./backups bind
+// mount from CIFS/SMB rejects link outright, and there a check-then-rename is the best on offer.
+function landUploadedArtifact(tempPath: string, artifactPath: string): void {
+    try {
+        fs.linkSync(tempPath, artifactPath);
+        return;
+    } catch (error) {
+        const code = errnoOf(error);
+        if (code === 'EEXIST') throw new ApiError(409, ALREADY_THERE);
+        if (code !== 'EPERM' && code !== 'ENOSYS' && code !== 'EXDEV') throw error;
+    }
+    if (fs.existsSync(artifactPath)) throw new ApiError(409, ALREADY_THERE);
+    fs.renameSync(tempPath, artifactPath);
 }
 
 export function deleteArtifact(artifactPath: string): void {

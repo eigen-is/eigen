@@ -1,10 +1,13 @@
-// Lets the next boot finish or undo a per-home restore that died halfway. The restore leaves notes in its staging
-// folder, and recoverInterruptedRestores reads them at boot, before the API listens and before the staging wipe,
-// and puts the home's pre-restore copy back where the install did not finish.
+// What a restart does about the backup work the last process left behind, in the order it must happen, before the
+// API listens. A per-home restore that died halfway is finished or undone from the notes in its staging folder,
+// then the staging folders are wiped, then a server backup left running is marked failed. The restore writes those
+// notes through here. This module loads the API's jobs and settings, so the stage of ./eigen restore must not
+// import it.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { getBackupStagingDir, getStagingRoot, parseSafetyCopyName } from './paths';
+import { getBackupStagingDir, getStagingRoot, parseSafetyCopyName, wipeBackupStaging } from './paths';
+import { recoverInterruptedServerBackups } from './server-archives';
 
 // The note a restore leaves in its staging folder while the home folder is not where it belongs.
 // Written before the move-aside, removed when the mark clears, read once at the next boot.
@@ -18,52 +21,36 @@ const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
 // `.failed-restore-` name for an extraction, the copy's own name for a safety copy put back.
 type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null; parkName: string };
 
-function restoringMarkerPath(jobId: string): string {
-    return path.join(getBackupStagingDir(jobId), RESTORING_MARKER);
+// Before the server listens: a request that resolved a home while the recovery was still deciding about it would
+// open a half-written folder as if it were the home. A restore that died between moving the home aside and
+// installing the archive left a note in its staging folder, so that is read first, before the wipe takes the
+// staging folders with it. Then they are cleared, because a backup, verify or restore cut off by a restart leaves a
+// half-written folder that nothing resumes. Last, a server backup killed mid-run left its record running, and it
+// becomes a failed attempt.
+export async function recoverBackupsAfterRestart(): Promise<void> {
+    recoverInterruptedRestores();
+    wipeBackupStaging();
+    await recoverInterruptedServerBackups().catch((error) =>
+        console.error('[backup] recovering server records:', error),
+    );
 }
 
 export function writeRestoringMarker(jobId: string, marker: RestoringMarker): void {
-    fs.writeFileSync(restoringMarkerPath(jobId), JSON.stringify(marker));
+    fs.writeFileSync(path.join(getBackupStagingDir(jobId), RESTORING_MARKER), JSON.stringify(marker));
 }
 
-export function markRestoreComplete(jobId: string): void {
+export function writeRestoreCompleteMarker(jobId: string): void {
     fs.writeFileSync(
         path.join(getBackupStagingDir(jobId), RESTORE_COMPLETE_MARKER),
         JSON.stringify({ completedAt: new Date().toISOString() }),
     );
 }
 
-// The marker survived a crash and names two paths this then renames, so it is read as untrusted
-// input: both names have to be safety copies of exactly the home folder it claims, the one to put back a
-// pre-restore copy.
-function readRestoringMarker(markerPath: string): RestoringMarker | null {
-    if (!fs.existsSync(markerPath)) return null;
-    let value: unknown;
-    try {
-        value = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-    } catch {
-        return null;
-    }
-    if (typeof value !== 'object' || value === null) return null;
-    if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value) || !('parkName' in value)) {
-        return null;
-    }
-    const { ownerId, homeDir, preRestoreName, parkName } = value;
-    if (typeof ownerId !== 'string' || typeof homeDir !== 'string' || typeof parkName !== 'string') return null;
-    if (preRestoreName !== null && typeof preRestoreName !== 'string') return null;
-    if (parseSafetyCopyName(parkName)?.homeName !== path.basename(homeDir)) return null;
-    if (preRestoreName !== null) {
-        const parsed = parseSafetyCopyName(preRestoreName);
-        if (parsed?.kind !== 'pre-restore' || parsed.homeName !== path.basename(homeDir)) return null;
-    }
-    return { ownerId, homeDir, preRestoreName, parkName };
-}
-
-// Boot: a restore killed anywhere between the move-aside and the last install step left the home
-// folder either gone or half written, with its real contents under the `{id}.pre-restore-{ts}` its
-// marker names. The process that knew about it is dead, so nothing else will ever put it back:
-// this does, loudly. The install writes a completion note beside the marker, so a restore that
-// finished is told from one that did not. It runs before the staging wipe, which is what clears the
+// A restore killed anywhere between the move-aside and the last install step left the home folder
+// either gone or half written, with its real contents under the `{id}.pre-restore-{ts}` its marker
+// names. The process that knew about it is dead, so nothing else will ever put it back. This does,
+// and logs it as an error. The install writes a completion note beside the marker, which tells a
+// restore that finished from one that did not. This runs before the staging wipe, which clears the
 // markers of both. A safety copy with no marker is not evidence of anything: nothing deletes them
 // automatically, so a deleted user leaves one behind.
 export function recoverInterruptedRestores(): void {
@@ -74,7 +61,7 @@ export function recoverInterruptedRestores(): void {
         const jobDir = path.join(stagingRoot, entry.name);
         const marker = readRestoringMarker(path.join(jobDir, RESTORING_MARKER));
         if (!marker) continue;
-        // The install finished; whatever the job did after that is nobody's business now.
+        // The install finished. Whatever the job did after that cannot leave the home folder out of place.
         if (fs.existsSync(path.join(jobDir, RESTORE_COMPLETE_MARKER))) continue;
         const aside = marker.preRestoreName && path.join(path.dirname(marker.homeDir), marker.preRestoreName);
         // A copy the restore's own rollback already put back is not there any more, and this must
@@ -102,4 +89,30 @@ export function recoverInterruptedRestores(): void {
             `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
         );
     }
+}
+
+// The marker survived a crash and names two paths this then renames, so it is read as untrusted
+// input: both names have to be safety copies of exactly the home folder it claims, the one to put back a
+// pre-restore copy.
+function readRestoringMarker(markerPath: string): RestoringMarker | null {
+    if (!fs.existsSync(markerPath)) return null;
+    let value: unknown;
+    try {
+        value = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
+    } catch {
+        return null;
+    }
+    if (typeof value !== 'object' || value === null) return null;
+    if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value) || !('parkName' in value)) {
+        return null;
+    }
+    const { ownerId, homeDir, preRestoreName, parkName } = value;
+    if (typeof ownerId !== 'string' || typeof homeDir !== 'string' || typeof parkName !== 'string') return null;
+    if (preRestoreName !== null && typeof preRestoreName !== 'string') return null;
+    if (parseSafetyCopyName(parkName)?.homeName !== path.basename(homeDir)) return null;
+    if (preRestoreName !== null) {
+        const parsed = parseSafetyCopyName(preRestoreName);
+        if (parsed?.kind !== 'pre-restore' || parsed.homeName !== path.basename(homeDir)) return null;
+    }
+    return { ownerId, homeDir, preRestoreName, parkName };
 }

@@ -1,6 +1,8 @@
-// The request-body schemas and schema helpers that more than one route uses, such as an S3 config, a drive import or
-// a document type. They stay in the API, not in the shared lib, so only the backend depends on Elysia's type system.
+// The request-body schemas and schema helpers that routes share, such as an S3 config, a drive import or a document
+// type, and the schema of one domain that another domain's route takes, such as the backup settings in a save of the
+// server settings. They stay in the API, not in the shared lib, so only the backend depends on Elysia's type system.
 
+import { BACKUP_KEEP_MAX } from '@workspace/lib/constants/backup';
 import { S3_NONCURRENT_DAYS_MAX } from '@workspace/lib/constants/s3';
 import type { DocumentImportOptions, DriveImportSource, EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { AttachmentReference } from '@workspace/lib/types/drive-reference';
@@ -130,6 +132,38 @@ export const s3DestinationBody = t.Object({
     accessKeyId: t.Optional(t.String()),
     secretAccessKey: t.Optional(t.String()),
     region: t.Optional(t.String()),
+});
+
+// t.Integer is a union with a numeric string, whose default 422 dumps both branches; `error` replaces it.
+const backupKeepSchema = t.Integer({
+    minimum: 1,
+    maximum: BACKUP_KEEP_MAX,
+    error: `Backups to keep must be a whole number from 1 to ${BACKUP_KEEP_MAX}`,
+});
+
+// The owner's backup settings in a save of the server settings: the schedule and the bucket.
+export const backupSettingsBody = t.Object({
+    schedule: t.Optional(
+        t.Object({
+            enabled: t.Optional(t.Boolean()),
+            hourUtc: t.Optional(
+                t.Integer({
+                    minimum: 0,
+                    maximum: 23,
+                    error: 'The backup hour must be a whole number from 0 to 23',
+                }),
+            ),
+            withS3: t.Optional(t.Boolean()),
+            keep: t.Optional(backupKeepSchema),
+        }),
+    ),
+    upload: t.Optional(
+        t.Object({
+            enabled: t.Optional(t.Boolean()),
+            s3: t.Optional(s3DestinationBody),
+            keep: t.Optional(backupKeepSchema),
+        }),
+    ),
 });
 
 export const s3HardenBody = t.Object({

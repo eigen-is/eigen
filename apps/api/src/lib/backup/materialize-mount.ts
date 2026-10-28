@@ -16,52 +16,17 @@ import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
 import { errnoOf } from '../storage/deadline';
-import { archivePath, HOME_DATABASES, listManagedDatabases, readMountPathRows, storageKeyOf } from './archive-layout';
+import {
+    HOME_DATABASES,
+    listManagedDatabases,
+    readMountPathRows,
+    rowArchivePath,
+    storageKeyOf,
+} from './archive-layout';
 import { requireMountDir, resolveInside } from './paths';
 
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
-
-// A move inside one unpacked tree, so on one disk.
-export function movePath(from: string, to: string): void {
-    fs.mkdirSync(path.dirname(to), { recursive: true });
-    fs.renameSync(from, to);
-}
-
-// A whole home from the backups folder into data/: on Docker the two are separate mounts, a rename between them
-// fails with EXDEV, and the copy that replaces it must not hold every other user's requests.
-export async function movePathAsync(from: string, to: string): Promise<void> {
-    await fsp.mkdir(path.dirname(to), { recursive: true });
-    await fsp.rename(from, to).catch(async (error: unknown) => {
-        if (errnoOf(error) !== 'EXDEV') throw error;
-        // A rename keeps every mtime, and Dovecot dates a Maildir message by its own.
-        await fsp.cp(from, to, { recursive: true, preserveTimestamps: true });
-        await fsp.rm(from, { recursive: true, force: true });
-    });
-}
-
-// A database with no stamp, or one that does not open, reads as 0, ManagedDatabase's "never migrated": the
-// quick_check after it names the failure. Read-write: a closed WAL database has no -shm, and a read-only open fails.
-function schemaVersionOf(filePath: string): number {
-    let db: Database | null = null;
-    try {
-        db = new Database(filePath, { readwrite: true, create: false });
-        const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
-        return row?.version ?? 0;
-    } catch {
-        return 0;
-    } finally {
-        db?.close();
-    }
-}
-
-// Verify refuses a paths table that could leave its mount (checkArchivedPathRows); this second lock resolves every
-// path a restore derives from one, so nothing here reads or moves a byte outside `data/`.
-function inMountData(dataDir: string, mountId: string, relPath: string): string {
-    const abs = resolveInside(dataDir, relPath);
-    if (!abs) throw new ApiError(400, `Mount ${mountId} names a path that leaves it: ${relPath}`);
-    return abs;
-}
 
 // Puts one mount's files where the restored mount looks for them. The archive holds them by path, so each backend
 // derives its keys again; an `s3` mount stages each file with a pending upload, which the UploadQueue drains with
@@ -101,7 +66,7 @@ export function materializeMount(
         orm.delete(pendingUploads).run();
 
         if (isPathBased) {
-            // A folder carries no bytes, so an empty one has no archive entry — recreate them from
+            // A folder carries no bytes, so an empty one has no archive entry. They are recreated from
             // the table, at the key the mount renames them from, or a later rename of one 404s.
             for (const row of rows) {
                 if (row.type === 'file' || row.parentId === null) continue;
@@ -117,7 +82,7 @@ export function materializeMount(
         db.transaction(() => {
             for (const row of rows) {
                 if (row.type !== 'file') continue;
-                const archived = archivePath(row, byId);
+                const archived = rowArchivePath(row, byId);
                 const source = inData(archived);
                 // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
                 // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.
@@ -167,21 +132,9 @@ export function materializeMount(
     }
 }
 
-// Depth-first, directories only: a leftover file means the tree and the paths table disagree, and
-// deleting it would be the restore losing bytes.
-function pruneEmptyDirs(dir: string): void {
-    if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const child = path.join(dir, entry.name);
-        pruneEmptyDirs(child);
-        if (fs.readdirSync(child).length === 0) fs.rmdirSync(child);
-    }
-}
-
 // What landed has to be a database this server can still open: SQLite's own verdict on the bytes,
-// and the schema stamp against the config that will open them. A database from a NEWER server passes
-// quick_check and is then refused by ManagedDatabase's forward-version guard — which fails the whole
+// and the schema stamp against the config that will open them. A database from a newer server passes
+// quick_check and is then refused by ManagedDatabase's forward-version guard, which fails the whole
 // home on the next load, long after the job said it was done. The home is evicted and the restoring
 // mark is still set, so this is the one place a live home's databases are opened directly.
 export function checkRestoredDatabases(
@@ -229,7 +182,7 @@ export function checkRestoredDatabases(
 // The managed databases a home folder holds, for a restore with no manifest to enumerate them
 // from: every mount's paths table, keyed the way that mount's own backend keys its objects. A
 // remote mount's are in its bucket, so the path derived for one does not exist and the check skips
-// it — exactly what materializeMount returns for the same mount.
+// it. That is exactly what materializeMount returns for the same mount.
 export function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
@@ -256,4 +209,58 @@ export function containerDatabasesIn(homeDir: string, mountIds: string[]): Versi
         }
     }
     return found;
+}
+
+// A move inside one unpacked tree, so on one disk.
+export function movePath(from: string, to: string): void {
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.renameSync(from, to);
+}
+
+// A whole home from the backups folder into data/: on Docker the two are separate mounts, a rename between them
+// fails with EXDEV, and the copy that replaces it must not hold every other user's requests.
+export async function movePathAsync(from: string, to: string): Promise<void> {
+    await fsp.mkdir(path.dirname(to), { recursive: true });
+    await fsp.rename(from, to).catch(async (error: unknown) => {
+        if (errnoOf(error) !== 'EXDEV') throw error;
+        // A rename keeps every mtime, and Dovecot dates a Maildir message by its own.
+        await fsp.cp(from, to, { recursive: true, preserveTimestamps: true });
+        await fsp.rm(from, { recursive: true, force: true });
+    });
+}
+
+// A database with no stamp, or one that does not open, reads as 0, which ManagedDatabase takes as "never migrated".
+// The quick_check after it names the failure. The open is read-write, because a closed WAL database has no -shm and
+// a read-only open of it fails.
+function schemaVersionOf(filePath: string): number {
+    let db: Database | null = null;
+    try {
+        db = new Database(filePath, { readwrite: true, create: false });
+        const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
+        return row?.version ?? 0;
+    } catch {
+        return 0;
+    } finally {
+        db?.close();
+    }
+}
+
+// Verify refuses a paths table that could leave its mount (checkArchivedPathRows). This second guard resolves every
+// path a restore derives from one, so nothing here reads or moves a byte outside `data/`.
+function inMountData(dataDir: string, mountId: string, relPath: string): string {
+    const abs = resolveInside(dataDir, relPath);
+    if (!abs) throw new ApiError(400, `Mount ${mountId} names a path that leaves it: ${relPath}`);
+    return abs;
+}
+
+// Depth-first, directories only: a leftover file means the tree and the paths table disagree, and
+// deleting it would be the restore losing bytes.
+function pruneEmptyDirs(dir: string): void {
+    if (!fs.existsSync(dir)) return;
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const child = path.join(dir, entry.name);
+        pruneEmptyDirs(child);
+        if (fs.readdirSync(child).length === 0) fs.rmdirSync(child);
+    }
 }

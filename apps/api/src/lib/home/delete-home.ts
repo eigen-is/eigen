@@ -4,7 +4,7 @@
 
 import * as fs from 'node:fs';
 import { requireHomeSlotFree } from '../backup/jobs';
-import { collectHomeObjects, forgetSafetyCopySize } from '../backup/safety-copy';
+import { collectHomeObjects, deleteBucketObjects, forgetSafetyCopySize } from '../backup/safety-copy';
 import { clearHomeDeleting, evictHome, markHomeDeleting } from './get-home';
 
 // Enough of the keys a refusing bucket kept for an operator to clean up, without one log line per object.
@@ -26,14 +26,15 @@ export async function deleteHomeData(ownerId: string, homeDir: string): Promise<
     }
 
     // The bucket objects go in the background: a bucket that refuses must not keep the owner.
-    const { folders, objectCount, deleteObjects } = collectHomeObjects(homeDir);
+    const { folders, buckets } = collectHomeObjects(homeDir);
+    const objectCount = buckets.reduce((sum, bucket) => sum + bucket.keys.size, 0);
     for (const folder of folders) {
         fs.rmSync(folder, { recursive: true, force: true });
         forgetSafetyCopySize(folder);
     }
     // Nothing records these keys once the folders are gone: a restart mid-way leaves the operator this number.
     if (objectCount > 0) console.log(`[delete-home] deleting ${objectCount} bucket objects of ${ownerId}`);
-    deleteObjects()
+    deleteBucketObjects(buckets)
         .then((failed) => {
             if (failed.length === 0) return;
             const more = failed.length > FAILED_KEYS_LOGGED ? `, and ${failed.length - FAILED_KEYS_LOGGED} more` : '';

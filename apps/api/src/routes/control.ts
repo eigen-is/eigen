@@ -1,3 +1,7 @@
+// The CLI's online commands, such as ./eigen status, setup, reset-password and backup, reach the running API over a
+// Unix socket that `docker compose exec` opens as the API's user, never over the web. controlRouter is a thin router
+// over the server's own functions, and startControlSocket opens the socket at boot with mode 0600.
+
 import * as fs from 'node:fs';
 import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
@@ -14,7 +18,6 @@ import { createSetupLink } from '../lib/setup/setup-token';
 import type { ResetPasswordResult } from '../lib/user/reset-password';
 import { resetUserPassword } from '../lib/user/reset-password';
 
-// The CLI's online commands, on the Unix socket `docker compose exec` reaches as the API's user; never the web.
 export const controlRouter = new Elysia({ name: 'control' })
     .onError(handleApiError)
     .get('/status', (): Promise<ControlStatus> => getServerStatus())

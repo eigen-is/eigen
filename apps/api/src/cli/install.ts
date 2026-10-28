@@ -16,7 +16,7 @@ export const VERSION = pkg.version;
 export const DECLINED = 3;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
 
-type Owner = { uid: number; gid: number };
+export type Owner = { uid: number; gid: number };
 
 // Root in a container writes files the operator must own; a run as the operator already owns them.
 export function ownAs(path: string, owner: Owner): void {

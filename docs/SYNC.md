@@ -98,7 +98,7 @@ Two cases stay unrepaired. An orphan that settles after the queue's `close()` is
 
 ## A staged database that isn't SQLite is dropped, not uploaded
 
-Before a PUT, a staged copy whose row says `isDatabase` must pass the SQLite header check (`isSqliteFile`). One that fails is a disk fault after `VACUUM INTO`, and uploading it would ack garbage over the good object. The queue drops it loudly, so the object stays last-good and the next dirty sync re-stages from the live temp. `isDatabase` is false only for the plain files a per-home restore stages (`apps/api/src/lib/backup/materialize.ts`), which have no header to check.
+Before a PUT, a staged copy whose row says `isDatabase` must pass the SQLite header check (`isSqliteFile`). One that fails is a disk fault after `VACUUM INTO`, and uploading it would ack garbage over the good object. The queue drops it loudly, so the object stays last-good and the next dirty sync re-stages from the live temp. `isDatabase` is false only for the plain files a per-home restore stages (`materializeMount`), which have no header to check.
 
 ## Backoff belongs to each queue
 

@@ -1,3 +1,7 @@
+// What ./eigen status asks of the running server: its version and build, its mail and domain settings, the free
+// disk, the mail certificate and the state of its backups. The control socket serves it, and the CLI prints it beside
+// what it reads from Docker and the host.
+
 import { X509Certificate } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';

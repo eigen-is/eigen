@@ -11,8 +11,9 @@ import { Elysia, t } from 'elysia';
 import { requireOwner } from '../lib/auth/access';
 import { hasS3Mounts } from '../lib/backup/enumerate-homes';
 import { deleteServerArchive, listServerArchives } from '../lib/backup/server-archives';
-import { startArchiveUpload, startServerBackup } from '../lib/backup/server-job';
+import { startServerBackup } from '../lib/backup/server-job';
 import { checkBackupDestination, withSavedSecret } from '../lib/backup/upload';
+import { startArchiveUpload } from '../lib/backup/upload-job';
 import { betterAuth } from './auth';
 import { s3DestinationBody } from './shared-schemas';
 

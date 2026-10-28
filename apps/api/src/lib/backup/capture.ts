@@ -9,8 +9,6 @@ import { eventLoopTurn } from '../core';
 import type { StorageFile } from '../storage';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
 
-// Copy one file into the archive folder and return its manifest entry. The sha256 is taken on the
-// bytes as they stream through, so nothing is read a second time to hash it.
 export async function captureFile(
     source: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
     destPath: string,
@@ -38,6 +36,13 @@ export async function captureUnlessGone(
     });
 }
 
+// The entry for a file already sitting in the archive, such as a VACUUM INTO copy that SQLite wrote
+// itself, so hashing it means one read of the copy.
+export async function captureWrittenFile(destPath: string, relPath: string): Promise<BackupEntry> {
+    const { size, hash } = await hashFile(destPath);
+    return { path: relPath, bytes: size, sha256: hash };
+}
+
 // A manifest's counts: its databases and files are disjoint, so the two add up to its entries.
 export function countEntries(entries: BackupEntry[], databases: number): BackupManifest['counts'] {
     return {
@@ -45,11 +50,4 @@ export function countEntries(entries: BackupEntry[], databases: number): BackupM
         files: entries.length - databases,
         bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
     };
-}
-
-// The entry for a file already sitting in the archive, such as a VACUUM INTO copy that SQLite wrote
-// itself, so hashing it means one read of the copy.
-export async function captureWrittenFile(destPath: string, relPath: string): Promise<BackupEntry> {
-    const { size, hash } = await hashFile(destPath);
-    return { path: relPath, bytes: size, sha256: hash };
 }

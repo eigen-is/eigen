@@ -9,7 +9,7 @@ import { auth } from '../../lib/auth/auth';
 import * as archive from '../../lib/backup/archive';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import * as jobs from '../../lib/backup/jobs';
-import { getBackupJob, startBackupJob, withBackupJobSlot } from '../../lib/backup/jobs';
+import { getBackupJob, startBackupJob, withHomeSlot } from '../../lib/backup/jobs';
 import {
     buildHomeFolderName,
     buildServerArchiveName,
@@ -26,7 +26,7 @@ import {
 } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
-import { readServerArchive } from '../../lib/backup/verify';
+import { readServerArchive } from '../../lib/backup/verify-server-archive';
 import { getServerDataPath, PATHS, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -54,7 +54,7 @@ const pullHomeSnapshot = homeRelay.pullHomeSnapshot;
 const snapshotHome = snapshotModule.snapshotHome;
 const waitForHomeSlot = jobs.waitForHomeSlot;
 const packFolder = archive.packFolder;
-const createArchiveWriter = archive.createArchiveWriter;
+const createServerArchiveWriter = archive.createServerArchiveWriter;
 
 async function runJob(
     options: { level?: BackupLevel; reason?: BackupReason } = {},
@@ -169,7 +169,7 @@ describe('Server backup job', () => {
                 spyOn(homeRelay, 'pullHomeSnapshot').mockImplementation(async (ownerId, dir, options) => {
                     if (ownerId === target) perHomeStateAtCapture = getBackupJob(perHome.id)?.state;
                     if (ownerId === held) {
-                        refusedWhileHeld = await withBackupJobSlot(held, async () => {}).catch((error) => error);
+                        refusedWhileHeld = await withHomeSlot(held, async () => {}).catch((error) => error);
                     }
                     return pullHomeSnapshot(ownerId, dir, options);
                 }),
@@ -202,7 +202,7 @@ describe('Server backup job', () => {
             expect(refusedWhileHeld).toBeInstanceOf(ApiError);
             expect((refusedWhileHeld as ApiError).status).toBe(409);
             // Released once captured.
-            await withBackupJobSlot(held, async () => {});
+            await withHomeSlot(held, async () => {});
 
             const { manifest } = await readServerManifest(archivePath);
             expect(manifest.homes.find((home) => home.ownerId === target)?.member).toBeDefined();
@@ -243,7 +243,7 @@ describe('Server backup job', () => {
             await Bun.sleep(50);
             expect(alertTitlesTo(relay, ctx.alice.user.id)).toHaveLength(1);
             // The throw released the home's slot.
-            await withBackupJobSlot(broken, async () => {});
+            await withHomeSlot(broken, async () => {});
         },
         JOB_TIMEOUT_MS,
     );
@@ -482,8 +482,8 @@ describe('Server backup job', () => {
                     for (let i = 0; i < 3000; i++) writeFileSync(join(dir, 'clutter', `${i}.txt`), 'x');
                     packedAt.set(packed, turns.read());
                 }),
-                spyOn(archive, 'createArchiveWriter').mockImplementation(async (archivePath) => {
-                    const writer = await createArchiveWriter(archivePath);
+                spyOn(archive, 'createServerArchiveWriter').mockImplementation(async (archivePath) => {
+                    const writer = await createServerArchiveWriter(archivePath);
                     const appendFile = writer.appendFile;
                     writer.appendFile = (name, sourcePath) => {
                         const before = packedAt.get(sourcePath);

@@ -1,6 +1,7 @@
-// The restore command of the eigen launcher: it puts a whole-server archive back in two steps. The stage
-// unpacks and checks the archive while Eigen runs, and the swap, with Eigen stopped, moves the staged tree in and
-// keeps what it replaces aside. Every refusal comes before anything in the data folder moves.
+// The restore command of the eigen launcher: it puts a whole-server archive back. The stage unpacks and checks the
+// archive while Eigen runs, and the swap, with Eigen stopped, moves the staged tree in and keeps what it replaces
+// aside. Between them the launcher asks which images the staged archive pins, and on a fresh machine it first takes
+// the archive's .env.production. Every refusal comes before anything in the data folder moves.
 
 import type { Database } from 'bun:sqlite';
 import {
@@ -33,15 +34,16 @@ import { describeError } from '../lib/backup/errors';
 import {
     backupsDirPath,
     buildSafetyCopyName,
-    freeAt,
     INSTALL_FOLDERS,
+    nextFreeTime,
     roomShortfall,
     SERVER_ARCHIVE_ENV_MEMBER,
     STAGING_DIR,
 } from '../lib/backup/paths';
 import type { ServerArchiveFile } from '../lib/backup/restore-server';
 import { RESTORING_DATA_DIR, RESTORING_DIR, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
-import { describeFailures, readServerArchive, readServerArchiveMember } from '../lib/backup/verify';
+import { describeFailures } from '../lib/backup/verify';
+import { readServerArchive, readServerArchiveMember } from '../lib/backup/verify-server-archive';
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
@@ -55,13 +57,14 @@ import {
 } from '../lib/config/paths';
 import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
 import { readEnvFile } from './env-file';
+import type { Owner } from './install';
 import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
 import type { Ui } from './ui';
-import { createUi, glyphLine } from './ui';
+import { createUi, glyphLine, refuseUsage } from './ui';
 
-// Two runs, as the launcher makes them. --stage runs as the API's user in its container while Eigen runs, on the
-// data root, .env.production and backups folder the API sees. --swap runs as root on the install folder (-w
-// /install) with Eigen stopped, like --staged and --env. A refusal in either comes before anything of data/ moves.
+// --stage runs as the API's user in its container while Eigen runs, on the data root, .env.production and backups
+// folder the API sees. --swap runs as root on the install folder (-w /install) with Eigen stopped, like --staged and
+// --env.
 export const RESTORE_OPTIONS = {
     stage: { type: 'boolean' },
     staged: { type: 'boolean' },
@@ -90,6 +93,20 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
 
 type Flags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
+export async function restore(archive: string | undefined, flags: Flags): Promise<void> {
+    const modes = [flags.stage, flags.staged, flags.swap, flags.env].filter(Boolean).length;
+    if (modes !== 1 || (!flags.stage && !flags.env && archive !== undefined)) {
+        return refuseUsage(
+            'Pass one of --stage, --staged, --swap or --env; only --stage and --env take an archive.',
+            RESTORE_USAGE,
+        );
+    }
+    if (flags.env) return writeArchiveEnv(archive);
+    if (flags.stage) return stage(archive, flags);
+    if (flags.staged) return printStaged();
+    return swap();
+}
+
 // Written last by the stage, so a stage cut off halfway is never swapped in.
 const STAGE_RECORD = 'staged.json';
 type StagedRestore = { archive: string; level: BackupLevel; appVersion: string };
@@ -112,15 +129,16 @@ type RestoreSwap = {
     env: boolean;
 };
 
-type Held = { path: string; dir: boolean };
+type LightEntry = { path: string; dir: boolean };
 
-// What refusal() looks at; not a setgid folder, which a setgid install folder hands down to every folder in it.
-const SUSPECTS = '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
+// What unsafeEntry() looks for. Not a setgid folder, which a setgid install folder hands down to every folder in it.
+const UNSAFE_FIND_ARGS =
+    '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
 // Held until exit, like the API holds the data lock while it runs. False when another process holds `file`.
 const locks: Database[] = [];
 
-function hold(file: string): boolean {
+function holdLock(file: string): boolean {
     const lock = lockDataDir(file);
     if (lock) locks.push(lock);
     return lock !== null;
@@ -130,7 +148,7 @@ function hold(file: string): boolean {
 function lockData(ui: Ui): void {
     const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not make one the API could not open; without one, no API ever ran on this data/.
-    if (existsSync(file) && !hold(file)) {
+    if (existsSync(file) && !holdLock(file)) {
         ui.fail(
             'data/ is in use by Eigen or by another restore.',
             'Wait for it to finish, then run ./eigen restore again.',
@@ -138,11 +156,11 @@ function lockData(ui: Ui): void {
     }
 }
 
-const lexists = (path: string) => lstatSync(path, { throwIfNoEntry: false }) !== undefined;
+const pathExists = (path: string) => lstatSync(path, { throwIfNoEntry: false }) !== undefined;
 
 // A home's light set, folders before what is in them, relative to the home.
-function lightWalk(root: string): Held[] {
-    const held: Held[] = [];
+function lightWalk(root: string): LightEntry[] {
+    const held: LightEntry[] = [];
     const walk = (dir: string) => {
         for (const entry of readdirSync(join(root, dir), { withFileTypes: true })) {
             const path = dir ? `${dir}/${entry.name}` : entry.name;
@@ -220,7 +238,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     const dataRoot = getDataRoot();
     const restoring = join(dataRoot, RESTORING_DIR);
     mkdirSync(restoring, { recursive: true, mode: 0o700 });
-    if (!hold(join(restoring, STAGE_LOCK))) {
+    if (!holdLock(join(restoring, STAGE_LOCK))) {
         return ui.fail(
             'Another restore is staging into data/.restoring.',
             'Wait for it to finish, then run ./eigen restore again.',
@@ -380,7 +398,7 @@ function requireRenamable(ui: Ui, archive: string): void {
 }
 
 // Run by the launcher before it stops Eigen, so a swap that cannot rename is refused while Eigen still runs.
-async function staged(): Promise<void> {
+async function printStaged(): Promise<void> {
     const restoring = join(DATA, RESTORING_DIR);
     const record = readRecord(join(restoring, STAGE_RECORD), isStagedRestore);
     if (!record) {
@@ -393,15 +411,15 @@ async function staged(): Promise<void> {
     console.log([`version=${record.appVersion}`, `level=${record.level}`, ...pins].join('\n'));
 }
 
-// Why root must not swap the staged tree in, or null; drops the fifos and sockets. The stage writes files and
+// Why root must not swap the staged tree in, or null. It drops the fifos and sockets. The stage writes files and
 // folders only, so anything else came from somebody else.
-async function refusal(restoring: string): Promise<string | null> {
+async function unsafeEntry(restoring: string): Promise<string | null> {
     const env = lstatSync(join(restoring, ENV_PATH), { throwIfNoEntry: false });
     if (env && (!env.isFile() || env.nlink > 1)) return `${ENV_PATH} is not a plain file`;
     if (!lstatSync(join(restoring, RESTORING_DATA_DIR), { throwIfNoEntry: false })?.isDirectory()) {
         return 'data is not a folder';
     }
-    const suspects = Bun.spawn(['find', restoring, '(', ...SUSPECTS.split(' '), ')', '-print0'], {
+    const suspects = Bun.spawn(['find', restoring, '(', ...UNSAFE_FIND_ARGS.split(' '), ')', '-print0'], {
         stdout: 'pipe',
         stderr: 'ignore',
     });
@@ -418,9 +436,9 @@ async function refusal(restoring: string): Promise<string | null> {
     return null;
 }
 
-// Light: server/, org/, dkim/ and certs/ go aside whole, the staged ones in. In a home here, every file of its light
-// set goes aside first, held by the archive or not: a -wal left beside another database would be replayed onto it.
-// A folder only here stays; one only in the archive moves in whole. A home only in the archive moves in whole.
+// Light: server/, org/, dkim/ and certs/ go aside whole, and the staged ones move in. In a home here, every file of
+// its light set goes aside first, whether the archive holds it or not, because a -wal left beside another database
+// would be replayed onto it. A folder only here stays. A folder or a home only in the archive moves in whole.
 // `merged` are the homes here the archive merges into, relative to data/.
 function planLight(
     staged: string,
@@ -430,14 +448,14 @@ function planLight(
     const merged: string[] = [];
     for (const top of [SERVER_DIR, ORG_HOMES_DIR, ...INSTALL_FOLDERS.map((folder) => folder.dir)]) {
         if (!existsSync(join(staged, top))) continue;
-        if (lexists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
+        if (pathExists(join(DATA, top))) renames.push([join(DATA, top), join(aside, top)]);
         renames.push([join(staged, top), join(DATA, top)]);
     }
     for (const kind of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
         if (!existsSync(join(staged, kind))) continue;
         for (const id of readdirSync(join(staged, kind))) {
             const [from, live] = [join(staged, kind, id), join(DATA, kind, id)];
-            if (!lexists(live)) {
+            if (!pathExists(live)) {
                 renames.push([from, live]);
                 continue;
             }
@@ -465,11 +483,11 @@ function planLight(
     return { renames, merged };
 }
 
-// The folders missing above `path`, owned like `owner`, what moves in: the stage made every staged item as the API
-// user. Root's own, or data/'s, which may be root's, would keep that user out of the homes in them.
-function makeParents(path: string, owner: { uid: number; gid: number }): void {
+// Makes the folders missing above `path`, owned like what moves in, which the stage made as the API user. Owned by
+// root, or like data/, which root may own, they would keep that user out of the homes in them.
+function makeParents(path: string, owner: Owner): void {
     const missing: string[] = [];
-    for (let dir = dirname(path); !lexists(dir); dir = dirname(dir)) missing.unshift(dir);
+    for (let dir = dirname(path); !pathExists(dir); dir = dirname(dir)) missing.unshift(dir);
     for (const dir of missing) {
         mkdirSync(dir, { mode: 0o700 });
         ownAs(dir, owner);
@@ -479,7 +497,7 @@ function makeParents(path: string, owner: { uid: number; gid: number }): void {
 // The device a path is on, or would be: that of its nearest folder that is there.
 function deviceOf(path: string): number {
     let dir = path;
-    while (!lexists(dir)) dir = dirname(dir);
+    while (!pathExists(dir)) dir = dirname(dir);
     return lstatSync(dir).dev;
 }
 
@@ -518,10 +536,10 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
         ownAs(to, source);
     }
     for (const [index, [from, to]] of swap.renames.entries()) {
-        const [fromHere, toHere] = [lexists(from), lexists(to)];
+        const [fromHere, toHere] = [pathExists(from), pathExists(to)];
         if (!fromHere && toHere) continue;
         if (fromHere && toHere) {
-            const refilled = swap.renames.slice(index + 1).some(([later, onto]) => onto === from && !lexists(later));
+            const refilled = swap.renames.slice(index + 1).some(([later, onto]) => onto === from && !pathExists(later));
             if (refilled) continue;
             cannot(`${from} and ${to} are both there`);
         }
@@ -561,7 +579,7 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
 async function swap(): Promise<void> {
     const ui = await createUi(true);
     mkdirSync(dirname(SWAP_LOCK), { recursive: true });
-    if (!hold(SWAP_LOCK)) {
+    if (!holdLock(SWAP_LOCK)) {
         return ui.fail('Another restore is swapping data/.', 'Wait for it to finish, then run ./eigen restore again.');
     }
     if (existsSync(SWAP_MARKER)) {
@@ -581,7 +599,7 @@ async function swap(): Promise<void> {
         return ui.fail('Nothing is staged to swap in.', 'Run ./eigen restore <archive>, which stages it first.');
     requireRenamable(ui, record.archive);
     lockData(ui);
-    const reason = await refusal(restoring);
+    const reason = await unsafeEntry(restoring);
     if (reason)
         return ui.fail(
             `The staged ${record.archive} cannot be swapped in: ${reason}.`,
@@ -590,16 +608,16 @@ async function swap(): Promise<void> {
     const stagedData = join(restoring, RESTORING_DATA_DIR);
 
     const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
-    const at = freeAt(
+    const at = nextFreeTime(
         new Date(),
-        (candidate) => lexists(asideOf(DATA, candidate)) || lexists(asideOf(ENV_PATH, candidate)),
+        (candidate) => pathExists(asideOf(DATA, candidate)) || pathExists(asideOf(ENV_PATH, candidate)),
     );
     const [dataAside, envAside] = [asideOf(DATA, at), asideOf(ENV_PATH, at)];
     const stagedEnv = join(restoring, ENV_PATH);
     const env = existsSync(stagedEnv);
     const copies: [string, string][] = [];
     const renames: [string, string][] = [];
-    if (env && lexists(ENV_PATH)) renames.push([ENV_PATH, envAside]);
+    if (env && pathExists(ENV_PATH)) renames.push([ENV_PATH, envAside]);
     if (env) renames.push([stagedEnv, ENV_PATH]);
     let leftover = restoring;
     if (record.level === 'light') {
@@ -631,14 +649,15 @@ async function swap(): Promise<void> {
 
     // A home bind-mounted from another disk cannot be renamed into or out of.
     for (const [from, to] of renames) {
-        if (lexists(from) && lstatSync(from).dev !== deviceOf(dirname(to))) {
+        if (pathExists(from) && lstatSync(from).dev !== deviceOf(dirname(to))) {
             return ui.fail(
                 `${record.archive} cannot be swapped in: ${from} is on another disk than ${dirname(to)}.`,
                 'Restore needs data/ and every home in it on the disk of the install folder.',
             );
         }
     }
-    // Made before the marker, owned like what moves in: a swap cut off before it plans them again, and finds them there.
+    // Made before the marker and owned like what moves in. A swap cut off before the marker plans them again, and
+    // finds them there.
     for (const [from, to] of renames) if (to.startsWith(`${DATA}/`)) makeParents(to, lstatSync(from));
 
     const marker: RestoreSwap = {
@@ -655,7 +674,7 @@ async function swap(): Promise<void> {
 
 // No setup runs on a fresh machine: the archive's own file pins the images, Compose's settings and the secrets, and
 // setup would write an org the restore throws away.
-async function takeEnv(archive: string | undefined): Promise<void> {
+async function writeArchiveEnv(archive: string | undefined): Promise<void> {
     const ui = await createUi(true);
     if (!archive) return ui.fail('Name the archive to restore.', 'Pass the path of a server archive.');
     const name = basename(archive);
@@ -690,18 +709,4 @@ async function takeEnv(archive: string | undefined): Promise<void> {
     ownAs(temporary, installOwner('.'));
     renameSync(temporary, ENV_PATH);
     console.log(glyphLine('ok', `Took ${ENV_PATH} from ${name}`));
-}
-
-export async function restore(archive: string | undefined, flags: Flags): Promise<void> {
-    const modes = [flags.stage, flags.staged, flags.swap, flags.env].filter(Boolean).length;
-    if (modes !== 1 || (!flags.stage && !flags.env && archive !== undefined)) {
-        console.error(
-            `Pass one of --stage, --staged, --swap or --env; only --stage and --env take an archive.\n\n${RESTORE_USAGE}`,
-        );
-        process.exit(2);
-    }
-    if (flags.env) return takeEnv(archive);
-    if (flags.stage) return stage(archive, flags);
-    if (flags.staged) return staged();
-    return swap();
 }

@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
-import { createArchiveWriter } from '../../lib/backup/archive';
+import { createServerArchiveWriter } from '../../lib/backup/archive';
 import { buildServerFolderName } from '../../lib/backup/paths';
 import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-server';
 import { verifyFolder } from '../../lib/backup/verify';
@@ -134,7 +134,7 @@ describe('Backup appendInstallFiles', () => {
         const dir = mkdtempSync(join(TEST_DATA_DIR, 'install-files-'));
         // Docker Desktop's view of a one-file mount whose host file got a new inode: the read fails ENOENT.
         process.env['EIGEN_ENV_FILE'] = join(dir, 'env.production');
-        const writer = await createArchiveWriter(join(dir, 'archive.tar'));
+        const writer = await createServerArchiveWriter(join(dir, 'archive.tar'));
         try {
             await expect(appendInstallFiles(writer)).rejects.toThrow('Run ./eigen restart.');
         } finally {
