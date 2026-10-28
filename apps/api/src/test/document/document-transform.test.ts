@@ -860,11 +860,13 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-// Both last moved with the text box's prose rules, and before that with the stylesheet's table of contents rules and
-// the headings' `h-N` ids, the PDF's with its head's page-number leader too, and with the print CSS that lets a table
-// and its rows split across pages (no table page-break-inside rule). The preview body stayed.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '095a58092f5df5ccb25bda3369249610125937d2de8373ef40c71b2862112ce6';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'cf46aeb9de2d4a654d5da2eeeaae96ee94e2f14cb2f02e4d53017c2d3c7c1452';
+// Both last moved when the text box's font, size, line height and color joined the prose base rule's selector list
+// (`.eigen-prose, .eigen-doc .text-box`) instead of repeating it, the only bytes that changed. Before that they moved
+// with the text box's prose rules, the stylesheet's table of contents rules and the headings' `h-N` ids, the PDF's
+// with its head's page-number leader too, and with the print CSS that lets a table and its rows split across pages
+// (no table page-break-inside rule). The preview body stayed.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '377cbeee6c018cf9a051e682ee0c6ddf208a66441052e3a9087ae3003d890a7b';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f9adf729d36d4688ae5e567b96e0fbcf5f3b73ea895423841f1f340c046fc9c8';
 // The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
 // libdeflate. It last moved with the wps namespace a text box needs, which every document part declares.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'c3a15846b8e2b9d1a095a816aa9d8bfe25ba59d8a148770401e309767fe7c1fd';
