@@ -1,11 +1,11 @@
-// The unused-primitives check of `check-standards.ts`: a primitive the shared-primitives index lists needs a user
-// outside its own file. It follows every import, through the packages' `exports` maps and their barrels, to the file
-// that defines the name, and reports each primitive nothing imports and each one only tests import. It reads code as
-// stripNoise blanked it, so an import inside a comment or a string is no use.
+// The unused-primitives standards check: a primitive the shared-primitives index lists needs a user outside its own
+// file. It follows every import, through the packages' `exports` maps and their barrels, to the file that defines the
+// name, and reports each primitive nothing imports and each one only tests import. It reads code as stripNoise
+// blanked it, so an import inside a comment or a string is no use.
 
 import { dirname, join, normalize } from 'node:path/posix';
 
-export type Primitive = { name: string; type: boolean; importPath: string; file: string };
+export type Primitive = { name: string; isType: boolean; importPath: string; file: string };
 
 export type SourceFile = {
     path: string;
@@ -54,7 +54,7 @@ export function readPrimitivesIndex(markdown: string): Primitive[] {
     for (const line of markdown.split('\n')) {
         section = INDEX_HEADING.exec(line)?.[1] ?? section;
         const row = INDEX_ROW.exec(line);
-        if (row) primitives.push({ name: row[1], type: section === 'Types', importPath: row[2], file: row[3] });
+        if (row) primitives.push({ name: row[1], isType: section === 'Types', importPath: row[2], file: row[3] });
     }
     return primitives;
 }
@@ -117,7 +117,7 @@ export function unusedPrimitives(
 
     const used = (primitive: Primitive) => users.get(primitive) === 'production';
     const propsOfUsedComponent = (primitive: Primitive) =>
-        primitive.type &&
+        primitive.isType &&
         primitive.name.endsWith('Props') &&
         primitives.some(
             (other) => other.file === primitive.file && other.name === primitive.name.slice(0, -5) && used(other),

@@ -80,11 +80,11 @@ describe('readPrimitivesIndex', () => {
         expect(rows).toHaveLength(9);
         expect(rows.find((row) => row.name === 'Shape')).toEqual({
             name: 'Shape',
-            type: true,
+            isType: true,
             importPath: '@workspace/lib/thing',
             file: 'packages/lib/src/thing.ts',
         });
-        expect(rows.find((row) => row.name === 'helper')?.type).toBe(false);
+        expect(rows.find((row) => row.name === 'helper')?.isType).toBe(false);
     });
 });
 

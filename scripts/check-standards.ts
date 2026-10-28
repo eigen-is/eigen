@@ -56,8 +56,8 @@ if (CANONICAL_MIMES.size === 0) {
 const PRIMITIVES_INDEX = 'docs/SHARED-PRIMITIVES.md';
 const unusedByFile = new Map<string, Primitive[]>();
 
-function unusedIn(path: string, types: boolean): number {
-    return (unusedByFile.get(path) ?? []).filter((primitive) => primitive.type === types).length;
+function unusedIn(path: string, isType: boolean): number {
+    return (unusedByFile.get(path) ?? []).filter((primitive) => primitive.isType === isType).length;
 }
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
