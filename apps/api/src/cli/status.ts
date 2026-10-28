@@ -1,5 +1,5 @@
 // ./eigen status: one report on the install, from what the launcher gathers on the host (the services, the mail
-// queue, the newest release) and what the running API answers on its control socket (backups, disk, the
+// queue, the newest release) and what the running API answers on its control socket (such as backups, disk and the
 // certificate). With Eigen stopped it still reports, reading the backup names in backups/.
 
 import type { parseArgs } from 'node:util';
@@ -174,6 +174,13 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
                 value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
             },
             backupRow(api.backup),
+            ...api.setupCopies.map(
+                ({ name, createdAt }): Row => ({
+                    level: 'warn',
+                    label: 'Setup copy',
+                    value: `data/server/${name}, ${formatTimeAgo(createdAt)}: the accounts a setup cleared; sudo rm it once you need none of them`,
+                }),
+            ),
         );
         if (api.certExpiresAt) {
             const days = Math.floor((new Date(api.certExpiresAt).getTime() - Date.now()) / DAY_MS);

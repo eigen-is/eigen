@@ -1,5 +1,5 @@
 // What ./eigen status asks of the running server: its version and build, its mail and domain settings, the free
-// disk, the mail certificate and the state of its backups. The control socket serves it, and the CLI prints it beside
+// disk, the mail certificate, the state of its backups and the copies of users3.db a setup left. The control socket serves it, and the CLI prints it beside
 // what it reads from Docker and the host.
 
 import { X509Certificate } from 'node:crypto';
@@ -7,6 +7,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { ServerBackupStatus } from '../backup/server-archives';
 import { getServerBackupStatus } from '../backup/server-archives';
+import type { SetupCopy } from '../setup/setup';
+import { listSetupCopies } from '../setup/setup';
 import { getRelayHost, isBundledCaddy, isMailEnabled } from './env';
 import { CERT_FILES, CERTS_DIR, getDataRoot } from './paths';
 import { getDomain, getPublicConfig, isSetupRequired } from './server-config';
@@ -25,6 +27,7 @@ export type ControlStatus = {
     certSelfSigned: boolean;
     bundledCaddy: boolean;
     backup: ServerBackupStatus;
+    setupCopies: SetupCopy[];
 };
 
 export async function getServerStatus(): Promise<ControlStatus> {
@@ -54,5 +57,6 @@ export async function getServerStatus(): Promise<ControlStatus> {
         certSelfSigned,
         bundledCaddy: isBundledCaddy(),
         backup: await getServerBackupStatus(),
+        setupCopies: listSetupCopies(),
     };
 }

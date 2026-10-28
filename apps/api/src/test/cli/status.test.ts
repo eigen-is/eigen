@@ -79,6 +79,7 @@ describe('the Backup row', () => {
         createdAt: at.toISOString(),
     });
     let backup: ControlStatus['backup'];
+    let setupCopies: ControlStatus['setupCopies'] = [];
     let server: ReturnType<typeof Bun.serve>;
 
     // What the API answers, with the backup facts the test sets.
@@ -97,6 +98,7 @@ describe('the Backup row', () => {
             certSelfSigned: false,
             bundledCaddy: false,
             backup,
+            setupCopies,
         };
     }
 
@@ -114,6 +116,29 @@ describe('the Backup row', () => {
 
     afterAll(() => {
         server.stop(true);
+    });
+
+    test('is followed by a row for each copy of users3.db a setup left, which says how to delete it', async () => {
+        const name = `users3.backup-${hoursAgo(3).getTime()}.db`;
+        setupCopies = [{ name, createdAt: hoursAgo(3).toISOString() }];
+        backup = {
+            scheduleEnabled: false,
+            newest: null,
+            scheduledFailure: null,
+            scheduledNotUploaded: null,
+            warned: null,
+            newestGoodFullAt: null,
+        };
+        try {
+            const { stdout } = await runCli(['status', '--services=eigen-api\trunning\thealthy'], {
+                env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET },
+            });
+            expect(stdout).toContain(
+                `▲  Setup copy   data/server/${name}, 3h ago: the accounts a setup cleared; sudo rm it once you need none of them`,
+            );
+        } finally {
+            setupCopies = [];
+        }
     });
 
     test('names the newest archive, its age and size', async () => {

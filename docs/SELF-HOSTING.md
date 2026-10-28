@@ -52,7 +52,7 @@ The help center at eigen.is follows `main`, which moves only for a release, so i
 | Command | What it does |
 |---|---|
 | `setup` | Asks the setup questions, writes `.env.production`, starts Eigen and prints the setup link. Run it again to change an answer |
-| `status` | The version, a waiting update, the services, disk space, the newest backup, the certificate and the mail queue |
+| `status` | The version, a waiting update, the services, disk space, the newest backup, any copy of the accounts a setup kept, the certificate and the mail queue |
 | `update [version]` | Backs up the running server, then switches to the new release. `--check` only tells whether there is an update and what it brings. `--accept-breaking` goes on past breaking changes without asking, as a run without a terminal must. `--full` makes the backup Full, `--no-backup` makes none |
 | `rollback` | Restores the backup the last update made, with the version it ran. `--yes` does not ask. Its `--help`, and its refusal when there is no such backup, list the `server-pre-update-` archives that are kept, which `./eigen restore <file>` puts back |
 | `backup` | Backs up the whole server into `backups/` while Eigen runs. `--light`, `--full` (the default), `--s3`, `--wait`. Its exit codes: [BACKUP.md § The whole-server backup runs inside the API](BACKUP.md#the-whole-server-backup-runs-inside-the-api) |
@@ -63,6 +63,8 @@ The help center at eigen.is follows `main`, which moves only for a release, so i
 | `reset-password` | Sets a new password for an account and signs it out everywhere |
 
 One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. Each step writes its output to `.eigen/last-step.log`, which a failure points at; the launcher makes it anew for each step, readable by you alone. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
+
+A setup that finds accounts in `users3.db` copies the database to `data/server/users3.backup-<ms>.db`, 0600, before it clears them (`resetAuthDatabase` in `apps/api/src/lib/setup/setup.ts`). Most often those are the half-made admin of an attempt that failed. But when `config.json` lost `setupCompleted` while `users3.db` survived, the copy is the only one of real accounts, so nothing deletes it and no backup holds it. `./eigen status` shows a yellow Setup copy row for each until you delete it with `sudo rm`.
 
 The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or a change marked `(full backup)`, or `--full` asks for Full. On the main channel the changes not released yet count too. Its name starts with `server-pre-update-`. Eigen keeps the two newest good ones and the one `rollback` needs ([BACKUP.md § Retention keeps good scheduled archives and every manual one](BACKUP.md#retention-keeps-good-scheduled-archives-and-every-manual-one)), and they never go to the backup bucket: they exist for `rollback` on this machine. A rollback from a Light backup puts the databases back over the files of today ([BACKUP.md § A Full restore swaps data/ whole, a Light one merges](BACKUP.md#a-full-restore-swaps-data-whole-a-light-one-merges)).
 

@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, commands, logs, status, files]
 related: [self-hosting/troubleshooting, self-hosting/update, self-hosting/back-up-and-restore]
 order: 110
-updated: 2026-10-05
+updated: 2026-10-28
 ---
 
 Everything you do with Eigen on the server goes through `./eigen` in the install folder. `./eigen help` lists the commands, and `./eigen <command> --help` tells more about one.
@@ -16,7 +16,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | Command | What it does |
 |---|---|
 | `./eigen setup` | Asks the setup questions, starts Eigen, and prints the link that finishes the setup. Run it again to change an answer. |
-| `./eigen status` | Shows the version, a waiting update, the services, disk space, the newest backup, the certificate, and the mail queue |
+| `./eigen status` | Shows the version, a waiting update, the services, disk space, the newest backup, any copy of the accounts a setup kept, the certificate, and the mail queue |
 | `./eigen logs [service]` | Follows the logs of every service, or of one. Ctrl-C stops it. |
 | `./eigen restart` | Starts Eigen, and any part of it that stopped |
 | `./eigen stop` | Stops Eigen. When a server backup or its upload to your backup bucket is running, it waits for that to end first. `./eigen restart` starts it again. |
@@ -31,6 +31,8 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 ## Status
 
 `./eigen status` also names the install folder, and the newest backup with its age and size. The Backup row turns red when the last nightly backup failed. It warns when the last backup has warnings, when that backup did not reach your backup bucket, when there is no backup yet, and when nightly backups are on but no Full backup has verified in two days. An update or a restore that stopped while writing the launcher and Compose files shows as `files of <version>, running <version>`, and `./eigen restart` writes the files of the version that runs.
+
+A setup that finds accounts on the server, such as those of an earlier attempt that failed, first saves a copy of them in `data/server/users3.backup-<time>.db`. Eigen never deletes it, because it may be the only copy of real accounts. A Setup copy row warns about each one. Delete it with `sudo rm` once you need none of the accounts in it.
 
 ## Logs
 
