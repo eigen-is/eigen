@@ -38,7 +38,7 @@ Merge bullets a reader would see as one change, such as two fixes to the same pa
 
 ## Markers `./eigen update` reads
 
-`apps/api/src/cli/update-check.ts` matches substrings: a line containing `(breaking)` makes the update ask first, and one containing `(full backup)` makes it take a full backup. Put them in a label on purpose (`**Backups (breaking)**`), never in running text, where they would fire by accident.
+`apps/api/src/cli/update-check.ts` matches substrings: a line containing `(breaking)` makes the update ask first, and one containing `(full backup)` makes it take a full backup. Put them in a label on purpose (`**Backups (breaking)**`), never in running text, where they would fire by accident. A commit that changes how a document's own database stores data, a container database migration, marks its `[Unreleased]` bullet with `(full backup)`, since `./eigen update` on the main channel reads `[Unreleased]` too and takes a Full backup before such an update.
 
 ## The intro is the GitHub release
 

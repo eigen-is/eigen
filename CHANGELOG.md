@@ -35,11 +35,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Labels in sentence case** — buttons, menus, dialogs and fields in Admin, Calendar, Chat, Contacts, Docs, Drive, Mail, Sheets, Space and Stickies capitalize only the first word and names, such as **Reply all**
 - **Menus in Docs, Sheets, Slides, Vector and Stickies** — with a menu open, point at another or use the arrow keys to open it. One click switches menus, and a click outside one reaches the page
 - **Links** — underlined, as in Word and Google Docs, in Docs and its downloads, Stickies, the email you write in Mail, the help center and the blog
-- **Tables in Docs** — a table keeps its column widths when the page gets narrower, and scrolls sideways. A table in a list or a cell still shrinks, and a PDF shrinks one wider than the page
+- **Tables in Docs** — a table keeps its column widths when the page gets narrower, and scrolls sideways. A table in a list or a cell still shrinks
 - **Decimals** — Docs margins show two decimals, such as 2.00 cm. Number fields in Slides and Vector show at most two, and line height and letter spacing at least one, such as 1.0
 - **Shortcuts in the Sheets menus** — **Edit** and **Format → Text** show each item's shortcut
 - **Spreadsheet PDF** — a sheet too large for the PDF keeps the columns one page holds, 192 at the default width. A web page download keeps more while all its rows fit
-- **Spreadsheet downloads** — a cell's text stays inside its row in web page and PDF downloads, as in the editor
+- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads with the ones that fit instead of failing, and its preview shows them. A picture too large to process is left out too. In a PDF, many large PNG pictures count against that limit, photos don't
 - **Forwarding email** — a forward brings the original's attachments, inline pictures too. Remove one with the **X** on its chip
 - **Contacts** — the list fills the page until you open a contact. A link to a deleted contact opens to **Contact not found**
 - **Teams in Admin** — teams get a list page, like users. To add people, select them on the **Users** page, right-click and choose **Add to team…**, which replaces dragging them onto a team
@@ -56,35 +56,49 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Formulas across sheets** — a formula that points at another sheet follows the rows and columns inserted or deleted there, in downloads and previews too, and for whoever opens it next
 - **Undo while you type in a cell** — **Ctrl+Z** (Mac: **⌘Z**) undoes only your typing
 - **Delete in Sheets** — Delete and Backspace clear cells, links too, and keep their formatting, as in Excel and Google Sheets
-- **Errors in Sheets formulas** — a typed error such as `#N/A` is a value, so `=ISERROR(#N/A)` gives TRUE. A Google Sheets-only function in an Excel file shows #NAME?, not #ERROR!
+- **Errors in Sheets formulas** — a formula sees an error in a cell it reads, as in Excel. With 1/0 in B1, `=IFERROR(B1,"none")` gives none and `=B1+1` gives #DIV/0!. CONCAT, TEXTJOIN, `&`, IFS and SWITCH hand an error on, `COUNTIF(…,NA())` counts error cells, and the ignore-errors options of AGGREGATE work
+- **Errors in Excel files** — error cells such as #N/A import and export as errors, and `#N/A` typed into a text-formatted cell stays text
+- **IFERROR in Sheets** — it gives its fallback for a name Sheets doesn't know, such as a typo. An Excel function Sheets can't calculate yet, such as FILTER, shows #NAME?, unless an IF or CHOOSE skips it, and an imported file keeps the value Excel saved
 - **Sheets shortcuts on other keyboard layouts** — copy and cut work on Dvorak, and bold, italic and underline work in a cell on Russian and Greek layouts. On a Mac they take **⌘**, as in Docs
 - **Row height in Sheets** — **Wrap** or a bigger font size makes the row tall enough for the text
 - **Wrapped text in Sheets** — a cell that mixes styles breaks its lines between words
 - **Color scales in Sheets** — short colors such as `#f00` shade cells instead of leaving them blank
 - **Resizing a chart in Sheets** — a large sketched chart keeps up with the pointer
 - **Sheets menus on a phone** — all six fit across the screen
+- **Names in search** — comment matches in the command palette show who wrote last by name, not email address. Search finds a chat message or emote by the name of the person in it as well as their email address
 - **Searching for spreadsheets** — search finds a spreadsheet by its charts' titles, axis titles and series names
+- **Inserting an Excel file in Sheets** — an insert that would make the spreadsheet larger than an import allows is refused with **This spreadsheet is too large to import**, and nothing changes. Before, repeated inserts could grow a spreadsheet without limit
 - **Excel named ranges** — a formula like `=SUM(Sales)` keeps working as its cells change, though the name itself isn't kept, and a dropdown from a named range comes in as a list. Names Eigen can't follow are counted in the import message
 - **Excel row heights** — a normal-height row with wrapped text stays normal, and Excel downloads keep the heights Eigen shows
 - **Copied charts** — a chart copied from Sheets into Docs, Slides or Vector keeps its axis number format, so 25% doesn't turn into 0.25
 - **100% stacked charts in Office downloads** — the axis runs from 0% to 100%
 - **Spreadsheet PDF** — thousands of small sheets print the first 2,000 instead of failing, and a cell of thousands of lines prints on one page
-- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads with the ones that fit instead of failing, and its preview shows them
+- **Spreadsheet downloads** — a spreadsheet with very many charts or pictures downloads with the ones that fit instead of failing, and its preview shows them. In a PDF or web page, many large PNG pictures count against that limit, photos don't
 - **Spreadsheet previews** — a merged cell cut off at the edge shows no border there. An image or chart on a sheet with hidden columns shows within the first 50 visible columns
+- **Wide tables in Docs PDFs** — a table wider than the page fits it in the PDF and web page download, with no columns cut off. A word too long for its column breaks inside its cell
 - **Long tables in Docs PDFs** — a table continues on the next page instead of jumping there whole, and a tall row splits, as in Word
+- **Pictures in downloads** — a document, spreadsheet or deck with photos downloads as a PDF much faster and at a fraction of the size. PDF, Word, PowerPoint and Excel files hold photos and screenshots as JPEG, and only see-through pictures as PNG. A web page download keeps its pictures as before
 - **Pasted photos in Docs downloads** — web page and PDF downloads strip a pasted photo's camera details and location, as Word downloads did. An animated GIF shows its first frame, and an image that can't be cleaned is left out
 - **Comments in downloads** — web page downloads and Drive previews show commented text without the yellow highlight
 - **Long code blocks** — many long code blocks with no language set no longer stall a download or preview. Past about 65,000 characters in all, the rest has no syntax colors
+- **PowerPoint arrows** — bent and curved connectors keep their arrowheads. A bent one comes in as an elbow arrow with its bends where PowerPoint put them, a curved one as a curved arrow
 - **Saving a text file in Drive** — a save over someone else's newer change shows **File conflict** instead of overwriting it. Recent activity lists your save as an edit, not an upload
 - **Paths in Drive** — a file or folder shared with you shows its path from **Shared with me**, a public one from the first folder you can open, and one on a team drive from the drive's name. Each folder in it is a link
 - **Closing a shared text file** — takes you back to **Shared with me**, not to an access request for its folder
+- **Team drives** — a file someone adds, renames, moves or trashes in a team drive or shared folder shows in the open view of everyone who can open it at once. A big upload fills the list as it goes
 - **Trash in Drive** — a file or folder deleted for good leaves the Trash in your other tabs too
 - **Unread counts in Mail** — reading a message in another mail app clears its count at once
 - **Sharing a calendar** — the list of who has access refreshes at once in every open tab when a calendar is shared or stops being shared
 - **New events late in the evening** — in Calendar, a new event made after 23:15 ends on the next day instead of before it starts. So does one with **All day** turned off that late
 - **Finding a person in a filter** — **Home** and **End** in a person search, such as Stickies' **Filter › Assigned to**, move the cursor on Windows and Linux
+- **Passwords with accents** — a password with accents or other non-English letters works for calendar, contacts and file sync
+- **Last active in Admin** — a mail, calendar or file client that signs in with an account's password no longer counts, so it shows when the person last used Eigen in a browser
 - **Picking a theme** — the theme changes the moment you pick it, without a **Settings saved** message
-- **Deleting a team in Admin** — removes its drives, files and calendar from the server. The organization's own team, and a team being backed up or restored, can't be deleted. A refused delete closes the dialog with the reason
+- **Deleting a team in Admin** — removes its drives, files and calendar from the server. A team being backed up or restored can't be deleted, and the organization's own team has no delete button. A refused delete closes the dialog with the reason
+- **Backups on a shared server** — every backup, its description files, the `data/` folder and the log `./eigen` keeps of its last step are readable by Eigen's own user alone
+- **Updates on the main channel** — an update to a new build of `main` makes a Full backup when a change not released yet converts how documents store their data
+- **Restore and rollback** — when one would set aside the folder of a user or team made since the backup, it lists them and asks again before it stops Eigen
+- **Setup copies of the accounts** — `./eigen status` lists each copy of the login database that setup kept, and how to delete it
 
 ## [0.4.0] - 2026-10-26
 
