@@ -284,6 +284,10 @@ step() {
     step_running=$1 step_done=$2 step_failed=$3
     shift 3
     code=0
+    # A step may print a secret, so its log is made anew for the operator alone: a truncating write keeps the mode
+    # of a log an older launcher left readable by every user.
+    rm -f "$LOG"
+    (umask 077 && : >"$LOG")
     if [ -t 1 ]; then
         set -m
         (set +e; "$@") >"$LOG" 2>&1 </dev/null &

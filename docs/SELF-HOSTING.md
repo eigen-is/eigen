@@ -62,7 +62,7 @@ The help center at eigen.is follows `main`, which moves only for a release, so i
 | `logs [service]` | Follows the logs of every service, or of one |
 | `reset-password` | Sets a new password for an account and signs it out everywhere |
 
-One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
+One command that changes Eigen runs at a time, under `.eigen/lock`. `backup` takes no lock: it changes nothing and runs inside the API. Each step writes its output to `.eigen/last-step.log`, which a failure points at; the launcher makes it anew for each step, readable by you alone. What the backup and restore do, and why, is in [BACKUP.md](BACKUP.md).
 
 The backup `update` makes is Light, the databases and settings without files and mail, unless a release since the running one lists a breaking change or a change marked `(full backup)`, or `--full` asks for Full. On the main channel the changes not released yet count too. Its name starts with `server-pre-update-`. Eigen keeps the two newest good ones and the one `rollback` needs ([BACKUP.md § Retention keeps good scheduled archives and every manual one](BACKUP.md#retention-keeps-good-scheduled-archives-and-every-manual-one)), and they never go to the backup bucket: they exist for `rollback` on this machine. A rollback from a Light backup puts the databases back over the files of today ([BACKUP.md § A Full restore swaps data/ whole, a Light one merges](BACKUP.md#a-full-restore-swaps-data-whole-a-light-one-merges)).
 
