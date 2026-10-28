@@ -87,8 +87,8 @@ export function renderDocHtml(
         options: {
             nodeMapping: {
                 codeBlock: ({ node }) => renderCodeBlockNode(node, highlight),
-                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 table: ({ node, children }) => renderTable(node, children),
+                taskItem: ({ node, children }) => renderTaskItemNode(node, children),
                 figure: ({ node }) => renderFigureNode(readFigureAttrs(node.attrs), resolveImgSrc, options),
                 chart: ({ node }) => renderChartNode(readChartAttrs(node.attrs)),
                 textBox: ({ node, renderElement }) => renderTextBox(readTextBoxAttrs(node.attrs), node, renderElement),
