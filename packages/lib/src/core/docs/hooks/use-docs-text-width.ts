@@ -1,84 +1,27 @@
-// The reader's own text width on a page-less doc, Narrow, Medium, Wide or Full, which the Docs editor draws its text
-// column at. It lives in the user's settings, so it follows them to every device and every page-less doc, and never
-// in the doc, so a collaborator keeps their own. A copy in this browser draws the column before the settings load,
-// and is all a guest has.
+// The reader's own text width on a page-less doc, which the Docs editor draws its text column at. It lives in the
+// user's settings, so it follows them to every device and every page-less doc. It is never stored in the doc, so a
+// collaborator keeps their own. A copy in this browser draws the column before the settings load.
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { spaceApi } from '@workspace/lib/api';
-import { useAuth, useIsGuest } from '@workspace/lib/auth';
-import type { DocsTextWidth, UserSettings } from '@workspace/lib/types/settings';
+import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import { DOCS_TEXT_WIDTHS, docsTextWidth } from '@workspace/lib/types/settings';
-import { useEffect } from 'react';
-import { AppError, onMutationError } from '../../api-error';
-import { invalidateSpaceSettings, spaceKeys } from '../../space/hooks/keys';
-import { useSpaceSettings } from '../../space/hooks/use-space-settings';
+import type { SettingWithCopy } from '../../space/hooks/use-setting-with-copy';
+import { useSettingWithCopy } from '../../space/hooks/use-setting-with-copy';
 
-const cacheKeyFor = (ownerId: string) => `eigen-docs-text-width:${ownerId || 'anon'}`;
-
-function readCache(key: string): DocsTextWidth | undefined {
-    try {
-        const cached = window.localStorage.getItem(key);
-        return DOCS_TEXT_WIDTHS.find((width) => width === cached);
-    } catch {
-        return undefined;
-    }
-}
-
-function writeCache(key: string, width: DocsTextWidth | undefined) {
-    try {
-        if (width) window.localStorage.setItem(key, width);
-        else window.localStorage.removeItem(key);
-    } catch {}
-}
+const TEXT_WIDTH: SettingWithCopy<DocsTextWidth> = {
+    copyKey: (ownerId) => `eigen-docs-text-width:${ownerId || 'anon'}`,
+    read: (settings) => (settings.docsView?.textWidth ? docsTextWidth(settings) : undefined),
+    patch: (textWidth) => ({ docsView: { textWidth } }),
+    parse: (copy) => DOCS_TEXT_WIDTHS.find((width) => width === copy),
+    serialize: (width) => width,
+};
 
 export function useDocsTextWidth(): { textWidth: DocsTextWidth; setTextWidth: (width: DocsTextWidth) => void } {
-    const queryClient = useQueryClient();
-    const { user } = useAuth();
-    const isGuest = useIsGuest();
-    const ownerId = user?.id || '';
-    const cacheKey = cacheKeyFor(ownerId);
-    const { data: settings } = useSpaceSettings();
-    const loaded = settings?.docsView?.textWidth ? docsTextWidth(settings) : undefined;
-    const textWidth = loaded ?? readCache(cacheKey) ?? 'narrow';
-    // The settings replace the copy, so a choice made on another device is what this browser draws first next time.
-    useEffect(() => {
-        if (loaded) writeCache(cacheKey, loaded);
-    }, [cacheKey, loaded]);
-
-    const mutation = useMutation({
-        mutationFn: async (next: DocsTextWidth) => {
-            if (!ownerId || isGuest) return;
-            const res = await spaceApi({ ownerId }).settings.put({ docsView: { textWidth: next } });
-            if (res.error) throw new AppError(res);
-            return res.data;
-        },
-        onMutate: async (next) => {
-            const prevCache = readCache(cacheKey);
-            writeCache(cacheKey, next);
-            await queryClient.cancelQueries({ queryKey: spaceKeys.settings(ownerId) });
-            const prev = queryClient.getQueryData<UserSettings>(spaceKeys.settings(ownerId));
-            queryClient.setQueryData<UserSettings>(spaceKeys.settings(ownerId), (old) => ({
-                ...(old ?? {}),
-                docsView: { ...old?.docsView, textWidth: next },
-            }));
-            return { prev, prevCache };
-        },
-        onError: (error, _next, context) => {
-            if (context) {
-                writeCache(cacheKey, context.prevCache);
-                if (context.prev !== undefined) queryClient.setQueryData(spaceKeys.settings(ownerId), context.prev);
-            }
-            onMutationError(error);
-        },
-        onSettled: () => {
-            if (ownerId && !isGuest) invalidateSpaceSettings(queryClient, ownerId);
-        },
-    });
-
+    const { value, save } = useSettingWithCopy(TEXT_WIDTH);
+    const textWidth = value ?? docsTextWidth(undefined);
     return {
         textWidth,
         setTextWidth: (width) => {
-            if (width !== textWidth) mutation.mutate(width);
+            if (width !== textWidth) save(width);
         },
     };
 }

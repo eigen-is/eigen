@@ -1,3 +1,7 @@
+// A doc's bands, its headers and footers: their Yjs roots, the nodes their schema leaves out, and whether one has
+// anything to print. The editor that edits a band, the PDF and the docx read them from here, so a band means the same
+// everywhere.
+
 import type { Node } from '@tiptap/pm/model';
 import { readEquation } from './nodes/equation';
 import type { Equation } from './nodes/equation-paste';
@@ -14,9 +18,10 @@ export type BandEdge = keyof typeof FIRST_PAGE_BAND;
 export const bandEdge = (root: BandRoot): BandEdge =>
     root === 'footer' || root === FIRST_PAGE_BAND.footer ? 'footer' : 'header';
 
-// Nodes a band's schema leaves out, so the Yjs binding deletes one a peer writes: none has a meaning in a header that
-// prints on every page, a note belongs to the body's text, a table of contents lists the body's headings, and the chart
-// panel edits the body's charts only. Marks stay: a mark the schema lacks deletes the text that carries it.
+// Nodes a band's schema leaves out, so the Yjs binding deletes one a peer writes. None of them means anything in a
+// header that prints on every page. A note belongs to the body's text, and a table of contents lists the body's
+// headings. The chart panel edits the body's charts only. Marks stay, because a mark the schema lacks deletes the text
+// that carries it.
 export const BAND_EXCLUDED_NODES: ReadonlySet<string> = new Set([
     'pageBreak',
     'title',

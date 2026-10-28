@@ -1,4 +1,4 @@
-// One tab in the sheet tab strip: its name, renamed in place on a double click, its colour, its context menu,
+// One tab in the sheet tab strip: its name, renamed in place on a double click, its color, its context menu,
 // and the drag and drop that moves it. A drop renumbers every sheet's order from 0.
 
 import { MenuSections } from '@workspace/ui/components/context-menu';
@@ -24,6 +24,7 @@ import {
     deselectFloatingObject,
     editSheetName,
     getSheetIndex,
+    sheetOrder,
 } from '../../state';
 
 const NO_MORE_SHEET =
@@ -89,15 +90,15 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             setContext((draftCtx) => {
                 let draggingSheet: Sheet | undefined;
                 let droppingSheet: Sheet | undefined;
-                const sorted = [...draftCtx.sheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                const sorted = [...draftCtx.sheets].sort((a, b) => sheetOrder(a) - sheetOrder(b));
                 for (const [i, f] of sorted.entries()) {
                     f.order = i;
                     if (f.id === draggingId) draggingSheet = f;
                     else if (f.id === id) droppingSheet = f;
                 }
                 if (draggingSheet && droppingSheet) {
-                    draggingSheet.order = (droppingSheet.order ?? 0) - 0.1;
-                    const resorted = [...draftCtx.sheets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                    draggingSheet.order = sheetOrder(droppingSheet) - 0.1;
+                    const resorted = [...draftCtx.sheets].sort((a, b) => sheetOrder(a) - sheetOrder(b));
                     for (const [i, f] of resorted.entries()) {
                         f.order = i;
                     }
@@ -116,7 +117,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             if (context.allowEdit === false) return;
             setContext((ctx) => {
                 let currentOrder = -1;
-                const sorted = ctx.sheets.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                const sorted = ctx.sheets.slice().sort((a, b) => sheetOrder(a) - sheetOrder(b));
                 for (const [i, _sheet] of sorted.entries()) {
                     _sheet.order = i;
                     if (_sheet.id === id) currentOrder = i;

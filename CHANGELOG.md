@@ -50,6 +50,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
+- **Color scales in Sheets** — a color scale whose colors are written short, such as `#f00`, shades its cells instead of leaving them blank
+- **Sharing a calendar** — when the owner stops sharing a calendar with you, the list of who has access refreshes at once, as it does when they share it
 - **Contents title in Word files** — the title Word puts above a table of contents, such as **Contents**, comes in as normal text instead of a Heading 1, so it no longer lists itself in the outline
 - **Trash in Drive** — a file or folder deleted for good disappears from the Trash open in your other tabs too
 - **Unread counts in Mail** — a message you read in another mail app clears its unread count in Eigen's sidebar at once

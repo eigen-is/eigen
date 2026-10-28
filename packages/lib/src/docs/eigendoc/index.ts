@@ -9,7 +9,7 @@ export {
     PAGE_BAND_CLASS,
 } from './bands';
 export { getDocExtensions } from './extensions';
-export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR } from './heading';
+export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, MAX_HEADING_LEVEL } from './heading';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
 export { ChartNode, chartSvg, readChartAttrs } from './nodes/chart';

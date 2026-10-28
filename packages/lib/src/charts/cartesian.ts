@@ -27,8 +27,8 @@ const SIN45 = Math.SQRT1_2;
 // Float error can put a label that ends at its room's edge a hair past it.
 const EDGE_SLACK = 1e-6;
 
-// labelled says whether the series draws its data labels: its style's choice, and none past the sketch cap.
-export type PaintedSeries = InlineChartSeries & { color: string; style: ChartSeriesStyle; labelled: boolean };
+// labeled says whether the series draws its data labels. Its style decides, and no series draws them past the sketch cap.
+export type PaintedSeries = InlineChartSeries & { color: string; style: ChartSeriesStyle; labeled: boolean };
 
 // A data label's text and width, measured once before the plot is laid out.
 type ValueText = { value: number; text: string; width: number };
@@ -40,8 +40,7 @@ type ValueLabel = { label: ChartLabel; box: Frame; area: number };
 // labels' room to the plot. Its title and the gridlines stay. The baseline is the category axis's line, so a hidden
 // category axis draws none. A 100% stack plots shares and labels its ticks as percents, whatever the source cells'
 // format. Its min and max are shares too, as Excel's c:min and c:max are, where 1 is 100%. A data label reads the raw
-// value in the values' own format: the axis's, else the source cells', else General. A 100% stack's axis format reads
-// shares, so its labels skip it. Null when the frame is too small for a plot.
+// value, in the format ChartLayoutInput describes. Null when the frame is too small for a plot.
 export function layoutCartesian(
     ctx: Context,
     marks: Context,
@@ -50,7 +49,7 @@ export function layoutCartesian(
     series: PaintedSeries[],
     raw: (number | null)[][],
     frame: Frame,
-    sourceFormat: string | null,
+    sourceFormat: string | undefined,
 ): ChartShape[] | null {
     const { lineHeight: lh, gap, fontSize } = ctx;
     const { type, blanks } = spec.chart;
@@ -63,13 +62,13 @@ export function layoutCartesian(
     const format = y.labels.format ?? sourceFormat;
     const formatTick: ChartTickFormat = percent
         ? formatPercentTick
-        : format === null
+        : format === undefined
           ? formatTickValue
           : (value) => numberDisplay(value, format);
     const valueText = (value: number) => numberDisplay(value, (percent ? sourceFormat : format) ?? 'General');
     const texts = series.map((s, si) =>
         raw[si].map((value): ValueText | null => {
-            if (!s.labelled || value === null) return null;
+            if (!s.labeled || value === null) return null;
             const text = valueText(value);
             return { value, text, width: measure(ctx, text) };
         }),
@@ -272,6 +271,7 @@ function barMarks(
     texts: (ValueText | null)[][],
     valueLabels: ValueLabel[],
 ): ChartShape[] {
+    const { lineHeight: lh, gap } = ctx;
     const shapes: ChartShape[] = [];
     const ups: number[] = [];
     const downs: number[] = [];
@@ -302,38 +302,25 @@ function barMarks(
                 ...rectangle(ctx, `bar:${si}:${c}`, box, outlineOf(ctx, s.color), fill),
                 strokeWidth: stroke,
             });
+            // A data label sits past the bar's end, on the far side of the axis for a negative bar. A stacked segment
+            // centers its label inside, and shows none when the label doesn't fit.
             const text = texts[si][c];
-            const placed = text && barLabel(ctx, text, box, horizontal, stacked);
-            if (placed) valueLabels.push(placed);
+            if (!text || (stacked && (text.width > box.width || lh > box.height))) continue;
+            const area = box.width * box.height;
+            const middle = { x: box.x + box.width / 2, y: box.y + (box.height - lh) / 2 };
+            const negative = text.value < 0;
+            if (stacked) {
+                valueLabels.push(valueLabel(ctx, text, middle.x, middle.y, 'middle', area));
+            } else if (horizontal) {
+                const x = negative ? box.x - gap : box.x + box.width + gap;
+                valueLabels.push(valueLabel(ctx, text, x, middle.y, negative ? 'end' : 'start', area));
+            } else {
+                const y = negative ? box.y + box.height + gap : box.y - gap - lh;
+                valueLabels.push(valueLabel(ctx, text, middle.x, y, 'middle', area));
+            }
         }
     }
     return shapes;
-}
-
-// Past the bar's end, on the far side of the axis for a negative bar, or centered in a stacked segment, where a label
-// that doesn't fit inside shows none.
-function barLabel(
-    ctx: Context,
-    text: ValueText,
-    box: { x: number; y: number; width: number; height: number },
-    horizontal: boolean,
-    stacked: boolean,
-): ValueLabel | null {
-    const { lineHeight: lh, gap } = ctx;
-    const area = box.width * box.height;
-    const middle = { x: box.x + box.width / 2, y: box.y + (box.height - lh) / 2 };
-    if (stacked) {
-        if (text.width > box.width || lh > box.height) return null;
-        return valueLabel(ctx, text, middle.x, middle.y, 'middle', area);
-    }
-    if (horizontal) {
-        return text.value < 0
-            ? valueLabel(ctx, text, box.x - gap, middle.y, 'end', area)
-            : valueLabel(ctx, text, box.x + box.width + gap, middle.y, 'start', area);
-    }
-    return text.value < 0
-        ? valueLabel(ctx, text, middle.x, box.y + box.height + gap, 'middle', area)
-        : valueLabel(ctx, text, middle.x, box.y - gap - lh, 'middle', area);
 }
 
 function valueLabel(

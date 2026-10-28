@@ -1,6 +1,6 @@
 // A doc's Normal text: the font, size, spacing and color that text and paragraphs without their own draw. A doc keeps
 // it in a Y.Map any peer writes, so readNormalStyle reads it back to known values only. The editor, the previews and
-// the exports draw the body through normalStyleProperties.
+// the exports, for example, draw the body through normalStyleProperties.
 
 import { isHexColor } from '../../constants/colors';
 import {

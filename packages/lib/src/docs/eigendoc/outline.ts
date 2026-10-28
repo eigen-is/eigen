@@ -1,9 +1,10 @@
-// A doc's outline: its body headings at levels 1 to 6, in document order, with their text and position. The editor's
-// outline sidebar and every table of contents list them and jump to one on a click, reading them again on every
-// change to the doc. The exports number the same headings for their links and bookmarks, the docx writer from the
-// stored JSON, through the one rule here.
+// A doc's outline: its body headings, in document order, with their text and position. Surfaces such as the editor's
+// outline sidebar and a table of contents list them, and read them again on every change to the doc. The exports
+// number the same headings for their links and bookmarks. Every reader goes through outlineEntry, the one rule for
+// which headings count.
 
 import type { Node } from '@tiptap/pm/model';
+import { MAX_HEADING_LEVEL } from './heading';
 
 export type OutlineEntry = { level: number; text: string };
 
@@ -12,10 +13,10 @@ export type OutlineHeading = OutlineEntry & { pos: number };
 // A heading's children as a ProseMirror node (`node.content.content`) and its stored JSON (`content`) both give them.
 type HeadingChild = { readonly text?: string | undefined };
 
-// The one rule for what the outline lists: a heading whose level is 1 to 6, as a collaborator can store any, with text
+// The one rule for what the outline lists: a heading with a real level, as a collaborator can store any, and with text
 // of its own. A footnote in a heading holds paragraphs, not text, so the note's text and its number stay out.
 export function outlineEntry(level: unknown, children: readonly HeadingChild[]): OutlineEntry | null {
-    if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 6) return null;
+    if (typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > MAX_HEADING_LEVEL) return null;
     const text = children.map((child) => child.text ?? '').join('');
     return text.trim() === '' ? null : { level, text };
 }

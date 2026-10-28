@@ -2,7 +2,7 @@
 // and data bars. Beside the evaluator sit the rule edits a row op, a move or a paste makes, which keep a formula rule's
 // anchor, and the shape check every reader of a stored rule asks first, since a peer can store anything.
 
-import { parseRgb } from '@workspace/lib/constants/colors';
+import { hexChannels, parseRgb } from '@workspace/lib/constants/colors';
 import { isRecord } from '@workspace/lib/guards';
 import { isNil } from 'es-toolkit/compat';
 import { cellValue, parseCellInput } from './format';
@@ -98,10 +98,11 @@ function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: nu
     }
 }
 
-// Parse "#rrggbb" or an rgb() into [r, g, b].
+// A stop's red, green and blue, from a hex, its alpha dropped, or from an rgb(). isWellFormedCfRule keeps any stop
+// that starts with '#', and one that is no hex color reads as black.
 function parseColorChannels(color: string): [number, number, number] {
-    const hex = color.startsWith('#') ? color : (parseRgb(color)?.hex ?? '');
-    return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+    const { red, green, blue } = hexChannels(parseRgb(color)?.hex ?? color, [3, 6, 8]) ?? { red: 0, green: 0, blue: 0 };
+    return [red, green, blue];
 }
 
 function getColorGradation(color1: string, color2: string, value1: number, value2: number, value: number) {

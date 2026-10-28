@@ -22,9 +22,8 @@ import { usePublicUser, usePublicUsers } from '../../public';
 import { formatFreeBusyTitle, isInvitationFromOthers, occurrenceDateToString } from '../calendar-utils';
 import {
     calendarKeys,
-    invalidateCalendarCreated,
     invalidateCalendarDeleted,
-    invalidateCalendarUpdated,
+    invalidateCalendarList,
     invalidateEventList,
     invalidateSharedCalendarUpdated,
 } from './keys';
@@ -53,7 +52,7 @@ export function useCreateCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateCalendarCreated(queryClient, ownerId),
+        onSuccess: () => invalidateCalendarList(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -67,7 +66,7 @@ export function useUpdateCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateCalendarUpdated(queryClient, ownerId),
+        onSuccess: () => invalidateCalendarList(queryClient, ownerId),
         onError: onMutationError,
     });
 }

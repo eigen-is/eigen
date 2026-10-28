@@ -9,12 +9,12 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { invalidateChatMatches } from '../chat/hooks/keys';
 import { invalidateSearchOwner } from '../search';
 import {
-    driveKeys,
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
     invalidateEffectiveMembers,
     invalidateItemCreated,
     invalidateItemDeleted,
+    invalidatePath,
     invalidatePathMoved,
     invalidatePathRenamed,
     invalidateTrash,
@@ -62,7 +62,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, use
             invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
             // An overwrite keeps the path, so its own detail refetches too. The size, the thumbnail's
             // cache-bust and the text preview's key all come from it.
-            queryClient.invalidateQueries({ queryKey: driveKeys.path(path.ownerId, path.mountId, path.id) });
+            invalidatePath(queryClient, path.ownerId, path.mountId, path.id);
             invalidateSearchOwner(queryClient, path.ownerId);
             invalidateFileHistory(queryClient, path.ownerId);
             return true;

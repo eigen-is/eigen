@@ -31,7 +31,7 @@ import type {
     Sheet,
     SingleRange,
 } from './types';
-import { getSheetIndex } from './utils';
+import { getSheetIndex, sheetOrder } from './utils';
 
 interface MutableRefObject<T> {
     current: T;
@@ -456,7 +456,7 @@ export function ensureSheetIndex(data: Sheet[], generateSheetId: () => string) {
 
 export function firstVisibleSheetId(ctx: Context, excludeId?: string) {
     const shown = ctx.sheets.filter((sheet) => sheet.hide !== 1 && sheet.id !== excludeId);
-    return sortBy(shown, (sheet) => sheet.order)[0]?.id;
+    return sortBy(shown, sheetOrder)[0]?.id;
 }
 
 export function initSheetIndex(ctx: Context) {
