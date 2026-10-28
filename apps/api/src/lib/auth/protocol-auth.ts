@@ -19,12 +19,8 @@ export async function authenticateBasic(request: Request): Promise<User> {
         throw new ApiError(401, 'Unauthorized');
     }
 
-    let decoded: string;
-    try {
-        decoded = atob(authHeader.slice(6));
-    } catch {
-        throw new ApiError(401, 'Unauthorized');
-    }
+    // Clients encode the credentials as UTF-8, so a password with accents survives; atob would read them as Latin-1.
+    const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf8');
     const colonIndex = decoded.indexOf(':');
     if (colonIndex === -1) {
         throw new ApiError(401, 'Unauthorized');
@@ -73,15 +69,21 @@ export async function verifyProtocolAuth(email: string, password: string, ip?: s
 
 // The user when the password matches the hash on their credential account, else null. A protocol client signs in
 // on every request or poll, so this creates no session and does not count as a sign-in. A 2FA account never uses
-// its account password here, because the protocols have no second factor. Every refusal spends one password hash,
-// the cost of a wrong password, so the time to answer does not tell an unknown address or a 2FA account apart.
+// its account password here, because the protocols have no second factor, and a banned account is refused as the
+// browser sign-in refuses it. Every refusal spends one password hash, the cost of a wrong password, so the time to
+// answer does not tell an unknown address, a 2FA account or a ban apart.
 async function checkAccountPassword(user: User | null, password: string): Promise<User | null> {
     const context = await auth.$context;
-    const account =
-        user && !user.twoFactorEnabled ? await context.internalAdapter.findCredentialAccount(user.id) : null;
+    const usable = user && !user.twoFactorEnabled && !isBanned(user);
+    const account = usable ? await context.internalAdapter.findCredentialAccount(user.id) : null;
     if (!user || !account?.password) {
         await context.password.hash(password);
         return null;
     }
     return (await context.password.verify({ hash: account.password, password })) ? user : null;
+}
+
+// better-auth's rule: a ban whose expiry has passed no longer holds.
+function isBanned(user: User): boolean {
+    return Boolean(user.banned) && !(user.banExpires && user.banExpires < new Date());
 }

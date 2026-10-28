@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
+import { APP_PASSWORD_LENGTH } from '../../lib/auth/auth';
 import type { TestUser } from '../setup';
 import { app, createTestGuest, createTestUser, getTestContext } from '../setup';
 
@@ -75,15 +76,19 @@ describe('Protocol Auth', () => {
     describe('every refusal looks the same', () => {
         let guest: TestUser;
         let twoFactorEmail: string;
+        let bannedEmail: string;
 
         beforeAll(async () => {
             guest = await createTestGuest('Protocol Guest');
             const member = await createTestUser('protocol-2fa@test.eigen.is', 'testpassword123', 'Protocol 2FA');
             twoFactorEmail = member.email;
+            const banned = await createTestUser('protocol-banned@test.eigen.is', 'testpassword123', 'Protocol Banned');
+            bannedEmail = banned.email;
             const { getAuthDrizzleDb } = await import('../../lib/auth/auth');
             const { user } = await import('../../../auth-schema');
             const { eq } = await import('drizzle-orm');
             getAuthDrizzleDb().update(user).set({ twoFactorEnabled: true }).where(eq(user.id, member.id)).run();
+            getAuthDrizzleDb().update(user).set({ banned: true }).where(eq(user.id, banned.id)).run();
         });
 
         async function passwordWork(run: () => Promise<unknown>): Promise<number> {
@@ -103,6 +108,7 @@ describe('Protocol Auth', () => {
             ['an unknown address', () => ['nobody-protocol@test.eigen.is', 'testpassword123']],
             ['a guest address', () => [guest.email, 'testpassword123']],
             ['a 2FA account on its account password', () => [twoFactorEmail, 'testpassword123']],
+            ['a banned account on its account password', () => [bannedEmail, 'testpassword123']],
             ['a wrong password', () => [ctx.alice.user.email, 'wrongpassword']],
         ];
 
@@ -133,7 +139,8 @@ describe('Protocol Auth', () => {
                 body: { name: 'guest-app-password' },
                 headers: { cookie: `better-auth.session_token=${guest.sessionToken}` },
             });
-            await expect(verifyProtocolAuth(guest.email, created?.key ?? '')).rejects.toThrow('Unauthorized');
+            expect(created.key).toHaveLength(APP_PASSWORD_LENGTH);
+            await expect(verifyProtocolAuth(guest.email, created.key)).rejects.toThrow('Unauthorized');
         });
     });
 
@@ -227,6 +234,38 @@ describe('Protocol Auth', () => {
             }),
         );
         expect(res.status).toBe(401);
+    });
+
+    // A Basic header carries the credentials as UTF-8 bytes, as clients send them, and a JSON body as UTF-8 text.
+    describe('a password with accents', () => {
+        const email = 'protocol-utf8@test.eigen.is';
+        const password = 'wachtwoord-é-ü';
+
+        beforeAll(async () => {
+            await createTestUser(email, password, 'Protocol UTF-8');
+        });
+
+        test('signs in over DAV', async () => {
+            const credentials = Buffer.from(`${email}:${password}`, 'utf8').toString('base64');
+            const res = await app.handle(
+                new Request('http://localhost/dav/', {
+                    method: 'PROPFIND',
+                    headers: { Authorization: `Basic ${credentials}`, Depth: '0' },
+                }),
+            );
+            expect(res.status).toBe(207);
+        });
+
+        test('signs in through the mail server check', async () => {
+            const res = await app.handle(
+                new Request('http://localhost/internal/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password }),
+                }),
+            );
+            expect(res.status).toBe(200);
+        });
     });
 
     // -- 2FA hard-gate: primary password must never bypass 2FA over protocol auth --
