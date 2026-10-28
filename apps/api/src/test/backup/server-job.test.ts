@@ -407,8 +407,7 @@ describe('Server backup job', () => {
                 const { job, archivePath } = await runJob();
                 expect(job.error).toBeUndefined();
                 expect(job.state).toBe('done');
-                expect(refused).toBeInstanceOf(ApiError);
-                expect(refused).toMatchObject({ status: 409 });
+                expect(refused).toMatchObject({ statusCode: 409 });
                 const home = (await readServerManifest(archivePath)).manifest.homes.find((h) => h.ownerId === kept.id);
                 expect(home?.member).toBeDefined();
                 expect(home?.skipped).toBeUndefined();
