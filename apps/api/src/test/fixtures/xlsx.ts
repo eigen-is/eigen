@@ -2,7 +2,7 @@ import type { Sheet } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import type { TransformWarning } from '../../lib/document/transform/protocol';
 import { lossCounter } from '../../lib/document/transform/protocol';
-import type { OfficeMedia } from '../../lib/export/office-image';
+import type { OfficeMedia } from '../../lib/export/export-image';
 import { writeXlsx } from '../../lib/export/sheets/xlsx/to-xlsx';
 import { writeZip } from '../../lib/ooxml/zip';
 

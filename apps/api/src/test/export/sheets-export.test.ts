@@ -1308,7 +1308,7 @@ describe('Sheets xlsx export — colors', () => {
 // The whole export: the transform names the sheets' images, the main thread prepares them as a docx's, and the drawing
 // part shows them among the charts.
 describe('an xlsx export carries the sheets’ images', () => {
-    test('each image once under xl/media, the PNG from its source and an SVG beside its PNG', async () => {
+    test('each image once under xl/media, a JPEG from its opaque source and an SVG beside its PNG', async () => {
         const ctx = await getTestContext();
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, 'default', 'root');
         const created = await drivePost<DrivePath>(
@@ -1350,18 +1350,21 @@ describe('an xlsx export carries the sheets’ images', () => {
         const result = await exportDocument(mount, path, 'xlsx');
         const zip = openZip(result.data);
         expect(zip.names().filter((name) => name.startsWith('xl/media/'))).toEqual([
-            'xl/media/image1.png',
+            'xl/media/image1.jpeg',
             'xl/media/image2.png',
             'xl/media/image2.svg',
         ]);
         const signature = (name: string) =>
             Buffer.from(zip.read(name) ?? [])
-                .subarray(1, 4)
-                .toString();
-        expect([signature('xl/media/image1.png'), signature('xl/media/image2.png')]).toEqual(['PNG', 'PNG']);
-        expect(readZipEntry(result.data, '[Content_Types].xml')).toContain(
-            '<Default Extension="png" ContentType="image/png"/>',
-        );
-        expect(readZipEntry(result.data, 'xl/drawings/_rels/drawing2.xml.rels')).toContain('../media/image1.png');
+                .subarray(0, 4)
+                .toString('hex');
+        expect([signature('xl/media/image1.jpeg'), signature('xl/media/image2.png')]).toEqual([
+            expect.stringMatching(/^ffd8ff/),
+            '89504e47',
+        ]);
+        const contentTypes = readZipEntry(result.data, '[Content_Types].xml');
+        expect(contentTypes).toContain('<Default Extension="jpeg" ContentType="image/jpeg"/>');
+        expect(contentTypes).toContain('<Default Extension="png" ContentType="image/png"/>');
+        expect(readZipEntry(result.data, 'xl/drawings/_rels/drawing2.xml.rels')).toContain('../media/image1.jpeg');
     }, 120_000);
 });

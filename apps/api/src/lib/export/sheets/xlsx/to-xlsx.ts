@@ -1,8 +1,8 @@
 // The xlsx writer's entry: an export's sheets to the bytes of a workbook, its SpreadsheetML written by hand as the
 // import reads it. Every part is declared before any is written, and a part's body is pulled when the zip writer
 // reaches it, so the sheets come first, then the shared strings and the styles they filled. Runs in the transform
-// process: `media` is the sheets' images as the Office media prep made them. What Excel's limits cut is counted
-// through `lost`.
+// process: `media` is the sheets' images as the main thread's media prep made them, a JPEG or PNG and an SVG beside
+// its PNG. What Excel's limits cut is counted through `lost`.
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -12,8 +12,8 @@ import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf, writePackage } from '../../../ooxml/opc';
 import { SPREADSHEETML } from '../../../ooxml/spreadsheetml';
-import type { OfficeMedia } from '../../office-image';
-import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../office-image';
+import type { OfficeMedia } from '../../export-image';
+import { OFFICE_IMAGE_CONTENT_TYPES, officeImages } from '../../export-image';
 import { drawingOf } from './drawing';
 import { activeTabOf, sheetNames, workbookXml } from './package';
 import { sharedStringTable } from './strings';

@@ -1525,25 +1525,25 @@ describe('Sheets HTML export — floating images', () => {
     }, 60_000);
 });
 
-// WeasyPrint decodes every picture whole, so an export reads each picture's size from its header and charges the pixels
-// it decodes to, once per picture, on top of the bytes its tags write.
+// WeasyPrint decodes a PNG whole and embeds a JPEG as it is, so the PDF charges a PNG the pixels it decodes to, once
+// per picture, on top of the bytes its tags write. The size is the one the main thread sends with the picture.
 describe('Sheets HTML export — decoded pixels', () => {
-    function picture(name: string, contentType: string, bytes: Buffer): ExportMedia {
-        return { name, contentType, data: toTransferableBuffer(bytes) };
-    }
-
-    // What collectExportMedia sends for a photo in the sheet: its screen preview, a WebP as large as one gets. A flat
-    // colour keeps it a few kilobytes, so its bytes alone spend little of the cap. `shade` makes each one distinct.
-    async function screenPreview(name: string, shade: number): Promise<ExportMedia> {
-        const background = { r: shade, g: 119, b: 85 };
-        const webp = await sharp({ create: { width: 2560, height: 1440, channels: 3, background } })
-            .webp({ quality: 85 })
+    // What collectExportMedia sends the PDF: a PNG or JPEG made from the source, with the size it was sent at. The
+    // bytes are a few pixels, so the size sent beside them is all the charge can read.
+    async function picture(name: string, format: 'png' | 'jpeg', width: number, height: number): Promise<ExportMedia> {
+        const background = { r: 255, g: 119, b: 85 };
+        const bytes = await sharp({ create: { width: 4, height: 4, channels: 3, background } })
+            .toFormat(format)
             .toBuffer();
-        return picture(name, 'image/webp', webp);
+        return { name, contentType: `image/${format}`, data: toTransferableBuffer(bytes), width, height };
     }
 
-    // A sheet with one tag for each media name in `tags`, exported to the HTML WeasyPrint prints.
-    async function exportPictures(media: ExportMedia[], tags: string[]) {
+    function pictures(count: number, format: 'png' | 'jpeg', width: number, height: number) {
+        return Promise.all(Array.from({ length: count }, (_, i) => picture(`picture-${i}`, format, width, height)));
+    }
+
+    // A sheet with one tag for each media name in `tags`, exported to the HTML WeasyPrint prints or the download.
+    async function exportPictures(media: ExportMedia[], tags: string[], format: 'pdf-html' | 'html' = 'pdf-html') {
         const sheet: Sheet = {
             id: 'sheet-1',
             name: 'Sheet1',
@@ -1555,38 +1555,52 @@ describe('Sheets HTML export — decoded pixels', () => {
         };
         const doc = new Y.Doc();
         doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet], { computed: true }));
-        const exported = await renderEigensheetsExport(doc, 'pdf-html', 'Pictures', async () => media);
+        const exported = await renderEigensheetsExport(doc, format, 'Pictures', async () => media);
         const html = new TextDecoder().decode(exported.data);
         return { drawn: html.match(/<img /g)?.length ?? 0, warnings: exported.warnings };
     }
 
-    // Distinct previews of photos took WeasyPrint 0.58 s each, so 60 of them took 35 s. By their bytes these 60 cost
-    // some 11,000 cells; their pixels cost 4,608 each, so 52 fit the cap with the sheet's page.
-    test('many distinct screen previews spend the cap with their pixels, and the ones past it are left out', async () => {
-        const media = await Promise.all(Array.from({ length: 60 }, (_, i) => screenPreview(`photo-${i}.webp`, i)));
+    // A 2560 by 1440 PNG costs 4,608 cells for its pixels and 7 for its tag, so 54 fit the cap beside the sheet's cell
+    // and page.
+    test('many distinct PNGs spend the cap with their pixels, and the ones past it are left out', async () => {
+        const media = await pictures(60, 'png', 2560, 1440);
         const { drawn, warnings } = await exportPictures(
             media,
             media.map(({ name }) => name),
         );
-        expect(drawn).toBe(52);
-        expect(warnings).toEqual([{ code: 'images-dropped', count: 8 }]);
-    }, 30_000);
+        expect(drawn).toBe(54);
+        expect(warnings).toEqual([{ code: 'images-dropped', count: 6 }]);
+    });
 
-    test('a picture on many tags is decoded once, so its pixels are charged once', async () => {
+    // The browser that opens the download decodes its pictures, so WeasyPrint's cost has no part in it.
+    test('the HTML download charges no pixels', async () => {
+        const media = await pictures(60, 'png', 2560, 1440);
         const { drawn, warnings } = await exportPictures(
-            [await screenPreview('photo.webp', 0)],
-            Array(60).fill('photo.webp'),
+            media,
+            media.map(({ name }) => name),
+            'html',
         );
         expect(drawn).toBe(60);
         expect(warnings).toEqual([]);
     });
 
-    test('a picture whose header does not read costs its bytes, as before', async () => {
+    // A full cap of the JPEGs with the most pixels a byte can hold, flat 2560 px squares, took WeasyPrint 1.3 s.
+    test('a JPEG costs its bytes alone, as WeasyPrint decodes none of its pixels', async () => {
+        const media = await pictures(60, 'jpeg', 2560, 2560);
         const { drawn, warnings } = await exportPictures(
-            [picture('broken.webp', 'image/webp', Buffer.from('not a picture'))],
-            ['broken.webp'],
+            media,
+            media.map(({ name }) => name),
         );
-        expect(drawn).toBe(1);
+        expect(drawn).toBe(60);
+        expect(warnings).toEqual([]);
+    });
+
+    test('a picture on many tags is decoded once, so its pixels are charged once', async () => {
+        const { drawn, warnings } = await exportPictures(
+            [await picture('picture.png', 'png', 2560, 1440)],
+            Array(60).fill('picture.png'),
+        );
+        expect(drawn).toBe(60);
         expect(warnings).toEqual([]);
     });
 
@@ -1595,7 +1609,7 @@ describe('Sheets HTML export — decoded pixels', () => {
         const svg =
             '<svg xmlns="http://www.w3.org/2000/svg" width="16000" height="16000"><rect width="10" height="10"/></svg>';
         const { drawn, warnings } = await exportPictures(
-            [picture('drawing.svg', 'image/svg+xml', Buffer.from(svg))],
+            [{ name: 'drawing.svg', contentType: 'image/svg+xml', data: toTransferableBuffer(Buffer.from(svg)) }],
             ['drawing.svg'],
         );
         expect(drawn).toBe(1);

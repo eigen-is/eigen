@@ -29,7 +29,7 @@ import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/s
 import { peakRss } from '../lib/document/transform/peak-rss';
 import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
-import type { OfficeMedia } from '../lib/export/office-image';
+import type { OfficeMedia } from '../lib/export/export-image';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
 import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';

@@ -860,19 +860,22 @@ describe('document transform (xlsx import)', () => {
 // The doc's preview body: its first 20 blocks, the truncation marker, media as an embed URL, sanitized.
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
-// paper, no band, note, equation or small caps, so the two differ only by the page-number counters every PDF's head holds.
-// Both last moved when the text box's font, size, line height and color joined the prose base rule's selector list
-// (`.eigen-prose, .eigen-doc .text-box`) instead of repeating it, the only bytes that changed.
+// paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
+// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. The HTML last moved
+// when the text box's font, size, line height and color joined the prose base rule's selector list
+// (`.eigen-prose, .eigen-doc .text-box`). The PDF's last moved when the golden image, an opaque PNG, went in as that
+// JPEG, the only bytes that changed.
 const GOLDEN_DOC_EXPORT_HTML_SHA256 = '377cbeee6c018cf9a051e682ee0c6ddf208a66441052e3a9087ae3003d890a7b';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'f9adf729d36d4688ae5e567b96e0fbcf5f3b73ea895423841f1f340c046fc9c8';
-// The doc's docx: the writer's parts and embedded fonts, and the thumbnail Worker's PNG of the image, each deflated by
-// libdeflate. It last moved with the wps namespace a text box needs, which every document part declares.
-const GOLDEN_DOC_EXPORT_DOCX_SHA256 = 'c3a15846b8e2b9d1a095a816aa9d8bfe25ba59d8a148770401e309767fe7c1fd';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '2c7b36f8fe94a65f37aa5bc108b43ec377eded19a8cbab8b93194aa7cf27f793';
+// The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
+// image. It last moved when that image, an opaque PNG, went in as a JPEG instead of a PNG.
+const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '397346808f7793452b4a5024442e5f6ad3a587b7af928e2c14a2e65afb8bbdcc';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
-// The two exports embed canvas-text.css whole, its comments too, so they last moved with its header comment.
+// The HTML download embeds canvas-text.css whole, its comments too, so it last moved with its header comment. The
+// PDF's last moved when the golden image went in as a JPEG made from its source instead of its WebP preview.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
 const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ecaf8cfcc7d68e1388c6c291039d74a500b894a6bb5bccbe3dd5ffb5c6aab5d6';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '4dcf24f76d0d0d82df636bfcd9f14fd327bf728c0d8840a9fb80f8199b5b1c3b';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'c160dfae9d26c67fe924166b5f6786cdbcd4035dff0646a62463a4d517f1fb78';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
@@ -1233,18 +1236,23 @@ describe('document transform (eigendoc)', () => {
         });
     }, 120_000);
 
-    // A docx re-encodes each image from its source, read whole: one source past the cap is refused before its read.
-    test('a docx source past MAX_DECOMPRESSED_BYTES is a 413 before it is read', async () => {
-        await withDeclaredMedia('heavy-source', [['a.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1]], async (doc) => {
+    // A docx or a PDF re-encodes each image from its source, read whole: one source past the cap is left out unread, as
+    // an unreadable one is, and the export goes on with the rest.
+    test('a docx leaves out a source past MAX_DECOMPRESSED_BYTES unread and counts it as dropped', async () => {
+        const photos: [string, string, number][] = [
+            ['heavy.png', 'image/png', MAX_DECOMPRESSED_BYTES + 1],
+            ['light.png', 'image/png', TEST_PNG_BYTES.length],
+        ];
+        await withDeclaredMedia('heavy-source', photos, async (doc) => {
             const encode = spyOn(thumbnails, 'generateImagePreview');
             try {
-                const failure = await runDocumentExport(
+                const { warnings } = await runDocumentExport(
                     { documentType: 'eigendoc', format: 'docx' },
                     doc.mount,
                     doc.path,
-                ).catch((err: unknown) => err);
-                expect(encode).not.toHaveBeenCalled();
-                expect(failure).toMatchObject({ status: 413 });
+                );
+                expect(encode.mock.calls.map(([, , fileName]) => fileName)).toEqual(['light.png']);
+                expect(warnings).toContainEqual({ code: 'images-dropped', count: 1 });
             } finally {
                 encode.mockRestore();
             }
@@ -1483,7 +1491,8 @@ describe('document transform (docx round trip)', () => {
             .toJSON();
         const imported = await roundTrip('kept', json);
         expect(numberMedia(imported.json)).toEqual(numberMedia(json));
-        expect(imported.media.map((image) => image.contentType)).toEqual(['image/png']);
+        // An opaque PNG goes into the docx as a JPEG.
+        expect(imported.media.map((image) => image.contentType)).toEqual(['image/jpeg']);
     }, 120_000);
 
     // test/import/doc/round-trip.test.ts pins every node; this is the Download path, its media prep and Worker.
@@ -1492,9 +1501,9 @@ describe('document transform (docx round trip)', () => {
         const { json, media } = await roundTrip('all-features', original);
         expect(words(json)).toEqual(words(original));
         expect(attrValues(json, 'href')).toEqual(['https://example.com/a%20b', '/contacts/team/x?contactId=a%40b']);
-        // One media file per image part, and an SVG comes back as itself rather than its PNG fallback.
-        // The chart is a Word chart, so it brings no media file.
-        expect(media.map((image) => image.contentType)).toEqual(['image/png', 'image/jpeg', 'image/svg+xml']);
+        // One media file per image part, an opaque PNG as the JPEG the docx holds, and an SVG as itself rather than its
+        // PNG fallback. The chart is a Word chart, so it brings no media file.
+        expect(media.map((image) => image.contentType)).toEqual(['image/jpeg', 'image/jpeg', 'image/svg+xml']);
     }, 120_000);
 });
 

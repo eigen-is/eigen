@@ -1,5 +1,5 @@
-// The images the docx, pptx and xlsx writers embed: the PNG or JPEG a source becomes, the PNG an SVG falls back to, and
-// the media parts of one package.
+// The pictures an export embeds: the JPEG or PNG made from a raster source for the PDF and the Office formats, and for
+// the docx, pptx and xlsx writers the PNG an SVG falls back to and the media parts of one package.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { ExportMedia } from '../document/transform/protocol';
@@ -13,10 +13,10 @@ import type { ImageResult, WorkerInput } from '../shared/thumbnail-worker';
 // read inside the transform process, so it never crosses the boundary on ExportMedia.
 export type OfficeMedia = ExportMedia & { png?: ArrayBuffer };
 
-// An Office image's largest side: the raster the main thread re-encodes and the PNG an SVG falls back to.
-export const OFFICE_IMAGE_MAX_SIZE = 2560;
+// An exported picture's largest side: the raster made from a source, and the PNG an SVG falls back to.
+export const EXPORT_IMAGE_MAX_SIZE = 2560;
 
-// The part extension of each type encodeOfficeImage writes, which an Office package embeds as is.
+// The part extension of each type encodeExportImage writes, which an Office package embeds as is.
 const RASTER_TYPES = new Set(['image/png', 'image/jpeg']);
 const RASTER_EXTENSIONS = new Map(
     [...IMAGE_EXTENSION_BY_MIME].filter(([contentType]) => RASTER_TYPES.has(contentType)),
@@ -28,44 +28,56 @@ export const OFFICE_IMAGE_CONTENT_TYPES: Record<string, string> = {
     svg: 'image/svg+xml',
 };
 
-// Lossless codings, which PNG keeps pixel for pixel. Every other type takes JPEG, a photo's size; one with alpha
-// retries as PNG.
-const PNG_SOURCES = new Set(['image/png', 'image/gif']);
+// Lossless codings: a screenshot's or a chart's, whose text and hard edges take a higher JPEG quality than a photo's.
+const LOSSLESS_SOURCES = new Set(['image/png', 'image/gif']);
+const LOSSLESS_QUALITY = 90;
+const PHOTO_QUALITY = 80;
 
 // How far into a WebP the chunk walk reads.
 export const WEBP_SCAN_BYTES = 64 * 1024;
 
-// An Office image is a PNG or JPEG made from its source, since Word and PowerPoint for the web and Google Docs show no
-// WebP. `encode` is sharpResize, in the thumbnail Worker for a media file and in the transform process for a data:
-// src; its re-encode drops the EXIF, GPS included. `webp` is the start of a WebP source, at least WEBP_SCAN_BYTES of it.
-export async function encodeOfficeImage(
+// An exported picture is a JPEG made from its source, or a PNG when the source shows transparency, which JPEG has no
+// way to hold. Word and PowerPoint for the web and Google Docs show no WebP, and WeasyPrint embeds a JPEG's bytes as
+// they are where it decodes a WebP or PNG and deflates it again: a full-screen screenshot went in as 6.8 MB of PNG
+// against 0.8 MB of JPEG. `encode` is sharpResize, in the thumbnail Worker for a media file and in the transform process for a data:
+// src; its re-encode drops the EXIF, GPS included. `webp` is the start of a WebP source, at least WEBP_SCAN_BYTES of
+// it. The size returned is the picture's as sent, shrunk to fit inside EXPORT_IMAGE_MAX_SIZE.
+export async function encodeExportImage(
     name: string,
     mime: string,
     webp: Buffer | null,
     encode: (options: WorkerInput['options']) => Promise<ImageResult | null>,
 ): Promise<ExportMedia | null> {
-    let format: 'png' | 'jpeg' = PNG_SOURCES.has(mime) ? 'png' : 'jpeg';
+    let lossless = LOSSLESS_SOURCES.has(mime);
     // A WebP's image chunk names its coding, which the thumbnail Worker doesn't report: VP8L is lossless; VP8 is lossy.
     // An ICC profile, EXIF or alpha puts a VP8X header and other chunks first, so the walk reads past them.
     const head = mime === 'image/webp' ? webp : null;
     for (let at = 12; head && at + 8 <= head.byteLength; ) {
         const chunk = head.toString('latin1', at, at + 4);
-        if (chunk === 'VP8L') format = 'png';
+        if (chunk === 'VP8L') lossless = true;
         if (chunk === 'VP8L' || chunk === 'VP8 ') break;
         const size = head.readUInt32LE(at + 4);
         at += 8 + size + (size & 1);
     }
+    const quality = lossless ? LOSSLESS_QUALITY : PHOTO_QUALITY;
     const encodeAs = (format: 'png' | 'jpeg') =>
-        encode({ format, maxSize: OFFICE_IMAGE_MAX_SIZE, quality: 80, fit: 'inside' });
+        encode({ format, maxSize: EXPORT_IMAGE_MAX_SIZE, quality, fit: 'inside' });
+    let format: 'png' | 'jpeg' = 'jpeg';
     let result = await encodeAs(format);
-    // JPEG has no alpha: a source that holds one (a VP8X WebP, an AVIF, a PNG stored as JPEG) takes PNG.
-    if (result?.hasAlpha && format === 'jpeg') {
+    // A source whose pixels aren't all opaque (a VP8X WebP, an AVIF, a PNG stored as JPEG) takes PNG, which keeps them.
+    if (result?.hasAlpha) {
         format = 'png';
         result = await encodeAs(format);
     }
     if (!result) return null;
-    const { data, width, height } = result;
-    return { name, contentType: `image/${format}`, data: toTransferableBuffer(data), width, height };
+    return { name, contentType: `image/${format}`, data: toTransferableBuffer(result.data), ...sentSize(result) };
+}
+
+// The Worker reports the source's size; sharp shrinks a larger one to fit inside EXPORT_IMAGE_MAX_SIZE, rounding each
+// side, and never enlarges a smaller one.
+function sentSize({ width, height }: ImageResult): { width: number; height: number } {
+    const scale = Math.min(1, EXPORT_IMAGE_MAX_SIZE / Math.max(width, height));
+    return { width: Math.round(width * scale), height: Math.round(height * scale) };
 }
 
 // The PNG a reader without SVG draws, from the sanitized XML the svgBlip carries, so both draw one picture. One at a
@@ -84,7 +96,7 @@ export async function withSvgFallbacks(media: ExportMedia[]): Promise<OfficeMedi
             const image = sharp(svg);
             const { width = 0, height = 0 } = await image.metadata();
             const png = await image
-                .resize(OFFICE_IMAGE_MAX_SIZE, OFFICE_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
+                .resize(EXPORT_IMAGE_MAX_SIZE, EXPORT_IMAGE_MAX_SIZE, { fit: 'inside', withoutEnlargement: true })
                 .png()
                 .timeout({ seconds: THUMBNAIL_TIMEOUT_SECONDS })
                 .toBuffer();

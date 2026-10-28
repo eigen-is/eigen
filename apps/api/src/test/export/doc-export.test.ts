@@ -1485,12 +1485,17 @@ describe('doc export — docx data: figures', () => {
     const red = (width: number, height: number, alpha = 1) =>
         sharp({ create: { width, height, channels: 4, background: { r: 255, g: 0, b: 0, alpha } } });
 
-    test('a data: PNG writes its PNG part at its own size, and one shown twice is one part', async () => {
+    test('an opaque data: PNG writes a JPEG part at its own size, and one shown twice is one part', async () => {
         const src = dataUri('image/png', await red(80, 50).png().toBuffer());
         const { zip, parts } = await docxOf(src, src);
+        expect(parts).toEqual(['word/media/image1.jpeg']);
+        const { format, width, height } = await sharp(zip.read('word/media/image1.jpeg')).metadata();
+        expect([format, width, height]).toEqual(['jpeg', 80, 50]);
+    });
+
+    test('a data: PNG that shows through stays a PNG', async () => {
+        const { parts } = await docxOf(dataUri('image/png', await red(80, 50, 0.5).png().toBuffer()));
         expect(parts).toEqual(['word/media/image1.png']);
-        const { format, width, height } = await sharp(zip.read('word/media/image1.png')).metadata();
-        expect([format, width, height]).toEqual(['png', 80, 50]);
     });
 
     test('a data: JPEG is re-encoded: its EXIF, GPS included, stays out, and past 2560 px it shrinks', async () => {

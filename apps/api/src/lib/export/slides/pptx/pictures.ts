@@ -4,7 +4,7 @@ import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { VectorFrame, VectorImageElement } from '@workspace/lib/vector';
 import { isBordered } from '@workspace/lib/vector';
 import { blipXml, drawingShare } from '../../../ooxml/drawingml';
-import type { OfficeImage } from '../../office-image';
+import type { OfficeImage } from '../../export-image';
 import { lineXml } from './lines';
 import type { Slide } from './package';
 import { boxGeometry, fillXml, presetXml, spXml, xfrmXml } from './shapes';

@@ -29,11 +29,12 @@ export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
 }
 
 // Document media crossing the boundary: prepared on the main thread for an export
-// (Mount I/O + screen previews), extracted from the upload by an import.
+// (Mount I/O and a re-encode from the source), extracted from the upload by an import.
 export type TransformMedia = { name: string; contentType: string; data: ArrayBuffer };
 
-// An export's media; only an Office format's raster carries the thumbnail Worker's width and height. Their arms add an
-// SVG's size inside the transform process.
+// An export's media. A raster made from its source carries the width and height of the picture as sent, and the
+// cached preview an HTML download takes carries none. The docx, pptx and xlsx writers add an SVG's size inside the
+// transform process.
 export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 
 // An export's renderer asks for the media its document names once it has read the document, so the main thread

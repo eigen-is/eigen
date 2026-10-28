@@ -12,7 +12,7 @@ import type {
 import { lossCounter, toTransferableBuffer } from '../../document/transform/protocol';
 import { sceneMediaNames } from '../canvas/render';
 import { renderEigenslidesHtml } from '../canvas/transform';
-import { withSvgFallbacks } from '../office-image';
+import { withSvgFallbacks } from '../export-image';
 import { sanitizeSceneHtml } from '../sanitize';
 
 // The pptx writer loads lazily, so an HTML export never evaluates it. The rich-text filter the HTML export runs keeps a

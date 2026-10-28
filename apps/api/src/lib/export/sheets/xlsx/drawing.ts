@@ -14,8 +14,8 @@ import { chartGraphicXml } from '../../../ooxml/ooxml-chart-writer';
 import type { PackagePart } from '../../../ooxml/opc';
 import { partRelationships, relationshipsXml, relsPathOf } from '../../../ooxml/opc';
 import { DRAWING_CONTENT_TYPE } from '../../../ooxml/spreadsheetml';
+import type { OfficeImages } from '../../export-image';
 import { addOfficeChart, officeCharts } from '../../office-chart';
-import type { OfficeImages } from '../../office-image';
 import { sheetsResolver } from '../cell-style';
 
 // A sheet's floating charts and pictures as its drawing part: the path its <drawing> relationship targets, and the parts

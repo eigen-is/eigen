@@ -25,7 +25,7 @@ import * as Y from 'yjs';
 import { commitEigendocImport } from '../../lib/document/doc';
 import { docSchema } from '../../lib/document/doc-schema';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import type { OfficeMedia } from '../../lib/export/office-image';
+import type { OfficeMedia } from '../../lib/export/export-image';
 import type { Mount } from '../../lib/mount';
 import { parseOoxml } from '../../lib/ooxml/ooxml';
 import { sampleChartParts } from './chart-parts';

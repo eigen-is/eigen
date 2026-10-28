@@ -1,6 +1,6 @@
 // A spreadsheet's export inside the transform process: the HTML download, the document WeasyPrint prints, and the
-// xlsx. Each returns its bytes and the warnings that count what it left out. The HTML and the PDF also read the size of
-// each picture from its header, so the cap charges the pixels it decodes to.
+// xlsx. Each returns its bytes and the warnings that count what it left out. The PDF also counts the pixels WeasyPrint
+// decodes of each picture, so the cap charges them.
 
 import type * as Y from 'yjs';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
@@ -17,12 +17,13 @@ import {
     toTransferableBuffer,
     toTransferableText,
 } from '../../document/transform/protocol';
-import { withSvgFallbacks } from '../office-image';
+import { withSvgFallbacks } from '../export-image';
 import type { MediaPixels } from './render';
 
 // The writers load lazily, so an HTML export never evaluates the xlsx writer. A failed recalc exports the replayed
 // values with a warning, as an export never fails for it. Images embed as data: URIs in the HTML, and go into an xlsx
-// as the Office media prep made them, an SVG beside its PNG.
+// as the media prep made them, an SVG beside its PNG. The browser that opens the HTML download decodes its pictures,
+// not WeasyPrint, so the download charges no pixels.
 export async function renderEigensheetsExport(
     doc: Y.Doc,
     format: SheetExportFormat,
@@ -36,14 +37,14 @@ export async function renderEigensheetsExport(
     switch (format) {
         case 'html':
         case 'pdf-html': {
-            const { sheetsHtmlDocument } = await import('./render');
+            const { NO_PIXELS, sheetsHtmlDocument } = await import('./render');
             const media = await loadMedia(mediaNamesIn(sheets.map((sheet) => sheet.images)));
             const losses = lossCounter();
             const html = sheetsHtmlDocument({
                 title,
                 sheets,
                 mediaUrls: toDataUriMap(media),
-                mediaPixels: await decodedPixels(media),
+                mediaPixels: format === 'pdf-html' ? decodedPixels(media) : NO_PIXELS,
                 mode: htmlExportMode(format),
                 lost: losses.lost,
             });
@@ -59,19 +60,13 @@ export async function renderEigensheetsExport(
     }
 }
 
-// The pixels each raster decodes to, read from its header here, as the main thread knows no preview's size: a cached
-// preview is its bytes alone. An SVG draws as vectors, so it has none. A header sharp can't read leaves its picture to
-// cost its bytes alone. sharp loads only for an export with a raster in it.
-async function decodedPixels(media: ExportMedia[]): Promise<MediaPixels> {
+// The pixels WeasyPrint decodes of each picture, at the size the main thread sent it. It decodes a PNG whole, embeds a
+// JPEG's bytes as they are and draws an SVG as vectors, so only a raster that is no JPEG has any.
+function decodedPixels(media: ExportMedia[]): MediaPixels {
     const pixels: MediaPixels = new Map();
-    const rasters = media.filter((item) => item.contentType !== 'image/svg+xml');
-    if (rasters.length === 0) return pixels;
-    const { default: sharp } = await import('sharp');
-    for (const { name, data } of rasters) {
-        try {
-            const { width, height } = await sharp(data).metadata();
-            pixels.set(name, width * height);
-        } catch {}
+    for (const { name, contentType, width, height } of media) {
+        if (contentType === 'image/jpeg' || contentType === 'image/svg+xml' || !width || !height) continue;
+        pixels.set(name, width * height);
     }
     return pixels;
 }
