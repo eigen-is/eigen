@@ -13,7 +13,7 @@ import { DecorationSet } from '@tiptap/pm/view';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { StoryNode } from '@workspace/lib/docs/eigendoc';
 import { isStoryNode, newStoryId, readStoryId, storyDepth } from '@workspace/lib/docs/eigendoc';
-import { useCallback, useEffect, useLayoutEffect, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { StoryAnchor } from '../extensions/story';
 import { findStory, STORY_EDIT, STORY_PULL, storyAnchor, storyDecorationsKey } from '../extensions/story';
 
@@ -77,8 +77,9 @@ function forwardStory(body: Editor, story: Editor, anchor: StoryAnchor): void {
     );
 }
 
-// Each story editor's doc as it opened, or as the last pull that brought the body's text into it left it. Once its doc
-// differs, it holds keystrokes the body may lack. A pull that brings nothing, as a peer's caret makes, leaves it.
+// Each story editor's doc as it opened, or as the last pull that brought a peer's text into it left it. Once its doc
+// differs, it holds keystrokes a peer may lack. A pull that brings nothing, as a peer's caret makes, leaves it, and so
+// does this tab's own undo or move: no peer has this tab's text from those.
 const pulled = new WeakMap<Editor, PMNode>();
 
 // y-tiptap marks a peer's change and an undo alike. This is the peer's.
@@ -120,7 +121,7 @@ function pullStory(
             .setMeta('preventAutolink', true)
             .setMeta(storyDecorationsKey, DecorationSet.create(tr.doc, decorations)),
     );
-    if (diff) pulled.set(story, story.state.doc);
+    if (diff && transactions.some(isPeerChange)) pulled.set(story, story.state.doc);
     return found.pos;
 }
 
@@ -131,11 +132,14 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
     if (opening && !allowed) setOpening(null);
     const anchor = opening?.anchor ?? null;
     const story = anchor && editors[anchor.type];
+    // The story subscribed below, so `open` tells a fresh open from the find bar's reveal inside the open story.
+    const subscribed = useRef<StoryAnchor | null>(null);
 
     // The story goes into its editor here, before React mounts the editor in the list or the box: a node view React
     // draws, an image's, would otherwise mount inside a layout effect, where React refuses its flushSync. A story with
     // no id, such as a note from an older tab or a box a web page's HTML pasted, takes one first: the box draws the
-    // open editor by it, and a re-anchor finds the story again by it.
+    // open editor by it, and a re-anchor finds the story again by it. Opening the open story again keeps what it typed
+    // as typed.
     const open = useCallback(
         (pos: number, how: Omit<StoryOpening, 'anchor'>) => {
             const node = body.state.doc.nodeAt(pos);
@@ -146,8 +150,9 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
             const anchor = storyAnchor(body, pos);
             if (!anchor) return;
             const story = editors[anchor.type];
+            const fresh = subscribed.current?.element !== anchor.element;
             if (pullStory(body, story, anchor) === null) return;
-            pulled.set(story, story.state.doc);
+            if (fresh) pulled.set(story, story.state.doc);
             setOpening({ anchor, ...how });
         },
         [body, editors],
@@ -193,9 +198,11 @@ export function useOpenStory(body: Editor, editors: StoryEditors, allowed: boole
             pull([transaction, ...appendedTransactions]);
         };
         pull([]);
+        subscribed.current = anchor;
         body.on('transaction', onBody);
         story.on('transaction', forward);
         return () => {
+            subscribed.current = null;
             body.off('transaction', onBody);
             story.off('transaction', forward);
         };

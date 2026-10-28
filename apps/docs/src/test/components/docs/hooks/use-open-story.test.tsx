@@ -687,6 +687,56 @@ describe("a peer's cut and paste of the open note's reference", () => {
         expect(noteOf(a)).toBe('Peer Note');
         expect(noteOf(b)).toBe('Peer Note');
     });
+
+    // A peer offline since the note opened, so none of this tab's typing reached it, moves the note and reconnects.
+    const forkPeer = (yA: InstanceType<typeof Y.Doc>) => {
+        const offline = new Y.Doc();
+        Y.applyUpdate(offline, Y.encodeStateAsUpdate(yA));
+        const peer = bodyOn(offline);
+        return async () => {
+            cutAndPaste(peer);
+            await act(async () => {
+                Y.applyUpdate(yA, Y.encodeStateAsUpdate(offline, Y.encodeStateVector(yA)), 'reconnect');
+                await Promise.resolve();
+            });
+        };
+    };
+
+    // The undo pulls this tab's own history into the note: no peer has its text yet, so it still reads as typed.
+    test('keeps what was typed when an undo since then brought text into the note', async () => {
+        const { a, b, yA, note, undoManager, open } = await setup(moved('n1'));
+        await open(9);
+        const reconnect = forkPeer(yA);
+        note.commands.setTextSelection(5);
+        typeInto(note, '!');
+        undoManager.stopCapturing();
+        typeInto(note, '?');
+        await act(async () => {
+            press(note, 'z');
+        });
+        expect(note.state.doc.textContent).toBe('Note!');
+        await reconnect();
+        expect(note.state.doc.textContent).toBe('Note!');
+        expect(noteOf(a)).toBe('Note!');
+        expect(noteOf(b)).toBe('Note!');
+    });
+
+    // The find bar's reveal of a match in the open note opens it again, which is no fresh open.
+    test('keeps what was typed when a body selection inside the open note opened it again', async () => {
+        const { a, b, yA, note, session, open } = await setup(moved('n1'));
+        await open(9);
+        const reconnect = forkPeer(yA);
+        note.commands.setTextSelection(5);
+        typeInto(note, '!');
+        await act(async () => {
+            a.commands.setTextSelection({ from: 11, to: 15 });
+        });
+        expect(session.current?.anchor?.pos).toBe(9);
+        await reconnect();
+        expect(note.state.doc.textContent).toBe('Note!');
+        expect(noteOf(a)).toBe('Note!');
+        expect(noteOf(b)).toBe('Note!');
+    });
 });
 
 // One undo step that typed into the open note and moved its reference, in either order: ⌘Z takes back both, and ⇧⌘Z
