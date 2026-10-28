@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { columnFit, MIN_TABLE_COLUMN_PX } from '../../../docs/eigendoc';
+import { columnFit, isWidth, MIN_TABLE_COLUMN_PX } from '../../../docs/eigendoc';
 
 describe('columnFit', () => {
     // One cell's widths, scaled by the factor of the whole table they are part of.
@@ -20,5 +20,13 @@ describe('columnFit', () => {
     test('a scaled column is floored to whole pixels', () => {
         const fit = columnFit(667, 1335);
         expect([fit(1000), fit(335)]).toEqual([499, 167]);
+    });
+});
+
+// A peer can store any JSON as a column's width.
+describe('isWidth', () => {
+    test('a width is a positive, finite number', () => {
+        expect([100, 0.5].every(isWidth)).toBe(true);
+        expect([0, -1, Number.NaN, Number.POSITIVE_INFINITY, '100', null].some(isWidth)).toBe(false);
     });
 });

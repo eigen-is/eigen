@@ -133,4 +133,4 @@ export {
     selectionParagraphFormat,
 } from './paragraph-format';
 export { attributeSearchText } from './search-text';
-export { columnFit, MIN_TABLE_COLUMN_PX } from './table';
+export { columnFit, isWidth, MIN_TABLE_COLUMN_PX } from './table';

@@ -1,8 +1,13 @@
-// A table's column widths against the text column: the floor a column keeps and the one fit that shrinks a table wider
-// than the column into it, so every renderer that must fit a table, such as the docx writer and the PDF, fits it alike.
+// A table's column widths against the text column: what a stored width is, the floor a column keeps and the one fit
+// that shrinks a table wider than the column into it, so every renderer that must fit a table, such as the docx writer
+// and the PDF, fits it alike.
 
 // The narrowest a table column gets when a table is scaled to fit the text column.
 export const MIN_TABLE_COLUMN_PX = 25;
+
+// A column's stored width, as a peer can store any JSON in a cell's colwidth.
+export const isWidth = (value: unknown): value is number =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0;
 
 // The fit of a table `total` px wide into a column `columnPx` wide, as a function of one column's width: a table that
 // fits keeps its widths, and a wider one shrinks every column by one factor, none below `floor`. A renderer that meets
