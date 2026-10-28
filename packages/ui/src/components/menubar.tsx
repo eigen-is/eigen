@@ -5,6 +5,7 @@
 // tell an editor or a canvas beside the bar what a closing menu, or a press that closes one, leaves to it.
 
 import { MenuRows } from '@workspace/ui/components/dropdown-menu';
+import { OPEN_MENU } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import { Menubar as MenubarPrimitive } from 'radix-ui';
 import type * as React from 'react';
@@ -68,9 +69,9 @@ export function focusLeftToEditor(): boolean {
 
 // Whether a press lands while a menu is open, such as a bar menu, and so only closes it. The menu leaves the page live,
 // so the press reaches what lies under it too, where an eraser or a text tool would act on it. A pointerdown handler
-// asks this before Radix closes the menu on the same press. A menu still fading out after a pick is not open.
+// asks this before Radix closes the menu on the same press.
 export function pressClosesMenu(): boolean {
-    return document.querySelector('[role="menu"][data-state="open"]') !== null;
+    return document.querySelector(OPEN_MENU) !== null;
 }
 
 export { Menubar, MenubarContent, MenubarMenu, MenubarTrigger };

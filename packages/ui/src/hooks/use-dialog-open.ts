@@ -1,11 +1,13 @@
+// Whether a dialog or a menu is open, read from the DOM. A document-level keymap folds these into its
+// `enabled`, such as the canvas's or the mail list's: the hotkey lib's own guard covers text fields only,
+// so a key pressed on a dialog button or in an open menu would otherwise act on the document behind it.
+
 import type { RefObject } from 'react';
 import { useSyncExternalStore } from 'react';
 
 // Is a modal open? Every one carries role="dialog" (Radix dialogs, alert dialogs and popovers; the
-// hand-rolled overlays under `useFocusTrap`), so the DOM is the one source. The gate every
-// document-level keymap folds into its `enabled`: the hotkey lib's own guard covers text fields only,
-// so a key pressed on a dialog button would otherwise act on the document behind it. Overlays that are
-// dialogs themselves (the file preview, the mail cheat sheet) register their keys ungated.
+// hand-rolled overlays under `useFocusTrap`), so the DOM is the one source. Overlays that are dialogs
+// themselves (the file preview, the mail cheat sheet) register their keys ungated.
 //
 // Presence rather than focus: a dialog opened from a context menu has no trigger left to return focus
 // to, so its close lands focus on <body> without an event, and a focus-based gate would stick shut.
@@ -15,6 +17,9 @@ import { useSyncExternalStore } from 'react';
 // preview reads its own keys off this gate, so the popover its content mounts stands them down, and the
 // stickies card dialog it was opened from does not.
 const OPEN_DIALOG = '[role="dialog"]:not([data-state="closed"]), [role="alertdialog"]:not([data-state="closed"])';
+
+// An open menu, such as a bar menu or a dropdown. A menu still fading out after a pick is not open.
+export const OPEN_MENU = '[role="menu"][data-state="open"]';
 
 // One observer for every subscriber, alive only while one is mounted.
 const listeners = new Set<() => void>();
@@ -52,4 +57,10 @@ export function useDialogOpen(base?: RefObject<HTMLElement | null>): boolean {
         return false;
     };
     return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
+
+// Is a menu open? A bar menu leaves the page live, so its arrow keys, Delete and letters reach the
+// document keymap too.
+export function useMenuOpen(): boolean {
+    return useSyncExternalStore(subscribe, () => document.querySelector(OPEN_MENU) !== null, getServerSnapshot);
 }

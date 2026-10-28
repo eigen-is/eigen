@@ -1,5 +1,6 @@
-// A bar menu leaves the page live, so a press outside it reaches what lies under it. On the canvas that press only
-// closes the menu: with the eraser it would delete the shape under it, with the text tool place a box.
+// A bar menu leaves the page live, so a press outside it and a key pressed in it reach what lies under it. On the
+// canvas that press only closes the menu: with the eraser it would delete the shape under it, with the text tool
+// place a box. The keys belong to the menu.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -68,16 +69,21 @@ afterEach(() => unmount());
 
 let container: HTMLElement;
 
-async function render(tool: VectorTool) {
+let toolPicks: VectorTool[] = [];
+let selection: string[] = [];
+
+async function render(tool: VectorTool, selected: string[] = []) {
+    toolPicks = [];
     function Host() {
         const canvas = useCanvasDoc('owner', 'mount', 'drawing', VECTOR_STYLE_DEFAULTS);
-        const [selectedIds, setSelectedIds] = useState<string[]>([]);
+        const [selectedIds, setSelectedIds] = useState(selected);
+        selection = selectedIds;
         return createElement(CanvasEditor, {
             doc: canvas,
             viewport: 'infinite',
             styleDefaults: VECTOR_STYLE_DEFAULTS,
             tool,
-            setTool: () => {},
+            setTool: (picked: VectorTool) => toolPicks.push(picked),
             toolLocked: false,
             setToolLocked: () => {},
             canEdit: true,
@@ -194,4 +200,20 @@ test('a finger that closes File still counts toward a pinch', async () => {
     await touch('pointerup', 1);
     expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
     expect(elementIds()).toEqual(['box']);
+});
+
+// Keys pressed in an open menu belong to the menu. They must not nudge, delete or deselect the shape behind it,
+// or switch the tool.
+test('keys pressed in an open File menu leave the selected shape and the tool alone', async () => {
+    await render('select', ['box']);
+    await openFile();
+    const focused = document.activeElement ?? document.body;
+    for (const key of ['ArrowRight', 'ArrowDown', 'Delete', 'Backspace', 'r', 'Escape']) {
+        await act(async () => {
+            focused.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        });
+    }
+    expect(readVectorFromDoc(doc).elements.map(({ id, x, y }) => ({ id, x, y }))).toEqual([{ id: 'box', x: 0, y: 0 }]);
+    expect(toolPicks).toEqual([]);
+    expect(selection).toEqual(['box']);
 });
