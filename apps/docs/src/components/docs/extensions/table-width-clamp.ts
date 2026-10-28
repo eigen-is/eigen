@@ -5,6 +5,7 @@
 // one factor to a floor.
 
 import { Extension } from '@tiptap/core';
+import type { Node as PMNode } from '@tiptap/pm/model';
 import { Plugin } from '@tiptap/pm/state';
 import { columnFit } from '@workspace/lib/docs/eigendoc';
 
@@ -38,38 +39,36 @@ export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
                     let modified = false;
                     let maxWidth: number | undefined;
                     let maxColumnWidth: number | undefined;
-                    const setColwidth = (pos: number, attrs: Record<string, unknown>, colwidth: number[]) => {
-                        modified = true;
-                        tr.setNodeMarkup(pos, null, { ...attrs, colwidth });
+                    // Rewrites the stored widths of each cell of the table at `pos`. A nested table is left to the
+                    // walk below, which reaches it on its own.
+                    const rewriteWidths = (table: PMNode, pos: number, next: (colwidth: number[]) => number[]) => {
+                        table.descendants((child, childPos) => {
+                            if (child.type.name === 'table') return false;
+                            if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
+                            const cw: number[] | null = child.attrs.colwidth;
+                            if (!cw) return false;
+                            const colwidth = next(cw);
+                            if (colwidth.some((w, i) => w !== cw[i])) {
+                                modified = true;
+                                tr.setNodeMarkup(pos + 1 + childPos, null, { ...child.attrs, colwidth });
+                            }
+                            return false;
+                        });
                     };
 
                     newState.doc.descendants((node, pos) => {
                         if (node.type.name !== 'table') return;
                         const firstRow = node.firstChild;
                         if (!firstRow) return;
-                        const tableContentStart = pos + 1;
 
                         if (!band && newState.doc.resolve(pos).depth === 0) {
                             maxColumnWidth ??= paperWidth();
                             const cap = maxColumnWidth;
-                            node.descendants((child, childPos) => {
-                                if (child.type.name === 'table') return false;
-                                if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
-                                const cw: number[] | null = child.attrs.colwidth;
-                                if (cw?.some((w) => w > cap)) {
-                                    setColwidth(
-                                        tableContentStart + childPos,
-                                        child.attrs,
-                                        cw.map((w) => Math.min(w, cap)),
-                                    );
-                                }
-                                return false;
-                            });
+                            rewriteWidths(node, pos, (cw) => cw.map((w) => Math.min(w, cap)));
                             return;
                         }
                         maxWidth ??= textColumnWidth();
 
-                        // Sum column widths from the first row
                         let totalWidth = 0;
                         for (let i = 0; i < firstRow.childCount; i++) {
                             const cell = firstRow.child(i);
@@ -82,18 +81,7 @@ export const TableWidthClamp = Extension.create<TableWidthClampOptions>({
                         if (totalWidth <= maxWidth) return;
 
                         const fit = columnFit(maxWidth, totalWidth);
-
-                        node.descendants((child, childPos) => {
-                            if (child.type.name === 'table') return false;
-                            if (child.type.name !== 'tableCell' && child.type.name !== 'tableHeader') return;
-                            const cw: number[] | null = child.attrs.colwidth;
-                            if (!cw) return false;
-                            const scaled = cw.map((w) => (w ? fit(w) : w));
-                            if (scaled.some((w, i) => w !== cw[i])) {
-                                setColwidth(tableContentStart + childPos, child.attrs, scaled);
-                            }
-                            return false;
-                        });
+                        rewriteWidths(node, pos, (cw) => cw.map((w) => (w ? fit(w) : w)));
                     });
 
                     return modified ? tr : null;

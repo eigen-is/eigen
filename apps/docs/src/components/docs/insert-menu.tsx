@@ -1,7 +1,7 @@
-// Docs' Insert menu: links, images, charts, text boxes, tables, page elements, equations, footnotes, a table of
-// contents and comments. It asks the editor it acts on what its schema holds, so a band's or a note's editor greys out
-// what it can't take, and a page-less doc offers no page break, header, footer or page number. An equation, a footnote
-// or a text box goes in once the menu has closed, so the focus lands in the new field rather than on the menu.
+// Docs' Insert menu, which adds things such as an image, a chart, a text box, a table or a table of contents. It asks
+// the editor it acts on what its schema holds, so the editor of a band, a note or a text box grays out what it can't
+// take, and a page-less doc offers no page break, header, footer or page number. An equation, a footnote or a text box
+// goes in once the menu has closed, so the focus lands in the new field rather than on the menu.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -61,7 +61,7 @@ type InsertMenuProps = {
 
 // What a band can't hold is missing from its editor's schema, and a command for a node the schema lacks throws. A
 // story's schema is the body's, so what a note or a text box can't hold is disabled by hand. Those items stay in the
-// menu greyed out, as in Google.
+// menu grayed out, as in Google.
 export function InsertMenu({
     editor,
     active,
