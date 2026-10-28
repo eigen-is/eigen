@@ -2,7 +2,7 @@
 // year > month > day tree whose `key`/`value` are the lookup and check-state
 // identity (dotted ISO parts) and whose `text` is display only. The two are
 // pinned together here because the labels used to be built by concatenating
-// the value with a word — "2024Year", "08Month" — a luckysheet leftover that
+// the value with a word — "2024Year", "08Month" — an upstream leftover that
 // only reads correctly in Chinese. Excel's convention is 2024 > August > 5.
 
 import { describe, expect, test } from 'bun:test';

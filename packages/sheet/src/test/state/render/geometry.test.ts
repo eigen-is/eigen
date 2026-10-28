@@ -1,6 +1,6 @@
 // Pure viewport geometry for the canvas renderer. visibledatarow/-column hold
-// cumulative bottom/right edges per index; these helpers pin the inherited
-// fortune-sheet conventions: rows sit one pixel above columns (the -1 shift)
+// cumulative bottom/right edges per index; these helpers pin the grid's
+// pixel conventions: rows sit one pixel above columns (the -1 shift)
 // and the header range keeps an end index of positions.length when the
 // viewport extends past the last entry.
 

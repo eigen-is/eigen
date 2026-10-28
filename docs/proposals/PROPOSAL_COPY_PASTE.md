@@ -34,9 +34,8 @@ The four arguments the v2 shape rests on:
 
 ## Known constraints
 
-- **The sheet engine has its own internal clipboard.** `ctx.copyState` (upstream's
-  `luckysheet_copy_save`, renamed) handles internal copy/paste separately from the system clipboard.
-  It holds **coordinates only** — a sheet id and the copied rectangles; formulas, formatting and
+- **The sheet engine has its own internal clipboard.** `ctx.copyState` handles
+  internal copy/paste separately from the system clipboard. It holds **coordinates only** — a sheet id and the copied rectangles; formulas, formatting and
   merge info survive because the paste re-reads the live cells at those coordinates, which is
   exactly why it cannot cross a tab or a login boundary. The eigen clipboard integration sits
   **on top of** it, not inside it. Consequences: the
@@ -460,7 +459,7 @@ The migration is non-breaking because:
 | Risk | Severity | Mitigation |
 |---|---|---|
 | **HTML attribute sanitization differs across browsers.** Some browser versions may strip `data-*` attributes in specific contexts. | Medium | Test on Chrome, Firefox, Safari, Edge. The `data-eigen-clipboard` attribute on `<span>` is safe in all current browsers. If a browser strips it, the content degrades to external HTML paste (not a crash). |
-| **Fortune-sheet cell serialization is complex.** The internal Cell type has many fields; deciding which to include in the clipboard is non-trivial. | Medium | Start with display values + basic formatting (bold, italic, color, background, number format, merge). Add more fields as needed. Formulas as strings, with a comment that references will be wrong. |
+| **Sheet cell serialization is complex.** The internal Cell type has many fields; deciding which to include in the clipboard is non-trivial. | Medium | Start with display values + basic formatting (bold, italic, color, background, number format, merge). Add more fields as needed. Formulas as strings, with a comment that references will be wrong. |
 | **Tiptap `insertContent(tiptapJson)` may not handle all node types from a different document.** Custom extensions (resizable images, comments) in the source doc may not exist in the target. | Low | Tiptap silently drops unknown node types. Comments should be stripped during copy (they are document-specific). Images use the standard `figure` node (`mediaName` attribute), present in all Docs instances. |
 | **URI-encoded JSON in HTML attributes could be very large.** | Medium | The 100KB threshold with BroadcastChannel fallback handles this. For cross-browser-session paste of very large payloads, the HTML table/text fallback is lossy but functional. |
 | **Async clipboard write fails on iOS Safari outside user gesture.** | Medium | The sync path (`writeEigenPayload` in a `copy` event handler) is the primary path. The async path is only used for context menu buttons. For these, ensure the `navigator.clipboard.write()` call is synchronous within the click handler. Show a toast on failure. |
