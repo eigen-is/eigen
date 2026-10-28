@@ -4,7 +4,7 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
-import type { SSEStreamItem } from '@workspace/lib/types/sse';
+import type { SSEvent } from '@workspace/lib/types/sse';
 import { useEffect } from 'react';
 import { getSSEEventsUrl } from '../../api';
 import { handleSSEvent } from '../sse-handlers';
@@ -38,8 +38,8 @@ export function useSSE(): void {
 
             source.onmessage = (message) => {
                 try {
-                    const item = JSON.parse(message.data) as SSEStreamItem;
-                    if (!('event' in item)) handleSSEvent(item, queryClient, userId);
+                    const event: SSEvent = JSON.parse(message.data);
+                    handleSSEvent(event, queryClient, userId);
                 } catch (e) {
                     console.error('SSE event failed', e);
                 }

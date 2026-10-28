@@ -72,12 +72,6 @@ export type SSEvent =
     | SSEventBackup
     | SSEventHomeDataEpochs;
 
-// The stream also carries a keepalive. It reaches the browser as an ordinary message, so the tab
-// drops it before it hands the events to the handlers.
-export type SSEKeepalive = { event: 'keepalive' };
-
-export type SSEStreamItem = SSEvent | SSEKeepalive;
-
 export type SSEventMail = {
     type: SSEventTypeName & `mail:${string}`;
     mail: { messageId: string; mailbox: string; toMailbox?: string };

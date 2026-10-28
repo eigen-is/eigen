@@ -781,8 +781,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SetupResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SetupStatus` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `SharedCalendar` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
-| `SSEKeepalive` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
-| `SSEStreamItem` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEvent` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventBackup` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventCalendar` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |

@@ -3,22 +3,26 @@
 // proxy keeps the connection and the Home does not go idle under an open tab. With each keepalive it
 // announces the data epochs, and it follows the Home when an evicted one was built again.
 
-import type { SSEKeepalive, SSEStreamItem } from '@workspace/lib/types/sse';
+import type { SSEvent } from '@workspace/lib/types/sse';
+import { sse } from 'elysia';
 import { getHome } from './get-home';
 import type { Home } from './home';
 import { buildDataEpochsEvent } from './sse-events';
 
-const KEEPALIVE: SSEKeepalive = { event: 'keepalive' };
+// A named event with no data: the browser never dispatches it to onmessage, but its bytes keep a proxy awake.
+const keepaliveItem = () => sse({ event: 'keepalive' });
 const KEEPALIVE_INTERVAL_MS = 15_000;
 
-export function createSSEStream(home: Home): ReadableStream<SSEStreamItem> {
+type StreamItem = SSEvent | ReturnType<typeof keepaliveItem>;
+
+export function createSSEStream(home: Home): ReadableStream<StreamItem> {
     const userId = home.user.id;
     let currentHome = home;
-    let streamController: ReadableStreamDefaultController<SSEStreamItem> | null = null;
+    let streamController: ReadableStreamDefaultController<StreamItem> | null = null;
     let keepalive: Timer | null = null;
     let isClosed = false;
 
-    const send = (item: SSEStreamItem) => {
+    const send = (item: StreamItem) => {
         if (isClosed || streamController === null) return;
         try {
             streamController.enqueue(item);
@@ -37,7 +41,7 @@ export function createSSEStream(home: Home): ReadableStream<SSEStreamItem> {
         start: (controller) => {
             streamController = controller;
             currentHome.subscribeSSE(send);
-            send(KEEPALIVE);
+            send(keepaliveItem());
             announceDataEpochs();
 
             keepalive = setInterval(async () => {
@@ -57,7 +61,7 @@ export function createSSEStream(home: Home): ReadableStream<SSEStreamItem> {
                     console.error(`[SSE] Failed to get Home for ${userId}:`, e);
                 }
 
-                send(KEEPALIVE);
+                send(keepaliveItem());
                 if (!isClosed) announceDataEpochs();
             }, KEEPALIVE_INTERVAL_MS);
         },
