@@ -1,15 +1,11 @@
 // The notes under the page, as Google's page-less document collects them at its end: each numbered, drawn as static
-// HTML, and the open one as the note's live editor in its place. A press on a note opens it. StaticStory draws a
-// closed text box's paragraphs the same way.
+// HTML, and the open one as the note's live editor in its place. A press on a note opens it.
 
-import type { Node as PMNode } from '@tiptap/pm/model';
-import { DOMSerializer } from '@tiptap/pm/model';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditorState } from '@tiptap/react';
-import { useMediaResolver } from '@workspace/lib/drive';
 import { cn } from '@workspace/ui/lib/utils';
-import { memo, useLayoutEffect, useRef } from 'react';
 import { footnotesInDoc } from './extensions/footnote';
+import { StaticStory } from './extensions/static-story';
 import type { StoryAnchor } from './extensions/story';
 import { storyKey } from './extensions/story';
 
@@ -21,21 +17,6 @@ type FootnoteListProps = {
     // A writer's on a desktop or a tablet; a viewer and a phone read the notes.
     onOpen?: (pos: number, at: { left: number; top: number }) => void;
 };
-
-// A story as the schema writes it, so 133 notes are not 133 editors. Its images resolve as the figure's node view's do.
-export const StaticStory = memo(function StaticStory({ node, className }: { node: PMNode; className: string }) {
-    const ref = useRef<HTMLDivElement>(null);
-    const { resolveMediaUrl } = useMediaResolver();
-    useLayoutEffect(() => {
-        const fragment = DOMSerializer.fromSchema(node.type.schema).serializeFragment(node.content);
-        for (const img of fragment.querySelectorAll('img[data-media-name]')) {
-            const src = resolveMediaUrl(img.getAttribute('data-media-name') ?? '');
-            if (src) img.setAttribute('src', src);
-        }
-        ref.current?.replaceChildren(fragment);
-    }, [node, resolveMediaUrl]);
-    return <div ref={ref} className={className} />;
-});
 
 // The notes under the text, numbered and under a short rule, as Google's pageless document collects them at its end.
 export function FootnoteList({ body, note, open, onOpen }: FootnoteListProps) {

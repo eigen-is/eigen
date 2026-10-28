@@ -153,9 +153,8 @@ export const figureLayoutLooks = (inFlowOnly: boolean) =>
 
 // Where a figure sits: in its own line, aligned, wrapped by the text on one side, or behind or in front of the text.
 // The section also holds its caption, which a figure behind or in front of the text doesn't draw and a text box has
-// none of. A figure in a band
-// offers the alignment alone, so a pasted wrap goes back to its own line. A figure in a note or a table cell draws in
-// line, so there the section offers no place behind or in front of the text.
+// none of. A figure in a band offers the alignment alone, so a pasted wrap goes back to its own line. A figure in a
+// note or a table cell draws in line, so there the section offers no place behind or in front of the text.
 export function FigureLayoutSection({
     layout,
     alignment,

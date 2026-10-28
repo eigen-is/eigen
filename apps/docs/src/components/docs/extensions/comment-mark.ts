@@ -1,3 +1,8 @@
+// The Docs comment anchor: the mark a card holds on a run of text, and the attribute it holds on a node the Yjs binding
+// keeps no mark on, such as an image or a text box. It adds, finds, selects and removes a card's anchors, quotes the
+// anchored text for the card, and paints each card's colour from the comment panel's state as decorations, which the
+// editor component updates and a figure's node view draws as its corner mark.
+
 import type { Editor } from '@tiptap/core';
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
@@ -30,8 +35,8 @@ type CommentMeta = {
 
 const decorationKey = new PluginKey('commentDecorations');
 
-// A node whose schema gives it a commentCardId, an image, a chart or an equation, holds its card there: the Yjs binding
-// persists a mark only on text.
+// A node whose schema gives it a commentCardId, such as an image, a text box or an equation, holds its card there: the
+// Yjs binding persists a mark only on text.
 const anchorsByAttribute = (node: Node): boolean => node.type.spec.attrs?.['commentCardId'] !== undefined;
 
 // The card a node anchors: by attribute, or on text as the comment mark.
@@ -54,7 +59,7 @@ export function commentCardIdAt(target: EventTarget | null): string | null {
     return target.closest('.comment-highlight')?.getAttribute('data-comment-id') || null;
 }
 
-// A new card anchors by attribute on an image, a chart or an equation selected alone, else as the mark on the range's text.
+// A new card anchors by attribute on a node that holds one, selected alone, else as the mark on the range's text.
 export function addCommentAnchor(editor: Editor, { from, to }: { from: number; to: number }, cardId: string): void {
     const node = editor.state.doc.nodeAt(from);
     if (node && anchorsByAttribute(node) && to === from + node.nodeSize) {
@@ -127,8 +132,8 @@ function buildDecorations(state: EditorState, meta: CommentMeta): DecorationSet 
         if (cardId) {
             const end = pos + node.nodeSize;
             const color = meta.colorMap.get(cardId);
-            // An image's, a chart's or an equation's node view paints the corner mark from this spec, resolved or not,
-            // like a commented canvas element.
+            // The node view of a node that holds its card, such as an image's or a text box's, paints the corner mark
+            // from this spec, resolved or not, like a commented canvas element.
             if (anchorsByAttribute(node)) decorations.push(Decoration.node(pos, end, {}, { commentColor: color }));
             // Text, and an equation among it, is highlighted until resolved; the sidebar shows a resolved one.
             if (!isFigureFrameNode(node.type.name) && !meta.resolvedIds.has(cardId) && color) {

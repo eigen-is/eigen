@@ -50,7 +50,7 @@ async function render(
         onInsertEquation,
         onInsertFootnote,
         onInsertTextBox,
-        inNote = false,
+        inStory = false,
         sync = { offline: false, unsyncedEdits: false },
         outlineShown = false,
         pageSetup = DEFAULT_PAGE_SETUP,
@@ -60,7 +60,7 @@ async function render(
         onInsertEquation?: () => void;
         onInsertFootnote?: () => void;
         onInsertTextBox?: () => void;
-        inNote?: boolean;
+        inStory?: boolean;
         sync?: { offline: boolean; unsyncedEdits: boolean };
         outlineShown?: boolean;
         pageSetup?: PageSetup;
@@ -76,7 +76,7 @@ async function render(
         onInsertEquation,
         onInsertFootnote,
         onInsertTextBox,
-        inNote,
+        inStory,
         ...sync,
         storageUnavailable: false,
         canUndo: false,
@@ -782,7 +782,7 @@ test('in a band, Format › Image offers no layout, as a band holds no float', a
 test('in a note, Format › Image offers no place in front of or behind the text', async () => {
     const note = new Editor({ extensions: rootExtensions({ note: true }), content: TABLE_AND_FIGURE });
     note.commands.setNodeSelection(2);
-    await render(1920, true, { active: note, inNote: true });
+    await render(1920, true, { active: note, inStory: true });
     await openMenu('Format');
     await openSubmenu('Image');
     expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
@@ -1394,7 +1394,7 @@ test('Insert › Text box follows Chart, inserts once the menu has closed, and i
 });
 
 test('Insert greys out Text box in a story', async () => {
-    await render(1920, true, { onInsertTextBox: () => {}, inNote: true, active: editor });
+    await render(1920, true, { onInsertTextBox: () => {}, inStory: true, active: editor });
     await openMenu('Insert');
     const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
         .filter((item) => item.getAttribute('aria-disabled') === 'true')
@@ -1411,7 +1411,7 @@ test('Insert has no Equation without a way to edit it', async () => {
 
 // Google greys out what a header can't hold; the open note's rule shows the same.
 test('Insert greys out, rather than hides, what a note or a band can’t hold', async () => {
-    await render(1920, true, { onInsertEquation: () => {}, inNote: true, active: editor });
+    await render(1920, true, { onInsertEquation: () => {}, inStory: true, active: editor });
     await openMenu('Insert');
     const greyed = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')]
         .filter((item) => item.getAttribute('aria-disabled') === 'true')
@@ -1544,11 +1544,11 @@ test('Insert › Page elements › Footnote ends the submenu and inserts once th
 test.each([
     ['in a band', true, false],
     ['in a note', false, true],
-])('Insert › Page elements › Footnote is off %s', async (_, inBand, inNote) => {
+])('Insert › Page elements › Footnote is off %s', async (_, inBand, inStory) => {
     const band = new Editor({ extensions: rootExtensions({ band: true }) });
     editor.commands.setContent(ONE_PARAGRAPH);
     editor.commands.setTextSelection(2);
-    await render(1920, true, { onInsertFootnote: () => {}, inNote, active: inBand ? band : editor });
+    await render(1920, true, { onInsertFootnote: () => {}, inStory, active: inBand ? band : editor });
     await openMenu('Insert');
     await openSubmenu('Page elements');
     expect(footnoteItem()?.getAttribute('aria-disabled')).toBe('true');

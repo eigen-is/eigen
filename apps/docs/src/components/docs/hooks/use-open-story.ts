@@ -1,5 +1,5 @@
-// The one story open in a live editor, a footnote's note or a text box, for a writer on a desktop or a tablet: its edits
-// forward into the body, the body's changes to it pull back, and a body selection inside a story (the find bar's
+// The one story open in a live editor, a footnote's note or a text box, for a writer on a desktop or a tablet: its
+// edits forward into the body, the body's changes to it pull back, and a body selection inside a story (the find bar's
 // reveal) opens it. The editor component calls it with the body's editor and one editor per kind of story; the note's
 // editor draws in the list under the page and the box's in the box itself.
 
@@ -65,9 +65,9 @@ function forwardStory(body: Editor, story: Editor, anchor: StoryAnchor): void {
     if (found) forwardTo(body, story, found);
 }
 
-// The body's version of the story into its editor, with the body's decorations inside it. A story found by its id
-// after its element went holds less than its editor: the typist's keystrokes of that round trip landed in the deleted
-// element. Its editor stays as it is and forwards them into the story's new node, once the change that moved it is done.
+// The body's version of the story into its editor, with the body's decorations inside it. A story found by its id after
+// its element went holds less than its editor: the typist's keystrokes of that round trip landed in the deleted
+// element. Its editor stays as it is and forwards them into the new node once the change that moved it ends.
 function pullStory(
     body: Editor,
     story: Editor,

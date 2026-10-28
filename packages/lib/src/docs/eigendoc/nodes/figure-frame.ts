@@ -1,7 +1,7 @@
-// The frame a Docs figure sits in, such as an image, a chart or a text box: where its box sits (in line, wrapped, or in front of or
-// behind the text at an offset from its paragraph), its caption and its comment card. Each figure node takes its
-// attributes and HTML from here. Every surface that draws one, such as the editor or the export, takes its box style,
-// so they all draw the same box.
+// The frame a Docs figure sits in, such as an image, a chart or a text box: where its box sits (in line, wrapped, or
+// in front of or behind the text at an offset from its paragraph), its caption and its comment card. Each figure node
+// takes its attributes and HTML from here. Every surface that draws one, such as the editor or the export, takes its
+// box style, so they all draw the same box.
 
 import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
@@ -53,7 +53,7 @@ export const readFrameSide = (value: unknown): number | null =>
 const readOffset = (value: unknown) =>
     typeof value === 'number' && Number.isFinite(value) ? Math.min(MAX_PAPER_PX, Math.max(-MAX_PAPER_PX, value)) : null;
 
-// Only Eigen's own span places a figure: another app's <figure> or absolute <img> has no anchor paragraph to count from.
+// Only Eigen's own span places a figure: another app's <figure> or absolute <img> has no paragraph to count from.
 export const isOwnSpan = (element: HTMLElement) => element.tagName === 'SPAN';
 
 const parseOffset = (element: HTMLElement, name: string) => {
@@ -105,7 +105,7 @@ export function figureFrameAttributes() {
             default: null,
             parseHTML: (element: HTMLElement) => element.querySelector('figcaption, .figcaption')?.textContent || null,
         },
-        // The comment card. An attribute, not the comment mark text carries: the Yjs binding persists a mark only on text.
+        // The comment card, an attribute: the Yjs binding persists a mark, such as the comment mark, only on text.
         commentCardId: {
             default: null,
             parseHTML: (element: HTMLElement) => element.getAttribute('data-comment-id'),

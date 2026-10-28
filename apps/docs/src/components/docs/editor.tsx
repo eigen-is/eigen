@@ -2,7 +2,7 @@
 // and footer bands, its body and its notes, scaled to fit a narrow window, or, for a page-less doc, as a column of
 // text at the reader's own width with room beside it for wide tables and images. Around the page it wires the
 // toolbar and menus, the outline, the selection's properties panel, comments, chat and search, all through the
-// body's, a band's or a note's editor, whichever holds the selection.
+// body's, a band's or an open story's editor, whichever holds the selection.
 
 import type { Node } from '@tiptap/pm/model';
 import { Selection } from '@tiptap/pm/state';
@@ -259,7 +259,7 @@ const TiptapEditor = ({
     const openBoxRef = useRef((_pos: number, _at: { left: number; top: number } | null) => {});
     const jumpToHeadingRef = useRef((_pos: number) => {});
     const insertFootnoteRef = useRef((): boolean => false);
-    const leaveNoteRef = useRef(() => {});
+    const leaveStoryRef = useRef(() => {});
     const [undoManager] = useState(() => createDocUndoManager(yDoc));
     const pageSetup = useYMapRead(yDoc.getMap(PAGE_ROOT), readPageSetup);
     const writeSetup = (from: PageSetup, to: PageSetup) => writePageSetup(yDoc, undoManager, from, to);
@@ -398,7 +398,7 @@ const TiptapEditor = ({
         yDoc,
         provider: null,
         editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current(), story: 'footnote' },
+        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'footnote' },
         equation,
     });
     // The open text box's live editor, which draws in the box itself.
@@ -407,15 +407,15 @@ const TiptapEditor = ({
         yDoc,
         provider: null,
         editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveNoteRef.current(), story: 'textBox' },
+        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'textBox' },
         equation,
     });
     const storyEditors = useMemo(() => ({ footnote: noteEditor, textBox: boxEditor }), [noteEditor, boxEditor]);
-    const notes = useOpenStory(editor, storyEditors, bandsAllowed);
-    leaveNoteRef.current = notes.leave;
+    const story = useOpenStory(editor, storyEditors, bandsAllowed);
+    leaveStoryRef.current = story.leave;
     const openStory = (pos: number, at: { left: number; top: number } | null) => {
         setEditingBand(null);
-        notes.open(pos, { focus: true, at, selection: null });
+        story.open(pos, { focus: true, at, selection: null });
     };
     openNoteRef.current = (pos) => {
         if (bandsAllowed) openStory(pos, null);
@@ -442,8 +442,8 @@ const TiptapEditor = ({
         editor.view.dispatch(tr.scrollIntoView());
         openStory(pos, null);
     };
-    const storyEditor = notes.editor;
-    const openBox = notes.anchor?.type === 'textBox' ? notes.anchor : null;
+    const storyEditor = story.editor;
+    const openBox = story.anchor?.type === 'textBox' ? story.anchor : null;
     const textBoxContext = useMemo(() => ({ anchor: openBox, editor: boxEditor }), [openBox, boxEditor]);
     const activeEditor = editingBand ? bands[editingBand] : (storyEditor ?? editor);
     // A jump from the outline or a table of contents leaves a band or a note and puts the caret at the start of the
@@ -452,7 +452,7 @@ const TiptapEditor = ({
     // closes first, and the scroll waits a frame for the editor the pane hid to be drawn again.
     const jumpToHeading = (pos: number) => {
         setEditingBand(null);
-        notes.close();
+        story.close();
         if (isMobile) outline.close();
         editor.commands.focus(pos + 1, { scrollIntoView: false });
         requestAnimationFrame(() => {
@@ -466,7 +466,7 @@ const TiptapEditor = ({
     jumpToHeadingRef.current = jumpToHeading;
     // A double-click puts the caret where it was, a menu at the band's end.
     const enterBand = (root: BandRoot, at?: { left: number; top: number }) => {
-        notes.close();
+        story.close();
         setEditingBand(root);
         const band = bands[root];
         band.commands.focus((at && band.view.posAtCoords(at)?.pos) ?? 'end');
@@ -551,7 +551,7 @@ const TiptapEditor = ({
     const menuChart = figureContextMenu.item?.chart;
 
     // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being edited
-    // or the open note's. A viewer, and a band not being edited, keep the browser's.
+    // or the open story's. A viewer, and a band not being edited, keep the browser's.
     const tableContextMenu = useContextMenu<TableMenuItem>();
     tableContextMenuRef.current = (target, pos, event) => {
         if (!target.isEditable) return false;
@@ -799,7 +799,7 @@ const TiptapEditor = ({
                                     textWidth={textWidth}
                                     onTextWidthChange={setTextWidth}
                                     onUpdateNormalStyle={
-                                        editingBand || notes.anchor
+                                        editingBand || story.anchor
                                             ? undefined
                                             : () => updateNormalStyle(yDoc, undoManager, editor, normalStyle)
                                     }
@@ -827,7 +827,7 @@ const TiptapEditor = ({
                                     onInsertEquation={insertEquation}
                                     onInsertFootnote={bandsAllowed ? insertFootnote : undefined}
                                     onInsertTextBox={bandsAllowed ? insertBox : undefined}
-                                    inNote={!!notes.anchor}
+                                    inStory={!!story.anchor}
                                     onEnterBand={
                                         bandsAllowed && !pageless ? (edge) => enterBand(entryBand(edge)) : undefined
                                     }
@@ -860,21 +860,21 @@ const TiptapEditor = ({
                                     // as in Google, and one in another band moves there, as that band is read-only
                                     // until entered; a press anywhere else would focus nothing, leaving the band
                                     // edited with Esc and typing reaching nothing, so it keeps the caret. A portaled
-                                    // menu or dialog is the band's own. An open note is left and kept alike, and
-                                    // another note opens itself.
+                                    // menu or dialog is the band's own. An open story is left and kept alike, and
+                                    // another story opens itself.
                                     onMouseDown={
-                                        notes.anchor && !editingBand
+                                        story.anchor && !editingBand
                                             ? (e) => {
                                                   const target = e.target;
                                                   if (
                                                       !(target instanceof Element) ||
                                                       !e.currentTarget.contains(target) ||
                                                       e.defaultPrevented ||
-                                                      notes.editor?.view.dom.contains(target)
+                                                      story.editor?.view.dom.contains(target)
                                                   ) {
                                                       return;
                                                   }
-                                                  if (target.closest('[data-page-body]')) notes.close();
+                                                  if (target.closest('[data-page-body]')) story.close();
                                                   else e.preventDefault();
                                               }
                                             : editingBand
@@ -955,7 +955,7 @@ const TiptapEditor = ({
                                         <FootnoteList
                                             body={editor}
                                             note={noteEditor}
-                                            open={notes.anchor}
+                                            open={story.anchor}
                                             onOpen={bandsAllowed ? openStory : undefined}
                                         />
                                         {!pageless && (

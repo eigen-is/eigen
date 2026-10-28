@@ -1,7 +1,7 @@
-// Builds every editor of a doc: the body's, each header and footer band's and each story's, a note's and a text box's. One factory gives
-// them the schema, the node views, the collaboration and its caret, and the copy, paste and drop paths, so a band and a
-// note edit as the body does. useDocEditor and useBandEditors add what a mounted editor runs, such as the sweep of
-// images a closed tab left mid-upload, and useDocMedia holds the image uploads they share.
+// Builds every editor of a doc: the body's, each header and footer band's and each story's, a note's and a text box's.
+// One factory gives them the schema, the node views, the collaboration and its caret, and the copy, paste and drop
+// paths, so a band and a story edit as the body does. useDocEditor and useBandEditors add what a mounted editor runs,
+// such as the sweep of images a closed tab left mid-upload, and useDocMedia holds the image uploads they share.
 
 import type { Extensions } from '@tiptap/core';
 import { Extension, Node } from '@tiptap/core';
@@ -190,7 +190,7 @@ export function useDocMedia(path: DrivePath) {
             const replaced = target.getAttributes('figure').mediaName;
             const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
             const settled = editor();
-            // The selection may have left the figure during the copy; the copied file then stays unreferenced in media/.
+            // The selection may have left the figure during the copy. The copied file then stays in media/, unused.
             if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {
                 settled.chain().focus().updateFigure({ mediaName: result[0].name, width: null, height: null }).run();
             }
@@ -343,12 +343,12 @@ export function docEditorOptions({
         });
     return {
         editable,
-        // y-tiptap writes nothing while the doc reads as one empty paragraph, unless an earlier update saw other content.
-        // It draws the root as it builds its plugin view, before its update can see that. One update as the view mounts
-        // shows it what the root holds, so an edit that empties a root that held something is saved.
+        // y-tiptap writes nothing while the doc reads as one empty paragraph, unless an earlier update saw other
+        // content. It draws the root as it builds its plugin view, before its update can see that. One update as the
+        // view mounts shows it what the root holds, so an edit that empties a root that held something is saved.
         onMount: ({ editor }) => editor.view.updateState(editor.state),
         extensions: [
-            // A story's own doc holds its paragraphs; a nested note or box stays in the schema, as a peer may write one.
+            // A story's own doc holds its paragraphs. A nested note or box stays in the schema, as a peer may send one.
             ...getDocExtensions({
                 lowlight,
                 textColumnWidth,
@@ -502,8 +502,8 @@ type UseDocEditorOptions = Omit<DocEditorOptions, 'caret' | 'coarsePointer' | 'm
     editing?: boolean;
 };
 
-// The body's editor, each band's and each story's: docEditorOptions with this tab's user and its pointer, plus the sweep of pending
-// images a closed tab left and the font-name pass, both in an editable editor only.
+// The body's editor, each band's and each story's: docEditorOptions with this tab's user and its pointer, plus the
+// sweep of pending images a closed tab left and the font-name pass, both in an editable editor only.
 export function useDocEditor(
     { media, provider, editing = true, ...options }: UseDocEditorOptions,
     deps: DependencyList = [],
@@ -530,8 +530,9 @@ export function useDocEditor(
         deps,
     );
     editorRef.current = editor;
-    // TipTap keeps an editor's editable flag across renders, so write access lost or gained while the doc is open, and a
-    // band entered or left, reach it here. Before paint, so an editor never shows a frame editable after it lost that.
+    // TipTap keeps an editor's editable flag across renders, so write access lost or gained while the doc is open, and
+    // a band entered or left, reach it here. It runs before paint, so an editor never draws a frame as editable once
+    // it lost write access.
     useLayoutEffect(() => {
         editor.setEditable(editable, false);
         // A node view reads the flag as it renders and nothing re-renders it, so a selected image would keep its grips.

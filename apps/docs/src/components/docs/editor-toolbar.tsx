@@ -1,7 +1,7 @@
 // The docs editor's toolbar: the menus on the left, the formatting icon row in the middle and the share cluster on the
-// right. It acts on the editor the caret is in, the body's, a band's or the open note's, and owns the dialogs its menus
-// open, such as Page setup and Word count. The editor hands it what it shares with the page, such as the panels' and
-// the outline's toggles.
+// right. It acts on the editor the caret is in, the body's, a band's or the open story's, and owns the dialogs its
+// menus open, such as Page setup and Word count. The editor hands it what it shares with the page, such as the panels'
+// and the outline's toggles.
 
 import { formatForDisplay, useHotkey } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -74,11 +74,11 @@ import { StylePicker } from './style-picker';
 import { ShowOutlineItem, ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
 
-// A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather than
-// back to its trigger, which would swallow the next keystrokes; a pick's own command focuses it a frame later. A dialog
-// the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it. Radix hands
-// focus back a tick after the menu unmounts, when Tiptap has destroyed the editors of a document that closed with it,
-// which still read as editable.
+// A closing menu hands focus to the editor the caret is in, whether a pick, Esc or a press outside closed it, rather
+// than back to its trigger, which would swallow the next keystrokes; a pick's own command focuses it a frame later. A
+// dialog the pick opened keeps focus, and a viewer's menu returns it to the trigger, as the editor can't take it. Radix
+// hands focus back a tick after the menu unmounts, when Tiptap has destroyed the editors of a document that closed with
+// it, which still read as editable.
 export const keepEditorFocus = (editor: Editor) => (e: Event) => {
     if (editor.isDestroyed || !editor.isEditable) return;
     e.preventDefault();
@@ -86,7 +86,7 @@ export const keepEditorFocus = (editor: Editor) => (e: Event) => {
 };
 
 type EditorToolbarProps = {
-    // The editor the caret is in: the body's, a band's while the band is edited, or the open note's.
+    // The editor the caret is in: the body's, a band's while the band is edited, or the open story's.
     editor: Editor;
     // Word count counts the body, from a band too.
     body: Editor;
@@ -120,8 +120,8 @@ type EditorToolbarProps = {
     // Inserts a footnote and opens its note; a writer's on a desktop or a tablet only.
     onInsertFootnote?: () => void;
     onInsertTextBox?: () => void;
-    // The caret is in the open footnote's note, which holds paragraphs only.
-    inNote: boolean;
+    // The caret is in the open story, a note or a text box, which holds paragraphs only.
+    inStory: boolean;
     // Puts the caret in a band, and writes a page-number preset there; a writer's on a desktop or a tablet only.
     onEnterBand?: (edge: BandEdge) => void;
     onPageNumbers?: (preset: PageNumberPreset) => void;
@@ -157,7 +157,7 @@ export const EditorToolbar = ({
     onInsertEquation,
     onInsertFootnote,
     onInsertTextBox,
-    inNote,
+    inStory,
     onEnterBand,
     onPageNumbers,
     outlineShown,
@@ -353,7 +353,7 @@ export const EditorToolbar = ({
                                     onInsertEquation={onInsertEquation}
                                     onInsertFootnote={onInsertFootnote}
                                     onInsertTextBox={onInsertTextBox}
-                                    inNote={inNote}
+                                    inStory={inStory}
                                     held={editor !== body}
                                     pageless={pageSetup.pageless}
                                     onEnterBand={onEnterBand}
