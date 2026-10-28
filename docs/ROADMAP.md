@@ -248,7 +248,7 @@ Still to do:
 - `packages/ui`.
 - The apps, thin ones last.
 - Duplication folding, on the next touch of each domain: the copy-mutation quartet (`useCopyFiles`, `useCopyToMediaFolder`, `useCopyPath`, `useDuplicatePath` in `packages/lib/src/core/drive/hooks/writes.ts`), and the per-domain action lists, the same action built again in the desktop toolbar, the compact menu, right-click, the command palette and the mobile menus, drifted in permission, label, keyboard and visibility. Extract a small action catalog per domain as its drift is fixed, in the shape `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`) gives the file actions, not a generic menu framework.
-- Auth, guests and the share registry (better-auth wrapper, `verifyProtocolAuth`, guest cleanup, `addRegistryEntry`), before SSO adds a second identity path: headers, comments and duplicate merges done and reviewed; the full source-file pass is still to do.
+- Auth, guests and the share registry (better-auth wrapper, `verifyProtocolAuth`, guest cleanup, `addRegistryEntry`), before SSO adds a second identity path: full pass done, review pending.
 - The ops path: `./eigen` backup, restore, update and rollback, `docker/` and first-run setup, as restore drills and upgrade rehearsals: the full source-file pass is done and reviewed, with backup and restore code moved out of the modules that host it. The drills still wait for a Docker run of `docker/test-*.sh`.
 - The SSE to query-key contract: every `sse-events.ts` emitter against `sse-handlers.ts` and the `*Keys` in `packages/lib`. The contract is fixed and tested, and the full source-file pass is done and reviewed.
 - WebDAV and CalDAV conformance, the measured gaps first (litmus 0.17, cadaver, vdirsyncer 0.21):
