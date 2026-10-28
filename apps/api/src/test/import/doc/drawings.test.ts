@@ -807,6 +807,31 @@ describe('text boxes as boxes', () => {
         });
     });
 
+    // Word writes a length under one with no leading zero: `.5pt`, `-.75pt`, `.1in`.
+    test('a VML box reads lengths with no leading zero, in the style and in the attributes', async () => {
+        const style = PLACED.replace('margin-left:30pt', 'margin-left:-.75pt')
+            .replace('margin-top:15pt', 'margin-top:.5in')
+            .replace('width:150pt', 'width:.5in')
+            .replace('height:60pt', 'height:.25in');
+        const run = vmlBox(style)
+            .replace('strokeweight="1.5pt"', 'strokeweight=".75pt"')
+            .replace('inset="7.2pt,3.6pt,7.2pt,3.6pt"', 'inset=".25in,.125in,.25in,.125in"');
+        const boxes = await vmlBoxesOf(run);
+        expect(boxes[0]?.attrs).toMatchObject({
+            offsetX: -1,
+            offsetY: 48,
+            width: 48,
+            height: 24,
+            outline: '1px solid #0000ff',
+            paddingX: 24,
+            paddingY: 12,
+        });
+        const px = await vmlBoxesOf(
+            vmlBox(PLACED.replace('margin-left:30pt', 'margin-left:-.6').replace('width:150pt', 'width:.5in')),
+        );
+        expect(px[0]?.attrs).toMatchObject({ offsetX: -1 });
+    });
+
     // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
     test('a VML box wraps by its w10:wrap, never by the wrap of its own text', async () => {
         const boxes = await vmlBoxesOf(

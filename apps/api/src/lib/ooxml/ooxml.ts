@@ -130,7 +130,7 @@ const MAX_MEASURE_CHARS = 64;
 // too large for a double to hold exactly.
 export function emu(value: string | undefined): number | undefined {
     if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
-    const [, number, unit = ''] = value.trim().match(/^(-?\d+(?:\.\d+)?)([a-z]*)$/) ?? [];
+    const [, number, unit = ''] = value.trim().match(/^(-?(?:\d+(?:\.\d+)?|\.\d+))([a-z]*)$/) ?? [];
     const points = POINTS_PER_UNIT.get(unit);
     const result =
         unit === '' ? Number(number) : points === undefined ? Number.NaN : Number(number) * points * EMU_PER_POINT;

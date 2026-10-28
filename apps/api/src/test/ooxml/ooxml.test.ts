@@ -58,6 +58,10 @@ describe('a coordinate', () => {
         ]);
     });
 
+    test('may lack its leading zero, as Word writes it', () => {
+        expect([emu('.5pt'), emu('-.75pt'), emu('.1in'), emu('.5')]).toEqual([6350, -9525, 91440, 0.5]);
+    });
+
     test('is none past what a double holds exactly, in no unit, or not a number', () => {
         for (const value of [undefined, '', '9007199254740992', '1em', '1e3', 'NaN', '- 1', '1.'])
             expect([value, emu(value)]).toEqual([value, undefined]);

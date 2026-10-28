@@ -233,7 +233,7 @@ export function vmlStyle(element: XmlElement): Map<string, string> {
 // as an inset or a stroke weight, as LibreOffice reads them.
 export function vmlPx(value: string | undefined, unitless: 'px' | 'emu'): number | null {
     const text = value?.trim().toLowerCase() ?? '';
-    const [, number, px] = /^(-?\d+(?:\.\d+)?)(px)?$/.exec(text) ?? [];
+    const [, number, px] = /^(-?(?:\d+(?:\.\d+)?|\.\d+))(px)?$/.exec(text) ?? [];
     if (number !== undefined && (px || unitless === 'px')) return Number(number);
     const length = emu(text);
     return length === undefined ? null : length / EMU_PER_PX;
