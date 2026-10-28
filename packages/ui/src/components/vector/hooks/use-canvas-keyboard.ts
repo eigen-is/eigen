@@ -19,6 +19,8 @@ import { VECTOR_TOOLS } from './use-tool';
 
 type CanvasKeyboardParams = {
     enabled: boolean;
+    // An open menu owns the arrows, Delete, letters and Escape, but the Edit menu lists ⌘Z and ⇧⌘Z, so undo stays on.
+    menuOpen: boolean;
     elements: VectorElement[];
     selectedIds: string[];
     setTool: (t: VectorTool) => void;
@@ -82,7 +84,8 @@ export function createNudgeBurst(undoManager: Y.UndoManager | null): { begin: ()
 }
 
 export function useCanvasKeyboard(params: CanvasKeyboardParams) {
-    const { enabled, elements, selectedIds, undoManager } = params;
+    const { elements, selectedIds, undoManager } = params;
+    const enabled = params.enabled && !params.menuOpen;
     const hasSelection = selectedIds.length > 0;
 
     // Every handler below reads the live params through this ref, so every registration keeps ONE
@@ -92,7 +95,7 @@ export function useCanvasKeyboard(params: CanvasKeyboardParams) {
     live.current = params;
 
     // Undo/redo through the doc's own UndoManager (⌘Z / ⌘⇧Z / ⌘Y).
-    useYjsUndoHotkeys(undoManager, enabled);
+    useYjsUndoHotkeys(undoManager, params.enabled);
 
     const on = useMemo(() => ({ enabled }), [enabled]);
     const onSelection = useMemo(() => ({ enabled: enabled && hasSelection }), [enabled, hasSelection]);

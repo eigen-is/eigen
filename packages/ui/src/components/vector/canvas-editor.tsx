@@ -498,11 +498,12 @@ export function CanvasEditor({
     // the lib's ignoreInputs default does not cover a ProseMirror contenteditable, so a tool letter
     // would otherwise be swallowed as a keystroke inside the in-place editor. An open dialog stands the
     // keymap down too, or Delete on its button would delete the selection behind it. So does an open
-    // menu, whose arrow keys would otherwise also nudge the selection.
+    // menu, whose arrow keys would otherwise also nudge the selection, except for undo and redo.
     const dialogOpen = useDialogOpen();
     const menuOpen = useMenuOpen();
     useCanvasKeyboard({
-        enabled: canEdit && !textEditing && !dialogOpen && !menuOpen,
+        enabled: canEdit && !textEditing && !dialogOpen,
+        menuOpen,
         elements: visibleElements,
         selectedIds,
         setTool,
