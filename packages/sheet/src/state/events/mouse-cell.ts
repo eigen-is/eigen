@@ -1,3 +1,8 @@
+// The grid's clicks on cells. A mousedown selects a cell or a range, extends it with Shift, adds one with ⌘ or Ctrl,
+// picks a reference while a formula is being typed, or does a painted glyph's job, such as ticking a tick box. A
+// double click opens the cell editor, and a right click or a long press selects the cell and opens the context menu.
+// The sheet overlay calls these from its DOM handlers.
+
 import { isNil, last } from 'es-toolkit/compat';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';

@@ -1,7 +1,7 @@
 // The dialog for one conditional-format rule, such as "Greater than" or "Top 10", opened from the
 // Format menu. It edits the draft in ctx.conditionRules, reads back a range picked with the range
-// picker, and hands the draft to setConditionRules on confirm. RULE_COPY names each rule once for
-// the menu, this dialog and the Manage-rules list.
+// picker, and hands the draft to setConditionRules on confirm. RULE_COPY names each rule once, so
+// this dialog and the places that list rules, such as the Format menu, show the same words.
 
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
