@@ -1,10 +1,21 @@
-// The pptx reader's bent and curved connectors, as the arrow that draws each, so a connector keeps its arrowheads. A
-// bent connector is an elbow arrow with every bend pinned, so the router never moves them. A curved one is a curved
-// arrow through points along its curve. The shape reader calls connectorArrow with the path the connector's preset
-// draws, after the flips.
+// The pptx reader's arrows that come as paths: a bent or curved connector with a head, and an open freeform with one,
+// which is how the pptx export writes an arrow of more than two points. Each becomes the arrow that draws it, so it
+// keeps its arrowheads. Lines at right angles are an elbow arrow with every bend pinned, so the router never moves
+// them, other lines a sharp arrow through their corners, and a curve a curved arrow through points along it. The shape
+// reader calls connectorArrow and freeformArrow with the path the shape draws, after the flips.
 
-import type { Arrowhead, Box, NewVectorElement, PathCommand, Point, VectorArrowElement } from '@workspace/lib/vector';
+import type {
+    Arrowhead,
+    Box,
+    NewVectorElement,
+    PathCommand,
+    Point,
+    Roundness,
+    VectorArrowElement,
+} from '@workspace/lib/vector';
 import {
+    arrowCurveBeziers,
+    bezierAt,
     distance,
     linearLocalToScene,
     parsePathCommands,
@@ -33,68 +44,67 @@ export const CONNECTORS: ReadonlyMap<string, Connector> = new Map([
 const CURVE_STEP_PX = 40;
 const MAX_STEPS_PER_CURVE = 8;
 
+// A freeform curve whose control points lie this close to those of the canvas's own curve through its ends draws as
+// that curve, so it reads back as the arrow through those ends.
+const OWN_CURVE_PX = 1;
+
 type Stroke = Pick<VectorArrowElement, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>;
 
-// `path` is the preset's path in the unit box, `box` the shape's place on the slide. An elbow arrow pins only a leg
-// between two others and draws only right angles, so a connector of two legs, or one turned off a quarter turn, is a
-// sharp arrow through its corners instead.
+// `path` is the preset's path in the unit box, `box` the shape's place on the slide.
 export function connectorArrow(
     connector: Connector,
     path: string,
     box: Box,
-    { strokeColor, strokeWidth, strokeStyle }: Stroke,
-    [startArrowhead, endArrowhead]: Arrowhead[],
+    stroke: Stroke,
+    ends: Arrowhead[],
 ): NewVectorElement {
-    const onSlide = (p: Point) => linearLocalToScene(box, { x: p.x * box.width, y: p.y * box.height });
-    const polyline = polylineOf(parsePathCommands(path) ?? [], onSlide);
-    const points = connector === 'bent' ? corners(polyline) : polyline;
-    // The elbow's route is unturned, so every arrow stores its points on the slide, its box their box.
-    const { minX, minY, maxX, maxY } = pointsBounds(points);
-    const local = points.map((p) => ({ x: round(p.x - minX), y: round(p.y - minY) }));
-    const elbow = connector === 'bent' && local.length >= 4 && validateElbowPoints(local);
-    return {
-        type: 'arrow',
-        x: minX,
-        y: minY,
-        width: maxX - minX,
-        height: maxY - minY,
-        angle: 0,
-        points: serializePoints(local),
-        roundness: connector === 'curved' ? 'round' : 'sharp',
-        elbow,
-        fixedSegments: elbow ? pinnedBends(local) : '',
-        startArrowhead,
-        endArrowhead,
-        strokeColor,
-        strokeWidth,
-        strokeStyle,
-    };
+    const polyline = polylineOf(parsePathCommands(path) ?? [], onSlide(box));
+    return connector === 'bent'
+        ? arrowThrough(corners(polyline), 'sharp', stroke, ends)
+        : arrowThrough(polyline, 'round', stroke, ends);
 }
 
-// The path's points on the slide, each cubic cut into steps by the length of its control polygon.
-function polylineOf(commands: PathCommand[], onSlide: (p: Point) => Point): Point[] {
+// A freeform of one open subpath, of lines only or of curves only, as the pptx export writes an arrow. Undefined for
+// any other, which stays a path: no arrow draws a closed shape, nor lines and curves at once.
+export function freeformArrow(path: string, box: Box, stroke: Stroke, ends: Arrowhead[]): NewVectorElement | undefined {
+    const commands = parsePathCommands(path) ?? [];
+    const drawn = commands.slice(1);
+    const curves = drawn.filter(({ op }) => op === 'C' || op === 'Q').length;
+    const lines = drawn.filter(({ op }) => op === 'L').length;
+    if (drawn.length === 0 || (curves !== drawn.length && lines !== drawn.length)) return undefined;
+    const at = onSlide(box);
+    const points = commands.map((command) => at(command.points[command.points.length - 1]));
+    if (lines > 0) return arrowThrough(points, 'sharp', stroke, ends);
+    const own = arrowCurveBeziers(points).every(([, c1, c2], i) => {
+        const { op, points: controls } = drawn[i];
+        return (
+            op === 'C' && distance(c1, at(controls[0])) <= OWN_CURVE_PX && distance(c2, at(controls[1])) <= OWN_CURVE_PX
+        );
+    });
+    return arrowThrough(own ? points : polylineOf(commands, at), 'round', stroke, ends);
+}
+
+// A point of the unit box on the slide.
+function onSlide(box: Box): (p: Point) => Point {
+    return (p) => linearLocalToScene(box, { x: p.x * box.width, y: p.y * box.height });
+}
+
+// The path's points on the slide, each curve cut into steps by the length of its control polygon.
+function polylineOf(commands: PathCommand[], at: (p: Point) => Point): Point[] {
     const points: Point[] = [];
-    for (const { op, points: controls } of commands) {
-        const ends = controls.map(onSlide);
+    for (const command of commands) {
+        const controls = command.points.map(at);
         const from = points[points.length - 1];
-        if (op !== 'C' || !from) {
-            points.push(...ends);
+        if (controls.length < 2 || !from) {
+            points.push(...controls);
             continue;
         }
-        const [c1, c2, to] = ends;
-        const length = distance(from, c1) + distance(c1, c2) + distance(c2, to);
+        const curve = [from, ...controls];
+        const length = curve.slice(1).reduce((sum, p, i) => sum + distance(curve[i], p), 0);
         const steps = Math.min(MAX_STEPS_PER_CURVE, Math.max(2, Math.round(length / CURVE_STEP_PX)));
-        for (let i = 1; i <= steps; i++) points.push(cubicAt([from, c1, c2, to], i / steps));
+        for (let i = 1; i <= steps; i++) points.push(bezierAt(curve, i / steps));
     }
     return points;
-}
-
-function cubicAt([p0, p1, p2, p3]: Point[], t: number): Point {
-    const weights = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t ** 2, t ** 3];
-    return {
-        x: weights[0] * p0.x + weights[1] * p1.x + weights[2] * p2.x + weights[3] * p3.x,
-        y: weights[0] * p0.y + weights[1] * p1.y + weights[2] * p2.y + weights[3] * p3.y,
-    };
 }
 
 // A bent connector's adjust values can make two bends meet or a leg go straight on. Such a point is no corner, and a
@@ -119,15 +129,45 @@ function straightOn(a: Point, b: Point, c: Point): boolean {
     return Math.abs(cross) <= 1e-6 * Math.hypot(u.x, u.y) * Math.hypot(v.x, v.y) && u.x * v.x + u.y * v.y > 0;
 }
 
-// Every leg between the first and the last pinned: a pin keys points[index - 1] to points[index].
-function pinnedBends(points: Point[]): string {
-    return serializeFixedSegments({
-        segments: points.slice(2, -1).map((end, i) => ({
-            index: i + 2,
-            start: [points[i + 1].x, points[i + 1].y],
-            end: [end.x, end.y],
-        })),
-        startIsSpecial: false,
-        endIsSpecial: false,
-    });
+// An elbow arrow pins only a leg between two others and draws only right angles, so lines of two legs, or any turned
+// off a quarter turn, are a sharp arrow through their corners instead.
+function arrowThrough(
+    points: Point[],
+    roundness: Roundness,
+    { strokeColor, strokeWidth, strokeStyle }: Stroke,
+    [startArrowhead, endArrowhead]: Arrowhead[],
+): NewVectorElement {
+    // The elbow's route is unturned, so every arrow stores its points on the slide, its box their box.
+    const { minX, minY, maxX, maxY } = pointsBounds(points);
+    const local = points.map((p) => ({ x: round(p.x - minX), y: round(p.y - minY) }));
+    const elbow = roundness === 'sharp' && local.length >= 4 && validateElbowPoints(local);
+    // Every leg between the first and the last pinned: a pin keys points[index - 1] to points[index].
+    const fixedSegments = elbow
+        ? serializeFixedSegments({
+              segments: local.slice(2, -1).map((end, i) => ({
+                  index: i + 2,
+                  start: [local[i + 1].x, local[i + 1].y],
+                  end: [end.x, end.y],
+              })),
+              startIsSpecial: false,
+              endIsSpecial: false,
+          })
+        : '';
+    return {
+        type: 'arrow',
+        x: minX,
+        y: minY,
+        width: maxX - minX,
+        height: maxY - minY,
+        angle: 0,
+        points: serializePoints(local),
+        roundness,
+        elbow,
+        fixedSegments,
+        startArrowhead,
+        endArrowhead,
+        strokeColor,
+        strokeWidth,
+        strokeStyle,
+    };
 }

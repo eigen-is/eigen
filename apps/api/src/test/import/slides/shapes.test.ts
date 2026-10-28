@@ -655,16 +655,93 @@ describe('kinds', () => {
         expect(Math.max(...drawn.map((point) => nearest(point, truth)))).toBeLessThan(1.5);
     });
 
+    test('an open freeform line with a head is an arrow through its points, an elbow where its legs run square', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:headEnd type="oval"/><a:tailEnd type="triangle"/></a:ln>`;
+        const freeform = (points: [number, number][]) => {
+            const [first, ...rest] = points.map(([x, y]) => `<a:pt x="${x}" y="${y}"/>`);
+            const path = `<a:moveTo>${first}</a:moveTo>${rest.map((pt) => `<a:lnTo>${pt}</a:lnTo>`).join('')}`;
+            return sp({
+                xfrm: box(100, 100, 200, 100),
+                spPr: `${custGeom(`<a:path w="4" h="2" fill="none">${path}</a:path>`)}${ln}`,
+            });
+        };
+        const deck = deckOf({
+            slides: [
+                {
+                    shapes:
+                        freeform([
+                            [0, 0],
+                            [2, 0],
+                            [2, 2],
+                            [4, 2],
+                        ]) +
+                        freeform([
+                            [0, 0],
+                            [4, 1],
+                            [0, 2],
+                        ]),
+                },
+            ],
+        });
+        const [elbow, sharp] = deck.slides[0].elements;
+        expect(elbow).toMatchObject({ type: 'arrow', elbow: true, roundness: 'sharp', startArrowhead: 'circle' });
+        expect(scenePoints(elbow)).toEqual([
+            [100, 100],
+            [200, 100],
+            [200, 200],
+            [300, 200],
+        ]);
+        expect(pinned(elbow)).toEqual([2]);
+        expect(sharp).toMatchObject({ type: 'arrow', elbow: false, roundness: 'sharp', endArrowhead: 'triangle' });
+        expect(scenePoints(sharp)).toEqual([
+            [100, 100],
+            [300, 150],
+            [100, 200],
+        ]);
+        expect(deck.warnings).toEqual([]);
+    });
+
+    test('an open freeform curve with a head is a curved arrow through points along it', () => {
+        const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="triangle"/></a:ln>`;
+        const curve =
+            '<a:path w="4" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:cubicBezTo><a:pt x="2" y="0"/><a:pt x="2" y="2"/><a:pt x="4" y="2"/></a:cubicBezTo></a:path>';
+        const deck = deckOf({
+            slides: [{ shapes: sp({ xfrm: box(100, 100, 400, 200), spPr: `${custGeom(curve)}${ln}` }) }],
+        });
+        const [found] = deck.slides[0].elements;
+        expect(found).toMatchObject({ type: 'arrow', elbow: false, roundness: 'round', endArrowhead: 'triangle' });
+        const truth = cubic([100, 100], [300, 100], [300, 300], [500, 300]);
+        const points = scenePoints(found).map(([x, y]) => ({ x, y }));
+        expect(points.length).toBeGreaterThan(3);
+        expect(Math.max(...points.map((point) => nearest(point, truth)))).toBeLessThan(0.5);
+        expect(deck.warnings).toEqual([]);
+    });
+
     test('a closed path loses no arrowheads, as PowerPoint draws a line end only on an open one', () => {
         const ln = `<a:ln w="12700">${solid('0000FF')}<a:tailEnd type="triangle"/></a:ln>`;
-        const open = (closed: boolean) =>
-            custGeom(
-                `<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="0"/></a:lnTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo>${closed ? '<a:close/>' : ''}</a:path>`,
-            );
-        const lost = (closed: boolean) =>
-            deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), spPr: `${open(closed)}${ln}` }) }] }).warnings;
-        expect(lost(true)).toEqual([]);
-        expect(lost(false)).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+        const lines = '<a:lnTo><a:pt x="2" y="0"/></a:lnTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo>';
+        const curve = '<a:cubicBezTo><a:pt x="1" y="2"/><a:pt x="0" y="1"/><a:pt x="0" y="2"/></a:cubicBezTo>';
+        const read = (path: string) =>
+            deckOf({
+                slides: [
+                    {
+                        shapes: sp({
+                            xfrm: box(0, 0, 10, 10),
+                            spPr: `${custGeom(`<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo>${path}</a:path>`)}${ln}`,
+                        }),
+                    },
+                ],
+            });
+        const closed = read(`${lines}<a:close/>`);
+        expect(closed.slides[0].elements.map((found) => found.type)).toEqual(['path']);
+        expect(closed.warnings).toEqual([]);
+        // No arrow draws lines and curves at once, nor an arc, so those open paths lose their heads.
+        const mixed = read(`${lines}${curve}`);
+        expect(mixed.slides[0].elements.map((found) => found.type)).toEqual(['path']);
+        expect(mixed.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
+        const arc = deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), geom: 'arc', spPr: ln }) }] });
+        expect(arc.slides[0].elements.map((found) => found.type)).toEqual(['path']);
+        expect(arc.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
 
     test('a custGeom past the caps or empty, or a preset no definition names, keeps its text and says so', () => {
