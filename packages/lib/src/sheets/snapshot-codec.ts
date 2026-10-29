@@ -1,10 +1,7 @@
-// Wire codec for the sheets snapshot (the JSON string in the Yjs `state` map).
-// v1 was JSON.stringify(Sheet[]), which repeats every cell's style keys and every
-// border payload inline — 56MB for a real 340k-cell workbook, of which only 224
-// distinct style combinations and ~110 distinct border payloads were measured.
-// v2 interns both workbook-wide and drops the per-cell key names, ~4.5x smaller.
-// The dictionary lives at the serialization seam only: the in-memory Sheet[] the
-// decoder rebuilds is exactly today's shape.
+// Encodes a workbook's sheets as the snapshot JSON its Yjs doc stores, and decodes the JSON back. A large workbook
+// repeats a few cell styles and border payloads across many cells, so the encoder keeps each distinct one once in a
+// dictionary and leaves the key names out of each cell. The dictionary exists only in the JSON: the decoder rebuilds
+// the plain Sheet[] every other reader uses.
 
 import { isRecord } from '../core/guards';
 import { cloneSides, parseCellKey } from './borders';
@@ -24,26 +21,24 @@ import type {
 
 const FORMAT = 'eigensheets/2';
 
-// Cell style payload. Deliberately loose: it holds whatever keys a cell carried,
-// including ones no current type knows about.
+// A cell's style keys. It is loose on purpose: it keeps whatever keys a cell carried, including ones no type knows.
 type StyleTuple = Record<string, unknown>;
 
-// [row, col, styleIndex, content?]. styleIndex -1 = no style; a missing content
-// slot = the cell had neither content nor extra keys (with -1: no cell at all).
+// [row, col, styleIndex, content?]. A styleIndex of -1 means no style. A missing content means the cell had no content
+// and no extra keys. With both, there is no cell at all.
 type EncodedCell = [number, number, number, EncodedContent?];
-// A bare primitive is a `v` whose `m` is exactly String(v) — the overwhelmingly
-// common cell, encoded without either key name. Everything else spells out the
-// keys it had verbatim (`cc` = commentCardIds).
+// The most common cell has an `m` that is exactly String(v), and it is written as the bare value. Any other content
+// keeps its keys as they were, with `cc` for commentCardIds.
 type EncodedContent = string | number | boolean | Record<string, unknown>;
-// [row, col, borderIndex] — one per `config.borderInfo` key.
+// [row, col, borderIndex], one for each `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
 type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'charts'> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
-    // Floating images and charts ride verbatim, a handful of small records per sheet with nothing
-    // to intern. A map is omitted when empty; decode materializes it.
+    // Floating images and charts are a few small records per sheet, so they are written as they are. An empty map is
+    // left out, and the decoder adds it back.
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
 };
@@ -56,8 +51,8 @@ type SnapshotV2 = {
     sheets: EncodedSheet[];
 };
 
-// Editor-runtime extras the wire shape omits: `selections` is a per-client cursor,
-// `calcChain` is regenerated on decode.
+// Fields the editor keeps that the snapshot leaves out. `selections` is one client's cursor. The decoder rebuilds
+// `calcChain` from the formulas.
 type RuntimeSheet = SheetWithCalcChain & { selections?: unknown };
 
 export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean }): string {
@@ -66,7 +61,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     const borders: CellBorderSides[] = [];
     const borderIndex = new Map<string, number>();
 
-    const encoded = sheets.map((sheet) => {
+    const encoded = sheets.map((sheet: RuntimeSheet) => {
         const {
             celldata,
             data,
@@ -76,15 +71,13 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             images,
             charts,
             ...rest
-        } = sheet as RuntimeSheet;
+        } = sheet;
         const out: EncodedSheet = { ...rest };
         if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
 
-        // The dense matrix never goes on the wire, but it is the authoritative copy
-        // when present: editor state edits write `data` and leave `celldata` stale,
-        // so folding it in here is what the read path's withSyncedCelldataIfData
-        // does — without it a flushed workbook persists as its pre-edit celldata.
+        // The dense matrix is never written, but where it exists it holds the latest cells. An editor edit writes
+        // `data` and leaves `celldata` stale, so the cells come from `data`, as they do at the end of a replay.
         const entries = data ? denseToEntries(data) : celldata;
         if (entries) {
             const cells: EncodedCell[] = [];
@@ -92,9 +85,8 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             out.cells = cells;
         }
 
-        // An empty config still ships: every fresh sheet has one, and a replayed op
-        // adding to it (`config.merge.0_0`, a row height, …) cannot resolve its path
-        // against an absent config — immer rejects the whole batch.
+        // An empty config is still written. A replayed op that adds to it, such as a merge or a row height, can't
+        // resolve its path without one, and its whole batch fails.
         if (config) {
             const { borderInfo, ...restConfig } = config;
             out.config = restConfig;
@@ -114,8 +106,7 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
     return JSON.stringify(snapshot);
 }
 
-// `{"f":"<FORMAT>"` is the v2 snapshot's header: the encoder writes the format key first on purpose, and
-// snapshot-codec.test holds it there, so the probe reads the header and decodes nothing.
+// The encoder writes the format key first on purpose, so this check reads the start of the string and decodes nothing.
 export function isCurrentSheetsSnapshot(snapshot: string): boolean {
     return snapshot.startsWith(`{"f":"${FORMAT}"`);
 }
@@ -124,19 +115,17 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
     return decodeSheetsWorkbook(snapshot).sheets;
 }
 
-// The sheets with the flag the encoder was given, which a writer that re-encodes them, such as the server's
-// compaction, must pass on: the decoded sheets only hint at it through their calcChain.
+// The sheets with the `computed` flag the encoder was given. A writer that encodes them again, such as the server's
+// compaction, must pass the flag on. The decoded sheets only hint at it through their calcChain.
 export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; computed: boolean } {
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
-    // Fail crisp on a corrupt envelope, a v1 array or a future format — silent
-    // garbage-in would materialize a half-empty workbook instead of surfacing the problem.
+    // A corrupt snapshot, an older format or a newer one throws here. Read on, it would become a half-empty workbook
+    // that hides the problem.
     if (f !== FORMAT) throw unknownFormat(f);
     const decoded = sheets.map((encoded) => {
         const { cells, borderCells, config, images, charts, ...rest } = encoded;
-        // Both maps are materialized on every sheet, the way normalizeSheetConfig materializes a
-        // config collection: the editor writes each object under its own key, and a patch resolves
-        // against a base that already carries the map. A value that is no map is dropped, and so is a chart past the
-        // entry cap.
+        // Every sheet gets both maps, even empty ones. The editor writes each image or chart under its own key, and
+        // that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the entry cap.
         const sheet: RuntimeSheet = {
             ...rest,
             images: isRecord(images) ? images : {},
@@ -153,8 +142,8 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
                 if (id != null && typeof cell?.f === 'string') calcChain.push({ r, c, id });
             }
             sheet.celldata = celldata;
-            // A populated calcChain is the read path's "already computed" signal; a
-            // snapshot flushed with stale values must leave it off so recalc fires.
+            // A calcChain tells a reader that the values are computed. A snapshot written with stale values leaves it
+            // off, so the recalc runs.
             if (computed) sheet.calcChain = calcChain;
         }
 
@@ -165,8 +154,7 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
                 for (const entry of borderCells) {
                     if (!Array.isArray(entry) || entry.length !== 3) throw unknownFormat(entry);
                     const [r, c, borderIdx] = entry;
-                    // An index past the borders dictionary is as corrupt as a bad shape — crisp
-                    // over the raw TypeError cloneSides(undefined) would otherwise throw.
+                    // An index past the borders dictionary is as corrupt as a bad shape, so it throws the same error.
                     if (borders[borderIdx] === undefined) throw unknownFormat(entry);
                     borderInfo[`${r}_${c}`] = cloneSides(borders[borderIdx]);
                 }
@@ -198,17 +186,14 @@ function denseToEntries(data: CellMatrix): CellWithRowAndCol[] {
 
 function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: Map<string, number>): EncodedCell {
     if (entry.v == null) return [entry.r, entry.c, -1];
-    // An empty cell object is not null: an op patch recorded against it (e.g.
-    // ['data', r, c, 'v']) must still resolve through it after a round-trip —
-    // a null parent would roll back the whole replayed batch.
+    // An empty cell stays an empty object. An op recorded against it, such as one that sets its `v`, must still resolve
+    // after a round trip. A null cell would roll back the whole replayed batch.
     if (Object.keys(entry.v).length === 0) return [entry.r, entry.c, -1, {}];
 
-    const raw = entry.v as Record<string, unknown>;
     let style: StyleTuple | undefined;
     let content: Record<string, unknown> | undefined;
     let hasExtra = false;
-    for (const key in raw) {
-        const value = raw[key];
+    for (const [key, value] of Object.entries(entry.v)) {
         if (value === undefined) continue;
         switch (key) {
             case 'v':
@@ -244,8 +229,8 @@ function encodeCell(entry: CellWithRowAndCol, styles: StyleTuple[], styleIndex: 
 function decodeCell(styleIdx: number, content: EncodedContent | undefined, styles: StyleTuple[]): Cell | null {
     if (styleIdx === -1 && content === undefined) return null;
 
-    // Same dictionary hole as borderIdx: an index past the styles table would iterate
-    // an `undefined` into a silent blank-styled cell — throw the standard error instead.
+    // An index past the styles dictionary is as corrupt as one past the borders. Read on, it would become a cell with no
+    // style that hides the problem.
     if (styleIdx !== -1 && styles[styleIdx] === undefined) throw unknownFormat(styleIdx);
     const cell: Record<string, unknown> = styleIdx === -1 ? {} : materializeStyle(styles[styleIdx]);
     if (content === undefined) return cell as Cell;
@@ -261,9 +246,8 @@ function decodeCell(styleIdx: number, content: EncodedContent | undefined, style
     return cell as Cell;
 }
 
-// Consumers sharing a dictionary entry (cell styles, border side payloads) must
-// not share nested object identity — an in-place `cell.ct.x = …` outside an immer
-// draft would corrupt every sibling. Primitives copy by value; object values deep-clone.
+// Cells that share a dictionary entry must not share its nested objects. An in-place edit outside an immer draft, such
+// as one to `cell.ct`, would change every cell that shares the entry. So every object value is cloned deeply.
 function materializeStyle(style: StyleTuple): Record<string, unknown> {
     const cell: Record<string, unknown> = {};
     for (const key in style) {
@@ -275,17 +259,15 @@ function materializeStyle(style: StyleTuple): Record<string, unknown> {
 
 function cloneJsonValue(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(cloneJsonValue);
-    if (typeof value === 'object' && value !== null) {
+    if (isRecord(value)) {
         const out: Record<string, unknown> = {};
-        for (const key in value as Record<string, unknown>)
-            out[key] = cloneJsonValue((value as Record<string, unknown>)[key]);
+        for (const key in value) out[key] = cloneJsonValue(value[key]);
         return out;
     }
     return value;
 }
 
-// Keys are sorted before stringifying so two payloads that were written in a
-// different key order still land on one dictionary entry.
+// The keys are sorted before the JSON is made, so two payloads written in a different key order share one entry.
 function intern(tuple: Record<string, unknown>, dict: Record<string, unknown>[], index: Map<string, number>): number {
     const canonical: Record<string, unknown> = {};
     for (const key of Object.keys(tuple).sort()) canonical[key] = tuple[key];
