@@ -42,5 +42,11 @@ export {
     isCurrentSheetsSnapshot,
 } from './snapshot-codec';
 export * from './types';
-export type { SheetsBase } from './yjs-state';
-export { readSheetsBase, readSheetsSnapshotJson, stampSheetsBase, writeSheetsSnapshot } from './yjs-state';
+export {
+    readSheetsBase,
+    readSheetsSnapshotJson,
+    sheetsOpLog,
+    sheetsStateMap,
+    stampSheetsBase,
+    writeSheetsSnapshot,
+} from './yjs-state';

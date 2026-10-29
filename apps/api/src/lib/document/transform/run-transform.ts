@@ -1,11 +1,12 @@
-// The one main-thread path every document transform takes: admit the job, surface its warnings and map its failures,
-// and for a document-sourced job capture the compressed Yjs blobs first. A caller adds only its job fields and what it
-// does with the result, so a new operation is a thin wrapper here plus a pure converter in the transform process. There
-// is no main-thread fallback: a runner 503 and a controlled document error keep their status, an import or a search
-// extract out of memory is a file too large, a search extract that timed out too, and any other failure throws.
+// The one main-thread path every document transform takes. It admits the job, logs its warnings and maps its failures,
+// and for a job that reads a stored document it captures the compressed Yjs blobs first. A caller adds only its job
+// fields and what it does with the result. There is no main-thread fallback. A runner 503 and a controlled document
+// error keep their status. An import or a search extract out of memory is a file too large, and so is a search extract
+// that timed out. Any other failure throws.
 
-import type { Op } from '@workspace/lib/sheets';
+import { readSheetsSnapshotJson, sheetsOpLog } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import type * as Y from 'yjs';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
 import { IMPORT_MESSAGES } from '../../import/messages';
@@ -32,10 +33,9 @@ import type {
 import type { RunOptions, TransformPriority } from './runner';
 import { documentTransformRunner, TRANSFORM_LIMITS } from './runner';
 
-// What a caller still decides; the limits belong to the job kind (TRANSFORM_LIMITS),
-// and the capture time is measured here. prepMs: main-thread media preparation time,
-// measured by the caller's wrapper — logged with the job so a fast transform behind slow
-// preparation stays visible.
+// What a caller still decides, since the limits belong to the job kind and the capture is timed here. `prepMs` is the
+// time the caller spent preparing media on the main thread. It is logged with the job, so a fast transform behind a
+// slow preparation stays visible.
 type TransformOptions = Omit<RunOptions, 'priority' | 'deadlineMs' | 'admissionCostMs' | 'captureMs'> & {
     priority?: TransformPriority;
 };
@@ -63,7 +63,8 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
 ): Promise<{ result: TransformResultFor<R>; warnings: TransformWarning[] }> {
     const { priority = 'foreground', ...rest } = opts;
     const limits = TRANSFORM_LIMITS[request.kind];
-    // The caller's prep spends from the deadline, so a job is one deadline end to end; a spent one times out at once.
+    // The caller's preparation counts against the deadline, so a job has one deadline end to end. A job whose
+    // preparation spent it all times out at once.
     const response = await documentTransformRunner.run(request, {
         ...rest,
         ...limits,
@@ -87,22 +88,21 @@ async function runTransformRequest<R extends DocumentTransformRequest>(
         );
     }
     for (const warning of response.warnings) surfaceWarning(warning, request.kind);
-    // The one seam the kind→result mapping crosses: the runner settles every kind of job
-    // through one widened response, having already proved this result pairs with this
-    // request (resultMatchesRequest). Past here every caller reads its field with no cast.
+    // The runner settles every kind of job through one wide response, and it has already checked that this result
+    // pairs with this request (resultMatchesRequest). This cast is the one place that mapping is crossed, so every
+    // caller reads its field with no cast.
     return { result: response.result as TransformResultFor<R>, warnings: response.warnings };
 }
 
-// `toRequest` completes the caller's own job with the captured source, so the request
-// keeps its kind here and the result narrows with it.
+// `toRequest` completes the caller's own job with the captured source. The request keeps its kind, so the result
+// narrows with it.
 async function runDocumentTransform<R extends DocumentTransformRequest>(
     mount: Mount,
     drivePath: DrivePath,
     opts: TransformOptions,
     toRequest: (source: YjsStatePayload) => R,
 ): Promise<{ result: TransformResultFor<R>; warnings: TransformWarning[] }> {
-    // Refuse before the capture: a job the runner will not admit must not pay for a
-    // full read of the document's blobs (a refused reindex drain did, per row).
+    // A job the runner won't admit is refused before the capture, so it never pays for a full read of the blobs.
     const priority = opts.priority ?? 'foreground';
     documentTransformRunner.assertAdmissible(priority);
 
@@ -115,9 +115,8 @@ async function runDocumentTransform<R extends DocumentTransformRequest>(
     });
 }
 
-// Only recalc-failed needs a line here: the child already logs every skipped blob
-// and the runner logs each warning code with the job. The two fallbacks differ —
-// a read serves replayed values, an import persists the parsed ones.
+// Only a failed recalc is logged here. The child already logs every skipped blob, and the runner logs each warning
+// code with the job. After a failed recalc, a read serves the replayed values and an import keeps the parsed ones.
 function surfaceWarning(warning: TransformWarning, kind: DocumentTransformRequest['kind']): void {
     if (warning.code !== 'recalc-failed') return;
     if (kind === 'import') {
@@ -127,10 +126,9 @@ function surfaceWarning(warning: TransformWarning, kind: DocumentTransformReques
     }
 }
 
-// Text results (preview bodies, indexable content) and binary results (exports). The
-// job kind decides which the child returns and which limits it runs under. The runner
-// validated the result pairs with the request (protocol.ts's resultMatchesRequest), so
-// these narrow instead of re-checking. An export keeps its warnings, for the summary it answers with.
+// These return a job's text, such as a preview body or the text to index, or its bytes, such as an export. The job kind
+// decides which one the child returns and the limits it runs under. An export keeps its warnings, for the summary it
+// answers with.
 export async function runTransformToPreview(
     mount: Mount,
     drivePath: DrivePath,
@@ -161,9 +159,8 @@ export async function runTransformToBytes(
     return { data: Buffer.from(result.data), zoom: result.zoom, warnings };
 }
 
-// The bytes-sourced counterpart of runDocumentTransform: the input is the file itself, read from
-// the Mount after admission the same way a Yjs capture is. Null when the file is gone, so the
-// caller serves no preview rather than an empty one.
+// Like runDocumentTransform, but the input is the file itself, read from the Mount after admission. It returns null
+// when the file is gone, so the caller serves no preview rather than an empty one.
 export async function runFileTransformToText(
     mount: Mount,
     drivePath: DrivePath,
@@ -184,7 +181,7 @@ export async function runFileTransformToText(
     });
 }
 
-// The same job with the bytes already in hand — a mail part has no Mount to read them from.
+// The same job with the bytes already in hand, for a mail part, which has no Mount to read them from.
 export async function runBytesTransformToText(
     job: BytesPreviewJob,
     data: ArrayBuffer,
@@ -194,10 +191,9 @@ export async function runBytesTransformToText(
     return result.body;
 }
 
-// Imports carry uploaded bytes instead of a captured document, and hand back what
-// the caller commits: the snapshot JSON (decoded, never parsed, on the main thread)
-// for sheets, a ready Yjs update for documents and decks, each with its extracted media.
-// The warnings come back too, for the summary an import answers with.
+// An import sends the uploaded bytes and returns what the caller commits, with the media it extracted. A workbook comes
+// back as snapshot JSON, which the main thread decodes as text and never parses. A document or a deck comes back as a
+// ready Yjs update. The warnings come back too, for the summary an import answers with.
 export type SheetsImportSnapshot = {
     snapshotJson: string;
     weight: SheetsWeight;
@@ -233,13 +229,12 @@ export async function runImportToSlidesUpdate(
     return { ...result, warnings };
 }
 
-// A workbook's log folded into its snapshot, in the background. The signal ends the job wherever it is, queued or
-// running, so the caller bounds the whole wait with it.
-export async function runSheetsCompaction(
-    snapshot: string | null,
-    batches: Op[][],
-    signal: AbortSignal,
-): Promise<string> {
+// A workbook's op log folded into its snapshot, in the background. It reads the snapshot and the batches from the live
+// doc in one step, never from data.db, which can lag behind. The signal ends the job wherever it is, queued or running,
+// so the caller bounds the whole wait with it.
+export async function runSheetsCompaction(doc: Y.Doc, signal: AbortSignal): Promise<string> {
+    const snapshot = readSheetsSnapshotJson(doc) ?? null;
+    const batches = sheetsOpLog(doc).toArray();
     const { result } = await runTransformRequest(
         { kind: 'compact', documentType: 'eigensheets', snapshot, batches },
         { priority: 'background', signal },
