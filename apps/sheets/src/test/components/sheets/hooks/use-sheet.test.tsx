@@ -10,8 +10,8 @@ const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const realCollab = await import('@workspace/lib/collab');
-const realSheets = await import('@workspace/lib/sheets');
+const realCollab = { ...(await import('@workspace/lib/collab')) };
+const realSheets = { ...(await import('@workspace/lib/sheets')) };
 const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsBase, readSheetsSnapshotJson, writeSheetsSnapshot } =
     realSheets;
 const { Workbook } = await import('@workspace/sheet');
@@ -120,7 +120,6 @@ async function open(cells: Record<string, string> = {}, { stamped = true } = {})
         if (linked && origin !== 'peer') Y.applyUpdate(peer, update, 'tab');
     });
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
-    provider.wsconnected = true;
     const workbookRef = createRef<WorkbookInstance>();
     const seen: { version: number; data: unknown; loadFailed: boolean } = {
         version: 0,
@@ -237,24 +236,31 @@ test('a compaction of everything the tab holds keeps its grid, its offline edit 
     expect(seen.version).toBe(0);
     expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(2, 2)?.bl, cell(3, 3)?.bl]).toEqual(['stored', 'peer', 1, 1]);
     expect(doc.getArray('ops').length).toBe(1);
+    await act(async () => workbookRef.current?.undo());
+    expect([cell(2, 2)?.bl, cell(3, 3)?.bl]).toEqual([1, undefined]);
 
     // A second compaction names the base the first one stamped, which this tab now holds.
     linked = false;
     compact();
     await reconnect();
     expect(seen.version).toBe(0);
-    expect(cell(3, 3)?.bl).toBe(1);
+    expect(cell(3, 3)?.bl).toBeUndefined();
+    await act(async () => workbookRef.current?.undo());
+    expect(cell(2, 2)?.bl).toBeUndefined();
 });
 
 test("a compaction that arrives with a peer's new batch keeps the grid and applies the batch", async () => {
-    const { cell, seen } = await open({ '1_1': 'stored' });
+    const { workbookRef, cell, seen } = await open({ '1_1': 'stored' });
     peerSends(typed(0, 0, 'folded'));
+    await act(async () => workbookRef.current?.setCellFormat(2, 2, 'bl', 1));
     linked = false;
     compact();
     peerSends(typed(0, 1, 'live'));
     await reconnect();
     expect(seen.version).toBe(0);
-    expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(0, 1)?.v]).toEqual(['stored', 'folded', 'live']);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(0, 1)?.v, cell(2, 2)?.bl]).toEqual(['stored', 'folded', 'live', 1]);
+    await act(async () => workbookRef.current?.undo());
+    expect(cell(2, 2)?.bl).toBeUndefined();
 });
 
 test('a compaction that folded a batch the tab never received remounts onto it', async () => {
@@ -265,6 +271,23 @@ test('a compaction that folded a batch the tab never received remounts onto it',
     await reconnect();
     expect(seen.version).toBe(1);
     expect([cell(1, 1)?.v, cell(0, 0)?.v]).toEqual(['stored', 'unseen']);
+});
+
+test('a compaction that folded a batch the tab rejected remounts onto it', async () => {
+    const { workbookRef, cell, seen } = await open({ '1_1': 'stored' });
+    const workbook = workbookRef.current;
+    if (!workbook) throw new Error('no workbook');
+    // The tab rolls the batch back, as it does a batch that fails to apply, while the server's replay applies it.
+    const { applyOp } = workbook;
+    workbook.applyOp = () => false;
+    peerSends(typed(0, 0, 'rejected'));
+    workbook.applyOp = applyOp;
+    expect(cell(0, 0)?.v).toBeUndefined();
+    linked = false;
+    compact();
+    await reconnect();
+    expect(seen.version).toBe(1);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v]).toEqual(['stored', 'rejected']);
 });
 
 test('an import that writes a fresh snapshot remounts the grid', async () => {
@@ -285,6 +308,20 @@ test('a tab on a workbook stored before bases existed remounts on its first comp
     compact();
     await reconnect();
     expect(seen.version).toBe(1);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v]).toEqual(['stored', 'folded']);
+});
+
+test('a tab after a failed load remounts on a compaction', async () => {
+    decodeFails = true;
+    const { cell, seen } = await open({ '1_1': 'stored' });
+    expect(seen.loadFailed).toBe(true);
+    decodeFails = false;
+    await act(async () => {
+        peerSends(typed(0, 0, 'folded'));
+        compact();
+    });
+    expect(seen.version).toBe(1);
+    expect(seen.loadFailed).toBe(false);
     expect([cell(1, 1)?.v, cell(0, 0)?.v]).toEqual(['stored', 'folded']);
 });
 

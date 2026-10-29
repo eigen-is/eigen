@@ -12,12 +12,14 @@ import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 
-// A throw escaping the Yjs observer would kill the app, so a batch that fails is logged.
-function applyBatch(workbook: WorkbookInstance | null, ops: Op[]) {
+// Applies a peer's batch to the grid and says whether it applied. A throw escaping the Yjs observer would kill the app,
+// so a batch that fails is logged.
+function applyBatch(workbook: WorkbookInstance | null, ops: Op[]): boolean {
     try {
-        workbook?.applyOp(ops);
+        return workbook?.applyOp(ops) ?? false;
     } catch (e) {
         console.error('[sheet] Failed to apply remote op:', e);
+        return false;
     }
 }
 
@@ -36,7 +38,8 @@ export function useSheet(
     const readyForOpsRef = useRef(false);
     // Same fact for handleOp: ops built against the fallback workbook must not reach peers.
     const loadedRef = useRef(false);
-    // The base of the snapshot the grid shows, null when the workbook has none or the grid shows something else.
+    // The base of the snapshot the grid shows. It is null when the workbook has none, when the grid shows the defaults
+    // after a failed load, when it keeps its view after a failed mid-session decode, and when it rejected a peer's batch.
     const baseIdRef = useRef<string | null>(null);
     // A peer's batches that arrive while a grid mounts on `data`. They wait for that grid, never the one it replaces.
     const pendingRef = useRef<{ data: Sheet[]; batches: Op[][] } | null>(null);
@@ -74,7 +77,9 @@ export function useSheet(
         const pending = pendingRef.current;
         if (!pending || pending.data !== initialData || !workbookRef.current) return;
         pendingRef.current = null;
-        for (const ops of pending.batches) applyBatch(workbookRef.current, ops);
+        for (const ops of pending.batches) {
+            if (!applyBatch(workbookRef.current, ops)) baseIdRef.current = null;
+        }
     }, [initialData, workbookRef]);
 
     // useCollabDoc owns the doc and provider lifecycle, and sheets layers its op log and snapshot on top through onInit
@@ -90,7 +95,9 @@ export function useSheet(
 
             const stateMap = doc.getMap('state');
             const opsArray = doc.getArray<Op[]>('ops');
-            const stateRoot = doc.share.get('state');
+            // The same object as stateMap. A transaction's set of changed types does not accept a YMap's type, but it
+            // accepts the plain type that doc.get returns.
+            const stateRoot = doc.get('state');
 
             // Whether this transaction writes a new snapshot that the grid must remount on. It keeps the grid only for
             // a compaction of exactly what the grid shows. The new base must name the base the grid loaded. Every
@@ -99,7 +106,7 @@ export function useSheet(
             // the verdict is taken once, before either of them.
             let remountGrid = false;
             const judgeTransaction = (tr: Y.Transaction) => {
-                remountGrid = stateRoot !== undefined && tr.changed.has(stateRoot);
+                remountGrid = tr.changed.has(stateRoot);
                 if (!remountGrid || baseIdRef.current === null) return;
                 if (readSheetsBase(doc)?.compactedFrom !== baseIdRef.current) return;
                 for (const [client, deletes] of tr.deleteSet.clients) {
@@ -122,7 +129,7 @@ export function useSheet(
                     if (delta.insert && Array.isArray(delta.insert)) {
                         for (const ops of delta.insert as Op[][]) {
                             if (pendingRef.current) pendingRef.current.batches.push(ops);
-                            else applyBatch(workbookRef.current, ops);
+                            else if (!applyBatch(workbookRef.current, ops)) baseIdRef.current = null;
                         }
                     }
                 }
