@@ -1,3 +1,8 @@
+// AppShell is the page frame of every Eigen app: the top bar, the sidebar and the main column.
+// It owns the layout state that useLayout() hands to the app, such as the app name, the document
+// title and whether the sidebar is open. For a signed-in user it also mounts the command palette
+// and the create dialogs the palette opens.
+
 import { Outlet } from '@tanstack/react-router';
 import { openMailComposeWith } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -10,7 +15,7 @@ import type { CommandContext } from '@workspace/lib/types/command-palette';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { cn } from '@workspace/ui/lib/utils';
 import type { ReactNode } from 'react';
-import { lazy, Suspense, useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
 import { DriveCreateFolder } from '../../drive/drive-create-folder';
 import { useOptionalPreview, usePreview } from '../../preview-provider/preview-provider';
@@ -21,13 +26,6 @@ import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts';
 import { DemoBanner } from './demo-banner';
 import { LayoutContext } from './layout-context';
 import { Topbar } from './topbar';
-
-// Browser-only dev widget — never render it during SSR/prerender, where
-// renderToString cannot handle the lazy component's Suspense boundary.
-const TanStackRouterDevtools =
-    import.meta.env.DEV && !import.meta.env.SSR
-        ? lazy(() => import('@tanstack/react-router-devtools').then((m) => ({ default: m.TanStackRouterDevtools })))
-        : () => null;
 
 type AppShellProps = {
     appName: string;
@@ -103,9 +101,6 @@ export function AppShell({
                 </div>
                 <DemoBanner />
             </div>
-            <Suspense>
-                <TanStackRouterDevtools position="bottom-left" />
-            </Suspense>
         </LayoutContext.Provider>
     );
 }

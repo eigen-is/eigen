@@ -7,7 +7,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { printDocument } from '../../../lib/printElement';
 import { PreviewProvider } from '../../preview-provider/preview-provider';
 import { Toaster } from '../../sonner';
@@ -17,10 +17,6 @@ import { LoadingScreen } from '../pages/loading-screen';
 import { CommandPaletteProvider } from './command-palette/command-palette-provider';
 import { ErrorBoundary } from './error-boundary';
 import { ThemeProvider } from './theme-provider';
-
-const ReactQueryDevtools = import.meta.env.DEV
-    ? lazy(() => import('@tanstack/react-query-devtools').then((m) => ({ default: m.ReactQueryDevtools })))
-    : () => null;
 
 type EigenAppProps = {
     children: React.ReactNode;
@@ -83,9 +79,6 @@ export function EigenApp({ children }: EigenAppProps) {
                             </UploadProvider>
                         </SSEProvider>
                     </ThemeProvider>
-                    <Suspense>
-                        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left" />
-                    </Suspense>
                 </AuthProvider>
             </QueryClientProvider>
         </HotkeysProvider>
