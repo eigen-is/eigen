@@ -7,6 +7,7 @@ import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import { parseServerArchiveNames } from '@workspace/lib/validation';
+import { getBuildCommit } from '../lib/config/env';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
 import { buildChannel, VERSION, VERSION_PATTERN } from './install';
@@ -70,60 +71,12 @@ export async function status(flags: StatusFlags): Promise<void> {
     printReport(flags, services, await res.json());
 }
 
-// Red while the newest scheduled attempt failed, whatever came after it, because the schedule is what the owner
-// counts on. Yellow, in this order of urgency: while its archive is here but not in the bucket, while the newest
-// archive was backed up with warnings, and while the schedule is on and no complete Full verified in two days.
-function backupRow({
-    scheduleEnabled,
-    newest,
-    scheduledFailure,
-    scheduledNotUploaded,
-    warned,
-    newestGoodFullAt,
-}: ControlStatus['backup']): Row {
-    const why = (error: string | null) => (error ? `: ${error}` : '');
-    if (scheduledFailure) {
-        const { name, createdAt, error } = scheduledFailure;
-        return { level: 'bad', label: 'Backup', value: `${name} failed, ${formatTimeAgo(createdAt)}${why(error)}` };
-    }
-    if (scheduledNotUploaded) {
-        const { name, createdAt, error } = scheduledNotUploaded;
-        const value = `${name} not uploaded, ${formatTimeAgo(createdAt)}${why(error)}`;
-        return { level: 'warn', label: 'Backup', value };
-    }
-    if (warned) {
-        const { name, createdAt, error } = warned;
-        const value = `${name} backed up with warnings, ${formatTimeAgo(createdAt)}${why(error)}`;
-        return { level: 'warn', label: 'Backup', value };
-    }
-    if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
-    const parts = [newest.name, formatTimeAgo(newest.createdAt)];
-    if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
-    if (newest.state === 'running') parts.push('running');
-    if (newest.state === 'failed') parts.push(`failed${why(newest.error)}`);
-    const stale =
-        scheduleEnabled && (!newestGoodFullAt || Date.now() - new Date(newestGoodFullAt).getTime() > 2 * DAY_MS);
-    return {
-        level: stale || newest.state === 'failed' ? 'warn' : 'ok',
-        label: 'Backup',
-        value: `${parts.join(', ')}${stale ? '; no good Full backup in two days' : ''}`,
-    };
-}
-
-// Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
-function listedBackupRow(listing: string): Row {
-    const [newest] = parseServerArchiveNames(listing.split('\n'));
-    if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
-    const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
-    return { level: 'ok', label: 'Backup', value };
-}
-
 // Without the API, the report holds what the launcher knows.
 function printReport(flags: StatusFlags, services: Service[], api: ControlStatus | null): void {
     const { install, latest, 'mail-queue': queue, files } = flags;
     // The CLI runs in an api image: the running one, or the one .env.production pins.
     const channel = buildChannel();
-    const commit = process.env['EIGEN_COMMIT'];
+    const commit = getBuildCommit();
     const build: Row[] = install ? [{ level: 'ok', label: 'Folder', value: install }] : [];
     if (api) {
         build.push({
@@ -240,4 +193,52 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
             )
             .join(`\n${glyphLine('bar', '')}\n`),
     );
+}
+
+// Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
+function listedBackupRow(listing: string): Row {
+    const [newest] = parseServerArchiveNames(listing.split('\n'));
+    if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
+    const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
+    return { level: 'ok', label: 'Backup', value };
+}
+
+// Red while the newest scheduled attempt failed, whatever came after it, because the schedule is what the owner
+// counts on. Yellow, in this order of urgency: while its archive is here but not in the bucket, while the newest
+// archive was backed up with warnings, and while the schedule is on and no complete Full verified in two days.
+function backupRow({
+    scheduleEnabled,
+    newest,
+    scheduledFailure,
+    scheduledNotUploaded,
+    warned,
+    newestGoodFullAt,
+}: ControlStatus['backup']): Row {
+    const why = (error: string | null) => (error ? `: ${error}` : '');
+    if (scheduledFailure) {
+        const { name, createdAt, error } = scheduledFailure;
+        return { level: 'bad', label: 'Backup', value: `${name} failed, ${formatTimeAgo(createdAt)}${why(error)}` };
+    }
+    if (scheduledNotUploaded) {
+        const { name, createdAt, error } = scheduledNotUploaded;
+        const value = `${name} not uploaded, ${formatTimeAgo(createdAt)}${why(error)}`;
+        return { level: 'warn', label: 'Backup', value };
+    }
+    if (warned) {
+        const { name, createdAt, error } = warned;
+        const value = `${name} backed up with warnings, ${formatTimeAgo(createdAt)}${why(error)}`;
+        return { level: 'warn', label: 'Backup', value };
+    }
+    if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
+    const parts = [newest.name, formatTimeAgo(newest.createdAt)];
+    if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
+    if (newest.state === 'running') parts.push('running');
+    if (newest.state === 'failed') parts.push(`failed${why(newest.error)}`);
+    const stale =
+        scheduleEnabled && (!newestGoodFullAt || Date.now() - new Date(newestGoodFullAt).getTime() > 2 * DAY_MS);
+    return {
+        level: stale || newest.state === 'failed' ? 'warn' : 'ok',
+        label: 'Backup',
+        value: `${parts.join(', ')}${stale ? '; no good Full backup in two days' : ''}`,
+    };
 }

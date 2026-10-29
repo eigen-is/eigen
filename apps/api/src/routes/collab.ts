@@ -43,21 +43,9 @@ type CollabSession = {
 // across open/message/close, and it has no typed slot for the route's own per-socket state.
 const sessions = new WeakMap<ServerWebSocket<unknown>, CollabSession>();
 
-function cleanupSession(session: CollabSession, ws: ServerWebSocket<unknown>, ownerId: string) {
-    if (session.pingInterval) clearInterval(session.pingInterval);
-    session.pingInterval = undefined;
-    unregisterCollabConnection(ownerId, ws);
-    if (session.collabDocument) {
-        session.collabDocument.unsubscribe(ws);
-    }
-    session.collabDocument = undefined;
-}
-
-// Collab routes allow cross-owner access (collaborative editing on shared/team drives).
-// Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
-// WebSocket server options (perMessageDeflate, maxPayloadLength) can't live here —
-// Elysia only honors `websocket` config on the root app instance, so it's set in
-// app.ts.
+// A user may open a document in another owner's drive, such as a shared or team drive. getSharedDrive and its ACL
+// checks decide what they may do there. The WebSocket server options, such as perMessageDeflate, are set on the root
+// app, because Elysia reads `websocket` config only there.
 export const collabRouter = new Elysia({
     name: 'collab',
 })
@@ -174,7 +162,7 @@ export const collabRouter = new Elysia({
                         });
                     }
                 } catch {
-                    // user or home may not exist (unregistered guests get no notification)
+                    // The user or their home may not exist: an unregistered guest gets no notification.
                 }
             }
             return { success: true };
@@ -215,8 +203,8 @@ export const collabRouter = new Elysia({
                 const loadStart = performance.now();
 
                 const { ownerId, mountId, pathId } = ws.data.params;
-                // The tab loaded its document before a restore put other data back: its sync would merge what the
-                // restore undid.
+                // A stale epoch means the tab loaded its document before a restore or an update. Its sync would
+                // bring back what the restore undid, or write structures the new code no longer reads.
                 const { epoch } = ws.data.query;
                 if (epoch !== undefined && epoch !== getDataEpoch(ownerId)) {
                     ws.close(COLLAB_HOME_REPLACED_CLOSE, COLLAB_HOME_REPLACED_REASON);
@@ -251,9 +239,9 @@ export const collabRouter = new Elysia({
                 );
             } catch (err) {
                 console.error('Error opening collab session:', err);
-                // Any failure HTTP would answer 5xx retries, a local one or a home a restore is replacing
-                // too: the stale epoch the reconnect names after a finished restore reloads the tab, and a
-                // failed restore leaves the epoch, so the tab syncs the edits it holds.
+                // A failure HTTP would answer with a 5xx makes the client retry. That includes a home a restore
+                // is replacing. If the restore finishes, the reconnect names a stale epoch and the tab reloads.
+                // If it fails, the epoch stays, and the tab syncs the edits it holds.
                 const status = err instanceof ApiError ? err.status : 500;
                 if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
@@ -308,3 +296,11 @@ export const collabRouter = new Elysia({
             }
         },
     });
+
+function cleanupSession(session: CollabSession, ws: ServerWebSocket<unknown>, ownerId: string): void {
+    if (session.pingInterval) clearInterval(session.pingInterval);
+    session.pingInterval = undefined;
+    unregisterCollabConnection(ownerId, ws);
+    session.collabDocument?.unsubscribe(ws);
+    session.collabDocument = undefined;
+}

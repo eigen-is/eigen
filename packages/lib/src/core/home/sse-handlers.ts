@@ -1,6 +1,6 @@
 // Handles home:data-epochs, which every stream sends when it opens and with every keepalive. The tab
-// keeps the epochs it has heard in sessionStorage, and reloads when one of them changes, which only a
-// restore of that home does.
+// keeps the epochs it has heard in sessionStorage, and reloads when one of them changes, such as after a
+// restore of that home or an update of the server.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
