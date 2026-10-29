@@ -1,94 +1,75 @@
 # Contributing to Eigen
 
-Eigen started as a solo project. I wanted to see how far one person could get building a self-hosted workspace from scratch. Turns out: pretty far, but not far enough. There's way more to build than one person can do, and I'm looking for people who want to help.
+Eigen started as a solo project. I wanted to see how far one person could get building a self-hosted workspace from scratch. The answer: far, but not far enough. There is much more to build than one person can do, and I'm looking for people who want to help.
 
-If you're curious about how this started, I wrote about it here: [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
+How it started: [Eigen: Building a Workspace](https://reindernijhoff.net/2025/10/eigen-building-a-workspace/).
 
-This page covers the ways you can help, how to get Eigen running on your own machine, and where to start reading the code.
+This page covers how you can help, how to run Eigen on your own computer, and where to start reading the code.
 
 ## Current state
 
-A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Vector, Stickies, Calendar, Contacts, Chat, and an Admin panel are all working. Real-time collaboration, CalDAV sync, file sharing, document export, two-factor sign-in. It's a real thing now.
+A lot has happened since that first blog post. Mail, Drive, Docs, Sheets, Slides, Vector, Stickies, Calendar, Contacts, Chat and an Admin panel all work. So do real-time editing together, calendar and contacts sync with your phone (CalDAV and CardDAV), file sharing, export to Office and PDF, and two-factor sign-in.
 
-But it's still early. Rough edges everywhere, missing features, architecture decisions that could still go either way. If you like working on something where your input actually matters, this is that kind of project.
+But it's still early, before version 1.0. There are rough edges, missing features, and design choices that could still go either way. If you like a project where your input really matters, this is one.
 
-I move fast on the codebase; things change week to week. A few things to keep in mind:
+The code changes week to week. Keep in mind:
 
-- **PRs may need rebasing** if the area you touched has changed. Don't take it personally.
-- **Open an issue first** if you're planning something bigger. Saves everyone time.
-- **Bug reports and ideas** are just as useful as code. Sometimes more.
-- **Security issues** go through [SECURITY.md](../SECURITY.md), not public issues.
+- **A pull request may need a rebase** if the code around it changed. Don't take it personally.
+- **Open an issue first** if you plan something bigger. It saves everyone time.
+- **Bug reports and ideas** help as much as code. Sometimes more.
+- **Security problems** go through [SECURITY.md](../SECURITY.md), not a public issue.
 
 ## Ways to contribute
 
 ### Use it and break things
 
-Honestly, the most helpful thing right now is just using Eigen and telling me what's broken. Deploy it, connect a CalDAV client, try editing a doc with two people, upload weird files. Then open an issue when something doesn't work.
+The most useful thing right now is to use Eigen and tell me what breaks. Install it, connect a calendar app, edit a doc with two people at once, upload strange files. When something doesn't work, open an issue.
 
 ### Adopt an app or area
 
-Eigen has a dozen apps and a lot of infrastructure underneath. I can't give everything equal attention. If something here interests you, I'd love to hand you the keys. Maintain it, improve it, triage bugs.
+Eigen has a dozen apps and a lot of shared code underneath. I can't give all of it the same attention. If one of them interests you, I'd love to hand it over: look after it, improve it, sort its bug reports.
 
-Every app needs work:
+The open work is written down, so you don't have to guess:
 
-- **Mail**: threading, filters, attachment handling
-- **Drive**: bulk operations, drag-and-drop improvements
-- **Docs**: import from Markdown, more export polish
-- **Sheets**: sheet engine cleanup (forked from fortune-sheet)
-- **Slides**: more object types, and what the pptx import still leaves out (an arc's arrowheads, crop, SmartArt without a cached drawing)
-- **Stickies**: labels, filters, archiving
-- **Calendar**: recurring event edge cases, CalDAV compliance
-- **Contacts**: merge and deduplicate
-- **Chat**: threads, search, richer formatting
-- **Admin**: dashboards, usage stats, bulk user management
-- **Space**: account settings, profile improvements
+- **[ROADMAP.md](ROADMAP.md)**: the work for every app and area, most important first, with **Next up** at the top. What waits until after 1.0 is in [ROADMAP-POST-1.md](ROADMAP-POST-1.md).
+- **The app backlogs**: [DOCS-TODO.md](DOCS-TODO.md), [SHEETS-TODO.md](SHEETS-TODO.md), [CHARTS-TODO.md](CHARTS-TODO.md) and [CANVAS-TODO.md](CANVAS-TODO.md) (Slides, Vector and Stickies).
+- **[docs/proposals/](proposals/)**: designs for larger features that aren't built yet. A good place to start if you want to own something bigger.
 
-And cross-cutting concerns:
+Areas that cross apps need owners too: search, accessibility, phones and tablets, speed, security, copy and paste, tests and documentation.
 
-- **Search**: calendar, contacts and chat in the one search that covers mail and Drive ([SEARCH.md](SEARCH.md))
-- **IMAP/Dovecot**: edge cases, flag sync, mailbox management
-- **CalDAV**: client compatibility (Apple Calendar, DAVx5, etc.)
-- **Mobile/responsive**: the open items in the Mobile row of [ROADMAP.md](ROADMAP.md), and testing on real devices
-- **Accessibility**: keyboard nav, screen readers, ARIA
-- **Performance**: profiling, optimizations, offloading heavy work to workers
-- **Security**: audits, penetration testing, hardening
-- **Copy/paste**: from external sources into Docs/Sheets/Slides, and between apps
-- **Testing**: more coverage
-- **Documentation**: tutorials, guides, API docs
-
-Reach out at [reinder@eigen.is](mailto:reinder@eigen.is) or just open an issue saying "I want to work on X".
+Write to [reinder@eigen.is](mailto:reinder@eigen.is), or open an issue that says "I want to work on X".
 
 ### Sponsor
 
-If you or your company want to support the project, you can sponsor Eigen through [GitHub Sponsors](https://github.com/sponsors/eigen-is) or [Open Collective](https://opencollective.com/eigen). Open Collective is the better fit if you need an invoice. Questions? Reach out at [reinder@eigen.is](mailto:reinder@eigen.is).
+If you or your company want to support Eigen, you can sponsor it through [GitHub Sponsors](https://github.com/sponsors/eigen-is) or [Open Collective](https://opencollective.com/eigen). Open Collective is the better choice if you need an invoice. Questions? Write to [reinder@eigen.is](mailto:reinder@eigen.is).
 
-### Issues first, PRs for small fixes
+### Issues first, pull requests for small fixes
 
-I'd rather see feature ideas and larger changes as **issues**, not pull requests.
+Please bring feature ideas and larger changes as an **issue**, not a pull request.
 
-The codebase moves fast. Things change week to week. A PR for a new feature that sits for a few days often needs a full rebase by the time I can review it, and sometimes the approach it was built on has already shifted. That's frustrating for both of us.
+The code changes quickly. A pull request for a new feature that waits a few days often needs a full rebase before I can review it, and sometimes the code it was built on has changed shape. That's frustrating for both of us.
 
-A simple rule:
+So:
 
-- **Small fixes** (bugs, typos, UI tweaks, one-liners): open a PR directly. Always welcome.
-- **New features or bigger changes**: open an **issue** first. Describe the problem and what you'd like to build. If we agree on the direction, go for it. No wasted work.
-- **Want to adopt a whole area** (a full app, say Docs, Contacts, or Calendar, or a cross-cutting concern like search or accessibility)? That's the most valuable kind of contribution. See [Adopt an app or area](#adopt-an-app-or-area), and email me at [reinder@eigen.is](mailto:reinder@eigen.is) to talk.
+- **Small fixes** (bugs, typos, small UI changes): open a pull request. Always welcome.
+- **New features or bigger changes**: open an **issue** first. Describe the problem and what you'd like to build. Once we agree on the direction, go ahead. No wasted work.
+- **Want to adopt a whole area** (an app such as Docs, Contacts or Calendar, or something like search or accessibility)? That helps the most. See [Adopt an app or area](#adopt-an-app-or-area), and email me at [reinder@eigen.is](mailto:reinder@eigen.is).
 
-#### PR checklist (for small fixes)
+#### Pull request checklist (for small fixes)
 
-1. Fork the repo, create a branch from `develop`, and open the PR against `develop`
-2. Run `bun run check` before pushing (lint, typecheck, repo guards and tests)
-3. One concern per PR
-4. Link to a related issue if there is one
-5. Enable "Allow edits from maintainers" so I can help land your PR
+1. Fork the repo, make a branch from `develop`, and open the pull request against `develop`.
+2. Run `bun run check` before you push. It runs the linter, the type check, the repo's own rules and the tests.
+3. One change per pull request.
+4. Link the issue it belongs to, if there is one.
+5. Turn on "Allow edits from maintainers", so I can help finish it.
 
 ## Setting up your development environment
 
-### Prerequisites
+### What you need
 
-- [Bun](https://bun.sh) at the version in `.bun-version`, the one CI and the Docker image run: `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`. `bun run serve` warns when yours differs.
-- [Git](https://git-scm.com)
-- Optional: WeasyPrint 68 or later for PDF export, `ffmpeg` for video thumbnails. Everything else works without them. Install WeasyPrint from Homebrew (`brew install weasyprint`) or with pip in a venv, and put its `weasyprint` launcher on your PATH. The Python the launcher names must run `python3 -I -c 'import weasyprint'`, so `pip install --user` won't do.
+- [Bun](https://bun.sh), at the version in `.bun-version`. CI and the Docker image use the same one. Install it with `curl -fsSL https://bun.sh/install | bash -s "bun-v$(cat .bun-version)"`. `bun run serve` warns when your version is different.
+- [Git](https://git-scm.com).
+- Optional: WeasyPrint 68 or newer for PDF export, and `ffmpeg` for video thumbnails. Everything else works without them. Install WeasyPrint with Homebrew (`brew install weasyprint`) or with pip in a virtual environment, and put its `weasyprint` command on your PATH. `pip install --user` does not work: the Python that the command starts must be able to run `python3 -I -c 'import weasyprint'`.
 
 ### Run it
 
@@ -99,41 +80,43 @@ bun install
 bun run serve
 ```
 
-This starts the API on `localhost:8000` and every app on its own port, with hot reload. The API logs a one-time link, `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to create your admin account and choose where files are stored. Every restart before setup is done logs a fresh link and retires the previous one. Data lands in `data/` in the checkout.
+This starts the API on `localhost:8000` and each app on its own port. Changes reload by themselves. The API prints a one-time link: `Finish the setup at http://localhost:3009/admin/#setup=…`. Open it to create your admin account and choose where files are stored. Until setup is done, every restart prints a new link and the old one stops working. Your data goes to `data/` in the checkout.
 
-Run one app instead of all of them:
+To run one app instead of all of them:
 
 ```bash
-bun run serve:mail     # Just Mail + API
-bun run serve:docs     # Just Docs + API
+bun run serve:mail     # Mail and the API
+bun run serve:docs     # Docs and the API
 # ... works for any app name
 ```
 
-The API reads `.env.development`. Put your own overrides in `.env`, which git ignores.
+The API reads its settings from `.env.development`. Put your own settings in `.env`, which git ignores.
 
-Eigen sends no mail in development: the API logs each message's sender, recipient and subject instead. To read the mail itself, such as a 2FA or guest sign-in code, run [Mailpit](https://mailpit.axllent.org) and add `SMTP_HOST=localhost` and `SMTP_PORT=1025` to `.env`.
+In development Eigen sends no mail. The API logs each message's sender, recipient and subject instead. To read the mail itself, such as a sign-in code, run [Mailpit](https://mailpit.axllent.org) and add `SMTP_HOST=localhost` and `SMTP_PORT=1025` to `.env`.
 
 ### Useful commands
 
 ```bash
-bun run lint           # Lint + format check (Biome)
-bun run lint:fix       # Auto-fix lint + format
-bun run typecheck      # Type check all packages (bun check, the TypeScript port)
+bun run lint           # Check lint and formatting (Biome)
+bun run lint:fix       # Fix lint and formatting
+bun run typecheck      # Type check every package
 bun run test           # Run all tests
-bun run check          # lint + typecheck + repo guards + tests (run this before submitting a PR)
+bun run check          # All of the above plus the repo's own rules: run it before a pull request
 ```
 
-Committing runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up). The hook re-stages every staged file whole from the working tree, so a hunk staged with `git add -p` is lost: to commit part of a file, make the working tree match the commit first. What `check` runs and how to run one test file: [TESTING.md](TESTING.md).
+How `check` works, and how to run one test file: [TESTING.md](TESTING.md).
 
-After a `bun.lock` dedupe, `bun install` can keep stale `node_modules/.bun` links, report no changes, and the build then bundles two copies of one package. A crash about a duplicate class after a dependency change goes away with `rm -rf node_modules apps/*/node_modules packages/*/node_modules && bun install`.
+### When something is strange
 
-Vite reads the `exports` maps once, at start. After you add a `packages/lib` or `packages/ui` subpath, the new specifier answers 500 until you stop the vite servers, `rm -rf node_modules/.vite` and start them again; a hot reload never picks it up. A new Tailwind arbitrary value (`h-[3px]`) can fail to apply on a long-running dev server too, so restart it before you debug the component.
-
-A commit SHA from before 2026-07-06, as older notes cite, predates a history rewrite. Find the commit by its subject, or map the SHA through `.git/filter-repo/commit-map` in a clone that has one.
+- **A commit of part of a file.** Each commit runs Biome on the staged files (`.githooks/pre-commit`, which `bun install` sets up) and stages those files again, whole. So a part of a file you staged with `git add -p` is lost. To commit part of a file, first make the file on disk match what you want to commit.
+- **An error about a duplicate class after a dependency change.** `bun install` sometimes keeps old links and bundles two copies of one package. Run `rm -rf node_modules apps/*/node_modules packages/*/node_modules && bun install`.
+- **A new import from `packages/lib` or `packages/ui` answers 500.** Vite reads the packages' import paths only when it starts. Stop the dev servers, run `rm -rf node_modules/.vite`, and start them again.
+- **A new Tailwind value such as `h-[3px]` doesn't apply.** Restart the dev server before you look for a bug in the component.
+- **An old commit id doesn't exist.** The history was rewritten on 2026-07-06, so an id from before that date, in an older note, no longer works. Find the commit by its message instead.
 
 ### Eigen in Docker
 
-You need Docker only to test mail delivery, IMAP, HTTPS or the images themselves. It takes Docker with Compose 2.20 or newer, and no Bun. Use a clone of its own, never the checkout you develop in: the stack writes that folder's `data/` and `.env.production`.
+You only need Docker to test mail delivery, IMAP, HTTPS, or the Docker images themselves. You need Docker with Compose 2.20 or newer, and no Bun. Use a separate clone, never the checkout you work in, because the stack writes to that folder's `data/` and `.env.production`.
 
 ```bash
 git clone /path/to/your/eigen eigen-docker
@@ -142,15 +125,23 @@ cp docker-compose.dev.yml docker-compose.override.yml
 ./eigen setup --domain localhost --yes
 ```
 
-That builds the images from the clone and starts Caddy, the API, Postfix, Dovecot, Unbound and Mailpit. The build fetches from the npm registry, PyPI and Debian's mirrors. Setup prints the one-time link; open it and accept the certificate warning. Eigen runs at `https://localhost`. Addresses live on `eigen.localhost`, because a sign-in address needs a dot in its domain. Mailpit, at `http://localhost:8025`, catches every mail Eigen sends. The API runs in development mode, and Postfix and Dovecot use a self-signed certificate.
+This builds the images from the clone and starts Caddy (the web server), the API, Postfix and Dovecot (the mail server), Unbound (DNS) and Mailpit. The build downloads from npm, PyPI and Debian. Setup prints the one-time link: open it and accept the certificate warning.
 
-From then on, run the clone as an operator would: `./eigen logs`, `./eigen status`, `./eigen restart`, `./eigen backup`. To try new commits, pull them in the clone and run `./eigen setup` again, which rebuilds; `./eigen update` refuses on a local build. Run no `docker compose up` of your own in it: that shares the launcher's project and `data/`, and every `./eigen` command that starts Eigen, like `setup` and `restart`, removes every container of a service it does not run.
+- Eigen runs at `https://localhost`.
+- Mail addresses end in `@eigen.localhost`, because a sign-in address needs a dot in its domain.
+- Mailpit, at `http://localhost:8025`, catches every mail Eigen sends.
+- The API runs in development mode, and the mail server uses a self-signed certificate.
 
-To start fresh, stop it with `docker compose --env-file .env.production down`, move `data/` and `caddy-data/` aside, and run `./eigen setup` again.
+From then on, use the clone the way a server admin would: `./eigen logs`, `./eigen status`, `./eigen restart`, `./eigen backup`. To try new commits, pull them into the clone and run `./eigen setup` again, which rebuilds. `./eigen update` does not work on a local build. Don't run your own `docker compose up` in the clone: `./eigen setup` and `./eigen restart` remove every container they didn't start themselves.
 
-When the stack was down for more than 7 days, Caddy's local CA has expired, and `docker compose --env-file .env.production restart caddy` renews it. On a Mac, `sqlite3` on the host lags the container's writes over the bind mount, so read a database from inside the API container with `docker compose --env-file .env.production exec eigen-api`.
+To start over, stop it with `docker compose --env-file .env.production down`, move `data/` and `caddy-data/` somewhere else, and run `./eigen setup` again.
 
-Mail from outside reaches Eigen through Postfix, which calls the API on the Docker network; the web server hides that route. To deliver a message by hand, post it from inside the API container:
+Two things to know:
+
+- If the stack was off for more than 7 days, Caddy's local certificates have expired. `docker compose --env-file .env.production restart caddy` renews them.
+- On a Mac, `sqlite3` on your machine can show old data from the container's databases. Read a database from inside the API container instead, with `docker compose --env-file .env.production exec eigen-api`.
+
+Mail from outside reaches Eigen through Postfix, which calls the API inside Docker. To deliver a test message by hand, send it from inside the API container:
 
 ```bash
 printf 'From: sender@example.com\nTo: you@eigen.localhost\nSubject: Test\n\nHello.\n' |
@@ -159,21 +150,23 @@ printf 'From: sender@example.com\nTo: you@eigen.localhost\nSubject: Test\n\nHell
     "http://localhost:8000/mail/deliver/you@eigen.localhost"
 ```
 
-Replace `you@eigen.localhost` with your address. To connect a mail or calendar client, follow [Set up Eigen Mail in a mail client](https://eigen.is/support/connect/mail-client) and [Set up Eigen Calendar in a calendar client](https://eigen.is/support/connect/calendar-client) with `localhost` as the server and accept the certificate warning.
+Replace `you@eigen.localhost` with your own address. To connect a mail or calendar app, follow [Set up Eigen Mail in a mail client](https://eigen.is/support/connect/mail-client) and [Set up Eigen Calendar in a calendar client](https://eigen.is/support/connect/calendar-client). Use `localhost` as the server and accept the certificate warning.
 
 ## Finding your way around
 
-It's a monorepo: one API server in `apps/api/`, frontend apps in `apps/*/`, and shared code in `packages/lib/` (types, hooks, API client) and `packages/ui/` (components).
+All of Eigen lives in one repository. There is one API server in `apps/api/`, one folder per app in `apps/`, and shared code in `packages/`: `lib` (types, hooks, the API client), `ui` (components), `sheet` (the spreadsheet engine) and `math` (equations).
 
 Start here:
 
-- **[AGENTS.md](../AGENTS.md)** has the critical rules every change follows. Written for humans and AI assistants alike.
-- **[docs/README.md](README.md)** indexes every doc by domain.
-- **[CODE-STANDARDS.md](CODE-STANDARDS.md)** covers code patterns and Eden Treaty usage; **[ARCHITECTURE.md](ARCHITECTURE.md)** has the backend and frontend location tables, the Drive layers and the pitfalls.
-- **[STORAGE.md](STORAGE.md)** explains the per-user SQLite + file storage design.
-- **[ACL.md](ACL.md)** describes sharing and permissions.
+- **[AGENTS.md](../AGENTS.md)**: the rules every change follows, written for people and AI assistants alike.
+- **[docs/README.md](README.md)**: a list of every doc, by topic.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: where each kind of code lives, and the common mistakes.
+- **[CODE-STANDARDS.md](CODE-STANDARDS.md)**: how the code is written.
+- **[STORAGE.md](STORAGE.md)**: how each user's files and databases are stored.
+- **[ACL.md](ACL.md)**: sharing and permissions.
+- **[ROADMAP.md](ROADMAP.md)** and the backlogs it links: what is planned, most important first.
 
-Most subsystems have their own doc in `docs/`.
+Most parts of Eigen have their own doc in `docs/`.
 
 ## Code style
 
@@ -209,8 +202,8 @@ One change per commit: a title that needs "and" is two commits. No AI co-author 
 
 ## License
 
-Contributions are licensed under [MIT](../LICENSE.txt), same as the rest of the project.
+Contributions are licensed under [MIT](../LICENSE.txt), like the rest of the project.
 
 ## Get in touch
 
-Questions, ideas, or just want to say hi: [reinder@eigen.is](mailto:reinder@eigen.is), or open an issue.
+Questions, ideas, or just want to say hi? Write to [reinder@eigen.is](mailto:reinder@eigen.is), or open an issue.

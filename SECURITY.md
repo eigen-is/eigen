@@ -1,45 +1,36 @@
 # Security Policy
 
-Eigen handles mail, files, documents, calendars, and other personal data. If you find a security issue,
-please report it privately — not via a public GitHub issue or pull request.
+Eigen holds mail, files, documents, calendars and other personal data. If you find a security problem, please report it privately, not in a public GitHub issue or pull request.
 
-## Reporting a vulnerability
+## Reporting a problem
 
-Two ways, preferred first:
+Two ways, the first one preferred:
 
-- **GitHub private vulnerability reporting**:
-  [Report a vulnerability](https://github.com/eigen-is/eigen/security/advisories/new).
+- **GitHub private vulnerability reporting**: [Report a vulnerability](https://github.com/eigen-is/eigen/security/advisories/new).
 - **Email**: [reinder@eigen.is](mailto:reinder@eigen.is).
 
-I aim to acknowledge reports within a week and share a rough timeline for a fix once triaged. Critical
-issues affecting user data are prioritized; lower-severity issues may take longer. Eigen is a side project
-with a single maintainer, so response times may vary — especially around holidays. If you haven't heard
-back within two weeks, please send a follow-up email.
+I try to reply within a week, and to give a rough timeline for a fix once I've looked at it. Problems that put user data at risk come first; smaller ones can take longer. Eigen has one maintainer, so replies can be slower, for example around holidays. If you haven't heard back within two weeks, please send a reminder.
 
-## Scope
+## What counts
 
 In scope:
 
-- The Eigen server (`apps/api/`) and any of its endpoints
-- The shipped frontend apps (`apps/*`)
-- The default Docker deployment (`docker/`, `docker-compose.yml`, `Caddyfile`)
-- Shared packages (`packages/lib`, `packages/ui`, `packages/sheet`)
+- The Eigen server (`apps/api/`) and all its endpoints
+- The apps (`apps/*`)
+- The standard Docker install (`docker/`, `docker-compose.yml`, `Caddyfile`, the `eigen` script)
+- The shared packages (`packages/*`)
 
 Out of scope:
 
-- Issues that require physical access to the server, a compromised admin account, or a compromised user
-  device
-- Known issues in third-party dependencies that are already tracked upstream (please report those upstream)
-- Self-inflicted misconfiguration (weak DKIM keys, exposed admin endpoints, disabled HTTPS, leaked secrets,
-  etc.)
-- Denial of service from a single authenticated user against their own account
+- Problems that need physical access to the server, a hacked admin account or a hacked user device
+- Known problems in other projects that Eigen uses, already reported to those projects (please report them there)
+- A server set up unsafely by its admin, such as weak DKIM keys, open admin endpoints, HTTPS turned off or leaked secrets
+- A signed-in user slowing down or blocking only their own account
 
 ## Supported versions
 
-Eigen is still pre-1.0 and moves fast. Only the `main` branch is actively maintained. If you're running
-something older, the first step is always to update.
+Eigen is before version 1.0 and changes fast. Fixes go into the newest release and the `main` branch only. If you run an older version, update first (`./eigen update`).
 
 ## Disclosure
 
-Once a fix is available, I'll credit reporters in the release notes unless you'd prefer to stay anonymous.
-Please give a reasonable disclosure window (at least until a fix ships) before making details public.
+Once a fix is out, I'll thank you by name in the release notes, unless you'd rather stay anonymous. Please keep the details private until the fix has shipped.
