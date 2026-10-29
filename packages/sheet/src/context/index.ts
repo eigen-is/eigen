@@ -1,6 +1,6 @@
 // The React context the Workbook provides to every part of the grid: the workbook it renders, the way to write it, the
-// settings, the DOM refs and undo and redo. A component renders from `context` and reads `getContext()` in an event
-// handler, which also sees a write made since the last render.
+// settings, the DOM refs and undo and redo. `context` is the workbook as it was last rendered. A read that must see a
+// write made since that render, such as one right after an edit, goes through `getContext()`.
 
 import React from 'react';
 import type { Context, GlobalCache, PatchOptions, Settings } from '../state';
@@ -22,7 +22,6 @@ export type SetContextOptions = {
     // undoes as their own step — the pending→real image mediaName swap and the paste-flow height
     // correction — so a single paste stays one ⌘Z. Distinct from noHistory, which skips op emission too.
     noUndo?: boolean;
-    logPatch?: boolean;
 } & PatchOptions;
 
 const defaultScrollListeners = new Set<() => void>();

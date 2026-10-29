@@ -178,7 +178,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
-                const ctx_ = contextRef.current;
+                const base = contextRef.current;
                 // Sync scroll position from globalCache into the immer draft.
                 // Scroll state lives in globalCache to avoid re-rendering all
                 // context consumers on every scroll tick. We lazily sync it here
@@ -194,23 +194,20 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // produceWithPatches generates JSON patches for every mutation,
                 // but selection changes are filtered out by filterPatch anyway.
                 if (options.noHistory) {
-                    commit(produce(ctx_, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
                     return;
                 }
 
                 const [result, patches, inversePatches] = produceWithPatches(
-                    ctx_,
+                    base,
                     concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
                 );
                 commit(result);
                 if (patches.length === 0) return;
-                if (options.logPatch) {
-                    console.info('patch', patches);
-                }
                 const filteredPatches = filterPatch(patches);
                 const filteredInversePatches = filterPatch(inversePatches);
                 if (filteredInversePatches.length === 0) return;
-                const entry = recordEntry(ctx_, result, filteredPatches, filteredInversePatches, options);
+                const entry = recordEntry(base, result, filteredPatches, filteredInversePatches, options);
                 // noUndo: emit the op (peers need the swap/correction) but record no local
                 // undo entry, so a cross-mount paste stays a single ⌘Z.
                 if (!options.noUndo) {
@@ -436,9 +433,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // handler's tail steals focus out of the open menu.
                 if (!e.currentTarget.contains(e.target as Node)) return;
                 const { nativeEvent } = e;
-                // Undo and redo run ahead of the grid's handler: handleUndo and handleRedo call setContext
-                // themselves and can't nest in setContextWithProduce. An open cell editor leaves them to the
-                // browser, which undoes the typing, as Google Sheets does.
+                // Undo and redo run ahead of the grid's handler, because a write must not start another write
+                // inside its recipe, and handleUndo and handleRedo are writes. An open cell editor leaves them to
+                // the browser, which undoes the typing, as Google Sheets does.
                 if (contextRef.current.editingCellPosition.length === 0) {
                     if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.undo)) {
                         handleUndo();
@@ -479,33 +476,37 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // width) copies its own text.
                 const floating = !isTypingTarget();
                 const ctx = contextRef.current;
+                const sheet = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) ?? -1];
+                const { activeObject } = ctx;
+                const chart = activeObject?.kind === 'chart' ? sheet?.charts?.[activeObject.id] : undefined;
+                const image = activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined;
                 // A selected chart copies itself with its ranges read into inline data, the one thing every
                 // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
                 // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
                 // ctx.sheets, not the editable current sheet, so a viewer copies too.
-                if (activeChart && floating) {
-                    const item = sheetChartClipboardItem(ctx, activeChart);
+                if (chart && floating) {
+                    const item = sheetChartClipboardItem(ctx, chart);
                     if (!item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
-                    globalCache.current.copiedChart = { inline: item.parts, chart: activeChart };
+                    globalCache.current.copiedChart = { inline: item.parts, chart };
                     if (e.type === 'cut' && ctx.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
                 // A selected floating image takes precedence over the pending cell copy: its
                 // copy is a pure image — eigen JSON only, no text/plain and no png, as vector's is (a
                 // native copy event can't await a media/ blob fetch, so png is dropped). A cut deletes it.
-                if (activeImage && floating) {
-                    const source = mergedSettings.hooks?.resolveImagePath?.(activeImage.mediaName);
+                if (image && floating) {
+                    const source = mergedSettings.hooks?.resolveImagePath?.(image.mediaName);
                     if (source) {
                         e.preventDefault();
                         // Drop any cell table the keyboard copy staged, so a later native-menu copy
                         // with no image active can't emit this stale table.
                         consumePendingCopy();
                         const item = buildImageClipboardItem({
-                            mediaName: activeImage.mediaName,
+                            mediaName: image.mediaName,
                             source,
-                            box: { width: activeImage.width, height: activeImage.height, angle: activeImage.angle },
+                            box: { width: image.width, height: image.height, angle: image.angle },
                         });
                         writeEigenClipboard(e, { version: 1, items: [item] });
                         if (e.type === 'cut' && ctx.allowEdit !== false) setContextWithProduce(deleteActiveObject);
@@ -527,7 +528,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [activeChart, activeImage, mergedSettings.hooks, setContextWithProduce],
+            [mergedSettings.hooks, setContextWithProduce],
         );
 
         const onPaste = useCallback(

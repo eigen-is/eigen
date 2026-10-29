@@ -5,7 +5,7 @@
 import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
-import { current, produce } from 'immer';
+import { current } from 'immer';
 import type { SetContextOptions } from '../../context';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { setUpChartRange } from '../../engine/chart-range';
@@ -50,7 +50,7 @@ export function generateAPIs(
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void,
     handleUndo: () => void,
     handleRedo: () => void,
-    history: Pick<GlobalCache, 'undoList' | 'redoList'>,
+    history: Pick<GlobalCache, 'undoList' | 'redoList' | 'undoGesture'>,
 ) {
     return {
         applyOp: (ops: Op[]) => {
@@ -137,15 +137,12 @@ export function generateAPIs(
         deleteFloatingObject: (ref: FloatingRef) => setContext((draftCtx) => deleteFloatingObject(draftCtx, ref)),
 
         // One op + undo step each, on the current sheet. The id is made here so the caller can
-        // select the new chart. A dry run tells a viewer or a missing sheet apart, which inserts
-        // nothing and returns null.
+        // select the new chart. A viewer or a missing sheet inserts nothing and returns null.
         insertChart: (box: ChartInsertBox, spec: ChartSpec): string | null => {
             const id = crypto.randomUUID();
-            const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
-            const ctx = getContext();
-            if (produce(ctx, recipe) === ctx) return null;
-            setContext(recipe);
-            return id;
+            const { sheets } = getContext();
+            setContext((draftCtx) => insertChart(draftCtx, id, box, spec));
+            return getContext().sheets === sheets ? null : id;
         },
 
         setChartSpec: (id: string, change: ChartSpecChange) =>
@@ -164,10 +161,9 @@ export function generateAPIs(
         // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
         beginGesture: () => {
             const gesture = {};
-            const cache = getContext().getRefs().globalCache;
-            cache.undoGesture = gesture;
+            history.undoGesture = gesture;
             return () => {
-                if (cache.undoGesture === gesture) cache.undoGesture = undefined;
+                if (history.undoGesture === gesture) history.undoGesture = undefined;
             };
         },
 

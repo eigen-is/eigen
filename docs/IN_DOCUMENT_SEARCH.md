@@ -18,7 +18,7 @@ Under collaboration a match can vanish between search and reveal, so `reveal` va
 
 ## Replace returns the fresh match list
 
-`replace` and `replaceAll` make the edit and return the post-edit matches, which the provider adopts. It never re-runs `search` after an edit, because sheets' React context is one render behind at that point. The query is passed on every call rather than read from a cached term, for the same interleaving reason as the id. `preserveCase` is its own argument, applied by `applyPreserveCase` (`packages/lib/src/doc-search/`). Replacement text is literal everywhere: no `$1` or `$&` expansion.
+`replace` and `replaceAll` make the edit and return the post-edit matches, which the provider adopts instead of searching again. The query is passed on every call rather than read from a cached term, for the same interleaving reason as the id. `preserveCase` is its own argument, applied by `applyPreserveCase` (`packages/lib/src/doc-search/`). Replacement text is literal everywhere: no `$1` or `$&` expansion.
 
 A surface sets `canReplace` from its write access. A read-only document gets search only, and `⇧⌘H` opens plain search there.
 
