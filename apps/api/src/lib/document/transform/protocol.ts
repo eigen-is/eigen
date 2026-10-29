@@ -316,9 +316,8 @@ export type ChildResponseEnvelope = {
 // with a different payload fails to compile here until it is handled.
 export function inputBytesOf(request: DocumentTransformRequest): number {
     if ('data' in request) return request.data.byteLength;
-    if (request.kind === 'compact') {
-        return Buffer.byteLength(request.snapshot ?? '') + Buffer.byteLength(JSON.stringify(request.batches));
-    }
+    // The batches go uncounted: measuring them would serialize them once more on the main thread.
+    if (request.kind === 'compact') return Buffer.byteLength(request.snapshot ?? '');
     let bytes = request.source.snapshot?.data.byteLength ?? 0;
     for (const update of request.source.updates) bytes += update.data.byteLength;
     return bytes;

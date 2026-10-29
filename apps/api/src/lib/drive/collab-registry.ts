@@ -4,7 +4,7 @@
 
 import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
 import { createAsyncSingleton } from '../../utils/singleton';
-import { CollabDocument } from '../collab/collab-document';
+import { CollabDocument, collabDocumentKey } from '../collab/collab-document';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
 import type { Drive } from './drive';
@@ -25,7 +25,7 @@ export class CollabRegistry {
     public constructor(private ownerId: string) {}
 
     private key(mountId: string, pathId: string): string {
-        return `${this.ownerId}.${mountId}.${pathId}`;
+        return collabDocumentKey(this.ownerId, mountId, pathId);
     }
 
     public has(mountId: string, pathId: string): boolean {

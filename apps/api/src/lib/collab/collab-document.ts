@@ -50,7 +50,7 @@ const COMPACTION_BUDGET_MS = 180_000;
 // A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until the API
 // restarts, so it doesn't hold the one child at every close.
 const MAX_COMPACTION_FAILURES = 3;
-// The failed compactions in a row of each workbook, keyed as the collab registry keys it. A failed run still closes the
+// The failed compactions in a row of each workbook, keyed with collabDocumentKey. A failed run still closes the
 // document, and the next open is a new CollabDocument, so the count lives outside it.
 const compactionFailures = new Map<string, number>();
 // The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
@@ -58,6 +58,12 @@ const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
+
+// The one key of an open document, for the Drive's registry and the compaction failure count. It lives here, not in
+// the registry, because the registry imports this file.
+export function collabDocumentKey(ownerId: string, mountId: string, pathId: string): string {
+    return `${ownerId}.${mountId}.${pathId}`;
+}
 
 function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
     const encoder = encoding.createEncoder();
@@ -121,7 +127,7 @@ export class CollabDocument {
     }
 
     private get compactionKey(): string {
-        return `${this.path.ownerId}.${this.path.mountId}.${this.path.id}`;
+        return collabDocumentKey(this.path.ownerId, this.path.mountId, this.path.id);
     }
 
     // Sets up a new document's container. If comments.db fails after data.db was made,
