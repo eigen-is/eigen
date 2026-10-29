@@ -9,7 +9,7 @@
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, current, produce } from 'immer';
-import { asDeleteValue, asInsertValue, asSheet } from '../../engine/replay-ops';
+import { asDeleteValue, asInsertValue, asNewSheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
@@ -65,14 +65,18 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
                     moved.push({ op, sheets });
                     if (id === draft.currentSheetId) followEditor(draft, rowCol);
                 } else if (op.op === 'addSheet') {
-                    const sheet = asSheet(op.value);
+                    const sheet = asNewSheet(op.value, draft.sheets);
                     if (!sheet) continue;
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
                     const value = cloneDeep(sheet);
+                    // addSheet drops a cell matrix the value carries, but the replay keeps it, so it goes back once
+                    // the sheet is in.
+                    const { data } = value;
                     addSheet(draft, value.id, false, undefined, value, true);
                     const index = getSheetIndex(draft, value.id);
                     if (index == null) continue;
                     initSheetData(draft, index, value);
+                    if (data) draft.sheets[index].data = data;
                     materialized.push(value.id);
                 } else if (op.op === 'deleteSheet' && id) deleteSheet(draft, id, true);
             }
