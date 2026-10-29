@@ -31,14 +31,14 @@ Eigen has a dozen apps and a lot of shared code underneath. I can't give all of 
 
 What each app is working toward:
 
-- **Mail**: everything people expect from Gmail or Outlook, in the browser and in any mail app on their phone or computer
-- **Drive**: a file store that's as easy as Google Drive or Dropbox, and that people trust with their only copy
+- **Mail**: everything people expect from Gmail or Outlook, in the browser and in any mail app on a phone or computer (IMAP and SMTP)
+- **Drive**: a file store that's as easy as Google Drive or Dropbox, that people trust with their only copy, and that opens as a folder on a phone or computer (WebDAV)
 - **Docs**: on par with Word and Google Docs, and opening and saving Word files without losing anything
 - **Sheets**: on par with Excel and Google Sheets, in formulas, charts and Excel files
 - **Slides**: on par with PowerPoint and Google Slides, and PowerPoint files that open as they were made
 - **Vector**: a drawing app as easy to use as Excalidraw
 - **Stickies**: a board for notes and ideas, as easy as Miro or FigJam
-- **Calendar and Contacts**: on par with Google Calendar and Contacts, and syncing with every phone and calendar app
+- **Calendar and Contacts**: on par with Google Calendar and Contacts, and syncing with every phone and calendar app (CalDAV and CardDAV)
 - **Chat**: on par with Slack or Google Chat, for small teams
 - **Admin and Space** (account settings): running an Eigen server and an account without needing the command line
 
