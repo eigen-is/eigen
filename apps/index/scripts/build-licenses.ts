@@ -48,6 +48,7 @@ const FONTS: LicenseFont[] = [
     { name: 'Source Serif 4', license: 'OFL-1.1', url: 'https://github.com/adobe-fonts/source-serif' },
     { name: 'JetBrains Mono', license: 'OFL-1.1', url: 'https://github.com/JetBrains/JetBrainsMono' },
     { name: 'Excalifont', license: 'OFL-1.1', url: 'https://plus.excalidraw.com/excalifont' },
+    { name: 'STIX Two Math', license: 'OFL-1.1', url: 'https://github.com/stipub/stixfonts' },
 ];
 
 type PackageJson = {
