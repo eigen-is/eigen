@@ -3,6 +3,7 @@
 // applyOp registers it.
 
 import { describe, expect, it } from 'bun:test';
+import type { Sheet as LibSheet } from '@workspace/lib/sheets';
 import { produce } from 'immer';
 import { generateAPIs } from '../../../components/Workbook/api';
 import { dataToCelldata } from '../../../engine/celldata';
@@ -281,5 +282,69 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         const [joiner] = join(ctx, [ops]);
         expect(joiner.data?.[0][0]?.v).toBe(9);
         expect(applyPeerOps(ctx, ops).sheets[0].data).toEqual(joiner.data);
+    });
+});
+
+// The replay skips a sheet or row op whose value has the wrong shape and applies the rest of the batch. A live client
+// must skip the same ops, or it keeps a row or a sheet that every joiner, and the compacted log, lacks. The sheet adds
+// it does take must end with the same cells on both paths.
+describe('applyOp and a joiner skip the same malformed sheet and row ops', () => {
+    const grid = (sheets: Pick<LibSheet, 'id' | 'name' | 'data' | 'celldata' | 'row' | 'column'>[]) =>
+        sheets.map((s) => ({
+            id: s.id,
+            name: s.name,
+            rows: s.data?.length ?? s.row,
+            columns: s.data?.[0]?.length ?? s.column,
+            cells: s.data ? dataToCelldata(s.data) : s.celldata,
+        }));
+    const typedA1: Op = { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } };
+    const insert = (value: unknown): Op => ({ op: 'insertRowCol', id: 'id_1', path: [], value });
+    const remove = (value: unknown): Op => ({ op: 'deleteRowCol', id: 'id_1', path: [], value });
+    const add = (value: unknown): Op => ({ op: 'addSheet', path: [], value });
+
+    it.each([
+        ['a row insert without a direction', insert({ type: 'row', index: 1, count: 1 })],
+        ['a row insert with a text count', insert({ type: 'row', index: 1, count: '1', direction: 'lefttop' })],
+        ['an insert of an unknown kind', insert({ type: 'rows', index: 1, count: 1, direction: 'lefttop' })],
+        ['an insert without a value', insert(undefined)],
+        ['a row delete with a text start', remove({ type: 'row', start: '1', end: 1 })],
+        ['a delete of an unknown kind', remove({ type: 'rows', start: 1, end: 1 })],
+        ['a sheet add without a name', add({ id: 'id_3', order: 2, row: 4, column: 4, celldata: [] })],
+        ['a sheet add with a numeric id', add({ id: 3, name: 'third', order: 2, row: 4, column: 4, celldata: [] })],
+        ['a sheet add with an empty id', add({ id: '', name: 'third', order: 2, row: 4, column: 4, celldata: [] })],
+    ])('%s', (_, op) => {
+        const ctx = makeCtx(null);
+        const ops = [op, typedA1];
+        expect(grid(applyPeerOps(ctx, ops).sheets)).toEqual(grid(join(ctx, [ops])));
+    });
+
+    const third = { id: 'id_3', name: 'third', order: 2, row: 4, column: 4 };
+    const storedB1 = [{ r: 0, c: 1, v: { v: 7, m: '7' } }];
+
+    it('applies a batch that adds a sheet and writes a cell on it', () => {
+        const ops: Op[] = [
+            add({ ...third, celldata: storedB1 }),
+            { op: 'replace', id: 'id_3', path: ['data', 0, 0], value: { v: 9, m: '9' } },
+        ];
+        const ctx = makeCtx(null);
+        const joiner = grid(join(ctx, [ops]));
+        expect(joiner[2]?.cells).toEqual([{ r: 0, c: 0, v: { v: 9, m: '9' } }, ...storedB1]);
+        expect(grid(applyPeerOps(ctx, ops).sheets)).toEqual(joiner);
+    });
+
+    it('skips a sheet add whose id is already a sheet', () => {
+        const ops = [add({ ...third, id: 'id_2', celldata: storedB1 }), typedA1];
+        const ctx = makeCtx(null);
+        const joiner = grid(join(ctx, [ops]));
+        expect(joiner).toEqual(grid(join(ctx, [[typedA1]])));
+        expect(grid(applyPeerOps(ctx, ops).sheets)).toEqual(joiner);
+    });
+
+    it('keeps the cells of a sheet add that carries a matrix and no stored cells', () => {
+        const ops = [add({ ...third, data: makeData({ v: 7, m: '7' }) }), typedA1];
+        const ctx = makeCtx(null);
+        const joiner = grid(join(ctx, [ops]));
+        expect(joiner[2]?.cells).toEqual([{ r: 0, c: 0, v: { v: 5, m: '5' } }, ...storedB1]);
+        expect(grid(applyPeerOps(ctx, ops).sheets)).toEqual(joiner);
     });
 });
