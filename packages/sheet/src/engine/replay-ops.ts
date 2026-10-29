@@ -1,3 +1,8 @@
+// Replays the stored op batches onto a workbook's stored sheets, for every reader that was not there live: a browser
+// that opens the workbook, and the server's export, preview and read. It also owns the shape check a sheet or row op
+// passes before it applies. A live client's applyOpBatch calls the same checks, so a peer, a joiner and the server
+// skip the same ops and end with the same sheets.
+
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
@@ -13,9 +18,9 @@ enablePatches();
 type InsertValue = { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom' };
 type DeleteValue = { type: 'row' | 'column'; start: number; end: number };
 
-// op.value is `any` in lib.Op; these adapters pin the runtime shape so a
-// malformed payload produces a warn+skip rather than corrupt state.
-function asInsertValue(v: unknown): InsertValue | null {
+// An op's value is untyped, and a buggy or hostile client may send any shape. These read the shape a row, column or
+// sheet op must have, and return null for anything else. The op is then skipped, here and in a live client.
+export function asInsertValue(v: unknown): InsertValue | null {
     if (!v || typeof v !== 'object') return null;
     const { type, index, count, direction } = v as Partial<InsertValue>;
     if (type !== 'row' && type !== 'column') return null;
@@ -24,7 +29,7 @@ function asInsertValue(v: unknown): InsertValue | null {
     return { type, index, count, direction };
 }
 
-function asDeleteValue(v: unknown): DeleteValue | null {
+export function asDeleteValue(v: unknown): DeleteValue | null {
     if (!v || typeof v !== 'object') return null;
     const { type, start, end } = v as Partial<DeleteValue>;
     if (type !== 'row' && type !== 'column') return null;
@@ -32,13 +37,16 @@ function asDeleteValue(v: unknown): DeleteValue | null {
     return { type, start, end };
 }
 
-function asSheet(v: unknown): Sheet | null {
+// A sheet add also needs an id no sheet has yet. A second sheet with the same id would make every later op on that id
+// ambiguous.
+export function asNewSheet(v: unknown, sheets: { id?: string }[]): (Sheet & { id: string }) | null {
     if (!v || typeof v !== 'object') return null;
     const sheet = v as Sheet;
     // id is technically optional on Sheet but every patchToOp producer stamps it.
     // A sheet without an id silently breaks subsequent ops referencing that sheet.
     if (typeof sheet.id !== 'string' || typeof sheet.name !== 'string') return null;
-    return sheet;
+    if (sheets.some((s) => s.id === sheet.id)) return null;
+    return { ...sheet, id: sheet.id };
 }
 
 // The one shape every sheet leaves the replay in, whichever door it came through — the decoded
@@ -85,7 +93,7 @@ function withSyncedCelldataIfData(s: Sheet): Sheet {
 // on `target.data` directly inside the engine — both must trigger materialization.
 // Collected per batch (not once up-front) so a sheet introduced mid-replay by
 // an addSheet op — whose value may carry celldata only — is materialized
-// before a later batch's data ops touch it.
+// before a data op touches it, in its own batch or a later one.
 function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     let touched: Set<string> | null = null;
     for (const op of batch) {
@@ -117,12 +125,13 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
             // addSheet/deleteSheet must settle the array before patches resolve.
             for (const op of batch) {
                 if (op.op === 'addSheet') {
-                    const newSheet = asSheet(op.value);
+                    const newSheet = asNewSheet(op.value, result);
                     if (!newSheet) {
-                        console.warn('[sheets] addSheet op has malformed value', op.value);
+                        console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
                         continue;
                     }
-                    result = [...result, withNormalizedSheet(newSheet)];
+                    const added = withNormalizedSheet(newSheet);
+                    result = [...result, dataOpIds?.has(newSheet.id) ? withMaterializedData(added) : added];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
                 } else if (op.op === 'insertRowCol' && op.id) {
