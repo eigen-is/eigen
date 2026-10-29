@@ -1,10 +1,8 @@
-// Applies one op batch to the editor's context, the way replaySheetsOps applies it to a joiner's sheets: the sheet and
-// row or column ops first, then the cell and field patches, resolved against the sheets those ops left. A batch applies
-// whole or not at all, and a sheet or row op whose value fails the replay's shape check is skipped, as the replay skips
-// it. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or deletes rows, go
-// through it, so the client that sends a batch, the peers that take it and a joiner all end the same. It also says
-// which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those. It moves an open cell
-// editor with its cell, unless the caller applies a batch the editor already followed once.
+// Applies one op batch to the editor's context as replaySheetsOps applies it to a joiner's sheets: the sheet and row or
+// column ops first, then the cell and field patches, whole or not at all, skipping each op the replay's shape check
+// refuses. A peer's batch, a replay of the log and a structural undo all go through it, so every tab and a joiner end
+// the same. It reports the row or column ops that moved rows, which the undo stacks follow. An open cell editor moves
+// with its cell, unless it already followed the batch once.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';

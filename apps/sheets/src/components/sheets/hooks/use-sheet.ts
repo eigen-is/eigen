@@ -16,61 +16,10 @@ import type * as Y from 'yjs';
 // the grid already applied takes the grid back to the nearest one and applies the log again from there.
 type Anchor = { at: number; sheets: WorkbookSheet[] };
 
-// How many batches pass between two anchors. Restoring one costs nothing, since the sheets share all they did not change,
-// but each batch after it is applied again.
-const ANCHOR_EVERY = 50;
-
-// Keeps the sheets the grid shows as the anchor at `at`, when the last anchor lies far enough back. The caller makes
-// sure the grid holds exactly the log's first `at` batches.
-function keepAnchor(anchors: Anchor[], at: number, workbook: WorkbookInstance) {
-    const last = anchors.at(-1);
-    if (!last || at - last.at >= ANCHOR_EVERY) anchors.push({ at, sheets: workbook.getAllSheets() });
-}
-
-// Whether the fresh batches, applied after the overtaken ones, still give the workbook the log's order gives. They do
-// when no batch adds, deletes or moves sheets, rows or columns, and no op of one side writes a path an op of the other
-// writes, or a path inside or above it. The recalc list counts too: two formula cells added at once both append to it.
-function commutes(fresh: Iterable<Op[]>, overtaken: Op[][]): boolean {
-    const written = new Set<string>();
-    const above = new Set<string>();
-    for (const ops of overtaken) {
-        for (const op of ops) {
-            const keys = pathKeys(op);
-            if (!keys) return false;
-            const [key, ...up] = keys;
-            written.add(key);
-            for (const k of up) above.add(k);
-        }
-    }
-    for (const ops of fresh) {
-        for (const op of ops) {
-            const keys = pathKeys(op);
-            if (!keys || above.has(keys[0]) || keys.some((key) => written.has(key))) return false;
-        }
-    }
-    return true;
-}
-
-// The key of the path an op writes, its sheet first, then the key of each path above it. An add or remove at an array
-// index moves the entries after it, so it writes the whole array. Null for an op on sheets, rows or columns.
-function pathKeys(op: Op): string[] | null {
-    if (op.op !== 'add' && op.op !== 'remove' && op.op !== 'replace') return null;
-    const last = op.path.at(-1);
-    const wholeArray = (op.op !== 'replace' && typeof last === 'number') || last === 'length';
-    const path = [op.id, ...(wholeArray ? op.path.slice(0, -1) : op.path)].map(String);
-    return path.map((_, i) => JSON.stringify(path.slice(0, path.length - i)));
-}
-
-// Applies a peer's batch to the grid and says whether it applied. A throw escaping the Yjs observer would kill the app,
-// so a batch that fails is logged.
-function applyBatch(workbook: WorkbookInstance | null, ops: Op[]): boolean {
-    try {
-        return workbook?.applyOp(ops) ?? false;
-    } catch (e) {
-        console.error('[sheet] Failed to apply remote op:', e);
-        return false;
-    }
-}
+// How many batches pass between two anchors. Restoring one costs nothing, since it shares every row nobody changed
+// since. Each batch after it is applied again, which on a sheet of 300,000 cells takes about 12 ms a batch, so twenty
+// keeps that part of a rollback near a quarter second.
+const ANCHOR_EVERY = 20;
 
 export function useSheet(
     ownerId: string,
@@ -180,8 +129,8 @@ export function useSheet(
             };
             doc.on('beforeObserverCalls', judgeTransaction);
 
-            // Positions come from the change's retains: Yjs hands the observer one change per transaction, so a
-            // transaction that adds several batches is handled once, from the first of them.
+            // Yjs calls this once per transaction, with one change that holds every batch it added or deleted. Their
+            // places in the log come from the change's retains, and the grid handles them at once, from the first.
             const handleOps = (event: Y.YArrayEvent<Op[]>) => {
                 // A new snapshot that remounts the grid replays the whole log, these batches too.
                 if (!readyForOpsRef.current || remountGrid) return;
@@ -235,7 +184,7 @@ export function useSheet(
                     // A batch that lands before the batches the grid replayed at load has no anchor.
                     if (!anchor) return reload(doc);
                     try {
-                        workbook.replayOps(anchor.sheets, log.slice(anchor.at), fresh);
+                        if (!workbook.replayOps(anchor.sheets, log.slice(anchor.at), fresh)) baseIdRef.current = null;
                     } catch (e) {
                         // A throw escaping the Yjs observer would kill the app.
                         console.error('[sheet] Failed to apply the log again:', e);
@@ -303,4 +252,56 @@ export function useSheet(
         docRef,
         provider,
     };
+}
+
+// Applies a peer's batch to the grid and says whether it applied. A throw escaping the Yjs observer would kill the app,
+// so a batch that fails is logged.
+function applyBatch(workbook: WorkbookInstance, ops: Op[]): boolean {
+    try {
+        return workbook.applyOp(ops);
+    } catch (e) {
+        console.error('[sheet] Failed to apply remote op:', e);
+        return false;
+    }
+}
+
+// Keeps the sheets the grid shows as the anchor at `at`, when the last anchor lies far enough back. The caller makes
+// sure the grid holds exactly the log's first `at` batches.
+function keepAnchor(anchors: Anchor[], at: number, workbook: WorkbookInstance) {
+    const last = anchors.at(-1);
+    if (!last || at - last.at >= ANCHOR_EVERY) anchors.push({ at, sheets: workbook.getAllSheets() });
+}
+
+// Whether the fresh batches, applied after the overtaken ones, still give the workbook the log's order gives. They do
+// when no batch adds, deletes or moves sheets, rows or columns, and no op of one side writes a path an op of the other
+// writes, or a path inside or above it. The recalc list counts too: two formula cells added at once both append to it.
+function commutes(fresh: Iterable<Op[]>, overtaken: Op[][]): boolean {
+    const written = new Set<string>();
+    const above = new Set<string>();
+    for (const ops of overtaken) {
+        for (const op of ops) {
+            const keys = pathKeys(op);
+            if (!keys) return false;
+            const [key, ...up] = keys;
+            written.add(key);
+            for (const k of up) above.add(k);
+        }
+    }
+    for (const ops of fresh) {
+        for (const op of ops) {
+            const keys = pathKeys(op);
+            if (!keys || above.has(keys[0]) || keys.some((key) => written.has(key))) return false;
+        }
+    }
+    return true;
+}
+
+// The key of the path an op writes, its sheet first, then the key of each path above it. An add or remove at an array
+// index moves the entries after it, so it writes the whole array. Null for an op on sheets, rows or columns.
+function pathKeys(op: Op): string[] | null {
+    if (op.op !== 'add' && op.op !== 'remove' && op.op !== 'replace') return null;
+    const last = op.path.at(-1);
+    const wholeArray = (op.op !== 'replace' && typeof last === 'number') || last === 'length';
+    const path = [op.id, ...(wholeArray ? op.path.slice(0, -1) : op.path)].map(String);
+    return path.map((_, i) => JSON.stringify(path.slice(0, path.length - i)));
 }
