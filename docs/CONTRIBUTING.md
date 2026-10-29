@@ -179,6 +179,15 @@ Most subsystems have their own doc in `docs/`.
 
 The rules, and the checklist a change passes before review, are in [CODE-STANDARDS.md](CODE-STANDARDS.md).
 
+### Commit messages
+
+A commit message is read in `git log --oneline`, by someone who doesn't know the code yet.
+
+- **Subject**: `area: what changed`, at most 72 characters, no period. The area is an app, package or domain (`sheets`, `drive`, `auth`, `docs`). Say what a user or caller now gets, not every function touched: `sheets: undo keeps a peer's edits after a row insert`.
+- **Body**, only when the subject isn't enough: after a blank line, a few short sentences on why, and what a reviewer should know (a limit, a trade-off, a follow-up). Leave out lists of renamed symbols, measurements and test names; the diff, the tests and the domain doc hold those.
+- One change per commit. A subject that needs "and" twice is two commits.
+- No AI co-author trailers.
+
 ## License
 
 Contributions are licensed under [MIT](../LICENSE.txt), same as the rest of the project.
