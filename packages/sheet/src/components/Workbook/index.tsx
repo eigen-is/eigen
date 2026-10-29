@@ -1,6 +1,7 @@
 // The Workbook: the sheet editor's root component and the context every part of the grid reads. Each edit runs as a
-// recipe through setContextWithProduce, which records the tab's undo entry and sends the edit's ops through onOp. It
-// also owns undo and redo, the clipboard listeners and the imperative API a host reaches through its ref.
+// recipe through setContextWithProduce, which applies it at the call, records the tab's undo entry and sends the edit's
+// ops through onOp before it returns. React only renders the result. It also owns undo and redo, the clipboard
+// listeners and the imperative API a host reaches through its ref.
 
 import { formatWithLabels, matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { isSketchCapped, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
@@ -29,7 +30,7 @@ import { WorkbookContext } from '../../context';
 import { ModalProvider } from '../../context/modal';
 import { copySheetChartSpec, resolveRangeChartData, seriesName } from '../../engine/chart-data';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
-import type { ChartPanelState, Context, GlobalCache, History, Op, Settings, Sheet as SheetType } from '../../state';
+import type { ChartPanelState, Context, GlobalCache, Op, Settings, Sheet as SheetType } from '../../state';
 import {
     api,
     applySheetView,
@@ -142,7 +143,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [],
         );
 
-        const [context, setContext] = useState(defaultContext(refs));
+        const [context, setContext] = useState(() => defaultContext(refs));
+        // The workbook with every write so far. A write lands here at its call, and React renders it a moment later. A read
+        // outside render, such as the host's getFlowdata or a paste, reads it here, so it sees an edit made just before.
+        const contextRef = useRef(context);
+        const getContext = useCallback(() => contextRef.current, []);
+        const commit = useCallback((next: Context) => {
+            contextRef.current = next;
+            setContext(next);
+        }, []);
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(
@@ -156,10 +165,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // built the map.
         const warmSheetIdx = getSheetIndex(context, context.currentSheetId);
         const dataReady = warmSheetIdx != null && (context.sheets?.[warmSheetIdx]?.data?.length ?? 0) > 0;
-        // biome-ignore lint/correctness/useExhaustiveDependencies: warm once when data first loads; depending on `context` would re-run and cancel the scheduled idle build on every selection change
         useEffect(() => {
             if (!dataReady) return;
-            const run = () => warmFormulaCellInfoMap(context);
+            const run = () => warmFormulaCellInfoMap(contextRef.current);
             if (typeof requestIdleCallback === 'function') {
                 const id = requestIdleCallback(run, { timeout: 2000 });
                 return () => cancelIdleCallback(id);
@@ -170,108 +178,90 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
-                setContext((ctx_) => {
-                    // Sync scroll position from globalCache into the immer draft.
-                    // Scroll state lives in globalCache to avoid re-rendering all
-                    // context consumers on every scroll tick. We lazily sync it here
-                    // so that business logic (e.g. handleCellAreaMouseDown) that reads
-                    // ctx.scrollLeft/ctx.scrollTop inside recipes gets fresh values.
-                    const syncScroll = (ctx: Context) => {
-                        ctx.scrollLeft = globalCache.current.scrollLeft;
-                        ctx.scrollTop = globalCache.current.scrollTop;
-                    };
+                const ctx_ = contextRef.current;
+                // Sync scroll position from globalCache into the immer draft.
+                // Scroll state lives in globalCache to avoid re-rendering all
+                // context consumers on every scroll tick. We lazily sync it here
+                // so that business logic (e.g. handleCellAreaMouseDown) that reads
+                // ctx.scrollLeft/ctx.scrollTop inside recipes gets fresh values.
+                const syncScroll = (ctx: Context) => {
+                    ctx.scrollLeft = globalCache.current.scrollLeft;
+                    ctx.scrollTop = globalCache.current.scrollTop;
+                };
 
-                    // Fast path: skip expensive produceWithPatches when no undo
-                    // history is needed (e.g. mouse-move during drag selection).
-                    // produceWithPatches generates JSON patches for every mutation,
-                    // but selection changes are filtered out by filterPatch anyway.
-                    if (options.noHistory) {
-                        return produce(ctx_, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh));
-                    }
+                // Fast path: skip expensive produceWithPatches when no undo
+                // history is needed (e.g. mouse-move during drag selection).
+                // produceWithPatches generates JSON patches for every mutation,
+                // but selection changes are filtered out by filterPatch anyway.
+                if (options.noHistory) {
+                    commit(produce(ctx_, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    return;
+                }
 
-                    const [result, patches, inversePatches] = produceWithPatches(
-                        ctx_,
-                        concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
-                    );
-                    if (patches.length > 0 && !options.noHistory) {
-                        if (options.logPatch) {
-                            console.info('patch', patches);
+                const [result, patches, inversePatches] = produceWithPatches(
+                    ctx_,
+                    concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
+                );
+                commit(result);
+                if (patches.length === 0) return;
+                if (options.logPatch) {
+                    console.info('patch', patches);
+                }
+                const filteredPatches = filterPatch(patches);
+                const filteredInversePatches = filterPatch(inversePatches);
+                if (filteredInversePatches.length === 0) return;
+                const entry = recordEntry(ctx_, result, filteredPatches, filteredInversePatches, options);
+                // noUndo: emit the op (peers need the swap/correction) but record no local
+                // undo entry, so a cross-mount paste stays a single ⌘Z.
+                if (!options.noUndo) {
+                    const { undoList, undoGesture } = globalCache.current;
+                    const last = undoList.at(-1);
+                    if (undoGesture && last?.gesture === undoGesture) {
+                        const [patch] = entry.patches;
+                        const previous = last.patches.at(-1);
+                        // A field typed key by key keeps its first old value and its latest new one.
+                        if (
+                            entry.patches.length === 1 &&
+                            patch.op === 'replace' &&
+                            previous?.op === 'replace' &&
+                            isEqual(previous.path, patch.path)
+                        ) {
+                            last.patches[last.patches.length - 1] = patch;
+                        } else {
+                            last.patches.push(...entry.patches);
+                            last.inversePatches.unshift(...entry.inversePatches);
                         }
-                        const filteredPatches = filterPatch(patches);
-                        const filteredInversePatches = filterPatch(inversePatches);
-                        if (filteredInversePatches.length > 0) {
-                            const entry = recordEntry(ctx_, result, filteredPatches, filteredInversePatches, options);
-                            // noUndo: emit the op (peers need the swap/correction) but record no local
-                            // undo entry, so a cross-mount paste stays a single ⌘Z.
-                            if (!options.noUndo) {
-                                const { undoList, undoGesture } = globalCache.current;
-                                const last = undoList.at(-1);
-                                if (undoGesture && last?.gesture === undoGesture) {
-                                    const [patch] = entry.patches;
-                                    const previous = last.patches.at(-1);
-                                    // A field typed key by key keeps its first old value and its latest new one.
-                                    if (
-                                        entry.patches.length === 1 &&
-                                        patch.op === 'replace' &&
-                                        previous?.op === 'replace' &&
-                                        isEqual(previous.path, patch.path)
-                                    ) {
-                                        last.patches[last.patches.length - 1] = patch;
-                                    } else {
-                                        last.patches.push(...entry.patches);
-                                        last.inversePatches.unshift(...entry.inversePatches);
-                                    }
-                                } else {
-                                    pushEntry(undoList, { ...entry, gesture: undoGesture });
-                                }
-                                globalCache.current.redoList = [];
-                            }
-                            onOp?.(patchToOp(result, filteredPatches, entry.options));
-                        }
+                    } else {
+                        pushEntry(undoList, { ...entry, gesture: undoGesture });
                     }
-                    return result;
-                });
+                    globalCache.current.redoList = [];
+                }
+                onOp?.(patchToOp(result, filteredPatches, entry.options));
             },
-            [onOp],
+            [commit, onOp],
         );
 
-        // The entry moves to the other stack in the updater, as a peer batch shifts the stacks in its own, so the two
-        // happen in call order. React may run an updater twice, and the entry moves once.
         const handleUndo = useCallback(() => {
-            if (context.allowEdit === false) return;
-            let moved = false;
-            let entry: History | undefined;
-            setContext((ctx_) => {
-                if (!moved) {
-                    moved = true;
-                    const { undoList, redoList } = globalCache.current;
-                    entry = undoList.pop();
-                    if (entry) redoList.push(entry);
-                }
-                if (!entry) return ctx_;
-                const { ctx, ops } = undoEntry(ctx_, entry);
-                if (ops.length > 0) onOp?.(ops);
-                return ctx;
-            });
-        }, [onOp, context.allowEdit]);
+            if (contextRef.current.allowEdit === false) return;
+            const { undoList, redoList } = globalCache.current;
+            const entry = undoList.pop();
+            if (!entry) return;
+            redoList.push(entry);
+            const { ctx, ops } = undoEntry(contextRef.current, entry);
+            commit(ctx);
+            if (ops.length > 0) onOp?.(ops);
+        }, [commit, onOp]);
 
         const handleRedo = useCallback(() => {
-            if (context.allowEdit === false) return;
-            let moved = false;
-            let entry: History | undefined;
-            setContext((ctx_) => {
-                if (!moved) {
-                    moved = true;
-                    const { undoList, redoList } = globalCache.current;
-                    entry = redoList.pop();
-                    if (entry) undoList.push(entry);
-                }
-                if (!entry) return ctx_;
-                const { ctx, ops } = redoEntry(ctx_, entry);
-                if (ops.length > 0) onOp?.(ops);
-                return ctx;
-            });
-        }, [onOp, context.allowEdit]);
+            if (contextRef.current.allowEdit === false) return;
+            const { undoList, redoList } = globalCache.current;
+            const entry = redoList.pop();
+            if (!entry) return;
+            undoList.push(entry);
+            const { ctx, ops } = redoEntry(contextRef.current, entry);
+            commit(ctx);
+            if (ops.length > 0) onOp?.(ops);
+        }, [commit, onOp]);
 
         useEffect(() => {
             if (context.selections != null) {
@@ -321,13 +311,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const providerValue = useMemo(
             () => ({
                 context,
+                getContext,
                 setContext: setContextWithProduce,
                 settings: mergedSettings,
                 handleUndo,
                 handleRedo,
                 refs,
             }),
-            [context, handleRedo, handleUndo, mergedSettings, refs, setContextWithProduce],
+            [context, getContext, handleRedo, handleUndo, mergedSettings, refs, setContextWithProduce],
         );
 
         useEffect(() => {
@@ -448,7 +439,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // Undo and redo run ahead of the grid's handler: handleUndo and handleRedo call setContext
                 // themselves and can't nest in setContextWithProduce. An open cell editor leaves them to the
                 // browser, which undoes the typing, as Google Sheets does.
-                if (context.editingCellPosition.length === 0) {
+                if (contextRef.current.editingCellPosition.length === 0) {
                     if (matchesKeyboardEvent(nativeEvent, SHEET_HOTKEYS.undo)) {
                         handleUndo();
                         e.stopPropagation();
@@ -479,7 +470,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     );
                 });
             },
-            [context.editingCellPosition.length, handleRedo, handleUndo, setContextWithProduce],
+            [handleRedo, handleUndo, setContextWithProduce],
         );
 
         const onCopy = useCallback(
@@ -487,17 +478,18 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // A text field beside a selected chart or image (the chart panel's title, the image panel's
                 // width) copies its own text.
                 const floating = !isTypingTarget();
+                const ctx = contextRef.current;
                 // A selected chart copies itself with its ranges read into inline data, the one thing every
                 // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
                 // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
                 // ctx.sheets, not the editable current sheet, so a viewer copies too.
                 if (activeChart && floating) {
-                    const item = sheetChartClipboardItem(context, activeChart);
+                    const item = sheetChartClipboardItem(ctx, activeChart);
                     if (!item) return;
                     e.preventDefault();
                     writeEigenClipboard(e, { version: 1, items: [item] });
                     globalCache.current.copiedChart = { inline: item.parts, chart: activeChart };
-                    if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
+                    if (e.type === 'cut' && ctx.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                     return;
                 }
                 // A selected floating image takes precedence over the pending cell copy: its
@@ -516,7 +508,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             box: { width: activeImage.width, height: activeImage.height, angle: activeImage.angle },
                         });
                         writeEigenClipboard(e, { version: 1, items: [item] });
-                        if (e.type === 'cut' && context.allowEdit !== false) setContextWithProduce(deleteActiveObject);
+                        if (e.type === 'cut' && ctx.allowEdit !== false) setContextWithProduce(deleteActiveObject);
                         return;
                     }
                 }
@@ -531,11 +523,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // a real table, and the custom MIME lands for same-origin reads.
                 const eigenData: EigenClipboardData = {
                     version: 1,
-                    items: [buildCellRangeClipboardItem(context, pending.cellText)],
+                    items: [buildCellRangeClipboardItem(ctx, pending.cellText)],
                 };
                 writeEigenClipboard(e, eigenData, pending.plainText, pending.html);
             },
-            [activeChart, activeImage, context, mergedSettings.hooks, setContextWithProduce],
+            [activeChart, activeImage, mergedSettings.hooks, setContextWithProduce],
         );
 
         const onPaste = useCallback(
@@ -543,6 +535,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // deal with multi instance case, only the focused sheet handles the paste; a selected image or
                 // chart holds the focus
                 const { activeElement } = document;
+                const ctx = contextRef.current;
                 if (
                     cellInput.current === activeElement ||
                     activeElement?.className === 'sheet-overlay' ||
@@ -552,7 +545,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // selectionCache, and a paste the grid passes on or takes without handlePaste ends that wait,
                     // so a later paste into the editor can't become a grid paste that closes it.
                     const { clipboardData } = e;
-                    if (!clipboardData || context.editingCellPosition.length > 0) {
+                    if (!clipboardData || ctx.editingCellPosition.length > 0) {
                         selectionCache.isPasteAction = false;
                         return;
                     }
@@ -650,8 +643,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML
                     // and a live element's innerHTML loads <img> and fires its onerror even detached.
                     const trList = new DOMParser().parseFromString(txtdata, 'text/html').querySelectorAll('table tr');
-                    const rowCount = getFlowdata(context)?.length ?? 0;
-                    const range = context.selections;
+                    const rowCount = getFlowdata(ctx)?.length ?? 0;
+                    const range = ctx.selections;
                     const firstRow = range?.[0]?.row[0];
                     const rowToBeAdded = firstRow == null ? 0 : trList.length + firstRow - rowCount;
                     if (rowToBeAdded > 0) {
@@ -660,7 +653,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             index: rowCount - 1,
                             count: rowToBeAdded,
                             direction: 'rightbottom',
-                            id: context.currentSheetId,
+                            id: ctx.currentSheetId,
                         };
                         setContextWithProduce(
                             (draftCtx) => {
@@ -681,7 +674,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     });
                 }
             },
-            [context, setContextWithProduce, mergedSettings.hooks],
+            [setContextWithProduce, mergedSettings.hooks],
         );
 
         useEffect(() => {
@@ -698,8 +691,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // expose APIs
         useImperativeHandle(
             ref,
-            () => generateAPIs(context, setContextWithProduce, handleUndo, handleRedo, globalCache.current),
-            [context, setContextWithProduce, handleUndo, handleRedo],
+            () => generateAPIs(getContext, setContextWithProduce, handleUndo, handleRedo, globalCache.current),
+            [getContext, setContextWithProduce, handleUndo, handleRedo],
         );
 
         const i = getSheetIndex(context, context.currentSheetId);

@@ -1,3 +1,7 @@
+// The React context the Workbook provides to every part of the grid: the workbook it renders, the way to write it, the
+// settings, the DOM refs and undo and redo. A component renders from `context` and reads `getContext()` in an event
+// handler, which also sees a write made since the last render.
+
 import React from 'react';
 import type { Context, GlobalCache, PatchOptions, Settings } from '../state';
 import { defaultContext, defaultSettings } from '../state';
@@ -44,15 +48,19 @@ const defaultRefs: RefValues = {
     workbookContainer: React.createRef<HTMLDivElement | null>(),
 };
 
+const defaultWorkbook = defaultContext(defaultRefs);
+
 const WorkbookContext = React.createContext<{
     context: Context;
+    getContext: () => Context;
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void;
     settings: Required<Settings>;
     refs: RefValues;
     handleUndo: () => void;
     handleRedo: () => void;
 }>({
-    context: defaultContext(defaultRefs),
+    context: defaultWorkbook,
+    getContext: () => defaultWorkbook,
     setContext: () => {},
     settings: defaultSettings,
     handleUndo: () => {},

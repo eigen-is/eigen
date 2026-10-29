@@ -55,7 +55,7 @@ function applyPeerOps(ctx: Context, ops: Op[]): Context {
         next = produce(next, recipe);
     };
     generateAPIs(
-        ctx,
+        () => next,
         setContext,
         () => {},
         () => {},
