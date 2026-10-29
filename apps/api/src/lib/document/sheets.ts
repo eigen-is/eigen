@@ -1,9 +1,16 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[] for an export, a
-// preview or a search extract, replaying the pending ops over the snapshot as a browser does. An xlsx import writes it:
-// a replace as a new snapshot, an insert as addSheet ops after the sheets an open tab shows.
+// preview or a search extract, replaying the pending ops over the snapshot as a browser does, and folds the ops into a
+// new snapshot when the document closes. An xlsx import writes it: a replace as a new snapshot, an insert as addSheet
+// ops after the sheets an open tab shows.
 
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot } from '@workspace/lib/sheets';
+import {
+    decodeSheetsSnapshot,
+    decodeSheetsWorkbook,
+    encodeSheetsSnapshot,
+    readSheetsSnapshotJson,
+    writeSheetsSnapshot,
+} from '@workspace/lib/sheets';
 import {
     copySheetName,
     createDefaultSheets,
@@ -61,9 +68,17 @@ export function readSheetsFromDoc(
     }
 }
 
-// The workbook's snapshot JSON; undefined before the first flush.
-export function readSheetsSnapshotJson(doc: Y.Doc): string | undefined {
-    return doc.getMap<string>('state').get('snapshot');
+// A compaction, in the transform process: the log replayed over the snapshot, encoded as the import encodes it, so
+// the main thread can swap it in and drop the batches. A batch the replay rejects is skipped with a warning, as every
+// reader skips it, and goes with the rest. A workbook with no snapshot yet starts from the default sheets the editor
+// computed its edits against. The result stays computed only while no sheet needs the recalc an export gives it, such
+// as a tab an import added without a calc chain.
+export function compactSheetsSnapshot(snapshotJson: string | null, batches: Op[][]): string {
+    const { sheets, computed } = snapshotJson
+        ? decodeSheetsWorkbook(snapshotJson)
+        : { sheets: createDefaultSheets(), computed: true };
+    const replayed = replaySheetsOps(sheets, batches);
+    return encodeSheetsSnapshot(replayed, { computed: computed && !sheetsNeedRecalc(replayed) });
 }
 
 // The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first flush,
@@ -75,10 +90,10 @@ export function readLiveSheets(doc: Y.Doc): Sheet[] {
 }
 
 // A replacing import's commit. The transform's snapshot goes into the live doc as it came, never parsed here, and the
-// pending ops go with the workbook they edited.
+// pending ops go with the workbook they edited. The snapshot starts a fresh base, so an open tab loads it anew.
 export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string): void {
     doc.transact(() => {
-        doc.getMap<string>('state').set('snapshot', snapshotJson);
+        writeSheetsSnapshot(doc, snapshotJson, null);
         const ops = doc.getArray('ops');
         if (ops.length > 0) ops.delete(0, ops.length);
     });

@@ -39,6 +39,9 @@ export const TRANSFORM_LIMITS: Record<
     // Search reindexing: nobody waits on it, but a stuck job must not hold the single
     // active child away from user-facing work. It reuses the preview cost.
     'extract-text': { deadlineMs: 30_000, admissionCostMs: 15_000 },
+    // A workbook's log folded at its close: a decode, a replay and an encode, less than an export does. It runs in the
+    // background and holds the one child, so it gets a preview's cost and room for a large workbook.
+    compact: { deadlineMs: 60_000, admissionCostMs: 15_000 },
 };
 
 const MAX_ACTIVE_CHILDREN = 1;

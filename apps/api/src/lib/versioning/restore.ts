@@ -2,13 +2,12 @@
 // picks a version in the history panel. It first saves the current state as a version of its own. An
 // open document then takes the old state in place, so connected editors follow without a reload.
 
-import { isCurrentSheetsSnapshot } from '@workspace/lib/sheets';
+import { isCurrentSheetsSnapshot, readSheetsSnapshotJson } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS, isCollabType } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
-import { readSheetsSnapshotJson } from '../document/sheets';
 import type { Drive } from '../drive';
 import type { Mount } from '../mount/mount';
 import type { RetentionPolicy } from './retention';

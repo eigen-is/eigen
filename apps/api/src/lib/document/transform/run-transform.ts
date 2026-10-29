@@ -4,6 +4,7 @@
 // is no main-thread fallback: a runner 503 and a controlled document error keep their status, an import or a search
 // extract out of memory is a file too large, a search extract that timed out too, and any other failure throws.
 
+import type { Op } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { YjsStatePayload } from '../../collab/yjs-loader';
 import { ApiError } from '../../core/errors';
@@ -230,4 +231,18 @@ export async function runImportToSlidesUpdate(
 ): Promise<SlidesImportTransformResult & { warnings: TransformWarning[] }> {
     const { result, warnings } = await runTransformRequest({ ...job, data }, opts);
     return { ...result, warnings };
+}
+
+// A workbook's log folded into its snapshot, in the background. The signal ends the job wherever it is, queued or
+// running, so the caller bounds the whole wait with it.
+export async function runSheetsCompaction(
+    snapshot: string | null,
+    batches: Op[][],
+    signal: AbortSignal,
+): Promise<string> {
+    const { result } = await runTransformRequest(
+        { kind: 'compact', documentType: 'eigensheets', snapshot, batches },
+        { priority: 'background', signal },
+    );
+    return new TextDecoder().decode(result.snapshot);
 }
