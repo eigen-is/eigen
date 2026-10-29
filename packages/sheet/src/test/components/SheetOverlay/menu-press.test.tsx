@@ -53,6 +53,7 @@ async function renderOverlay() {
                 {
                     value: {
                         context,
+                        getContext: () => context,
                         setContext: () => {},
                         settings: defaultSettings,
                         refs,

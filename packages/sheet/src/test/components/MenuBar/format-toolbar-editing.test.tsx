@@ -82,6 +82,7 @@ async function openEditor(html: string) {
                 {
                     value: {
                         context,
+                        getContext: () => context,
                         setContext: (recipe: (ctx: Context) => void) => {
                             context = produce(context, recipe);
                             render();

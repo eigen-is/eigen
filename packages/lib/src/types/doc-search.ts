@@ -38,9 +38,8 @@ export type DocSearchController = {
     // opens plain search.
     canReplace?: boolean;
     // Both methods perform the edit AND return the FRESH post-edit match list, which the provider
-    // ADOPTS — it never re-runs search() after an edit (sheets' React context is one render behind
-    // then). Docs re-searches synchronously after view.dispatch; sheets collects on a synchronously
-    // produced next-state inside the same commit. The query is EXPLICIT on both — impls MUST NOT
+    // ADOPTS instead of re-running search(). Docs re-searches synchronously after view.dispatch;
+    // sheets collects on the workbook the edit left. The query is EXPLICIT on both — impls MUST NOT
     // read a cached last-search term: the palette calls search() on this same controller between a
     // bar session's calls (same interleave as the id rule above). preserveCase is a separate arg
     // (a replace-only concern search()/buildSearchRegex never read); the impl reapplies it via
