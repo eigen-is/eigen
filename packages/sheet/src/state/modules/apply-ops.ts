@@ -1,16 +1,19 @@
 // Applies one op batch to the editor's context, the way replaySheetsOps applies it to a joiner's sheets: the sheet and
 // row or column ops first, then the cell and field patches, resolved against the sheets those ops left. A batch applies
-// whole or not at all. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or
-// deletes rows, go through it, so the client that sends a batch, the peers that take it and a joiner all end the same.
-// It also says which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those, and moves
-// an open cell editor with its cell.
+// whole or not at all, and a sheet or row op whose value fails the replay's shape check is skipped, as the replay skips
+// it. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or deletes rows, go
+// through it, so the client that sends a batch, the peers that take it and a joiner all end the same. It also says
+// which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those, and moves an open cell
+// editor with its cell.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, current, produce } from 'immer';
+import { asDeleteValue, asInsertValue, asSheet } from '../../engine/replay-ops';
 import { RowColError } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Sheet } from '../types';
+import type { PatchOptions } from '../utils';
 import { getSheetIndex, opToPatch } from '../utils';
 import { cancelNormalSelected } from './cell';
 import { createFilterOptions } from './filter';
@@ -45,17 +48,27 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
                 // force: a peer's op lands for a read-only viewer too, or the grid and the metadata patches part ways.
                 // The op names its sheet, as the replay reads it, whatever its value carries.
                 if ((op.op === 'insertRowCol' || op.op === 'deleteRowCol') && id) {
+                    const insert = op.op === 'insertRowCol' ? asInsertValue(op.value) : null;
+                    const remove = op.op === 'deleteRowCol' ? asDeleteValue(op.value) : null;
+                    const rowCol: PatchOptions = {
+                        insertRowColOp: insert ? { ...insert, id } : undefined,
+                        deleteRowColOp: remove ? { ...remove, id } : undefined,
+                    };
+                    const { insertRowColOp, deleteRowColOp } = rowCol;
+                    if (!insertRowColOp && !deleteRowColOp) continue;
                     const sheets = current(draft.sheets);
                     const applied = skipRowColError(() => {
-                        if (op.op === 'insertRowCol') insertRowCol(draft, { ...op.value, id }, false, true);
-                        else deleteRowCol(draft, { ...op.value, id }, true);
+                        if (insertRowColOp) insertRowCol(draft, insertRowColOp, false, true);
+                        else if (deleteRowColOp) deleteRowCol(draft, deleteRowColOp, true);
                     });
                     if (!applied) continue;
                     moved.push({ op, sheets });
-                    if (id === draft.currentSheetId) followEditor(draft, op, id);
-                } else if (op.op === 'addSheet' && op.value?.id) {
+                    if (id === draft.currentSheetId) followEditor(draft, rowCol);
+                } else if (op.op === 'addSheet') {
+                    const sheet = asSheet(op.value);
+                    if (!sheet) continue;
                     // addSheet keeps the value it is given, so the op itself never ends up in the frozen context.
-                    const value = cloneDeep(op.value);
+                    const value = cloneDeep(sheet);
                     addSheet(draft, value.id, false, undefined, value, true);
                     const index = getSheetIndex(draft, value.id);
                     if (index == null) continue;
@@ -86,12 +99,10 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
 
 // An open cell editor moves with its cell, so a commit writes where the person was typing, not into the row that slid
 // under it. A delete of that cell closes the editor without writing.
-function followEditor(draft: Context, op: Op, id: string) {
+function followEditor(draft: Context, rowCol: PatchOptions) {
     const [r, c] = draft.editingCellPosition;
     if (r == null || c == null) return;
-    const move = rowColMove(
-        op.op === 'insertRowCol' ? { insertRowColOp: { ...op.value, id } } : { deleteRowColOp: { ...op.value, id } },
-    );
+    const move = rowColMove(rowCol);
     if (!move) return;
     const row = move.type === 'row';
     const moved = move.to(row ? r : c);
