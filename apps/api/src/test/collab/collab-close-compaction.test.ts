@@ -52,12 +52,15 @@ type StubbedRun = {
     settle: (response: DocumentTransformResponse) => void;
 };
 
-// The runner answers when the test says so, so a test can act while a compaction is in flight.
+// The runner answers a compaction when the test says so, so a test can act while one is in flight. Other jobs, such as
+// the search extract a real close queues, run as usual.
 function stubRunner() {
     const runs: StubbedRun[] = [];
     const original = documentTransformRunner.run;
-    documentTransformRunner.run = (request, opts) =>
-        new Promise((resolve) => runs.push({ request, signal: opts.signal, settle: resolve }));
+    documentTransformRunner.run = (request, opts) => {
+        if (request.kind !== 'compact') return original.call(documentTransformRunner, request, opts);
+        return new Promise((resolve) => runs.push({ request, signal: opts.signal, settle: resolve }));
+    };
     return { runs, restore: () => (documentTransformRunner.run = original) };
 }
 
@@ -228,7 +231,7 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
-    test('an update during the run drops the swap', async () => {
+    test('an update during the run drops the swap, and the document lingers again before the next try', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-update', [edit(0, 0, 1)]);
         try {
@@ -240,6 +243,13 @@ describe('CollabDocument compacts a workbook at close', () => {
 
             expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(before);
             expect(sheet.ops.length).toBe(2);
+            expect(sheet.closes()).toBe(0);
+
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
+            expect(stub.runs).toHaveLength(2);
+            succeed(stub.runs[1]);
+            await tick();
+            expect(sheet.ops.length).toBe(0);
             expect(sheet.closes()).toBe(1);
         } finally {
             stub.restore();
@@ -266,33 +276,48 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
-    test('three failed runs in a row stop the retries for the life of the document', async () => {
+    test('three failed runs in a row, each closing the document, stop the retries until the API restarts', async () => {
         const stub = stubRunner();
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
-        const sheet = await openLingeringSheet('compaction-gives-up', [edit(0, 0, 1)]);
+        const created = await home.drive.create(mountId, rootId, 'compaction-gives-up', 'sheets');
+        const open = () => home.drive.getCollabDocument(mountId, created.id);
+        const seeded = await open();
+        seeded.doc.transact(() => {
+            seeded.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(SHEETS, { computed: true }));
+            seeded.doc.getArray<Op[]>('ops').push([edit(0, 0, 1)]);
+        });
+        let onClose = () => {};
+        const originalClose = home.drive.closeCollabDocument.bind(home.drive);
+        home.drive.closeCollabDocument = async (...args: Parameters<typeof originalClose>) => {
+            await originalClose(...args);
+            onClose();
+        };
         try {
-            for (let i = 0; i < 3; i++) {
-                lingerOut(sheet.doc);
-                expect(stub.runs).toHaveLength(i + 1);
-                fail(stub.runs[i]);
-                await tick();
-                // A failed run still closes the document.
-                expect(sheet.closes()).toBe(i + 1);
+            const opened = new Set<CollabDocument>();
+            for (let i = 0; i < 4; i++) {
+                const collab = await open();
+                opened.add(collab);
+                expect(collab.doc.getArray('ops').length).toBe(1);
+                const closed = new Promise<void>((resolve) => (onClose = resolve));
+                jest.useFakeTimers();
+                lingerOut(collab);
+                jest.useRealTimers();
+                expect(stub.runs).toHaveLength(Math.min(i + 1, 3));
+                if (i < 3) fail(stub.runs[i]);
+                await closed;
+                expect(home.drive.hasCollabDocument(mountId, created.id)).toBe(false);
             }
-            lingerOut(sheet.doc);
-            expect(stub.runs).toHaveLength(3);
-            expect(sheet.closes()).toBe(4);
-            expect(sheet.ops.length).toBe(1);
-            expect(warn.mock.calls.some((args) => String(args[0]).includes('gave up'))).toBe(true);
+            // Every open was a new document, read back from data.db.
+            expect(opened.size).toBe(4);
+            expect(warn.mock.calls.filter((args) => String(args[0]).includes('gave up'))).toHaveLength(1);
         } finally {
+            home.drive.closeCollabDocument = originalClose;
             warn.mockRestore();
             stub.restore();
-            sheet.restore();
-            sheet.doc.destruct();
         }
-    });
+    }, 30_000);
 
-    test('a second close timer during the run starts no second run and closes once', async () => {
+    test('a subscribe and a leave during the run drop the swap, and the document lingers again before the next try', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-one-run', [edit(0, 0, 1)]);
         try {
@@ -303,6 +328,13 @@ describe('CollabDocument compacts a workbook at close', () => {
             succeed(stub.runs[0]);
             await tick();
             expect(sheet.ops.length).toBe(1);
+            expect(sheet.closes()).toBe(0);
+
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
+            expect(stub.runs).toHaveLength(2);
+            succeed(stub.runs[1]);
+            await tick();
+            expect(sheet.ops.length).toBe(0);
             expect(sheet.closes()).toBe(1);
         } finally {
             stub.restore();

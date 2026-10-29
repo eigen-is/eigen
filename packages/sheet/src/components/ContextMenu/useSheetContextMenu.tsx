@@ -1,3 +1,7 @@
+// The grid's right-click menu, with items for a cell, a row header or a column header, such as the clipboard, inserting
+// and deleting rows and columns, hiding, sorting and filters. useSheetContextMenu selects what was clicked and opens the
+// menu for one area, on a right click or a long press on touch.
+
 import { CommentLifecycleMenuItems } from '@workspace/ui/components/comments';
 import {
     ClipboardMenuItems,
@@ -92,9 +96,10 @@ function InsertItem({
     direction: 'lefttop' | 'rightbottom';
     label: string;
 }) {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { getContext, setContext } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const insert = () => {
+        const context = getContext();
         const sel = context.selections?.[0];
         if (!sel) return;
         const axis = type === 'row' ? sel.row : sel.column;
@@ -122,9 +127,10 @@ function InsertItem({
 }
 
 function DeleteItem({ type, label }: { type: RowColType; label: string }) {
-    const { context, setContext } = useContext(WorkbookContext);
+    const { getContext, setContext } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const remove = () => {
+        const context = getContext();
         const sel = context.selections?.[0];
         if (!sel) return;
         const [start, end] = type === 'row' ? sel.row : sel.column;

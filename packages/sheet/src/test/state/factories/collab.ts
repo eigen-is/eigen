@@ -61,7 +61,7 @@ export function receive(ctx: Context, ops: Op[], history: Tab['history'] = { und
         next = produce(next, recipe);
     };
     generateAPIs(
-        ctx,
+        () => next,
         setContext,
         () => {},
         () => {},

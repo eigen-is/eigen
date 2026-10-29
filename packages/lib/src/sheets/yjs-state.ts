@@ -1,7 +1,7 @@
-// The layout of a workbook's Yjs `state` map, which holds the stored snapshot and the base it starts. Every reader and
-// writer of that map goes through here, such as the server's export and compaction, an import, a version restore and
-// the editor tab. A base is a fresh id stamped with each new snapshot. A compaction names the base it folded the log
-// into, so a tab can tell a compaction of what it already holds from any other new snapshot.
+// The layout of a workbook's Yjs `state` map, which holds the stored snapshot and the base it starts. Its readers and
+// writers, such as the server's export and compaction, an import or a version restore, share these helpers so they
+// agree on that layout. A base is a fresh id stamped with each new snapshot. A compaction names the base it folded the
+// log into, so a tab can tell a compaction of what it already holds from any other new snapshot.
 
 import type * as Y from 'yjs';
 import { isRecord } from '../core/guards';

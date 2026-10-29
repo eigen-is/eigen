@@ -1,11 +1,11 @@
 // The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops, undo and redo, the
 // floating images and charts, search and replace. Its writes run as recipes on the workbook's context, as the
-// editor's own edits do.
+// editor's own edits do. A write applies at its call, so a read right after it, such as getFlowdata, sees it.
 
 import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
 import type { Box, ZOp } from '@workspace/lib/vector';
-import { current, produce } from 'immer';
+import { current } from 'immer';
 import type { SetContextOptions } from '../../context';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { setUpChartRange } from '../../engine/chart-range';
@@ -46,24 +46,21 @@ import {
 } from '../../state';
 
 export function generateAPIs(
-    context: Context,
+    getContext: () => Context,
     setContext: (recipe: (ctx: Context) => void, options?: SetContextOptions) => void,
     handleUndo: () => void,
     handleRedo: () => void,
-    history: Pick<GlobalCache, 'undoList' | 'redoList'>,
+    history: Pick<GlobalCache, 'undoList' | 'redoList' | 'undoGesture'>,
 ) {
     return {
         applyOp: (ops: Op[]) => {
             // A peer's row or column op moves the cells under this tab's undo and redo entries. They shift by the ops
-            // the batch applied, against the sheets it applied them to, once: React may run an updater twice.
-            let shifted = false;
+            // the batch applied, against the sheets it applied them to.
             setContext(
                 (ctx_) => {
                     const applied = applyOpBatch(current(ctx_), ops);
                     if (!applied) return;
                     Object.assign(ctx_, applied.ctx);
-                    if (shifted) return;
-                    shifted = true;
                     for (const { op, sheets } of applied.moved) {
                         history.undoList = shiftEntries(history.undoList, op, sheets, 'undo');
                         history.redoList = shiftEntries(history.redoList, op, sheets, 'redo');
@@ -87,7 +84,7 @@ export function generateAPIs(
         mergeCells: (ranges: Range, type: string, options: api.CommonOptions = {}) =>
             setContext((draftCtx) => api.mergeCells(draftCtx, ranges, type, options)),
 
-        getAllSheets: () => api.getAllSheets(context),
+        getAllSheets: () => api.getAllSheets(getContext()),
 
         addPresences: (newPresences: Presence[]) => {
             setContext((draftCtx) => {
@@ -140,14 +137,12 @@ export function generateAPIs(
         deleteFloatingObject: (ref: FloatingRef) => setContext((draftCtx) => deleteFloatingObject(draftCtx, ref)),
 
         // One op + undo step each, on the current sheet. The id is made here so the caller can
-        // select the new chart; the recipe runs later, so a dry run on this state tells a viewer or
-        // a missing sheet apart, which inserts nothing and returns null.
+        // select the new chart. A viewer or a missing sheet inserts nothing and returns null.
         insertChart: (box: ChartInsertBox, spec: ChartSpec): string | null => {
             const id = crypto.randomUUID();
-            const recipe = (draftCtx: Context) => insertChart(draftCtx, id, box, spec);
-            if (produce(context, recipe) === context) return null;
-            setContext(recipe);
-            return id;
+            const { sheets } = getContext();
+            setContext((draftCtx) => insertChart(draftCtx, id, box, spec));
+            return getContext().sheets === sheets ? null : id;
         },
 
         setChartSpec: (id: string, change: ChartSpecChange) =>
@@ -158,7 +153,7 @@ export function generateAPIs(
 
         // Sets the range up, or says why it holds no chart and writes nothing.
         setChartDataRange: (id: string, ref: CellRangeRef): ChartRangeRefusal | undefined => {
-            const setup = setUpChartRange(ref, createContextResolver(context));
+            const setup = setUpChartRange(ref, createContextResolver(getContext()));
             if (typeof setup === 'string') return setup;
             setContext((draftCtx) => setChartDataRange(draftCtx, id, ref));
         },
@@ -166,19 +161,18 @@ export function generateAPIs(
         // Opens one undo step for a panel edit and returns its release (PropertyGestureContext).
         beginGesture: () => {
             const gesture = {};
-            const cache = context.getRefs().globalCache;
-            cache.undoGesture = gesture;
+            history.undoGesture = gesture;
             return () => {
-                if (cache.undoGesture === gesture) cache.undoGesture = undefined;
+                if (history.undoGesture === gesture) history.undoGesture = undefined;
             };
         },
 
         undo: handleUndo,
         redo: handleRedo,
 
-        getFlowdata: (id?: string | null) => getFlowdata(context, id),
+        getFlowdata: (id?: string | null) => getFlowdata(getContext(), id),
 
-        searchAll: (query: string, opts: DocSearchOptions): SearchResult[] => collectMatches(context, query, opts),
+        searchAll: (query: string, opts: DocSearchOptions): SearchResult[] => collectMatches(getContext(), query, opts),
 
         setSearchHighlights: (cells: SearchHighlight[]) =>
             setContext((draftCtx) => setSearchHighlights(draftCtx, cells), { noHistory: true }),
@@ -187,9 +181,8 @@ export function generateAPIs(
             setContext((draftCtx) => revealSearchMatch(draftCtx, cell), { noHistory: true }),
 
         // Replace rewrites every occurrence in the one targeted cell; replaceAll sweeps every match —
-        // each in ONE setContext recipe (one undo, one op batch). React state updates a render later,
-        // so the fresh post-edit match list is computed on a synchronously produced next-state (the
-        // same pure recipe) and returned; the provider adopts it instead of re-searching stale state.
+        // each in ONE setContext recipe (one undo, one op batch). Both return the match list the edit
+        // leaves, which the provider adopts instead of searching again.
         replace: (
             cell: SearchHighlight,
             query: string,
@@ -201,7 +194,7 @@ export function generateAPIs(
                 replaceSearchMatch(ctx_, cell, query, replacement, opts, preserveCase);
             };
             setContext(recipe);
-            return collectMatches(produce(context, recipe), query, opts);
+            return collectMatches(getContext(), query, opts);
         },
 
         replaceAll: (
@@ -215,8 +208,7 @@ export function generateAPIs(
                 replaced = replaceAllMatches(ctx_, query, replacement, opts, preserveCase);
             };
             setContext(recipe);
-            const next = produce(context, recipe);
-            return { replaced, matches: collectMatches(next, query, opts) };
+            return { replaced, matches: collectMatches(getContext(), query, opts) };
         },
     };
 }

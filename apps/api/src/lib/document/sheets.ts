@@ -69,15 +69,16 @@ export function readSheetsFromDoc(
 }
 
 // A compaction, in the transform process: the log replayed over the snapshot, encoded as the import encodes it, so
-// the main thread can swap it in and drop the batches. It takes the snapshot and the batches as plain data, never the
-// stored doc, because the swap deletes exactly the batches it was handed. A batch the replay rejects is skipped with a
-// warning, as every reader skips it, and goes with the rest. The snapshot keeps its computed flag. A workbook with no
-// snapshot yet starts from the default sheets the editor computed its edits against.
+// the main thread can swap it in and drop the batches. A batch the replay rejects is skipped with a warning, as every
+// reader skips it, and goes with the rest. A workbook with no snapshot yet starts from the default sheets the editor
+// computed its edits against. The result stays computed only while no sheet needs the recalc an export gives it, such
+// as a tab an import added without a calc chain.
 export function compactSheetsSnapshot(snapshotJson: string | null, batches: Op[][]): string {
     const { sheets, computed } = snapshotJson
         ? decodeSheetsWorkbook(snapshotJson)
         : { sheets: createDefaultSheets(), computed: true };
-    return encodeSheetsSnapshot(replaySheetsOps(sheets, batches), { computed });
+    const replayed = replaySheetsOps(sheets, batches);
+    return encodeSheetsSnapshot(replayed, { computed: computed && !sheetsNeedRecalc(replayed) });
 }
 
 // The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first flush,

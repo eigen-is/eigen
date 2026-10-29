@@ -1,3 +1,7 @@
+// The sheets editor's side of in-document search: it turns the Workbook's search, reveal and replace into the
+// shared search controller that callers such as the find bar and the command palette drive. A match id names its
+// cell, so every call works from the id alone.
+
 import type { DocSearchController, DocSearchMatch } from '@workspace/lib/types/doc-search';
 import type { SearchResult, WorkbookInstance } from '@workspace/sheet';
 import type { RefObject } from 'react';
@@ -53,10 +57,9 @@ export function useSheetSearchController(
 
             canReplace: canWrite,
 
-            // Rewrite the matched cell (every occurrence in it), then adopt the RETURNED fresh list —
-            // sheets' React context is a render behind, so the engine computes it on a synchronously
-            // produced next-state. A stale id no-ops inside the engine (the cell's value is
-            // re-checked against the query there) and still returns the fresh list.
+            // Rewrite the matched cell (every occurrence in it), then adopt the RETURNED fresh list. A stale
+            // id no-ops inside the engine (the cell's value is re-checked against the query there) and
+            // still returns the fresh list.
             replace(matchId, query, replacement, opts, preserveCase) {
                 const wb = workbookRef.current;
                 if (!wb) return [];

@@ -119,7 +119,7 @@ export function FxEditor() {
             }
 
             setContext((draftCtx) => {
-                if (context.editingCellPosition.length > 0) {
+                if (draftCtx.editingCellPosition.length > 0) {
                     switch (key) {
                         case 'Enter': {
                             const lastEditingCellPosition = [...draftCtx.editingCellPosition];

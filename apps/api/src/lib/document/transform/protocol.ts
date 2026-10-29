@@ -132,8 +132,7 @@ export type ImportTransformJob = SheetsImportJob | DocImportJob | SlidesImportJo
 export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
 export type BytesTransformJob = BytesPreviewJob | ImportTransformJob;
 
-// A workbook's op log folded into its snapshot when the document closes. It carries what the main thread read from the
-// live doc in one step, not a capture of data.db, because the swap deletes exactly these batches.
+// A workbook's op log folded into its snapshot when the document closes.
 export type SheetsCompactionJob = {
     kind: 'compact';
     documentType: 'eigensheets';

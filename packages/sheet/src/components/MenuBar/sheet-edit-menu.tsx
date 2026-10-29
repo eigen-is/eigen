@@ -35,11 +35,10 @@ import {
 // The MenuBar owns focusFindBarRef and hands it in: a Find pick sets it, so the menu's onCloseAutoFocus
 // skips Radix's focus-restore to the trigger, which would otherwise steal the focus back from the find bar.
 export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
-    const { context, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
+    const { context, getContext, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const docSearchBar = useOptionalDocSearchBar();
 
-    const selection = context.selections?.[0];
     const canUndo = refs.globalCache.undoList.length > 0;
     const canRedo = refs.globalCache.redoList.length > 0;
 
@@ -126,13 +125,14 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() => {
-                                    const row = selection?.row_focus;
+                                    const { selections, currentSheetId } = getContext();
+                                    const row = selections?.[0]?.row_focus;
                                     if (row == null) return;
                                     const deleteRowColOp = {
                                         type: 'row' as const,
                                         start: row,
                                         end: row,
-                                        id: context.currentSheetId,
+                                        id: currentSheetId,
                                     };
                                     setContext(
                                         (draftCtx) => {
@@ -147,13 +147,14 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                             </DropdownMenuItem>
                             <DropdownMenuItem
                                 onClick={() => {
-                                    const col = selection?.column_focus;
+                                    const { selections, currentSheetId } = getContext();
+                                    const col = selections?.[0]?.column_focus;
                                     if (col == null) return;
                                     const deleteRowColOp = {
                                         type: 'column' as const,
                                         start: col,
                                         end: col,
-                                        id: context.currentSheetId,
+                                        id: currentSheetId,
                                     };
                                     setContext(
                                         (draftCtx) => {
