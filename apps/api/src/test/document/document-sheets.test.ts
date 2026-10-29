@@ -958,6 +958,8 @@ describe('document/sheets — compactSheetsSnapshot', () => {
 });
 
 describe('document/sheets — the base a snapshot starts', () => {
+    const sheets = (): Sheet[] => [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+
     test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
         const doc = new Y.Doc();
         writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), 'older');
@@ -984,6 +986,4 @@ describe('document/sheets — the base a snapshot starts', () => {
         expect(readSheetsBase(doc)).toEqual(base);
         doc.destroy();
     });
-
-    const sheets = (): Sheet[] => [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
 });
