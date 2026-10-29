@@ -1,6 +1,6 @@
 # Charts: TODO
 
-This is the backlog for chart kinds and chart features: what Office files hold that Eigen can't draw yet, in the order to add it, and where Eigen draws a chart it does read unlike Office or Google. [CHARTS.md](CHARTS.md) describes how charts work today. Chart bugs and the storage work are in [ROADMAP.md](ROADMAP.md).
+This is the backlog for chart kinds and chart features: what Office files hold that Eigen can't draw yet, in the order to add it, and where Eigen draws a chart it does read unlike Office or Google. [CHARTS.md](CHARTS.md) describes how charts work today. Data-loss bugs and work shared across apps are in [ROADMAP.md](ROADMAP.md).
 
 Eigen draws four kinds: column, bar, line and pie, with column and bar stacked or 100% stacked. `readChart` (`apps/api/src/lib/ooxml/ooxml-chart.ts`) reads 3-D bar, line and pie flat, and brings every other chart in as "<Name> chart not imported" with its title. That includes a combo, a second value axis, a log or reversed value axis and a stacked line. A chartex part (`cx:`, Excel 2016's waterfall, treemap and the rest) has no reader at all.
 
@@ -20,10 +20,8 @@ Ranked by how many corpus files hold one (xlsx, docx and pptx together; files, n
 | 8 | **Stacked and 100% line** | 3 (2 / 0 / 1) | S | The stacking the bars have. |
 | 9 | **Pie of pie, bar of pie** | 6 (5 / 1 / 0) | M | |
 | 10 | **Waterfall** (chartex) | 7 (1 / 4 / 2) | M | A stacked column with an invisible base, plus the first `cx:` reader. |
-| 11 | **Dash, hatch and gradient in a written chart's `c:spPr`** | S–M | `writeChart` writes solid fills and lines only, so a chart's dashed stroke and hatch draw plain in Excel, Word and PowerPoint, and a gradient background goes as its middle color. DrawingML holds each: `a:prstDash`, `a:pattFill` and `a:gradFill`. Map them in `writeChart` and `readChartPartLook`, so all three formats gain them together ([ROADMAP.md](ROADMAP.md), Office charts: the look and Edit Data). The sketch has no equivalent. |
-| 12 | **A pie's radius is sized from labels it then hides** | S | `layoutPie` (`packages/lib/src/charts/pie.ts`) shrinks the radius until every label of a slice of 5% or more fits the frame, and only then hides the labels that touch one placed before them. So a hidden label can still make the pie smaller. Size the radius from the labels that show, or let row 1's spread decide which show first. |
-| 12 | **The other chartex kinds**: box and whisker, funnel, treemap, sunburst, region map | 5, 4, 3, 3, 1 | L each | A new layout each. |
-| 13 | **Stock, surface** | 3 (docx), 4 | M each | |
+| 11 | **The other chartex kinds**: box and whisker, funnel, treemap, sunburst, region map | 5, 4, 3, 3, 1 | L each | A new layout each. |
+| 12 | **Stock, surface** | 3 (docx), 4 | M each | |
 
 A new field should nest inside a part the spec already stores, a per-series field in its series and a per-chart one in its axis, so a tab on an older build keeps it.
 
@@ -53,7 +51,16 @@ Ranked by what a user notices, from a study of how ECharts, Chart.js, Plotly, Ve
 | 8 | **A pinned min gets its own label** | S | A min of 3 ticks at 20, 40 and on, with no label at 3. Excel steps from the min, and Chart.js labels a pinned end (`includeBounds`). A pinned max also decides Excel's zero rule for a line (data of 90 to 100 under a max of 200 ticks from 0 in Excel, from 90 in Eigen). |
 | 9 | **A sheet chart's ticks never repeat a label** | S | A sheet chart formats ticks with the cell format and ignores the step, so an integer format over a 0.5 step reads `0 1 1 2 2`. Ask for fewer ticks while two neighbours format alike, as LibreOffice does (tdf#48041). |
 | 10 | **Read `c:firstSliceAng`** | S | An Excel pie turned by it draws from 12 o'clock (2 of 48 test-file pies). One number on `plots.pie`, drawn by the start angle `layoutPie` already takes. |
-| 11 | **Dash, hatch and gradient in a written chart's `c:spPr`** | S–M | `writeChart` writes solid fills and lines only, so a chart's dashed stroke and hatch draw plain in Excel, and a gradient background draws none. DrawingML holds each: `a:prstDash`, `a:pattFill` and `a:gradFill`. Map them for xlsx now, and for docx and pptx with their chart parts ([ROADMAP.md](ROADMAP.md), Write charts to Office files as charts). The sketch has no equivalent. |
+| 11 | **Dash, hatch and gradient in a written chart's `c:spPr`** | S–M | `writeChart` writes solid fills and lines only, so a chart's dashed stroke and hatch draw plain in Excel, Word and PowerPoint, and a gradient background goes as its middle color. DrawingML holds each: `a:prstDash`, `a:pattFill` and `a:gradFill`. Map them in `writeChart` and `readChartPartLook`, so all three formats gain them together ([Office round trip](#editing-and-the-office-round-trip)). The sketch has no equivalent. |
+| 12 | **A pie's radius is sized from labels it then hides** | S | `layoutPie` (`packages/lib/src/charts/pie.ts`) shrinks the radius until every label of a slice of 5% or more fits the frame, and only then hides the labels that touch one placed before them. So a hidden label can still make the pie smaller. Size the radius from the labels that show, or let row 1's spread decide which show first. |
+
+## Editing and the Office round trip
+
+- **Edit data: embed the Sheets grid** (M–L (about 4–5 days)): The chart Edit data dialog is its own grid in Sheets' look and keys (`packages/ui/src/components/charts/chart-data-dialog.tsx`, [CHARTS.md](CHARTS.md#edit-data-looks-and-types-like-eigen-sheets)): a second keyboard model with no undo, fill handle, column resize or formulas. A probe that mounted a one-sheet Workbook in the dialog worked. First: the keystroke after a Delete is dropped inside the Radix dialog (likely its focus trap against `cellInput.focus()`; no root cause yet). The sheet's module-global copy state (`state/modules/clipboard.ts`, `selectionCache`) and `document` listeners let the main grid take the dialog's copy. Escape mid-edit closes the dialog until `WorkbookInstance` answers `isEditing()`. On Save only numbers and labels survive: formulas flatten, and formats, filters, images and comments go. The cell menu needs an allow-list; touch is unverified.
+
+- **Office charts: Edit Data and line width** ([CHARTS.md](CHARTS.md#a-docx-or-pptx-chart-carries-its-numbers-in-a-workbook-of-its-own)) (S–M): Edit Data on a docx or pptx chart is unverified in desktop Word, PowerPoint and Office for the web. Open an exported doc and deck with every chart kind in desktop Office: each draws, and Edit Data opens and redraws. Add a Series width row in `PaintSections` for line charts. Hatch, gradient and dash are row 11 of [Drawing as Office and Google do](#drawing-as-office-and-google-do).
+
+- **Skip hidden rows and columns (Excel/Google default)** (S–M): `resolveRangeChartData` (`packages/sheet/src/engine/chart-data.ts`) plots hidden rows and columns, so a chart over a filtered table shows the filtered-out rows. Skip what `config.rowhidden` and `colhidden` hide, with a spec field (Excel's `c:plotVisOnly`) carried by the chart panel's Setup and the xlsx writer. The help-center article says hidden cells are included for now.
 
 ## Measuring
 

@@ -11,7 +11,7 @@ A domain doc tells a developer how one part of Eigen works now and why it is bui
 
 Read `docs/CALENDAR.md` for the opening and `docs/COLLAB.md` for the reference sections before you write. What to avoid: narration, catalogues and file tours.
 
-Not domain docs: the backlogs (`ROADMAP*.md`, `SHEETS-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and the operator guide `SELF-HOSTING.md`. The voice rules still apply to them.
+Not domain docs: the backlogs (`ROADMAP*.md`, `*-TODO.md`), the generated `SHARED-PRIMITIVES.md`, the standards and guides (`CODE-STANDARDS.md`, `CODE-EXAMPLES.md`, `REVIEW-STANDARD.md`, `SUPPORT-STYLE-GUIDE.md`, `CONTRIBUTING.md`) and the operator guide `SELF-HOSTING.md`. The voice rules still apply to them.
 
 ## The shape
 

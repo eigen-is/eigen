@@ -150,4 +150,4 @@ Pick it up when a research group, a university or a paying customer asks. Then b
 
 - [DOCS.md § A footnote is an inline node](../DOCS.md#a-footnote-is-an-inline-node-that-holds-its-notes-paragraphs): the pattern the citation follows, an atom whose text is computed in document order.
 - [EXPORT.md § A docx import replaces the document](../EXPORT.md#a-docx-import-replaces-the-document) and [§ A doc's docx is written from its JSON](../EXPORT.md#a-docs-docx-is-written-from-its-json-with-the-editors-css-values): the reader and writer phases 3 and 4 extend.
-- [ROADMAP.md](../ROADMAP.md), the row "Docs: what Word and Google Docs show that a doc can't hold": the gaps this competes with.
+- [DOCS-TODO.md](../DOCS-TODO.md), the row "Docs: what Word and Google Docs show that a doc can't hold": the gaps this competes with.

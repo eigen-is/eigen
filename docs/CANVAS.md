@@ -66,7 +66,7 @@ The reader fills every missing or corrupt text field from the kind's defaults, s
 
 A text box grows to fit its text: `useRichTextAutoFit` (`packages/ui/src/components/vector/text-fit.ts`) writes the measured height, and acts only on `richtext`. A shape keeps its size and lets text that does not fit spill out of it, as PowerPoint does, so a shape never changes under the user's hand. The text area is the box minus `padding` and minus the border, for both.
 
-A drawing's PDF, preview and SVG download are sized from the element boxes (`sceneBounds`), so text that spills past the outermost element of the drawing is cut off there ([ROADMAP](ROADMAP.md)).
+A drawing's PDF, preview and SVG download are sized from the element boxes (`sceneBounds`), so text that spills past the outermost element of the drawing is cut off there ([CANVAS-TODO](CANVAS-TODO.md)).
 
 ## An open path keeps its text but reads as empty
 

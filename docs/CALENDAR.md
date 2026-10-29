@@ -245,7 +245,7 @@ Each series is written as its own resource through `putResource`, the path a Cal
 
 ## An import needs a target calendar
 
-The file routes reach only the caller's own home and team homes, because only the home relay crosses into another user's Home. So a calendar another user shared is no target ([ROADMAP.md](ROADMAP.md)). An export takes `read` and an import `write`, and `free-busy` is no read here.
+The file routes reach only the caller's own home and team homes, because only the home relay crosses into another user's Home. So a calendar another user shared is no target ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)). An export takes `read` and an import `write`, and `free-busy` is no read here.
 
 The "Import to Calendar" file action opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/`). It offers the viewer's own calendars, the team calendars they may write in, or a new one. `useImportToCalendar` deletes a new calendar again when it took no events, and a retry reuses the one it made.
 

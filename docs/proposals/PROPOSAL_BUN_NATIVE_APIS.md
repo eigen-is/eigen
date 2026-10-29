@@ -2,7 +2,7 @@
 
 This page lists the npm packages and `node:*` uses a Bun built-in could still replace, the ones it cannot, and the Bun 1.4 features worth using. Each replacement removes a dependency Eigen has to audit and update. Eigen already uses Bun natively for most runtime work: `S3Client`, `bun:sqlite` (through `drizzle-orm/bun-sqlite`), `Bun.password`, `Bun.CryptoHasher`, `Bun.Glob`, `Bun.semver`, `Bun.spawn`, `Bun.zstd*Sync` and `bun:test`.
 
-**Status:** `Bun.XML` has replaced `fast-xml-parser` and `he`: every XML read goes through `parseXml` (`apps/api/src/lib/core/xml.ts`, the XML reads row of [ARCHITECTURE.md § Backend](../ARCHITECTURE.md#backend)). The rest of this page is not built, and [ROADMAP.md](../ROADMAP.md) keeps its row.
+**Status:** `Bun.XML` has replaced `fast-xml-parser` and `he`: every XML read goes through `parseXml` (`apps/api/src/lib/core/xml.ts`, the XML reads row of [ARCHITECTURE.md § Backend](../ARCHITECTURE.md#backend)). The rest of this page is not built, and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps its row.
 
 ## What 1.4 added
 

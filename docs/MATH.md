@@ -58,7 +58,7 @@ The other rules of the form:
 
 A variant is the Unicode alphanumeric where one exists and `mathvariant` where none does, such as bold-italic digits. MathML draws a lone letter italic, so an upright capital Greek letter is written `mathvariant="normal"` and an italic one as its alphanumeric, 𝛤. Chrome honours only `mathvariant="normal"` but draws the alphanumerics. The writer never writes `display`: whether an equation stands on its own line belongs to the document that holds it.
 
-A separator `mo` carries neither `stretchy="true"` nor `symmetric="true"`. Chromium stretches an infix `|` only when it is marked stretchy (Temml and MathJax add both), so whether a separator grows with a tall part is unchecked, a [ROADMAP](ROADMAP.md) row.
+A separator `mo` carries neither `stretchy="true"` nor `symmetric="true"`. Chromium stretches an infix `|` only when it is marked stretchy (Temml and MathJax add both), so whether a separator grows with a tall part is unchecked, a [DOCS-TODO](DOCS-TODO.md) row.
 
 ## The readers take only what their format shows
 
