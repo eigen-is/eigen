@@ -1,6 +1,7 @@
-// The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops, undo and redo, the
-// floating images and charts, search and replace. Its writes run as recipes on the workbook's context, as the
-// editor's own edits do. A write applies at its call, so a read right after it, such as getFlowdata, sees it.
+// The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops and a replay of the op
+// log, undo and redo, the floating images and charts, search and replace. Its writes run as recipes on the workbook's
+// context, as the editor's own edits do. A write applies at its call, so a read right after it, such as getFlowdata,
+// sees it.
 
 import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
@@ -20,6 +21,7 @@ import type {
     Range,
     SearchHighlight,
     SearchResult,
+    Sheet,
 } from '../../state';
 import {
     api,
@@ -72,6 +74,24 @@ export function generateAPIs(
                 { noHistory: true },
             );
             return accepted;
+        },
+
+        // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
+        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. Only the
+        // `fresh` batches, those new to this tab, move an open cell editor, since it followed the others once. The undo
+        // and redo entries were recorded against the order that is gone, so both stacks empty.
+        replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>) => {
+            setContext(
+                (ctx_) => {
+                    let next: Context = { ...current(ctx_), sheets: base };
+                    for (const ops of batches) next = applyOpBatch(next, ops, fresh.has(ops))?.ctx ?? next;
+                    Object.assign(ctx_, next);
+                },
+                { noHistory: true },
+            );
+            getContext().formulaCache.resetEngine();
+            history.undoList = [];
+            history.redoList = [];
         },
 
         setCellFormat: (

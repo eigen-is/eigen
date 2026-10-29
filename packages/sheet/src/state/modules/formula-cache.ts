@@ -178,6 +178,12 @@ export class FormulaCache {
         this.engine = new FormulaEngine();
     }
 
+    // Forgets what the engine learned from the cells, for sheets swapped under it. The reference picker's state stays.
+    public resetEngine() {
+        this.engine = new FormulaEngine();
+        this.cellTextToIndexList = {};
+    }
+
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;

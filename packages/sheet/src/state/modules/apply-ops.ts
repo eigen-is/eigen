@@ -3,8 +3,8 @@
 // whole or not at all, and a sheet or row op whose value fails the replay's shape check is skipped, as the replay skips
 // it. Callers such as the Workbook's applyOp for a peer's batch, and an undo that adds a sheet or deletes rows, go
 // through it, so the client that sends a batch, the peers that take it and a joiner all end the same. It also says
-// which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those, and moves an open cell
-// editor with its cell.
+// which row or column ops moved rows, so the Workbook moves its undo stacks by exactly those. It moves an open cell
+// editor with its cell, unless the caller applies a batch the editor already followed once.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -26,7 +26,11 @@ import { addSheet, deleteSheet, initSheetData, leaveCurrentSheet } from './sheet
 export type AppliedRowCol = { op: Op; sheets: Sheet[] };
 
 // The next context and the row or column ops that moved rows, or null when an op failed and the batch was skipped.
-export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: AppliedRowCol[] } | null {
+export function applyOpBatch(
+    ctx: Context,
+    ops: Op[],
+    moveEditor = true,
+): { ctx: Context; moved: AppliedRowCol[] } | null {
     let patches: Patch[] = [];
     // The sheets this batch gives a cell matrix, whose formulas the formula map learns once the batch applied.
     const materialized: string[] = [];
@@ -63,7 +67,7 @@ export function applyOpBatch(ctx: Context, ops: Op[]): { ctx: Context; moved: Ap
                     });
                     if (!applied) continue;
                     moved.push({ op, sheets });
-                    if (id === draft.currentSheetId) followEditor(draft, rowCol);
+                    if (moveEditor && id === draft.currentSheetId) followEditor(draft, rowCol);
                 } else if (op.op === 'addSheet') {
                     const sheet = asNewSheet(op.value, draft.sheets);
                     if (!sheet) continue;
