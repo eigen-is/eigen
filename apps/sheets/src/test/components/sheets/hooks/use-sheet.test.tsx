@@ -1,30 +1,39 @@
-// The sheet's op log on a real mounted Workbook over a real Y.Doc, with no server behind it. A peer's batch that
-// arrives while the grid mounts or remounts lands in the grid that stays. A tab writes the log into the snapshot only
-// when it closes connected and alone, so closing one tab never remounts another's grid.
+// The sheet's op log on a real mounted Workbook over a real Y.Doc, with a second Y.Doc as the server. A peer's batch
+// that arrives while the grid mounts or remounts lands in the grid that stays. A tab never writes the snapshot, and it
+// keeps its grid through a compaction of what it already holds.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
-const window = installHappyDom();
+installHappyDom();
 
 const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const realCollab = await import('@workspace/lib/collab');
-const { decodeSheetsSnapshot, encodeSheetsSnapshot } = await import('@workspace/lib/sheets');
+const realSheets = await import('@workspace/lib/sheets');
+const { decodeSheetsSnapshot, encodeSheetsSnapshot, readSheetsBase, readSheetsSnapshotJson, writeSheetsSnapshot } =
+    realSheets;
 const { Workbook } = await import('@workspace/sheet');
+const { replaySheetsOps } = await import('@workspace/sheet/engine');
 type Op = import('@workspace/sheet').Op;
 type Sheet = import('@workspace/sheet').Sheet;
 type WorkbookInstance = import('@workspace/sheet').WorkbookInstance;
 type CollabDocContext = import('@workspace/lib/collab').CollabDocContext;
 type UseCollabDocOptions = import('@workspace/lib/collab').UseCollabDocOptions;
 
-// A peer's doc, the server's copy in effect: everything it writes reaches the tab's doc at once.
+// The server's copy. While the link is up, each side's updates reach the other at once.
 let peer = new Y.Doc();
 let doc = new Y.Doc();
+let linked = true;
 let provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
 // What a test does between the tab's onInit and its first sync, and right after the sync, before React renders.
 let afterSync = () => {};
+// The shared hook's sync event again, as a reconnect fires it.
+let syncAgain = () => {};
+// The tab's snapshot decodes, counted, and a switch that makes them fail for now.
+let decodes = 0;
+let decodeFails = false;
 
 // The shared hook's lifecycle without a socket: onInit, then a synced onSync, and the init's cleanup on unmount.
 mock.module('@workspace/lib/collab', () => ({
@@ -36,6 +45,7 @@ mock.module('@workspace/lib/collab', () => ({
             const ctx: CollabDocContext = { doc, provider, undoManager: null };
             const cleanup = options.onInit?.(ctx);
             options.onSync?.(ctx, true);
+            syncAgain = () => options.onSync?.(ctx, true);
             afterSync();
             return () => cleanup?.();
         }, []);
@@ -53,8 +63,17 @@ mock.module('@workspace/lib/collab', () => ({
         };
     },
 }));
+mock.module('@workspace/lib/sheets', () => ({
+    ...realSheets,
+    decodeSheetsSnapshot: (json: string) => {
+        decodes++;
+        if (decodeFails) throw new Error('decode failed');
+        return decodeSheetsSnapshot(json);
+    },
+}));
 afterAll(() => {
     mock.module('@workspace/lib/collab', () => realCollab);
+    mock.module('@workspace/lib/sheets', () => realSheets);
 });
 
 const { useSheet } = await import('../../../../components/sheets/hooks/use-sheet');
@@ -80,26 +99,44 @@ const cleanups: (() => Promise<void>)[] = [];
 afterEach(async () => {
     for (const cleanup of cleanups.splice(0)) await cleanup();
     afterSync = () => {};
+    linked = true;
+    decodes = 0;
+    decodeFails = false;
 });
 
-// A workbook whose stored snapshot holds `cells`, open in one tab that a peer shares.
-async function open(cells: Record<string, string> = {}) {
+// A workbook whose stored snapshot holds `cells`, open in one tab that a peer shares. An import stamps a base, and a
+// workbook stored before bases existed has none.
+async function open(cells: Record<string, string> = {}, { stamped = true } = {}) {
     peer = new Y.Doc();
-    peer.getMap('state').set('snapshot', encodeSheetsSnapshot([sheet(cells)], { computed: true }));
+    const json = encodeSheetsSnapshot([sheet(cells)], { computed: true });
+    if (stamped) writeSheetsSnapshot(peer, json, null);
+    else peer.getMap('state').set('snapshot', json);
     doc = new Y.Doc();
     Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer));
-    peer.on('update', (update: Uint8Array) => Y.applyUpdate(doc, update, 'peer'));
+    peer.on('update', (update: Uint8Array, origin: unknown) => {
+        if (linked && origin !== 'tab') Y.applyUpdate(doc, update, 'peer');
+    });
+    doc.on('update', (update: Uint8Array, origin: unknown) => {
+        if (linked && origin !== 'peer') Y.applyUpdate(peer, update, 'tab');
+    });
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
     provider.wsconnected = true;
     const workbookRef = createRef<WorkbookInstance>();
+    const seen: { version: number; data: unknown; loadFailed: boolean } = {
+        version: 0,
+        data: null,
+        loadFailed: false,
+    };
     function Host() {
-        const { initialData, snapshotVersion, handleOp, onDataChange } = useSheet('o', 'm', 'p', workbookRef);
+        const { initialData, snapshotVersion, loadFailed, handleOp } = useSheet('o', 'm', 'p', workbookRef);
+        seen.version = snapshotVersion;
+        seen.data = initialData;
+        seen.loadFailed = loadFailed;
         if (!initialData) return null;
         return createElement(Workbook, {
             key: snapshotVersion,
             ref: workbookRef,
             data: initialData,
-            onChange: onDataChange,
             onOp: handleOp,
             showToolbar: false,
             showFormulaBar: false,
@@ -114,43 +151,59 @@ async function open(cells: Record<string, string> = {}) {
         container.remove();
     };
     cleanups.push(close);
-    const cell = (r: number, c: number) => workbookRef.current?.getFlowdata()?.[r]?.[c]?.v;
-    return { workbookRef, cell, close };
+    const cell = (r: number, c: number) => workbookRef.current?.getFlowdata()?.[r]?.[c];
+    return { workbookRef, cell, close, seen };
 }
 
-const peerSends = (ops: Op[]) => peer.getArray('ops').push([ops]);
-const stored = () => decodeSheetsSnapshot(String(doc.getMap('state').get('snapshot')))[0].celldata;
+const peerSends = (ops: Op[]) => peer.getArray<Op[]>('ops').push([ops]);
+
+// The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
+// the folded batches deleted, all in one transaction.
+function compact() {
+    const ops = peer.getArray<Op[]>('ops');
+    const batches = ops.toArray();
+    const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(peer) ?? '');
+    const json = encodeSheetsSnapshot(replaySheetsOps(stored, batches), { computed: true });
+    peer.transact(() => {
+        writeSheetsSnapshot(peer, json, readSheetsBase(peer)?.id ?? null);
+        ops.delete(0, batches.length);
+    });
+}
+
+// The tab is back online: it takes what the server holds that it lacks in one update, and sends what it wrote.
+async function reconnect() {
+    await act(async () => {
+        linked = true;
+        Y.applyUpdate(doc, Y.encodeStateAsUpdate(peer, Y.encodeStateVector(doc)), 'peer');
+        Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc, Y.encodeStateVector(peer)), 'tab');
+        syncAgain();
+    });
+}
 
 test("a peer's batch that arrives before the grid mounts is in the grid", async () => {
     afterSync = () => peerSends(typed(0, 0, 'early'));
     const { cell } = await open();
-    expect(cell(0, 0)).toBe('early');
+    expect(cell(0, 0)?.v).toBe('early');
 });
 
 test("a peer's batch that arrives while the grid remounts on a new snapshot is in the new grid", async () => {
     const { cell } = await open({ '1_1': 'old' });
     await act(async () => {
         peer.transact(() => {
-            peer.getMap('state').set(
-                'snapshot',
-                encodeSheetsSnapshot([sheet({ '1_1': 'flushed' })], { computed: true }),
-            );
+            writeSheetsSnapshot(peer, encodeSheetsSnapshot([sheet({ '1_1': 'flushed' })], { computed: true }), null);
             peer.getArray('ops').delete(0, peer.getArray('ops').length);
         });
         peerSends(typed(0, 0, 'late'));
     });
-    expect(cell(1, 1)).toBe('flushed');
-    expect(cell(0, 0)).toBe('late');
+    expect(cell(1, 1)?.v).toBe('flushed');
+    expect(cell(0, 0)?.v).toBe('late');
 });
 
 test("a peer's snapshot and batch in one update apply the batch once", async () => {
     const { cell } = await open({ '1_1': 'old' });
     await act(async () => {
         peer.transact(() => {
-            peer.getMap('state').set(
-                'snapshot',
-                encodeSheetsSnapshot([sheet({ '1_1': 'flushed' })], { computed: true }),
-            );
+            writeSheetsSnapshot(peer, encodeSheetsSnapshot([sheet({ '1_1': 'flushed' })], { computed: true }), null);
             peerSends([
                 {
                     op: 'insertRowCol',
@@ -161,33 +214,95 @@ test("a peer's snapshot and batch in one update apply the batch once", async () 
             ]);
         });
     });
-    expect(cell(2, 1)).toBe('flushed');
+    expect(cell(2, 1)?.v).toBe('flushed');
 });
 
-test('a tab that closes connected and alone writes its edits into the snapshot', async () => {
+test('a tab that closes writes no snapshot and leaves its edits in the log', async () => {
     const { workbookRef, close } = await open();
     await act(async () => workbookRef.current?.setCellFormat(0, 0, 'bl', 1));
-    expect(doc.getArray('ops').length).toBe(1);
+    const snapshot = readSheetsSnapshotJson(doc);
     await close();
-    expect(doc.getArray('ops').length).toBe(0);
-    expect(stored()).toEqual([{ r: 0, c: 0, v: { bl: 1 } }]);
+    expect(doc.getArray('ops').length).toBe(1);
+    expect(readSheetsSnapshotJson(doc)).toBe(snapshot);
 });
 
-test('a tab that closes while another tab is open leaves the log for the last one', async () => {
-    const { workbookRef, close } = await open();
-    provider.awareness.states.set(doc.clientID + 1, { user: 'peer' });
-    await act(async () => workbookRef.current?.setCellFormat(0, 0, 'bl', 1));
-    window.dispatchEvent(new window.Event('beforeunload'));
+test('a compaction of everything the tab holds keeps its grid, its offline edit and the cells, and adopts the base', async () => {
+    const { workbookRef, cell, seen } = await open({ '1_1': 'stored' });
+    peerSends(typed(0, 0, 'peer'));
+    await act(async () => workbookRef.current?.setCellFormat(2, 2, 'bl', 1));
+    linked = false;
+    await act(async () => workbookRef.current?.setCellFormat(3, 3, 'bl', 1));
+    compact();
+    await reconnect();
+    expect(seen.version).toBe(0);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(2, 2)?.bl, cell(3, 3)?.bl]).toEqual(['stored', 'peer', 1, 1]);
     expect(doc.getArray('ops').length).toBe(1);
-    await close();
-    expect(doc.getArray('ops').length).toBe(1);
-    expect(stored()).toEqual([]);
+
+    // A second compaction names the base the first one stamped, which this tab now holds.
+    linked = false;
+    compact();
+    await reconnect();
+    expect(seen.version).toBe(0);
+    expect(cell(3, 3)?.bl).toBe(1);
 });
 
-test('a tab that closes offline leaves the log for the next connected close', async () => {
-    const { workbookRef, close } = await open();
-    await act(async () => workbookRef.current?.setCellFormat(0, 0, 'bl', 1));
-    provider.wsconnected = false;
-    await close();
-    expect(doc.getArray('ops').length).toBe(1);
+test("a compaction that arrives with a peer's new batch keeps the grid and applies the batch", async () => {
+    const { cell, seen } = await open({ '1_1': 'stored' });
+    peerSends(typed(0, 0, 'folded'));
+    linked = false;
+    compact();
+    peerSends(typed(0, 1, 'live'));
+    await reconnect();
+    expect(seen.version).toBe(0);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v, cell(0, 1)?.v]).toEqual(['stored', 'folded', 'live']);
+});
+
+test('a compaction that folded a batch the tab never received remounts onto it', async () => {
+    const { cell, seen } = await open({ '1_1': 'stored' });
+    linked = false;
+    peerSends(typed(0, 0, 'unseen'));
+    compact();
+    await reconnect();
+    expect(seen.version).toBe(1);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v]).toEqual(['stored', 'unseen']);
+});
+
+test('an import that writes a fresh snapshot remounts the grid', async () => {
+    const { cell, seen } = await open({ '1_1': 'stored' });
+    await act(async () => {
+        peer.transact(() => {
+            writeSheetsSnapshot(peer, encodeSheetsSnapshot([sheet({ '1_1': 'imported' })], { computed: true }), null);
+        });
+    });
+    expect(seen.version).toBe(1);
+    expect(cell(1, 1)?.v).toBe('imported');
+});
+
+test('a tab on a workbook stored before bases existed remounts on its first compaction', async () => {
+    const { cell, seen } = await open({ '1_1': 'stored' }, { stamped: false });
+    peerSends(typed(0, 0, 'folded'));
+    linked = false;
+    compact();
+    await reconnect();
+    expect(seen.version).toBe(1);
+    expect([cell(1, 1)?.v, cell(0, 0)?.v]).toEqual(['stored', 'folded']);
+});
+
+test('a reconnect after a failed load loads the workbook and unlocks it', async () => {
+    decodeFails = true;
+    const { cell, seen } = await open({ '1_1': 'stored' });
+    expect(seen.loadFailed).toBe(true);
+    decodeFails = false;
+    await reconnect();
+    expect(seen.loadFailed).toBe(false);
+    expect(cell(1, 1)?.v).toBe('stored');
+});
+
+test('a reconnect after a good load decodes nothing and keeps the grid', async () => {
+    const { seen } = await open({ '1_1': 'stored' });
+    const data = seen.data;
+    const before = decodes;
+    await reconnect();
+    expect(decodes).toBe(before);
+    expect(seen.data).toBe(data);
 });
