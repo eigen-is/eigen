@@ -38,11 +38,10 @@ import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
 import { pageScale, pageWidths, textColumnWidth } from './text-column';
 
-// The resize floor of a figure's width, in px. An image's height has no floor but a pixel, so a thin divider keeps its
-// shape. A chart's height has the width's floor, as an axis and its labels need the room.
-const FIGURE_MIN_WIDTH = 100;
-const IMAGE_MIN_HEIGHT = 1;
-export const CHART_MIN_HEIGHT = 100;
+// The resize floor of a figure, in px. An image has none but a pixel a side, so a thin divider or a small icon keeps its
+// shape. A chart keeps 100 px a side, as an axis and its labels need the room.
+const IMAGE_FLOOR: FigureSize = { width: 1, height: 1 };
+export const CHART_FLOOR: FigureSize = { width: 100, height: 100 };
 
 // The widest a resize makes a figure. A figure in the flow gets the text column, and a wrapped one half of it. A figure
 // in front of or behind the text gets the paper of the page map. In a page-less doc a block figure may grow past the
@@ -57,40 +56,41 @@ export function figureMaxWidth(editor: Editor, layout: FigureLayout | null | und
 }
 
 // The whole width a resize writes, such as a grip's or Shift and an arrow's.
-export function clampFigureWidth(width: number, maxWidth: number) {
-    return Math.round(Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width)));
+export function clampFigureWidth(width: number, maxWidth: number, minWidth: number = IMAGE_FLOOR.width) {
+    return Math.round(Math.max(minWidth, Math.min(maxWidth, width)));
 }
 
 // A figure's drawn box, such as an image's, a chart's or a text box's, in page px.
 export type FigureSize = { width: number; height: number };
 
 // A size the panel asks for, fitted to `maxWidth`: the width within the floor and the cap, and a height that comes with
-// it scaled alongside, so the figure keeps the shape it was given, above `minHeight`. Unlike a grip's, it stays
-// unrounded, as a typed cm gives a fraction of a px.
-export function fitFigureSize(size: CoupledSize, maxWidth: number, minHeight: number = IMAGE_MIN_HEIGHT): CoupledSize {
+// it scaled alongside, so the figure keeps the shape it was given, above the floor. A side the size leaves out stays
+// out, so an unlocked edit of one side never moves the other. Unlike a grip's, it stays unrounded, as a typed cm gives
+// a fraction of a px.
+export function fitFigureSize(size: CoupledSize, maxWidth: number, floor: FigureSize = IMAGE_FLOOR): CoupledSize {
     const { width, height } = size;
-    if (width === undefined) return height === undefined ? {} : { height: Math.max(minHeight, height) };
-    const fitted = Math.max(FIGURE_MIN_WIDTH, Math.min(maxWidth, width));
+    if (width === undefined) return height === undefined ? {} : { height: Math.max(floor.height, height) };
+    const fitted = Math.max(floor.width, Math.min(maxWidth, width));
     if (height === undefined) return { width: fitted };
-    return { width: fitted, height: Math.max(minHeight, heightAtWidth({ width, height }, fitted)) };
+    return { width: fitted, height: Math.max(floor.height, heightAtWidth({ width, height }, fitted)) };
 }
 
 // A dragged box fitted to the column. With a ratio, the width is the one the box allows at that ratio and the height
 // follows it, so a box whose top stopped at the paper's caps the width too. Without one, the width keeps to its floor
-// and the height to `minHeight`.
+// and the height to the floor's.
 export function fitFigureBox(
     next: Box,
     maxWidth: number,
     ratio: number | null,
-    minHeight: number = IMAGE_MIN_HEIGHT,
+    floor: FigureSize = IMAGE_FLOOR,
 ): FigureSize {
     if (ratio === null) {
         return {
-            width: clampFigureWidth(next.width, maxWidth),
-            height: Math.round(Math.max(minHeight, next.height)),
+            width: clampFigureWidth(next.width, maxWidth, floor.width),
+            height: Math.round(Math.max(floor.height, next.height)),
         };
     }
-    const width = clampFigureWidth(Math.min(next.width, next.height * ratio), maxWidth);
+    const width = clampFigureWidth(Math.min(next.width, next.height * ratio), maxWidth, floor.width);
     return { width, height: width / ratio };
 }
 

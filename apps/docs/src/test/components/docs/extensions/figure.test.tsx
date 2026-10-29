@@ -242,12 +242,13 @@ test('an unlocked grip stretches a picture and stores its height', async () => {
     expect(editor.state.doc.nodeAt(2)?.attrs).toMatchObject({ width: 250, height: 100 });
 });
 
-// A height has no floor but a pixel, so a grip can draw a thin divider, as a docx brings one.
-test('an unlocked grip keeps a width to its floor and a height to a pixel', () => {
+// An image has no floor but a pixel a side, so a grip can draw a thin divider, as a docx brings one, or a small icon.
+test('an unlocked grip keeps each side of an image to a pixel', () => {
     expect(fitFigureBox({ x: 0, y: 0, width: 40, height: 4.4, angle: 0 }, 600, null)).toEqual({
-        width: 100,
+        width: 40,
         height: 4,
     });
+    expect(fitFigureBox({ x: 0, y: 0, width: 0, height: 20, angle: 0 }, 600, null)).toEqual({ width: 1, height: 20 });
     expect(fitFigureBox({ x: 0, y: 0, width: 300, height: 0, angle: 0 }, 600, null)).toEqual({ width: 300, height: 1 });
 });
 
@@ -319,7 +320,7 @@ test('Shift and an arrow key keep a stretched figure in shape', async () => {
 test.each([
     ['block', 595, 'ArrowRight', 600],
     ['wrap-left', 295, 'ArrowRight', 300],
-    ['block', 105, 'ArrowLeft', 100],
+    ['block', 15, 'ArrowLeft', 1],
 ])('a %s figure of %d px, Shift-%s twice, stops at %d px', async (layout, width, key, limit) => {
     const { editor } = await mount([paragraph(text('a'), { ...figure, attrs: { ...figure.attrs, layout, width } })]);
     await act(async () => {

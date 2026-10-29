@@ -25,7 +25,7 @@ import {
 import { useCallback, useMemo } from 'react';
 import type * as Y from 'yjs';
 import {
-    CHART_MIN_HEIGHT,
+    CHART_FLOOR,
     figureMaxWidth,
     fitFigureSize,
     isAspectLocked,
@@ -87,9 +87,7 @@ export function ChartPropertiesPanel({ editor, undoManager, onEditData }: ChartP
                         width={width}
                         height={height}
                         aspect={{ locked, onLockChange: (next) => setAspectLocked(editor, 'chart', next) }}
-                        onChange={(size) =>
-                            write(fitFigureSize(size, figureMaxWidth(editor, layout), CHART_MIN_HEIGHT))
-                        }
+                        onChange={(size) => write(fitFigureSize(size, figureMaxWidth(editor, layout), CHART_FLOOR))}
                     />
                     <FigureLayoutSection
                         layout={layout}

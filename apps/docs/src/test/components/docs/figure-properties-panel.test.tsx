@@ -290,7 +290,8 @@ test.each(['Enter', 'blur'])('an untouched Width field keeps the stored width on
 test.each([
     ['block', '30', 600, '15.88'],
     ['wrap-left', '30', 300, '7.94'],
-    ['block', '1', 100, '2.65'],
+    ['block', '0.5', mmToPx(5), '0.50'],
+    ['block', '0', 1, '0.03'],
     ['block', '6.63', mmToPx(66.3), '6.63'],
 ])('a %s figure set to %s cm gets %d px, within the floor and the column', async (layout, value, width, shown) => {
     const editor = await mount({ layout });
@@ -394,6 +395,18 @@ test('a W past the column scales both sides to it', async () => {
     await type(widthField(), '30');
     await key(widthField(), 'Enter');
     expect(sizeAt2(editor)).toEqual({ width: 600, height: 150 });
+});
+
+// An unlocked side the floor or the cap moves leaves the other as it is.
+test.each([
+    ['0.5', { width: mmToPx(5), height: 100 }],
+    ['30', { width: 600, height: 100 }],
+])('an unlocked W of %s cm keeps the height', async (value, size) => {
+    const editor = await mount();
+    await click(aspectBox());
+    await type(widthField(), value);
+    await key(widthField(), 'Enter');
+    expect(sizeAt2(editor)).toEqual(size);
 });
 
 // A height has no floor but a pixel, so a docx divider 4 px tall can be typed back.

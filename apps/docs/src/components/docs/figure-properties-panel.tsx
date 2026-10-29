@@ -266,16 +266,19 @@ export function FigurePropertiesPanel({ editor, onReplaceImage }: FigureProperti
                 height={height}
                 aspect={{ locked, onLockChange: (next) => setAspectLocked(editor, 'figure', next) }}
                 onChange={(size) => {
+                    // Fitted before the stored side fills in, so an unlocked edit that the floor or the cap moves
+                    // leaves the other side as it is.
+                    const fitted = fitFigureSize(size, figureMaxWidth(editor, layout));
                     // A picture at its own ratio stores its width alone, so it keeps that ratio wherever it draws. An
                     // edit that stretches it, or one of a picture already stretched, stores both sides.
                     const asked =
                         locked && !stretched
-                            ? { width: size.width }
-                            : { width: size.width ?? width, height: size.height ?? height };
+                            ? { width: fitted.width }
+                            : { width: fitted.width ?? width, height: fitted.height ?? height };
                     // With no width stored, the picture draws at the width its <img> takes, which a height alone would
                     // stretch once a width is stored.
                     if (asked.width === undefined) return;
-                    editor.commands.updateFigure(fitFigureSize(asked, figureMaxWidth(editor, layout)));
+                    editor.commands.updateFigure(asked);
                 }}
             />
 

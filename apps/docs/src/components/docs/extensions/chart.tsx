@@ -11,7 +11,7 @@ import { useCallback, useMemo } from 'react';
 import type { FigureFrameOptions, FigureSize } from './figure-frame';
 import {
     aspectLockedIn,
-    CHART_MIN_HEIGHT,
+    CHART_FLOOR,
     FigureFrame,
     figureFramePlugins,
     figureMaxWidth,
@@ -44,10 +44,7 @@ function ChartView(props: NodeViewProps) {
 
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);
     // A chart has no ratio of its own, so its grips are free unless Keep aspect ratio is on.
-    const fit = useCallback(
-        (next: Box, maxWidth: number) => fitFigureBox(next, maxWidth, ratio, CHART_MIN_HEIGHT),
-        [ratio],
-    );
+    const fit = useCallback((next: Box, maxWidth: number) => fitFigureBox(next, maxWidth, ratio, CHART_FLOOR), [ratio]);
     const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit, stored: storedSize });
 
     // A resize lays the chart out again at every move, as the canvas does.
