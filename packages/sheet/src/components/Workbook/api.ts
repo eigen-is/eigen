@@ -53,13 +53,16 @@ export function generateAPIs(
     history: Pick<GlobalCache, 'undoList' | 'redoList' | 'undoGesture'>,
 ) {
     return {
-        applyOp: (ops: Op[]) => {
+        // True when the batch applied, false when an op failed and the whole batch was rolled back.
+        applyOp: (ops: Op[]): boolean => {
+            let accepted = false;
             // A peer's row or column op moves the cells under this tab's undo and redo entries. They shift by the ops
             // the batch applied, against the sheets it applied them to.
             setContext(
                 (ctx_) => {
                     const applied = applyOpBatch(current(ctx_), ops);
                     if (!applied) return;
+                    accepted = true;
                     Object.assign(ctx_, applied.ctx);
                     for (const { op, sheets } of applied.moved) {
                         history.undoList = shiftEntries(history.undoList, op, sheets, 'undo');
@@ -68,6 +71,7 @@ export function generateAPIs(
                 },
                 { noHistory: true },
             );
+            return accepted;
         },
 
         setCellFormat: (

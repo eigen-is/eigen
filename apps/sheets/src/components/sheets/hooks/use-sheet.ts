@@ -1,22 +1,25 @@
 // A workbook's collab protocol in the editor: the stored snapshot plus a log of op batches, both in one Yjs document.
 // It decodes the snapshot with the log replayed on top for the Workbook, pushes the Workbook's own batches onto the
-// log, and hands a peer's batches to the Workbook's applyOp, queueing them while a grid mounts. A tab that closes while
-// connected and alone, with no other client in the document, viewers included, writes the log into a fresh snapshot.
+// log, and hands a peer's batches to the Workbook's applyOp, queueing them while a grid mounts. The server folds the log
+// into the snapshot when the workbook closes. A tab keeps its grid through such a compaction of what it already holds,
+// and remounts on any other new snapshot.
 
 import { useCollabDoc } from '@workspace/lib/collab';
 import type { Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, readSheetsBase, readSheetsSnapshotJson } from '@workspace/lib/sheets';
 import type { Op, WorkbookInstance } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
 
-// A throw escaping the Yjs observer would kill the app, so a batch that fails is logged.
-function applyBatch(workbook: WorkbookInstance | null, ops: Op[]) {
+// Applies a peer's batch to the grid and says whether it applied. A throw escaping the Yjs observer would kill the app,
+// so a batch that fails is logged.
+function applyBatch(workbook: WorkbookInstance | null, ops: Op[]): boolean {
     try {
-        workbook?.applyOp(ops);
+        return workbook?.applyOp(ops) ?? false;
     } catch (e) {
         console.error('[sheet] Failed to apply remote op:', e);
+        return false;
     }
 }
 
@@ -32,26 +35,23 @@ export function useSheet(
     const [loadFailed, setLoadFailed] = useState(false);
 
     const isLocalOpRef = useRef(false);
-    const isLocalSnapshotRef = useRef(false);
     const readyForOpsRef = useRef(false);
-    // Same fact for the callbacks: a fallback workbook must never be flushed over state.snapshot.
+    // Same fact for handleOp: ops built against the fallback workbook must not reach peers.
     const loadedRef = useRef(false);
-    const latestDataRef = useRef<Sheet[] | null>(null);
+    // The base of the snapshot the grid shows. It is null when the workbook has none, when the grid shows the defaults
+    // after a failed load, when it keeps its view after a failed mid-session decode, and when it rejected a peer's batch.
+    const baseIdRef = useRef<string | null>(null);
     // A peer's batches that arrive while a grid mounts on `data`. They wait for that grid, never the one it replaces.
     const pendingRef = useRef<{ data: Sheet[]; batches: Op[][] } | null>(null);
 
-    // Decodes state.snapshot with the pending ops replayed on top (browser A flushes while B
-    // has unflushed local ops: B's edits survive the Yjs merge and must be reapplied). A failure
-    // disarms persistence: what this client shows must never be flushed over a snapshot it
-    // could not read — and the doc must still open, a throw escaping the Yjs handler kills the app.
-    // Returns whether the on-screen view was (re)seeded, so the mid-session caller knows whether
-    // to remount. `keepViewOnFailure` distinguishes the two failure paths: the initial load shows
-    // the blank defaults fallback (nothing on screen yet); a peer's undecodable mid-session flush
-    // keeps the populated workbook already on screen — replacing it with defaults would wipe the
-    // user's view — and only arms the read-only lock + banner.
+    // Decodes the snapshot with the log replayed on top, so a peer's batches that the snapshot lacks show too. A
+    // failure locks the workbook read-only, because what it shows may differ from the truth on the wire. The doc must
+    // still open, since a throw escaping the Yjs handler kills the app. On the initial load the tab shows the blank
+    // defaults. Mid-session it keeps the workbook on screen, because defaults would wipe the user's view. It returns
+    // whether it seeded a new view, so a mid-session caller knows whether to remount.
     const loadSnapshot = (doc: Y.Doc, keepViewOnFailure = false): boolean => {
-        const snapshot = doc.getMap('state').get('snapshot') as string | undefined;
-        const pending = doc.getArray('ops').toArray() as Op[][];
+        const snapshot = readSheetsSnapshotJson(doc);
+        const pending = doc.getArray<Op[]>('ops').toArray();
         let data = createDefaultSheets();
         let loaded = true;
         try {
@@ -59,17 +59,14 @@ export function useSheet(
             if (pending.length > 0) data = replaySheetsOps(data, pending);
         } catch (e) {
             loaded = false;
-            console.error('[sheet] Failed to load the snapshot, opening read-only without persistence:', e);
+            console.error('[sheet] Failed to load the snapshot, opening read-only:', e);
         }
-        // Read-only lock either way: local state may now diverge from the truth on the wire, so
-        // writes must stop (loadedRef gates flushSnapshot + handleOp; loadFailed gates allowEdit).
         loadedRef.current = loaded;
-        // The read-only lock plus a persistent in-editor banner (editor.tsx, gated on loadFailed)
-        // surface the failure. A toast was wrong here: it dismissed on click, leaving a blank
-        // read-only sheet indistinguishable from data loss.
+        baseIdRef.current = loaded ? (readSheetsBase(doc)?.id ?? null) : null;
+        // A persistent banner in the editor, gated on loadFailed, says why the sheet is read-only. A toast would be
+        // dismissed, and a blank read-only sheet then looks like data loss.
         setLoadFailed(!loaded);
         if (!loaded && keepViewOnFailure) return false;
-        latestDataRef.current = data;
         pendingRef.current = { data, batches: [] };
         setInitialData(data);
         return true;
@@ -80,63 +77,59 @@ export function useSheet(
         const pending = pendingRef.current;
         if (!pending || pending.data !== initialData || !workbookRef.current) return;
         pendingRef.current = null;
-        for (const ops of pending.batches) applyBatch(workbookRef.current, ops);
+        for (const ops of pending.batches) {
+            if (!applyBatch(workbookRef.current, ops)) baseIdRef.current = null;
+        }
     }, [initialData, workbookRef]);
 
-    // useCollabDoc owns the doc/provider lifecycle; sheets layers its op-log + snapshot protocol on
-    // top via onInit/onSync. No UndoManager — the sheet engine's own op stack owns undo. The op-log
-    // (readyForOps gating, echo suppression, flush-on-unmount, replay) is NOT collab-scaffold
-    // duplication, so it stays here over the shared lifecycle.
+    // useCollabDoc owns the doc and provider lifecycle, and sheets layers its op log and snapshot on top through onInit
+    // and onSync. There is no UndoManager, because the sheet engine's own op stack owns undo.
     const { docRef, provider, synced, offline, loaded, storageUnavailable, storageGone, unsyncedEdits } = useCollabDoc({
         ownerId,
         mountId,
         pathId,
-        onInit: ({ doc, provider }) => {
+        onInit: ({ doc }) => {
             readyForOpsRef.current = false;
             loadedRef.current = false;
-            latestDataRef.current = null;
+            baseIdRef.current = null;
 
             const stateMap = doc.getMap('state');
-            const opsArray = doc.getArray('ops');
+            const opsArray = doc.getArray<Op[]>('ops');
+            // The same object as stateMap. A transaction's set of changed types does not accept a YMap's type, but it
+            // accepts the plain type that doc.get returns.
+            const stateRoot = doc.get('state');
 
-            // Only a tab that is connected and alone writes the snapshot. A flush reaches every open tab and remounts
-            // its grid, which costs that tab its undo, and offline it can't reach the server; the log waits either way.
-            const flushSnapshot = () => {
-                const data = latestDataRef.current;
-                if (!loadedRef.current || !data || !provider.wsconnected) return;
-                if ([...provider.awareness.getStates().keys()].some((id) => id !== doc.clientID)) return;
-                // Every edit reaches the doc as an op, so no pending ops means the stored snapshot is current.
-                if (opsArray.length === 0 && stateMap.has('snapshot')) return;
-                let json: string;
-                try {
-                    // computed: true — the client recomputes dependents inside the op-emitting produce.
-                    json = encodeSheetsSnapshot(data, { computed: true });
-                } catch {
-                    return;
+            // Whether this transaction writes a new snapshot that the grid must remount on. It keeps the grid only for
+            // a compaction of exactly what the grid shows. The new base must name the base the grid loaded. Every
+            // struct the transaction deletes must be one this tab held, or the compaction folded a batch the tab never
+            // applied, such as one sent while it was offline. Yjs runs the two observers below in no fixed order, so
+            // the verdict is taken once, before either of them.
+            let remountGrid = false;
+            const judgeTransaction = (tr: Y.Transaction) => {
+                remountGrid = tr.changed.has(stateRoot);
+                if (!remountGrid || baseIdRef.current === null) return;
+                if (readSheetsBase(doc)?.compactedFrom !== baseIdRef.current) return;
+                for (const [client, deletes] of tr.deleteSet.clients) {
+                    const held = tr.beforeState.get(client) ?? 0;
+                    if (deletes.some((d) => d.clock + d.len > held)) return;
                 }
-                isLocalSnapshotRef.current = true;
-                doc.transact(() => {
-                    stateMap.set('snapshot', json);
-                    if (opsArray.length > 0) {
-                        opsArray.delete(0, opsArray.length);
-                    }
-                });
+                remountGrid = false;
             };
+            doc.on('beforeObserverCalls', judgeTransaction);
 
-            const handleOps = (event: Y.YArrayEvent<unknown>) => {
+            const handleOps = (event: Y.YArrayEvent<Op[]>) => {
                 if (!readyForOpsRef.current) return;
                 if (isLocalOpRef.current) {
                     isLocalOpRef.current = false;
                     return;
                 }
-                // An update that also writes the snapshot reloads it with the whole log replayed, these batches too.
-                const state = doc.share.get('state');
-                if (state && event.transaction.changed.has(state)) return;
+                // A new snapshot that remounts the grid replays the whole log, these batches too.
+                if (remountGrid) return;
                 for (const delta of event.changes.delta) {
                     if (delta.insert && Array.isArray(delta.insert)) {
                         for (const ops of delta.insert as Op[][]) {
                             if (pendingRef.current) pendingRef.current.batches.push(ops);
-                            else applyBatch(workbookRef.current, ops);
+                            else if (!applyBatch(workbookRef.current, ops)) baseIdRef.current = null;
                         }
                     }
                 }
@@ -145,39 +138,39 @@ export function useSheet(
 
             const handleState = () => {
                 if (!readyForOpsRef.current) return;
-                if (isLocalSnapshotRef.current) {
-                    isLocalSnapshotRef.current = false;
+                // A compaction of what the grid shows only moves the grid to the new base.
+                if (!remountGrid) {
+                    baseIdRef.current = readSheetsBase(doc)?.id ?? null;
                     return;
                 }
-                // Mid-session: a decodable flush reseeds initialData and remounts the workbook to
-                // it; an undecodable one keeps the current view (no remount) and only locks it.
                 if (loadSnapshot(doc, true)) setSnapshotVersion((v) => v + 1);
             };
             stateMap.observe(handleState);
 
-            window.addEventListener('beforeunload', flushSnapshot);
-
             return () => {
-                window.removeEventListener('beforeunload', flushSnapshot);
-                flushSnapshot();
                 readyForOpsRef.current = false;
-                // Unregister observers (held by reference) before the shared hook destroys the
-                // provider/doc, so a WS message racing teardown can't fire against a destroyed doc.
+                // Unregister the listeners before the shared hook destroys the provider and doc, so a WS message
+                // racing teardown can't fire against a destroyed doc.
+                doc.off('beforeObserverCalls', judgeTransaction);
                 opsArray.unobserve(handleOps);
                 stateMap.unobserve(handleState);
             };
         },
         onSync: ({ doc }, isSynced) => {
             if (!isSynced) return;
-            loadSnapshot(doc);
-            readyForOpsRef.current = true;
+            if (!readyForOpsRef.current) {
+                loadSnapshot(doc);
+                readyForOpsRef.current = true;
+                return;
+            }
+            // A loaded grid caught up through the observers, so only a reconnect after a failed load reads again.
+            if (!loadedRef.current && loadSnapshot(doc, true)) setSnapshotVersion((v) => v + 1);
         },
     });
 
     const handleOp = useCallback(
         (ops: Op[]) => {
             const doc = docRef.current;
-            // Same gate as flushSnapshot: ops built against the fallback workbook must not reach peers.
             if (!doc || !loadedRef.current || ops.length === 0) return;
             isLocalOpRef.current = true;
             try {
@@ -192,10 +185,6 @@ export function useSheet(
         [docRef],
     );
 
-    const onDataChange = useCallback((data: Sheet[]) => {
-        latestDataRef.current = data;
-    }, []);
-
     return {
         initialData,
         snapshotVersion,
@@ -207,7 +196,6 @@ export function useSheet(
         storageGone,
         unsyncedEdits,
         handleOp,
-        onDataChange,
         docRef,
         provider,
     };

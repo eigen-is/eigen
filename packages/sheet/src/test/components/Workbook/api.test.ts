@@ -171,17 +171,34 @@ describe('applyOp and the formula dependency map', () => {
 
 // replaySheetsOps rolls a failing batch back whole, so a live client must too or it disagrees with a joiner.
 describe('applyOp and a batch that fails halfway', () => {
+    const ops: Op[] = [
+        { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 3, end: 3, id: 'id_1' } },
+        { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
+        { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
+    ];
+
     it('applies none of it, a row delete before the failing patch included, as the replay does', () => {
-        const ops: Op[] = [
-            { op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 3, end: 3, id: 'id_1' } },
-            { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } },
-            { op: 'replace', id: 'id_1', path: ['data', 9, 9, 'v'], value: 1 },
-        ];
         const ctx = makeCtx(null);
         const peer = applyPeerOps(ctx, ops);
         const [joiner] = join(ctx, [ops]);
         expect(peer.sheets[0].data).toEqual(ctx.sheets[0].data);
         expect(joiner.celldata).toEqual(dataToCelldata(ctx.sheets[0].data));
+    });
+
+    it('says the batch did not apply, and that a good one did', () => {
+        let next = makeCtx(null);
+        const setContext = (recipe: (draft: Context) => void) => {
+            next = produce(next, recipe);
+        };
+        const workbook = generateAPIs(
+            () => next,
+            setContext,
+            () => {},
+            () => {},
+            { undoList: [], redoList: [] },
+        );
+        expect(workbook.applyOp(ops)).toBe(false);
+        expect(workbook.applyOp(ops.slice(0, 2))).toBe(true);
     });
 });
 

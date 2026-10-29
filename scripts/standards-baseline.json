@@ -32,7 +32,7 @@
     "apps/index/src/components/support/support-search.tsx": 1,
     "apps/index/src/content/manifest.ts": 3,
     "apps/mail/src/routes/_auth.$filterType.$filterId.tsx": 1,
-    "apps/sheets/src/components/sheets/hooks/use-sheet.ts": 3,
+    "apps/sheets/src/components/sheets/hooks/use-sheet.ts": 1,
     "apps/space/src/components/space/mail-prefs-section.tsx": 1,
     "apps/stickies/src/components/stickies/board.tsx": 2,
     "apps/stickies/src/components/stickies/hooks/use-drag-and-drop.ts": 3,
