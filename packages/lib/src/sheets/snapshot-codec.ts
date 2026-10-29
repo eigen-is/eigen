@@ -121,11 +121,17 @@ export function isCurrentSheetsSnapshot(snapshot: string): boolean {
 }
 
 export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
+    return decodeSheetsWorkbook(snapshot).sheets;
+}
+
+// The sheets with the flag the encoder was given, which a writer that re-encodes them, such as the server's
+// compaction, must pass on: the decoded sheets only hint at it through their calcChain.
+export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; computed: boolean } {
     const { f, computed, styles, borders, sheets } = JSON.parse(snapshot) as SnapshotV2;
     // Fail crisp on a corrupt envelope, a v1 array or a future format — silent
     // garbage-in would materialize a half-empty workbook instead of surfacing the problem.
     if (f !== FORMAT) throw unknownFormat(f);
-    return sheets.map((encoded) => {
+    const decoded = sheets.map((encoded) => {
         const { cells, borderCells, config, images, charts, ...rest } = encoded;
         // Both maps are materialized on every sheet, the way normalizeSheetConfig materializes a
         // config collection: the editor writes each object under its own key, and a patch resolves
@@ -170,6 +176,7 @@ export function decodeSheetsSnapshot(snapshot: string): Sheet[] {
 
         return sheet;
     });
+    return { sheets: decoded, computed };
 }
 
 function unknownFormat(found: unknown): Error {

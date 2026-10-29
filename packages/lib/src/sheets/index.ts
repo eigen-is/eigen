@@ -35,5 +35,12 @@ export {
 } from './floating';
 export { cellFontName, cellFontSize, SHEET_DEFAULT_DIGIT_WIDTH, SHEET_DEFAULT_FONT } from './fonts';
 export { columnIndexToLabel, columnLabelToIndex } from './labels';
-export { decodeSheetsSnapshot, encodeSheetsSnapshot, isCurrentSheetsSnapshot } from './snapshot-codec';
+export {
+    decodeSheetsSnapshot,
+    decodeSheetsWorkbook,
+    encodeSheetsSnapshot,
+    isCurrentSheetsSnapshot,
+} from './snapshot-codec';
 export * from './types';
+export type { SheetsBase } from './yjs-state';
+export { readSheetsBase, readSheetsSnapshotJson, stampSheetsBase, writeSheetsSnapshot } from './yjs-state';

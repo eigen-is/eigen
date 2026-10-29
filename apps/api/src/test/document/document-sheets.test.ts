@@ -1,12 +1,19 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { defaultChartSpec, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import {
+    decodeSheetsSnapshot,
+    decodeSheetsWorkbook,
+    encodeSheetsSnapshot,
+    readSheetsBase,
+    writeSheetsSnapshot,
+} from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
 import {
     appendSheetsToYjs,
+    compactSheetsSnapshot,
     readLiveSheets,
     readSheetsFromDoc,
     writeSheetsSnapshotToYjs,
@@ -898,4 +905,85 @@ describe('document/sheets — appendSheetsToYjs', () => {
         expect(added.name).toBe('Summary');
         expect(added.celldata[0].v.f).toBe(summary.celldata?.[0]?.v?.f);
     });
+});
+
+describe('document/sheets — compactSheetsSnapshot', () => {
+    const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+    const edit = (c: number, v: string): Op[] => [
+        { op: 'replace', id: 'sheet-1', path: ['data', 0, c], value: { v, m: v } },
+    ];
+    const values = (snapshot: string) =>
+        decodeSheetsWorkbook(snapshot).sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v]);
+
+    test('folds the batches into the snapshot and keeps its computed flag', () => {
+        for (const computed of [true, false]) {
+            const compacted = compactSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed }), [
+                edit(0, 'a'),
+                edit(1, 'b'),
+            ]);
+            expect(decodeSheetsWorkbook(compacted).computed).toBe(computed);
+            expect(values(compacted)).toEqual([
+                [0, 0, 'a'],
+                [0, 1, 'b'],
+            ]);
+        }
+    });
+
+    test('a workbook with no snapshot compacts over the default sheets, computed', () => {
+        const compacted = compactSheetsSnapshot(null, [edit(0, 'a')]);
+        const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+        expect(computed).toBe(true);
+        expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
+        expect(values(compacted)).toEqual([[0, 0, 'a']]);
+    });
+
+    test('a batch the replay rejects is dropped and logged, and the others still apply', () => {
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const poison: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
+            const compacted = compactSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }), [
+                edit(0, 'a'),
+                poison,
+                edit(1, 'b'),
+            ]);
+            expect(values(compacted)).toEqual([
+                [0, 0, 'a'],
+                [0, 1, 'b'],
+            ]);
+            expect(warn.mock.calls.filter((args) => String(args[0]).includes('skipping batch'))).toHaveLength(1);
+        } finally {
+            warn.mockRestore();
+        }
+    });
+});
+
+describe('document/sheets — the base a snapshot starts', () => {
+    test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
+        const doc = new Y.Doc();
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), 'older');
+        const old = readSheetsBase(doc);
+        expect(old?.compactedFrom).toBe('older');
+        doc.getArray<Op[]>('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
+
+        let updates = 0;
+        doc.on('update', () => updates++);
+        writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot([], { computed: true }));
+
+        expect(updates).toBe(1);
+        const base = readSheetsBase(doc);
+        expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
+        expect(base?.id).not.toBe(old?.id);
+        doc.destroy();
+    });
+
+    test('appending tabs leaves the base alone', () => {
+        const doc = new Y.Doc();
+        writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
+        const base = readSheetsBase(doc);
+        appendSheetsToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }), readLiveSheets(doc));
+        expect(readSheetsBase(doc)).toEqual(base);
+        doc.destroy();
+    });
+
+    const sheets = (): Sheet[] => [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
 });

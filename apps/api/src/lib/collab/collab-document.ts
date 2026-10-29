@@ -1,13 +1,15 @@
-// One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the
-// document from its data.db, saves every edit back to it, and relays edits and cursors between the
-// sockets that have it open. Server-side writers, such as an import or a version restore, edit the
-// same Y.Doc, so their changes reach every editor too. The Drive opens each document once, however
-// many sockets connect, and closes it a while after the last one leaves.
+// One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
+// its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
+// Server-side writers, such as an import or a version restore, edit the same Y.Doc, so their changes reach every
+// editor too. The Drive opens each document once, however many sockets connect, and closes it a while after the last
+// one leaves. A workbook first folds its op log into its snapshot.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
+import type { Op } from '@workspace/lib/sheets';
+import { readSheetsBase, readSheetsSnapshotJson, stampSheetsBase, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_SHEETS, DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import * as decoding from 'lib0/decoding';
 import * as encoding from 'lib0/encoding';
@@ -16,6 +18,7 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { ApiError } from '../core/errors';
+import { runSheetsCompaction } from '../document/transform/run-transform';
 import type { Drive } from '../drive';
 import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
@@ -41,6 +44,14 @@ const TOUCH_THROTTLE_MS = 60_000;
 // The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
 export const CLOSE_LINGER_MS = 60_000;
+// A compaction waits for the one transform child behind whatever holds it, such as a 120 s export, and then runs
+// under its own 60 s deadline. Past this budget for the two together, the document closes without it.
+const COMPACTION_BUDGET_MS = 180_000;
+// A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until it opens
+// again, so it doesn't hold the one child at every close.
+const MAX_COMPACTION_FAILURES = 3;
+// The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
+const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
@@ -91,6 +102,12 @@ export class CollabDocument {
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
     private untouchedUpdateAt: number | null = null;
     private readonly editRecordedAtByUser = new Map<string, number>();
+    // Moves with every update and every subscribe. A compaction swaps its result in only while it hasn't moved since
+    // the compaction read the document.
+    private generation = 0;
+    // The compaction in flight, which a destruct aborts.
+    private compaction: AbortController | null = null;
+    private compactionFailures = 0;
 
     public constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
@@ -134,6 +151,7 @@ export class CollabDocument {
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
+            this.generation++;
             const conn = isConnection(origin) ? origin : null;
             this.broadcastMessage(
                 conn,
@@ -141,7 +159,7 @@ export class CollabDocument {
             );
             const user = conn && this.connections.get(conn);
             if (user) this.recordEditThrottled(user);
-            this.throttledTouchUpdatedAt();
+            if (origin !== COMPACTION_ORIGIN) this.throttledTouchUpdatedAt();
         });
 
         this.awareness.on(
@@ -164,6 +182,7 @@ export class CollabDocument {
         if (this.closed) return;
         this.closed = true;
         clearTimeout(this.closeTimer);
+        this.compaction?.abort();
         if (this.untouchedUpdateAt !== null) {
             this.drive
                 .touchUpdatedAt(this.path.mountId, this.path.id, new Date(this.untouchedUpdateAt))
@@ -183,6 +202,7 @@ export class CollabDocument {
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
+        this.generation++;
         this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
@@ -277,7 +297,9 @@ export class CollabDocument {
 
     // Replaces the document's state with a version's, for a version restore. It runs as one Yjs
     // transaction, so it makes one update, which is saved and sent to every editor like any edit. It is
-    // synchronous, so nothing can change the document halfway, and the caller needs no lock.
+    // synchronous, so nothing can change the document halfway, and the caller needs no lock. A workbook
+    // gets a fresh base in the same transaction, so an open tab can't take the restored snapshot for a
+    // compaction of the one it holds.
     public applySnapshotState(state: Uint8Array): void {
         if (this.closed) throw new Error('applySnapshotState: CollabDocument is closed');
         if (!isCollabType(this.path.type)) {
@@ -285,7 +307,10 @@ export class CollabDocument {
         }
         const roots = EIGEN_DOC_TYPE_INFO[this.path.type].yjsRoots;
         if (!roots) throw new Error(`No yjsRoots schema declared for ${this.path.type}`);
-        restoreYjsDoc(this.doc, state, roots);
+        this.doc.transact(() => {
+            restoreYjsDoc(this.doc, state, roots);
+            if (this.path.type === DRIVE_TYPE_SHEETS) stampSheetsBase(this.doc, null);
+        });
     }
 
     private dropConnection(conn: ServerWebSocket<unknown>): void {
@@ -302,11 +327,58 @@ export class CollabDocument {
     private scheduleClose(): void {
         clearTimeout(this.closeTimer);
         this.closeTimer = setTimeout(() => {
-            if (this.closed || this.connections.size > 0) return;
-            this.drive.closeCollabDocument(this.path.mountId, this.path.id).catch(() => {});
+            // A compaction in flight closes the document itself when it ends.
+            if (this.closed || this.connections.size > 0 || this.compaction) return;
+            this.closeAfterLinger().catch(() => {});
         }, CLOSE_LINGER_MS);
         // A lingering document must never keep the process alive at shutdown.
         this.closeTimer.unref();
+    }
+
+    // A workbook folds its op log into its snapshot first. The registry still holds the document meanwhile, so a
+    // socket that connects reattaches to it, and then the document stays open until the next linger.
+    private async closeAfterLinger(): Promise<void> {
+        const compacts =
+            this.path.type === DRIVE_TYPE_SHEETS &&
+            this.compactionFailures < MAX_COMPACTION_FAILURES &&
+            this.doc.getArray('ops').length > 0;
+        if (compacts) {
+            await this.compactSheetsOps();
+            if (this.closed || this.connections.size > 0) return;
+        }
+        await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
+    }
+
+    // It reads the batches from the live doc in one step, never from data.db, which can lag behind. The swap deletes
+    // exactly the batches the transform replayed, so the two must be the same.
+    private async compactSheetsOps(): Promise<void> {
+        const ops = this.doc.getArray<Op[]>('ops');
+        const batches = ops.toArray();
+        const generation = this.generation;
+        const abort = new AbortController();
+        this.compaction = abort;
+        let snapshot: string;
+        try {
+            const budget = AbortSignal.any([abort.signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
+            snapshot = await runSheetsCompaction(readSheetsSnapshotJson(this.doc) ?? null, batches, budget);
+        } catch (err) {
+            if (abort.signal.aborted) return;
+            const givesUp = ++this.compactionFailures === MAX_COMPACTION_FAILURES;
+            console.warn(
+                `[collab] sheets compaction failed path=${this.path.id}${givesUp ? ', gave up until it opens again' : ''}:`,
+                err instanceof Error ? err.message : err,
+            );
+            return;
+        } finally {
+            this.compaction = null;
+        }
+        this.compactionFailures = 0;
+        // Anything since the read, a subscribe included, makes the result stale. The next close timer tries again.
+        if (this.closed || this.generation !== generation) return;
+        this.doc.transact(() => {
+            writeSheetsSnapshot(this.doc, snapshot, readSheetsBase(this.doc)?.id ?? null);
+            ops.delete(0, batches.length);
+        }, COMPACTION_ORIGIN);
     }
 
     private sendSyncStep1(conn: ServerWebSocket<unknown>): void {

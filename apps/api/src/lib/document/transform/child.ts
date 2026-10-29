@@ -29,7 +29,7 @@ import type {
     TransformResult,
     TransformWarning,
 } from './protocol';
-import { toTransformError } from './protocol';
+import { toTransferableText, toTransformError } from './protocol';
 
 async function renderPreview(
     request: CollabPreviewJob,
@@ -177,6 +177,12 @@ async function renderCollabRequest(
 async function handleRequest(jobId: number, request: DocumentTransformRequest): Promise<DocumentTransformResponse> {
     // Bytes-sourced jobs carry their own input — no document to materialize.
     if ('data' in request) return runBytesRequest(request);
+    // So does a compaction, which the main thread read from the live document.
+    if (request.kind === 'compact') {
+        const { compactSheetsSnapshot } = await import('../sheets');
+        const snapshot = compactSheetsSnapshot(request.snapshot, request.batches);
+        return { ok: true, result: { snapshot: toTransferableText(snapshot) }, warnings: [] };
+    }
 
     // Preview and export both read the persisted document, so materialization is shared.
     const { materializeYjsState } = await import('../../collab/yjs-loader');
