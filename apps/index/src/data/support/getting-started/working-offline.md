@@ -6,7 +6,7 @@ category: Basics
 tags: [offline, sync, editing, troubleshooting, getting-started]
 related: [getting-started/your-first-steps, drive/file-versions]
 order: 7
-updated: 2026-09-29
+updated: 2026-10-29
 ---
 
 Documents, spreadsheets, presentations, drawings, and boards save themselves as you type, which means they need the server. This page explains what you see when the connection to it goes away for a moment, and what happens to the work you did meanwhile.
@@ -21,7 +21,7 @@ A short hiccup never shows the icon at all. Eigen waits a second or two before d
 
 <div class="eigen-callout">
 
-Edits made while the icon is showing live only in this browser tab. Nothing is kept on your computer, so closing the tab before the connection returns loses them.
+Edits made while the icon is showing live only in this browser tab. Nothing is kept on your computer, so closing the tab before the connection returns loses them. So does an update of Eigen while you are offline: the page then reloads instead of sending them.
 
 </div>
 
@@ -55,6 +55,6 @@ If the document was already open, it stays on screen and shows as offline. Reloa
 
 ## The page reloads by itself
 
-**What it means:** someone restored this account from a backup while you had the document open. The copy in your tab belongs to the version that has been replaced, so Eigen reloads the page onto the restored one rather than syncing the old copy back over it.
+**What it means:** Eigen was updated, or someone restored this account from a backup, while you had the page open. The page in your tab belongs to what has been replaced, so Eigen reloads it rather than sending the old copy back.
 
-**What to do:** nothing. The page comes back on the restored document. Anything you typed in the seconds before the reload belongs to the replaced copy and is not kept.
+**What to do:** nothing. The page comes back on the new version or the restored document. Anything you typed in the seconds before the reload, or while Eigen was down, is not kept.

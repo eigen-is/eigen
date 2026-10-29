@@ -2,6 +2,7 @@ import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { getServerDataPath, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { LocalFilesystem } from '../../lib/core/local-filesystem';
+import { restoreEnvAfterEach } from '../env-test-helpers';
 
 // The per-home half of the data epoch is one small JSON file in data/server/, read once per process. A stream announces
 // it on every keepalive, so a file that no longer parses must cost a reload, never every stream and collab open.
@@ -9,6 +10,7 @@ import { LocalFilesystem } from '../../lib/core/local-filesystem';
 const file = getServerDataPath(SERVER_RUNTIME_FILES.homeEpochs);
 const original = existsSync(file) ? readFileSync(file) : null;
 let loads = 0;
+restoreEnvAfterEach(['EIGEN_COMMIT']);
 
 // A process start: the module reads the file anew. The query makes bun evaluate it anew.
 async function startProcess(): Promise<typeof import('../../lib/home/data-epoch')> {
@@ -22,6 +24,14 @@ afterEach(() => {
 });
 
 describe('Data epoch', () => {
+    test('an update changes it, so a tab never runs old code against the new server', async () => {
+        const { getDataEpoch } = await startProcess();
+        process.env['EIGEN_COMMIT'] = '1111111';
+        const before = getDataEpoch('user_a');
+        process.env['EIGEN_COMMIT'] = '2222222';
+        expect(getDataEpoch('user_a')).not.toBe(before);
+    });
+
     test('a torn epochs file reads as no restores yet, and the next rotation writes it whole again', async () => {
         writeFileSync(file, '{"user_a":"half');
         const { getDataEpoch, rotateHomeDataEpoch } = await startProcess();

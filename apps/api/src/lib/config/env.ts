@@ -1,3 +1,6 @@
+// The API's reads of its process environment, such as whether it runs in production, which docker profiles are on
+// and the build it runs. Each is a function, so a test can change a variable between calls.
+
 export function isProduction(): boolean {
     return process.env['PRODUCTION'] === '1' || process.env['NODE_ENV'] === 'production';
 }
@@ -30,6 +33,11 @@ export function isBundledCaddy(): boolean {
 // The relay a mail-off install sends through; unset, it sends no email at all.
 export function getRelayHost(): string | undefined {
     return process.env['SMTP_RELAY_HOST'] || undefined;
+}
+
+// The commit the API image was built from, set by its Dockerfile and by ./eigen for a local build; unset in `bun run dev`.
+export function getBuildCommit(): string | undefined {
+    return process.env['EIGEN_COMMIT'] || undefined;
 }
 
 // The install's .env.production, which Compose mounts read-only for the server backup; unset in `bun run dev`.

@@ -1,13 +1,16 @@
-// The data epoch is a random stamp that changes only when a restore replaces a home's data. An open
-// browser tab remembers the stamp it started with. The event stream announces the current one and a
-// collab socket checks it when it connects; when it differs, the tab reloads. Without it, a tab that
-// was open (or offline) during a restore would sync its old state back over the restored data.
+// The data epoch is a stamp that changes when a restore replaces a home's data or an update replaces
+// the code. An open browser tab remembers the stamp it started with. The event stream announces the
+// current one and a collab socket checks it when it connects; when it differs, the tab reloads. Without
+// it, a tab that was open (or offline) during a restore would sync its old state back over the restored
+// data, and a tab from before an update would write old structures to the new server.
 //
-// The stamp is the server's part followed by the home's part. The server's part changes when the
-// whole server is restored, the home's part when only that home is restored.
+// The stamp is the server's part, the build's commit, then the home's part. The server's part changes
+// when the whole server is restored, the commit with every update, the home's part when only that home
+// is restored.
 
 import { existsSync, readFileSync } from 'node:fs';
 import { parseStringRecord } from '@workspace/lib/validation';
+import { getBuildCommit } from '../config/env';
 import { getServerDataPath, SERVER_RUNTIME_FILES } from '../config/paths';
 import { LocalFilesystem } from '../core/local-filesystem';
 
@@ -46,7 +49,7 @@ export function getDataEpoch(ownerId: string): string {
             serverFs.writeAtomic(SERVER_RUNTIME_FILES.epoch, serverEpoch).catch(console.error);
         }
     }
-    return serverEpoch + (loadHomeEpochs().get(ownerId) ?? '');
+    return serverEpoch + (getBuildCommit() ?? '') + (loadHomeEpochs().get(ownerId) ?? '');
 }
 
 // Called by a restore of one home, after its data is back in place.

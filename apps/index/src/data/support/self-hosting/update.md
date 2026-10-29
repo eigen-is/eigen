@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-28
+updated: 2026-10-29
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -24,7 +24,7 @@ In the install folder, run:
 3. While Eigen keeps running, it makes a backup in `backups/`. When a backup is already running, it waits for that one to end. If the backup fails, the update stops there and Eigen runs on as it was.
 4. Eigen stops, switches to the new version, and starts again.
 
-Eigen is down only for the switch. Open browser tabs reconnect by themselves. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
+Eigen is down only for the switch. When it is back, every open browser tab reloads by itself onto the new version. Anything a tab had not saved yet is lost, such as text typed while Eigen was down or a comment not yet sent. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
 
 To see whether there is an update, and what it brings, without installing it: `./eigen update --check`. To install a specific release: `./eigen update 0.3.1`.
 

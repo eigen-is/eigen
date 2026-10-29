@@ -6,6 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
 
 ## [0.4.1] - 2026-10-28

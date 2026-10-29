@@ -8,11 +8,11 @@ import { ROLE_MAILBOX_LOCAL_PARTS } from '@workspace/lib/validation';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { JsonStore } from '../core/json-store';
 import { LocalFilesystem } from '../core/local-filesystem';
-import { isProduction } from './env';
+import { getBuildCommit, isProduction } from './env';
 import { getServerDataPath, SERVER_FILES } from './paths';
 
 const VERSION: string = pkg.version;
-const COMMIT: string | undefined = process.env['EIGEN_COMMIT'] || undefined;
+const COMMIT = getBuildCommit();
 const BUILT_AT: Date | undefined = process.env['EIGEN_BUILT_AT'] ? new Date(process.env['EIGEN_BUILT_AT']) : undefined;
 
 // Identity + secrets for the deployment. The secret is made at first boot, the rest set during setup; only
