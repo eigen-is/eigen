@@ -29,13 +29,26 @@ The most useful thing right now is to use Eigen and tell me what breaks. Install
 
 Eigen has a dozen apps and a lot of shared code underneath. I can't give all of it the same attention. If one of them interests you, I'd love to hand it over: look after it, improve it, sort its bug reports.
 
-The open work is written down, so you don't have to guess:
+What each app is working toward:
+
+- **Mail**: everything people expect from Gmail or Outlook, in the browser and in any mail app on their phone or computer
+- **Drive**: a file store that's as easy as Google Drive or Dropbox, and that people trust with their only copy
+- **Docs**: on par with Word and Google Docs, and opening and saving Word files without losing anything
+- **Sheets**: on par with Excel and Google Sheets, in formulas, charts and Excel files
+- **Slides**: on par with PowerPoint and Google Slides, and PowerPoint files that open as they were made
+- **Vector**: a drawing app as easy to use as Excalidraw
+- **Stickies**: a board for notes and ideas, as easy as Miro or FigJam
+- **Calendar and Contacts**: on par with Google Calendar and Contacts, and syncing with every phone and calendar app
+- **Chat**: on par with Slack or Google Chat, for small teams
+- **Admin and Space** (account settings): running an Eigen server and an account without needing the command line
+
+Areas that cross apps need owners too: search, accessibility, phones and tablets, speed, security, copy and paste, tests and documentation.
+
+Where to find the open work:
 
 - **[ROADMAP.md](ROADMAP.md)**: the work for every app and area, most important first, with **Next up** at the top. What waits until after 1.0 is in [ROADMAP-POST-1.md](ROADMAP-POST-1.md).
 - **The app backlogs**: [DOCS-TODO.md](DOCS-TODO.md), [SHEETS-TODO.md](SHEETS-TODO.md), [CHARTS-TODO.md](CHARTS-TODO.md) and [CANVAS-TODO.md](CANVAS-TODO.md) (Slides, Vector and Stickies).
 - **[docs/proposals/](proposals/)**: designs for larger features that aren't built yet. A good place to start if you want to own something bigger.
-
-Areas that cross apps need owners too: search, accessibility, phones and tablets, speed, security, copy and paste, tests and documentation.
 
 Write to [reinder@eigen.is](mailto:reinder@eigen.is), or open an issue that says "I want to work on X".
 
