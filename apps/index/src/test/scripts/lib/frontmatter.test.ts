@@ -34,7 +34,7 @@ describe('parseContentFile', () => {
         expect(() => parseContentFile(raw, supportFrontmatterSchema)).toThrow(/title/);
     });
 
-    test('coerces an unquoted YAML date to a YYYY-MM-DD string', () => {
+    test('keeps an unquoted YAML date as a YYYY-MM-DD string', () => {
         const raw = ['---', 'title: T', 'description: D', 'type: overview', 'updated: 2026-05-20', '---', 'body'].join(
             '\n',
         );

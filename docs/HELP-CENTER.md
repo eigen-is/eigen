@@ -26,7 +26,7 @@ postbuild  prerender.tsx, build-search-index.ts                       every rout
 
 ## A bad frontmatter field fails the build
 
-`build-content.ts` walks `src/data/{blog,support}`, parses frontmatter with `gray-matter` and validates it against the Zod schemas in `apps/index/scripts/lib/content-types.ts`. A bad or missing required field throws, so a broken article never ships. It extracts media grids and renders Markdown with `markdown-it` and `markdown-it-anchor`.
+`build-content.ts` walks `src/data/{blog,support}`, parses frontmatter with `Bun.YAML` and validates it against the Zod schemas in `apps/index/scripts/lib/content-types.ts`. A bad or missing required field throws, so a broken article never ships. It extracts media grids and renders Markdown with `markdown-it` and `markdown-it-anchor`.
 
 Per collection it writes one `<slug>.json` body (`{ html, mediaGrids }`) and one `<collection>.manifest.json` with metadata only: title, description, type, category, tags, order, `updated`, cross-sections, the h2/h3 TOC and the resolved `related` list. The output goes to `src/content/.generated/`, which is gitignored: it is a build artifact.
 
