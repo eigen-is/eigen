@@ -2,11 +2,15 @@
 
 Open work on the road to a trustworthy 1.0, data integrity first. Status is what exists in code today; designs live in the `docs/proposals/PROPOSAL_*.md` file a row links. Work that waits until after 1.0, or for a trigger, is in [ROADMAP-POST-1.md](ROADMAP-POST-1.md). Each domain keeps its own backlog: [DOCS-TODO.md](DOCS-TODO.md), [CANVAS-TODO.md](CANVAS-TODO.md) (slides, vector, stickies), [SHEETS-TODO.md](SHEETS-TODO.md) and [CHARTS-TODO.md](CHARTS-TODO.md). Their data-loss and security bugs stay here, in P0 and P1.
 
+**Next up**, in this order. Drop an item from this list when it ships.
+
+1. **The Light restore row (P0).** The last open step on the self-hoster's path (install, update, whole-server backup, a mail-off install), which comes before announcing the open-source repository.
+2. **One batch of the small P1 bugs that lose data or leak access**: an overwrite that loses its row, the zombie media sweep, the calendar web app's missing etag, and team-removal collab read-revocation.
+3. **The E2E multi-user collab suite (P0)**, the safety net the remaining sync rows (array-order batches, replace without losing a peer's edits) need before they are built.
+
 The page holds only open work: when work ships, its row or its done part goes in the same commit. A bug found and not fixed gets a row in the same commit, here or in its domain backlog, naming the file and function, the failure and the callers.
 
 **No backward compatibility before 1.0.** A change to a persisted format is done outright: existing data is dropped or converted once, and migrations become mandatory from 1.0. Stickies are the exception, because eigen.is users rely on them. Self-host tooling is never shimmed either: scripts, env files, Compose layouts and archive, snapshot and backup formats change outright, an old script is deleted, and running instances get a short note.
-
-The current focus, ahead of announcing the open-source repository, is the self-hoster's path: install, update, whole-server backup and a mail-off install. What is left of it is the Light restore row in P0.
 
 **Legend**: Effort: S / M / L / XL (rough T-shirt size). Frozen-format: flags a change to a persisted format (Yjs roots, DB schema, drive MIME values) that drops or converts existing data.
 
