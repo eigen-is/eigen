@@ -929,6 +929,30 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         }
     });
 
+    test('a tab added without a calc chain leaves the compacted workbook uncomputed, so an export still recalculates it', () => {
+        const added: Sheet = {
+            id: 'sheet-2',
+            name: 'Imported',
+            order: 1,
+            celldata: [{ r: 0, c: 0, v: { f: '=1+1', v: 99, m: '99' } }],
+            config: {},
+        };
+        const snapshot = encodeSheetsSnapshot(sheets, { computed: true });
+        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: added }]];
+        const exported = (doc: Y.Doc) => readSheetsFromDoc(doc).sheets[1].celldata?.[0]?.v?.v;
+
+        const logged = new Y.Doc();
+        logged.getMap('state').set('snapshot', snapshot);
+        logged.getArray<Op[]>('ops').push(batches);
+        const compacted = new Y.Doc();
+        compacted.getMap('state').set('snapshot', compactSheetsSnapshot(snapshot, batches));
+
+        expect(exported(logged)).toBe(2);
+        expect(exported(compacted)).toBe(2);
+        logged.destroy();
+        compacted.destroy();
+    });
+
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {
         const compacted = compactSheetsSnapshot(null, [edit(0, 'a')]);
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);

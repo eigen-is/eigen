@@ -47,9 +47,12 @@ export const CLOSE_LINGER_MS = 60_000;
 // A compaction waits for the one transform child behind whatever holds it, such as a 120 s export, and then runs
 // under its own 60 s deadline. Past this budget for the two together, the document closes without it.
 const COMPACTION_BUDGET_MS = 180_000;
-// A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until it opens
-// again, so it doesn't hold the one child at every close.
+// A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until the API
+// restarts, so it doesn't hold the one child at every close.
 const MAX_COMPACTION_FAILURES = 3;
+// The failed compactions in a row of each workbook, keyed as the collab registry keys it. A failed run still closes the
+// document, and the next open is a new CollabDocument, so the count lives outside it.
+const compactionFailures = new Map<string, number>();
 // The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
 const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
@@ -107,7 +110,6 @@ export class CollabDocument {
     private generation = 0;
     // The compaction in flight, which a destruct aborts.
     private compaction: AbortController | null = null;
-    private compactionFailures = 0;
 
     public constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
@@ -116,6 +118,10 @@ export class CollabDocument {
 
     public get connectionCount(): number {
         return this.connections.size;
+    }
+
+    private get compactionKey(): string {
+        return `${this.path.ownerId}.${this.path.mountId}.${this.path.id}`;
     }
 
     // Sets up a new document's container. If comments.db fails after data.db was made,
@@ -327,7 +333,7 @@ export class CollabDocument {
     private scheduleClose(): void {
         clearTimeout(this.closeTimer);
         this.closeTimer = setTimeout(() => {
-            // A compaction in flight closes the document itself when it ends.
+            // A compaction in flight closes the document itself when it ends, or lingers it again.
             if (this.closed || this.connections.size > 0 || this.compaction) return;
             this.closeAfterLinger().catch(() => {});
         }, CLOSE_LINGER_MS);
@@ -340,18 +346,24 @@ export class CollabDocument {
     private async closeAfterLinger(): Promise<void> {
         const compacts =
             this.path.type === DRIVE_TYPE_SHEETS &&
-            this.compactionFailures < MAX_COMPACTION_FAILURES &&
+            (compactionFailures.get(this.compactionKey) ?? 0) < MAX_COMPACTION_FAILURES &&
             this.doc.getArray('ops').length > 0;
         if (compacts) {
-            await this.compactSheetsOps();
+            const stale = await this.compactSheetsOps();
             if (this.closed || this.connections.size > 0) return;
+            // The document changed during the run, so it lingers again and the next close tries again.
+            if (stale) {
+                this.scheduleClose();
+                return;
+            }
         }
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
     }
 
     // It reads the batches from the live doc in one step, never from data.db, which can lag behind. The swap deletes
-    // exactly the batches the transform replayed, so the two must be the same.
-    private async compactSheetsOps(): Promise<void> {
+    // exactly the batches the transform replayed, so the two must be the same. It resolves true when the document
+    // changed during the run, which drops the result.
+    private async compactSheetsOps(): Promise<boolean> {
         const ops = this.doc.getArray<Op[]>('ops');
         const batches = ops.toArray();
         const generation = this.generation;
@@ -362,23 +374,27 @@ export class CollabDocument {
             const budget = AbortSignal.any([abort.signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
             snapshot = await runSheetsCompaction(readSheetsSnapshotJson(this.doc) ?? null, batches, budget);
         } catch (err) {
-            if (abort.signal.aborted) return;
-            const givesUp = ++this.compactionFailures === MAX_COMPACTION_FAILURES;
+            if (abort.signal.aborted) return false;
+            const failures = (compactionFailures.get(this.compactionKey) ?? 0) + 1;
+            compactionFailures.set(this.compactionKey, failures);
+            const givesUp = failures === MAX_COMPACTION_FAILURES;
             console.warn(
-                `[collab] sheets compaction failed path=${this.path.id}${givesUp ? ', gave up until it opens again' : ''}:`,
+                `[collab] sheets compaction failed path=${this.path.id}${givesUp ? ', gave up until the API restarts' : ''}:`,
                 err instanceof Error ? err.message : err,
             );
-            return;
+            return false;
         } finally {
             this.compaction = null;
         }
-        this.compactionFailures = 0;
-        // Anything since the read, a subscribe included, makes the result stale. The next close timer tries again.
-        if (this.closed || this.generation !== generation) return;
+        compactionFailures.delete(this.compactionKey);
+        // Anything since the read, a subscribe included, makes the result stale.
+        if (this.closed) return false;
+        if (this.generation !== generation) return true;
         this.doc.transact(() => {
             writeSheetsSnapshot(this.doc, snapshot, readSheetsBase(this.doc)?.id ?? null);
             ops.delete(0, batches.length);
         }, COMPACTION_ORIGIN);
+        return false;
     }
 
     private sendSyncStep1(conn: ServerWebSocket<unknown>): void {
