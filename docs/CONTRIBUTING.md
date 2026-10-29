@@ -181,12 +181,31 @@ The rules, and the checklist a change passes before review, are in [CODE-STANDAR
 
 ### Commit messages
 
-A commit message is read in `git log --oneline`, by someone who doesn't know the code yet.
+A commit message is read in `git log`, by someone who doesn't know the code yet. Write it in plain, short English.
 
-- **Subject**: `area: what changed`, at most 72 characters, no period. The area is an app, package or domain (`sheets`, `drive`, `auth`, `docs`). Say what a user or caller now gets, not every function touched: `sheets: undo keeps a peer's edits after a row insert`.
-- **Body**, only when the subject isn't enough: after a blank line, a few short sentences on why, and what a reviewer should know (a limit, a trade-off, a follow-up). Leave out lists of renamed symbols, measurements and test names; the diff, the tests and the domain doc hold those.
-- One change per commit. A subject that needs "and" twice is two commits.
-- No AI co-author trailers.
+**Title**: `type(area): what changed`, at most 60 characters, lower case, no period.
+
+- `type` is one of `feat` (something new a user can do), `fix` (a bug), `perf`, `refactor` (no behavior change), `test`, `docs` or `chore` (build, CI, dependencies).
+- `area` is the app, package or domain: `sheets`, `docs`, `drive`, `mail`, `calendar`, `auth`, `backup`, `ui`, `lib`.
+- Say what changed for the user or the caller, not which functions moved: `fix(sheets): undo keeps a coworker's edits`, `feat(drive): save an export straight to Drive`, `docs(roadmap): drop the done rows`.
+
+**Body**, after a blank line, for anything beyond a one-line fix. Write it for someone who knows what Eigen is but hasn't followed this part:
+
+- What was wrong or missing, as a user would notice it.
+- What the change does about it, and why this way.
+- Anything a reviewer should know: a limit, a trade-off, a follow-up.
+
+Short sentences, everyday words, and a name explained the first time it appears. Leave out lists of renamed symbols, measurements and test names: the diff, the tests and the domain doc hold those.
+
+```
+fix(drive): an overwrite no longer deletes a newer upload
+
+When saving over a file failed halfway, the cleanup could remove the
+bytes of a file someone uploaded a moment later. The cleanup now checks
+that the bytes are still the ones it wrote before deleting them.
+```
+
+One change per commit: a title that needs "and" is two commits. No AI co-author trailers.
 
 ## License
 
