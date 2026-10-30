@@ -34,8 +34,13 @@ export function sheetsNeedCompaction(path: DrivePath, doc: Y.Doc): boolean {
 export async function compactSheets(path: DrivePath, doc: Y.Doc, signal: AbortSignal): Promise<string | null> {
     try {
         const budget = AbortSignal.any([signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
-        const snapshot = await runSheetsCompaction(doc, budget);
+        const { snapshot, dropped } = await runSheetsCompaction(doc, budget);
         compactionFailures.delete(path.id);
+        if (dropped > 0) {
+            console.warn(
+                `[sheets] compaction dropped ${dropped} op ${dropped === 1 ? 'batch' : 'batches'} path=${path.id}`,
+            );
+        }
         return snapshot;
     } catch (err) {
         if (err instanceof ApiError) return null;

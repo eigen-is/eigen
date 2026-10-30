@@ -180,8 +180,8 @@ async function handleRequest(jobId: number, request: DocumentTransformRequest): 
     // So does a compaction, which the main thread read from the live document.
     if (request.kind === 'compact') {
         const { compactSheetsSnapshot } = await import('../sheets');
-        const snapshot = compactSheetsSnapshot(request.snapshot, request.batches);
-        return { ok: true, result: { snapshot: toTransferableText(snapshot) }, warnings: [] };
+        const { snapshot, dropped } = compactSheetsSnapshot(request.snapshot, request.batches);
+        return { ok: true, result: { snapshot: toTransferableText(snapshot), dropped }, warnings: [] };
     }
 
     // Preview and export both read the persisted document, so materialization is shared.

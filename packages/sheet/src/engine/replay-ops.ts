@@ -19,7 +19,13 @@ enablePatches();
 type InsertValue = { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom' };
 type DeleteValue = { type: 'row' | 'column'; start: number; end: number };
 
-export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
+// A batch the replay can't apply is reported to `onDropped`, which a caller that wants a count of its own passes. By
+// default each one is logged as a warning.
+export function replaySheetsOps(
+    sheets: Sheet[],
+    opBatches: Op[][],
+    onDropped: (error: unknown) => void = (e) => console.warn('[sheets] op batch failed to apply, skipping batch:', e),
+): Sheet[] {
     // Every base sheet carries its config collections before the first op, so the config patches the editor writes
     // resolve here as they do in the editor.
     let result = sheets.map(withNormalizedSheet);
@@ -76,7 +82,7 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = applyPatches(result, patches);
         } catch (e) {
-            console.warn('[sheets] op batch failed to apply, skipping batch:', e);
+            onDropped(e);
             result = preBatch;
         }
     }

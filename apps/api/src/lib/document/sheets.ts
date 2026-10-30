@@ -75,21 +75,30 @@ export function readSheetsFromDoc(
 
 // A compaction, in the transform process. It replays the log over the snapshot and encodes the result as an import
 // does, and the main thread swaps it in. The batches come as JSON text, which crosses to the process much faster than
-// the objects. A batch the replay rejects is skipped with a warning, as every reader skips it. A workbook with no
-// snapshot yet starts from the default sheets the editor made its edits against.
-export function compactSheetsSnapshot(snapshotJson: string | null, batchesJson: string): string {
+// the objects. A batch the replay rejects is skipped, as every reader skips it, and `dropped` counts them for the
+// caller to log. A workbook with no snapshot yet starts from the default sheets the editor made its edits against.
+export function compactSheetsSnapshot(
+    snapshotJson: string | null,
+    batchesJson: string,
+): { snapshot: string; dropped: number } {
     const { sheets, computed } = snapshotJson
         ? decodeSheetsWorkbook(snapshotJson)
         : { sheets: createDefaultSheets(), computed: true };
-    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson));
-    if (computed && !sheetsNeedRecalc(replayed)) return encodeSheetsSnapshot(replayed, { computed: true });
+    let dropped = 0;
+    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++);
+    if (computed && !sheetsNeedRecalc(replayed)) {
+        return { snapshot: encodeSheetsSnapshot(replayed, { computed: true }), dropped };
+    }
     // A workbook nobody computed, such as an import whose recalc failed, is computed here, and so is one with a tab an
     // import added. Its exports then stop paying for the recalc. A recalc that fails stores the replayed values, and
     // an export tries again.
     try {
-        return encodeSheetsSnapshot(recalcSheets(replayed, SERVER_RECALC_BUDGET), { computed: true });
+        return {
+            snapshot: encodeSheetsSnapshot(recalcSheets(replayed, SERVER_RECALC_BUDGET), { computed: true }),
+            dropped,
+        };
     } catch {
-        return encodeSheetsSnapshot(replayed, { computed: false });
+        return { snapshot: encodeSheetsSnapshot(replayed, { computed: false }), dropped };
     }
 }
 
