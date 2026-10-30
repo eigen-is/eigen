@@ -46,11 +46,18 @@ type KeyOptions = {
     shiftKey?: boolean;
     code?: string;
     cellInput?: HTMLDivElement;
+    target?: EventTarget;
 };
 
-function keyDown(ctx: Context, key: string, { altKey, ctrlKey, mod, shiftKey, code, cellInput }: KeyOptions = {}) {
+function keyDown(
+    ctx: Context,
+    key: string,
+    { altKey, ctrlKey, mod, shiftKey, code, cellInput, target }: KeyOptions = {},
+) {
     let prevented = false;
+    const input = cellInput ?? (win.document.createElement('div') as unknown as HTMLDivElement);
     const e = {
+        target: target ?? input,
         key,
         code: code ?? (/^[a-z]$/i.test(key) ? `Key${key.toUpperCase()}` : key),
         keyCode: key === 'ArrowDown' ? 40 : 70,
@@ -63,7 +70,6 @@ function keyDown(ctx: Context, key: string, { altKey, ctrlKey, mod, shiftKey, co
         },
         stopPropagation() {},
     } as unknown as KeyboardEvent;
-    const input = cellInput ?? (win.document.createElement('div') as unknown as HTMLDivElement);
     handleGlobalKeyDown(ctx, input, null, e, {} as GlobalCache);
     return prevented;
 }
@@ -273,6 +279,12 @@ describe('handleGlobalKeyDown — no selection', () => {
         const ctx = unselected();
         expect(keyDown(ctx, 'x')).toBe(true);
         expect(ctx.editingCellPosition).toEqual([]);
+    });
+
+    test('a key typed into another field of the workbook still reaches it', () => {
+        const ctx = unselected();
+        const field = win.document.createElement('input') as unknown as EventTarget;
+        expect(keyDown(ctx, 'x', { target: field })).toBe(false);
     });
 
     test('Enter and Tab do nothing and log nothing', () => {
