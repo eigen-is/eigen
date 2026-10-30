@@ -61,11 +61,12 @@ type StubbedRun = {
 // the search extract a real close queues, run as usual. While `busy` is set, it refuses a compaction as a full queue does.
 function stubRunner() {
     const runs: StubbedRun[] = [];
-    const state = { busy: false };
+    const state: { busy: boolean; failure: ApiError | null } = { busy: false, failure: null };
     const original = documentTransformRunner.run;
     documentTransformRunner.run = (request, opts) => {
         if (request.kind !== 'compact') return original.call(documentTransformRunner, request, opts);
         if (state.busy) throw new ApiError(503, BUSY_MESSAGE);
+        if (state.failure) throw state.failure;
         return new Promise((resolve) => runs.push({ request, signal: opts.signal, settle: resolve }));
     };
     return { runs, state, restore: () => (documentTransformRunner.run = original) };
@@ -372,6 +373,23 @@ describe('CollabDocument compacts a workbook at close', () => {
             stub.state.busy = false;
             expect(await sheet.closeOnce(fail)).toBe(true);
             expect(warn.mock.calls.filter((args) => String(args[0]).includes('gave up'))).toHaveLength(0);
+        } finally {
+            sheet.restore();
+            warn.mockRestore();
+            stub.restore();
+        }
+    }, 30_000);
+
+    test('an ApiError other than the busy 503 counts toward giving up', async () => {
+        const stub = stubRunner();
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await registeredSheet('compaction-api-error-counts', stub);
+        try {
+            stub.state.failure = new ApiError(413, 'Too large');
+            for (let i = 0; i < 3; i++) expect(await sheet.closeOnce(fail)).toBe(false);
+            stub.state.failure = null;
+            expect(await sheet.closeOnce(fail)).toBe(false);
+            expect(warn.mock.calls.filter((args) => String(args[0]).includes('gave up'))).toHaveLength(1);
         } finally {
             sheet.restore();
             warn.mockRestore();

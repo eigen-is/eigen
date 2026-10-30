@@ -43,7 +43,7 @@ export async function compactSheets(path: DrivePath, doc: Y.Doc, signal: AbortSi
         }
         return snapshot;
     } catch (err) {
-        if (err instanceof ApiError) return null;
+        if (err instanceof ApiError && err.status === 503) return null;
         if (err instanceof TransformFailedError && (err.code === 'canceled' || err.code === 'shutdown')) return null;
         const failures = (compactionFailures.get(path.id) ?? 0) + 1;
         compactionFailures.set(path.id, failures);
