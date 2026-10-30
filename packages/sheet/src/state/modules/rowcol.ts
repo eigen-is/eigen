@@ -4,8 +4,8 @@
 // calc chain, validation rules, links and the selection. A local edit and a peer's op both come through here.
 
 import { isRecord } from '@workspace/lib/guards';
-import type { MergeCell, SingleRange } from '@workspace/lib/sheets';
-import { assign, cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
+import type { SingleRange } from '@workspace/lib/sheets';
+import { cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
 import {
     applySheetsDeleteRowCol,
     applySheetsInsertRowCol,
@@ -23,30 +23,6 @@ import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
 type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
-
-const refreshLocalMergeData = (merge_new: Record<string, MergeCell>, file: Sheet) => {
-    for (const v of Object.values(merge_new)) {
-        const { r, c, rs, cs } = v;
-
-        // Engine inserts null for new cells inside an expanded merge range; the
-        // canvas renderer needs `mc` on every cell of the range to hide them
-        // behind the top-left, so stamp through nulls too.
-        for (let i = r; i < r + rs; i += 1) {
-            for (let j = c; j < c + cs; j += 1) {
-                if (!file?.data?.[i]) continue;
-                const existing = file.data[i][j];
-                file.data[i][j] = existing ? assign(cloneDeep(existing), { mc: { r, c } }) : { mc: { r, c } };
-            }
-        }
-
-        if (file?.data?.[r]) {
-            const existing = file.data[r][c];
-            file.data[r][c] = existing
-                ? assign(cloneDeep(existing), { mc: { r, c, rs, cs } })
-                : { mc: { r, c, rs, cs } };
-        }
-    }
-};
 
 // Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
 function shiftFrozenFocus(file: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
@@ -87,7 +63,6 @@ function shiftStateOnlyFieldsForInsert(
     }
     file.calcChain = newCalcChain;
 
-    // Filter config update
     const cfg = file.config || {};
     const { filterRange } = file;
     const { filter } = file;
@@ -245,7 +220,6 @@ function shiftStateOnlyFieldsForDelete(
     }
     file.calcChain = newCalcChain;
 
-    // Filter config update
     const cfg = file.config || {};
     const { filterRange } = file;
     const { filter } = file;
@@ -421,7 +395,7 @@ function adjustSelectionForInsert(
 // its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
 // once survives, and the undo puts back only the entries the op moved; an image never moves.
 function writeBackSheets(ctx: Context, sheets: Sheet[]) {
-    sheets.forEach((next, i) => {
+    for (const [i, next] of sheets.entries()) {
         const sheet: Record<string, unknown> = ctx.sheets[i];
         for (const [key, value] of Object.entries(next)) {
             if (key !== 'charts' && sheet[key] !== value) sheet[key] = value;
@@ -437,7 +411,7 @@ function writeBackSheets(ctx: Context, sheets: Sheet[]) {
                 else stored[field] = value;
             }
         }
-    });
+    }
 }
 
 function writeEntries(record: Record<string, unknown>, next: Record<string, unknown>) {
@@ -491,9 +465,6 @@ export function insertRowCol(
     shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
     if (changeSelection) adjustSelectionForInsert(ctx, { ...op, id });
 
-    const merge_new = file.config?.merge ?? {};
-    refreshLocalMergeData(merge_new, file);
-
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
@@ -542,9 +513,6 @@ export function deleteRowCol(
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
     ctx.selections = undefined;
-
-    const merge_new = file.config?.merge ?? {};
-    refreshLocalMergeData(merge_new, file);
 
     ctx.formulaCache.formulaCellInfoMap = null;
 }
