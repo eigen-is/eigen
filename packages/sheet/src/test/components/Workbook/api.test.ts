@@ -365,3 +365,74 @@ describe('applyOp and a joiner skip the same malformed sheet and row ops', () =>
         expect(grid(applyPeerOps(ctx, ops).sheets)).toEqual(joiner);
     });
 });
+
+// A row or column op moves a merge in `config.merge`, and the cells it covers must follow: every cell points at the
+// corner, and the corner holds the size. A peer's bare op carries no stamps, so a live client and a joiner each derive
+// them, and must derive the same ones, or the compacted log stores the joiner's.
+describe('applyOp and a joiner stamp a merge the same way after a row or column op', () => {
+    // A 2 by 2 merge over C3:D4, so every case below is above, at an edge of, inside or below it on either axis.
+    const merged = () =>
+        produce(makeCtx(null), (draft: Context) => {
+            const data = Array.from({ length: 8 }, () => Array.from({ length: 8 }, (): Cell | null => null));
+            data[2][2] = { v: 1, m: '1', mc: { r: 2, c: 2, rs: 2, cs: 2 } };
+            data[2][3] = { mc: { r: 2, c: 2 } };
+            data[3][2] = { mc: { r: 2, c: 2 } };
+            data[3][3] = { mc: { r: 2, c: 2 } };
+            draft.sheets[0] = {
+                ...draft.sheets[0],
+                row: 8,
+                column: 8,
+                data,
+                config: { merge: { '2_2': { r: 2, c: 2, rs: 2, cs: 2 } } },
+            };
+        });
+    // Each cell's stamp, and each merge's stamps as `config.merge` says they must be.
+    const stamps = (sheet: LibSheet) =>
+        dataToCelldata(sheet.data).flatMap(({ r, c, v }) => (v?.mc ? [{ r, c, mc: v.mc }] : []));
+    const expected = (sheet: LibSheet) =>
+        Object.values(sheet.config?.merge ?? {}).flatMap(({ r, c, rs, cs }) =>
+            Array.from({ length: rs * cs }, (_, i) => {
+                const [row, column] = [r + Math.floor(i / cs), c + (i % cs)];
+                return { r: row, c: column, mc: row === r && column === c ? { r, c, rs, cs } : { r, c } };
+            }),
+        );
+    const byPlace = (a: { r: number; c: number }, b: { r: number; c: number }) => a.r - b.r || a.c - b.c;
+
+    const insert = (type: 'row' | 'column', index: number, direction: 'lefttop' | 'rightbottom'): Op => ({
+        op: 'insertRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type, index, count: 1, direction },
+    });
+    const remove = (type: 'row' | 'column', start: number, end: number): Op => ({
+        op: 'deleteRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type, start, end },
+    });
+
+    it.each(
+        (['row', 'column'] as const).flatMap((type): [string, Op][] => [
+            [`a ${type} insert before the merge`, insert(type, 1, 'lefttop')],
+            [`a ${type} insert at its first ${type}`, insert(type, 2, 'lefttop')],
+            [`a ${type} insert after its first ${type}`, insert(type, 2, 'rightbottom')],
+            [`a ${type} insert at its last ${type}`, insert(type, 3, 'lefttop')],
+            [`a ${type} insert after its last ${type}`, insert(type, 3, 'rightbottom')],
+            [`a ${type} insert after the merge`, insert(type, 5, 'lefttop')],
+            [`a ${type} delete before the merge`, remove(type, 0, 0)],
+            [`a ${type} delete across its first ${type}`, remove(type, 1, 2)],
+            [`a ${type} delete of its first ${type}`, remove(type, 2, 2)],
+            [`a ${type} delete of its last ${type}`, remove(type, 3, 3)],
+            [`a ${type} delete across its last ${type}`, remove(type, 3, 4)],
+            [`a ${type} delete of the whole merge`, remove(type, 2, 3)],
+            [`a ${type} delete after the merge`, remove(type, 5, 5)],
+        ]),
+    )('%s', (_, op) => {
+        const ctx = merged();
+        const [joiner] = join(ctx, [[op]]);
+        const [live] = applyPeerOps(ctx, [op]).sheets;
+        expect(stamps(joiner).sort(byPlace)).toEqual(expected(joiner).sort(byPlace));
+        expect(dataToCelldata(live.data)).toEqual(dataToCelldata(joiner.data));
+        expect(live.config?.merge).toEqual(joiner.config?.merge);
+    });
+});
