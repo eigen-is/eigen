@@ -16,9 +16,8 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { ApiError } from '../core/errors';
-import { restampRestoredSheetsBase, sheetsNeedCompaction, writeSheetsSnapshotToYjs } from '../document/sheets';
-import { runSheetsCompaction } from '../document/transform/run-transform';
-import { TRANSFORM_LIMITS } from '../document/transform/runner';
+import { restampRestoredSheetsBase, stampMissingSheetsBase, writeSheetsSnapshotToYjs } from '../document/sheets';
+import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import type { User } from '../user';
 import { COLLAB_DB_CONFIG } from './db-config';
@@ -44,26 +43,11 @@ const TOUCH_THROTTLE_MS = 60_000;
 // The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
 export const CLOSE_LINGER_MS = 60_000;
-// A compaction waits for the one transform child behind whatever holds it, at worst an export, and then runs under its
-// own deadline. Past the two together, the document closes without it.
-const COMPACTION_BUDGET_MS = TRANSFORM_LIMITS.export.deadlineMs + TRANSFORM_LIMITS.compact.deadlineMs;
-// A workbook whose compaction keeps failing, such as one too large for the child's memory, stops trying until the API
-// restarts, so it doesn't hold the one child at every close.
-const MAX_COMPACTION_FAILURES = 3;
-// The failed compactions in a row of each workbook, keyed with collabDocumentKey. A failed run still closes the
-// document, and the next open is a new CollabDocument, so the count lives outside it.
-const compactionFailures = new Map<string, number>();
 // The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
 const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
-
-// The one key of an open document, for the Drive's registry and the compaction failure count. It lives here, not in
-// the registry, because the registry imports this file.
-export function collabDocumentKey(ownerId: string, mountId: string, pathId: string): string {
-    return `${ownerId}.${mountId}.${pathId}`;
-}
 
 function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
     const encoder = encoding.createEncoder();
@@ -126,10 +110,6 @@ export class CollabDocument {
         return this.connections.size;
     }
 
-    private get compactionKey(): string {
-        return collabDocumentKey(this.path.ownerId, this.path.mountId, this.path.id);
-    }
-
     // Sets up a new document's container. If comments.db fails after data.db was made,
     // provisionManagedDbs removes both, so a retry starts clean.
     public static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
@@ -160,6 +140,8 @@ export class CollabDocument {
         this.dataDbPathId = dataDbPath.id;
 
         this.provider = new DbProvider(this.doc, this.path.name, managedDb);
+        // Before the document listens for updates, so the stamp is saved but moves no Modified time.
+        stampMissingSheetsBase(this.path.type, this.doc);
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
@@ -349,48 +331,25 @@ export class CollabDocument {
     // A workbook folds its op log into its snapshot first. The registry still holds the document meanwhile, so a
     // socket that connects reattaches to it, and then the document stays open until the next linger.
     private async closeAfterLinger(): Promise<void> {
-        const failures = compactionFailures.get(this.compactionKey) ?? 0;
-        if (failures < MAX_COMPACTION_FAILURES && sheetsNeedCompaction(this.path.type, this.doc)) {
-            const stale = await this.compactSheetsOps();
+        if (sheetsNeedCompaction(this.path, this.doc)) {
+            const generation = this.generation;
+            this.compaction = new AbortController();
+            // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
+            const snapshot = await compactSheets(this.path, this.doc, this.compaction.signal);
+            this.compaction = null;
             if (this.closed || this.connections.size > 0) return;
-            // The document changed during the run, so it lingers again and the next close tries again.
-            if (stale) {
-                this.scheduleClose();
-                return;
+            if (snapshot !== null) {
+                // Anything since the read, a subscribe included, makes the result stale. The document lingers again,
+                // and the next close tries again.
+                if (this.generation !== generation) {
+                    this.scheduleClose();
+                    return;
+                }
+                // Nothing changed, so the op log holds exactly the batches the snapshot folded, and the swap drops them.
+                writeSheetsSnapshotToYjs(this.doc, snapshot, COMPACTION_ORIGIN);
             }
         }
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);
-    }
-
-    // It resolves true when the document changed during the run, which drops the result.
-    private async compactSheetsOps(): Promise<boolean> {
-        const generation = this.generation;
-        const abort = new AbortController();
-        this.compaction = abort;
-        let snapshot: string;
-        try {
-            const budget = AbortSignal.any([abort.signal, AbortSignal.timeout(COMPACTION_BUDGET_MS)]);
-            snapshot = await runSheetsCompaction(this.doc, budget);
-        } catch (err) {
-            if (abort.signal.aborted) return false;
-            const failures = (compactionFailures.get(this.compactionKey) ?? 0) + 1;
-            compactionFailures.set(this.compactionKey, failures);
-            const givesUp = failures === MAX_COMPACTION_FAILURES;
-            console.warn(
-                `[collab] sheets compaction failed path=${this.path.id}${givesUp ? ', gave up until the API restarts' : ''}:`,
-                err instanceof Error ? err.message : err,
-            );
-            return false;
-        } finally {
-            this.compaction = null;
-        }
-        compactionFailures.delete(this.compactionKey);
-        if (this.closed) return false;
-        // Anything since the read, a subscribe included, makes the result stale.
-        if (this.generation !== generation) return true;
-        // Nothing changed, so the op log holds exactly the batches the snapshot folded, and the swap drops them all.
-        writeSheetsSnapshotToYjs(this.doc, snapshot, COMPACTION_ORIGIN);
-        return false;
     }
 
     private sendSyncStep1(conn: ServerWebSocket<unknown>): void {

@@ -4,7 +4,6 @@
 // or function name user input could influence.
 
 import type { NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
-import type { Op } from '@workspace/lib/sheets';
 import type { ImageDimensions } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
 import type { SlidePage } from '@workspace/lib/vector';
@@ -24,7 +23,7 @@ export type VectorExportFormat = 'pdf-html';
 // What an HTML export is for: the download a browser opens, or the document WeasyPrint prints.
 export type HtmlExportMode = 'screen' | 'pdf';
 
-// Out of html-document.ts, which loads jsdom, so an xlsx export never evaluates it.
+// Out of the module of exportHtmlDocument, which loads jsdom, so an xlsx export never evaluates it.
 export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
     return format === 'pdf-html' ? 'pdf' : 'screen';
 }
@@ -43,7 +42,7 @@ export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 export type ExportMediaLoader = (names: Set<string>) => Promise<ExportMedia[]>;
 
 // A job is everything a caller decides; the shared main-thread orchestration
-// (run-transform.ts) captures the Yjs source and completes it into a request.
+// (runDocumentTransform) captures the Yjs source and completes it into a request.
 // Previews reference media by URL, so no bytes cross for a preview. (Vector renders to
 // an SVG served as-is; the URL map resolves its <image> hrefs.)
 export type CollabPreviewJob = {
@@ -132,12 +131,12 @@ export type ImportTransformJob = SheetsImportJob | DocImportJob | SlidesImportJo
 export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
 export type BytesTransformJob = BytesPreviewJob | ImportTransformJob;
 
-// A workbook's op log folded into its snapshot when the document closes.
+// A workbook's op log folded into its snapshot when the document closes. The batches are the log's JSON text.
 export type SheetsCompactionJob = {
     kind: 'compact';
     documentType: 'eigensheets';
     snapshot: string | null;
-    batches: Op[][];
+    batches: string;
 };
 
 export type DocumentTransformRequest =
@@ -274,7 +273,7 @@ export type TransformResult =
     | SheetsCompactionResult;
 
 // Which result a job kind produces. The runner proves the pairing at runtime with
-// resultMatchesRequest; run-transform.ts narrows to this once so no caller re-checks.
+// resultMatchesRequest; runTransformRequest narrows to this once so no caller re-checks.
 // Keyed off the job discriminants, so a captured request (job + source) resolves the
 // same. A future arm resolves to `never` and fails to compile at its callsite.
 export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob | SheetsCompactionJob> = R extends {
@@ -316,8 +315,8 @@ export type ChildResponseEnvelope = {
 // with a different payload fails to compile here until it is handled.
 export function inputBytesOf(request: DocumentTransformRequest): number {
     if ('data' in request) return request.data.byteLength;
-    // The batches go uncounted: measuring them would serialize them once more on the main thread.
-    if (request.kind === 'compact') return Buffer.byteLength(request.snapshot ?? '');
+    if (request.kind === 'compact')
+        return Buffer.byteLength(request.snapshot ?? '') + Buffer.byteLength(request.batches);
     let bytes = request.source.snapshot?.data.byteLength ?? 0;
     for (const update of request.source.updates) bytes += update.data.byteLength;
     return bytes;

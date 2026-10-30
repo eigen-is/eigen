@@ -8,6 +8,7 @@ import { DRIVE_TYPE_SHEETS, isCollabType } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import { readYjsStateFromFile } from '../collab/yjs-loader';
 import { ApiError } from '../core';
+import { resetSheetsCompactionFailures } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import type { Mount } from '../mount/mount';
 import type { RetentionPolicy } from './retention';
@@ -64,6 +65,7 @@ export async function restoreContainer(
             // A collab document, such as a doc or a sheet, takes the old state in place. Connected
             // editors follow without a reload.
             await restoreYjsContainer(drive, mount, container.id, state);
+            resetSheetsCompactionFailures(container);
         } else {
             // A chat, or a gone data.db, gets the bytes of the version written over data.db.
             await mount.replaceContainerDataDb(container.id, tempPath);

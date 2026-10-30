@@ -5,16 +5,21 @@ import {
     encodeSheetsSnapshot,
     readSheetsBase,
     readSheetsSnapshotJson,
+    sheetsOpLog,
+    sheetsStateMap,
 } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
 import { CLOSE_LINGER_MS, CollabDocument } from '../../lib/collab/collab-document';
+import { ApiError } from '../../lib/core/errors';
 import { compactSheetsSnapshot, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
 import { toTransferableText } from '../../lib/document/transform/protocol';
-import { documentTransformRunner } from '../../lib/document/transform/runner';
+import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transform/runner';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
+import { importIntoDocument } from '../../lib/import/import-document';
+import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, getTestContext } from '../setup';
 
 // A workbook's op log folds into its snapshot when the close timer fires: the server replays the log in the transform
@@ -53,15 +58,17 @@ type StubbedRun = {
 };
 
 // The runner answers a compaction when the test says so, so a test can act while one is in flight. Other jobs, such as
-// the search extract a real close queues, run as usual.
+// the search extract a real close queues, run as usual. While `busy` is set, it refuses a compaction as a full queue does.
 function stubRunner() {
     const runs: StubbedRun[] = [];
+    const state = { busy: false };
     const original = documentTransformRunner.run;
     documentTransformRunner.run = (request, opts) => {
         if (request.kind !== 'compact') return original.call(documentTransformRunner, request, opts);
+        if (state.busy) throw new ApiError(503, BUSY_MESSAGE);
         return new Promise((resolve) => runs.push({ request, signal: opts.signal, settle: resolve }));
     };
-    return { runs, restore: () => (documentTransformRunner.run = original) };
+    return { runs, state, restore: () => (documentTransformRunner.run = original) };
 }
 
 function succeed(run: StubbedRun): void {
@@ -72,6 +79,14 @@ function succeed(run: StubbedRun): void {
 
 function fail(run: StubbedRun): void {
     run.settle({ ok: false, error: { code: 'crashed', message: 'Document transform failed' } });
+}
+
+function cancel(run: StubbedRun): void {
+    run.settle({ ok: false, error: { code: 'canceled', message: 'Request was canceled' } });
+}
+
+function shutDown(run: StubbedRun): void {
+    run.settle({ ok: false, error: { code: 'shutdown', message: 'Server is shutting down' } });
 }
 
 describe('CollabDocument compacts a workbook at close', () => {
@@ -100,8 +115,8 @@ describe('CollabDocument compacts a workbook at close', () => {
         const doc = new CollabDocument(home.drive, path);
         await doc.init();
         doc.doc.transact(() => {
-            doc.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(SHEETS, { computed }));
-            doc.doc.getArray<Op[]>('ops').push(batches);
+            sheetsStateMap(doc.doc).set('snapshot', encodeSheetsSnapshot(SHEETS, { computed }));
+            sheetsOpLog(doc.doc).push(batches);
         });
 
         let closes = 0;
@@ -119,7 +134,7 @@ describe('CollabDocument compacts a workbook at close', () => {
         jest.useFakeTimers();
         return {
             doc,
-            ops: doc.doc.getArray<Op[]>('ops'),
+            ops: sheetsOpLog(doc.doc),
             closes: () => closes,
             touches: () => touches,
             nextClose: () => new Promise<void>((resolve) => (onClose = resolve)),
@@ -138,9 +153,49 @@ describe('CollabDocument compacts a workbook at close', () => {
         jest.advanceTimersByTime(CLOSE_LINGER_MS);
     }
 
-    test('the close stores the replayed log as the snapshot, empties the log and keeps computed', async () => {
+    // A workbook the Drive's registry opens, so each close ends the document and the next open reads data.db again.
+    async function registeredSheet(fileName: string, stub: ReturnType<typeof stubRunner>) {
+        const created = await home.drive.create(mountId, rootId, fileName, 'sheets');
+        const open = () => home.drive.getCollabDocument(mountId, created.id);
+        const seeded = await open();
+        seeded.doc.transact(() => {
+            sheetsStateMap(seeded.doc).set('snapshot', encodeSheetsSnapshot(SHEETS, { computed: true }));
+            sheetsOpLog(seeded.doc).push([edit(0, 0, 1)]);
+        });
+        let onClose = () => {};
+        const originalClose = home.drive.closeCollabDocument.bind(home.drive);
+        home.drive.closeCollabDocument = async (...args: Parameters<typeof originalClose>) => {
+            await originalClose(...args);
+            onClose();
+        };
+        return {
+            id: created.id,
+            open,
+            // The last socket leaves, a compaction that starts is settled with `settle`, and the document closes. It
+            // resolves whether a compaction started.
+            closeOnce: async (settle: (run: StubbedRun) => void): Promise<boolean> => {
+                const collab = await open();
+                const runsBefore = stub.runs.length;
+                const closed = new Promise<void>((resolve) => (onClose = resolve));
+                jest.useFakeTimers();
+                lingerOut(collab);
+                jest.useRealTimers();
+                const run = stub.runs.at(runsBefore);
+                if (run) settle(run);
+                await closed;
+                expect(home.drive.hasCollabDocument(mountId, created.id)).toBe(false);
+                return run !== undefined;
+            },
+            restore: () => (home.drive.closeCollabDocument = originalClose),
+        };
+    }
+
+    test('the close stores the replayed log as the snapshot, empties the log and computes it', async () => {
         const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x')]);
         try {
+            // The open stamped a base, which the compaction names as the one it folded.
+            const opened = readSheetsBase(sheet.doc.doc);
+            expect(opened).toEqual({ id: expect.any(String), compactedFrom: null });
             const closed = sheet.nextClose();
             lingerOut(sheet.doc);
             jest.useRealTimers();
@@ -149,7 +204,7 @@ describe('CollabDocument compacts a workbook at close', () => {
             const snapshot = readSheetsSnapshotJson(sheet.doc.doc);
             if (!snapshot) throw new Error('no snapshot');
             const { sheets, computed } = decodeSheetsWorkbook(snapshot);
-            expect(computed).toBe(false);
+            expect(computed).toBe(true);
             expect(sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v])).toEqual([
                 [0, 0, 7],
                 [0, 1, 'x'],
@@ -157,7 +212,7 @@ describe('CollabDocument compacts a workbook at close', () => {
             // The batch the replay rejected is gone with the others.
             expect(sheet.ops.length).toBe(0);
             const base = readSheetsBase(sheet.doc.doc);
-            expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
+            expect(base).toEqual({ id: expect.any(String), compactedFrom: opened?.id ?? 'missing' });
 
             // The next compaction names the base it folded into.
             sheet.ops.push([edit(1, 0, 3)]);
@@ -279,43 +334,110 @@ describe('CollabDocument compacts a workbook at close', () => {
     test('three failed runs in a row, each closing the document, stop the retries until the API restarts', async () => {
         const stub = stubRunner();
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
-        const created = await home.drive.create(mountId, rootId, 'compaction-gives-up', 'sheets');
-        const open = () => home.drive.getCollabDocument(mountId, created.id);
-        const seeded = await open();
-        seeded.doc.transact(() => {
-            seeded.doc.getMap('state').set('snapshot', encodeSheetsSnapshot(SHEETS, { computed: true }));
-            seeded.doc.getArray<Op[]>('ops').push([edit(0, 0, 1)]);
-        });
-        let onClose = () => {};
-        const originalClose = home.drive.closeCollabDocument.bind(home.drive);
-        home.drive.closeCollabDocument = async (...args: Parameters<typeof originalClose>) => {
-            await originalClose(...args);
-            onClose();
-        };
+        const sheet = await registeredSheet('compaction-gives-up', stub);
         try {
             const opened = new Set<CollabDocument>();
             for (let i = 0; i < 4; i++) {
-                const collab = await open();
-                opened.add(collab);
-                expect(collab.doc.getArray('ops').length).toBe(1);
-                const closed = new Promise<void>((resolve) => (onClose = resolve));
-                jest.useFakeTimers();
-                lingerOut(collab);
-                jest.useRealTimers();
-                expect(stub.runs).toHaveLength(Math.min(i + 1, 3));
-                if (i < 3) fail(stub.runs[i]);
-                await closed;
-                expect(home.drive.hasCollabDocument(mountId, created.id)).toBe(false);
+                opened.add(await sheet.open());
+                expect(await sheet.closeOnce(fail)).toBe(i < 3);
             }
             // Every open was a new document, read back from data.db.
             expect(opened.size).toBe(4);
-            expect(warn.mock.calls.filter((args) => String(args[0]).includes('gave up'))).toHaveLength(1);
+            const gaveUp = warn.mock.calls.filter((args) => String(args[0]).includes('gave up'));
+            expect(gaveUp).toHaveLength(1);
+            expect(String(gaveUp[0][0])).toContain(sheet.id);
         } finally {
-            home.drive.closeCollabDocument = originalClose;
+            sheet.restore();
             warn.mockRestore();
             stub.restore();
         }
     }, 30_000);
+
+    test("a busy runner, a canceled run and a shutdown don't count toward giving up", async () => {
+        const stub = stubRunner();
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await registeredSheet('compaction-not-failures', stub);
+        try {
+            expect(await sheet.closeOnce(cancel)).toBe(true);
+            expect(await sheet.closeOnce(cancel)).toBe(true);
+            expect(await sheet.closeOnce(shutDown)).toBe(true);
+            stub.state.busy = true;
+            for (let i = 0; i < 3; i++) expect(await sheet.closeOnce(fail)).toBe(false);
+            stub.state.busy = false;
+            expect(await sheet.closeOnce(fail)).toBe(true);
+            expect(warn.mock.calls.filter((args) => String(args[0]).includes('gave up'))).toHaveLength(0);
+        } finally {
+            sheet.restore();
+            warn.mockRestore();
+            stub.restore();
+        }
+    }, 30_000);
+
+    test('a replacing import and a version restore start the failure count over', async () => {
+        const stub = stubRunner();
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await registeredSheet('compaction-count-resets', stub);
+        const giveUp = async () => {
+            for (let i = 0; i < 3; i++) expect(await sheet.closeOnce(fail)).toBe(true);
+            expect(await sheet.closeOnce(fail)).toBe(false);
+        };
+        const pushEdit = async () => sheetsOpLog((await sheet.open()).doc).push([edit(0, 0, 2)]);
+        try {
+            await giveUp();
+            const { path } = await home.drive.resolveFile(mountId, sheet.id);
+            const xlsx = Buffer.from(xlsxFixture({ sheets: [{ name: 'Sheet1', data: rowsXml([['A1', 5]]) }] }));
+            await importIntoDocument(home.drive, path, xlsx, { mode: 'replace' }, home.user);
+            await pushEdit();
+            expect(await sheet.closeOnce(fail)).toBe(true);
+
+            for (let i = 0; i < 2; i++) expect(await sheet.closeOnce(fail)).toBe(true);
+            expect(await sheet.closeOnce(fail)).toBe(false);
+            const version = await home.drive.saveVersion(mountId, sheet.id);
+            await home.drive.restoreContainer(mountId, sheet.id, version.name);
+            await pushEdit();
+            expect(await sheet.closeOnce(succeed)).toBe(true);
+        } finally {
+            sheet.restore();
+            warn.mockRestore();
+            stub.restore();
+        }
+    }, 60_000);
+
+    test('the batches cross to the transform process as JSON text', async () => {
+        const stub = stubRunner();
+        const sheet = await openLingeringSheet('compaction-json-batches', [edit(0, 0, 1), edit(0, 1, 2)]);
+        try {
+            lingerOut(sheet.doc);
+            const [run] = stub.runs;
+            if (run.request.kind !== 'compact') throw new Error(`unexpected ${run.request.kind} job`);
+            expect(run.request.batches).toBe(JSON.stringify([edit(0, 0, 1), edit(0, 1, 2)]));
+            succeed(run);
+            await tick();
+            expect(sheet.ops.length).toBe(0);
+        } finally {
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('a snapshot in an older format is left as it is, and the document closes with no run', async () => {
+        const stub = stubRunner();
+        const sheet = await openLingeringSheet('compaction-older-format', [edit(0, 0, 1)]);
+        try {
+            const older = JSON.stringify(SHEETS);
+            sheetsStateMap(sheet.doc.doc).set('snapshot', older);
+            lingerOut(sheet.doc);
+            expect(stub.runs).toHaveLength(0);
+            expect(sheet.closes()).toBe(1);
+            expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(older);
+            expect(sheet.ops.length).toBe(1);
+        } finally {
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
 
     test('a subscribe and a leave during the run drop the swap, and the document lingers again before the next try', async () => {
         const stub = stubRunner();
@@ -357,13 +479,35 @@ describe('a snapshot writer starts a fresh base', () => {
         home = await getHome(ctx.alice.user.id);
     });
 
+    test('a workbook opened without a base gets one, saved, and its Modified time stays', async () => {
+        const created = await home.drive.create(mountId, rootId, 'open-stamps-base', 'sheets');
+        let touches = 0;
+        const originalTouch = home.drive.touchUpdatedAt;
+        home.drive.touchUpdatedAt = async () => {
+            touches++;
+        };
+        try {
+            const collab = await home.drive.getCollabDocument(mountId, created.id);
+            const base = readSheetsBase(collab.doc);
+            expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
+            await home.drive.closeCollabDocument(mountId, created.id);
+            expect(touches).toBe(0);
+
+            const reopened = await home.drive.getCollabDocument(mountId, created.id);
+            expect(readSheetsBase(reopened.doc)).toEqual(base);
+            await home.drive.closeCollabDocument(mountId, created.id);
+        } finally {
+            home.drive.touchUpdatedAt = originalTouch;
+        }
+    });
+
     test('a version restore stamps a fresh base without compactedFrom, in the same transaction', async () => {
         const created = await home.drive.create(mountId, rootId, 'restore-stamps-base', 'sheets');
         const collab = await home.drive.getCollabDocument(mountId, created.id);
         writeSheetsSnapshotToYjs(collab.doc, encodeSheetsSnapshot(SHEETS, { computed: true }));
         const saved = readSheetsBase(collab.doc);
         const version = await home.drive.saveVersion(mountId, created.id);
-        collab.doc.getArray<Op[]>('ops').push([edit(0, 0, 1)]);
+        sheetsOpLog(collab.doc).push([edit(0, 0, 1)]);
 
         let updates = 0;
         const count = () => updates++;

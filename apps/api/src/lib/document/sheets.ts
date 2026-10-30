@@ -74,15 +74,23 @@ export function readSheetsFromDoc(
 }
 
 // A compaction, in the transform process. It replays the log over the snapshot and encodes the result as an import
-// does, and the main thread swaps it in. A batch the replay rejects is skipped with a warning, as every reader skips
-// it. A workbook with no snapshot yet starts from the default sheets the editor made its edits against. The result
-// stays computed only while no sheet needs a recalc, such as a tab an import added without a calc chain.
-export function compactSheetsSnapshot(snapshotJson: string | null, batches: Op[][]): string {
+// does, and the main thread swaps it in. The batches come as JSON text, which crosses to the process much faster than
+// the objects. A batch the replay rejects is skipped with a warning, as every reader skips it. A workbook with no
+// snapshot yet starts from the default sheets the editor made its edits against.
+export function compactSheetsSnapshot(snapshotJson: string | null, batchesJson: string): string {
     const { sheets, computed } = snapshotJson
         ? decodeSheetsWorkbook(snapshotJson)
         : { sheets: createDefaultSheets(), computed: true };
-    const replayed = replaySheetsOps(sheets, batches);
-    return encodeSheetsSnapshot(replayed, { computed: computed && !sheetsNeedRecalc(replayed) });
+    const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson));
+    if (computed && !sheetsNeedRecalc(replayed)) return encodeSheetsSnapshot(replayed, { computed: true });
+    // A workbook nobody computed, such as an import whose recalc failed, is computed here, and so is one with a tab an
+    // import added. Its exports then stop paying for the recalc. A recalc that fails stores the replayed values, and
+    // an export tries again.
+    try {
+        return encodeSheetsSnapshot(recalcSheets(replayed, SERVER_RECALC_BUDGET), { computed: true });
+    } catch {
+        return encodeSheetsSnapshot(replayed, { computed: false });
+    }
 }
 
 // The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first flush,
@@ -91,11 +99,6 @@ export function readLiveSheets(doc: Y.Doc): Sheet[] {
     const snapshot = readSheetsSnapshotJson(doc);
     const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
     return replaySheetsOps(stored, sheetsOpLog(doc).toArray());
-}
-
-// A collab document folds a workbook's pending ops into its snapshot when it closes.
-export function sheetsNeedCompaction(type: DrivePathType, doc: Y.Doc): boolean {
-    return type === DRIVE_TYPE_SHEETS && sheetsOpLog(doc).length > 0;
 }
 
 // Puts a new snapshot into the live doc and empties the op log, whose edits the snapshot holds. The snapshot goes in as
@@ -107,6 +110,12 @@ export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string, compa
         const ops = sheetsOpLog(doc);
         if (ops.length > 0) ops.delete(0, ops.length);
     }, compactionOrigin);
+}
+
+// A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first
+// compaction names the base an open tab already holds, and the tab keeps its grid.
+export function stampMissingSheetsBase(type: DrivePathType, doc: Y.Doc): void {
+    if (type === DRIVE_TYPE_SHEETS && readSheetsBase(doc) === null) stampSheetsBase(doc, null);
 }
 
 // A version restore puts back the base the version was saved with. A workbook gets a fresh one, so an open tab can't

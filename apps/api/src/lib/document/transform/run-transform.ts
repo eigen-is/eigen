@@ -47,12 +47,14 @@ function repeatsForSameInput(code: TransformError['code']): boolean {
     return code === 'out-of-memory' || code === 'timeout';
 }
 
-// Every other failure, with whether the same input would fail again, so a caller can stop rerunning it.
+// Every other failure, with its code and whether the same input would fail again, so a caller can stop rerunning it.
 export class TransformFailedError extends Error {
+    public readonly code: TransformError['code'];
     public readonly repeats: boolean;
 
     public constructor(code: TransformError['code'], message: string) {
         super(message);
+        this.code = code;
         this.repeats = repeatsForSameInput(code);
     }
 }
@@ -234,7 +236,7 @@ export async function runImportToSlidesUpdate(
 // so the caller bounds the whole wait with it.
 export async function runSheetsCompaction(doc: Y.Doc, signal: AbortSignal): Promise<string> {
     const snapshot = readSheetsSnapshotJson(doc) ?? null;
-    const batches = sheetsOpLog(doc).toArray();
+    const batches = JSON.stringify(sheetsOpLog(doc).toArray());
     const { result } = await runTransformRequest(
         { kind: 'compact', documentType: 'eigensheets', snapshot, batches },
         { priority: 'background', signal },
