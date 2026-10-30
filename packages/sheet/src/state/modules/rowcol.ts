@@ -427,8 +427,8 @@ export function insertRowCol(
         id: string;
     },
     changeSelection: boolean = true,
-    // Remote mirror (applyOp): re-derive the data shift even for a read-only viewer.
-    // The permission guard blocks LOCAL viewer-initiated ops only.
+    // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
+    // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own insert only.
     force: boolean = false,
 ) {
     if (!force && ctx.allowEdit === false) return;

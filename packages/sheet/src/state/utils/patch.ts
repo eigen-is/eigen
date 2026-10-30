@@ -218,8 +218,8 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
 }
 
 // A sheet add as a batch: the sheet, then the order of each sheet at or past its place, as `sheets` hold them once it
-// was added. A peer's addSheet moves those orders itself, but a joiner's replay only appends the sheet. The edit, its
-// undo and its redo all send this batch.
+// was added. A peer and a joiner's replay only add the sheet, and the orders come from the batch. The edit, its undo
+// and its redo all send this batch.
 export function addSheetOps(added: Sheet, sheets: Sheet[]): Op[] {
     return [{ op: 'addSheet', id: added.id, path: [], value: added }, ...orderOps(added, sheets)];
 }

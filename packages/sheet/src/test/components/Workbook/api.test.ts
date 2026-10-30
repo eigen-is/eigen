@@ -556,6 +556,14 @@ describe('replayOps', () => {
             expect(ctx.currentSheetId).toBe('id_1');
         });
 
+        it('a delete and a re-add of the current sheet leave the tab on it', () => {
+            const shown = makeCtx(null, 'id_2');
+            const del: Op[] = [{ op: 'deleteSheet', id: 'id_2', path: [], value: { id: 'id_2' } }];
+            const add: Op[] = [{ op: 'addSheet', id: 'id_2', path: [], value: { ...shown.sheets[1], config: {} } }];
+            const { ctx } = replay(shown, shown.sheets, [typed, del, add], [typed]);
+            expect(ctx.currentSheetId).toBe('id_2');
+        });
+
         it('a filter set before leaves the filter the tab shows', () => {
             const shown = makeCtx(null);
             const filter: Op[] = [
