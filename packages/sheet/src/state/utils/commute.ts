@@ -1,6 +1,6 @@
 // Whether a peer's op batches that land in the op log before batches a tab already applied may simply apply after
-// them. A host that keeps the grid's order with the log's calls commutes on such a late batch: when it holds, the tab
-// applies the batch directly and keeps its undo, and otherwise it replays the log from an earlier state.
+// them. A host such as the sheets editor asks this when such a late batch arrives. When the batches commute, the tab
+// applies the late ones directly and keeps its undo. When they don't, it applies the log again from an earlier state.
 
 import type { Op } from '../types';
 
@@ -12,21 +12,42 @@ export function commutes(fresh: Iterable<Op[]>, overtaken: Op[][]): boolean {
     const written = new Set<string>();
     const above = new Set<string>();
     for (const ops of overtaken) {
-        for (const op of ops) {
-            const keys = pathKeys(op);
-            if (!keys) return false;
-            const [key, ...up] = keys;
+        const keys = batchKeys(ops);
+        if (!keys) return false;
+        for (const [key, ...up] of keys) {
             written.add(key);
             for (const k of up) above.add(k);
         }
     }
     for (const ops of fresh) {
-        for (const op of ops) {
-            const keys = pathKeys(op);
-            if (!keys || above.has(keys[0]) || keys.some((key) => written.has(key))) return false;
+        const keys = batchKeys(ops);
+        if (!keys) return false;
+        for (const opKeys of keys) {
+            if (above.has(opKeys[0]) || opKeys.some((key) => written.has(key))) return false;
         }
     }
     return true;
+}
+
+// A tab checks the batches it already applied against every late batch that overtakes them, so each batch's keys are
+// worked out once and kept for as long as the batch lives.
+const keysByBatch = new WeakMap<Op[], string[][] | null>();
+
+// The path keys of each op in a batch, or null when an op moves sheets, rows or columns.
+function batchKeys(ops: Op[]): string[][] | null {
+    const cached = keysByBatch.get(ops);
+    if (cached !== undefined) return cached;
+    const keys: string[][] = [];
+    for (const op of ops) {
+        const opKeys = pathKeys(op);
+        if (!opKeys) {
+            keysByBatch.set(ops, null);
+            return null;
+        }
+        keys.push(opKeys);
+    }
+    keysByBatch.set(ops, keys);
+    return keys;
 }
 
 // The key of the path an op writes, its sheet first, then the key of each path above it. An add or remove at an array

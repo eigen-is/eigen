@@ -484,3 +484,25 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     expect(opsIn(tab.doc)).toBe(sent);
     expectJoined(tab);
 });
+
+// A tab sends a batch per keystroke, and the log grows long between two compactions, so the tab's own batch reads none
+// of it.
+test("the tab's own edit reads no batch of the log", async () => {
+    const s = server();
+    for (let i = 0; i < 50; i++) push(s, typed(0, 0, `${i}`));
+    const tab = await openTab(s, 50);
+    const log = tab.doc.getArray<Op[]>('ops');
+    let reads = 0;
+    const { toArray, slice } = log;
+    log.toArray = () => {
+        reads += 1;
+        return toArray.call(log);
+    };
+    log.slice = (start, end) => {
+        reads += 1;
+        return slice.call(log, start, end);
+    };
+    await tab.edit((w) => w.setCellFormat(1, 1, 'v', 'mine'));
+    expect(reads).toBe(0);
+    expectJoined(tab);
+});
