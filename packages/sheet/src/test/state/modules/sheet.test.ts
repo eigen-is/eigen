@@ -175,6 +175,5 @@ describe('leaving a sheet that goes away', () => {
         expect(ctx.sheets.map((sheet) => sheet.id)).toContain('a');
         deleteSheet(ctx, 'a', true);
         expect(ctx.sheets.map((sheet) => sheet.id)).not.toContain('a');
-        expect(ctx.currentSheetId).toBe('b');
     });
 });

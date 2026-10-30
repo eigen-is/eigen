@@ -486,6 +486,30 @@ test('a row op that overtakes another row op takes the focus off the grid', asyn
     expectJoined(tab);
 });
 
+// The sheet keeps its own copy of the selection for a switch back to it. A peer's sheet add must not bring back the
+// copy the row delete left behind, or the keystroke lands on the row that slid up.
+test("a peer's sheet add after a peer deleted the selected row brings no selection back", async () => {
+    const s = server({ '3_0': 'mine', '4_0': 'theirs' });
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 100);
+    await tab.edit((w) => w.setSelection([{ row: [3, 3], column: [0, 0] }]));
+    const input = document.getElementById('sheet-rich-text-editor');
+    input?.focus();
+    push(peer, [{ op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: 3, end: 3 } }]);
+    push(peer, [{ op: 'addSheet', id: 's2', path: [], value: { ...sheet({}), id: 's2', name: 'Two', order: 1 } }]);
+    await deliver(peer, tab.doc);
+    const sent = opsIn(tab.doc);
+    await act(async () => {
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', keyCode: 88, bubbles: true }));
+    });
+    if (input) input.textContent = 'typed';
+    await act(async () => {
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+    });
+    expect(opsIn(tab.doc)).toBe(sent);
+    expect(tab.cell(3, 0)?.v).toBe('theirs');
+});
+
 // A tab sends a batch per keystroke, and the log grows long between two compactions, so the tab's own batch reads none
 // of it.
 test("the tab's own edit reads no batch of the log", async () => {

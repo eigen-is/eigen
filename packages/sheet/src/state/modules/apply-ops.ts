@@ -2,8 +2,8 @@
 // column ops first, then the cell and field patches, whole or not at all, skipping each op the replay's shape check
 // refuses. Every batch that changes the open workbook outside an edit's own recipe goes through it, such as a peer's
 // batch, a replay of the log and a structural undo, so every tab and a joiner end the same. It reports the row or
-// column ops that moved rows, which the undo stacks follow. A batch new to the tab also moves the tab's view: the open
-// cell editor and the selection move with their cells, and a filter or a hidden sheet changes what the tab shows.
+// column ops that moved rows, which the undo stacks follow. A batch new to the tab also moves the tab's view: the cell
+// editor and the selection follow their cells, and a filter or a hidden or deleted sheet changes what the tab shows.
 
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
@@ -82,7 +82,10 @@ export function applyOpBatch(
                     initSheetData(draft, index, value);
                     if (data) draft.sheets[index].data = data;
                     materialized.push(value.id);
-                } else if (op.op === 'deleteSheet' && id) deleteSheet(draft, id, true);
+                } else if (op.op === 'deleteSheet' && id) {
+                    deleteSheet(draft, id, true);
+                    if (moveView && id === draft.currentSheetId) leaveCurrentSheet(draft);
+                }
             }
             [patches] = opToPatch(draft, ops);
             const [first] = ops;

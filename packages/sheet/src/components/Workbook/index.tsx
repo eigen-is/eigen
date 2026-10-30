@@ -368,7 +368,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         normalizeSheetConfig(sheet);
                     }
 
+                    // A switch already restored the sheet's stored selection. Once the view is live, an empty
+                    // selection may be one a peer's row op dropped, and the stored copy points at the wrong row.
                     if (
+                        viewStale &&
                         (!draftCtx.selections || draftCtx.selections.length === 0) &&
                         sheet.selections &&
                         sheet.selections.length > 0

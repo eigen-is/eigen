@@ -149,8 +149,8 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet) 
 export function deleteSheet(
     ctx: Context,
     id: string,
-    // A batch through applyOpBatch, such as a peer's delete, lands for a read-only viewer too, and leaves the other
-    // sheets' orders to the order ops its batch carries.
+    // A batch through applyOpBatch, such as a peer's delete, lands for a read-only viewer too. It leaves the other
+    // sheets' orders to the order ops its batch carries, and the current sheet to applyOpBatch.
     force = false,
 ) {
     if (!force && ctx.allowEdit === false) {
@@ -164,7 +164,8 @@ export function deleteSheet(
     }
 
     const [deleted] = ctx.sheets.splice(arrIndex, 1);
-    if (!force) shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
+    if (force) return;
+    shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
 }
 
