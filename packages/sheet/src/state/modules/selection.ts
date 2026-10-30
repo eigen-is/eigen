@@ -745,10 +745,7 @@ export function moveHighlightCell(
 
     if (type === 'rangeOfSelect') {
         const last = ctx.selections?.[ctx.selections.length - 1];
-        if (!last) {
-            console.error('moveHighlightCell: no selection found');
-            return;
-        }
+        if (!last) return;
 
         const walk = computeMoveHighlightCell(ctx, flowdata, last, postion, index, false);
         if (!walk) return;

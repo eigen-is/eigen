@@ -510,6 +510,37 @@ test("a peer's sheet add after a peer deleted the selected row brings no selecti
     expect(tab.cell(3, 0)?.v).toBe('theirs');
 });
 
+// The open cell editor follows its cell when a peer inserts or deletes a row above it, so the text typed there stays in
+// the editor and Enter writes it into the cell that moved, as the log has it.
+const rowDelete = (index: number): Op[] => [
+    { op: 'deleteRowCol', id: 's1', path: [], value: { type: 'row', start: index, end: index } },
+];
+for (const [name, rowOp, to] of [
+    ['insert', rowInsert(2), 6],
+    ['delete', rowDelete(1), 4],
+] as const) {
+    test(`text typed in the open editor survives a peer's row ${name} above and commits into the moved cell`, async () => {
+        const s = server();
+        const tab = await openTab(s, 50);
+        const peer = replica(s, 100);
+        await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+        const input = document.getElementById('sheet-rich-text-editor');
+        input?.focus();
+        await act(async () => {
+            input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', keyCode: 72, bubbles: true }));
+        });
+        if (input) input.textContent = 'hello';
+        push(peer, rowOp);
+        await deliver(peer, tab.doc);
+        expect(input?.textContent).toBe('hello');
+        await act(async () => {
+            input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        });
+        expect([tab.cell(5, 1)?.v ?? null, tab.cell(to, 1)?.v]).toEqual([null, 'hello']);
+        expectJoined(tab);
+    });
+}
+
 // A tab sends a batch per keystroke, and the log grows long between two compactions, so the tab's own batch reads none
 // of it.
 test("the tab's own edit reads no batch of the log", async () => {

@@ -227,7 +227,7 @@ A range copy writes three flavors: the HTML table with the cells' styles, the Ei
 
 While a cell is open, Enter commits it and moves down, and Tab commits and moves right, Shift+Tab left, as in Google Sheets. Both go through `commitEdit` (`state/events/keyboard.ts`), which writes the cell and collapses the selection to it before the move. A visible formula suggestion takes Tab first and stops it, so Tab picks the function instead of committing.
 
-The open editor's cell is `ctx.editingCellPosition`, and every commit path writes there. A peer's row or column op on the current sheet moves it with its cell (`followView` in `applyOpBatch`), and the selection with it, so Enter writes where the person was typing, not into the row that slid under the editor. A peer's delete of that cell closes the editor without writing.
+The open editor's cell is `ctx.editingCellPosition`, and every commit path writes there. A peer's row or column op on the current sheet moves it with its cell (`followView` in `applyOpBatch`), and the selection with it, so Enter writes where the person was typing, not into the row that slid under the editor. The editor keeps what was typed through that move, because `InputBox` loads a cell's text only when the editor opens or its sheet changes. A peer's delete of that cell closes the editor without writing.
 
 ## The cell editor edits rich text as runs
 
