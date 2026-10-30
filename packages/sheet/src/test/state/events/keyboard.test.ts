@@ -6,7 +6,7 @@
 // without a mouse. handleGlobalKeyDown needs a real DOM, so this file installs
 // happy-dom at module scope the way events/mouse-cell.test.ts does.
 
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, spyOn, test } from 'bun:test';
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown } from '../../../state/events/keyboard';
@@ -257,6 +257,33 @@ describe('handleGlobalKeyDown — Tab while editing', () => {
         keyDown(ctx, 'Tab', { cellInput, shiftKey: true });
         expect(ctx.sheets[0].data?.[1][1]?.v).toBe('north');
         expect(ctx.selections?.[0]).toMatchObject({ row_focus: 1, column_focus: 0 });
+    });
+});
+
+// A peer's row delete can take the selection away. A key typed then has no cell to open, so it must not pile up in the
+// hidden editor, and Enter and Tab do nothing.
+describe('handleGlobalKeyDown — no selection', () => {
+    function unselected() {
+        const ctx = listContext(null);
+        ctx.selections = undefined;
+        return ctx;
+    }
+
+    test('a typed key opens no cell and types nothing', () => {
+        const ctx = unselected();
+        expect(keyDown(ctx, 'x')).toBe(true);
+        expect(ctx.editingCellPosition).toEqual([]);
+    });
+
+    test('Enter and Tab do nothing and log nothing', () => {
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        const ctx = unselected();
+        keyDown(ctx, 'Enter');
+        keyDown(ctx, 'Tab');
+        const logged = errors.mock.calls.length;
+        errors.mockRestore();
+        expect(logged).toBe(0);
+        expect([ctx.selections, ctx.editingCellPosition]).toEqual([undefined, []]);
     });
 });
 

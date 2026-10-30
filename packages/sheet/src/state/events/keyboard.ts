@@ -453,7 +453,9 @@ export function handleGlobalKeyDown(
         kcode === 0
     ) {
         if (!allowEdit) return;
-        if (!isEmpty(ctx.selections) && kstr !== 'CapsLock' && kcode !== 18) {
+        // With no selection a typed key has no cell to open, so it must not land in the hidden editor either.
+        if (isEmpty(ctx.selections)) e.preventDefault();
+        else if (kstr !== 'CapsLock' && kcode !== 18) {
             // Activate the input box and forward the keypress to it.
             const last = ctx.selections?.at(-1);
             if (last?.row_focus == null || last.column_focus == null) return;
