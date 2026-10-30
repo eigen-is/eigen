@@ -50,7 +50,7 @@ export function readSheetsFromDoc(
 ): { sheets: Sheet[]; recalcError: string | null } {
     const snapshot = readSheetsSnapshotJson(doc);
     const opBatches = sheetsOpLog(doc).toArray();
-    // Ops without a snapshot come from a new workbook closed before its first flush. They were recorded against the
+    // Ops without a snapshot come from a new workbook closed before its first compaction. They were recorded against the
     // editor's default sheets, so the replay starts from those, or it drops every edit. A doc with neither stays empty.
     const sheets = snapshot ? decodeSheetsSnapshot(snapshot) : opBatches.length > 0 ? createDefaultSheets() : [];
     // The snapshot stores cells as a list, but the renderers' conditional formats and the cross-sheet formula resolver
@@ -103,7 +103,7 @@ export function compactSheetsSnapshot(
     }
 }
 
-// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first flush,
+// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first compaction,
 // with every pending op replayed.
 export function readLiveSheets(doc: Y.Doc): Sheet[] {
     const snapshot = readSheetsSnapshotJson(doc);
@@ -135,7 +135,7 @@ export function restampRestoredSheetsBase(type: DrivePathType, doc: Y.Doc): void
 }
 
 // Import… as new tabs. The file's sheets go in after the workbook's own as addSheet ops, the way a peer's new tab
-// arrives, so an open tab adds them live and keeps its unflushed edits. Each sheet takes a fresh id. One whose name the
+// arrives, so an open tab adds them live and keeps its view and its undo. Each sheet takes a fresh id. One whose name the
 // workbook already has is renamed the way Duplicate names a copy. The file's references to its own sheets follow them.
 // Formulas, conditional formats, list sources and links name a sheet by name. Charts, link cells and the calc chain
 // name it by id. `current` is the workbook as readLiveSheets reads it in the same write.

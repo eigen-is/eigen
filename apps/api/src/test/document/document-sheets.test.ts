@@ -279,7 +279,7 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('reads doc with pending ops but no snapshot → replays over the default sheets', async () => {
-        // A fresh doc whose tab was killed before the first flushSnapshot has
+        // A fresh doc closed before its first compaction has
         // ops in Yjs but no snapshot. The replay base must be the same default
         // sheets the editor started from — over an empty base the ops
         // referencing 'sheet-1' are silently dropped and the doc reads empty.
@@ -493,7 +493,7 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('celldata-only snapshot + cell-edit op → data materialized, celldata refreshed', async () => {
-        // Reproduces the user-reported export crash: xlsxToSheets / pre-flush
+        // Reproduces the user-reported export crash: xlsxToSheets / early
         // FE snapshots store celldata only, but ops emitted by the reducer
         // reference data[r][c]. replaySheetsOps must materialize data before
         // applying patches, then sync celldata back so xlsx export sees the
@@ -624,7 +624,7 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('gate OFF: a doc carrying a calcChain keeps its stored values (no recompute)', async () => {
-        // Editor-flushed / import-recalced docs carry calcChain. Even a
+        // Editor-edited / import-recalced docs carry calcChain. Even a
         // deliberately-wrong cached value must survive untouched — the gate must
         // not recompute.
         const sheetsPath = await drivePost<DrivePath>(
@@ -745,7 +745,7 @@ describe('document/sheets — patch op replay', () => {
 
         // Volatile freeze, pinned: the xlsx carried no cached NOW() result, so
         // there is nothing to freeze — the cell keeps its formula but stays
-        // without v/m until a client editor computes and flushes it.
+        // without v/m until a client editor computes it.
         expect(cellAt(0, 2)?.f).toBe('=NOW()');
         expect(cellAt(0, 2)?.v).toBeUndefined();
         expect(cellAt(0, 2)?.m).toBeUndefined();
@@ -892,7 +892,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
         expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
     });
 
-    test('a workbook never flushed takes the file beside the default sheet the editor opens on', () => {
+    test('a workbook never compacted takes the file beside the default sheet the editor opens on', () => {
         const doc = new Y.Doc();
         append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
