@@ -926,7 +926,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     });
 
     test('folds the batches, which cross as JSON text, into the snapshot', () => {
-        const compacted = compactSheetsSnapshot(
+        const { snapshot: compacted } = compactSheetsSnapshot(
             encodeSheetsSnapshot(sheets, { computed: true }),
             JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
         );
@@ -948,7 +948,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             },
         }));
         try {
-            const compacted = compactSheetsSnapshot(
+            const { snapshot: compacted } = compactSheetsSnapshot(
                 encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
                 JSON.stringify([]),
             );
@@ -965,7 +965,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const snapshot = encodeSheetsSnapshot(sheets, { computed: true });
         const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }]];
         const compacted = new Y.Doc();
-        sheetsStateMap(compacted).set('snapshot', compactSheetsSnapshot(snapshot, JSON.stringify(batches)));
+        sheetsStateMap(compacted).set('snapshot', compactSheetsSnapshot(snapshot, JSON.stringify(batches)).snapshot);
 
         const read = readSheetsFromDoc(compacted, { recalc: false });
         expect(sheetsNeedRecalc(read.sheets)).toBe(false);
@@ -982,7 +982,7 @@ describe('document/sheets — compactSheetsSnapshot', () => {
             },
         }));
         try {
-            const compacted = compactSheetsSnapshot(
+            const { snapshot: compacted } = compactSheetsSnapshot(
                 encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
                 JSON.stringify([]),
             );
@@ -995,26 +995,28 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     });
 
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {
-        const compacted = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]));
+        const { snapshot: compacted } = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]));
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
         expect(computed).toBe(true);
         expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
         expect(values(compacted)).toEqual([[0, 0, 'a']]);
     });
 
-    test('a batch the replay rejects is dropped and logged, and the others still apply', () => {
+    test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const poison: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
-            const compacted = compactSheetsSnapshot(
+            const { snapshot, dropped } = compactSheetsSnapshot(
                 encodeSheetsSnapshot(sheets, { computed: true }),
-                JSON.stringify([edit(0, 'a'), poison, edit(1, 'b')]),
+                JSON.stringify([edit(0, 'a'), poison, edit(1, 'b'), poison]),
             );
-            expect(values(compacted)).toEqual([
+            expect(values(snapshot)).toEqual([
                 [0, 0, 'a'],
                 [0, 1, 'b'],
             ]);
-            expect(warn.mock.calls.filter((args) => String(args[0]).includes('skipping batch'))).toHaveLength(1);
+            expect(dropped).toBe(2);
+            // The caller logs the count once, with the path, so the replay itself stays quiet.
+            expect(warn).not.toHaveBeenCalled();
         } finally {
             warn.mockRestore();
         }

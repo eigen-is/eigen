@@ -234,12 +234,15 @@ export async function runImportToSlidesUpdate(
 // A workbook's op log folded into its snapshot, in the background. It reads the snapshot and the batches from the live
 // doc in one step, never from data.db, which can lag behind. The signal ends the job wherever it is, queued or running,
 // so the caller bounds the whole wait with it.
-export async function runSheetsCompaction(doc: Y.Doc, signal: AbortSignal): Promise<string> {
+export async function runSheetsCompaction(
+    doc: Y.Doc,
+    signal: AbortSignal,
+): Promise<{ snapshot: string; dropped: number }> {
     const snapshot = readSheetsSnapshotJson(doc) ?? null;
     const batches = JSON.stringify(sheetsOpLog(doc).toArray());
     const { result } = await runTransformRequest(
         { kind: 'compact', documentType: 'eigensheets', snapshot, batches },
         { priority: 'background', signal },
     );
-    return new TextDecoder().decode(result.snapshot);
+    return { snapshot: new TextDecoder().decode(result.snapshot), dropped: result.dropped };
 }

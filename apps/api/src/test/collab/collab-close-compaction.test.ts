@@ -73,8 +73,8 @@ function stubRunner() {
 
 function succeed(run: StubbedRun): void {
     if (run.request.kind !== 'compact') throw new Error(`unexpected ${run.request.kind} job`);
-    const snapshot = compactSheetsSnapshot(run.request.snapshot, run.request.batches);
-    run.settle({ ok: true, result: { snapshot: toTransferableText(snapshot) }, warnings: [] });
+    const { snapshot, dropped } = compactSheetsSnapshot(run.request.snapshot, run.request.batches);
+    run.settle({ ok: true, result: { snapshot: toTransferableText(snapshot), dropped }, warnings: [] });
 }
 
 function fail(run: StubbedRun): void {
@@ -133,6 +133,7 @@ describe('CollabDocument compacts a workbook at close', () => {
         };
         jest.useFakeTimers();
         return {
+            id: created.id,
             doc,
             ops: sheetsOpLog(doc.doc),
             closes: () => closes,
@@ -191,7 +192,8 @@ describe('CollabDocument compacts a workbook at close', () => {
     }
 
     test('the close stores the replayed log as the snapshot, empties the log and computes it', async () => {
-        const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x')]);
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x'), POISON]);
         try {
             // The open stamped a base, which the compaction names as the one it folded.
             const opened = readSheetsBase(sheet.doc.doc);
@@ -209,8 +211,11 @@ describe('CollabDocument compacts a workbook at close', () => {
                 [0, 0, 7],
                 [0, 1, 'x'],
             ]);
-            // The batch the replay rejected is gone with the others.
+            // The batches the replay rejected are gone with the others, and one line names how many.
             expect(sheet.ops.length).toBe(0);
+            expect(warn.mock.calls.map((args) => String(args[0]))).toEqual([
+                `[sheets] compaction dropped 2 op batches path=${sheet.id}`,
+            ]);
             const base = readSheetsBase(sheet.doc.doc);
             expect(base).toEqual({ id: expect.any(String), compactedFrom: opened?.id ?? 'missing' });
 
@@ -224,6 +229,7 @@ describe('CollabDocument compacts a workbook at close', () => {
             expect(sheet.ops.length).toBe(0);
             expect(readSheetsBase(sheet.doc.doc)?.compactedFrom).toBe(base?.id ?? 'missing');
         } finally {
+            warn.mockRestore();
             sheet.restore();
             sheet.doc.destruct();
         }

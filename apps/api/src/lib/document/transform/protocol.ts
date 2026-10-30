@@ -260,8 +260,8 @@ export type DocImportTransformResult = {
 export type DocImportResult = DocImportTransformResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
-// The compacted snapshot's JSON as UTF-8 bytes.
-export type SheetsCompactionResult = { snapshot: ArrayBuffer };
+// The compacted snapshot's JSON as UTF-8 bytes, and how many op batches the replay dropped because they failed to apply.
+export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number };
 
 export type TransformResult =
     | PreviewResult
@@ -361,6 +361,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
               style?: unknown;
               images?: unknown;
               snapshot?: unknown;
+              dropped?: unknown;
           }
         | undefined;
     switch (request.kind) {
@@ -369,7 +370,7 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
         case 'extract-text':
             return typeof r?.text === 'string';
         case 'compact':
-            return r?.snapshot instanceof ArrayBuffer;
+            return r?.snapshot instanceof ArrayBuffer && typeof r.dropped === 'number';
         case 'export':
             return (
                 r?.data instanceof ArrayBuffer &&
