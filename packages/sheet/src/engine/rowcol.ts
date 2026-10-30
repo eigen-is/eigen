@@ -1,6 +1,6 @@
-// Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, merges, borders, sizes and
-// conditional formats of the sheet the op names, and the formula text and chart ranges on every sheet that point at
-// it. It runs wherever such an op applies, for example in the editor's own insert and in the server's replay of the op
+// Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, merges, borders, row heights,
+// column widths, conditional formats and size of the sheet the op names, and the formula text and chart ranges on
+// every sheet that point at it. It runs wherever such an op applies, for example in the editor's own insert and in the server's replay of the op
 // log. The shifters for one kind of map are exported for code that moves the same maps, such as the undo stacks.
 
 import type { CellMatrix, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
@@ -451,8 +451,9 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         }
     }
 
-    stampMerges(newData, newCfg.merge);
+    stampMerges(newData, newCfg.merge, op.type, insertAt);
     newTarget.config = newCfg;
+    setSize(newTarget, newData, op.type);
 
     if (target.conditionalFormatRules != null) {
         newTarget.conditionalFormatRules = target.conditionalFormatRules.map((cf) => ({
@@ -531,8 +532,9 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         for (const row of newData) row.splice(op.start, removeCount);
     }
 
-    stampMerges(newData, newCfg.merge);
+    stampMerges(newData, newCfg.merge, op.type, op.start);
     newTarget.config = newCfg;
+    setSize(newTarget, newData, op.type);
 
     if (target.conditionalFormatRules != null) {
         const newCFarr = [];
@@ -573,14 +575,17 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
 }
 
 // The merge map alone doesn't draw a merge: each of its cells points at the corner, and the corner holds the size.
-// The op moved the cells but not their stamps, so every merge stamps its cells again, empty cells included. Only the
-// rows it writes are copied, since the others may be shared with the sheet before the op.
-function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>) {
+// The op moved the cells from index `from` on its axis but not their stamps, so every merge that reaches that far
+// stamps its cells again, empty cells included. A merge that ends right before `from` may have lost its last rows to a
+// delete, so it stamps too. A column op copied every row already. A row op shares the rows it did not insert with the
+// sheet before the op, so a row is copied before its first stamp.
+function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>, type: 'row' | 'column', from: number) {
     const copied = new Set<number>();
     for (const { r, c, rs, cs } of Object.values(merges)) {
+        if ((type === 'row' ? r + rs : c + cs) < from) continue;
         for (let i = r; i < r + rs; i += 1) {
             if (!data[i]) continue;
-            if (!copied.has(i)) {
+            if (type === 'row' && !copied.has(i)) {
                 data[i] = [...data[i]];
                 copied.add(i);
             }
@@ -590,4 +595,11 @@ function stampMerges(data: CellMatrix, merges: Record<string, MergeCell>) {
             }
         }
     }
+}
+
+// A stored sheet keeps its size in `row` and `column`, and a reader builds the matrix at that size. A size behind the
+// cells would cut the last rows off the next snapshot, so the size follows the cells after every row or column op.
+function setSize(sheet: Sheet, data: CellMatrix, type: 'row' | 'column') {
+    if (type === 'row') sheet.row = data.length;
+    else sheet.column = data[0]?.length;
 }

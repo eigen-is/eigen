@@ -76,6 +76,30 @@ function copyThenPaste(
     handlePasteByClick(ctx, 'internal');
 }
 
+// A paste past the last row or column grows the grid, and the sheet's size grows with it: a stored snapshot keeps the
+// size, so a size behind the cells would cut the pasted rows off the next snapshot.
+describe('a paste past the grid grows the sheet size with it', () => {
+    const size = (ctx: Context) => [ctx.sheets[0].row, ctx.sheets[0].column];
+
+    it('for plain text', () => {
+        const ctx = makeCtx();
+        ctx.selections = single(7, 7);
+        handlePasteByClick(ctx, '1\t2\n3\t4');
+        expect(size(ctx)).toEqual([9, 9]);
+    });
+
+    it('for a copy and a cut', () => {
+        for (const cut of [false, true]) {
+            const ctx = makeCtx(8, 8, (d) => {
+                d[0][0] = { v: 1, m: '1' };
+                d[1][1] = { v: 2, m: '2' };
+            });
+            copyThenPaste(ctx, rangeSel(0, 1, 0, 1), single(7, 7), { cut });
+            expect(size(ctx)).toEqual([9, 9]);
+        }
+    });
+});
+
 describe('plain-text paste (tab/newline matrix)', () => {
     it('fills a 2x2 numeric block and expands the selection to the pasted range', () => {
         const ctx = makeCtx();

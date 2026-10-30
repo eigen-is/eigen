@@ -36,13 +36,12 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
             // before the patches resolve.
             for (const op of batch) {
                 if (op.op === 'addSheet') {
-                    const newSheet = asNewSheet(op.value, result);
-                    if (!newSheet) {
+                    if (!isNewSheet(op.value, result)) {
                         console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
                         continue;
                     }
-                    const added = withNormalizedSheet(newSheet);
-                    result = [...result, dataOpIds?.has(newSheet.id) ? withMaterializedData(added) : added];
+                    const added = withNormalizedSheet(op.value);
+                    result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
                 } else if (op.op === 'insertRowCol' && op.id) {
@@ -112,13 +111,16 @@ export function asDeleteValue(v: unknown): DeleteValue | null {
 }
 
 // A new sheet needs an id, because every later op names its sheet by id. The id must be one no sheet has yet, or those
-// ops would be ambiguous.
-export function asNewSheet(v: unknown, sheets: { id?: string }[]): (Sheet & { id: string }) | null {
-    if (!isRecord(v)) return null;
-    const sheet = v as Sheet;
-    if (typeof sheet.id !== 'string' || typeof sheet.name !== 'string') return null;
-    if (sheets.some((s) => s.id === sheet.id)) return null;
-    return { ...sheet, id: sheet.id };
+// ops would be ambiguous. A name is the one other field every reader of a sheet needs.
+export function isNewSheet(v: unknown, sheets: { id?: string }[]): v is Sheet & { id: string } {
+    if (!isRecord(v)) return false;
+    const { id, name } = v;
+    return typeof id === 'string' && typeof name === 'string' && !sheets.some((s) => s.id === id);
+}
+
+// A row or column op moves the cells after it on its sheet, and it needs the sheet's matrix to apply.
+export function isRowColOp(op: Op): boolean {
+    return op.op === 'insertRowCol' || op.op === 'deleteRowCol';
 }
 
 // Every sheet leaves the replay in one shape, whether it came from the snapshot or from an addSheet op. The editor
@@ -137,7 +139,7 @@ function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
 function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     let touched: Set<string> | null = null;
     for (const op of batch) {
-        const needsData = op.path[0] === 'data' || op.op === 'insertRowCol' || op.op === 'deleteRowCol';
+        const needsData = op.path[0] === 'data' || isRowColOp(op);
         if (needsData && op.id) {
             if (!touched) touched = new Set();
             touched.add(op.id);

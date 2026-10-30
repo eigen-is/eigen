@@ -225,6 +225,69 @@ describe('applySheetsDeleteRowCol — column', () => {
     });
 });
 
+// A stored snapshot keeps a sheet's size in `row` and `column`, and a reader builds the matrix at that size. A count
+// behind the cells would cut rows off the next snapshot, and a cell written there would fail on every joiner.
+describe('applySheetsInsertRowCol/Delete — the sheet size follows its cells', () => {
+    const sized = () => [
+        makeSheet(
+            's1',
+            'Sheet1',
+            [
+                [cell('a'), cell('b')],
+                [cell('c'), cell('d')],
+                [cell('e'), cell('f')],
+            ],
+            {
+                row: 3,
+                column: 2,
+            },
+        ),
+    ];
+    const size = (sheet: Sheet) => [sheet.row, sheet.column];
+
+    test('a row insert and delete', () => {
+        const op = { type: 'row', index: 2, count: 2, direction: 'rightbottom', id: 's1' } as const;
+        expect(size(applySheetsInsertRowCol(sized(), op)[0])).toEqual([5, 2]);
+        expect(size(applySheetsDeleteRowCol(sized(), { type: 'row', start: 0, end: 1, id: 's1' })[0])).toEqual([1, 2]);
+    });
+
+    test('a column insert and delete', () => {
+        const op = { type: 'column', index: 0, count: 3, direction: 'lefttop', id: 's1' } as const;
+        expect(size(applySheetsInsertRowCol(sized(), op)[0])).toEqual([3, 5]);
+        expect(size(applySheetsDeleteRowCol(sized(), { type: 'column', start: 1, end: 1, id: 's1' })[0])).toEqual([
+            3, 1,
+        ]);
+    });
+});
+
+// Only the merges at or past the op have cells that moved, so a merge above the op keeps its rows and stamps as they
+// were, and a large sheet with many merges doesn't copy rows the op never touched.
+describe('applySheetsInsertRowCol/Delete — a merge above the op stays as it was', () => {
+    const merged = (): Sheet[] => [
+        {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            data: [
+                [{ ...cell('a'), mc: { r: 0, c: 0, rs: 1, cs: 2 } }, { mc: { r: 0, c: 0 } }],
+                [cell('c'), cell('d')],
+                [cell('e'), cell('f')],
+            ],
+            config: { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } },
+        },
+    ];
+
+    test('a row insert and delete below it', () => {
+        const base = merged();
+        for (const sheets of [
+            applySheetsInsertRowCol(base, { type: 'row', index: 2, count: 1, direction: 'lefttop', id: 's1' }),
+            applySheetsDeleteRowCol(base, { type: 'row', start: 2, end: 2, id: 's1' }),
+        ]) {
+            expect(sheets[0].data?.[0]).toBe(base[0].data?.[0]);
+        }
+    });
+});
+
 describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
     test('row insert in Sheet1 shifts =Sheet1!A1 in Sheet2 to =Sheet1!A2', () => {
         const s1: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[cell('x')]], config: {} };

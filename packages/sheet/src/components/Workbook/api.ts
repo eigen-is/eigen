@@ -10,6 +10,7 @@ import { current } from 'immer';
 import type { SetContextOptions } from '../../context';
 import type { ChartRangeRefusal } from '../../engine/chart-range';
 import { setUpChartRange } from '../../engine/chart-range';
+import { isRowColOp } from '../../engine/replay-ops';
 import type { Cell } from '../../engine/types';
 import type {
     ChartInsertBox,
@@ -44,8 +45,10 @@ import {
     setChartLook,
     setChartSpec,
     setSearchHighlights,
+    settleCurrentSheet,
     shiftEntries,
     updateFloatingBox,
+    warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 
 export function generateAPIs(
@@ -78,19 +81,28 @@ export function generateAPIs(
         },
 
         // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
-        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. An open
-        // cell editor followed the batches this tab applied, so only the `fresh` batches, those new to this tab, move
-        // it. When a batch they overtake moved rows or columns, the editor's row and column no longer match a fresh
-        // batch's. The editor then closes without writing, as when its cell is deleted. The undo and redo entries were
-        // recorded against the order that is gone, so both stacks empty. True when every batch applied.
+        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. The
+        // tab's view, its open cell editor, selection, current sheet and filter, moved with the batches the tab
+        // applied before, so only the `fresh` batches, those new to this tab, move it again. A fresh batch that moves
+        // rows ahead of an applied one that moves rows leaves the tab unable to tell where its editor and selection
+        // went. The editor then closes without writing, the selection goes and the grid gives up the focus, so a
+        // keystroke writes nowhere. The undo and redo entries were recorded against the order that is gone, so both
+        // stacks empty. True when every batch applied.
         replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
             let accepted = true;
-            const movesRows = (ops: Op[]) => ops.some((op) => op.op === 'insertRowCol' || op.op === 'deleteRowCol');
-            const from = batches.findIndex((ops) => fresh.has(ops));
-            const closeEditor = from !== -1 && batches.slice(from).some((ops) => !fresh.has(ops) && movesRows(ops));
+            const { currentSheetId } = getContext();
+            const movesRows = (ops: Op[]) => ops.some((op) => isRowColOp(op) && op.id === currentSheetId);
+            const firstMove = batches.findIndex((ops) => fresh.has(ops) && movesRows(ops));
+            const lost = firstMove !== -1 && batches.slice(firstMove).some((ops) => !fresh.has(ops) && movesRows(ops));
+            // The formula engine starts empty, so the replay skips the formula map, and it is built once the browser
+            // is idle.
+            getContext().formulaCache.resetEngine();
             setContext(
                 (ctx_) => {
-                    if (closeEditor) cancelNormalSelected(ctx_);
+                    if (lost) {
+                        cancelNormalSelected(ctx_);
+                        ctx_.selections = undefined;
+                    }
                     let next: Context = { ...current(ctx_), sheets: base };
                     for (const ops of batches) {
                         const applied = applyOpBatch(next, ops, fresh.has(ops));
@@ -98,10 +110,12 @@ export function generateAPIs(
                         else accepted = false;
                     }
                     Object.assign(ctx_, next);
+                    settleCurrentSheet(ctx_);
                 },
                 { noHistory: true },
             );
-            getContext().formulaCache.resetEngine();
+            if (lost) getContext().getRefs().cellInput.current?.blur();
+            warmFormulaCellInfoMapOnIdle(getContext);
             history.undoList = [];
             history.redoList = [];
             return accepted;

@@ -197,6 +197,7 @@ const rowInsert = (index: number): Op[] => [
 ];
 
 const opsIn = (doc: YDoc) => doc.getArray<Op[]>('ops').length;
+const opsOf = (doc: YDoc) => doc.getArray<Op[]>('ops').toArray();
 
 test('two tabs typing into one cell end with the value later in the log', async () => {
     const s = server();
@@ -435,5 +436,118 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
     expect(tab.doc.getArray<Op[]>('ops').get(0)).toEqual(typed(0, 0, 'offline'));
     expect(tab.seen.version).toBe(1);
     expect(tab.cell(0, 0)?.v).toBe('online 219');
+    expectJoined(tab);
+});
+
+test('rows a peer inserted at the bottom survive a compaction, and a cell typed there reaches a joiner', async () => {
+    const s = server({ '0_0': 'base' });
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 1);
+    push(peer, [
+        {
+            op: 'insertRowCol',
+            id: 's1',
+            path: [],
+            value: { type: 'row', index: 11, count: 2, direction: 'rightbottom' },
+        },
+    ]);
+    await deliver(peer, s);
+    await deliver(s, tab.doc);
+    compact(s);
+    await deliver(s, tab.doc);
+    expect(tab.seen.version).toBe(0);
+    await tab.edit((w) => w.setCellFormat(13, 0, 'v', 'typed'));
+    expect(joined(tab.doc).data[13][0]?.v).toBe('typed');
+    expectJoined(tab);
+});
+
+// A peer's row op that lands before a row op the tab already applied leaves the tab unable to tell where its selection
+// went. The tab drops it and leaves the grid, so a keystroke writes into no cell.
+test('a row op that overtakes another row op takes the focus off the grid', async () => {
+    const s = server();
+    const early = replica(s, 1);
+    const tab = await openTab(s, 50);
+    const late = replica(s, 100);
+    await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+    const input = document.getElementById('sheet-rich-text-editor');
+    input?.focus();
+    expect(document.activeElement === input).toBe(true);
+    push(late, rowInsert(0));
+    await deliver(late, tab.doc);
+    expect(document.activeElement === input).toBe(true);
+    push(early, rowInsert(2));
+    await deliver(early, tab.doc);
+    expect(document.activeElement === input).toBe(false);
+    const sent = opsIn(tab.doc);
+    await act(async () => {
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', keyCode: 88, bubbles: true }));
+    });
+    expect(opsIn(tab.doc)).toBe(sent);
+    expectJoined(tab);
+});
+
+// A tab sends a batch per keystroke, and the log grows long between two compactions, so the tab's own batch reads none
+// of it.
+test("the tab's own edit reads no batch of the log", async () => {
+    const s = server();
+    for (let i = 0; i < 50; i++) push(s, typed(0, 0, `${i}`));
+    const tab = await openTab(s, 50);
+    const log = tab.doc.getArray<Op[]>('ops');
+    let reads = 0;
+    const { toArray, slice } = log;
+    log.toArray = () => {
+        reads += 1;
+        return toArray.call(log);
+    };
+    log.slice = (start, end) => {
+        reads += 1;
+        return slice.call(log, start, end);
+    };
+    await tab.edit((w) => w.setCellFormat(1, 1, 'v', 'mine'));
+    expect(reads).toBe(0);
+    expectJoined(tab);
+});
+
+// A sheet add or delete ships the orders its author left, and the replay only appends or drops the sheet. A tab that
+// also moved the other sheets would part from the joiner when two such batches cross, and a kept compaction would then
+// keep the tab's orders while the snapshot holds the joiner's.
+test('a sheet added and one deleted at once leave the tab with the orders a joiner has', async () => {
+    const named = (id: string, order: number): Sheet => ({ ...sheet({}), id, name: id, order });
+    const s = new Y.Doc();
+    s.clientID = 1000;
+    const four = [named('s1', 0), named('s2', 1), named('s3', 2), named('s4', 3)];
+    writeSheetsSnapshot(s, encodeSheetsSnapshot(four, { computed: true }), null);
+    const tab = await openTab(s, 50);
+    const adder = replica(s, 5);
+    const deleter = replica(s, 20);
+    push(adder, [{ op: 'addSheet', id: 's5', path: [], value: { ...named('s5', 4), config: {} } }]);
+    push(deleter, [
+        { op: 'deleteSheet', id: 's2', path: [], value: { id: 's2' } },
+        { op: 'replace', id: 's3', path: ['order'], value: 1 },
+        { op: 'replace', id: 's4', path: ['order'], value: 2 },
+    ]);
+    await deliver(deleter, s);
+    await deliver(adder, s);
+    await deliver(s, tab.doc);
+    const orders = (sheets: Sheet[]) => sheets.map((x) => `${x.id}:${x.order}`).sort();
+    const joiner = () => orders(replaySheetsOps(decodeSheetsSnapshot(readSheetsSnapshotJson(s) ?? ''), opsOf(s)));
+    expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
+    compact(s);
+    await deliver(s, tab.doc);
+    expect(tab.seen.version).toBe(0);
+    expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
+});
+
+// Only a compaction deletes batches, and it writes the snapshot they went into in the same transaction. A writer that
+// deletes the head of the log without one leaves the grid with batches no joiner applies, so the grid loads again.
+test('batches deleted from the head of the log without a new snapshot load the grid again', async () => {
+    const s = server();
+    push(s, typed(0, 0, 'first'), typed(1, 0, 'second'));
+    const tab = await openTab(s, 50);
+    const writer = replica(s, 1);
+    writer.getArray<Op[]>('ops').delete(0, 1);
+    await deliver(writer, tab.doc);
+    expect(tab.seen.version).toBe(1);
+    expect(tab.cell(0, 0)).toBeNull();
     expectJoined(tab);
 });

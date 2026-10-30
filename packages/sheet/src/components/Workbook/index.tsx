@@ -14,7 +14,7 @@ import {
     svgToImageFile,
     writeEigenClipboard,
 } from '@workspace/lib/clipboard';
-import type { SheetFloatingItem } from '@workspace/lib/sheets';
+import type { SheetChart, SheetFloatingItem, SheetImage } from '@workspace/lib/sheets';
 import type {
     EigenClipboardChartItem,
     EigenClipboardData,
@@ -59,7 +59,7 @@ import {
     selectionCache,
     sheetChartClipboardItem,
     undoEntry,
-    warmFormulaCellInfoMap,
+    warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
@@ -80,11 +80,10 @@ type AdditionalProps = {
     toolbarRightItems?: React.ReactNode;
 };
 
-// The copied cell range as a text item. Every clipboard item carries its rendered box, and sheets'
-// document-space units are px (no zoom), so the cumulative edge arrays give both dims directly. The
-// anchor cell's font size rides along so a consumer that honors the box (slides) renders the text
-// at the size it had here rather than at its own much larger default, which the box would clip.
-// A staged copy always has a selection (handleCopy bails without one); the [0, 0] only satisfies TS.
+// The copied cell range as a text item. Every clipboard item carries its drawn box. A sheet has no zoom, so the row and
+// column edges give the box in pixels. The first cell's font size goes along, so an app that keeps the box, such as
+// slides, draws the text at the size it had here and not at its own larger default, which the box would clip. A copy
+// always has a selection, so the [0, 0] fallback never applies.
 function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboardTextItem {
     const [r1, r2] = ctx.selections?.[0]?.row ?? [0, 0];
     const [c1, c2] = ctx.selections?.[0]?.column ?? [0, 0];
@@ -96,6 +95,17 @@ function buildCellRangeClipboardItem(ctx: Context, text: string): EigenClipboard
         },
         typography: { fontSize: runStyleOf(getFlowdata(ctx)?.[r1]?.[c1]).fs },
     });
+}
+
+// The image or chart the person selected on the current sheet. It is read from ctx.sheets, not from the editable
+// current sheet, so a viewer's panel and copy see it too.
+function activeFloating(ctx: Context): { image?: SheetImage; chart?: SheetChart } {
+    const sheet = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) ?? -1];
+    const { activeObject } = ctx;
+    return {
+        image: activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined,
+        chart: activeObject?.kind === 'chart' ? sheet?.charts?.[activeObject.id] : undefined,
+    };
 }
 
 const triggerGroupValuesRefresh = (ctx: Context) => {
@@ -144,8 +154,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const [context, setContext] = useState(() => defaultContext(refs));
-        // The workbook with every write so far. A write lands here at its call, and React renders it a moment later. A read
-        // outside render, such as the host's getFlowdata or a paste, reads it here, so it sees an edit made just before.
+        // The workbook with every write so far. A write lands here at its call, and React renders it a moment later.
+        // A read outside render, such as the host's getFlowdata or a paste, reads it here, so it sees an edit made just
+        // before.
         const contextRef = useRef(context);
         const getContext = useCallback(() => contextRef.current, []);
         const commit = useCallback((next: Context) => {
@@ -159,40 +170,26 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             [...Object.values(props)],
         );
 
-        // Build the formula dependency map off the interaction path once the sheet
-        // has loaded, so the first edit on a large workbook doesn't pay the
-        // multi-second inline rebuild. One-shot per mount; no-op if an edit already
-        // built the map.
+        // The formula map is built once the sheet has loaded, off the interaction path, so the first edit on a large
+        // workbook doesn't wait seconds for it.
         const warmSheetIdx = getSheetIndex(context, context.currentSheetId);
         const dataReady = warmSheetIdx != null && (context.sheets?.[warmSheetIdx]?.data?.length ?? 0) > 0;
         useEffect(() => {
-            if (!dataReady) return;
-            const run = () => warmFormulaCellInfoMap(contextRef.current);
-            if (typeof requestIdleCallback === 'function') {
-                const id = requestIdleCallback(run, { timeout: 2000 });
-                return () => cancelIdleCallback(id);
-            }
-            const id = setTimeout(run, 200);
-            return () => clearTimeout(id);
-        }, [dataReady]);
+            if (dataReady) return warmFormulaCellInfoMapOnIdle(getContext);
+        }, [dataReady, getContext]);
 
         const setContextWithProduce = useCallback(
             (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
                 const base = contextRef.current;
-                // Sync scroll position from globalCache into the immer draft.
-                // Scroll state lives in globalCache to avoid re-rendering all
-                // context consumers on every scroll tick. We lazily sync it here
-                // so that business logic (e.g. handleCellAreaMouseDown) that reads
-                // ctx.scrollLeft/ctx.scrollTop inside recipes gets fresh values.
+                // The scroll position lives in globalCache, so a scroll tick doesn't render every reader of the
+                // context. A recipe that reads it, such as a click on a cell, gets it copied in here.
                 const syncScroll = (ctx: Context) => {
                     ctx.scrollLeft = globalCache.current.scrollLeft;
                     ctx.scrollTop = globalCache.current.scrollTop;
                 };
 
-                // Fast path: skip expensive produceWithPatches when no undo
-                // history is needed (e.g. mouse-move during drag selection).
-                // produceWithPatches generates JSON patches for every mutation,
-                // but selection changes are filtered out by filterPatch anyway.
+                // A write that records no history, such as a drag that moves the selection, skips the patches, which
+                // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
                     commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
                     return;
@@ -208,8 +205,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 const filteredInversePatches = filterPatch(inversePatches);
                 if (filteredInversePatches.length === 0) return;
                 const entry = recordEntry(base, result, filteredPatches, filteredInversePatches, options);
-                // noUndo: emit the op (peers need the swap/correction) but record no local
-                // undo entry, so a cross-mount paste stays a single ⌘Z.
+                // A noUndo write still reaches peers, which need the fix it makes, but it records no undo entry. A
+                // paste whose images upload afterwards then stays one undo step.
                 if (!options.noUndo) {
                     const { undoList, undoGesture } = globalCache.current;
                     const last = undoList.at(-1);
@@ -269,11 +266,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         // Surface the selected image or chart to the app so it can mount its properties panel. Fires on
         // select and deselect and after a write; immer keeps the record's reference while it is unchanged,
         // and the item is memoized on it, so the app's setState bails when nothing moved.
-        const currentSheetIndex = getSheetIndex(context, context.currentSheetId);
-        const currentSheet = context.sheets[currentSheetIndex ?? -1];
-        const { activeObject } = context;
-        const activeImage = activeObject?.kind === 'image' ? currentSheet?.images?.[activeObject.id] : undefined;
-        const activeChart = activeObject?.kind === 'chart' ? currentSheet?.charts?.[activeObject.id] : undefined;
+        const { image: activeImage, chart: activeChart } = activeFloating(context);
         const activeItem = useMemo((): SheetFloatingItem | null => {
             if (activeImage) return { kind: 'image', object: activeImage };
             if (activeChart) return { kind: 'chart', object: activeChart };
@@ -334,15 +327,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     let viewStale = false;
                     if (draftCtx.sheets.length === 0) {
                         viewStale = true;
-                        // Shallow-clone the sheet wrappers — NOT the heavy celldata/data,
-                        // which stay shared by reference (avoids the ~900ms deep clone on a
-                        // 48MB xlsx import). The init below only sets top-level props
-                        // (id/status/data/celldata/config/calcChain), and fresh wrappers keep
-                        // those writable — so a Workbook remount (key={snapshotVersion}) can
-                        // safely re-run this init. Immer still freezes the shared data/celldata
-                        // (auto-freeze copies their refs into the draft), but that's fine: for
-                        // already-populated sheets initSheetData is skipped (guarded below by
-                        // !sheet.data || length === 0), so their frozen contents are never mutated.
+                        // Each sheet is copied one level deep, and its cells stay shared: a deep copy of a large
+                        // import takes about a second. The init below writes only a sheet's own fields, so a remount
+                        // can run it again on the same data. It skips a sheet that already has a matrix, so the shared
+                        // cells, which immer freezes, are never written.
                         draftCtx.sheets = originalData.map((sheet) => ({
                             ...sheet,
                             id: sheet.id ?? crypto.randomUUID(),
@@ -352,17 +340,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             if (!sheet.data || sheet.data.length === 0) {
                                 initSheetData(draftCtx, index, sheet);
                             } else {
-                                // The replay materializes `data` for any sheet an op touched, so
-                                // initSheetData is skipped here — but the config collections it
-                                // also guarantees must still exist, or this client's own first
-                                // config write goes out as a whole collection.
+                                // The replay gave this sheet its matrix. Its config collections must still exist, or
+                                // this tab's first config write would send a whole collection.
                                 normalizeSheetConfig(sheet);
                             }
                         }
-                        // Just seed calcChain (the list of formula cells) — don't
-                        // re-evaluate. Excel-imported sheets carry the last computed
-                        // values, persisted sheets were saved post-recompute, and an
-                        // edit lazily kicks the engine for the affected sub-graph.
+                        // The list of formula cells is seeded without computing them. An imported or stored sheet
+                        // carries its computed values, and an edit computes the formulas it affects.
                         api.seedCalcChain(draftCtx);
                     }
                     if (mergedSettings.devicePixelRatio > 0) {
@@ -391,8 +375,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     ) {
                         draftCtx.selections = sheet.selections;
                     }
-                    // A fresh sheet with no persisted selection is seeded once by the
-                    // SheetOverlay mount effect (api.setSelection) — the single canonical seed.
+                    // A sheet with no stored selection gets its first one when the grid overlay mounts.
 
                     draftCtx.currency = mergedSettings.currency || '€';
 
@@ -476,14 +459,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // width) copies its own text.
                 const floating = !isTypingTarget();
                 const ctx = contextRef.current;
-                const sheet = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId) ?? -1];
-                const { activeObject } = ctx;
-                const chart = activeObject?.kind === 'chart' ? sheet?.charts?.[activeObject.id] : undefined;
-                const image = activeObject?.kind === 'image' ? sheet?.images?.[activeObject.id] : undefined;
+                const { chart, image } = activeFloating(ctx);
                 // A selected chart copies itself with its ranges read into inline data, the one thing every
                 // other app can draw; this workbook keeps its ranges for a paste here. A chart that draws
-                // #REF! or too much data copies nothing. A cut deletes it, as Google's does. Read from
-                // ctx.sheets, not the editable current sheet, so a viewer copies too.
+                // #REF! or too much data copies nothing. A cut deletes it, as Google's does.
                 if (chart && floating) {
                     const item = sheetChartClipboardItem(ctx, chart);
                     if (!item) return;
@@ -533,8 +512,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onPaste = useCallback(
             (e: ClipboardEvent) => {
-                // deal with multi instance case, only the focused sheet handles the paste; a selected image or
-                // chart holds the focus
+                // With more than one workbook on a page, only the focused one takes the paste. A selected image or
+                // chart holds the focus too.
                 const { activeElement } = document;
                 const ctx = contextRef.current;
                 if (
@@ -622,7 +601,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 });
                             }
                             if (textParts.length > 0) {
-                                // Create a synthetic paste with the text — let handlePaste process it
                                 const syntheticTransfer = new DataTransfer();
                                 syntheticTransfer.setData('text/plain', textParts.join('\n'));
                                 const syntheticEvent = new ClipboardEvent('paste', {
@@ -689,7 +667,6 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             };
         }, [onCopy, onPaste]);
 
-        // expose APIs
         useImperativeHandle(
             ref,
             () => generateAPIs(getContext, setContextWithProduce, handleUndo, handleRedo, globalCache.current),
