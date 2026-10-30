@@ -459,3 +459,28 @@ test('rows a peer inserted at the bottom survive a compaction, and a cell typed 
     expect(joined(tab.doc).data[13][0]?.v).toBe('typed');
     expectJoined(tab);
 });
+
+// A peer's row op that lands before a row op the tab already applied leaves the tab unable to tell where its selection
+// went. The tab drops it and leaves the grid, so a keystroke writes into no cell.
+test('a row op that overtakes another row op takes the focus off the grid', async () => {
+    const s = server();
+    const early = replica(s, 1);
+    const tab = await openTab(s, 50);
+    const late = replica(s, 100);
+    await tab.edit((w) => w.setSelection([{ row: [5, 5], column: [1, 1] }]));
+    const input = document.getElementById('sheet-rich-text-editor');
+    input?.focus();
+    expect(document.activeElement === input).toBe(true);
+    push(late, rowInsert(0));
+    await deliver(late, tab.doc);
+    expect(document.activeElement === input).toBe(true);
+    push(early, rowInsert(2));
+    await deliver(early, tab.doc);
+    expect(document.activeElement === input).toBe(false);
+    const sent = opsIn(tab.doc);
+    await act(async () => {
+        input?.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', keyCode: 88, bubbles: true }));
+    });
+    expect(opsIn(tab.doc)).toBe(sent);
+    expectJoined(tab);
+});

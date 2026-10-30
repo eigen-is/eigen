@@ -474,8 +474,8 @@ export function deleteRowCol(
         end: number;
         id: string;
     },
-    // Remote mirror (applyOp): re-derive the data shift even for a read-only viewer.
-    // The permission guard blocks LOCAL viewer-initiated ops only.
+    // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
+    // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own delete only.
     force: boolean = false,
 ) {
     if (!force && ctx.allowEdit === false) return;
@@ -510,7 +510,7 @@ export function deleteRowCol(
     file.alternateFormatRules = alternateFormats;
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
-    ctx.selections = undefined;
+    if (!force) ctx.selections = undefined;
 
     ctx.formulaCache.formulaCellInfoMap = null;
 }
