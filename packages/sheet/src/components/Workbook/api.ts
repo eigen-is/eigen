@@ -1,6 +1,7 @@
-// The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops, undo and redo, the
-// floating images and charts, search and replace. Its writes run as recipes on the workbook's context, as the
-// editor's own edits do. A write applies at its call, so a read right after it, such as getFlowdata, sees it.
+// The Workbook's imperative API, what a host app calls through the Workbook's ref: a peer's ops and a replay of the op
+// log, undo and redo, the floating images and charts, search and replace. Its writes run as recipes on the workbook's
+// context, as the editor's own edits do. A write applies at its call, so a read right after it, such as getFlowdata,
+// sees it.
 
 import type { CellRangeRef, ChartLook, ChartSpec, ChartSpecChange } from '@workspace/lib/types/chart';
 import type { DocSearchOptions } from '@workspace/lib/types/doc-search';
@@ -20,10 +21,12 @@ import type {
     Range,
     SearchHighlight,
     SearchResult,
+    Sheet,
 } from '../../state';
 import {
     api,
     applyOpBatch,
+    cancelNormalSelected,
     collectMatches,
     createContextResolver,
     deleteFloatingObject,
@@ -74,6 +77,36 @@ export function generateAPIs(
             return accepted;
         },
 
+        // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
+        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. An open
+        // cell editor followed the batches this tab applied, so only the `fresh` batches, those new to this tab, move
+        // it. When a batch they overtake moved rows or columns, the editor's row and column no longer match a fresh
+        // batch's. The editor then closes without writing, as when its cell is deleted. The undo and redo entries were
+        // recorded against the order that is gone, so both stacks empty. True when every batch applied.
+        replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
+            let accepted = true;
+            const movesRows = (ops: Op[]) => ops.some((op) => op.op === 'insertRowCol' || op.op === 'deleteRowCol');
+            const from = batches.findIndex((ops) => fresh.has(ops));
+            const closeEditor = from !== -1 && batches.slice(from).some((ops) => !fresh.has(ops) && movesRows(ops));
+            setContext(
+                (ctx_) => {
+                    if (closeEditor) cancelNormalSelected(ctx_);
+                    let next: Context = { ...current(ctx_), sheets: base };
+                    for (const ops of batches) {
+                        const applied = applyOpBatch(next, ops, fresh.has(ops));
+                        if (applied) next = applied.ctx;
+                        else accepted = false;
+                    }
+                    Object.assign(ctx_, next);
+                },
+                { noHistory: true },
+            );
+            getContext().formulaCache.resetEngine();
+            history.undoList = [];
+            history.redoList = [];
+            return accepted;
+        },
+
         setCellFormat: (
             row: number,
             column: number,
@@ -92,8 +125,6 @@ export function generateAPIs(
 
         addPresences: (newPresences: Presence[]) => {
             setContext((draftCtx) => {
-                const presenceKey = (v: { username: string; userId?: string }) =>
-                    v.userId == null ? v.username : v.userId;
                 const newKeys = new Set(newPresences.map(presenceKey));
                 draftCtx.presences = (draftCtx.presences || [])
                     .filter((v) => !newKeys.has(presenceKey(v)))
@@ -109,8 +140,6 @@ export function generateAPIs(
         ) => {
             setContext((draftCtx) => {
                 if (draftCtx.presences != null) {
-                    const presenceKey = (v: { username: string; userId?: string }) =>
-                        v.userId == null ? v.username : v.userId;
                     const removeKeys = new Set(arr.map(presenceKey));
                     draftCtx.presences = draftCtx.presences.filter((v) => !removeKeys.has(presenceKey(v)));
                 }
@@ -120,8 +149,8 @@ export function generateAPIs(
         insertImage: (mediaName: string, width: number, height: number, angle?: number) =>
             setContext((draftCtx) => insertImage(draftCtx, mediaName, width, height, angle)),
 
-        // Pending→real swap after an upload/paste settles — a technical fixup, never the user's own
-        // undo step (noUndo emits the op to peers but records no local undo entry).
+        // Swaps a pending image for the stored one once its upload or paste settles. That is a fixup, not the user's
+        // step, so noUndo sends the op to peers and records no undo entry.
         replaceImageMediaName: (oldName: string, newName: string) => {
             setContext((draftCtx) => replaceImageMediaName(draftCtx, oldName, newName), { noUndo: true });
             replaceMediaNameInHistory(history, oldName, newName);
@@ -184,9 +213,8 @@ export function generateAPIs(
         revealSearchMatch: (cell: SearchHighlight) =>
             setContext((draftCtx) => revealSearchMatch(draftCtx, cell), { noHistory: true }),
 
-        // Replace rewrites every occurrence in the one targeted cell; replaceAll sweeps every match —
-        // each in ONE setContext recipe (one undo, one op batch). Both return the match list the edit
-        // leaves, which the provider adopts instead of searching again.
+        // Replace rewrites every occurrence in one cell, and replaceAll every match. Each is one recipe, so one undo
+        // step and one op batch. Both return the matches the edit leaves, which the provider adopts without a search.
         replace: (
             cell: SearchHighlight,
             query: string,
@@ -194,10 +222,9 @@ export function generateAPIs(
             opts: DocSearchOptions,
             preserveCase: boolean,
         ): SearchResult[] => {
-            const recipe = (ctx_: Context) => {
+            setContext((ctx_) => {
                 replaceSearchMatch(ctx_, cell, query, replacement, opts, preserveCase);
-            };
-            setContext(recipe);
+            });
             return collectMatches(getContext(), query, opts);
         },
 
@@ -208,11 +235,13 @@ export function generateAPIs(
             preserveCase: boolean,
         ): { replaced: number; matches: SearchResult[] } => {
             let replaced = 0;
-            const recipe = (ctx_: Context) => {
+            setContext((ctx_) => {
                 replaced = replaceAllMatches(ctx_, query, replacement, opts, preserveCase);
-            };
-            setContext(recipe);
+            });
             return { replaced, matches: collectMatches(getContext(), query, opts) };
         },
     };
 }
+
+// A collaborator's key: the user id, or the name for a presence that has none.
+const presenceKey = (v: { username: string; userId?: string }) => (v.userId == null ? v.username : v.userId);

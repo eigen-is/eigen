@@ -1,5 +1,6 @@
 // Small helpers the sheet's state modules share, such as finding a sheet by id or name, a new sheet's name, a color
-// as hex and whether a selection may be edited. The op-to-patch translation lives beside them and is re-exported here.
+// as hex and whether a selection may be edited. The op-to-patch translation and the check whether two sets of op
+// batches commute live beside them and are re-exported here.
 
 import { parseRgb } from '@workspace/lib/constants/colors';
 import { parseCellKey } from '@workspace/lib/sheets';
@@ -9,6 +10,7 @@ import { getFlowdata, getSheetConfig } from '../context';
 import { checkCellIsLocked } from '../modules';
 import type { Selection, Sheet } from '../types';
 
+export * from './commute';
 export * from './patch';
 
 export function generateRandomSheetName(file: Sheet[], isPivotTable: boolean) {

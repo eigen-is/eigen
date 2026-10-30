@@ -436,3 +436,69 @@ describe('applyOp and a joiner stamp a merge the same way after a row or column 
         expect(live.config?.merge).toEqual(joiner.config?.merge);
     });
 });
+
+// A host replays the log from an earlier state when a peer's batch lands before batches the tab already applied.
+describe('replayOps', () => {
+    const typedA1: Op = { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 9, m: '9' } };
+    const typedB2: Op = { op: 'replace', id: 'id_1', path: ['data', 1, 1], value: { v: 'b2', m: 'b2' } };
+    const rowInsert: Op = {
+        op: 'insertRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type: 'row', index: 0, count: 1, direction: 'lefttop' },
+    };
+    const entry = { patches: [], inversePatches: [] };
+
+    function replay(ctx: Context, base: Context['sheets'], batches: Op[][], fresh: Op[][]) {
+        let next = ctx;
+        const history = { undoList: [entry], redoList: [entry] };
+        const api = generateAPIs(
+            () => next,
+            (recipe: (draft: Context) => void) => {
+                next = produce(next, recipe);
+            },
+            () => {},
+            () => {},
+            history,
+        );
+        const accepted = api.replayOps(base, batches, new Set(fresh));
+        return { ctx: next, history, accepted };
+    }
+
+    it('applies the batches on the base, clears both stacks and keeps the view', () => {
+        const base = makeCtx(null);
+        const shown = applyPeerOps(base, [typedA1]);
+        const { ctx, history, accepted } = replay(shown, base.sheets, [[typedB2], [typedA1]], [[typedB2]]);
+        expect([ctx.sheets[0].data?.[0][0]?.v, ctx.sheets[0].data?.[1][1]?.v]).toEqual([9, 'b2']);
+        expect(history).toEqual({ undoList: [], redoList: [] });
+        expect(ctx.selections).toBe(shown.selections);
+        expect(accepted).toBe(true);
+    });
+
+    it('says when a batch failed to apply', () => {
+        const broken: Op = { op: 'replace', id: 'id_1', path: ['data', 99, 0, 'v'], value: 1 };
+        const ctx = makeCtx(null);
+        expect(replay(ctx, ctx.sheets, [[broken]], [[broken]]).accepted).toBe(false);
+    });
+
+    it('moves an open cell editor only for a batch new to the tab', () => {
+        const ctx = produce(makeCtx(null), (draft: Context) => {
+            draft.editingCellPosition = [2, 1];
+        });
+        const old = [rowInsert];
+        const fresh = [{ ...rowInsert }];
+        expect(replay(ctx, ctx.sheets, [old, fresh], [fresh]).ctx.editingCellPosition).toEqual([3, 1]);
+    });
+
+    it('closes an open cell editor when a batch the fresh one overtakes moves rows', () => {
+        const base = produce(makeCtx(null), (draft: Context) => {
+            draft.editingCellPosition = [2, 1];
+        });
+        const overtaken = [rowInsert];
+        const shown = applyPeerOps(base, overtaken);
+        expect(shown.editingCellPosition).toEqual([3, 1]);
+        const late: Op[] = [{ op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 2, end: 2 } }];
+        const { ctx } = replay(shown, base.sheets, [late, overtaken], [late]);
+        expect(ctx.editingCellPosition).toEqual([]);
+    });
+});

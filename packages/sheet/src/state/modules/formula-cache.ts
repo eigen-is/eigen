@@ -93,34 +93,7 @@ export function createContextResolver(source: Context): CellResolver {
 
 // FormulaCache is defined as class to avoid being frozen by immer
 export class FormulaCache {
-    // Shared state — delegated to engine so both FE and BE use the same cache
-    public get execFunctionGlobalData(): Record<string, Cell> {
-        return this.engine.state.execFunctionGlobalData;
-    }
-
-    public set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
-        this.engine.state.execFunctionGlobalData = v ?? {};
-    }
-
-    public get formulaCellInfoMap(): FormulaCellInfoMap | null {
-        return this.engine.state.formulaCellInfoMap;
-    }
-
-    public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
-        this.engine.state.formulaCellInfoMap = v;
-        // The map is only ever reassigned to reset it (null or {}); the reverse
-        // index mirrors the map, so it resets too and refills via setFormulaCellInfo.
-        this.engine.state.dependencyIndex.clear();
-    }
-
-    // Reverse lookup cell → formulas reading it; lives in engine state next to
-    // formulaCellInfoMap (so engine resets clear both) and is kept in lockstep
-    // by setFormulaCellInfo and the setter above.
-    public get dependencyIndex(): DependencyIndex {
-        return this.engine.state.dependencyIndex;
-    }
-
-    // UI-only state — stays on FormulaCache
+    // The reference picker's state and the caches only the editor keeps. The engine holds what the server shares.
     public func_selectedrange?: Selection;
 
     public data_parm_index: number;
@@ -176,6 +149,38 @@ export class FormulaCache {
         this.functionlistMap = {};
         this.cellTextToIndexList = {};
         this.engine = new FormulaEngine();
+    }
+
+    // The engine keeps these, so the editor and the server read one cache.
+    public get execFunctionGlobalData(): Record<string, Cell> {
+        return this.engine.state.execFunctionGlobalData;
+    }
+
+    public set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
+        this.engine.state.execFunctionGlobalData = v ?? {};
+    }
+
+    public get formulaCellInfoMap(): FormulaCellInfoMap | null {
+        return this.engine.state.formulaCellInfoMap;
+    }
+
+    public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
+        this.engine.state.formulaCellInfoMap = v;
+        // Code only assigns the map to reset it, to null or to an empty map. The reverse index mirrors the map, so it
+        // resets too. setFormulaCellInfo fills both again.
+        this.engine.state.dependencyIndex.clear();
+    }
+
+    // For each cell, the formulas that read it. It lives in the engine's state next to the formula map, so a new
+    // engine starts both empty. setFormulaCellInfo and the map's setter keep the two in step.
+    public get dependencyIndex(): DependencyIndex {
+        return this.engine.state.dependencyIndex;
+    }
+
+    // Forgets what the engine learned from the cells, for sheets swapped under it. The reference picker's state stays.
+    public resetEngine() {
+        this.engine = new FormulaEngine();
+        this.cellTextToIndexList = {};
     }
 
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
@@ -239,8 +244,8 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
             }
         });
     } else if (!(calc_funcStr.substring(0, 2) === '="' && calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"')) {
-        // let formulaTextArray = calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g); // Cannot correctly split cases where ==, !=, - etc. appear between single or double quotes. This caused a bug where the formula value was not updated when the cell content of sheet name '1-2' in ='1-2'!A1 changed.
-        // Fix: ='1-2'!A1+5 being split by calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g) into ["","'1","2'!A1",5] incorrectly
+        // The formula splits at its operators, but never inside quotes: a sheet named '1-2' in ='1-2'!A1 must stay one
+        // reference, or a change to that cell would not recalculate the formula.
         let point = 0; // pointer
         let squote = -1; // single quote
         let dquote = -1; // double quotes
@@ -307,7 +312,6 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
                 formulaTextArray.splice(sq_end_array[j] + 1, 1);
             }
         }
-        // At this point =SUM('1-2'!A1:A2&"'1-2'!A2") is corrected from ["","SUM","'1","2'!A1:A2","",""'1","2'!A2""] to ["","SUM","","'1-2'!A1:A2","","",""'1-2'!A2""]
 
         for (let j = 0; j < formulaTextArray.length; j += 1) {
             const t = formulaTextArray[j];
