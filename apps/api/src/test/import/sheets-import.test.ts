@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Cell, CellWithRowAndCol, Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot, sheetsOpLog, sheetsStateMap } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
@@ -2153,7 +2153,7 @@ describe('an insert weighed with the workbook it joins', () => {
 
     test('a sheet no tab has flushed weighs with the stored ones', () => {
         const doc = new Y.Doc();
-        sheetsStateMap(doc).set('snapshot', encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }));
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }), null);
         const pending = sheetOf('Pending', numbers(10));
         sheetsOpLog(doc).push([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]);
         expect(sheetsWeight(readLiveSheets(doc)).cells).toBe(20);
