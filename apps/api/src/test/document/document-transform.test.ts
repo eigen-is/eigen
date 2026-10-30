@@ -560,9 +560,9 @@ describe('document transform (eigensheets export)', () => {
 // Recorded from the import pipeline (xlsxToSheets + recalcImportedSheets +
 // encodeSheetsSnapshot) over buildImportFixture(), so the Worker and the main
 // thread are proven to emit the same bytes. Regenerate only for an intentional
-// converter or wire-format change (last moved when a number without an alignment of its
-// own stopped storing a right one: the editor aligns by type).
-const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '02d90a244fc30b98a94a4ba9b075efa96617815380d1bd8ee60a61c7dea0f8f2';
+// converter or wire-format change (last moved when a sheet started storing the size of
+// its dense grid, so a stale smaller size drops no rows).
+const GOLDEN_IMPORT_SNAPSHOT_SHA256 = '09c6ca3cde63464e2e5079bd27dbcc0e74ce2b89dfaf5556f6a340ad004e2740';
 
 // Small but representative workbook: values, a stale cached formula result the
 // import recalc must correct, styles, a date format, a merge, a column width, a

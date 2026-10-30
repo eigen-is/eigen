@@ -132,6 +132,18 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         for (const sheet of decoded) expect(sheet.calcChain).toBeUndefined();
     });
 
+    test("a sheet's row and column are at least the dense grid's, so a stale smaller size truncates nothing", () => {
+        const data: (Cell | null)[][] = Array.from({ length: 14 }, () => [null, null, null, null, null]);
+        data[11][0] = { v: 'last cell', m: 'last cell' };
+        const grown: Sheet = { id: 's', name: 'S', row: 12, column: 4, data };
+        const kept: Sheet = { id: 't', name: 'T', row: 200, column: 30, data: [[{ v: 1, m: '1' }]] };
+        const decoded = decodeSheetsSnapshot(encodeSheetsSnapshot([grown, kept], { computed: true }));
+        expect(decoded.map(({ row, column }) => ({ row, column }))).toEqual([
+            { row: 14, column: 5 },
+            { row: 200, column: 30 },
+        ]);
+    });
+
     test('one shared style across 3000 cells is serialized once', () => {
         const encoded = encodeSheetsSnapshot(BULK, { computed: true });
         expect(encoded.split('#a1b2c3')).toHaveLength(2);

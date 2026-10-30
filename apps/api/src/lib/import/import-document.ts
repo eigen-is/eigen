@@ -21,6 +21,7 @@ import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { commitEigendocImport } from '../document/doc';
 import { appendSheetsToYjs, readLiveSheets, writeSheetsSnapshotToYjs } from '../document/sheets';
+import { resetSheetsCompactionFailures } from '../document/sheets-compaction';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import { lossSummary } from '../document/transform/losses';
 import type {
@@ -138,7 +139,11 @@ export async function importIntoDocument(
             assertInsertFits(readLiveSheets((await drive.getCollabDocument(path.mountId, path.id)).doc), weight);
         }
         await commitImport(commit, images, mode === 'replace', (doc) => {
-            if (mode === 'replace') return writeSheetsSnapshotToYjs(doc, snapshotJson);
+            if (mode === 'replace') {
+                writeSheetsSnapshotToYjs(doc, snapshotJson);
+                resetSheetsCompactionFailures(path);
+                return;
+            }
             const current = readLiveSheets(doc);
             assertInsertFits(current, weight);
             appendSheetsToYjs(doc, snapshotJson, current);

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { defaultChartSpec, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { Op, Sheet } from '@workspace/lib/sheets';
 import {
@@ -6,9 +6,11 @@ import {
     decodeSheetsWorkbook,
     encodeSheetsSnapshot,
     readSheetsBase,
+    sheetsStateMap,
     writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import * as engine from '@workspace/sheet/engine';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
 import {
@@ -16,6 +18,7 @@ import {
     compactSheetsSnapshot,
     readLiveSheets,
     readSheetsFromDoc,
+    SERVER_RECALC_BUDGET,
     writeSheetsSnapshotToYjs,
 } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
@@ -914,47 +917,85 @@ describe('document/sheets — compactSheetsSnapshot', () => {
     ];
     const values = (snapshot: string) =>
         decodeSheetsWorkbook(snapshot).sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v]);
+    const formulaSheet = (id: string, order: number): Sheet => ({
+        id,
+        name: id,
+        order,
+        celldata: [{ r: 0, c: 0, v: { f: '=1+1', v: 99, m: '99' } }],
+        config: {},
+    });
 
-    test('folds the batches into the snapshot and keeps its computed flag', () => {
-        for (const computed of [true, false]) {
-            const compacted = compactSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed }), [
-                edit(0, 'a'),
-                edit(1, 'b'),
-            ]);
-            expect(decodeSheetsWorkbook(compacted).computed).toBe(computed);
-            expect(values(compacted)).toEqual([
-                [0, 0, 'a'],
-                [0, 1, 'b'],
-            ]);
+    test('folds the batches, which cross as JSON text, into the snapshot', () => {
+        const compacted = compactSheetsSnapshot(
+            encodeSheetsSnapshot(sheets, { computed: true }),
+            JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
+        );
+        expect(decodeSheetsWorkbook(compacted).computed).toBe(true);
+        expect(values(compacted)).toEqual([
+            [0, 0, 'a'],
+            [0, 1, 'b'],
+        ]);
+    });
+
+    test('an uncomputed workbook is recalculated under the server budget, so the stored snapshot is computed', () => {
+        const original = { ...engine };
+        const budgets: unknown[] = [];
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: (input: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
+                budgets.push(options);
+                return original.recalcSheets(input, options);
+            },
+        }));
+        try {
+            const compacted = compactSheetsSnapshot(
+                encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
+                JSON.stringify([]),
+            );
+            const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+            expect(computed).toBe(true);
+            expect(result[0].celldata?.[0]?.v?.v).toBe(2);
+            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
         }
     });
 
-    test('a tab added without a calc chain leaves the compacted workbook uncomputed, so an export still recalculates it', () => {
-        const added: Sheet = {
-            id: 'sheet-2',
-            name: 'Imported',
-            order: 1,
-            celldata: [{ r: 0, c: 0, v: { f: '=1+1', v: 99, m: '99' } }],
-            config: {},
-        };
+    test('a tab added without a calc chain is recalculated, so an export of the compacted workbook pays no recalc', () => {
         const snapshot = encodeSheetsSnapshot(sheets, { computed: true });
-        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: added }]];
-        const exported = (doc: Y.Doc) => readSheetsFromDoc(doc).sheets[1].celldata?.[0]?.v?.v;
-
-        const logged = new Y.Doc();
-        logged.getMap('state').set('snapshot', snapshot);
-        logged.getArray<Op[]>('ops').push(batches);
+        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }]];
         const compacted = new Y.Doc();
-        compacted.getMap('state').set('snapshot', compactSheetsSnapshot(snapshot, batches));
+        sheetsStateMap(compacted).set('snapshot', compactSheetsSnapshot(snapshot, JSON.stringify(batches)));
 
-        expect(exported(logged)).toBe(2);
-        expect(exported(compacted)).toBe(2);
-        logged.destroy();
+        const read = readSheetsFromDoc(compacted, { recalc: false });
+        expect(sheetsNeedRecalc(read.sheets)).toBe(false);
+        expect(read.sheets[1].celldata?.[0]?.v?.v).toBe(2);
         compacted.destroy();
     });
 
+    test('a recalc that fails stores the replayed values uncomputed, so an export still recalculates them', () => {
+        const original = { ...engine };
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: () => {
+                throw new Error('forced recalc failure');
+            },
+        }));
+        try {
+            const compacted = compactSheetsSnapshot(
+                encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
+                JSON.stringify([]),
+            );
+            const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+            expect(computed).toBe(false);
+            expect(result[0].celldata?.[0]?.v?.v).toBe(99);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    });
+
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {
-        const compacted = compactSheetsSnapshot(null, [edit(0, 'a')]);
+        const compacted = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]));
         const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
         expect(computed).toBe(true);
         expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
@@ -965,11 +1006,10 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         try {
             const poison: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
-            const compacted = compactSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }), [
-                edit(0, 'a'),
-                poison,
-                edit(1, 'b'),
-            ]);
+            const compacted = compactSheetsSnapshot(
+                encodeSheetsSnapshot(sheets, { computed: true }),
+                JSON.stringify([edit(0, 'a'), poison, edit(1, 'b')]),
+            );
             expect(values(compacted)).toEqual([
                 [0, 0, 'a'],
                 [0, 1, 'b'],
