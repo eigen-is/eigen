@@ -11,7 +11,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
-- **Editing together in Sheets** — every tab ends with the same cells, the later of two edits winning, offline edits too. A row someone inserts or deletes moves your selection. The server packs a spreadsheet's edits into it when it closes
+- **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 
 ## [0.4.1] - 2026-10-28
 

@@ -19,7 +19,7 @@
 const ZSTD_MAGIC = [0x28, 0xb5, 0x2f, 0xfd] as const;
 
 // Below this, zstd's frame overhead outweighs the gain — keystroke-sized Yjs updates stay
-// raw. The wins (snapshots, sheet whole-doc flushes) are far above it. Tunable.
+// raw. The wins (snapshots, a sheet's whole-workbook updates) are far above it. Tunable.
 const COMPRESS_MIN_BYTES = 1024;
 
 export function compressBlob(bytes: Uint8Array): Buffer {

@@ -38,7 +38,7 @@ export function usePresence(
     // the other apps (you see yourself across windows).
     const peers = useAwarenessPeers<PeerPresence>(provider);
 
-    // Publish the local identity. snapshotVersion is a dep because a peer snapshot flush remounts the
+    // Publish the local identity. snapshotVersion is a dep because a new snapshot the tab doesn't hold remounts the
     // Workbook (the editor keys it by snapshotVersion), wiping context.presences — re-publishing the
     // local user field keeps this client visible to peers after the fresh mount.
     useEffect(() => {

@@ -17,23 +17,20 @@ type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 // killed). Outgoing server→client frames (the initial-sync whole-state
 // syncStep2) are NOT limited.
 //
-// The realistic oversized client→server frame is sheets' flushSnapshot
-// (use-sheet.ts): the whole workbook JSON lands in ONE Yjs update = ONE WS frame
-// on tab close/unmount and rides ~48 bytes above the JSON size. Measured with
-// full cell JSON: ~2.9 MB @ 26k cells, ~16.7 MB @ 150k cells, ~44.5 MB @ 400k
-// cells (the ~48 MB case blob-codec.ts documents from production). When the
-// frame is killed, the client sees an abnormal close (1006) and — on page
-// unload — the flush is simply gone; the server keeps snapshot_old + the ops
-// rows, so the sheet's state.snapshot never consolidates and the ops array
-// grows without bound.
+// The oversized client→server frame measured here is a whole workbook's JSON in
+// ONE Yjs update = ONE WS frame, which rides ~48 bytes above the JSON size. Any
+// large client update can reach that size. Measured with full cell JSON: ~2.9 MB
+// @ 26k cells, ~16.7 MB @ 150k cells, ~44.5 MB @ 400k cells (the ~48 MB case
+// blob-codec.ts documents from production). When the frame is killed, the
+// client sees an abnormal close (1006) and its update is lost.
 //
 // These tests pin the contract through the exact websocket options app.ts
 // passes to Bun.serve (Elysia forwards app.config.websocket verbatim).
 
 const MESSAGE_SYNC = 0;
 
-// The frame y-websocket sends for a flushSnapshot transaction: one update
-// carrying the whole workbook JSON inside state.snapshot.
+// The frame y-websocket sends for one update that carries the whole workbook
+// JSON inside state.snapshot.
 function sheetFlushFrame(jsonBytes: number): Uint8Array<ArrayBuffer> {
     const doc = new Y.Doc();
     let update: Uint8Array | undefined;
@@ -131,9 +128,9 @@ describe('Collab WS payload limits (audit finding #5)', () => {
         expect(result.delivered).toBe(frame.byteLength);
     }, 30_000);
 
-    // The finding itself: a ~150k-cell sheet's flushSnapshot frame (>16 MB)
+    // The finding itself: a ~150k-cell sheet's whole-workbook frame (>16 MB)
     // must survive the app websocket config. Under Bun's 16 MB default this
-    // killed the socket (abnormal 1006 close) and the flush was lost — RED
+    // killed the socket (abnormal 1006 close) and the update was lost — RED
     // until app.ts set maxPayloadLength sized for the documented ~48 MB worst
     // case (128 MB).
     test('a large sheet flush frame (20 MB) must survive the app websocket config', async () => {

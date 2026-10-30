@@ -154,7 +154,7 @@ function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
     return touched;
 }
 
-// Where a sheet has the dense matrix, the matrix holds its latest cells: an editor flush and a replayed cell op write
+// Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes
 // `data` and leave `celldata` stale. The exports and the preview read `celldata`, so it is written again from `data`.
 function withSyncedCelldataIfData(s: Sheet): Sheet {
     if (!s.data) return s;

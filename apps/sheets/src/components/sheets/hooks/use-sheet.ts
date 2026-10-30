@@ -26,8 +26,9 @@ type Anchor = { at: number; sheets: WorkbookSheet[] };
 
 // How many batches pass between two anchors. An anchor shares every row nobody changed since, so it is cheap to keep
 // and to restore. Restoring one empties the formula engine, which learns the formulas again once the browser is idle.
-// Each batch after the anchor is applied again, which on a sheet of 300,000 cells takes about 12 ms a batch, so twenty
-// keeps that part of a rollback near a quarter second.
+// Each batch after the anchor is applied again. On a sheet of 300,000 cells that takes about 12 ms a batch on average
+// over a mixed log: a cell edit well under a millisecond, a row insert or delete about 150 ms. So twenty keeps that
+// part of a rollback near a quarter second for a log of mostly cell edits, and a few seconds for one of row batches.
 const ANCHOR_EVERY = 20;
 
 // How many anchors the grid keeps, the oldest dropped first. On a sheet of 300,000 cells ten anchors hold about 2 MB.
