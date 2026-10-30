@@ -2,7 +2,7 @@
 
 This proposal grows Eigen's clipboard into a typed protocol, so that a table, a slide object or a card keeps its structure when it is pasted into another Eigen app, and still pastes as useful text and HTML anywhere else.
 
-**Status:** v1 is built, and [CLIPBOARD.md](../CLIPBOARD.md) describes it, canvas elements and charts included. This page designs v2 on top of it (Phases 1 to 4 and a chart's live link), none of it built, and the Phase 0 residual on the async write. [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps the v2 row and [ROADMAP.md](../ROADMAP.md) the Phase 0 row.
+**Status:** v1 is built, and [CLIPBOARD.md](../CLIPBOARD.md) describes it, canvas elements and charts included. This page designs v2 on top of it (Phases 1 to 4 and a chart's live link), none of it built. Phase 0 needs no change ([§ Phase 0](#phase-0-the-async-write-needs-no-custom-type)). [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps the v2 row.
 
 ## TLDR
 
@@ -57,24 +57,11 @@ transaction and the CRDT merge resolves it, exactly as it already does for typin
 
 ## Integration Proposal
 
-### Phase 0: Add the custom MIME to the async write (S)
+### Phase 0: the async write needs no custom type
 
-The sync path, `writeEigenClipboard`, writes `application/eigen-clipboard`, the marker and the
-plain-text fallback ([CLIPBOARD.md § One payload rides two channels](../CLIPBOARD.md#one-payload-rides-two-channels)).
-The residual is on the **async** path (the ROADMAP row):
+`writeEigenClipboardAsync` writes `text/html` and `text/plain` only, where the sync `writeEigenClipboard` also sets `application/eigen-clipboard`. That is not a loss. The marker span carries the same JSON, and a menu copy builds the same `EigenClipboardData` as ⌘C (`buildData` in `packages/ui/src/components/vector/hooks/use-canvas-clipboard.ts`), so the reader gets identical data either way ([CLIPBOARD.md § One payload rides two channels](../CLIPBOARD.md#one-payload-rides-two-channels)).
 
-| File | Change |
-|---|---|
-| `../../packages/lib/src/core/clipboard/clipboard.ts` | `writeEigenClipboardAsync` writes only `text/html` + `text/plain`. Add an `application/eigen-clipboard` blob to the `ClipboardItem`, matching the sync path. |
-
-The async path is used by Slides' context-menu / button copy
-(`../../apps/slides/src/components/slides/editor.tsx`). Without the custom MIME, a same-tab paste has to
-fall back to parsing the HTML marker, which is the lossy route -- adding the MIME makes Slides
-button-copy lossless. One caveat to check while implementing: browsers reject unrecognized MIME types
-in `ClipboardItem` on the async API, so if `application/eigen-clipboard` is refused, keep the write in
-a `try`/`catch` and let the existing HTML marker carry the payload.
-
-**Verify:** `bun run typecheck && bun run test`, then a manual Slides copy-then-paste round trip.
+Adding the custom type would break the write. Chromium and Firefox reject a `ClipboardItem` with `application/eigen-clipboard` and fail the whole `write`, marker and plain text included. WebKit accepts it, but its paste event does not hand the payload back.
 
 ---
 
@@ -401,12 +388,11 @@ can be added iteratively.
 
 The migration is non-breaking because:
 
-1. **Phase 0 only adds a MIME type** to the existing `writeEigenClipboardAsync` -- no data model change.
-2. **Phase 1 adds v2 alongside v1.** The `readEigenPayload` function includes a `upgradeV1ToV2` path that
+1. **Phase 1 adds v2 alongside v1.** The `readEigenPayload` function includes a `upgradeV1ToV2` path that
    wraps v1 data in a v2 envelope. Old clipboard data written by code not yet migrated will still be readable.
-3. **Apps are migrated one at a time.** During migration, one app may write v2 while another still writes v1.
+2. **Apps are migrated one at a time.** During migration, one app may write v2 while another still writes v1.
    The read path handles both.
-4. **Once all apps are on v2, v1 types and the upgrade function can be removed.**
+3. **Once all apps are on v2, v1 types and the upgrade function can be removed.**
 
 ---
 
@@ -463,7 +449,6 @@ The migration is non-breaking because:
 
 | Phase | Scope | Effort |
 |---|---|---|
-| Phase 0 | Custom MIME on the async write | S |
 | Phase 1 | v2 protocol + app migration (Docs, Sheets, Slides) | 2-3 sessions |
 | Phase 2 | Cross-app converters + external content classification | 2-3 sessions |
 | Phase 3 | Non-document apps + cut + drag-and-drop | 3-4 sessions |
