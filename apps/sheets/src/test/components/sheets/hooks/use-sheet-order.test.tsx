@@ -197,6 +197,7 @@ const rowInsert = (index: number): Op[] => [
 ];
 
 const opsIn = (doc: YDoc) => doc.getArray<Op[]>('ops').length;
+const opsOf = (doc: YDoc) => doc.getArray<Op[]>('ops').toArray();
 
 test('two tabs typing into one cell end with the value later in the log', async () => {
     const s = server();
@@ -505,4 +506,34 @@ test("the tab's own edit reads no batch of the log", async () => {
     await tab.edit((w) => w.setCellFormat(1, 1, 'v', 'mine'));
     expect(reads).toBe(0);
     expectJoined(tab);
+});
+
+// A sheet add or delete ships the orders its author left, and the replay only appends or drops the sheet. A tab that
+// also moved the other sheets would part from the joiner when two such batches cross, and a kept compaction would then
+// keep the tab's orders while the snapshot holds the joiner's.
+test('a sheet added and one deleted at once leave the tab with the orders a joiner has', async () => {
+    const named = (id: string, order: number): Sheet => ({ ...sheet({}), id, name: id, order });
+    const s = new Y.Doc();
+    s.clientID = 1000;
+    const four = [named('s1', 0), named('s2', 1), named('s3', 2), named('s4', 3)];
+    writeSheetsSnapshot(s, encodeSheetsSnapshot(four, { computed: true }), null);
+    const tab = await openTab(s, 50);
+    const adder = replica(s, 5);
+    const deleter = replica(s, 20);
+    push(adder, [{ op: 'addSheet', id: 's5', path: [], value: { ...named('s5', 4), config: {} } }]);
+    push(deleter, [
+        { op: 'deleteSheet', id: 's2', path: [], value: { id: 's2' } },
+        { op: 'replace', id: 's3', path: ['order'], value: 1 },
+        { op: 'replace', id: 's4', path: ['order'], value: 2 },
+    ]);
+    await deliver(deleter, s);
+    await deliver(adder, s);
+    await deliver(s, tab.doc);
+    const orders = (sheets: Sheet[]) => sheets.map((x) => `${x.id}:${x.order}`).sort();
+    const joiner = () => orders(replaySheetsOps(decodeSheetsSnapshot(readSheetsSnapshotJson(s) ?? ''), opsOf(s)));
+    expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
+    compact(s);
+    await deliver(s, tab.doc);
+    expect(tab.seen.version).toBe(0);
+    expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
 });
