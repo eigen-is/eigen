@@ -1,3 +1,7 @@
+// The Sheets editor page: the Workbook grid over its collab document, with the toolbar, comments, chat, find and
+// image and chart panels around it. SheetEditor is what the sheet route renders for one open workbook, and the grid
+// it mounts takes its data and op log from useSheet.
+
 import { useAuth } from '@workspace/lib/auth';
 import { materializeClipboardSvg, needsReUpload, reUploadImage } from '@workspace/lib/clipboard';
 import { useCommentFilter, useCommentLifecycle, useDocumentPanels } from '@workspace/lib/comments';
@@ -107,7 +111,6 @@ function SheetEditorInner({
         storageGone,
         unsyncedEdits,
         handleOp,
-        onDataChange,
         docRef,
         provider,
     } = useSheet(ownerId, path.mountId, path.id, workbookRef);
@@ -352,8 +355,8 @@ function SheetEditorInner({
         ],
     );
 
-    // A WS blip keeps the Workbook mounted; it catches up via the op-log observer, and a remote
-    // snapshot flush remounts through snapshotVersion.
+    // A WS blip keeps the Workbook mounted, and it catches up through the op log. A new snapshot remounts it through
+    // snapshotVersion, unless it is a compaction of what the tab already holds.
     return (
         <CollabDocumentGate collab={{ loaded, storageUnavailable, storageGone }} path={path} canWrite={canWrite}>
             <UnsyncedEditsGuard active={unsyncedEdits} />
@@ -398,10 +401,7 @@ function SheetEditorInner({
                                         key={snapshotVersion}
                                         ref={workbookRef}
                                         data={initialData}
-                                        onChange={(data) => {
-                                            onDataChange(data);
-                                            setFlowdata(workbookRef.current?.getFlowdata() ?? undefined);
-                                        }}
+                                        onChange={() => setFlowdata(workbookRef.current?.getFlowdata() ?? undefined)}
                                         onOp={handleOp}
                                         showToolbar={true}
                                         showFormulaBar={true}

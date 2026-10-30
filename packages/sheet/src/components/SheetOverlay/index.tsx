@@ -50,7 +50,7 @@ import { OverlayVisuals } from './OverlayVisuals';
 import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
-    const { context, setContext, settings, refs } = useContext(WorkbookContext);
+    const { context, getContext, setContext, settings, refs } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
     const {
         onContextMenu: cellAreaContextMenu,
@@ -248,7 +248,8 @@ export const SheetOverlay: React.FC = () => {
     );
 
     const handleBottomAddRow = useCallback(() => {
-        const valueStr = bottomAddRowInputRef.current?.value || context.addDefaultRows.toString();
+        const ctx = getContext();
+        const valueStr = bottomAddRowInputRef.current?.value || ctx.addDefaultRows.toString();
         const value = parseInt(valueStr, 10);
         if (Number.isNaN(value)) {
             return;
@@ -256,14 +257,14 @@ export const SheetOverlay: React.FC = () => {
         if (value < 1) {
             return;
         }
-        const data = getFlowdata(context);
+        const data = getFlowdata(ctx);
         if (!data) return;
         const insertRowColOp: SetContextOptions['insertRowColOp'] = {
             type: 'row',
             index: data.length - 1,
             count: value,
             direction: 'rightbottom',
-            id: context.currentSheetId,
+            id: ctx.currentSheetId,
         };
         setContext(
             (draftCtx) => {
@@ -272,7 +273,7 @@ export const SheetOverlay: React.FC = () => {
             },
             { insertRowColOp },
         );
-    }, [context, setContext, showAlert]);
+    }, [getContext, setContext, showAlert]);
 
     useEffect(() => {
         setContext((draftCtx) => {

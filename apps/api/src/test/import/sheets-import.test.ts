@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { Cell, CellWithRowAndCol, Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import { decodeSheetsSnapshot, encodeSheetsSnapshot, sheetsOpLog, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath, ImportResult } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_SHEETS } from '@workspace/lib/types/drive';
 import { escapeXml } from '@workspace/lib/xml';
@@ -403,7 +403,7 @@ describe('Sheets xlsx import/convert', () => {
         const sheetsDoc = await uploadAndConvert(await pictureWorkbook(), 'pictures-full.xlsx');
         const before = await mediaFiles(sheetsDoc.id);
         const home = await getHome(ctx.alice.user.id);
-        const ops = (await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc.getArray<Op[]>('ops');
+        const ops = sheetsOpLog((await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc);
         ops.push([[fullSheet]]);
         try {
             const res = await importRequest(sheetsDoc.id, await labelled(), 'insert');
@@ -422,7 +422,7 @@ describe('Sheets xlsx import/convert', () => {
         const { path } = await home.drive.resolveFile(mountId, sheetsDoc.id);
         const user = await getUserById(ctx.alice.user.id);
         if (!user) throw new Error('alice missing');
-        const ops = (await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc.getArray<Op[]>('ops');
+        const ops = sheetsOpLog((await home.drive.getCollabDocument(mountId, sheetsDoc.id)).doc);
         // The first open weighs the file before its pictures; the workbook grows before the write opens it again.
         const realGet = home.drive.getCollabDocument.bind(home.drive);
         let opens = 0;
@@ -2153,9 +2153,9 @@ describe('an insert weighed with the workbook it joins', () => {
 
     test('a sheet no tab has flushed weighs with the stored ones', () => {
         const doc = new Y.Doc();
-        doc.getMap('state').set('snapshot', encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }));
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([sheetOf('Stored', numbers(10))], { computed: true }), null);
         const pending = sheetOf('Pending', numbers(10));
-        doc.getArray<Op[]>('ops').push([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]);
+        sheetsOpLog(doc).push([[{ op: 'addSheet', id: pending.id, path: [], value: pending }]]);
         expect(sheetsWeight(readLiveSheets(doc)).cells).toBe(20);
     });
 

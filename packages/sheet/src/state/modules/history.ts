@@ -26,6 +26,7 @@ import {
     opToPatch,
     patchToOp,
     rowColMarker,
+    sheetOrder,
 } from '../utils';
 import { applyOpBatch } from './apply-ops';
 import { setCellValue } from './cell';
@@ -33,7 +34,7 @@ import { withoutDeletedFloatingEdits } from './floating';
 import { createContextResolver, FormulaCache, snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
 import { rowColMove } from './history-shift';
-import { settleCurrentSheet } from './sheet';
+import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
 type Step = { ctx: Context; ops: Op[] };
 
@@ -174,12 +175,23 @@ function applyBatch(ctx: Context, ops: Op[]): Step {
     return applied ? { ctx: produce(applied.ctx, settleCurrentSheet), ops } : { ctx, ops: [] };
 }
 
-// A sheet comes back, or goes, through applyOpBatch. The batch it sends also carries the tab order the sheet op left
-// behind, which the edit's own batch carries too; here those order ops would change nothing.
+// A sheet comes back, or goes, through applyOpBatch, as a peer's would. The step is the author here, so it moves the
+// other sheets' orders itself, and the batch it sends carries the orders it left.
 function sheetStep(ctx: Context, batch: (sheets: Sheet[]) => Op[]): Step {
-    const applied = applyOpBatch(ctx, batch(ctx.sheets).slice(0, 1));
+    const [sheetOp] = batch(ctx.sheets);
+    const applied = applyOpBatch(ctx, [sheetOp]);
     if (!applied) return { ctx, ops: [] };
-    return { ctx: produce(applied.ctx, settleCurrentSheet), ops: batch(applied.ctx.sheets) };
+    const next = produce(applied.ctx, (draft: Context) => {
+        if (sheetOp.op === 'addSheet') {
+            const others = draft.sheets.filter((sheet) => sheet.id !== sheetOp.id);
+            shiftSheetOrders(others, sheetOrder(sheetOp.value), 1);
+        } else {
+            const deleted = ctx.sheets.find((sheet) => sheet.id === sheetOp.id);
+            if (deleted) shiftSheetOrders(draft.sheets, sheetOrder(deleted), -1);
+        }
+        settleCurrentSheet(draft);
+    });
+    return { ctx: next, ops: batch(next.sheets) };
 }
 
 // A cell or field entry: `apply` goes in, and `written`, the entry's other side, says what the targets should hold.

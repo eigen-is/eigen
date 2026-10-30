@@ -93,7 +93,7 @@ describe('remote-op mirror (applyOp) still applies to viewers', () => {
             vctx = produce(vctx, r);
         };
         const workbook = generateAPIs(
-            vctx,
+            () => vctx,
             setContext,
             () => {},
             () => {},

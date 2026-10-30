@@ -22,7 +22,7 @@ describe('replaySheetsOps', () => {
 
     test('empty opBatches: snapshot with fresh data + stale celldata gets celldata resynced', () => {
         // Repro for the empty-export bug: FE state edits update `data` but
-        // never refresh `celldata`, so a flushed snapshot has fresh data and
+        // never refresh `celldata`, so a snapshot has fresh data and
         // stale (often empty) celldata. Without ops, replay must still sync
         // celldata — otherwise HTML/PDF/XLSX exports come out empty.
         const sheet: Sheet = {
@@ -192,7 +192,7 @@ describe('replaySheetsOps', () => {
     });
 
     test('celldata-only snapshot: data is materialized so cell ops can apply', () => {
-        // The persisted snapshot (xlsxToSheets / FE flushSnapshot before
+        // The persisted snapshot (xlsxToSheets / an FE snapshot from before
         // materialization) typically carries celldata only. Patches reference
         // ['data', r, c]; without internal materialization applyPatches throws
         // "path doesn't resolve". Verifies the BE export and FE startup paths.
@@ -353,8 +353,8 @@ describe('replaySheetsOps', () => {
     });
 
     test('cell op beyond the celldata extent applies over the default editor grid', () => {
-        // Reproduces the unloadable-doc bug: a fresh doc whose tab was killed
-        // before the first flushSnapshot has pending ops but no snapshot, so
+        // Reproduces the unloadable-doc bug: a fresh doc closed
+        // before its first compaction has pending ops but no snapshot, so
         // replay starts from the default sheets (celldata-only, no row/column).
         // The editor that emitted the ops worked on a grid expanded to the
         // default dimensions — patches at row/col ≥ 1 must still resolve.
@@ -427,7 +427,7 @@ describe('replaySheetsOps', () => {
 
 // A granular patch into a collection (`['config','rowlen','2']`, `['calcChain', 0]`) only
 // resolves if the collection already exists. Every document written before the editor started
-// materializing them — and every fresh doc before its first snapshot flush — stores `config: {}`
+// materializing them — and every fresh doc before its first compaction — stores `config: {}`
 // and no `calcChain`, so the replay base must materialize them too. Without this,
 // replaySheetsOps throws "path doesn't resolve" and rolls back the WHOLE batch: the edit is
 // lost, not degraded, on every reader (a second client opening the doc, the preview renderer,

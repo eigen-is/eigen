@@ -23,7 +23,7 @@ export type VectorExportFormat = 'pdf-html';
 // What an HTML export is for: the download a browser opens, or the document WeasyPrint prints.
 export type HtmlExportMode = 'screen' | 'pdf';
 
-// Out of html-document.ts, which loads jsdom, so an xlsx export never evaluates it.
+// Out of the module of exportHtmlDocument, which loads jsdom, so an xlsx export never evaluates it.
 export function htmlExportMode(format: DocumentExportFormat): HtmlExportMode {
     return format === 'pdf-html' ? 'pdf' : 'screen';
 }
@@ -42,7 +42,7 @@ export type ExportMedia = TransformMedia & Partial<ImageDimensions>;
 export type ExportMediaLoader = (names: Set<string>) => Promise<ExportMedia[]>;
 
 // A job is everything a caller decides; the shared main-thread orchestration
-// (run-transform.ts) captures the Yjs source and completes it into a request.
+// (runDocumentTransform) captures the Yjs source and completes it into a request.
 // Previews reference media by URL, so no bytes cross for a preview. (Vector renders to
 // an SVG served as-is; the URL map resolves its <image> hrefs.)
 export type CollabPreviewJob = {
@@ -131,9 +131,18 @@ export type ImportTransformJob = SheetsImportJob | DocImportJob | SlidesImportJo
 export type CollabTransformJob = CollabPreviewJob | ExportTransformJob | ExtractTextJob;
 export type BytesTransformJob = BytesPreviewJob | ImportTransformJob;
 
+// A workbook's op log folded into its snapshot when the document closes. The batches are the log's JSON text.
+export type SheetsCompactionJob = {
+    kind: 'compact';
+    documentType: 'eigensheets';
+    snapshot: string | null;
+    batches: string;
+};
+
 export type DocumentTransformRequest =
     | (CollabTransformJob & { source: YjsStatePayload })
-    | (BytesTransformJob & { data: ArrayBuffer });
+    | (BytesTransformJob & { data: ArrayBuffer })
+    | SheetsCompactionJob;
 
 // The warnings that count what a read skipped, an import left out or an export cut.
 export const COUNTED_WARNING_CODES = [
@@ -251,6 +260,8 @@ export type DocImportTransformResult = {
 export type DocImportResult = DocImportTransformResult & { warnings: TransformWarning[] };
 // A pptx's update plus its pictures: the main thread only applies the update and writes the media through Mount.
 export type SlidesImportTransformResult = { update: ArrayBuffer; images: TransformMedia[] };
+// The compacted snapshot's JSON as UTF-8 bytes, and how many op batches the replay dropped because they failed to apply.
+export type SheetsCompactionResult = { snapshot: ArrayBuffer; dropped: number };
 
 export type TransformResult =
     | PreviewResult
@@ -258,25 +269,30 @@ export type TransformResult =
     | ExportTransformResult
     | SheetsImportTransformResult
     | DocImportTransformResult
-    | SlidesImportTransformResult;
+    | SlidesImportTransformResult
+    | SheetsCompactionResult;
 
 // Which result a job kind produces. The runner proves the pairing at runtime with
-// resultMatchesRequest; run-transform.ts narrows to this once so no caller re-checks.
+// resultMatchesRequest; runTransformRequest narrows to this once so no caller re-checks.
 // Keyed off the job discriminants, so a captured request (job + source) resolves the
 // same. A future arm resolves to `never` and fails to compile at its callsite.
-export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob> = R extends { kind: 'preview' }
+export type TransformResultFor<R extends CollabTransformJob | BytesTransformJob | SheetsCompactionJob> = R extends {
+    kind: 'preview';
+}
     ? PreviewResult
     : R extends { kind: 'extract-text' }
       ? ExtractTextResult
       : R extends { kind: 'export' }
         ? ExportTransformResult
-        : R extends { targetType: 'eigensheets' }
-          ? SheetsImportTransformResult
-          : R extends { targetType: 'eigendoc' }
-            ? DocImportTransformResult
-            : R extends { targetType: 'eigenslides' }
-              ? SlidesImportTransformResult
-              : never;
+        : R extends { kind: 'compact' }
+          ? SheetsCompactionResult
+          : R extends { targetType: 'eigensheets' }
+            ? SheetsImportTransformResult
+            : R extends { targetType: 'eigendoc' }
+              ? DocImportTransformResult
+              : R extends { targetType: 'eigenslides' }
+                ? SlidesImportTransformResult
+                : never;
 
 export type DocumentTransformResponse =
     | { ok: true; result: TransformResult; warnings: TransformWarning[] }
@@ -299,6 +315,8 @@ export type ChildResponseEnvelope = {
 // with a different payload fails to compile here until it is handled.
 export function inputBytesOf(request: DocumentTransformRequest): number {
     if ('data' in request) return request.data.byteLength;
+    if (request.kind === 'compact')
+        return Buffer.byteLength(request.snapshot ?? '') + Buffer.byteLength(request.batches);
     let bytes = request.source.snapshot?.data.byteLength ?? 0;
     for (const update of request.source.updates) bytes += update.data.byteLength;
     return bytes;
@@ -342,6 +360,8 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
               page?: unknown;
               style?: unknown;
               images?: unknown;
+              snapshot?: unknown;
+              dropped?: unknown;
           }
         | undefined;
     switch (request.kind) {
@@ -349,6 +369,8 @@ export function resultMatchesRequest(request: DocumentTransformRequest, result: 
             return typeof r?.body === 'string';
         case 'extract-text':
             return typeof r?.text === 'string';
+        case 'compact':
+            return r?.snapshot instanceof ArrayBuffer && typeof r.dropped === 'number';
         case 'export':
             return (
                 r?.data instanceof ArrayBuffer &&
@@ -385,6 +407,7 @@ export function resultBytes(result: TransformResult): number {
     if ('body' in result) return Buffer.byteLength(result.body);
     if ('text' in result) return Buffer.byteLength(result.text);
     if ('data' in result) return result.data.byteLength;
+    if ('snapshot' in result) return result.snapshot.byteLength;
     const main = 'snapshotJson' in result ? result.snapshotJson : result.update;
     return result.images.reduce((sum, image) => sum + image.data.byteLength, main.byteLength);
 }
@@ -407,7 +430,7 @@ export function toTransferableMedia(
     return media.map(({ name, contentType, data }) => ({ name, contentType, data: toTransferableBuffer(data) }));
 }
 
-// Every text result (export documents, the import snapshot JSON) crosses as UTF-8
+// Every text result (export documents, the import and compaction snapshot JSON) crosses as UTF-8
 // bytes the main thread decodes or serves as-is.
 export function toTransferableText(text: string): ArrayBuffer {
     return toTransferableBuffer(new TextEncoder().encode(text));

@@ -8,7 +8,6 @@ import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
-import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
@@ -88,7 +87,8 @@ export function addSheet(
     isPivotTable = false,
     sheetName: string | undefined = undefined,
     sheetData: Sheet | undefined = undefined,
-    // Remote mirror (applyOp): a peer's sheet lands for a read-only viewer too.
+    // A batch through applyOpBatch, such as a peer's add, lands for a read-only viewer too, and leaves the other
+    // sheets' orders to the order ops its batch carries.
     force = false,
 ) {
     if (!force && ctx.allowEdit === false) {
@@ -114,13 +114,7 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (!isNil(sheetData)) {
-        const insertAt = sheetOrder(sheetData);
-        for (const sheet of ctx.sheets) {
-            const order = sheetOrder(sheet);
-            sheet.order = order < insertAt ? sheet.order : order + 1;
-        }
-    }
+    if (!isNil(sheetData) && !force) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
 
     ctx.sheets.push(sheetconfig);
 
@@ -155,7 +149,8 @@ export function initSheetData(draftCtx: Context, index: number, newData: Sheet) 
 export function deleteSheet(
     ctx: Context,
     id: string,
-    // Remote mirror (applyOp): a peer's deletion lands for a read-only viewer too.
+    // A batch through applyOpBatch, such as a peer's delete, lands for a read-only viewer too. It leaves the other
+    // sheets' orders to the order ops its batch carries, and the current sheet to applyOpBatch.
     force = false,
 ) {
     if (!force && ctx.allowEdit === false) {
@@ -168,15 +163,20 @@ export function deleteSheet(
         return;
     }
 
-    const deletedOrder = sheetOrder(ctx.sheets[arrIndex]);
-    ctx.sheets = ctx.sheets.map((sheet) => {
-        const order = sheetOrder(sheet);
-        sheet.order = order < deletedOrder ? sheet.order : order - 1;
-        return sheet;
-    });
-
-    ctx.sheets.splice(arrIndex, 1);
+    const [deleted] = ctx.sheets.splice(arrIndex, 1);
+    if (force) return;
+    shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
+}
+
+// A sheet added at order `at`, or deleted from it, moves the sheets from there on one place. Only the author's edit
+// does this. Its batch carries the orders it left, which a peer and the replay apply as they are, so a peer's batch
+// must not move them again: two batches sent at once would each move them.
+export function shiftSheetOrders(sheets: Sheet[], at: number, by: 1 | -1) {
+    for (const sheet of sheets) {
+        const order = sheetOrder(sheet);
+        if (order >= at) sheet.order = order + by;
+    }
 }
 
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
@@ -216,10 +216,11 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     ctx.sheets[index].name = txt;
 }
 
-export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, columnsToAdd: number) {
-    if (rowsToAdd <= 0 && columnsToAdd <= 0) {
-        return data;
-    }
+// Grows the current grid for a paste that runs past its last row or column. The sheet's size grows with it, because a
+// stored snapshot keeps the size and a reader builds the grid at that size.
+export function expandRowsAndColumns(sheet: Sheet, rowsToAdd: number, columnsToAdd: number) {
+    const { data } = sheet;
+    if (!data || (rowsToAdd <= 0 && columnsToAdd <= 0)) return;
 
     if (data.length + rowsToAdd > MAX_SHEET_ROW_COUNT) {
         throw new Error(
@@ -232,28 +233,10 @@ export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, column
             `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
         );
     }
-    if (rowsToAdd <= 0) {
-        rowsToAdd = 0;
-    }
 
-    if (columnsToAdd <= 0) {
-        columnsToAdd = 0;
-    }
-
-    let currentColLen = 0;
-    if (data.length > 0) {
-        currentColLen = data[0].length;
-    }
-
-    for (let r = 0; r < data.length; r += 1) {
-        for (let i = 0; i < columnsToAdd; i += 1) {
-            data[r].push(null);
-        }
-    }
-
-    for (let r = 0; r < rowsToAdd; r += 1) {
-        data.push(times(currentColLen + columnsToAdd, () => null));
-    }
-
-    return data;
+    for (const row of data) row.push(...times(Math.max(columnsToAdd, 0), () => null));
+    const columns = data[0].length;
+    for (let r = 0; r < rowsToAdd; r += 1) data.push(times(columns, () => null));
+    sheet.row = data.length;
+    sheet.column = columns;
 }

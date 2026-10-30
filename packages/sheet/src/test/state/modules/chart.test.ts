@@ -202,7 +202,7 @@ describe("the Workbook's insertChart", () => {
             next = produce(next, recipe);
         };
         const api = generateAPIs(
-            base,
+            () => next,
             setContext,
             () => {},
             () => {},

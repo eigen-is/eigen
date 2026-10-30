@@ -32,7 +32,6 @@
     "apps/index/src/components/support/support-search.tsx": 1,
     "apps/index/src/content/manifest.ts": 3,
     "apps/mail/src/routes/_auth.$filterType.$filterId.tsx": 1,
-    "apps/sheets/src/components/sheets/hooks/use-sheet.ts": 3,
     "apps/space/src/components/space/mail-prefs-section.tsx": 1,
     "apps/stickies/src/components/stickies/board.tsx": 2,
     "apps/stickies/src/components/stickies/hooks/use-drag-and-drop.ts": 3,
@@ -45,7 +44,7 @@
     "packages/lib/src/core/mail/hooks/use-draft.ts": 1,
     "packages/lib/src/core/mail/hooks/use-emails.ts": 1,
     "packages/lib/src/core/search/pagefind.ts": 1,
-    "packages/lib/src/sheets/snapshot-codec.ts": 8,
+    "packages/lib/src/sheets/snapshot-codec.ts": 4,
     "packages/lib/src/sheets/yjs-ops.ts": 1,
     "packages/lib/src/types/chart.ts": 1,
     "packages/lib/src/types/file-history.ts": 1,
@@ -59,7 +58,6 @@
     "packages/sheet/src/components/SheetOverlay/reference-cycle.ts": 2,
     "packages/sheet/src/components/Workbook/index.tsx": 2,
     "packages/sheet/src/engine/parser/evaluate-by-operator/operator/formula-function.ts": 1,
-    "packages/sheet/src/engine/replay-ops.ts": 3,
     "packages/sheet/src/state/api/cell.ts": 5,
     "packages/sheet/src/state/api/range.ts": 2,
     "packages/sheet/src/state/modules/cell.ts": 2,
@@ -156,7 +154,7 @@
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
   "interface-decls": 3,
-  "biome-ignore": 66,
+  "biome-ignore": 65,
   "jsdoc-blocks": 0,
   "raw-colors": 0,
   "unused-primitive-types": 0

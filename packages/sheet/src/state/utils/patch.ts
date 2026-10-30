@@ -112,17 +112,27 @@ const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['sel
 // update, so patchToOp drops them (writesOneFloatingObject) and ships the op itself, which every consumer, the editor
 // and the server's replay, runs through the engine. The engine rebuilds `data` and the few config fields it owns, but
 // the reducer also shifts the editor-only fields, such as the filter, links and validation, so the rest of the edited
-// sheet's fields ship whole. sheetMetadataOps ships every field but `data`, the per-client ones, and `images` and
-// `charts`, which ship per object: a whole map would overwrite a peer's insert, delete or move. A row op moves no
-// image, and each chart it moves has immer's own patch of its spec, last writer wins, since a receiver's shift can
-// differ from the author's write-back. The edit's own op leaves `calcChain` off too: it scales with formula count, and
-// every receiver shifts its own.
+// sheet's fields ship whole. sheetMetadataOps ships every field but the ones the engine derives, the per-client ones,
+// and `images` and `charts`, which ship per object: a whole map would overwrite a peer's insert, delete or move. A row
+// op moves no image, and each chart it moves has immer's own patch of its spec, last writer wins, since a receiver's
+// shift can differ from the author's write-back. The edit's own op leaves `calcChain` off too: it scales with formula
+// count, and every receiver shifts its own.
 const PER_OBJECT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['images', 'charts']);
+
+// The fields the engine derives on every receiver from the op itself. The size ships least of all: two row ops sent at
+// once would each write their author's count, one op short.
+const ENGINE_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['data', 'row', 'column']);
 
 function sheetMetadataOps(fields: Record<string, unknown>, id: string): Op[] {
     const metaOps: Op[] = [];
     for (const [field, value] of Object.entries(fields)) {
-        if (field === 'data' || PER_CLIENT_SHEET_FIELDS.has(field) || PER_OBJECT_SHEET_FIELDS.has(field)) continue;
+        if (
+            ENGINE_SHEET_FIELDS.has(field) ||
+            PER_CLIENT_SHEET_FIELDS.has(field) ||
+            PER_OBJECT_SHEET_FIELDS.has(field)
+        ) {
+            continue;
+        }
         metaOps.push({ op: 'replace', id, path: [field], value });
     }
     return metaOps;
@@ -208,8 +218,8 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
 }
 
 // A sheet add as a batch: the sheet, then the order of each sheet at or past its place, as `sheets` hold them once it
-// was added. A peer's addSheet moves those orders itself, but a joiner's replay only appends the sheet. The edit, its
-// undo and its redo all send this batch.
+// was added. A peer and a joiner's replay only add the sheet, and the orders come from the batch. The edit, its undo
+// and its redo all send this batch.
 export function addSheetOps(added: Sheet, sheets: Sheet[]): Op[] {
     return [{ op: 'addSheet', id: added.id, path: [], value: added }, ...orderOps(added, sheets)];
 }

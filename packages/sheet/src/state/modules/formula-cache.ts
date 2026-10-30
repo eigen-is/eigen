@@ -23,8 +23,8 @@ import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
 import { execfunction, getcellrange, warmFormulaCellInfoMap } from './formula-exec';
 
-// Shared mutable state accessed by formula-editor.ts and formula-range.ts.
-// Wrapped in an object so mutations are visible across module boundaries.
+// The formula editor's hint and range state, which several modules of the formula editor share. It sits in an object,
+// so a write in one module is seen by the others.
 export const formulaUIState = {
     functionHTMLIndex: 0,
     rangeIndexes: [] as number[],
@@ -91,36 +91,10 @@ export function createContextResolver(source: Context): CellResolver {
     };
 }
 
-// FormulaCache is defined as class to avoid being frozen by immer
+// A class, because immer freezes the plain objects of a context but leaves a class instance alone, and the editor
+// writes the cache outside a recipe.
 export class FormulaCache {
-    // Shared state — delegated to engine so both FE and BE use the same cache
-    public get execFunctionGlobalData(): Record<string, Cell> {
-        return this.engine.state.execFunctionGlobalData;
-    }
-
-    public set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
-        this.engine.state.execFunctionGlobalData = v ?? {};
-    }
-
-    public get formulaCellInfoMap(): FormulaCellInfoMap | null {
-        return this.engine.state.formulaCellInfoMap;
-    }
-
-    public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
-        this.engine.state.formulaCellInfoMap = v;
-        // The map is only ever reassigned to reset it (null or {}); the reverse
-        // index mirrors the map, so it resets too and refills via setFormulaCellInfo.
-        this.engine.state.dependencyIndex.clear();
-    }
-
-    // Reverse lookup cell → formulas reading it; lives in engine state next to
-    // formulaCellInfoMap (so engine resets clear both) and is kept in lockstep
-    // by setFormulaCellInfo and the setter above.
-    public get dependencyIndex(): DependencyIndex {
-        return this.engine.state.dependencyIndex;
-    }
-
-    // UI-only state — stays on FormulaCache
+    // The reference picker's state and the caches only the editor keeps. The engine holds what the server shares.
     public func_selectedrange?: Selection;
 
     public data_parm_index: number;
@@ -178,6 +152,38 @@ export class FormulaCache {
         this.engine = new FormulaEngine();
     }
 
+    // The engine keeps these, so the editor and the server read one cache.
+    public get execFunctionGlobalData(): Record<string, Cell> {
+        return this.engine.state.execFunctionGlobalData;
+    }
+
+    public set execFunctionGlobalData(v: Record<string, Cell> | null | undefined) {
+        this.engine.state.execFunctionGlobalData = v ?? {};
+    }
+
+    public get formulaCellInfoMap(): FormulaCellInfoMap | null {
+        return this.engine.state.formulaCellInfoMap;
+    }
+
+    public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
+        this.engine.state.formulaCellInfoMap = v;
+        // Code only assigns the map to reset it, to null or to an empty map. The reverse index mirrors the map, so it
+        // resets too. setFormulaCellInfo fills both again.
+        this.engine.state.dependencyIndex.clear();
+    }
+
+    // For each cell, the formulas that read it. It lives in the engine's state next to the formula map, so a new
+    // engine starts both empty. setFormulaCellInfo and the map's setter keep the two in step.
+    public get dependencyIndex(): DependencyIndex {
+        return this.engine.state.dependencyIndex;
+    }
+
+    // Forgets what the engine learned from the cells, for sheets swapped under it. The reference picker's state stays.
+    public resetEngine() {
+        this.engine = new FormulaEngine();
+        this.cellTextToIndexList = {};
+    }
+
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;
@@ -209,12 +215,9 @@ export class FormulaCache {
     }
 }
 
-// Make sure setFormulaObject() is executed *after* the cell modifications.
-// `data` is a fast-path matrix; `dataSheetId` names the sheet it belongs to
-// (defaults to the active sheet). It is only consulted for entries on that
-// sheet — for other sheets' entries whose (r,c) also exists in this grid,
-// getcellFormula would read the wrong sheet's cell, dropping or mis-parsing
-// the formula (stale cross-sheet recalc).
+// Records one cell's formula in the formula map with the cells it reads, so it runs after the cell was written. `data`
+// stands in for the matrix of `dataSheetId`, the current sheet by default. It is read only for a cell on that sheet: a
+// cell of another sheet at the same row and column would give the wrong formula.
 export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?: CellMatrix, dataSheetId?: string) {
     const dataSheet = dataSheetId ?? ctx.currentSheetId;
     // An entry written into an unbuilt map would pass for the whole map, and the build would never run.
@@ -239,75 +242,70 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
             }
         });
     } else if (!(calc_funcStr.substring(0, 2) === '="' && calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"')) {
-        // let formulaTextArray = calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g); // Cannot correctly split cases where ==, !=, - etc. appear between single or double quotes. This caused a bug where the formula value was not updated when the cell content of sheet name '1-2' in ='1-2'!A1 changed.
-        // Fix: ='1-2'!A1+5 being split by calc_funcStr.split(/==|!=|<>|<=|>=|[,()=+-\/*%&^><]/g) into ["","'1","2'!A1",5] incorrectly
-        let point = 0; // pointer
-        let squote = -1; // single quote
-        let dquote = -1; // double quotes
+        // The formula splits at its operators, but never inside quotes: a sheet named '1-2' in ='1-2'!A1 must stay one
+        // reference, or a change to that cell would not recalculate the formula.
+        let segmentStart = 0;
+        let singleQuoteAt = -1;
+        let doubleQuoteAt = -1;
         const formulaTextArray = [];
-        const sq_end_array = []; // Saves the paired single quotes in the index of formulaTextArray.
+        // Where each quoted sheet name sits in formulaTextArray.
+        const quotedSheetIndexes = [];
         const calc_funcStr_length = calc_funcStr.length;
         for (let j = 0; j < calc_funcStr_length; j += 1) {
             const char = calc_funcStr.charAt(j);
-            if (char === "'" && dquote === -1) {
-                // If it starts with a single quote
-                if (squote === -1) {
-                    if (point !== j) {
+            if (char === "'" && doubleQuoteAt === -1) {
+                if (singleQuoteAt === -1) {
+                    if (segmentStart !== j) {
                         formulaTextArray.push(
-                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
+                            ...calc_funcStr.substring(segmentStart, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
                         );
                     }
-                    squote = j;
-                    point = j;
-                } // end single quote
-                else {
-                    // If '' it represents an output of '
+                    singleQuoteAt = j;
+                    segmentStart = j;
+                } else {
+                    // Two quotes in a row are one quote inside the name, not its end.
                     if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === "'") {
                         j += 1;
                     } else {
-                        // If the next character is not ', it means the end of a single quote
-                        point = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(squote, point));
-                        sq_end_array.push(formulaTextArray.length - 1);
-                        squote = -1;
+                        segmentStart = j + 1;
+                        formulaTextArray.push(calc_funcStr.substring(singleQuoteAt, segmentStart));
+                        quotedSheetIndexes.push(formulaTextArray.length - 1);
+                        singleQuoteAt = -1;
                     }
                 }
-            } else if (char === '"' && squote === -1) {
-                // If it starts with double quotes
-                if (dquote === -1) {
-                    if (point !== j) {
+            } else if (char === '"' && singleQuoteAt === -1) {
+                if (doubleQuoteAt === -1) {
+                    if (segmentStart !== j) {
                         formulaTextArray.push(
-                            ...calc_funcStr.substring(point, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
+                            ...calc_funcStr.substring(segmentStart, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
                         );
                     }
-                    dquote = j;
-                    point = j;
+                    doubleQuoteAt = j;
+                    segmentStart = j;
                 } else {
-                    // If "" represents output"
+                    // Two quotes in a row are one quote inside the text, not its end.
                     if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === '"') {
                         j += 1;
                     } else {
-                        // end with double quotes
-                        point = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(dquote, point));
-                        dquote = -1;
+                        segmentStart = j + 1;
+                        formulaTextArray.push(calc_funcStr.substring(doubleQuoteAt, segmentStart));
+                        doubleQuoteAt = -1;
                     }
                 }
             }
         }
-        if (point !== calc_funcStr_length) {
+        if (segmentStart !== calc_funcStr_length) {
             formulaTextArray.push(
-                ...calc_funcStr.substring(point, calc_funcStr_length).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
+                ...calc_funcStr.substring(segmentStart, calc_funcStr_length).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
             );
         }
-        // Concatenate each paired single-quoted segment with the following cell reference, e.g. ["'1-2'","!A1"] becomes ["'1-2'!A1"]
-        for (let j = sq_end_array.length - 1; j >= 0; j -= 1) {
-            if (sq_end_array[j] !== formulaTextArray.length - 1) {
-                formulaTextArray[sq_end_array[j]] += formulaTextArray[sq_end_array[j] + 1];
-                formulaTextArray.splice(sq_end_array[j] + 1, 1);
+        // A quoted sheet name and the reference after it, such as '1-2' and !A1, join into one reference.
+        for (let j = quotedSheetIndexes.length - 1; j >= 0; j -= 1) {
+            if (quotedSheetIndexes[j] !== formulaTextArray.length - 1) {
+                formulaTextArray[quotedSheetIndexes[j]] += formulaTextArray[quotedSheetIndexes[j] + 1];
+                formulaTextArray.splice(quotedSheetIndexes[j] + 1, 1);
             }
         }
-        // At this point =SUM('1-2'!A1:A2&"'1-2'!A2") is corrected from ["","SUM","'1","2'!A1:A2","",""'1","2'!A2""] to ["","SUM","","'1-2'!A1:A2","","",""'1-2'!A2""]
 
         for (let j = 0; j < formulaTextArray.length; j += 1) {
             const t = formulaTextArray[j];

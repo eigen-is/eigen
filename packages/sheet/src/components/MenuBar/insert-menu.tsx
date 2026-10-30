@@ -26,7 +26,7 @@ import {
 import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
 export function InsertMenu() {
-    const { context, setContext, refs, settings } = useContext(WorkbookContext);
+    const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
     const { showDialog, hideDialog } = useDialog();
 
@@ -39,14 +39,15 @@ export function InsertMenu() {
     const commentCol = last?.column_focus ?? last?.column[0] ?? 0;
 
     const insertHandler = (type: 'row' | 'column', direction: 'lefttop' | 'rightbottom') => {
-        const focus = type === 'row' ? rowFocus : columnFocus;
+        const { selections, currentSheetId } = getContext();
+        const focus = type === 'row' ? selections?.[0]?.row_focus : selections?.[0]?.column_focus;
         if (focus == null) return;
         const insertRowColOp = {
             type,
             index: focus,
             count: 1,
             direction,
-            id: context.currentSheetId,
+            id: currentSheetId,
         };
         setContext(
             (draftCtx) => {

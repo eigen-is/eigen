@@ -15,6 +15,11 @@ const APPS_BY_TYPE = {
     stickies: 'stickies',
 } as const;
 
+// The workbook's roots are reached through lib helpers, so their names live there, not in the app.
+const LIB_DIRS_BY_TYPE: Partial<Record<keyof typeof APPS_BY_TYPE, string>> = {
+    sheets: 'sheets',
+};
+
 const KIND_BY_METHOD: Record<string, YjsRootKind> = {
     getMap: 'map',
     getArray: 'array',
@@ -81,7 +86,9 @@ const REPO_ROOT = resolve(import.meta.dir, '../../../../..');
 describe('EIGEN_DOC_TYPE_INFO.yjsRoots covers every Y root the app touches', () => {
     for (const [type, appDir] of Object.entries(APPS_BY_TYPE) as [keyof typeof APPS_BY_TYPE, string][]) {
         test(`${type}: every Y root accessed under apps/${appDir}/src is declared`, () => {
+            const libDir = LIB_DIRS_BY_TYPE[type];
             const files = walkSourceFiles(resolve(REPO_ROOT, 'apps', appDir, 'src'));
+            if (libDir) files.push(...walkSourceFiles(resolve(REPO_ROOT, 'packages/lib/src', libDir)));
             const usage = collectUsage(type, files);
             // Widen the as-const narrowed union to a plain index signature so
             // the test can look roots up by string name.

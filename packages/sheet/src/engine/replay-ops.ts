@@ -1,3 +1,9 @@
+// Replays the stored op batches onto a workbook's stored sheets, for a reader that was not there live, such as a
+// browser that opens the workbook or the server's export. It also owns the shape check a sheet or row op passes before
+// it applies. A live client's applyOpBatch calls the same checks, so a peer, a joiner and the server skip the same ops
+// and end with the same sheets.
+
+import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
@@ -6,123 +12,42 @@ import { gridSize } from './defaults';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 
-// immer's patch plugin is a global, idempotent enable. Calling here means any
-// consumer of replaySheetsOps gets it transitively without a separate bootstrap.
+// immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
+// replaySheetsOps has it without a setup step of its own.
 enablePatches();
 
 type InsertValue = { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom' };
 type DeleteValue = { type: 'row' | 'column'; start: number; end: number };
 
-// op.value is `any` in lib.Op; these adapters pin the runtime shape so a
-// malformed payload produces a warn+skip rather than corrupt state.
-function asInsertValue(v: unknown): InsertValue | null {
-    if (!v || typeof v !== 'object') return null;
-    const { type, index, count, direction } = v as Partial<InsertValue>;
-    if (type !== 'row' && type !== 'column') return null;
-    if (typeof index !== 'number' || typeof count !== 'number') return null;
-    if (direction !== 'lefttop' && direction !== 'rightbottom') return null;
-    return { type, index, count, direction };
-}
-
-function asDeleteValue(v: unknown): DeleteValue | null {
-    if (!v || typeof v !== 'object') return null;
-    const { type, start, end } = v as Partial<DeleteValue>;
-    if (type !== 'row' && type !== 'column') return null;
-    if (typeof start !== 'number' || typeof end !== 'number') return null;
-    return { type, start, end };
-}
-
-function asSheet(v: unknown): Sheet | null {
-    if (!v || typeof v !== 'object') return null;
-    const sheet = v as Sheet;
-    // id is technically optional on Sheet but every patchToOp producer stamps it.
-    // A sheet without an id silently breaks subsequent ops referencing that sheet.
-    if (typeof sheet.id !== 'string' || typeof sheet.name !== 'string') return null;
-    return sheet;
-}
-
-// The one shape every sheet leaves the replay in, whichever door it came through — the decoded
-// snapshot or an addSheet op's value. Config collections, `images`, `charts` and `calcChain` are
-// materialized because the editor writes into them key by key, and a patch against one that
-// doesn't exist yet fails to resolve (see normalizeSheetConfig, and the decode in lib's
-// snapshot-codec). `calcChain` earns its place here: the editor seeds it on every sheet at mount
-// (seedCalcChain), so the first formula a user types emits `add ['calcChain', 0]` in the SAME
-// batch as the cell's value — against a base without the key that patch throws and takes the
-// whole batch down with it, which is how a fresh doc's formula cell used to export blank. An
-// empty chain is also what the recalc gate reads as "not computed", so materializing it leaves
-// sheetsNeedRecalc unchanged.
-function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
-    const next = { ...s, config: { ...s.config }, calcChain: s.calcChain ?? [] };
-    normalizeSheetConfig(next);
-    return next;
-}
-
-// Persisted snapshots carry `celldata` only; ops reference `data[r][c]`. When a
-// batch targets `data`, materialize that sheet on the way in and resync its
-// `celldata` on the way out. Sheets touched only via `celldata` paths pass
-// through unchanged.
-export function withMaterializedData(s: Sheet): Sheet {
-    if (s.data) return s;
-    const { row, column } = gridSize(s);
-    return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
-}
-
-// Sheets reach this path with three possible shapes:
-//   - data only (FE flush — state edits update `data` and never refresh `celldata`)
-//   - celldata only (xlsx import / fresh doc)
-//   - both populated (after replay materialized data, or stale snapshot)
-// In every case where data exists, regenerate celldata from it; downstream
-// readers (HTML / PDF / XLSX export, preview) are celldata-keyed, so a stale
-// celldata field is what causes "exported sheet looks empty" bugs.
-function withSyncedCelldataIfData(s: Sheet): Sheet {
-    if (!s.data) return s;
-    return { ...s, celldata: dataToCelldata(s.data) };
-}
-
-// A sheet snapshot persisted as celldata-only must materialize `data` before
-// any op that reads/writes through `data[r][c]`. Cell patches reach via
-// `path[0] === 'data'`; insertRowCol / deleteRowCol bypass paths and operate
-// on `target.data` directly inside the engine — both must trigger materialization.
-// Collected per batch (not once up-front) so a sheet introduced mid-replay by
-// an addSheet op — whose value may carry celldata only — is materialized
-// before a later batch's data ops touch it.
-function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
-    let touched: Set<string> | null = null;
-    for (const op of batch) {
-        const needsData = op.path[0] === 'data' || op.op === 'insertRowCol' || op.op === 'deleteRowCol';
-        if (needsData && op.id) {
-            if (!touched) touched = new Set();
-            touched.add(op.id);
-        }
-    }
-    return touched;
-}
-
-export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
-    // Every base sheet carries its config collections before a single op is applied, so the
-    // granular config patches the editor emits resolve here as well as they do in the editor.
+// A batch the replay can't apply is reported to `onDropped`, which a caller that wants a count of its own passes. By
+// default each one is logged as a warning.
+export function replaySheetsOps(
+    sheets: Sheet[],
+    opBatches: Op[][],
+    onDropped: (error: unknown) => void = (e) => console.warn('[sheets] op batch failed to apply, skipping batch:', e),
+): Sheet[] {
+    // Every base sheet carries its config collections before the first op, so the config patches the editor writes
+    // resolve here as they do in the editor.
     let result = sheets.map(withNormalizedSheet);
     for (const batch of opBatches) {
-        // One poisoned batch must never make the whole doc unreadable: on an
-        // unexpected failure, roll back to the pre-batch state, warn, and keep
-        // applying the remaining batches. Deterministic — the same batch is
-        // skipped on every replay.
+        // One bad batch must never make the whole workbook unreadable. It rolls back and the replay goes on with the
+        // next batch. The same batch is skipped on every replay.
         const preBatch = result;
         try {
             const dataOpIds = collectDataOpSheetIds(batch);
             if (dataOpIds) {
                 result = result.map((s) => (s.id && dataOpIds.has(s.id) ? withMaterializedData(s) : s));
             }
-            // Special ops first: opToPatchOnSheets maps sheet id → array index, so
-            // addSheet/deleteSheet must settle the array before patches resolve.
+            // opToPatchOnSheets finds a sheet by its place in the array, so the sheet and row ops settle the array
+            // before the patches resolve.
             for (const op of batch) {
                 if (op.op === 'addSheet') {
-                    const newSheet = asSheet(op.value);
-                    if (!newSheet) {
-                        console.warn('[sheets] addSheet op has malformed value', op.value);
+                    if (!isNewSheet(op.value, result)) {
+                        console.warn('[sheets] addSheet op has malformed value or a taken id', op.value);
                         continue;
                     }
-                    result = [...result, withNormalizedSheet(newSheet)];
+                    const added = withNormalizedSheet(op.value);
+                    result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
                 } else if (op.op === 'insertRowCol' && op.id) {
@@ -131,9 +56,8 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
                         console.warn('[sheets] insertRowCol op has malformed value', op.value);
                         continue;
                     }
-                    // RowColError is a UI-layer signal (readOnly / maxExceeded). On
-                    // the BE replay path (export, preview, server-side read) there
-                    // is no user to alert, so skip rather than propagate.
+                    // A RowColError, such as a sheet past its maximum size, alerts the user in the editor. A replay
+                    // has no user to alert, so it skips the op.
                     try {
                         result = applySheetsInsertRowCol(result, { ...v, id: op.id });
                     } catch (e) {
@@ -158,9 +82,81 @@ export function replaySheetsOps(sheets: Sheet[], opBatches: Op[][]): Sheet[] {
             const [patches] = opToPatchOnSheets(result, normalOps);
             result = applyPatches(result, patches);
         } catch (e) {
-            console.warn('[sheets] op batch failed to apply, skipping batch:', e);
+            onDropped(e);
             result = preBatch;
         }
     }
     return result.map(withSyncedCelldataIfData);
+}
+
+// A stored sheet keeps its cells as the `celldata` list, but a cell op writes `data[r][c]`. So a sheet gets the dense
+// matrix before such an op, and the replay writes the list back from it at the end.
+export function withMaterializedData(s: Sheet): Sheet {
+    if (s.data) return s;
+    const { row, column } = gridSize(s);
+    return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
+}
+
+// An op's value is untyped, and a buggy or hostile client may send any shape. These read the shape a row, column or
+// sheet op must have, and return null for anything else. The op is then skipped, here and in a live client.
+export function asInsertValue(v: unknown): InsertValue | null {
+    if (!isRecord(v)) return null;
+    const { type, index, count, direction } = v;
+    if (type !== 'row' && type !== 'column') return null;
+    if (typeof index !== 'number' || typeof count !== 'number') return null;
+    if (direction !== 'lefttop' && direction !== 'rightbottom') return null;
+    return { type, index, count, direction };
+}
+
+export function asDeleteValue(v: unknown): DeleteValue | null {
+    if (!isRecord(v)) return null;
+    const { type, start, end } = v;
+    if (type !== 'row' && type !== 'column') return null;
+    if (typeof start !== 'number' || typeof end !== 'number') return null;
+    return { type, start, end };
+}
+
+// A new sheet needs an id, because every later op names its sheet by id. The id must be one no sheet has yet, or those
+// ops would be ambiguous. A name is the one other field every reader of a sheet needs.
+export function isNewSheet(v: unknown, sheets: { id?: string }[]): v is Sheet & { id: string } {
+    if (!isRecord(v)) return false;
+    const { id, name } = v;
+    return typeof id === 'string' && typeof name === 'string' && !sheets.some((s) => s.id === id);
+}
+
+// A row or column op moves the cells after it on its sheet, and it needs the sheet's matrix to apply.
+export function isRowColOp(op: Op): boolean {
+    return op.op === 'insertRowCol' || op.op === 'deleteRowCol';
+}
+
+// Every sheet leaves the replay in one shape, whether it came from the snapshot or from an addSheet op. The editor
+// writes into its config collections, `images`, `charts` and `calcChain` key by key, and a patch against a missing
+// collection fails and takes its whole batch down. The editor seeds a calcChain on every sheet it mounts, so the first
+// formula a user types adds to it in the same batch as the cell's value. An empty chain reads as "not computed" to
+// sheetsNeedRecalc, as a missing one does, so adding it changes no recalc.
+function withNormalizedSheet(s: SheetWithCalcChain): SheetWithCalcChain {
+    const next = { ...s, config: { ...s.config }, calcChain: s.calcChain ?? [] };
+    normalizeSheetConfig(next);
+    return next;
+}
+
+// The sheets a batch's cell or row ops touch, which need the dense matrix first. It runs per batch, so a sheet an
+// earlier addSheet op brought in with only `celldata` gets its matrix too.
+function collectDataOpSheetIds(batch: Op[]): Set<string> | null {
+    let touched: Set<string> | null = null;
+    for (const op of batch) {
+        const needsData = op.path[0] === 'data' || isRowColOp(op);
+        if (needsData && op.id) {
+            if (!touched) touched = new Set();
+            touched.add(op.id);
+        }
+    }
+    return touched;
+}
+
+// Where a sheet has the dense matrix, the matrix holds its latest cells: a replayed cell op writes
+// `data` and leave `celldata` stale. The exports and the preview read `celldata`, so it is written again from `data`.
+function withSyncedCelldataIfData(s: Sheet): Sheet {
+    if (!s.data) return s;
+    return { ...s, celldata: dataToCelldata(s.data) };
 }

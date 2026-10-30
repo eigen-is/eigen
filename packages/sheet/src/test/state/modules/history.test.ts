@@ -299,13 +299,13 @@ describe("a peer's batch shifts the undo stacks once it applied", () => {
         const name = b.ctx.sheets[3].name;
         tabEdit(a, typedAt('A1', `=${name}!B10`, TWO));
         const inserted = tabEdit(b, ...insertRows(2, 2, FOUR));
-        // One API, built on A's last render, takes both batches, as the Workbook's does between two renders.
+        // One API takes both batches before A's next render, as the Workbook's does.
         let next = a.ctx;
         const setContext = (recipe: (ctx: Context) => void) => {
             next = produce(next, recipe);
         };
         const api = generateAPIs(
-            a.ctx,
+            () => next,
             setContext,
             () => {},
             () => {},

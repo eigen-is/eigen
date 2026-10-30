@@ -1,14 +1,24 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 import { defaultChartSpec, newSheetChartSpecParts, readChartSpec } from '@workspace/lib/charts';
 import type { Op, Sheet } from '@workspace/lib/sheets';
-import { decodeSheetsSnapshot, encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import {
+    decodeSheetsSnapshot,
+    decodeSheetsWorkbook,
+    encodeSheetsSnapshot,
+    readSheetsBase,
+    sheetsStateMap,
+    writeSheetsSnapshot,
+} from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import * as engine from '@workspace/sheet/engine';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
 import {
     appendSheetsToYjs,
+    compactSheetsSnapshot,
     readLiveSheets,
     readSheetsFromDoc,
+    SERVER_RECALC_BUDGET,
     writeSheetsSnapshotToYjs,
 } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
@@ -269,7 +279,7 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('reads doc with pending ops but no snapshot → replays over the default sheets', async () => {
-        // A fresh doc whose tab was killed before the first flushSnapshot has
+        // A fresh doc closed before its first compaction has
         // ops in Yjs but no snapshot. The replay base must be the same default
         // sheets the editor started from — over an empty base the ops
         // referencing 'sheet-1' are silently dropped and the doc reads empty.
@@ -483,7 +493,7 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('celldata-only snapshot + cell-edit op → data materialized, celldata refreshed', async () => {
-        // Reproduces the user-reported export crash: xlsxToSheets / pre-flush
+        // Reproduces the user-reported export crash: xlsxToSheets / early
         // FE snapshots store celldata only, but ops emitted by the reducer
         // reference data[r][c]. replaySheetsOps must materialize data before
         // applying patches, then sync celldata back so xlsx export sees the
@@ -614,7 +624,7 @@ describe('document/sheets — patch op replay', () => {
     });
 
     test('gate OFF: a doc carrying a calcChain keeps its stored values (no recompute)', async () => {
-        // Editor-flushed / import-recalced docs carry calcChain. Even a
+        // Editor-edited / import-recalced docs carry calcChain. Even a
         // deliberately-wrong cached value must survive untouched — the gate must
         // not recompute.
         const sheetsPath = await drivePost<DrivePath>(
@@ -735,7 +745,7 @@ describe('document/sheets — patch op replay', () => {
 
         // Volatile freeze, pinned: the xlsx carried no cached NOW() result, so
         // there is nothing to freeze — the cell keeps its formula but stays
-        // without v/m until a client editor computes and flushes it.
+        // without v/m until a client editor computes it.
         expect(cellAt(0, 2)?.f).toBe('=NOW()');
         expect(cellAt(0, 2)?.v).toBeUndefined();
         expect(cellAt(0, 2)?.m).toBeUndefined();
@@ -882,7 +892,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
         expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
     });
 
-    test('a workbook never flushed takes the file beside the default sheet the editor opens on', () => {
+    test('a workbook never compacted takes the file beside the default sheet the editor opens on', () => {
         const doc = new Y.Doc();
         append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));
         const { sheets } = readSheetsFromDoc(doc, { recalc: false });
@@ -897,5 +907,149 @@ describe('document/sheets — appendSheetsToYjs', () => {
         const added = doc.getArray<Op[]>('ops').toArray()[0][0].value;
         expect(added.name).toBe('Summary');
         expect(added.celldata[0].v.f).toBe(summary.celldata?.[0]?.v?.f);
+    });
+});
+
+describe('document/sheets — compactSheetsSnapshot', () => {
+    const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+    const edit = (c: number, v: string): Op[] => [
+        { op: 'replace', id: 'sheet-1', path: ['data', 0, c], value: { v, m: v } },
+    ];
+    const values = (snapshot: string) =>
+        decodeSheetsWorkbook(snapshot).sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v]);
+    const formulaSheet = (id: string, order: number): Sheet => ({
+        id,
+        name: id,
+        order,
+        celldata: [{ r: 0, c: 0, v: { f: '=1+1', v: 99, m: '99' } }],
+        config: {},
+    });
+
+    test('folds the batches, which cross as JSON text, into the snapshot', () => {
+        const { snapshot: compacted } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(sheets, { computed: true }),
+            JSON.stringify([edit(0, 'a'), edit(1, 'b')]),
+        );
+        expect(decodeSheetsWorkbook(compacted).computed).toBe(true);
+        expect(values(compacted)).toEqual([
+            [0, 0, 'a'],
+            [0, 1, 'b'],
+        ]);
+    });
+
+    test('an uncomputed workbook is recalculated under the server budget, so the stored snapshot is computed', () => {
+        const original = { ...engine };
+        const budgets: unknown[] = [];
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: (input: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
+                budgets.push(options);
+                return original.recalcSheets(input, options);
+            },
+        }));
+        try {
+            const { snapshot: compacted } = compactSheetsSnapshot(
+                encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
+                JSON.stringify([]),
+            );
+            const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+            expect(computed).toBe(true);
+            expect(result[0].celldata?.[0]?.v?.v).toBe(2);
+            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    });
+
+    test('a tab added without a calc chain is recalculated, so an export of the compacted workbook pays no recalc', () => {
+        const snapshot = encodeSheetsSnapshot(sheets, { computed: true });
+        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }]];
+        const compacted = new Y.Doc();
+        sheetsStateMap(compacted).set('snapshot', compactSheetsSnapshot(snapshot, JSON.stringify(batches)).snapshot);
+
+        const read = readSheetsFromDoc(compacted, { recalc: false });
+        expect(sheetsNeedRecalc(read.sheets)).toBe(false);
+        expect(read.sheets[1].celldata?.[0]?.v?.v).toBe(2);
+        compacted.destroy();
+    });
+
+    test('a recalc that fails stores the replayed values uncomputed, so an export still recalculates them', () => {
+        const original = { ...engine };
+        mock.module('@workspace/sheet/engine', () => ({
+            ...original,
+            recalcSheets: () => {
+                throw new Error('forced recalc failure');
+            },
+        }));
+        try {
+            const { snapshot: compacted } = compactSheetsSnapshot(
+                encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
+                JSON.stringify([]),
+            );
+            const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+            expect(computed).toBe(false);
+            expect(result[0].celldata?.[0]?.v?.v).toBe(99);
+        } finally {
+            mock.module('@workspace/sheet/engine', () => original);
+        }
+    });
+
+    test('a workbook with no snapshot compacts over the default sheets, computed', () => {
+        const { snapshot: compacted } = compactSheetsSnapshot(null, JSON.stringify([edit(0, 'a')]));
+        const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+        expect(computed).toBe(true);
+        expect(result.map((sheet) => sheet.id)).toEqual(['sheet-1']);
+        expect(values(compacted)).toEqual([[0, 0, 'a']]);
+    });
+
+    test('a batch the replay rejects is dropped and counted, and the others still apply', () => {
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        try {
+            const poison: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['missing', 'deep'], value: 1 }];
+            const { snapshot, dropped } = compactSheetsSnapshot(
+                encodeSheetsSnapshot(sheets, { computed: true }),
+                JSON.stringify([edit(0, 'a'), poison, edit(1, 'b'), poison]),
+            );
+            expect(values(snapshot)).toEqual([
+                [0, 0, 'a'],
+                [0, 1, 'b'],
+            ]);
+            expect(dropped).toBe(2);
+            // The caller logs the count once, with the path, so the replay itself stays quiet.
+            expect(warn).not.toHaveBeenCalled();
+        } finally {
+            warn.mockRestore();
+        }
+    });
+});
+
+describe('document/sheets — the base a snapshot starts', () => {
+    const sheets = (): Sheet[] => [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
+
+    test('a replacing import stamps a fresh base without compactedFrom, in the same transaction', () => {
+        const doc = new Y.Doc();
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), 'older');
+        const old = readSheetsBase(doc);
+        expect(old?.compactedFrom).toBe('older');
+        doc.getArray<Op[]>('ops').push([[{ op: 'replace', path: ['x'], value: 1 }]]);
+
+        let updates = 0;
+        doc.on('update', () => updates++);
+        writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot([], { computed: true }));
+
+        expect(updates).toBe(1);
+        const base = readSheetsBase(doc);
+        expect(base).toEqual({ id: expect.any(String), compactedFrom: null });
+        expect(base?.id).not.toBe(old?.id);
+        doc.destroy();
+    });
+
+    test('appending tabs leaves the base alone', () => {
+        const doc = new Y.Doc();
+        writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
+        const base = readSheetsBase(doc);
+        appendSheetsToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }), readLiveSheets(doc));
+        expect(readSheetsBase(doc)).toEqual(base);
+        doc.destroy();
     });
 });

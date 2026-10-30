@@ -54,6 +54,7 @@ function render(root: ReturnType<typeof createRoot>, context: Context) {
                 {
                     value: {
                         context,
+                        getContext: () => context,
                         setContext: () => {},
                         settings: defaultSettings,
                         refs,

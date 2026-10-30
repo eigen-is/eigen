@@ -242,6 +242,18 @@ export function warmFormulaCellInfoMap(ctx: Context, data?: CellMatrix | null): 
     return map;
 }
 
+// Builds the formula map while the browser is idle, such as after a load or a replay of the op log, so neither waits
+// for it and the next formula edit finds it ready. Returns the cancel.
+export function warmFormulaCellInfoMapOnIdle(getContext: () => Context): () => void {
+    const run = () => warmFormulaCellInfoMap(getContext());
+    if (typeof requestIdleCallback === 'function') {
+        const id = requestIdleCallback(run, { timeout: 2000 });
+        return () => cancelIdleCallback(id);
+    }
+    const id = setTimeout(run, 200);
+    return () => clearTimeout(id);
+}
+
 export function execFunctionGroup(
     ctx: Context,
     origin_r: number | null,

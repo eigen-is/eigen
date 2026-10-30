@@ -6,7 +6,6 @@
 
 import { matchesKeyboardEvent } from '@tanstack/react-hotkeys';
 import { escapeHtml } from '@workspace/lib/html';
-import { isEqual } from 'es-toolkit/compat';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
@@ -51,8 +50,8 @@ export const InputBox: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const prevEditingCellPosition = usePrevious<unknown[]>(context.editingCellPosition);
-    const prevSheetId = usePrevious<string>(context.currentSheetId);
+    const prevEditingCellPosition = usePrevious(context.editingCellPosition);
+    const prevSheetId = usePrevious(context.currentSheetId);
     const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
     const row_index = firstSelection?.row_focus;
@@ -85,13 +84,11 @@ export const InputBox: React.FC = () => {
                 delete refs.globalCache.doNotUpdateCell;
                 return;
             }
-            if (
-                isEqual(prevEditingCellPosition, context.editingCellPosition) &&
-                prevSheetId === context.currentSheetId
-            ) {
-                // data change by a collaborative update should not trigger this effect
-                return;
-            }
+            // The editor loads its cell only when it opens or its sheet changes. While it stays open the text is the
+            // person's, so a collaborative update leaves it alone, and so does a peer's row op that moves the editor
+            // with its cell.
+            const wasOpen = (prevEditingCellPosition?.length ?? 0) > 0;
+            if (wasOpen && prevSheetId === context.currentSheetId) return;
             const flowdata = getFlowdata(context);
             const cell = flowdata?.[row_index]?.[col_index];
             let value = '';
