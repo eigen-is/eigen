@@ -8,12 +8,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { Sheet as LibSheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
-import { replaySheetsOps } from '../../../engine';
+import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
 import type { Context } from '../../../state/context';
 import { undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import type { Op } from '../../../state/types';
+import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, patchToOp } from '../../../state/utils/patch';
 import { author, join, receive } from '../factories/collab';
 import { contextFactory } from '../factories/context';
@@ -96,7 +97,9 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink', 'dataVerification', 'row', 'column']));
+        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink', 'dataVerification']));
+        // Every receiver derives the sheet's size from its cells, so the size does not ship.
+        expect(metaPaths).not.toContain('row');
         const configOp = ops.find((op) => op.path[0] === 'config');
         expect(configOp?.value).toEqual(next.sheets[0].config);
         // calcChain scales with formula count and every consumer re-derives it,
@@ -312,4 +315,32 @@ describe("a row or column op racing a peer's unfreeze", () => {
             }
         },
     );
+});
+
+// Every receiver derives a sheet's size from its cells, so two row ops sent at once leave the size in step with the
+// cells on both tabs and in the replay. A size written whole in the batch would be the author's, one op short.
+describe('two row ops sent at once keep the sheet size in step with its cells', () => {
+    const inserted = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+    const deleted = { type: 'row', start: 3, end: 3, id: 'id_1' } as const;
+    const cases = [
+        ['two inserts', { insertRowColOp: inserted }, { insertRowColOp: inserted }],
+        ['an insert and a delete', { insertRowColOp: inserted }, { deleteRowColOp: deleted }],
+        ['two deletes', { deleteRowColOp: deleted }, { deleteRowColOp: { ...deleted, start: 0, end: 0 } }],
+    ] as const;
+    const run = (ctx: Context, options: PatchOptions) =>
+        options.insertRowColOp ? insertRowCol(ctx, options.insertRowColOp) : deleteRowCol(ctx, options.deleteRowColOp!);
+    const size = (sheet: LibSheet) => [sheet.row, sheet.column];
+    const grid = (sheet: LibSheet) => [sheet.data!.length, sheet.data![0].length];
+
+    test.each(cases)('%s', (_, first, second) => {
+        const base = produce(contextFactory() as Context, (ctx: Context) => {
+            Object.assign(ctx.sheets[0], { row: 4, column: 4 });
+        });
+        const a = author(base, (ctx) => run(ctx, first), first);
+        const b = author(base, (ctx) => run(ctx, second), second);
+        const onA = receive(a.next, b.ops).sheets[0];
+        const onB = receive(b.next, a.ops).sheets[0];
+        const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
+        for (const sheet of [onA, onB, joined]) expect(size(sheet)).toEqual(grid(sheet));
+    });
 });

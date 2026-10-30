@@ -437,3 +437,25 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
     expect(tab.cell(0, 0)?.v).toBe('online 219');
     expectJoined(tab);
 });
+
+test('rows a peer inserted at the bottom survive a compaction, and a cell typed there reaches a joiner', async () => {
+    const s = server({ '0_0': 'base' });
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 1);
+    push(peer, [
+        {
+            op: 'insertRowCol',
+            id: 's1',
+            path: [],
+            value: { type: 'row', index: 11, count: 2, direction: 'rightbottom' },
+        },
+    ]);
+    await deliver(peer, s);
+    await deliver(s, tab.doc);
+    compact(s);
+    await deliver(s, tab.doc);
+    expect(tab.seen.version).toBe(0);
+    await tab.edit((w) => w.setCellFormat(13, 0, 'v', 'typed'));
+    expect(joined(tab.doc).data[13][0]?.v).toBe('typed');
+    expectJoined(tab);
+});

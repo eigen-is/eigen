@@ -8,7 +8,6 @@ import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
-import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
@@ -216,10 +215,11 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     ctx.sheets[index].name = txt;
 }
 
-export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, columnsToAdd: number) {
-    if (rowsToAdd <= 0 && columnsToAdd <= 0) {
-        return data;
-    }
+// Grows the current grid for a paste that runs past its last row or column. The sheet's size grows with it, because a
+// stored snapshot keeps the size and a reader builds the grid at that size.
+export function expandRowsAndColumns(sheet: Sheet, rowsToAdd: number, columnsToAdd: number) {
+    const { data } = sheet;
+    if (!data || (rowsToAdd <= 0 && columnsToAdd <= 0)) return;
 
     if (data.length + rowsToAdd > MAX_SHEET_ROW_COUNT) {
         throw new Error(
@@ -232,28 +232,10 @@ export function expandRowsAndColumns(data: CellMatrix, rowsToAdd: number, column
             `This action would increase the number of columns in the workbook above the limit of ${MAX_SHEET_COLUMN_COUNT}.`,
         );
     }
-    if (rowsToAdd <= 0) {
-        rowsToAdd = 0;
-    }
 
-    if (columnsToAdd <= 0) {
-        columnsToAdd = 0;
-    }
-
-    let currentColLen = 0;
-    if (data.length > 0) {
-        currentColLen = data[0].length;
-    }
-
-    for (let r = 0; r < data.length; r += 1) {
-        for (let i = 0; i < columnsToAdd; i += 1) {
-            data[r].push(null);
-        }
-    }
-
-    for (let r = 0; r < rowsToAdd; r += 1) {
-        data.push(times(currentColLen + columnsToAdd, () => null));
-    }
-
-    return data;
+    for (const row of data) row.push(...times(Math.max(columnsToAdd, 0), () => null));
+    const columns = data[0].length;
+    for (let r = 0; r < rowsToAdd; r += 1) data.push(times(columns, () => null));
+    sheet.row = data.length;
+    sheet.column = columns;
 }

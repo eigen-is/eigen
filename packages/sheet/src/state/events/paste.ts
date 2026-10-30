@@ -190,7 +190,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         const addr = maxh - rowMaxLength + 1;
         const addc = maxc - cellMaxLength + 1;
         if (addr > 0 || addc > 0) {
-            expandRowsAndColumns(d, addr, addc);
+            expandRowsAndColumns(getSheet(ctx), addr, addc);
         }
 
         if (cfg.rowlen == null) {
@@ -296,7 +296,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         const addr = curR + rlen - d.length;
         const addc = curC + clen - d[0].length;
         if (addr > 0 || addc > 0) {
-            expandRowsAndColumns(d, addr, addc);
+            expandRowsAndColumns(getSheet(ctx), addr, addc);
         }
 
         for (let r = 0; r < rlen; r += 1) {
@@ -397,7 +397,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const addr = copyh + minh - rowMaxLength;
     const addc = copyc + minc - cellMaxLength;
     if (addr > 0 || addc > 0) {
-        expandRowsAndColumns(d, addr, addc);
+        expandRowsAndColumns(getSheet(ctx), addr, addc);
     }
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetId, [c_r1, c_r2, c_c1, c_c2]);
@@ -776,7 +776,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     const addr = copyh + minh - rowMaxLength;
     const addc = copyc + minc - cellMaxLength;
     if (addr > 0 || addc > 0) {
-        expandRowsAndColumns(d, addr, addc);
+        expandRowsAndColumns(getSheet(ctx), addr, addc);
     }
 
     const borderInfoCompute = getBorderInfoCompute(ctx, copySheetId, [c_r1, c_r2, c_c1, c_c2]);
