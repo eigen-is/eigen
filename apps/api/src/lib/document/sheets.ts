@@ -97,7 +97,8 @@ export function compactSheetsSnapshot(
             snapshot: encodeSheetsSnapshot(recalcSheets(replayed, SERVER_RECALC_BUDGET), { computed: true }),
             dropped,
         };
-    } catch {
+    } catch (e) {
+        console.warn('[sheets] server recalc failed, storing replayed values:', e instanceof Error ? e.message : e);
         return { snapshot: encodeSheetsSnapshot(replayed, { computed: false }), dropped };
     }
 }
