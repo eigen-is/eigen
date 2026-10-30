@@ -138,9 +138,11 @@ export function useSheet(
             // struct the transaction deletes must be one this tab held, or the compaction folded a batch the tab never
             // applied, such as one sent while it was offline. Yjs runs the two observers below in no fixed order, so
             // the verdict is taken once, before either of them.
+            let stateChanged = false;
             let remountGrid = false;
             const judgeTransaction = (tr: Y.Transaction) => {
-                remountGrid = tr.changed.has(stateRoot);
+                stateChanged = tr.changed.has(stateRoot);
+                remountGrid = stateChanged;
                 if (!remountGrid || baseIdRef.current === null) return;
                 if (readSheetsBase(doc)?.compactedFrom !== baseIdRef.current) return;
                 for (const [client, deletes] of tr.deleteSet.clients) {
@@ -172,9 +174,10 @@ export function useSheet(
                         kept += change.retain;
                         at += change.retain;
                     }
-                    // A compaction folds the head of the log into the snapshot. Batches deleted after one it keeps
-                    // would leave the grid with an order no anchor holds, so the grid loads again.
-                    if (change.delete && kept > 0) return reload(doc);
+                    // A compaction folds the head of the log into the snapshot it writes in the same transaction.
+                    // Batches deleted after one it keeps would leave the grid with an order no anchor holds. Batches
+                    // deleted with no new snapshot would leave it with cells no joiner has. The grid then loads again.
+                    if (change.delete && (kept > 0 || !stateChanged)) return reload(doc);
                     if (change.delete) folded += change.delete;
                     if (Array.isArray(change.insert)) {
                         for (const ops of change.insert) {

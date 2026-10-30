@@ -537,3 +537,17 @@ test('a sheet added and one deleted at once leave the tab with the orders a join
     expect(tab.seen.version).toBe(0);
     expect(orders(tab.workbook().getAllSheets())).toEqual(joiner());
 });
+
+// Only a compaction deletes batches, and it writes the snapshot they went into in the same transaction. A writer that
+// deletes the head of the log without one leaves the grid with batches no joiner applies, so the grid loads again.
+test('batches deleted from the head of the log without a new snapshot load the grid again', async () => {
+    const s = server();
+    push(s, typed(0, 0, 'first'), typed(1, 0, 'second'));
+    const tab = await openTab(s, 50);
+    const writer = replica(s, 1);
+    writer.getArray<Op[]>('ops').delete(0, 1);
+    await deliver(writer, tab.doc);
+    expect(tab.seen.version).toBe(1);
+    expect(tab.cell(0, 0)).toBeNull();
+    expectJoined(tab);
+});
