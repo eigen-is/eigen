@@ -214,9 +214,11 @@ describe('CollabDocument compacts a workbook at close', () => {
             ]);
             // The batches the replay rejected are gone with the others, and one line names how many.
             expect(sheet.ops.length).toBe(0);
-            expect(warn.mock.calls.map((args) => String(args[0]))).toEqual([
-                `[sheets] compaction dropped 2 op batches path=${sheet.id}`,
-            ]);
+            // Only the sheets lines: a loaded machine also logs slow requests.
+            const sheetsLines = warn.mock.calls
+                .map((args) => String(args[0]))
+                .filter((line) => line.startsWith('[sheets]'));
+            expect(sheetsLines).toEqual([`[sheets] compaction dropped 2 op batches path=${sheet.id}`]);
             const base = readSheetsBase(sheet.doc.doc);
             expect(base).toEqual({ id: expect.any(String), compactedFrom: opened?.id ?? 'missing' });
 
