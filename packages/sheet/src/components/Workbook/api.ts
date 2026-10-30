@@ -26,6 +26,7 @@ import type {
 import {
     api,
     applyOpBatch,
+    cancelNormalSelected,
     collectMatches,
     createContextResolver,
     deleteFloatingObject,
@@ -77,14 +78,19 @@ export function generateAPIs(
         },
 
         // Puts the workbook back to `base`, sheets an earlier getAllSheets returned, and applies `batches` on it in
-        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. Only the
-        // `fresh` batches, those new to this tab, move an open cell editor, since it followed the others once. The undo
-        // and redo entries were recorded against the order that is gone, so both stacks empty. True when every batch
-        // applied.
+        // order, as a host does when a peer's batch lands in the log before batches this tab already applied. An open
+        // cell editor followed the batches this tab applied, so only the `fresh` batches, those new to this tab, move
+        // it. When a batch they overtake moved rows or columns, the editor's row and column no longer match a fresh
+        // batch's. The editor then closes without writing, as when its cell is deleted. The undo and redo entries were
+        // recorded against the order that is gone, so both stacks empty. True when every batch applied.
         replayOps: (base: Sheet[], batches: Op[][], fresh: ReadonlySet<Op[]>): boolean => {
             let accepted = true;
+            const movesRows = (ops: Op[]) => ops.some((op) => op.op === 'insertRowCol' || op.op === 'deleteRowCol');
+            const from = batches.findIndex((ops) => fresh.has(ops));
+            const closeEditor = from !== -1 && batches.slice(from).some((ops) => !fresh.has(ops) && movesRows(ops));
             setContext(
                 (ctx_) => {
+                    if (closeEditor) cancelNormalSelected(ctx_);
                     let next: Context = { ...current(ctx_), sheets: base };
                     for (const ops of batches) {
                         const applied = applyOpBatch(next, ops, fresh.has(ops));

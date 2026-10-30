@@ -166,14 +166,13 @@ export class FormulaCache {
 
     public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
-        // The map is only ever reassigned to reset it (null or {}); the reverse
-        // index mirrors the map, so it resets too and refills via setFormulaCellInfo.
+        // Code only assigns the map to reset it, to null or to an empty map. The reverse index mirrors the map, so it
+        // resets too. setFormulaCellInfo fills both again.
         this.engine.state.dependencyIndex.clear();
     }
 
-    // Reverse lookup cell → formulas reading it; lives in engine state next to
-    // formulaCellInfoMap (so engine resets clear both) and is kept in lockstep
-    // by setFormulaCellInfo and the setter above.
+    // For each cell, the formulas that read it. It lives in the engine's state next to the formula map, so a new
+    // engine starts both empty. setFormulaCellInfo and the map's setter keep the two in step.
     public get dependencyIndex(): DependencyIndex {
         return this.engine.state.dependencyIndex;
     }

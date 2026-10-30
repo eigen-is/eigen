@@ -8,6 +8,7 @@ import { useCollabDoc } from '@workspace/lib/collab';
 import type { Sheet } from '@workspace/lib/sheets';
 import { decodeSheetsSnapshot, readSheetsBase, readSheetsSnapshotJson } from '@workspace/lib/sheets';
 import type { Op, WorkbookInstance, Sheet as WorkbookSheet } from '@workspace/sheet';
+import { commutes } from '@workspace/sheet';
 import { createDefaultSheets, replaySheetsOps } from '@workspace/sheet/engine';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type * as Y from 'yjs';
@@ -16,10 +17,16 @@ import type * as Y from 'yjs';
 // the grid already applied takes the grid back to the nearest one and applies the log again from there.
 type Anchor = { at: number; sheets: WorkbookSheet[] };
 
-// How many batches pass between two anchors. Restoring one costs nothing, since it shares every row nobody changed
-// since. Each batch after it is applied again, which on a sheet of 300,000 cells takes about 12 ms a batch, so twenty
-// keeps that part of a rollback near a quarter second.
+// How many batches pass between two anchors. An anchor shares every row nobody changed since, so it is cheap to keep
+// and to restore. Restoring one empties the formula engine, so the first formula edit after a rollback rebuilds its
+// map. Each batch after the anchor is applied again, which on a sheet of 300,000 cells takes about 12 ms a batch, so
+// twenty keeps that part of a rollback near a quarter second.
 const ANCHOR_EVERY = 20;
+
+// How many anchors the grid keeps, the oldest dropped first. On a sheet of 300,000 cells ten anchors hold about 2 MB.
+// A rollback from the oldest applies some two hundred batches again, a few seconds there. A batch that lands further
+// back loads the grid again, which costs no more.
+const MAX_ANCHORS = 10;
 
 export function useSheet(
     ownerId: string,
@@ -126,6 +133,9 @@ export function useSheet(
                     if (deletes.some((d) => d.clock + d.len > held)) return;
                 }
                 remountGrid = false;
+                // The grid moves to the new base here, before the observers run. A batch of this transaction that the
+                // grid rejects then clears it, whichever observer runs first.
+                baseIdRef.current = readSheetsBase(doc)?.id ?? null;
             };
             doc.on('beforeObserverCalls', judgeTransaction);
 
@@ -138,24 +148,19 @@ export function useSheet(
                 const added: Op[][] = [];
                 // What the transaction added that the grid has not applied yet.
                 const fresh = new Set<Op[]>();
-                let index = 0;
                 let kept = 0;
                 let folded = 0;
                 for (const change of event.changes.delta) {
-                    if (change.retain) {
-                        index += change.retain;
-                        kept += change.retain;
-                    }
+                    if (change.retain) kept += change.retain;
                     // A compaction folds the head of the log into the snapshot. Batches deleted after one it keeps
                     // would leave the grid with an order no anchor holds, so the grid loads again.
                     if (change.delete && kept > 0) return reload(doc);
                     if (change.delete) folded += change.delete;
                     if (Array.isArray(change.insert)) {
-                        for (const ops of log.slice(index, index + change.insert.length)) {
+                        for (const ops of change.insert) {
                             added.push(ops);
                             if (!ownRef.current.has(ops)) fresh.add(ops);
                         }
-                        index += change.insert.length;
                     }
                 }
                 const from = log.findIndex((ops) => fresh.has(ops));
@@ -180,8 +185,9 @@ export function useSheet(
                         if (!applyBatch(workbook, ops)) baseIdRef.current = null;
                     }
                 } else {
-                    const anchor = anchors.findLast((a) => a.at <= from);
-                    // A batch that lands before the batches the grid replayed at load has no anchor.
+                    const anchor = anchors.at(-1);
+                    // A batch that lands before the oldest anchor, such as one before the batches the grid replayed at
+                    // load, has none.
                     if (!anchor) return reload(doc);
                     try {
                         if (!workbook.replayOps(anchor.sheets, log.slice(anchor.at), fresh)) baseIdRef.current = null;
@@ -196,14 +202,9 @@ export function useSheet(
             };
             opsArray.observe(handleOps);
 
+            // A compaction of what the grid shows moved the grid to the new base before the observers ran.
             const handleState = () => {
-                if (!readyForOpsRef.current) return;
-                // A compaction of what the grid shows only moves the grid to the new base.
-                if (!remountGrid) {
-                    baseIdRef.current = readSheetsBase(doc)?.id ?? null;
-                    return;
-                }
-                reload(doc);
+                if (readyForOpsRef.current && remountGrid) reload(doc);
             };
             stateMap.observe(handleState);
 
@@ -265,43 +266,11 @@ function applyBatch(workbook: WorkbookInstance, ops: Op[]): boolean {
     }
 }
 
-// Keeps the sheets the grid shows as the anchor at `at`, when the last anchor lies far enough back. The caller makes
-// sure the grid holds exactly the log's first `at` batches.
+// Keeps the sheets the grid shows as the anchor at `at`, when the last anchor lies far enough back, and drops the
+// oldest anchor past the cap. The caller makes sure the grid holds exactly the log's first `at` batches.
 function keepAnchor(anchors: Anchor[], at: number, workbook: WorkbookInstance) {
     const last = anchors.at(-1);
-    if (!last || at - last.at >= ANCHOR_EVERY) anchors.push({ at, sheets: workbook.getAllSheets() });
-}
-
-// Whether the fresh batches, applied after the overtaken ones, still give the workbook the log's order gives. They do
-// when no batch adds, deletes or moves sheets, rows or columns, and no op of one side writes a path an op of the other
-// writes, or a path inside or above it. The recalc list counts too: two formula cells added at once both append to it.
-function commutes(fresh: Iterable<Op[]>, overtaken: Op[][]): boolean {
-    const written = new Set<string>();
-    const above = new Set<string>();
-    for (const ops of overtaken) {
-        for (const op of ops) {
-            const keys = pathKeys(op);
-            if (!keys) return false;
-            const [key, ...up] = keys;
-            written.add(key);
-            for (const k of up) above.add(k);
-        }
-    }
-    for (const ops of fresh) {
-        for (const op of ops) {
-            const keys = pathKeys(op);
-            if (!keys || above.has(keys[0]) || keys.some((key) => written.has(key))) return false;
-        }
-    }
-    return true;
-}
-
-// The key of the path an op writes, its sheet first, then the key of each path above it. An add or remove at an array
-// index moves the entries after it, so it writes the whole array. Null for an op on sheets, rows or columns.
-function pathKeys(op: Op): string[] | null {
-    if (op.op !== 'add' && op.op !== 'remove' && op.op !== 'replace') return null;
-    const last = op.path.at(-1);
-    const wholeArray = (op.op !== 'replace' && typeof last === 'number') || last === 'length';
-    const path = [op.id, ...(wholeArray ? op.path.slice(0, -1) : op.path)].map(String);
-    return path.map((_, i) => JSON.stringify(path.slice(0, path.length - i)));
+    if (last && at - last.at < ANCHOR_EVERY) return;
+    anchors.push({ at, sheets: workbook.getAllSheets() });
+    if (anchors.length > MAX_ANCHORS) anchors.shift();
 }

@@ -393,3 +393,47 @@ test('a batch that lands before the batches the tab replayed at load ends as the
     expect(tab.cell(0, 0)?.v).toBe('two');
     expectJoined(tab);
 });
+
+// Yjs runs the snapshot's observer first when the server's client id is the lower one, and the log's otherwise.
+for (const peerID of [1, 2000]) {
+    test(`a batch the tab rejects in the update of a kept compaction remounts it on the next one (peer ${peerID})`, async () => {
+        const s = server();
+        const tab = await openTab(s, 50);
+        await tab.edit((w) => w.setCellFormat(0, 1, 'v', 'tab'));
+        await deliver(tab.doc, s);
+        compact(s);
+        const peer = replica(s, peerID);
+        push(peer, [{ op: 'replace', id: 's1', path: ['data', 99, 0, 'v'], value: 1 }]);
+        await deliver(peer, s);
+        await deliver(s, tab.doc);
+        expect(tab.seen.version).toBe(0);
+        compact(s);
+        await deliver(s, tab.doc);
+        expect(tab.seen.version).toBe(1);
+        expectJoined(tab);
+    });
+}
+
+test('a batch that lands before the oldest anchor the tab keeps loads the grid again', async () => {
+    const s = server();
+    const tab = await openTab(s, 50);
+    const offline = replica(s, 1);
+    const online = replica(s, 100);
+    let recent = replica(s, 2);
+    for (let i = 0; i < 220; i++) {
+        if (i === 200) recent = replica(tab.doc, 2);
+        push(online, typed(0, 0, `online ${i}`));
+        await deliver(online, tab.doc);
+    }
+    push(recent, typed(0, 0, 'recent'));
+    await deliver(recent, tab.doc);
+    expect(tab.doc.getArray<Op[]>('ops').get(200)).toEqual(typed(0, 0, 'recent'));
+    expect(tab.seen.version).toBe(0);
+    expectJoined(tab);
+    push(offline, typed(0, 0, 'offline'));
+    await deliver(offline, tab.doc);
+    expect(tab.doc.getArray<Op[]>('ops').get(0)).toEqual(typed(0, 0, 'offline'));
+    expect(tab.seen.version).toBe(1);
+    expect(tab.cell(0, 0)?.v).toBe('online 219');
+    expectJoined(tab);
+});

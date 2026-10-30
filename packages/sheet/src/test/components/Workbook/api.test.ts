@@ -418,4 +418,16 @@ describe('replayOps', () => {
         const fresh = [{ ...rowInsert }];
         expect(replay(ctx, ctx.sheets, [old, fresh], [fresh]).ctx.editingCellPosition).toEqual([3, 1]);
     });
+
+    it('closes an open cell editor when a batch the fresh one overtakes moves rows', () => {
+        const base = produce(makeCtx(null), (draft: Context) => {
+            draft.editingCellPosition = [2, 1];
+        });
+        const overtaken = [rowInsert];
+        const shown = applyPeerOps(base, overtaken);
+        expect(shown.editingCellPosition).toEqual([3, 1]);
+        const late: Op[] = [{ op: 'deleteRowCol', id: 'id_1', path: [], value: { type: 'row', start: 2, end: 2 } }];
+        const { ctx } = replay(shown, base.sheets, [late, overtaken], [late]);
+        expect(ctx.editingCellPosition).toEqual([]);
+    });
 });
