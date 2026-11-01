@@ -166,6 +166,21 @@ describe('state/modules/text — measure cache', () => {
         clearMeasureTextCache();
         expect(getMeasureText('M', ctx, font).actualBoundingBoxAscent).toBe(16);
     });
+
+    // The span's height is cached by font, so it has to be measured in that font, not in the page's. The DOM here
+    // lays nothing out, so the span is as tall as the point size its font names.
+    test('a line height taken from the DOM is measured in the font it is cached by', () => {
+        Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', {
+            configurable: true,
+            get(this: HTMLElement) {
+                return Number.parseFloat(this.style.font.match(/([\d.]+)pt/)?.[1] ?? '0');
+            },
+        });
+        const ctx = measuringCanvas((text) => ({ width: text.length * 7, ascent: Number.NaN, descent: Number.NaN }));
+
+        expect(getMeasureText('M', ctx, getFontSet({ fs: 20 })).actualBoundingBoxAscent).toBe(16);
+        expect(getMeasureText('M', ctx, getFontSet({ fs: 30 })).actualBoundingBoxAscent).toBe(24);
+    });
 });
 
 // A rich cell wraps between words, inside a run too, and the runs on one line share its baseline.

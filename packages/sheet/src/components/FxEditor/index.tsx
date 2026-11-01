@@ -15,6 +15,7 @@ import {
     handleFormulaInput,
     isAllowEdit,
     isSelectionOnHiddenRowCol,
+    loadCellFont,
     moveHighlightCell,
     rangeHightlightselected,
     updateCell,
@@ -172,7 +173,10 @@ export function FxEditor() {
         ],
     );
 
+    const [editingRow, editingColumn] = context.editingCellPosition;
+    const editingCell = getFlowdata(context)?.[editingRow]?.[editingColumn];
     const onChange = useCallback(() => {
+        if (refs.fxInput.current) loadCellFont(editingCell, refs.fxInput.current.innerText);
         const e = lastKeyDownEventRef.current;
         if (!e) return;
         const kcode = e.keyCode;
@@ -199,7 +203,7 @@ export function FxEditor() {
                 handleFormulaInput(draftCtx, refs.cellInput.current, fxInput, kcode, recentText.current);
             });
         }
-    }, [refs.cellInput, refs.fxInput, setContext]);
+    }, [editingCell, refs.cellInput, refs.fxInput, setContext]);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-evaluates allowEdit only on the listed shape changes — internals of `context` are read directly
     const allowEdit = useMemo(() => {
