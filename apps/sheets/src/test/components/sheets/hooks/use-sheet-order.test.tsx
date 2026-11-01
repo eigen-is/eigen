@@ -3,6 +3,7 @@
 // with the workbook a joiner replays from the snapshot and the log in log order.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { clickRow } from '@workspace/ui/test/menu-rows';
 
 installHappyDom();
 
@@ -438,6 +439,58 @@ test('a batch that lands before the oldest anchor the tab keeps loads the grid a
     expect(tab.cell(0, 0)?.v).toBe('online 219');
     expectJoined(tab);
 });
+
+// The sheet tab whose label reads `name`.
+const sheetTab = (name: string) =>
+    [...document.querySelectorAll('[role="button"] span')].find((span) => span.textContent === name)?.parentElement;
+
+// A sheet the tab adds or copies gets its cell matrix only when it opens, and that write stays off the log. So the
+// anchor kept at the add or copy holds the sheet without one. A rollback to it must still leave the open sheet with its
+// cells, and a keystroke there must land.
+for (const [name, open, first] of [
+    [
+        'an added sheet',
+        () =>
+            act(async () => {
+                document.querySelector<HTMLButtonElement>('button[aria-label="New sheet"]')?.click();
+                await new Promise((resolve) => setTimeout(resolve));
+            }),
+        null,
+    ],
+    [
+        'a copied sheet',
+        async () => {
+            await act(async () => {
+                sheetTab('One')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+            });
+            await clickRow('Duplicate');
+            await act(async () => sheetTab('One(Copy)')?.click());
+        },
+        'a',
+    ],
+] as const) {
+    test(`a rollback to the anchor kept at ${name} keeps its cells and takes a keystroke`, async () => {
+        const s = server({ '0_0': 'a' });
+        const tab = await openTab(s, 50);
+        // Nineteen batches, so the sheet's own is the twentieth and the tab keeps an anchor right at it.
+        for (let i = 0; i < 19; i++) await tab.edit((w) => w.setCellFormat(i % 10, 1, 'v', `e${i}`));
+        await open();
+        expect(opsIn(tab.doc)).toBe(20);
+        expect(tab.cell(0, 0)?.v ?? null).toBe(first);
+        await deliver(tab.doc, s);
+        // Two peers send at once. The lower client id sits first in the log but arrives last, and it moves rows.
+        const late = replica(s, 100);
+        const early = replica(s, 900);
+        push(early, typed(5, 3, 'early'));
+        push(late, rowInsert(1));
+        await deliver(early, tab.doc);
+        await deliver(late, tab.doc);
+        expect(tab.seen.version).toBe(0);
+        expect(tab.cell(0, 0)?.v ?? null).toBe(first);
+        await tab.edit((w) => w.setCellFormat(2, 2, 'v', 'typed'));
+        expect(tab.cell(2, 2)?.v).toBe('typed');
+    });
+}
 
 test('rows a peer inserted at the bottom survive a compaction, and a cell typed there reaches a joiner', async () => {
     const s = server({ '0_0': 'base' });
