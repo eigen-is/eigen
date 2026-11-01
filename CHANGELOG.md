@@ -4,6 +4,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+### Added
+
+- **Table of contents levels in Docs** — on a computer, select a table of contents and choose under **Show levels** how many heading levels it lists, from 1 to 6. PDFs and Word downloads list the same
+
 ### Changed
 
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
