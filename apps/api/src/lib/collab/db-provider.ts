@@ -11,9 +11,9 @@ import { compressBlob } from './blob-codec';
 import * as schema from './schema';
 import { loadYjsState } from './yjs-loader';
 
-// The stored updates fold into one snapshot after 100 of them or after 1 MB. A sheet writes its whole
-// workbook as one update when a tab closes, so counting alone would let data.db grow to about 100 times
-// the document before it folds. With the byte limit too, data.db stays near twice the document.
+// The stored updates fold into one snapshot after 100 of them or after 1 MB. A sheets compaction writes its
+// whole workbook as one update, so counting alone would let data.db grow to about 100 times the document
+// before it folds. With the byte limit too, data.db stays near twice the document.
 const SNAPSHOT_INTERVAL = 100;
 const SNAPSHOT_BYTES = 1_000_000;
 

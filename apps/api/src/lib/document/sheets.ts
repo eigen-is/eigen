@@ -103,8 +103,8 @@ export function compactSheetsSnapshot(
     }
 }
 
-// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets before the first compaction,
-// with every pending op replayed.
+// The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets for a workbook with no
+// snapshot yet, with every pending op replayed.
 export function readLiveSheets(doc: Y.Doc): Sheet[] {
     const snapshot = readSheetsSnapshotJson(doc);
     const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
