@@ -1,124 +1,18 @@
 // The open sheet's grid: the canvas the cells are painted on and the overlay above it. It sizes the canvas to
 // its placeholder, derives the row and column geometry when the data or track sizes change, and repaints at most
-// once a frame on an edit or a scroll, painting the frozen panes, such as frozen rows, as their own regions.
+// once a frame. An edit draws the frame whole; a scroll alone moves the frame drawn before and paints what came
+// into view.
 
 import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
-import type { Context, Freezen, FreezenAxisData, Sheet as SheetType } from '../../state';
-import { Canvas, initFreeze, updateContextWithCanvas, updateContextWithSheetData } from '../../state';
+import type { Context, Freezen, Sheet as SheetType } from '../../state';
+import { clearMeasureTextCache, initFreeze, updateContextWithCanvas, updateContextWithSheetData } from '../../state';
+import type { ScrollPos } from '../../state/render/frame';
+import { drawFrame, scrollFrame } from '../../state/render/frame';
 import { SheetOverlay } from '../SheetOverlay';
 
-// ---------------------------------------------------------------------------
-// Canvas drawing helpers
-// ---------------------------------------------------------------------------
-
-type ScrollPos = { scrollLeft: number; scrollTop: number };
-
-function drawFrozenBoth(
-    tc: Canvas,
-    ctx: Context,
-    scroll: ScrollPos,
-    horizontalData: FreezenAxisData,
-    verticalData: FreezenAxisData,
-) {
-    const vOffset = verticalData.pos - verticalData.scroll;
-    const hOffset = horizontalData.pos - horizontalData.scroll;
-
-    tc.drawMain({
-        scrollWidth: scroll.scrollLeft + vOffset,
-        scrollHeight: scroll.scrollTop + hOffset,
-        offsetLeft: vOffset + ctx.rowHeaderWidth,
-        offsetTop: hOffset + ctx.columnHeaderHeight,
-        clear: true,
-    });
-    tc.drawMain({
-        scrollWidth: scroll.scrollLeft + vOffset,
-        scrollHeight: horizontalData.scroll,
-        drawHeight: horizontalData.pos,
-        offsetLeft: vOffset + ctx.rowHeaderWidth,
-    });
-    tc.drawMain({
-        scrollWidth: verticalData.scroll,
-        scrollHeight: scroll.scrollTop + hOffset,
-        drawWidth: verticalData.pos,
-        offsetTop: hOffset + ctx.columnHeaderHeight,
-    });
-    tc.drawMain({
-        scrollWidth: verticalData.scroll,
-        scrollHeight: horizontalData.scroll,
-        drawWidth: verticalData.pos,
-        drawHeight: horizontalData.pos,
-    });
-
-    tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
-    tc.drawColumnHeader(verticalData.scroll, verticalData.pos);
-    tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
-    tc.drawRowHeader(horizontalData.scroll, horizontalData.pos);
-    tc.drawFreezeLine({
-        horizontalTop: hOffset + ctx.columnHeaderHeight - 2,
-        verticalLeft: vOffset + ctx.rowHeaderWidth - 2,
-    });
-}
-
-function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: FreezenAxisData) {
-    const hOffset = horizontalData.pos - horizontalData.scroll;
-
-    tc.drawMain({
-        scrollWidth: scroll.scrollLeft,
-        scrollHeight: scroll.scrollTop + hOffset,
-        offsetTop: hOffset + ctx.columnHeaderHeight,
-        clear: true,
-    });
-    tc.drawMain({
-        scrollWidth: scroll.scrollLeft,
-        scrollHeight: horizontalData.scroll,
-        drawHeight: horizontalData.pos,
-    });
-
-    tc.drawColumnHeader(scroll.scrollLeft);
-    tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
-    tc.drawRowHeader(horizontalData.scroll, horizontalData.pos);
-    tc.drawFreezeLine({ horizontalTop: hOffset + ctx.columnHeaderHeight - 2 });
-}
-
-function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, verticalData: FreezenAxisData) {
-    const vOffset = verticalData.pos - verticalData.scroll;
-
-    tc.drawMain({
-        scrollWidth: scroll.scrollLeft + vOffset,
-        scrollHeight: scroll.scrollTop,
-        offsetLeft: vOffset + ctx.rowHeaderWidth,
-    });
-    tc.drawMain({
-        scrollWidth: verticalData.scroll,
-        scrollHeight: scroll.scrollTop,
-        drawWidth: verticalData.pos,
-    });
-
-    tc.drawRowHeader(scroll.scrollTop);
-    tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
-    tc.drawColumnHeader(verticalData.scroll, verticalData.pos);
-    tc.drawFreezeLine({ verticalLeft: vOffset + ctx.rowHeaderWidth - 2 });
-}
-
-function drawSheet(canvasEl: HTMLCanvasElement, ctx: Context, scroll: ScrollPos, freeze: Freezen | undefined) {
-    const tc = new Canvas(canvasEl, ctx);
-    const horizontalData = freeze?.horizontal?.freezenhorizontaldata;
-    const verticalData = freeze?.vertical?.freezenverticaldata;
-
-    if (horizontalData && verticalData) {
-        drawFrozenBoth(tc, ctx, scroll, horizontalData, verticalData);
-    } else if (horizontalData) {
-        drawFrozenHorizontal(tc, ctx, scroll, horizontalData);
-    } else if (verticalData) {
-        drawFrozenVertical(tc, ctx, scroll, verticalData);
-    } else {
-        tc.drawMain({ scrollWidth: scroll.scrollLeft, scrollHeight: scroll.scrollTop, clear: true });
-        tc.drawColumnHeader(scroll.scrollLeft);
-        tc.drawRowHeader(scroll.scrollTop);
-    }
-}
+type DrawnFrame = { ctx: Context; freeze: Freezen | undefined; scroll: ScrollPos; width: number; height: number };
 
 // ---------------------------------------------------------------------------
 // Stable serialization for object-type dependency values
@@ -241,21 +135,49 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     // Both call scheduleRedraw which coalesces to one paint per frame.
     // -----------------------------------------------------------------------
 
+    // What the canvas shows. When only the scroll changed since, scrollFrame moves it instead of drawing it again.
+    const drawnRef = useRef<DrawnFrame | undefined>(undefined);
+
     const scheduleRedraw = useCallback(() => {
         cancelAnimationFrame(rafIdRef.current);
         rafIdRef.current = requestAnimationFrame(() => {
             if (!visibleRef.current) return;
             const ctx = contextRef.current;
             if (ctx.groupValuesRefreshData.length > 0) return;
-            if (!refs.canvas.current) return;
+            const canvas = refs.canvas.current;
+            if (!canvas) return;
             const freeze = refs.globalCache.freezen?.[sheet.id];
             const scroll: ScrollPos = {
                 scrollLeft: refs.globalCache.scrollLeft,
                 scrollTop: refs.globalCache.scrollTop,
             };
-            drawSheet(refs.canvas.current, ctx, scroll, freeze);
+            const drawn = drawnRef.current;
+            const scrolledOnly =
+                drawn != null &&
+                drawn.ctx === ctx &&
+                drawn.freeze === freeze &&
+                drawn.width === canvas.width &&
+                drawn.height === canvas.height;
+            if (!scrolledOnly || !scrollFrame(canvas, ctx, freeze, drawn.scroll, scroll)) {
+                drawFrame(canvas, ctx, scroll, freeze);
+            }
+            drawnRef.current = { ctx, freeze, scroll, width: canvas.width, height: canvas.height };
         });
     }, [refs.canvas, refs.globalCache, sheet.id]);
+
+    // A web font that finishes loading changes the text's widths but not the context, so the measurements
+    // and the frame drawn with the fallback face both go.
+    useEffect(() => {
+        const fonts = document.fonts;
+        if (!fonts) return;
+        const onFontsLoaded = () => {
+            clearMeasureTextCache();
+            drawnRef.current = undefined;
+            scheduleRedraw();
+        };
+        fonts.addEventListener('loadingdone', onFontsLoaded);
+        return () => fonts.removeEventListener('loadingdone', onFontsLoaded);
+    }, [scheduleRedraw]);
 
     // Redraw on context changes (non-scroll: cell edits, selection, etc.)
     // biome-ignore lint/correctness/useExhaustiveDependencies: full `context` is the trigger — any change should redraw the canvas

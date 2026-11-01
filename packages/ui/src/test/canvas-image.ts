@@ -10,7 +10,9 @@ export function stubCanvasImageFonts(): { takeFetched: () => string[] } {
         files.push(file);
         return `/fonts/${file}`;
     });
-    Object.defineProperty(document, 'fonts', { configurable: true, value: { ready: Promise.resolve() } });
+    // A FontFaceSet is an event target too, which the sheet grid listens on for a face that finishes loading.
+    const fontSet = Object.assign(new EventTarget(), { ready: Promise.resolve() });
+    Object.defineProperty(document, 'fonts', { configurable: true, value: fontSet });
     afterAll(() => url.mockRestore());
     // The files asked for since the last take.
     const takeFetched = () => {
