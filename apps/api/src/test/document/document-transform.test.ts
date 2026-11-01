@@ -870,11 +870,11 @@ const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6a936e9608db69c4726650044fc086f061764
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
-// The HTML download embeds canvas-text.css whole, its comments too. The HTML download and the PDF's last moved when
-// they stopped embedding the faces the deck does not draw in.
-const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'a1c55d7e66406de2c759606e088018883b0980e06ca462dea78b414a46b4a9cd';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'dd6cbd06779c78772c31bf6d762404da0ec11540ae55fc82bab7c1c5a96baa45';
+// The HTML download embeds canvas-text.css whole, its comments too. All three last moved when every font stack took
+// the emoji and CJK faces after its family.
+const GOLDEN_DECK_PREVIEW_SHA256 = 'eaa231a9db70fc95ad6c50a9001c39efa94abd7a51cdfd5f6aebb6f5facd2399';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '6baf45cc7c0803acd8c18d9d2c2587079fd608e98d5a840e57b9e1de138098d8';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'a59cf60715dcf187e3869ded46d2847cac59207c08b50979e77f7374b3bd1979';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.

@@ -4,7 +4,13 @@ import {
     bundledFontOfCategory,
     bundledFontOfStack,
     EIGEN_FONT_NAMES,
+    FALLBACK_FONTS,
     fontFacesFor,
+    fontNameToCss,
+    fontStack,
+    getFontFamily,
+    getFontName,
+    MATH_FONT_STACK,
     MAX_FONT_SIZE,
     MIN_FONT_SIZE,
     nextFontSize,
@@ -68,6 +74,42 @@ describe('bundledFontOfCategory', () => {
         ['hand-drawn', 'Excalifont'],
     ] as const)('%s is drawn in %s', (category, name) => {
         expect(bundledFontOfCategory(category)).toBe(name);
+    });
+});
+
+describe('fontStack', () => {
+    // The order of the fallbacks never decides a glyph: each slice's range is disjoint from the other families'.
+    test('a family, then the emoji and CJK faces, then the system faces and the generic family', () => {
+        expect(fontStack('Inter')).toBe(
+            "'Inter', 'Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR', ui-sans-serif, system-ui, sans-serif",
+        );
+        expect(fontStack('Source Serif 4', 'serif')).toBe(
+            "'Source Serif 4', 'Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR', Georgia, 'Times New Roman', serif",
+        );
+    });
+
+    test('every stack Eigen writes for a font name is its stack, an unknown name as a sans-serif', () => {
+        expect(getFontFamily('JetBrains Mono')).toBe(fontStack('JetBrains Mono', 'monospace'));
+        expect(getFontFamily('Excalifont')).toBe(fontStack('Excalifont', 'hand-drawn'));
+        expect(getFontFamily('Bell MT')).toBe(fontStack('Bell MT'));
+        expect(fontNameToCss('Inter')).toBe(fontStack('Inter'));
+    });
+
+    // Only a formula draws in the math face, which covers Latin too.
+    test('no text stack names the math face, and the math stack names only it', () => {
+        const [math] = FALLBACK_FONTS.filter((font) => font.kind === 'math');
+        for (const name of EIGEN_FONT_NAMES) expect(getFontFamily(name)).not.toContain(math.family);
+        expect(MATH_FONT_STACK).toBe("'New Computer Modern Math', math");
+    });
+
+    // A doc stored before marks held a name keeps its whole stack, the old short one or a longer one.
+    test('a stored stack, old or new, collapses to its name and draws as it is stored', () => {
+        for (const name of EIGEN_FONT_NAMES) {
+            expect(getFontName(getFontFamily(name))).toBe(name);
+        }
+        expect(getFontName("'Source Serif 4', serif")).toBe('Source Serif 4');
+        expect(getFontName('"JetBrains Mono", monospace')).toBe('JetBrains Mono');
+        expect(fontNameToCss("'Source Serif 4', serif")).toBe("'Source Serif 4', serif");
     });
 });
 

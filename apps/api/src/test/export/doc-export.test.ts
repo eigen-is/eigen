@@ -1341,7 +1341,7 @@ describe('doc export — caps', () => {
             { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },
         ]);
         expect(html).toContain(
-            `<p><span style="font-family: 'Source Serif 4', serif; font-variant-caps: small-caps">Serif</span></p>`,
+            `<p><span style="font-family: ${getFontFamily('Source Serif 4')}; font-variant-caps: small-caps">Serif</span></p>`,
         );
     });
 });

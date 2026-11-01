@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { DEFAULT_CHART_SERIES_STYLE, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { StyleDefaults, VectorChartElement, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
@@ -12,6 +13,7 @@ import {
     SLIDES_STYLE_DEFAULTS,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
+import { escapeXml } from '@workspace/lib/xml';
 import { JSDOM } from 'jsdom';
 import * as Y from 'yjs';
 import { renderEigenslidesHtml } from '../../lib/export/canvas/transform';
@@ -117,6 +119,6 @@ describe('a chart in the canvas exports', () => {
         const layer = elementLayer(slide);
         if (!layer) throw new Error('a chart always draws');
         expect(layerBodies(html, '.canvas-page > div > div')).toEqual([asParsed(layerInnerHtml(layer.content))]);
-        expect(elementToSvg(slide)).toContain('font-family="&apos;Inter&apos;, sans-serif"');
+        expect(elementToSvg(slide)).toContain(`font-family="${escapeXml(getFontFamily('Inter'))}"`);
     });
 });
