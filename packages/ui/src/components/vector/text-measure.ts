@@ -1,6 +1,6 @@
 // Measures the plain text of a vector element, such as an arrow label, on a canvas in the font the
-// SVG <text> draws it in. This is the one writer of that text's stored width and height: the label
-// editor's commit and a font or size change both measure here, so the renderer, which never
+// SVG <text> draws it in. Every writer of that text's stored width and height measures here, such as
+// the label editor's commit, a font or size change and a paste, so the renderer, which never
 // measures, draws what was stored. It needs the DOM, so it lives in ui and never in lib.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
@@ -41,10 +41,10 @@ export async function loadVectorFont(fontSize: number, fontFamily: string, text:
 // height. Lines split as the renderer splits them. The editor's scrollWidth is no substitute: it is
 // rounded to whole pixels and includes padding.
 export function measureVectorText(text: string, fontSize: number, fontFamily: string): TextDimensions {
-    const canvas = measureContext();
-    canvas.font = vectorFontString(fontSize, fontFamily);
+    const ctx = measureContext();
+    ctx.font = vectorFontString(fontSize, fontFamily);
     const lines = text.replace(/\r\n?/g, '\n').split('\n');
     let width = 0;
-    for (const line of lines) width = Math.max(width, canvas.measureText(line).width);
+    for (const line of lines) width = Math.max(width, ctx.measureText(line).width);
     return { width, height: lines.length * getLineHeightPx(fontFamily, fontSize) };
 }
