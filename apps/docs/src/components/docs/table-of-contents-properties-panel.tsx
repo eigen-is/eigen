@@ -1,6 +1,6 @@
-// The Docs panel for the selected table of contents: how many heading levels it lists, as Word's Show levels. It opens
-// beside the page when the node is selected and writes through the editor that holds it, so its undo takes the change
-// back. The write keeps the node selected, so the panel stays open.
+// The Docs panel for the selected table of contents: how many heading levels it lists, as Word's Show levels
+// does. It opens beside the page when the node is selected and writes through the editor that holds it, so its undo
+// takes the change back. The write keeps the node selected, so the panel stays open.
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
@@ -27,7 +27,7 @@ export function TableOfContentsPropertiesPanel({ editor }: { editor: Editor }) {
     return (
         <PropertiesPanel title="Table of contents">
             <PropertySection title="Heading levels">
-                <PropertyRow label="Show levels">
+                <PropertyRow label="Levels">
                     <MergedSelect
                         value={numToStr(levels)}
                         onChange={(value) => editor.commands.updateTableOfContents({ levels: Number(value) })}

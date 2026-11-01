@@ -74,17 +74,17 @@ const entryLevels = (editor: InstanceType<typeof Editor>) =>
 
 test('shows the levels of the selected table of contents', async () => {
     await mount(2);
-    expect(row('Show levels').textContent).toBe('2');
+    expect(row('Levels').textContent).toBe('2');
 });
 
-test('Show levels writes the depth, keeps the node selected, and the editor lists to it', async () => {
+test('Levels writes the depth, keeps the node selected, and the editor lists to it', async () => {
     const editor = await mount(2);
     expect(entryLevels(editor)).toEqual(['1', '2']);
 
-    await choose('Show levels', '4');
+    await choose('Levels', '4');
     expect(editor.state.doc.child(0).attrs['levels']).toBe(4);
     expect(editor.state.selection).toBeInstanceOf(NodeSelection);
     expect(editor.state.selection.from).toBe(0);
-    expect(row('Show levels').textContent).toBe('4');
+    expect(row('Levels').textContent).toBe('4');
     expect(entryLevels(editor)).toEqual(['1', '2', '3', '4']);
 });

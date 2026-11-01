@@ -6,7 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
-- **Table of contents levels in Docs** — on a computer, select a table of contents and choose under **Show levels** how many heading levels it lists, from 1 to 6. PDFs and Word downloads list the same
+- **Table of contents levels in Docs** — on a computer, select a table of contents and choose under **Levels** how many heading levels it lists, from 1 to 6. PDFs and Word downloads list the same
 
 ### Changed
 

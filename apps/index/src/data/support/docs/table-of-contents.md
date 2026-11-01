@@ -21,7 +21,7 @@ It lists your headings from **Heading 1** to **Heading 3**, and you can [choose 
 ## Choose how many heading levels it lists
 
 1. Click to the right of the lines in the table of contents to select it. A blue outline shows around it, and the **Table of contents** panel opens on the right side of the editor.
-2. Under **Heading levels**, choose a number from 1 to 6 for **Show levels**. With **2**, it lists **Heading 1** and **Heading 2**.
+2. Under **Heading levels**, choose a number from 1 to 6 for **Levels**. With **2**, it lists **Heading 1** and **Heading 2**.
 
 The change shows for everyone who has the document open, and the PDF and the Word file list the same levels. The panel opens on a wide screen, for people who can edit the document. On a phone, you can't change the levels.
 
