@@ -23,107 +23,6 @@ import { getSheetConfig } from '../context';
 import type { CalcChainEntry, FilterEntry, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
-// Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
-function shiftFrozenFocus(sheet: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
-    const { frozen } = sheet;
-    if (!frozen?.range) return;
-    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
-    if (!ranged && frozen.type !== 'rangeBoth') return;
-    const axis = type === 'row' ? 'row_focus' : 'column_focus';
-    const focus = shift(frozen.range[axis]);
-    if (focus !== frozen.range[axis]) sheet.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
-}
-
-function shiftFilterForInsert(sheet: Sheet, op: InsertRowColOp) {
-    const { filterRange, filter } = sheet;
-    if (!filterRange || isEmpty(filterRange)) return;
-    const { type, index, count, direction } = op;
-    const range = shiftRangeForInsert(filterRange, op);
-    const [firstRow, lastRow] = range.row;
-    const [firstColumn, lastColumn] = range.column;
-    let shifted: Record<string, FilterEntry> | undefined;
-    if (filter) {
-        shifted = {};
-        const insertAt = direction === 'lefttop' ? index : index + 1;
-        for (const [key, entry] of Object.entries(filter)) {
-            if (type === 'row') {
-                const rowhidden = shiftKeyedMapForInsert(entry.rowhidden, index, count, direction);
-                shifted[key] = { ...entry, rowhidden, str: firstRow, edr: lastRow };
-            } else {
-                const cindex = entry.cindex >= insertAt ? entry.cindex + count : entry.cindex;
-                shifted[cindex - firstColumn] = { ...entry, cindex, stc: firstColumn, edc: lastColumn };
-            }
-        }
-    }
-    writeFilter(sheet, range, shifted);
-}
-
-function shiftFilterForDelete(sheet: Sheet, op: DeleteRowColOp) {
-    const { filterRange, filter } = sheet;
-    if (!filterRange || isEmpty(filterRange)) return;
-    const { type, start, end } = op;
-    const deletesHeader = type === 'row' && filterRange.row[0] >= start && filterRange.row[0] <= end;
-    const range = deletesHeader ? null : shiftRangeForDelete(filterRange, op);
-    if (!range) {
-        writeFilter(sheet, undefined, undefined);
-        return;
-    }
-    const [firstRow, lastRow] = range.row;
-    const [firstColumn, lastColumn] = range.column;
-    const shifted: Record<string, FilterEntry> = {};
-    for (const [key, entry] of Object.entries(filter ?? {})) {
-        if (type === 'row') {
-            const rowhidden = shiftKeyedMapForDelete(entry.rowhidden, start, end);
-            if (!isEmpty(rowhidden)) shifted[key] = { ...entry, rowhidden, str: firstRow, edr: lastRow };
-        } else if (entry.cindex < start) {
-            shifted[entry.cindex - firstColumn] = { ...entry, edc: lastColumn };
-        } else if (entry.cindex > end) {
-            const cindex = entry.cindex - (end - start + 1);
-            shifted[cindex - firstColumn] = { ...entry, cindex, stc: firstColumn, edc: lastColumn };
-        }
-    }
-    writeFilter(sheet, range, isEmpty(shifted) ? undefined : shifted);
-}
-
-function writeFilter(sheet: Sheet, range: SingleRange | undefined, filter: Record<string, FilterEntry> | undefined) {
-    sheet.filterRange = range;
-    sheet.filter = filter;
-    if (!filter || !sheet.config) return;
-    const rowhidden = (sheet.config.rowhidden ??= {});
-    for (const entry of Object.values(filter)) {
-        for (const row of Object.keys(entry.rowhidden)) rowhidden[row] = 0;
-    }
-}
-
-// Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
-// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
-// undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
-// its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
-// once survives, and the undo puts back only the entries the op moved; an image never moves.
-function writeBackSheets(ctx: Context, sheets: Sheet[]) {
-    for (const [i, next] of sheets.entries()) {
-        const sheet: Record<string, unknown> = ctx.sheets[i];
-        for (const [key, value] of Object.entries(next)) {
-            if (key !== 'charts' && sheet[key] !== value) sheet[key] = value;
-        }
-        const { charts } = ctx.sheets[i];
-        for (const chart of Object.values(next.charts ?? {})) {
-            const stored: Record<string, unknown> | undefined = charts?.[chart.id];
-            if (!stored || stored === chart) continue;
-            for (const [field, value] of Object.entries(chart)) {
-                const record = stored[field];
-                if (record === value) continue;
-                if (!isRecord(record) || !isRecord(value)) {
-                    stored[field] = value;
-                    continue;
-                }
-                for (const [entry, part] of Object.entries(value)) if (record[entry] !== part) record[entry] = part;
-                for (const entry of Object.keys(record)) if (!Object.hasOwn(value, entry)) delete record[entry];
-            }
-        }
-    }
-}
-
 export function insertRowCol(
     ctx: Context,
     op: {
@@ -311,4 +210,105 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
         at += step;
     }
     return count;
+}
+
+// Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
+// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
+// undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
+// its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
+// once survives, and the undo puts back only the entries the op moved; an image never moves.
+function writeBackSheets(ctx: Context, sheets: Sheet[]) {
+    for (const [i, next] of sheets.entries()) {
+        const sheet: Record<string, unknown> = ctx.sheets[i];
+        for (const [key, value] of Object.entries(next)) {
+            if (key !== 'charts' && sheet[key] !== value) sheet[key] = value;
+        }
+        const { charts } = ctx.sheets[i];
+        for (const chart of Object.values(next.charts ?? {})) {
+            const stored: Record<string, unknown> | undefined = charts?.[chart.id];
+            if (!stored || stored === chart) continue;
+            for (const [field, value] of Object.entries(chart)) {
+                const record = stored[field];
+                if (record === value) continue;
+                if (!isRecord(record) || !isRecord(value)) {
+                    stored[field] = value;
+                    continue;
+                }
+                for (const [entry, part] of Object.entries(value)) if (record[entry] !== part) record[entry] = part;
+                for (const entry of Object.keys(record)) if (!Object.hasOwn(value, entry)) delete record[entry];
+            }
+        }
+    }
+}
+
+function shiftFilterForInsert(sheet: Sheet, op: InsertRowColOp) {
+    const { filterRange, filter } = sheet;
+    if (!filterRange || isEmpty(filterRange)) return;
+    const { type, index, count, direction } = op;
+    const range = shiftRangeForInsert(filterRange, op);
+    const [firstRow, lastRow] = range.row;
+    const [firstColumn, lastColumn] = range.column;
+    let shifted: Record<string, FilterEntry> | undefined;
+    if (filter) {
+        shifted = {};
+        const insertAt = direction === 'lefttop' ? index : index + 1;
+        for (const [key, entry] of Object.entries(filter)) {
+            if (type === 'row') {
+                const rowhidden = shiftKeyedMapForInsert(entry.rowhidden, index, count, direction);
+                shifted[key] = { ...entry, rowhidden, str: firstRow, edr: lastRow };
+            } else {
+                const cindex = entry.cindex >= insertAt ? entry.cindex + count : entry.cindex;
+                shifted[cindex - firstColumn] = { ...entry, cindex, stc: firstColumn, edc: lastColumn };
+            }
+        }
+    }
+    writeFilter(sheet, range, shifted);
+}
+
+function shiftFilterForDelete(sheet: Sheet, op: DeleteRowColOp) {
+    const { filterRange, filter } = sheet;
+    if (!filterRange || isEmpty(filterRange)) return;
+    const { type, start, end } = op;
+    const deletesHeader = type === 'row' && filterRange.row[0] >= start && filterRange.row[0] <= end;
+    const range = deletesHeader ? null : shiftRangeForDelete(filterRange, op);
+    if (!range) {
+        writeFilter(sheet, undefined, undefined);
+        return;
+    }
+    const [firstRow, lastRow] = range.row;
+    const [firstColumn, lastColumn] = range.column;
+    const shifted: Record<string, FilterEntry> = {};
+    for (const [key, entry] of Object.entries(filter ?? {})) {
+        if (type === 'row') {
+            const rowhidden = shiftKeyedMapForDelete(entry.rowhidden, start, end);
+            if (!isEmpty(rowhidden)) shifted[key] = { ...entry, rowhidden, str: firstRow, edr: lastRow };
+        } else if (entry.cindex < start) {
+            shifted[entry.cindex - firstColumn] = { ...entry, edc: lastColumn };
+        } else if (entry.cindex > end) {
+            const cindex = entry.cindex - (end - start + 1);
+            shifted[cindex - firstColumn] = { ...entry, cindex, stc: firstColumn, edc: lastColumn };
+        }
+    }
+    writeFilter(sheet, range, isEmpty(shifted) ? undefined : shifted);
+}
+
+function writeFilter(sheet: Sheet, range: SingleRange | undefined, filter: Record<string, FilterEntry> | undefined) {
+    sheet.filterRange = range;
+    sheet.filter = filter;
+    if (!filter || !sheet.config) return;
+    const rowhidden = (sheet.config.rowhidden ??= {});
+    for (const entry of Object.values(filter)) {
+        for (const row of Object.keys(entry.rowhidden)) rowhidden[row] = 0;
+    }
+}
+
+// Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
+function shiftFrozenFocus(sheet: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
+    const { frozen } = sheet;
+    if (!frozen?.range) return;
+    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
+    if (!ranged && frozen.type !== 'rangeBoth') return;
+    const axis = type === 'row' ? 'row_focus' : 'column_focus';
+    const focus = shift(frozen.range[axis]);
+    if (focus !== frozen.range[axis]) sheet.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
 }
