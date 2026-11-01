@@ -73,7 +73,7 @@ export function cellTextRender(
             for (let a = 0; a < underLines.length; a += 1) {
                 const item = underLines[a];
                 ctx.beginPath();
-                ctx.moveTo(snapX(pos_x + item.startX) + 0.5, snapY(pos_y + item.startY));
+                ctx.moveTo(snapX(pos_x + item.startX) + 0.5, snapY(pos_y + item.startY) + 0.5);
                 ctx.lineTo(snapX(pos_x + item.endX) + 0.5, snapY(pos_y + item.endY) + 0.5);
                 ctx.lineWidth = Math.floor(item.fs / 9);
                 ctx.strokeStyle = ctx.fillStyle;

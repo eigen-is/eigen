@@ -60,6 +60,9 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
     for (const key of OVERRIDDEN) borrow(key, (window as any)[key]);
     borrow('window', window);
     borrow('document', window.document);
+    borrow('navigator', window.navigator);
+    borrow('getComputedStyle', window.getComputedStyle.bind(window));
+    borrow('IS_REACT_ACT_ENVIRONMENT', true);
     // happy-dom has no FontFaceSet. Code that waits for the fonts, or listens for one that finishes
     // loading, gets a set that has nothing to load.
     Object.defineProperty(window.document, 'fonts', {
@@ -71,9 +74,6 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
             load: async () => [],
         }),
     });
-    borrow('navigator', window.navigator);
-    borrow('getComputedStyle', window.getComputedStyle.bind(window));
-    borrow('IS_REACT_ACT_ENVIRONMENT', true);
     // A query the component fires fails here instead of reaching whatever listens on the origin, such
     // as a dev server answering with its SPA page. A test may stub fetch over this; afterAll restores it.
     borrow('fetch', () => Promise.reject(new TypeError('A component test has no network')));

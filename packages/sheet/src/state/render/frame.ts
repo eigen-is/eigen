@@ -110,7 +110,10 @@ export function planScroll(
         const inside = whole && shrink(whole, shiftX ? edge : 0, shiftY ? edge : 0, bounds);
         const kept = inside && intersect(inside, translate(inside, -shiftX, -shiftY));
         if (kept) plan.copies.push({ box: kept, shiftX, shiftY });
-        plan.stale.push(...subtract(area, kept));
+        // Two panes that share a pixel line both list it; it is repainted once.
+        for (const box of subtract(area, kept)) {
+            if (!plan.stale.some((other) => sameBox(other, box))) plan.stale.push(box);
+        }
     }
     return plan;
 }
@@ -306,6 +309,10 @@ function intersect(a: Box, b: Box): Box | undefined {
         y1: Math.min(a.y1, b.y1),
     };
     return box.x0 < box.x1 && box.y0 < box.y1 ? box : undefined;
+}
+
+function sameBox(a: Box, b: Box) {
+    return a.x0 === b.x0 && a.y0 === b.y0 && a.x1 === b.x1 && a.y1 === b.y1;
 }
 
 function translate(box: Box, x: number, y: number): Box {

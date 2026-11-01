@@ -31,7 +31,7 @@ const STEPS = [
 
 describe('state/render/frame — planScroll', () => {
     for (const dpr of [1, 1.25, 1.5, 2]) {
-        test(`copies each device pixel once at most, at a pixel ratio of ${dpr}`, () => {
+        test(`copies each device pixel once at most and repaints each box once, at a pixel ratio of ${dpr}`, () => {
             const ctx = workbookContextFactory({
                 devicePixelRatio: dpr,
                 rowHeaderWidth: 46,
@@ -55,6 +55,8 @@ describe('state/render/frame — planScroll', () => {
                             expect(overlaps(a.box, b.box), `${name}, ${dx},${dy}`).toBe(false);
                         }
                     }
+                    const stale = (plan?.stale ?? []).map((box) => JSON.stringify(box));
+                    expect(new Set(stale).size, `${name}, ${dx},${dy}: a box repainted twice`).toBe(stale.length);
                 }
             }
         });
