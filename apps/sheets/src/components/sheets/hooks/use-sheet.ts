@@ -54,8 +54,6 @@ export function useSheet(
     const [snapshotVersion, setSnapshotVersion] = useState(0);
     const [loadFailed, setLoadFailed] = useState(false);
 
-    // The tab's own batches, which the grid applied at their call. Yjs hands the observer the pushed array itself.
-    const ownRef = useRef(new WeakSet<Op[]>());
     // False until the first sync loaded the snapshot, so a batch that arrives before then waits for that load.
     const readyForOpsRef = useRef(false);
     // False while the grid shows the defaults after a failed load. A batch built on those must not reach peers.
@@ -163,37 +161,30 @@ export function useSheet(
             const handleOps = (event: Y.YArrayEvent<Op[]>) => {
                 // A new snapshot that remounts the grid replays the whole log, these batches too.
                 if (!readyForOpsRef.current || remountGrid) return;
+                // What the transaction added, and the log index of the first.
                 const added: Op[][] = [];
-                // What the transaction added that the grid has not applied yet, and the log index of the first.
-                const fresh = new Set<Op[]>();
                 let from = -1;
-                let at = 0;
                 let kept = 0;
                 let folded = 0;
                 for (const change of event.changes.delta) {
-                    if (change.retain) {
-                        kept += change.retain;
-                        at += change.retain;
-                    }
+                    if (change.retain) kept += change.retain;
                     // A compaction folds the head of the log into the snapshot it writes in the same transaction.
                     // Batches deleted after one it keeps would leave the grid with an order no anchor holds. Batches
                     // deleted with no new snapshot would leave it with cells no joiner has. The grid then loads again.
                     if (change.delete && (kept > 0 || !stateChanged)) return reload(doc);
                     if (change.delete) folded += change.delete;
                     if (Array.isArray(change.insert)) {
-                        for (const ops of change.insert) {
-                            added.push(ops);
-                            if (!ownRef.current.has(ops)) {
-                                fresh.add(ops);
-                                if (from === -1) from = at;
-                            }
-                            at += 1;
-                        }
+                        if (from === -1) from = kept;
+                        added.push(...change.insert);
                     }
                 }
+                // The batches the grid has not applied yet. The tab writes the log only in handleOp, and the grid
+                // applied that batch at its call. A peer's batch arrives through Y.applyUpdate, whose transaction is
+                // never local. So a transaction adds either the tab's own batch or only peers' batches.
+                const fresh = new Set(event.transaction.local ? [] : added);
                 // Every batch after the first fresh one is fresh too, or the fresh ones overtook it.
                 const overtaken =
-                    from === -1 || opsArray.length - from === fresh.size
+                    fresh.size === 0 || opsArray.length - from === fresh.size
                         ? []
                         : opsArray.slice(from).filter((ops) => !fresh.has(ops));
 
@@ -210,7 +201,7 @@ export function useSheet(
                 // An anchor stays true up to the first fresh batch, and a fold moves it back by the batches it folded.
                 const anchors = anchorsRef.current
                     .map((anchor) => ({ at: anchor.at - folded, sheets: anchor.sheets }))
-                    .filter((anchor) => anchor.at >= 0 && (from === -1 || anchor.at <= from));
+                    .filter((anchor) => anchor.at >= 0 && (fresh.size === 0 || anchor.at <= from));
                 if (overtaken.length === 0 || commutes(fresh, overtaken)) {
                     for (const ops of fresh) {
                         if (!applyBatch(workbook, ops)) baseIdRef.current = null;
@@ -265,7 +256,6 @@ export function useSheet(
         (ops: Op[]) => {
             const doc = docRef.current;
             if (!doc || !loadedRef.current || ops.length === 0) return;
-            ownRef.current.add(ops);
             sheetsOpLog(doc).push([ops]);
         },
         [docRef],

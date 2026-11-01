@@ -50,8 +50,8 @@ export function applyOpBatch(
             }
             for (const op of ops) {
                 const { id } = op;
-                // force: a peer's op lands for a read-only viewer too, or the grid and the metadata patches part ways.
-                // The op names its sheet, as the replay reads it, whatever its value carries.
+                // A batch's row or column op lands for a read-only viewer too, or the grid and the metadata patches
+                // part ways. The op names its sheet, as the replay reads it, whatever its value carries.
                 if (isRowColOp(op) && id) {
                     const insert = op.op === 'insertRowCol' ? asInsertValue(op.value) : null;
                     const remove = op.op === 'deleteRowCol' ? asDeleteValue(op.value) : null;
