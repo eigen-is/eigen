@@ -1,8 +1,7 @@
-// The image writer behind Download image and Vector's File › Download › SVG: canvas elements, or a doc's or a
-// sheet's chart, drawn by the browser as one standalone SVG. Rich text is written as SVG text from the browser's
-// own layout of each box, the font slices it and the labels draw in are embedded, and images are inlined from the
-// canvas's own media, so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the
-// writing in lib.
+// The image writer behind Download image and Vector's File › Download › SVG. It draws canvas elements, or a doc's
+// or a sheet's chart, as one standalone SVG. Rich text becomes SVG text from the browser's own layout of each box.
+// The file embeds the font slices its text draws in and inlines images from the canvas's own media, so it draws
+// the same in any SVG reader. Measuring needs the DOM, so it lives here, and lib writes the SVG.
 
 import { inlineSvgMedia } from '@workspace/lib/clipboard';
 import { downloadBlob } from '@workspace/lib/download';
@@ -47,6 +46,7 @@ export async function downloadCanvasImage(
     const measured = await measureRichText(scene.elements);
     const richText = new Map([...measured].map(([id, box]) => [id, richTextSvg(box)]));
     const inlined = await inlineSvgMedia(sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }), fetchMedia);
+    // The slice table and the slice URLs are large, so they load only once a download starts.
     const { fontFaceCss } = await import('@workspace/lib/constants/font-slices');
     const { bundledFontUrl } = await import('./bundled-font-url');
     const faces = await Promise.all(
