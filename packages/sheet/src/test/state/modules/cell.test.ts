@@ -7,7 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import { unescapeHtml } from '@workspace/lib/html';
-import { Window } from 'happy-dom';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { applyPatches, enablePatches, produceWithPatches } from 'immer';
 import { evaluateConditionalFormat } from '../../../engine/conditional-format';
 import type { CellType } from '../../../engine/types';
@@ -29,14 +29,10 @@ import { contextFactory } from '../factories/context';
 
 enablePatches();
 
-// The auto-height tests below commit through a real editor element, and getTextSize falls
-// back to a DOM span when a canvas reports no bounding box, so happy-dom is installed at
-// module scope the way events/mouse-cell.test.ts does.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const win = new Window();
-g.window = win;
-g.document = win.document;
+// The auto-height tests below commit through a real editor element, getTextSize falls back to a
+// DOM span when a canvas reports no bounding box, and the measure asks the page's fonts for the
+// text's slices. So the page is installed at module scope.
+const win = installHappyDom();
 
 describe('state/modules/cell — getInlineStringHTML', () => {
     function inlineCell(runs: { v: string; fc?: string }[]): CellMatrix {
