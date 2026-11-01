@@ -33,11 +33,12 @@ export const EMOJI_COMPONENTS: ReadonlySet<number> = new Set([
 // The first character past ASCII. The emoji face holds the ASCII keycap bases, but draws no ASCII character alone.
 export const FIRST_NON_ASCII = 0x80;
 
-// One slice as the @font-face rule that embeds it, its bytes a data: URI.
-export function fontFaceCss(slice: FontSlice, dataUri: string): string {
+// One slice as the @font-face rule that loads it from src: a data: URI of its bytes where an export or a downloaded
+// image embeds it, or the relative URL fonts.css uses.
+export function fontFaceCss(slice: FontSlice, src: string): string {
     return `@font-face {
     font-family: "${slice.family}";
-    src: url("${dataUri}") format("woff2");
+    src: url("${src}") format("woff2");
     font-weight: ${slice.weight};
     font-style: ${slice.style};
     font-display: swap;
