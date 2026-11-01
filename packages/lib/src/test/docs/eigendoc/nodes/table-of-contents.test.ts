@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Content, JSONContent } from '@tiptap/core';
 import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { NodeSelection } from '@tiptap/pm/state';
 import { MAX_FONT_SIZE } from '../../../../constants/fonts';
 import type { TocLevelStyle, TocPreset } from '../../../../docs/eigendoc';
 import {
@@ -125,6 +125,16 @@ describe('table of contents attributes', () => {
         expect(doc.child(0).attrs).toEqual({ ...DEFAULT_ATTRS, level3: { size: 10 } });
     });
 
+    // A pasted level is read only up to 256 characters. JSON allows the trailing spaces that make it long.
+    test.each([
+        [256, { bold: true }],
+        [257, null],
+    ])('a pasted level %p characters long reads as %p', (length, level1) => {
+        const json = '{"bold":true}'.padEnd(length);
+        const doc = createDocument(`<nav data-type="table-of-contents" data-level1='${json}'></nav>`, schema);
+        expect(doc.child(0).attrs['level1']).toEqual(level1);
+    });
+
     test('renders a peer’s stored value as its reader reads it', () => {
         const nav = navOf(
             generateHTML(tocDoc(3, { pageNumbers: 'false', leader: 'dash', level2: { size: 900, x: 1 } }), extensions),
@@ -219,24 +229,35 @@ describe('readTocLevels', () => {
 });
 
 describe('insertTableOfContents', () => {
-    test('splits a paragraph, and the caret lands at the start of its second half, in one step', () => {
+    // Selected, so its panel opens.
+    const selectedNode = (editor: Editor): string | null => {
+        const { selection } = editor.state;
+        return selection instanceof NodeSelection ? selection.node.type.name : null;
+    };
+
+    test('splits a paragraph and selects the new one', () => {
         const editor = mount('<p>Before</p>');
         editor.commands.setTextSelection(4);
         expect(editor.commands.insertTableOfContents()).toBe(true);
         const { doc, selection } = editor.state;
         expect(blockTypes(doc)).toEqual(['paragraph', 'tableOfContents', 'paragraph']);
-        expect(selection).toBeInstanceOf(TextSelection);
-        expect(selection.$from.parent.textContent).toBe('ore');
-        expect(selection.$from.parentOffset).toBe(0);
+        expect(doc.textContent).toBe('Before');
+        expect(selectedNode(editor)).toBe('tableOfContents');
+        expect(selection.from).toBe(doc.child(0).nodeSize);
         editor.destroy();
     });
 
-    test('at the end of the doc it opens a paragraph after itself for the caret', () => {
-        const editor = mount('<p>Before</p>');
-        editor.commands.setTextSelection(7);
+    test.each([
+        ['at the start of a paragraph', '<p>Before</p>', 1, 1],
+        ['at the end of the doc', '<p>Before</p>', 7, 7],
+        ['in an empty paragraph', '<p></p>', 1, 1],
+        ['over selected text, which it replaces', '<p>Before</p>', 2, 5],
+    ])('%s it selects the new one, a paragraph after it', (_where, html, from, to) => {
+        const editor = mount(html);
+        editor.commands.setTextSelection({ from, to });
         editor.commands.insertTableOfContents();
-        expect(blockTypes(editor.state.doc)).toEqual(['paragraph', 'tableOfContents', 'paragraph']);
-        expect(editor.state.selection.from).toBe(10);
+        expect(selectedNode(editor)).toBe('tableOfContents');
+        expect(blockTypes(editor.state.doc).at(-1)).toBe('paragraph');
         editor.destroy();
     });
 
@@ -340,6 +361,18 @@ describe('updateTableOfContents', () => {
         editor.commands.setTextSelection(2);
         expect(editor.commands.updateTableOfContents({ levels: 5 })).toBe(false);
         expect(editor.state.doc.child(0).attrs['levels']).toBe(3);
+        editor.destroy();
+    });
+
+    test('refuses with another node selected', () => {
+        const editor = mount({
+            type: 'doc',
+            content: [{ type: 'tableOfContents' }, { type: 'horizontalRule' }, { type: 'paragraph' }],
+        });
+        editor.commands.setNodeSelection(1);
+        const before = editor.getJSON();
+        expect(editor.commands.updateTableOfContents({ levels: 5 })).toBe(false);
+        expect(editor.getJSON()).toEqual(before);
         editor.destroy();
     });
 });

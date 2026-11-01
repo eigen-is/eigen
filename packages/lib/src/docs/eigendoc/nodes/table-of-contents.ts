@@ -5,13 +5,12 @@
 // between the body's blocks only, and a properties panel sets the selected one's attributes.
 
 import type { CommandProps } from '@tiptap/core';
-import { canInsertNode, mergeAttributes, Node } from '@tiptap/core';
+import { canInsertNode, getChangedRanges, mergeAttributes, Node } from '@tiptap/core';
 import type { EditorState } from '@tiptap/pm/state';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { EIGEN_FONT_NAMES, readFontSize } from '../../../constants/fonts';
 import { isRecord } from '../../../core/guards';
 import { MAX_HEADING_LEVEL } from '../heading';
-import { caretAfterInsertedBlock } from './page-break';
 
 // The look of one level's entries. A fact left out draws as the body text: a bundled font's name, a size in pt, and
 // bold and italic.
@@ -191,14 +190,26 @@ export const TableOfContentsNode = Node.create({
 
     addCommands() {
         return {
-            // As a page break goes in, but only where canInsertTableOfContents allows.
+            // Only where canInsertTableOfContents allows, and the new one selected, so its panel opens. The insert may
+            // split the caret's paragraph or replace it, so the new one is found in the range the insert wrote.
             insertTableOfContents:
                 () =>
                 ({ chain, state }: CommandProps) => {
                     if (!canInsertTableOfContents(state)) return false;
                     return chain()
                         .insertContent({ type: this.name })
-                        .command(caretAfterInsertedBlock)
+                        .command(({ tr }) => {
+                            let inserted = -1;
+                            for (const { newRange } of getChangedRanges(tr)) {
+                                tr.doc.nodesBetween(newRange.from, newRange.to, (node, pos) => {
+                                    if (node.type.name === this.name) inserted = pos;
+                                    return inserted < 0;
+                                });
+                            }
+                            if (inserted < 0) return false;
+                            tr.setSelection(NodeSelection.create(tr.doc, inserted));
+                            return true;
+                        })
                         .scrollIntoView()
                         .run();
                 },
