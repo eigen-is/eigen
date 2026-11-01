@@ -39,9 +39,9 @@ The editor shows your document as one long page, so its table of contents never 
 
 | Format | PDF and print | Word file | Web page |
 |---|---|---|---|
-| **Plain text** | Page numbers at the right edge | Page numbers at the right edge | Headings as links, no page numbers |
-| **Dotted** | Dots, then page numbers | Dots, then page numbers | Headings as links, no page numbers |
-| **Links** | Underlined links, no page numbers | Headings as links, no page numbers | Underlined links, no page numbers |
+| **Plain text** | Page numbers at the right edge | Page numbers at the right edge | Headings, with no page numbers; a line underlines when the pointer is on it |
+| **Dotted** | Dots, then page numbers | Dots, then page numbers | Headings, with no page numbers; a line underlines when the pointer is on it |
+| **Links** | Underlined links, no page numbers | Headings, no page numbers; they jump to the heading but are not coloured | Underlined links, no page numbers |
 
 In the Word file, the page numbers fill in when Word updates the table of contents. The fonts, sizes, bold, and italic you chose show in the PDF, the Word file, and the web page too.
 

@@ -6,7 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
-- **Table of contents options in Docs** — on a computer, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files keep them both ways
+- **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
 
 ### Changed
 
@@ -18,6 +18,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
+- **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 
 ## [0.4.1] - 2026-10-28
