@@ -18,6 +18,12 @@ from fontTools.colorLib.builder import buildCOLR, buildCPAL
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
+# Every slice file holds the space and the no-break space where its font has them, though only a Latin range declares
+# them. Pango keeps a space between two Chinese words in the font of those words. Without a glyph for it there, the PDF
+# printed a missing glyph half an em wide, and the space looked doubled. Only the file holds them: a declared space
+# would make a canvas that loads the font of a space fetch every slice.
+SPACES = (0x20, 0xA0)
+
 
 def cmap(path):
     print(json.dumps(sorted(TTFont(path).getBestCmap())))
@@ -41,8 +47,9 @@ def cut(job):
     options.layout_features = job["features"]
     options.flavor = "woff2"
     font = subset.load_font(job["font"], options)
+    cmap = font.getBestCmap()
     subsetter = subset.Subsetter(options)
-    subsetter.populate(unicodes=job["codePoints"])
+    subsetter.populate(unicodes=job["codePoints"] + [space for space in SPACES if space in cmap])
     subsetter.subset(font)
     if job["colorForeground"]:
         glyphs = [glyph for glyph in font.getGlyphOrder() if glyph != ".notdef"]
