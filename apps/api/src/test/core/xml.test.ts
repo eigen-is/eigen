@@ -330,16 +330,22 @@ describe('parseXml namespaces', () => {
 
     test('undoing a declaration costs the declaration, not the bindings in scope, in parse and serialize', () => {
         // Against the same body without the root's bindings, so an undo that pays per binding in scope shows as a
-        // multiple rather than as a clock this machine may or may not beat.
+        // multiple rather than as a clock this machine may or may not beat. Such an undo costs thousands of times more,
+        // and the two run here at about the same speed. The two sides take turns and each keeps its fastest run, so a
+        // pause from the collector or another process that slows one run fails nothing.
         const timed = (declarations: string): number => {
             const body = `<w><r ${declarations}>${'<b xmlns:q="urn:q"/>'.repeat(40_000)}</r></w>`;
             const start = performance.now();
             expect(serializeXmlChildren(parsed(body)).length).toBeLessThan(2 * body.length);
             return performance.now() - start;
         };
-        const base = timed('');
         const declarations = Array.from({ length: 10_000 }, (_, i) => `xmlns:p${i}="urn:${i}"`).join(' ');
-        expect(timed(declarations) / base).toBeLessThan(5);
+        let [base, declared] = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+        for (let run = 0; run < 5; run++) {
+            base = Math.min(base, timed(''));
+            declared = Math.min(declared, timed(declarations));
+        }
+        expect(declared / base).toBeLessThan(5);
     });
 
     test('resolves at the deepest nesting Bun reads, every level declaring a prefix', () => {
