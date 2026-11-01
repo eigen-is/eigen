@@ -1,6 +1,6 @@
 // nullCellRender/cellRender draw a single cell: background, indicators,
 // checkbox, data bar, text and grid lines. Text layout itself lives in
-// modules/text.ts.
+// getCellTextInfo.
 
 // One red for both attention marks: the invalid-value triangle, and the comment
 // triangle's fallback when its card carries no color of its own.
@@ -104,9 +104,9 @@ function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect
     renderCtx.restore();
 }
 
-// A cell adds its bottom grid line, and its right one unless spilled text hides it, to the pass's grid
-// path, which drawMain strokes once. Both lie on the cell's own last pixel. The right line stops one pixel
-// above the next row, so it leaves no stub where the cell below draws no right line.
+// A cell adds its grid lines to the pass's grid path, which drawMain strokes once. Spilled text hides the
+// right line. Both lines lie on the cell's own last pixel. The right line stops one pixel above the next
+// row, so it leaves no stub where the cell below draws no right line.
 function addGridLines(
     pass: RenderPass,
     startY: number,
@@ -374,10 +374,7 @@ export function cellRender(
             renderCtx.fillStyle = '#ff0000';
         }
 
-        cellTextRender(textInfo, renderCtx, {
-            pos_x,
-            pos_y,
-        });
+        cellTextRender(textInfo, renderCtx, { pos_x, pos_y, origin: pass.origin });
 
         renderCtx.restore();
     }

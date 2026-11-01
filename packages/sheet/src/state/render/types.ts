@@ -32,6 +32,8 @@ export type RenderPass = {
     offsetTop: number;
     scrollWidth: number;
     scrollHeight: number;
+    // Where the sheet's top-left corner falls on the canvas.
+    origin: { x: number; y: number };
     drawWidth: number;
     drawHeight: number;
     rowStart: number;

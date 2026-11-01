@@ -7,7 +7,7 @@
 Measured on 2026-11-01 in a real Chrome on Reinder's dev drive (`test.eigensheets`, the Production Planning tab, with frozen panes). The viewport was 1681 × 748 at DPR 2, scrolled 15 px per frame from a `requestAnimationFrame` loop.
 
 - Idle, Chrome runs `requestAnimationFrame` every 8.3 ms, so at 120 Hz. Safari caps it at 60 by default, so there the canvas runs at 60 whatever we do.
-- One draw (`drawSheet` in `components/Sheet/index.tsx`) took 8.8 ms at the median and 28 ms at worst. While scrolling, 44 % of frames missed, for about 82 fps.
+- One draw of the whole grid took 8.8 ms at the median and 28 ms at worst. While scrolling, 44 % of frames missed, for about 82 fps.
 - A draw made about 4,900 `stroke()` calls, 2,300 `fillRect`, 430 `fillText` and 610 save and restore pairs. The canvas calls were about a quarter of the draw time. The rest is our own JS in the passes.
 
 Everything that moves with the grid moves at the main thread's rate. The canvas sits outside the scroller and redraws from the scroll bus (`globalCache.notifyScrollListeners`). The overlays and headers translate from the same bus. Only the scrollbar and the invisible spacer scroll on the compositor.
@@ -16,7 +16,7 @@ Everything that moves with the grid moves at the main thread's rate. The canvas 
 
 Cheap, and it helps every path. Take the low-hanging fruit only: fewer canvas state changes and path flushes, and no work per cell that could be done once per draw. No caches that need invalidating. A draw under about 6 ms holds 120 Hz at this size. A bigger window, a zoom-out or a denser sheet can push it back over.
 
-Done on branch `sheets-120fps`, in two steps. A CPU profile of a scroll led to both.
+Done, in two steps. A CPU profile of a scroll led to both.
 
 - **The text measure cache.** `getMeasureText` was a fifth of a scroll frame. It read `renderCtx.font` back on every call, and the browser rebuilds the font string on each read, about 1.8 µs. It also stored a rich-text run under another spelling of the font than it looked it up by, so those runs never hit the cache. And the key left out the text baseline, so a number first measured under another baseline sat a few pixels too high. That is why some numbers in a row did not line up, and why two identical runs could draw different pixels. Now the key is the value, the font and the baseline, and the plain-text callers pass the font they just set.
 - **The grid lines as one path.** Each cell stroked its own right and bottom line, about 4,900 strokes a draw. They are now one `Path2D` per pass, stroked once. The grid color is 10 % black, so a corner stroked twice showed as a darker dot at every crossing; the grid is now even.
@@ -41,14 +41,16 @@ A redraw from a scroll copies the canvas onto itself at the scroll delta (`drawI
 
 It needs to know that a redraw comes from a scroll alone and that nothing else changed since the last frame. A context change, a resize or a delta that is not a whole device pixel paints in full. Each frozen pane shifts on its own free axes, or a frozen sheet just paints in full at first.
 
-Done on branch `sheets-120fps`, frozen panes included (`state/render/frame.ts`, [RENDERING.md](../packages/sheet/RENDERING.md)). The frame is a list of layers in paint order: the panes of cells, the headers, then the freeze lines. Each pane of cells is now clipped to its own rect, so the panes paint apart and each one can move on its own axes. A frozen pane's spilled text or merge now stops at the freeze line, as it does in Excel and Google Sheets.
+Done, frozen panes included (`state/render/frame.ts`, [RENDERING.md](../packages/sheet/RENDERING.md)). The frame is a list of layers in paint order: the panes of cells, the headers, then the freeze lines. Each pane of cells is now clipped to its own rect, so the panes paint apart and each one can move on its own axes. A frozen pane's spilled text or merge now stops at the freeze line, as it does in Excel and Google Sheets.
 
 Two things the work turned up:
 
 - **`forEachInRect` counted the border map on every call.** It chose between walking the rect and walking the map by counting the map with `for...in`, which collects every key of a large map before the first step. One full draw called it a few times; a scroll frame of strips calls it a dozen, and it took two thirds of the frame. A rect up to 100,000 cells is now walked cell by cell, so the canvas always walks it, in one order.
+- **At a fractional pixel ratio two panes share a pixel.** At 125 % or 150 % display scaling, where a pane meets its neighbour falls inside a device pixel, so both panes held that pixel and each copied it, which moved it at twice the scroll's speed. A pane now copies only the device pixels it covers whole and repaints the shared one. `planScroll` holds the geometry, and a test checks at four pixel ratios that no pixel is copied twice. The pixel gate ran at DPR 2 only, which is why it did not catch this.
+- **Half-pixel scrolls.** At DPR 2 a scroll can move by half a CSS pixel. The column letters and the strikethrough and underline were rounded to the canvas's pixels, so a moved copy and a fresh repaint could disagree by a pixel. They now round to the sheet's pixels, which gives the same picture at a whole-pixel scroll.
 - **A clip changes antialiasing.** Skia antialiases a glyph or a rounded stroke that a clip cuts a shade differently at the cut than when it draws it whole. So a repaint under a clip is not byte-identical to a whole frame: an edge pixel of a letter, a list chevron or a filter funnel can come out off by up to about 90 of 255, a few pixels at most, until the next whole frame, which any edit or resize draws. Painting the repaint on a scratch canvas and copying it over was tried and was worse: the copy back shifted large areas by one or two shades.
 
-The pixel gate: a whole frame, one scroll step, then a whole frame at the same place, compared pixel by pixel, from four start positions and six steps on five tabs. Every step matches within 32 of 255; the 1 to 6 pixels per run beyond that in longer runs are the clip cuts above.
+The pixel gate, at DPR 2: a whole frame, one scroll step, then a whole frame at the same place, compared pixel by pixel, from four start positions and six steps on five tabs. Every step matches within 32 of 255; the 1 to 6 pixels per run beyond that in longer runs are the clip cuts above.
 
 Draw time per scroll frame, median, in Reinder's Chrome at 120 Hz:
 

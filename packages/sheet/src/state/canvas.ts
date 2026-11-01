@@ -1,7 +1,7 @@
-// Canvas renderer facade. The actual drawing lives in state/render/: drawMain
-// orchestrates the per-pass phases (collect cells -> render cells -> reprocess
-// merges -> grid lines -> borders -> edge clear -> filter UI); freeze regions
-// invoke it once per region with their own offsets.
+// Canvas renderer facade. The drawing itself lives in the render passes: drawMain
+// runs them over one rect of one pane (collect cells -> render cells -> reprocess
+// merges -> grid lines -> borders -> edge clear -> filter UI), and each pane or
+// part of one is its own call with its own offsets.
 
 import type { Context } from './context';
 import { getFlowdata } from './context';
@@ -31,13 +31,13 @@ export class Canvas {
         this.sheetCtx = ctx;
     }
 
-    public drawRowHeader(scrollHeight: number, drawHeight?: number, offsetTop?: number) {
+    public drawRowHeader(scrollHeight: number, drawHeight: number, offsetTop: number) {
         const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
         drawRowHeader(this.sheetCtx, renderCtx, scrollHeight, drawHeight, offsetTop);
     }
 
-    public drawColumnHeader(scrollWidth: number, drawWidth?: number, offsetLeft?: number) {
+    public drawColumnHeader(scrollWidth: number, drawWidth: number, offsetLeft: number) {
         const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
         drawColumnHeader(this.sheetCtx, renderCtx, scrollWidth, drawWidth, offsetLeft);
@@ -50,19 +50,13 @@ export class Canvas {
         drawHeight,
         offsetLeft,
         offsetTop,
-        columnOffsetCell,
-        rowOffsetCell,
-        clear,
     }: {
         scrollWidth: number;
         scrollHeight: number;
-        drawWidth?: number;
-        drawHeight?: number;
-        offsetLeft?: number;
-        offsetTop?: number;
-        columnOffsetCell?: number;
-        rowOffsetCell?: number;
-        clear?: boolean;
+        drawWidth: number;
+        drawHeight: number;
+        offsetLeft: number;
+        offsetTop: number;
     }) {
         const flowdata = getFlowdata(this.sheetCtx);
         if (flowdata == null) {
@@ -71,34 +65,22 @@ export class Canvas {
 
         clearTimeout(renderCacheClearTimeout);
 
-        drawWidth ??= this.sheetCtx.tableContentSize[0];
-        drawHeight ??= this.sheetCtx.tableContentSize[1];
-        offsetLeft ??= this.sheetCtx.rowHeaderWidth;
-        offsetTop ??= this.sheetCtx.columnHeaderHeight;
-        columnOffsetCell ??= 0;
-        rowOffsetCell ??= 0;
-
         const renderCtx = this.canvasElement.getContext('2d');
         if (!renderCtx) return;
 
         renderCtx.save();
         renderCtx.scale(this.sheetCtx.devicePixelRatio, this.sheetCtx.devicePixelRatio);
-        if (clear) {
-            renderCtx.clearRect(0, 0, this.sheetCtx.tableContentSize[0], this.sheetCtx.tableContentSize[1]);
-        }
 
         // Table render area: start/end row/column indices
         const { start: rowStart, end: rowEnd } = mainVisibleRange(
             this.sheetCtx.visibledatarow,
             scrollHeight,
             drawHeight,
-            rowOffsetCell,
         );
         const { start: colStart, end: colEnd } = mainVisibleRange(
             this.sheetCtx.visibledatacolumn,
             scrollWidth,
             drawWidth,
-            columnOffsetCell,
         );
 
         // Table render area: start/end coordinates
@@ -121,6 +103,7 @@ export class Canvas {
             offsetTop,
             scrollWidth,
             scrollHeight,
+            origin: { x: offsetLeft - scrollWidth, y: offsetTop - scrollHeight },
             drawWidth,
             drawHeight,
             rowStart,

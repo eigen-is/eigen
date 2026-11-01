@@ -12,19 +12,17 @@ export function drawRowHeader(
     sheetCtx: Context,
     renderCtx: CanvasRenderingContext2D,
     scrollHeight: number,
-    drawHeight?: number,
-    offsetTop?: number,
+    drawHeight: number,
+    offsetTop: number,
 ) {
-    drawHeight ??= sheetCtx.tableContentSize[1];
-    offsetTop ??= sheetCtx.columnHeaderHeight;
-
     renderCtx.save();
     renderCtx.scale(sheetCtx.devicePixelRatio, sheetCtx.devicePixelRatio);
 
     renderCtx.clearRect(0, offsetTop, sheetCtx.rowHeaderWidth - 1, drawHeight);
 
     const colors = canvasColors(renderCtx.canvas);
-    renderCtx.font = defaultFont();
+    const font = defaultFont();
+    renderCtx.font = font;
     renderCtx.textBaseline = 'middle';
 
     const { start: rowStart, end: rowEnd } = headerVisibleRange(sheetCtx.visibledatarow, scrollHeight, drawHeight);
@@ -53,7 +51,7 @@ export function drawRowHeader(
             renderCtx.fillStyle = colors.headerText;
 
             // Row header sequence number
-            const textMetrics = getMeasureText(r + 1, renderCtx);
+            const textMetrics = getMeasureText(r + 1, renderCtx, font);
 
             const horizonAlignPos = (sheetCtx.rowHeaderWidth - textMetrics.width) / 2;
             const verticalAlignPos = startY + (endY - startY) / 2 + offsetTop;
@@ -106,18 +104,16 @@ export function drawColumnHeader(
     sheetCtx: Context,
     renderCtx: CanvasRenderingContext2D,
     scrollWidth: number,
-    drawWidth?: number,
-    offsetLeft?: number,
+    drawWidth: number,
+    offsetLeft: number,
 ) {
-    drawWidth ??= sheetCtx.tableContentSize[0];
-    offsetLeft ??= sheetCtx.rowHeaderWidth;
-
     renderCtx.save();
     renderCtx.scale(sheetCtx.devicePixelRatio, sheetCtx.devicePixelRatio);
     renderCtx.clearRect(offsetLeft, 0, drawWidth, sheetCtx.columnHeaderHeight - 1);
 
     const colors = canvasColors(renderCtx.canvas);
-    renderCtx.font = defaultFont();
+    const font = defaultFont();
+    renderCtx.font = font;
     renderCtx.textBaseline = 'middle';
 
     const { start: colStart, end: colEnd } = headerVisibleRange(sheetCtx.visibledatacolumn, scrollWidth, drawWidth);
@@ -140,9 +136,12 @@ export function drawColumnHeader(
             renderCtx.fillStyle = colors.headerText;
 
             // Column header sequence number
-            const textMetrics = getMeasureText(columnLabel, renderCtx);
+            const textMetrics = getMeasureText(columnLabel, renderCtx, font);
 
-            const horizonAlignPos = Math.round(startX + (endX - startX) / 2 + offsetLeft - textMetrics.width / 2);
+            // Rounded on the sheet, not the canvas, so the letter moves with its column when a scroll moves
+            // by half a pixel.
+            const sheetLeft = startX + scrollWidth + (endX - startX) / 2 - textMetrics.width / 2;
+            const horizonAlignPos = Math.round(sheetLeft) - scrollWidth + offsetLeft;
             const verticalAlignPos = Math.round(sheetCtx.columnHeaderHeight / 2);
 
             renderCtx.fillText(columnLabel, horizonAlignPos, verticalAlignPos);

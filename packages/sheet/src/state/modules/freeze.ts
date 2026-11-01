@@ -113,7 +113,7 @@ export type OverlayRegionSpec = {
 };
 
 // Derive the overlay pane viewports from the freeze config, mirroring the
-// canvas pane draw (drawFrozenBoth & friends): a band shows content
+// canvas pane draw (frameLayers): a band shows content
 // [scroll, pos) pinned at the viewport edge, main keeps the plain
 // content = viewport + scroll mapping. Rects only change with the freeze
 // config or row/col metrics — never per scroll tick.

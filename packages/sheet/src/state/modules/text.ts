@@ -209,7 +209,7 @@ export function getMeasureText(
         Number.isNaN(metrics.actualBoundingBoxAscent)
     ) {
         const commonWord = hasChinaword(String(value)) ? '田' : 'M';
-        const oneLineTextHeight = getTextSize(commonWord, renderCtx.font)[1] * 0.8;
+        const oneLineTextHeight = getTextSize(commonWord, font)[1] * 0.8;
         if (baseline === 'top') {
             metrics.actualBoundingBoxDescent = oneLineTextHeight;
             metrics.actualBoundingBoxAscent = 0;
@@ -224,14 +224,9 @@ export function getMeasureText(
 
     // Text without a descender gets the descent of letters like g and y, so every line of one font sits alike.
     if (baseline === 'alphabetic') {
-        const descText = 'gjpqy';
-        const matchText = 'abcdABCD';
-        const descTextMeasure = measureTextCache[`${descText}_${font}_${baseline}`] ?? renderCtx.measureText(descText);
-        const matchTextMeasure =
-            measureTextCache[`${matchText}_${font}_${baseline}`] ?? renderCtx.measureText(matchText);
-
-        if (metrics.actualBoundingBoxDescent <= matchTextMeasure.actualBoundingBoxDescent) {
-            metrics.actualBoundingBoxDescent = descTextMeasure.actualBoundingBoxDescent || 0;
+        const noDescender = renderCtx.measureText('abcdABCD');
+        if (metrics.actualBoundingBoxDescent <= noDescender.actualBoundingBoxDescent) {
+            metrics.actualBoundingBoxDescent = renderCtx.measureText('gjpqy').actualBoundingBoxDescent || 0;
         }
     }
 

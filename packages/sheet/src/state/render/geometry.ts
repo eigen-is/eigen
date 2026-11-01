@@ -13,23 +13,21 @@ export const HALF_PIXEL = 0.5;
 // preserve the exact values.
 export const BORDER_FIX = [-1, 0, 0, -1] as const;
 
-// Index range of cells touching the viewport, shifted by the freeze-region
-// cell offset; end clamps to the last index.
+// Index range of cells touching the viewport; end clamps to the last index.
 export function mainVisibleRange(
     positions: number[],
     scrollPos: number,
     drawSize: number,
-    offsetCell: number,
 ): { start: number; end: number } {
-    const start = sortedIndex(positions, scrollPos) + offsetCell;
-    let end = sortedIndex(positions, scrollPos + drawSize) + offsetCell;
+    const start = sortedIndex(positions, scrollPos);
+    let end = sortedIndex(positions, scrollPos + drawSize);
     if (end >= positions.length) {
         end = positions.length - 1;
     }
     return { start, end };
 }
 
-// Header variant: no freeze offset, and the inherited behavior keeps end at
+// Header variant: the inherited behavior keeps end at
 // positions.length when the viewport extends past the last entry (the loop's
 // final iteration reads an undefined edge and draws nothing).
 export function headerVisibleRange(

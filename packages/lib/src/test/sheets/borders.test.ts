@@ -4,6 +4,7 @@ import {
     borderInfoExtent,
     borderSidesToCss,
     cloneSides,
+    forEachInRect,
     mergedBorderSides,
     mergeEdgeSides,
     parseCellKey,
@@ -73,6 +74,27 @@ describe('mergedBorderSides', () => {
         const merge = { '0_0': { r: 0, c: 0, rs: 1_000_000, cs: 1 } };
         const borderInfo = { '5_5': { l: SIDE } };
         expect(mergedBorderSides(borderInfo, merge, [5, 5, 5, 5])).toEqual({ '5_5': { l: SIDE } });
+    });
+});
+
+// The canvas asks for the borders of the cells it paints on every frame, so a rect of its size is walked cell by
+// cell, in one order, row by row, however the map is built. Only a larger rect walks a smaller map instead.
+describe('forEachInRect', () => {
+    const SIDES = { l: SIDE };
+    const visited = (map: Record<string, typeof SIDES>, rect: [number, number, number, number]) => {
+        const keys: string[] = [];
+        forEachInRect(map, ...rect, (key) => keys.push(key));
+        return keys;
+    };
+
+    test('a canvas-sized rect visits row by row, whatever order the map holds', () => {
+        const map = { '3_0': SIDES, '0_2': SIDES, '1_1': SIDES, '9_9': SIDES };
+        expect(visited(map, [0, 3, 0, 3])).toEqual(['0_2', '1_1', '3_0']);
+    });
+
+    test('a rect larger than the walk limit visits only the map entries inside it', () => {
+        const map = { '5_1': SIDES, '2_0': SIDES, '2_500': SIDES };
+        expect(visited(map, [0, 999_999, 0, 2]).sort()).toEqual(['2_0', '5_1']);
     });
 });
 

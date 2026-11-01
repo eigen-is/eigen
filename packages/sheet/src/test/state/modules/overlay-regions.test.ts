@@ -3,7 +3,7 @@
 // fix*StyleOverflowInFreeze clamps: up to four viewport rects derived from the
 // freeze config, each translating from the scroll bus on its free axes only
 // (fixedLeft/fixedTop = null), while a frozen axis pins to the freeze-time
-// scroll. Mirrors the canvas pane draw (drawFrozenBoth & friends).
+// scroll. Mirrors the canvas pane draw (frameLayers).
 
 import { describe, expect, it } from 'bun:test';
 import {
