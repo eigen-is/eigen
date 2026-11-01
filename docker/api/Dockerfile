@@ -49,7 +49,13 @@ COPY packages/ui/src/assets/fonts/inter/Inter-Regular.ttf \
     packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Bold-renamed.ttf \
     packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.ttf \
     /usr/share/fonts/truetype/eigen/
-RUN fc-cache /usr/share/fonts/truetype/eigen
+# Chinese and Korean draw in Noto's slices, as TrueType the venv's fontTools writes from the WOFF2s: sharp's own libvips
+# has no brotli, so its FreeType reads no WOFF2 and draws boxes. A bind mount keeps the WOFF2s off this layer.
+RUN --mount=type=bind,source=packages/ui/src/assets/fonts,target=/tmp/fonts \
+    /opt/weasyprint/bin/python3 -I -c 'import pathlib, sys; from fontTools.ttLib.woff2 import decompress; \
+        [decompress(f, f"/usr/share/fonts/truetype/eigen/{pathlib.Path(f).stem}.ttf") for f in sys.argv[1:]]' \
+        /tmp/fonts/noto-sans-sc/*.woff2 /tmp/fonts/noto-sans-kr/*.woff2 \
+    && fc-cache /usr/share/fonts/truetype/eigen
 
 COPY --from=manifests /out/ ./
 
