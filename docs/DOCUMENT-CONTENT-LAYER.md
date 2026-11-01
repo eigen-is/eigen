@@ -15,7 +15,7 @@ Three details surprise people: capture leaves the database open, because a live 
 | Type | Reader | Returns | Writer |
 |---|---|---|---|
 | `.eigendoc` | `readEigendocFromDoc`, `readEigendocPage`, `readEigendocStyle` (`doc.ts`) | ProseMirror `JSONContent`, the `PageSetup`, the `NormalStyle` | `commitEigendocImport` |
-| `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshotToYjs`, `appendSheetsToYjs` |
+| `.eigensheets` | `readSheetsFromDoc` (`sheets.ts`) | `{ sheets, recalcError }` | `writeSheetsSnapshot`, `appendSheetsToYjs` |
 | `.eigenslides` | `readVectorFromDoc` (`packages/lib/src/vector/read-vector.ts`) | `VectorScene` | `replaceSlidesInYjs`, `insertSlidesIntoYjs` (`slides.ts`), for the pptx import |
 | `.eigenvector` | `readVectorFromDoc` | `VectorScene` | none |
 | `.eigenstickies` | `readStickiesContent` (`stickies.ts`, main thread) | card and column text | none |
@@ -47,7 +47,7 @@ Only the export read recalcs, and only a workbook nobody computed ([SHEETS.md §
 
 ## A replace doesn't merge; an insert arrives as a peer's edit
 
-Each type has a replacing writer. `writeSheetsSnapshotToYjs` sets `state.snapshot`, stamps a fresh base (the compaction's swap names the base it folded) and clears `ops` in one transaction. `commitEigendocImport` clears the `default` fragment and the header and footer fragments, applies a prepared Yjs update and sets the page and Normal keys, in one transaction; clearing first is what makes an import a replacement ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)). The import's transform builds that update itself (`apps/api/src/lib/import/doc/transform.ts`). `replaceSlidesInYjs` clears the deck's frames and elements and writes the file's, with its `meta`. A replace hands its writer what the transform produced, so the main thread never parses the file ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-transform-succeeds)).
+Each type has a replacing writer. `writeSheetsSnapshot` sets `state.snapshot`, stamps a fresh base (the compaction's swap names the base it folded) and clears `ops` in one transaction. `commitEigendocImport` clears the `default` fragment and the header and footer fragments, applies a prepared Yjs update and sets the page and Normal keys, in one transaction; clearing first is what makes an import a replacement ([EXPORT.md](EXPORT.md#a-docx-import-replaces-the-document)). The import's transform builds that update itself (`apps/api/src/lib/import/doc/transform.ts`). `replaceSlidesInYjs` clears the deck's frames and elements and writes the file's, with its `meta`. A replace hands its writer what the transform produced, so the main thread never parses the file ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-transform-succeeds)).
 
 They write into the live `CollabDocument`, so the change persists and reaches connected editors like any edit, and a sheet editor remounts on the new snapshot. But nothing merges. The sheet ops a peer made since the last compaction are cleared with the rest, and a peer's unsynced typing inside a deleted paragraph has nowhere to land. So an Import… that replaces saves a version first ([EXPORT.md](EXPORT.md#a-replace-saves-a-version-first)), and `Drive` still has no check for an open session ([ROADMAP.md](ROADMAP.md)). `convertToDocument` writes into a document it has just created, so no one can be editing it.
 

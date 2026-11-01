@@ -159,14 +159,10 @@ const peerSends = (ops: Op[]) => peer.getArray<Op[]>('ops').push([ops]);
 // The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
 // the folded batches deleted, all in one transaction.
 function compact() {
-    const ops = peer.getArray<Op[]>('ops');
-    const batches = ops.toArray();
+    const batches = peer.getArray<Op[]>('ops').toArray();
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(peer) ?? '');
     const json = encodeSheetsSnapshot(replaySheetsOps(stored, batches), { computed: true });
-    peer.transact(() => {
-        writeSheetsSnapshot(peer, json, readSheetsBase(peer)?.id ?? null);
-        ops.delete(0, batches.length);
-    });
+    writeSheetsSnapshot(peer, json, readSheetsBase(peer)?.id ?? null);
 }
 
 // The tab is back online: it takes what the server holds that it lacks in one update, and sends what it wrote.
@@ -190,7 +186,6 @@ test("a peer's batch that arrives while the grid remounts on a new snapshot is i
     await act(async () => {
         peer.transact(() => {
             writeSheetsSnapshot(peer, encodeSheetsSnapshot([sheet({ '1_1': 'flushed' })], { computed: true }), null);
-            peer.getArray('ops').delete(0, peer.getArray('ops').length);
         });
         peerSends(typed(0, 0, 'late'));
     });

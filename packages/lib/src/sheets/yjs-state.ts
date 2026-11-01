@@ -34,10 +34,14 @@ export function readSheetsBase(doc: Y.Doc): SheetsBase | null {
 }
 
 // A new snapshot always starts a new base. Only a compaction passes the base it folded; every other writer passes null.
+// The snapshot holds every edit the log held, so the log is emptied in the same transaction. A caller that needs an
+// origin, such as the compaction, wraps the call in a transaction of its own, which this one joins.
 export function writeSheetsSnapshot(doc: Y.Doc, snapshotJson: string, compactedFrom: string | null): void {
     doc.transact(() => {
         sheetsStateMap(doc).set('snapshot', snapshotJson);
         stampSheetsBase(doc, compactedFrom);
+        const ops = sheetsOpLog(doc);
+        ops.delete(0, ops.length);
     });
 }
 

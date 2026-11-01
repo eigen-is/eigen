@@ -6,6 +6,7 @@
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
+import { readSheetsBase, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_STICKIES, EIGEN_DOC_TYPE_INFO, isCollabType } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
@@ -16,7 +17,7 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import { COMMENT_INDEX_DB_CONFIG } from '../chat/comment-db-config';
 import { ApiError } from '../core/errors';
-import { restampRestoredSheetsBase, stampMissingSheetsBase, writeSheetsSnapshotToYjs } from '../document/sheets';
+import { restampRestoredSheetsBase, stampMissingSheetsBase } from '../document/sheets';
 import { compactSheets, sheetsNeedCompaction } from '../document/sheets-compaction';
 import type { Drive } from '../drive';
 import type { User } from '../user';
@@ -362,7 +363,10 @@ export class CollabDocument {
                 // Nothing changed, so the op log holds exactly the batches the snapshot folded, and the swap drops them.
                 // A version that failed stops the swap, and the document closes with its log, as after a failed run.
                 if (saved) {
-                    writeSheetsSnapshotToYjs(this.doc, snapshot, COMPACTION_ORIGIN);
+                    this.doc.transact(
+                        () => writeSheetsSnapshot(this.doc, snapshot, readSheetsBase(this.doc)?.id ?? null),
+                        COMPACTION_ORIGIN,
+                    );
                     // The version is the session's only one. A final version of the folded state would be newer, so
                     // retention would keep it and drop the copy of the log.
                     await this.drive.closeCollabDocument(this.path.mountId, this.path.id, { skipFinalSnapshot: true });

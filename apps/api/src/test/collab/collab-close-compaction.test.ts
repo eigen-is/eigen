@@ -7,6 +7,7 @@ import {
     readSheetsSnapshotJson,
     sheetsOpLog,
     sheetsStateMap,
+    writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
@@ -14,7 +15,7 @@ import * as Y from 'yjs';
 import { CLOSE_LINGER_MS, CollabDocument } from '../../lib/collab/collab-document';
 import { readYjsStateFromFile } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
-import { compactSheetsSnapshot, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
+import { compactSheetsSnapshot } from '../../lib/document/sheets';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
 import { toTransferableText } from '../../lib/document/transform/protocol';
 import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transform/runner';
@@ -729,7 +730,7 @@ describe('a snapshot writer starts a fresh base', () => {
     test('a version restore stamps a fresh base without compactedFrom, in the same transaction', async () => {
         const created = await home.drive.create(mountId, rootId, 'restore-stamps-base', 'sheets');
         const collab = await home.drive.getCollabDocument(mountId, created.id);
-        writeSheetsSnapshotToYjs(collab.doc, encodeSheetsSnapshot(SHEETS, { computed: true }));
+        writeSheetsSnapshot(collab.doc, encodeSheetsSnapshot(SHEETS, { computed: true }), null);
         const saved = readSheetsBase(collab.doc);
         const version = await home.drive.saveVersion(mountId, created.id);
         sheetsOpLog(collab.doc).push([edit(0, 0, 1)]);

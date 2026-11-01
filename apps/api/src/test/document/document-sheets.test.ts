@@ -13,13 +13,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import * as engine from '@workspace/sheet/engine';
 import { normalizeSheetConfig, sheetsNeedRecalc } from '@workspace/sheet/engine';
 import * as Y from 'yjs';
-import {
-    appendSheetsToYjs,
-    compactSheetsSnapshot,
-    readLiveSheets,
-    readSheetsFromDoc,
-    writeSheetsSnapshotToYjs,
-} from '../../lib/document/sheets';
+import { appendSheetsToYjs, compactSheetsSnapshot, readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
 import { getHome } from '../../lib/home/get-home';
 import { importIntoDocument } from '../../lib/import/import-document';
@@ -182,7 +176,7 @@ describe('document/sheets', () => {
         expect(withoutData(result)).toEqual(normalized(sheets));
     });
 
-    test('writeSheetsSnapshotToYjs commits pre-serialized JSON and clears the ops array', async () => {
+    test('writeSheetsSnapshot commits pre-serialized JSON and clears the ops array', async () => {
         // The import path commits the Worker's snapshot bytes without parsing them,
         // so this writer must leave the doc in the same state as the Sheet[] one.
         const sheetsPath = await drivePost<DrivePath>(
@@ -202,7 +196,7 @@ describe('document/sheets', () => {
         const sheets: Sheet[] = [
             { id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [{ r: 0, c: 0, v: { v: 'hi' } }], config: {} },
         ];
-        writeSheetsSnapshotToYjs(collab.doc, encodeSheetsSnapshot(sheets, { computed: false }));
+        writeSheetsSnapshot(collab.doc, encodeSheetsSnapshot(sheets, { computed: false }), null);
 
         expect(collab.doc.getArray('ops').length).toBe(0);
         const { mount, path } = await home.drive.resolveFile(mountId, sheetsPath.id);
@@ -1042,7 +1036,7 @@ describe('document/sheets — the base a snapshot starts', () => {
 
         let updates = 0;
         doc.on('update', () => updates++);
-        writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot([], { computed: true }));
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot([], { computed: true }), null);
 
         expect(updates).toBe(1);
         const base = readSheetsBase(doc);
@@ -1053,7 +1047,7 @@ describe('document/sheets — the base a snapshot starts', () => {
 
     test('appending tabs leaves the base alone', () => {
         const doc = new Y.Doc();
-        writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }));
+        writeSheetsSnapshot(doc, encodeSheetsSnapshot(sheets(), { computed: true }), null);
         const base = readSheetsBase(doc);
         appendSheetsToYjs(doc, encodeSheetsSnapshot(sheets(), { computed: true }), readLiveSheets(doc));
         expect(readSheetsBase(doc)).toEqual(base);
