@@ -9,7 +9,7 @@ import { REDO_ALT_HOTKEY, REDO_HOTKEY, UNDO_HOTKEY } from '@workspace/lib/consta
 import { cloneDeep, isEmpty, isNil } from 'es-toolkit/compat';
 import { cellValue } from '../../engine/format';
 import type { CellMatrix } from '../../engine/types';
-import { hideCRCount } from '..';
+import { moveCountPastHiddenRowCol } from '..';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
@@ -291,7 +291,7 @@ export function handleArrowKey(ctx: Context, e: KeyboardEvent) {
         return;
     }
 
-    const moveCount = hideCRCount(ctx, e.key);
+    const moveCount = moveCountPastHiddenRowCol(ctx, e.key);
     switch (e.key) {
         case 'ArrowUp':
             moveHighlightCell(ctx, 'down', -moveCount, 'rangeOfSelect');

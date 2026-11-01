@@ -14,7 +14,7 @@ import {
     getFormulaHtml,
     handleFormulaInput,
     isAllowEdit,
-    isShowHidenCR,
+    isSelectionOnHiddenRowCol,
     moveHighlightCell,
     rangeHightlightselected,
     updateCell,
@@ -30,14 +30,14 @@ export function FxEditor() {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
-    const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
+    const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
     const recentText = useRef('');
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes — derived helpers are read fresh from `context`
     useEffect(() => {
         // If selected row/column is in hidden state, don't allow editing
-        setIsHidenRC(isShowHidenCR(context));
+        setIsOnHiddenRowCol(isSelectionOnHiddenRowCol(context));
         // An open edit owns the box: the text in it is the user's, and a collaborative update
         // landing mid-keystroke must not overwrite it with the cell's stored content.
         if (context.editingCellPosition.length > 0) return;
@@ -207,14 +207,14 @@ export function FxEditor() {
         if (context.allowEdit === false) {
             return false;
         }
-        if (isHidenRC) {
+        if (isOnHiddenRowCol) {
             return false;
         }
         if (!isAllowEdit(context, context.selections)) {
             return false;
         }
         return true;
-    }, [context.selections, context.sheets, context.currentSheetId, isHidenRC]);
+    }, [context.selections, context.sheets, context.currentSheetId, isOnHiddenRowCol]);
 
     return (
         // eigen-paper: the formula bar reads like the grid — light in dark mode too (globals.css)

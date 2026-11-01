@@ -22,34 +22,34 @@ import { getSheetConfig } from '../context';
 import type { FilterEntry, FormulaCell, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
 
-type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
+type ShiftedFilter = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
 
 // Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
-function shiftFrozenFocus(file: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
-    const { frozen } = file;
+function shiftFrozenFocus(sheet: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
+    const { frozen } = sheet;
     if (!frozen?.range) return;
     const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
     if (!ranged && frozen.type !== 'rangeBoth') return;
     const axis = type === 'row' ? 'row_focus' : 'column_focus';
     const focus = shift(frozen.range[axis]);
-    if (focus !== frozen.range[axis]) file.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
+    if (focus !== frozen.range[axis]) sheet.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
 }
 
-function shiftStateOnlyFieldsForInsert(
+function shiftEditorOnlyFieldsForInsert(
     ctx: Context,
     op: { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom'; id: string },
 ) {
     const { type, index, count, direction } = op;
     const id = op.id || ctx.currentSheetId;
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
+    const sheet = ctx.sheets[sheetIndex];
+    if (!sheet) return;
 
     // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
     const newCalcChain: FormulaCell[] = [];
-    if (file.calcChain != null) {
-        for (const entry of file.calcChain) {
+    if (sheet.calcChain != null) {
+        for (const entry of sheet.calcChain) {
             const calc: FormulaCell = cloneDeep(entry);
             if (type === 'row') {
                 if (direction === 'lefttop' && calc.r >= index) calc.r += count;
@@ -61,296 +61,296 @@ function shiftStateOnlyFieldsForInsert(
             newCalcChain.push(calc);
         }
     }
-    file.calcChain = newCalcChain;
+    sheet.calcChain = newCalcChain;
 
-    const cfg = file.config || {};
-    const { filterRange } = file;
-    const { filter } = file;
-    let newFilterObj: FilterObj | null = null;
+    const config = sheet.config || {};
+    const { filterRange } = sheet;
+    const { filter } = sheet;
+    let shiftedFilter: ShiftedFilter | null = null;
     if (!isEmpty(filterRange) && filterRange != null) {
-        newFilterObj = { filterRange: null, filter: null };
+        shiftedFilter = { filterRange: null, filter: null };
 
-        let f_r1 = filterRange.row[0];
-        let f_r2 = filterRange.row[1];
-        let f_c1 = filterRange.column[0];
-        let f_c2 = filterRange.column[1];
+        let firstRow = filterRange.row[0];
+        let lastRow = filterRange.row[1];
+        let firstColumn = filterRange.column[0];
+        let lastColumn = filterRange.column[1];
 
         if (type === 'row') {
-            if (f_r1 < index) {
-                if (f_r2 === index && direction === 'lefttop') {
-                    f_r2 += count;
-                } else if (f_r2 > index) {
-                    f_r2 += count;
+            if (firstRow < index) {
+                if (lastRow === index && direction === 'lefttop') {
+                    lastRow += count;
+                } else if (lastRow > index) {
+                    lastRow += count;
                 }
-            } else if (f_r1 === index) {
+            } else if (firstRow === index) {
                 if (direction === 'lefttop') {
-                    f_r1 += count;
-                    f_r2 += count;
-                } else if (direction === 'rightbottom' && f_r2 > index) {
-                    f_r2 += count;
+                    firstRow += count;
+                    lastRow += count;
+                } else if (direction === 'rightbottom' && lastRow > index) {
+                    lastRow += count;
                 }
             } else {
-                f_r1 += count;
-                f_r2 += count;
+                firstRow += count;
+                lastRow += count;
             }
 
             if (filter != null) {
                 const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: Record<string, number> = {};
-                    forEach(f_rowhidden, (_v1, nstr) => {
-                        const n = parseFloat(nstr);
+                forEach(filter, (_entry, key) => {
+                    const hiddenRows = filter[key].rowhidden;
+                    const shiftedHiddenRows: Record<string, number> = {};
+                    forEach(hiddenRows, (_v1, rowKey) => {
+                        const n = parseFloat(rowKey);
 
                         if (n < index) {
-                            f_rowhidden_new[n] = 0;
+                            shiftedHiddenRows[n] = 0;
                         } else if (n === index) {
                             if (direction === 'lefttop') {
-                                f_rowhidden_new[n + count] = 0;
+                                shiftedHiddenRows[n + count] = 0;
                             } else if (direction === 'rightbottom') {
-                                f_rowhidden_new[n] = 0;
+                                shiftedHiddenRows[n] = 0;
                             }
                         } else {
-                            f_rowhidden_new[n + count] = 0;
+                            shiftedHiddenRows[n + count] = 0;
                         }
                     });
-                    shifted[k] = cloneDeep(filter[k]);
-                    shifted[k].rowhidden = f_rowhidden_new;
-                    shifted[k].str = f_r1;
-                    shifted[k].edr = f_r2;
+                    shifted[key] = cloneDeep(filter[key]);
+                    shifted[key].rowhidden = shiftedHiddenRows;
+                    shifted[key].str = firstRow;
+                    shifted[key].edr = lastRow;
                 });
-                newFilterObj.filter = shifted;
+                shiftedFilter.filter = shifted;
             }
         } else if (type === 'column') {
-            if (f_c1 < index) {
-                if (f_c2 === index && direction === 'lefttop') {
-                    f_c2 += count;
-                } else if (f_c2 > index) {
-                    f_c2 += count;
+            if (firstColumn < index) {
+                if (lastColumn === index && direction === 'lefttop') {
+                    lastColumn += count;
+                } else if (lastColumn > index) {
+                    lastColumn += count;
                 }
-            } else if (f_c1 === index) {
+            } else if (firstColumn === index) {
                 if (direction === 'lefttop') {
-                    f_c1 += count;
-                    f_c2 += count;
-                } else if (direction === 'rightbottom' && f_c2 > index) {
-                    f_c2 += count;
+                    firstColumn += count;
+                    lastColumn += count;
+                } else if (direction === 'rightbottom' && lastColumn > index) {
+                    lastColumn += count;
                 }
             } else {
-                f_c1 += count;
-                f_c2 += count;
+                firstColumn += count;
+                lastColumn += count;
             }
 
             if (filter != null) {
                 const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    let f_cindex = filter[k].cindex;
+                forEach(filter, (_entry, key) => {
+                    let column = filter[key].cindex;
 
-                    if (f_cindex === index && direction === 'lefttop') {
-                        f_cindex += count;
-                    } else if (f_cindex > index) {
-                        f_cindex += count;
+                    if (column === index && direction === 'lefttop') {
+                        column += count;
+                    } else if (column > index) {
+                        column += count;
                     }
 
-                    shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
-                    shifted[f_cindex - f_c1].cindex = f_cindex;
-                    shifted[f_cindex - f_c1].stc = f_c1;
-                    shifted[f_cindex - f_c1].edc = f_c2;
+                    shifted[column - firstColumn] = cloneDeep(filter[key]);
+                    shifted[column - firstColumn].cindex = column;
+                    shifted[column - firstColumn].stc = firstColumn;
+                    shifted[column - firstColumn].edc = lastColumn;
                 });
-                newFilterObj.filter = shifted;
+                shiftedFilter.filter = shifted;
             }
         }
 
-        newFilterObj.filterRange = { row: [f_r1, f_r2], column: [f_c1, f_c2] };
+        shiftedFilter.filterRange = { row: [firstRow, lastRow], column: [firstColumn, lastColumn] };
     }
 
-    if (newFilterObj != null && newFilterObj.filter != null) {
-        const rowhidden = (cfg.rowhidden ??= {});
-        forEach(newFilterObj.filter, (entry) => {
+    if (shiftedFilter != null && shiftedFilter.filter != null) {
+        const rowhidden = (config.rowhidden ??= {});
+        forEach(shiftedFilter.filter, (entry) => {
             forEach(entry.rowhidden, (_v1, n) => {
                 rowhidden[n] = 0;
             });
         });
     }
 
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter ?? undefined;
-        file.filterRange = newFilterObj.filterRange ?? undefined;
+    if (shiftedFilter != null) {
+        sheet.filter = shiftedFilter.filter ?? undefined;
+        sheet.filterRange = shiftedFilter.filterRange ?? undefined;
     }
 
     const normalizedIndex = direction === 'lefttop' ? index - 1 : index;
-    shiftFrozenFocus(file, type, (focus) => (focus > normalizedIndex ? focus + count : focus));
+    shiftFrozenFocus(sheet, type, (focus) => (focus > normalizedIndex ? focus + count : focus));
 
     // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
-    file.dataVerification = shiftCellKeyedForInsert(file.dataVerification, type, index, count, direction, cloneDeep);
-    file.hyperlink = shiftCellKeyedForInsert(file.hyperlink, type, index, count, direction);
+    sheet.dataVerification = shiftCellKeyedForInsert(sheet.dataVerification, type, index, count, direction, cloneDeep);
+    sheet.hyperlink = shiftCellKeyedForInsert(sheet.hyperlink, type, index, count, direction);
 }
 
-function shiftStateOnlyFieldsForDelete(
+function shiftEditorOnlyFieldsForDelete(
     ctx: Context,
     op: { type: 'row' | 'column'; start: number; end: number; id: string },
 ) {
     const { type, start, end } = op;
     const id = op.id || ctx.currentSheetId;
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
+    const sheet = ctx.sheets[sheetIndex];
+    if (!sheet) return;
 
-    const slen = end - start + 1;
+    const deletedCount = end - start + 1;
 
     // calcChain entries are sheet-local; entries inside the deleted range drop out.
     const newCalcChain: FormulaCell[] = [];
-    if (file.calcChain != null) {
-        for (const entry of file.calcChain) {
+    if (sheet.calcChain != null) {
+        for (const entry of sheet.calcChain) {
             const calc: FormulaCell = cloneDeep(entry);
             if (type === 'row') {
                 if (calc.r < start) newCalcChain.push(calc);
                 else if (calc.r > end) {
-                    calc.r -= slen;
+                    calc.r -= deletedCount;
                     newCalcChain.push(calc);
                 }
             } else {
                 if (calc.c < start) newCalcChain.push(calc);
                 else if (calc.c > end) {
-                    calc.c -= slen;
+                    calc.c -= deletedCount;
                     newCalcChain.push(calc);
                 }
             }
         }
     }
-    file.calcChain = newCalcChain;
+    sheet.calcChain = newCalcChain;
 
-    const cfg = file.config || {};
-    const { filterRange } = file;
-    const { filter } = file;
-    let newFilterObj: FilterObj | null = null;
+    const config = sheet.config || {};
+    const { filterRange } = sheet;
+    const { filter } = sheet;
+    let shiftedFilter: ShiftedFilter | null = null;
     if (!isEmpty(filterRange) && filterRange != null) {
-        newFilterObj = { filterRange: null, filter: null };
+        shiftedFilter = { filterRange: null, filter: null };
 
-        let f_r1 = filterRange.row[0];
-        let f_r2 = filterRange.row[1];
-        let f_c1 = filterRange.column[0];
-        let f_c2 = filterRange.column[1];
+        let firstRow = filterRange.row[0];
+        let lastRow = filterRange.row[1];
+        let firstColumn = filterRange.column[0];
+        let lastColumn = filterRange.column[1];
 
         if (type === 'row') {
-            if (f_r1 > end) {
-                f_r1 -= slen;
-                f_r2 -= slen;
+            if (firstRow > end) {
+                firstRow -= deletedCount;
+                lastRow -= deletedCount;
 
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
+                shiftedFilter.filterRange = {
+                    row: [firstRow, lastRow],
+                    column: [firstColumn, lastColumn],
                 };
-            } else if (f_r1 < start) {
-                if (f_r2 < start) {
-                } else if (f_r2 <= end) {
-                    f_r2 = start - 1;
+            } else if (firstRow < start) {
+                if (lastRow < start) {
+                } else if (lastRow <= end) {
+                    lastRow = start - 1;
                 } else {
-                    f_r2 -= slen;
+                    lastRow -= deletedCount;
                 }
 
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
+                shiftedFilter.filterRange = {
+                    row: [firstRow, lastRow],
+                    column: [firstColumn, lastColumn],
                 };
             }
 
-            if (newFilterObj.filterRange != null && filter != null) {
+            if (shiftedFilter.filterRange != null && filter != null) {
                 const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: Record<string, number> = {};
-                    forEach(f_rowhidden, (_v1, nstr) => {
-                        const n = parseFloat(nstr);
+                forEach(filter, (_entry, key) => {
+                    const hiddenRows = filter[key].rowhidden;
+                    const shiftedHiddenRows: Record<string, number> = {};
+                    forEach(hiddenRows, (_v1, rowKey) => {
+                        const n = parseFloat(rowKey);
 
                         if (n < start) {
-                            f_rowhidden_new[n] = 0;
+                            shiftedHiddenRows[n] = 0;
                         } else if (n > end) {
-                            f_rowhidden_new[n - slen] = 0;
+                            shiftedHiddenRows[n - deletedCount] = 0;
                         }
                     });
 
-                    if (!isEmpty(f_rowhidden_new)) {
-                        shifted[k] = cloneDeep(filter[k]);
-                        shifted[k].rowhidden = f_rowhidden_new;
-                        shifted[k].str = f_r1;
-                        shifted[k].edr = f_r2;
+                    if (!isEmpty(shiftedHiddenRows)) {
+                        shifted[key] = cloneDeep(filter[key]);
+                        shifted[key].rowhidden = shiftedHiddenRows;
+                        shifted[key].str = firstRow;
+                        shifted[key].edr = lastRow;
                     }
                 });
-                if (!isEmpty(shifted)) newFilterObj.filter = shifted;
+                if (!isEmpty(shifted)) shiftedFilter.filter = shifted;
             }
         } else if (type === 'column') {
-            if (f_c1 > end) {
-                f_c1 -= slen;
-                f_c2 -= slen;
+            if (firstColumn > end) {
+                firstColumn -= deletedCount;
+                lastColumn -= deletedCount;
 
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
+                shiftedFilter.filterRange = {
+                    row: [firstRow, lastRow],
+                    column: [firstColumn, lastColumn],
                 };
-            } else if (f_c1 < start) {
-                if (f_c2 < start) {
-                } else if (f_c2 <= end) {
-                    f_c2 = start - 1;
+            } else if (firstColumn < start) {
+                if (lastColumn < start) {
+                } else if (lastColumn <= end) {
+                    lastColumn = start - 1;
                 } else {
-                    f_c2 -= slen;
+                    lastColumn -= deletedCount;
                 }
 
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
+                shiftedFilter.filterRange = {
+                    row: [firstRow, lastRow],
+                    column: [firstColumn, lastColumn],
                 };
             } else {
-                if (f_c2 > end) {
-                    f_c1 = start;
-                    f_c2 -= slen;
+                if (lastColumn > end) {
+                    firstColumn = start;
+                    lastColumn -= deletedCount;
 
-                    newFilterObj.filterRange = {
-                        row: [f_r1, f_r2],
-                        column: [f_c1, f_c2],
+                    shiftedFilter.filterRange = {
+                        row: [firstRow, lastRow],
+                        column: [firstColumn, lastColumn],
                     };
                 }
             }
 
-            if (newFilterObj.filterRange != null && filter != null) {
+            if (shiftedFilter.filterRange != null && filter != null) {
                 const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    let f_cindex = filter[k].cindex;
+                forEach(filter, (_entry, key) => {
+                    let column = filter[key].cindex;
 
-                    if (f_cindex < start) {
-                        shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        shifted[f_cindex - f_c1].edc = f_c2;
-                    } else if (f_cindex > end) {
-                        f_cindex -= slen;
-                        shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        shifted[f_cindex - f_c1].cindex = f_cindex;
-                        shifted[f_cindex - f_c1].stc = f_c1;
-                        shifted[f_cindex - f_c1].edc = f_c2;
+                    if (column < start) {
+                        shifted[column - firstColumn] = cloneDeep(filter[key]);
+                        shifted[column - firstColumn].edc = lastColumn;
+                    } else if (column > end) {
+                        column -= deletedCount;
+                        shifted[column - firstColumn] = cloneDeep(filter[key]);
+                        shifted[column - firstColumn].cindex = column;
+                        shifted[column - firstColumn].stc = firstColumn;
+                        shifted[column - firstColumn].edc = lastColumn;
                     }
                 });
-                if (!isEmpty(shifted)) newFilterObj.filter = shifted;
+                if (!isEmpty(shifted)) shiftedFilter.filter = shifted;
             }
         }
     }
 
-    if (newFilterObj != null && newFilterObj.filter != null) {
-        const rowhidden = (cfg.rowhidden ??= {});
-        forEach(newFilterObj.filter, (entry) => {
+    if (shiftedFilter != null && shiftedFilter.filter != null) {
+        const rowhidden = (config.rowhidden ??= {});
+        forEach(shiftedFilter.filter, (entry) => {
             forEach(entry.rowhidden, (_v1, n) => {
                 rowhidden[n] = 0;
             });
         });
     }
 
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter ?? undefined;
-        file.filterRange = newFilterObj.filterRange ?? undefined;
+    if (shiftedFilter != null) {
+        sheet.filter = shiftedFilter.filter ?? undefined;
+        sheet.filterRange = shiftedFilter.filterRange ?? undefined;
     }
 
-    shiftFrozenFocus(file, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
+    shiftFrozenFocus(sheet, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
 
-    file.dataVerification = shiftCellKeyedForDelete(file.dataVerification, type, start, end);
-    file.hyperlink = shiftCellKeyedForDelete(file.hyperlink, type, start, end);
+    sheet.dataVerification = shiftCellKeyedForDelete(sheet.dataVerification, type, start, end);
+    sheet.hyperlink = shiftCellKeyedForDelete(sheet.hyperlink, type, start, end);
 }
 
 function adjustSelectionForInsert(
@@ -359,30 +359,30 @@ function adjustSelectionForInsert(
 ) {
     const { type, index, count, direction } = op;
     const id = op.id || ctx.currentSheetId;
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
-    const d = file.data;
-    if (!d) return;
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
+    const sheet = ctx.sheets[sheetIndex];
+    if (!sheet) return;
+    const { data } = sheet;
+    if (!data) return;
 
     let range = null;
     if (type === 'row') {
         if (direction === 'lefttop') {
-            range = [{ row: [index, index + count - 1], column: [0, d[0].length - 1] }];
+            range = [{ row: [index, index + count - 1], column: [0, data[0].length - 1] }];
         } else {
-            range = [{ row: [index + 1, index + count], column: [0, d[0].length - 1] }];
+            range = [{ row: [index + 1, index + count], column: [0, data[0].length - 1] }];
         }
     } else {
         if (direction === 'lefttop') {
-            range = [{ row: [0, d.length - 1], column: [index, index + count - 1] }];
+            range = [{ row: [0, data.length - 1], column: [index, index + count - 1] }];
         } else {
-            range = [{ row: [0, d.length - 1], column: [index + 1, index + count] }];
+            range = [{ row: [0, data.length - 1], column: [index + 1, index + count] }];
         }
     }
 
-    file.selections = range;
-    if (file.id === ctx.currentSheetId) {
+    sheet.selections = range;
+    if (sheet.id === ctx.currentSheetId) {
         ctx.selections = range;
     }
 }
@@ -439,15 +439,15 @@ export function insertRowCol(
 
     writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }));
 
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
 
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
+    const sheet = ctx.sheets[sheetIndex];
+    if (!sheet) return;
 
     // The engine refuses an op on a read-only row or column but does not move them.
     // They shift here, by the same rule as hidden rows and columns.
-    const { config } = file;
+    const { config } = sheet;
     if (type === 'row' && config?.rowReadOnly) {
         config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, op.direction);
     }
@@ -455,12 +455,12 @@ export function insertRowCol(
         config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, op.direction);
     }
 
-    file.alternateFormatRules = (file.alternateFormatRules ?? []).map((af) => ({
-        ...af,
-        cellrange: shiftRangeForInsert(af.cellrange, op),
+    sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).map((rule) => ({
+        ...rule,
+        cellrange: shiftRangeForInsert(rule.cellrange, op),
     }));
 
-    shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
+    shiftEditorOnlyFieldsForInsert(ctx, { ...op, id });
     if (changeSelection) adjustSelectionForInsert(ctx, { ...op, id });
 
     ctx.formulaCache.formulaCellInfoMap = null;
@@ -486,15 +486,15 @@ export function deleteRowCol(
 
     writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
 
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
 
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
+    const sheet = ctx.sheets[sheetIndex];
+    if (!sheet) return;
 
     // The engine refuses an op on a read-only row or column but does not move them.
     // They shift here, by the same rule as hidden rows and columns.
-    const { config } = file;
+    const { config } = sheet;
     if (type === 'row' && config?.rowReadOnly) {
         config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
     }
@@ -503,28 +503,28 @@ export function deleteRowCol(
     }
 
     const alternateFormats = [];
-    for (const af of file.alternateFormatRules ?? []) {
-        const cellrange = shiftRangeForDelete(af.cellrange, op);
-        if (cellrange) alternateFormats.push({ ...af, cellrange });
+    for (const rule of sheet.alternateFormatRules ?? []) {
+        const cellrange = shiftRangeForDelete(rule.cellrange, op);
+        if (cellrange) alternateFormats.push({ ...rule, cellrange });
     }
-    file.alternateFormatRules = alternateFormats;
+    sheet.alternateFormatRules = alternateFormats;
 
-    shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
+    shiftEditorOnlyFieldsForDelete(ctx, { ...op, id });
     if (!fromBatch) ctx.selections = undefined;
 
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 // Hide selected rows/columns
-export function hideSelected(ctx: Context, type: string) {
+export function hideSelectedRowCol(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const sheet = getSheet(ctx);
     const { data } = sheet;
     // A sheet that is not loaded has nothing to hide.
     if (!data) return '';
-    const cfg = (sheet.config ??= {});
+    const config = (sheet.config ??= {});
     if (type === 'row') {
-        const rowhidden = (cfg.rowhidden ??= {});
+        const rowhidden = (config.rowhidden ??= {});
         const [r1, r2] = ctx.selections[0].row;
         const rowhiddenNumber = r2;
         for (let r = r1; r <= r2; r += 1) {
@@ -542,7 +542,7 @@ export function hideSelected(ctx: Context, type: string) {
             ctx.selections[0].row[1] += 1;
         }
     } else if (type === 'column') {
-        const colhidden = (cfg.colhidden ??= {});
+        const colhidden = (config.colhidden ??= {});
         const c1 = ctx.selections[0].column[0];
         const c2 = ctx.selections[0].column[1];
         const colhiddenNumber = c2;
@@ -565,47 +565,47 @@ export function hideSelected(ctx: Context, type: string) {
 }
 
 // Show (unhide) selected rows/columns
-export function showSelected(ctx: Context, type: string) {
+export function showSelectedRowCol(ctx: Context, type: string) {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     // Unhiding cannot create hidden state, so it must not seed the map: on a sheet with
     // nothing hidden that would ship an op to peers and take an undo entry for a no-op.
-    const cfg = getSheetConfig(ctx);
-    if (type === 'row' && cfg?.rowhidden) {
+    const config = getSheetConfig(ctx);
+    if (type === 'row' && config?.rowhidden) {
         const [r1, r2] = ctx.selections[0].row;
         for (let r = r1; r <= r2; r += 1) {
-            delete cfg.rowhidden[r];
+            delete config.rowhidden[r];
         }
-    } else if (type === 'column' && cfg?.colhidden) {
+    } else if (type === 'column' && config?.colhidden) {
         const [c1, c2] = ctx.selections[0].column;
         for (let c = c1; c <= c2; c += 1) {
-            delete cfg.colhidden[c];
+            delete config.colhidden[c];
         }
     }
     return '';
 }
 
 // Check if the current selection is on a hidden row/column
-export function isShowHidenCR(ctx: Context): boolean {
-    const cfg = getSheetConfig(ctx);
-    if (!ctx.selections || (!cfg?.colhidden && !cfg?.rowhidden)) return false;
+export function isSelectionOnHiddenRowCol(ctx: Context): boolean {
+    const config = getSheetConfig(ctx);
+    if (!ctx.selections || (!config?.colhidden && !config?.rowhidden)) return false;
     // If the current selection is on a hidden row/column, it is not editable
-    if (cfg?.colhidden && size(cfg.colhidden) >= 1) {
-        const ctxColumn = ctx.selections[0]?.column?.[0];
-        const isHidenColumn =
-            Object.keys(cfg.colhidden).findIndex((o) => {
-                return ctxColumn === parseInt(o, 10);
+    if (config?.colhidden && size(config.colhidden) >= 1) {
+        const column = ctx.selections[0]?.column?.[0];
+        const isHiddenColumn =
+            Object.keys(config.colhidden).findIndex((o) => {
+                return column === parseInt(o, 10);
             }) >= 0;
-        if (isHidenColumn) {
+        if (isHiddenColumn) {
             return true;
         }
     }
-    if (cfg?.rowhidden && size(cfg.rowhidden) >= 1) {
-        const ctxRow = ctx.selections[0]?.row?.[0];
-        const isHidenRow =
-            Object.keys(cfg.rowhidden).findIndex((o) => {
-                return ctxRow === parseInt(o, 10);
+    if (config?.rowhidden && size(config.rowhidden) >= 1) {
+        const row = ctx.selections[0]?.row?.[0];
+        const isHiddenRow =
+            Object.keys(config.rowhidden).findIndex((o) => {
+                return row === parseInt(o, 10);
             }) >= 0;
-        if (isHidenRow) {
+        if (isHiddenRow) {
             return true;
         }
     }
@@ -613,20 +613,20 @@ export function isShowHidenCR(ctx: Context): boolean {
 }
 
 // Count hidden rows/columns to skip during keyboard navigation
-export function hideCRCount(ctx: Context, type: string): number {
+export function moveCountPastHiddenRowCol(ctx: Context, type: string): number {
     let count = 1;
     if (!ctx.selections) return 0;
-    const section = ctx.selections[0];
-    const cfg = getSheetConfig(ctx);
-    const rowhidden = cfg?.rowhidden ?? {};
-    const colhidden = cfg?.colhidden ?? {};
+    const selection = ctx.selections[0];
+    const config = getSheetConfig(ctx);
+    const rowhidden = config?.rowhidden ?? {};
+    const colhidden = config?.colhidden ?? {};
     if (type === 'ArrowUp' || type === 'ArrowDown') {
-        const rowArr = Object.keys(rowhidden);
+        const hiddenRows = Object.keys(rowhidden);
         if (type === 'ArrowUp') {
-            let row = section.row[0] - 1;
-            const rowIndex = rowArr.indexOf(row.toString());
+            let row = selection.row[0] - 1;
+            const rowIndex = hiddenRows.indexOf(row.toString());
             for (let i = rowIndex; i >= 0; i -= 1) {
-                if (parseInt(rowArr[i], 10) === row) {
+                if (parseInt(hiddenRows[i], 10) === row) {
                     count += 1;
                     row -= 1;
                 } else {
@@ -634,10 +634,10 @@ export function hideCRCount(ctx: Context, type: string): number {
                 }
             }
         } else {
-            let row = section.row[0] + 1;
-            const rowIndex = rowArr.indexOf(`${row}`);
-            for (let i = rowIndex; i < rowArr.length; i += 1) {
-                if (parseInt(rowArr[i], 10) === row) {
+            let row = selection.row[0] + 1;
+            const rowIndex = hiddenRows.indexOf(`${row}`);
+            for (let i = rowIndex; i < hiddenRows.length; i += 1) {
+                if (parseInt(hiddenRows[i], 10) === row) {
                     count += 1;
                     row += 1;
                 } else {
@@ -646,12 +646,12 @@ export function hideCRCount(ctx: Context, type: string): number {
             }
         }
     } else if (type === 'ArrowLeft' || type === 'ArrowRight') {
-        const columnArr = Object.keys(colhidden);
+        const hiddenColumns = Object.keys(colhidden);
         if (type === 'ArrowLeft') {
-            let column = section.column[0] - 1;
-            const columnIndex = columnArr.indexOf(column.toString());
+            let column = selection.column[0] - 1;
+            const columnIndex = hiddenColumns.indexOf(column.toString());
             for (let i = columnIndex; i >= 0; i -= 1) {
-                if (parseInt(columnArr[i], 10) === column) {
+                if (parseInt(hiddenColumns[i], 10) === column) {
                     count += 1;
                     column -= 1;
                 } else {
@@ -659,10 +659,10 @@ export function hideCRCount(ctx: Context, type: string): number {
                 }
             }
         } else {
-            let column = section.column[0] + 1;
-            const columnIndex = columnArr.indexOf(`${column}`);
-            for (let i = columnIndex; i < columnArr.length; i += 1) {
-                if (parseInt(columnArr[i], 10) === column) {
+            let column = selection.column[0] + 1;
+            const columnIndex = hiddenColumns.indexOf(`${column}`);
+            for (let i = columnIndex; i < hiddenColumns.length; i += 1) {
+                if (parseInt(hiddenColumns[i], 10) === column) {
                     count += 1;
                     column += 1;
                 } else {
