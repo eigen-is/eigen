@@ -72,7 +72,17 @@ export {
     readCellBackground,
     readCellBorder,
 } from './nodes/table-cell';
-export { canInsertTableOfContents, readTocLevels, TableOfContentsNode } from './nodes/table-of-contents';
+export type { TocLevelStyle, TocPreset } from './nodes/table-of-contents';
+export {
+    canInsertTableOfContents,
+    readTocLevelStyle,
+    readTocLevels,
+    TableOfContentsNode,
+    TOC_LEVEL_KEYS,
+    TOC_PRESETS,
+    tocLevelKey,
+    tocPreset,
+} from './nodes/table-of-contents';
 export type { TextBoxAttrs, TextBoxEdit, TextBoxVerticalAlign } from './nodes/text-box';
 export {
     insertTextBox,

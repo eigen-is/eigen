@@ -1,20 +1,42 @@
-// The table of contents: an atomic block that stores only how deep it lists, as Word's TOC field does with \o "1-3".
-// Its entries are the doc's outline and are never stored. Every surface that draws one, such as the editor or an
-// export, reads them from the headings as they are, a collaborator's edit included. Insert puts one between the body's
-// blocks only, and a properties panel sets how deep the selected one lists.
+// The table of contents: an atomic block that stores how deep it lists, as Word's TOC field does with \o "1-3", and how
+// it looks: whether its entries show page numbers, their leader, and a font, size, bold and italic per level. Its
+// entries are the doc's outline and are never stored. Every surface that draws one, such as the editor or an export,
+// reads them from the headings as they are, and reads the stored look through the readers here. Insert puts one
+// between the body's blocks only, and a properties panel sets the selected one's attributes.
 
 import type { CommandProps } from '@tiptap/core';
 import { canInsertNode, mergeAttributes, Node } from '@tiptap/core';
 import type { EditorState } from '@tiptap/pm/state';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
+import { EIGEN_FONT_NAMES, readFontSize } from '../../../constants/fonts';
+import { isRecord } from '../../../core/guards';
 import { MAX_HEADING_LEVEL } from '../heading';
 import { caretAfterInsertedBlock } from './page-break';
+
+// The look of one level's entries. A fact left out draws as the body text: a bundled font's name, a size in pt, and
+// bold and italic.
+export type TocLevelStyle = { font?: string; size?: number; bold?: boolean; italic?: boolean };
+
+// Google's three layouts, each a pair of Word's two facts.
+export type TocPreset = 'dotted' | 'plain' | 'links';
+
+// The character that leads from an entry to its page number. Word's dashes or line could join it later.
+type TocLeader = 'dot' | 'none';
+
+// Word's two facts that make the layout: whether entries show their page number, and the leader to it.
+type TocLayout = { pageNumbers: boolean; leader: TocLeader };
+
+// The attribute holding one heading level's look.
+type TocLevelKey = `level${number}`;
+
+// Every stored attribute. A level's look is an attribute of its own, so two peers who edit two levels both keep theirs.
+type TocAttrs = TocLayout & { levels: number } & Record<TocLevelKey, TocLevelStyle | null>;
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         tableOfContents: {
             insertTableOfContents: () => ReturnType;
-            updateTableOfContents: (attributes: { levels: number }) => ReturnType;
+            updateTableOfContents: (attributes: Partial<TocAttrs>) => ReturnType;
         };
     }
 }
@@ -31,6 +53,74 @@ export function readTocLevels(value: unknown): number {
         ? Math.min(MAX_HEADING_LEVEL, Math.max(1, Math.round(value)))
         : DEFAULT_TOC_LEVELS;
 }
+
+export function tocLevelKey(level: number): TocLevelKey {
+    return `level${level}`;
+}
+
+// The attribute of each heading level, from 1 down.
+export const TOC_LEVEL_KEYS: readonly TocLevelKey[] = Array.from({ length: MAX_HEADING_LEVEL }, (_, index) =>
+    tocLevelKey(index + 1),
+);
+
+// One level's look as a peer, a paste or the import wrote it: the font and size are held to what a font and a size mark
+// allow, and the flags must be booleans. Anything else is dropped, and a look with nothing left is no look.
+export function readTocLevelStyle(value: unknown): TocLevelStyle | null {
+    if (!isRecord(value)) return null;
+    const { font, bold, italic } = value;
+    const size = readFontSize(value['size']);
+    const style: TocLevelStyle = {
+        ...(typeof font === 'string' && EIGEN_FONT_NAMES.includes(font) && { font }),
+        ...(size !== undefined && { size }),
+        ...(typeof bold === 'boolean' && { bold }),
+        ...(typeof italic === 'boolean' && { italic }),
+    };
+    return Object.keys(style).length > 0 ? style : null;
+}
+
+// What each preset stores. Links stores no leader, as it shows no numbers, so the stored one comes back after it.
+export const TOC_PRESETS: Readonly<Record<TocPreset, Readonly<Partial<TocLayout>>>> = {
+    dotted: { pageNumbers: true, leader: 'dot' },
+    plain: { pageNumbers: true, leader: 'none' },
+    links: { pageNumbers: false },
+};
+
+// The layout every surface draws. A page-less doc has no page numbers to show, so it draws Links whatever is stored,
+// and the stored facts come back when its pages do.
+export function tocPreset(attrs: Record<string, unknown>, pageless: boolean): TocPreset {
+    if (pageless || !readPageNumbers(attrs['pageNumbers'])) return 'links';
+    return readTocLeader(attrs['leader']) === 'none' ? 'plain' : 'dotted';
+}
+
+function readPageNumbers(value: unknown): boolean {
+    return value !== false;
+}
+
+const TOC_LEADERS: readonly TocLeader[] = ['dot', 'none'];
+
+function readTocLeader(value: unknown): TocLeader {
+    return TOC_LEADERS.find((leader) => leader === value) ?? 'dot';
+}
+
+// A pasted level's JSON is read only up to this length, far past any look the reader keeps.
+const MAX_PASTED_STYLE_LENGTH = 256;
+
+function parseTocLevelStyle(text: string | null): TocLevelStyle | null {
+    if (text === null || text.length > MAX_PASTED_STYLE_LENGTH) return null;
+    try {
+        return readTocLevelStyle(JSON.parse(text));
+    } catch {
+        return null;
+    }
+}
+
+// The reader of each attribute, by name, so the command writes only what a parse or a render would keep.
+const ATTRIBUTE_READERS = new Map<string, (value: unknown) => unknown>([
+    ['levels', readTocLevels],
+    ['pageNumbers', readPageNumbers],
+    ['leader', readTocLeader],
+    ...TOC_LEVEL_KEYS.map((key): [string, (value: unknown) => unknown] => [key, readTocLevelStyle]),
+]);
 
 // Whether one goes in at the selection. The selection must sit in a textblock between the body's blocks, because one in
 // a cell or a list item would need another tab stop for the docx's page numbers. The schema must hold the node too, and
@@ -49,6 +139,7 @@ export const TableOfContentsNode = Node.create({
 
     atom: true,
 
+    // Each attribute renders only apart from its default, so an untouched one's HTML stays as it was.
     addAttributes() {
         return {
             levels: {
@@ -59,6 +150,33 @@ export const TableOfContentsNode = Node.create({
                     'data-levels': readTocLevels(attributes['levels']),
                 }),
             },
+            pageNumbers: {
+                default: true,
+                parseHTML: (element: HTMLElement) => element.getAttribute('data-page-numbers') !== 'false',
+                renderHTML: (attributes: Record<string, unknown>) =>
+                    readPageNumbers(attributes['pageNumbers']) ? {} : { 'data-page-numbers': 'false' },
+            },
+            leader: {
+                default: 'dot',
+                parseHTML: (element: HTMLElement) => readTocLeader(element.getAttribute('data-leader')),
+                renderHTML: (attributes: Record<string, unknown>) => {
+                    const leader = readTocLeader(attributes['leader']);
+                    return leader === 'dot' ? {} : { 'data-leader': leader };
+                },
+            },
+            ...Object.fromEntries(
+                TOC_LEVEL_KEYS.map((key) => [
+                    key,
+                    {
+                        default: null,
+                        parseHTML: (element: HTMLElement) => parseTocLevelStyle(element.getAttribute(`data-${key}`)),
+                        renderHTML: (attributes: Record<string, unknown>) => {
+                            const style = readTocLevelStyle(attributes[key]);
+                            return style ? { [`data-${key}`]: JSON.stringify(style) } : {};
+                        },
+                    },
+                ]),
+            ),
         };
     },
 
@@ -84,14 +202,18 @@ export const TableOfContentsNode = Node.create({
                         .scrollIntoView()
                         .run();
                 },
-            // The selected one's depth, as updateEquation writes. An attribute step moves no position, so the node
-            // stays selected and its panel open.
+            // The selected one's attributes the call gives, each through its reader, as updateEquation writes. Null
+            // clears a level's look. An attribute step moves no position, so the node stays selected and its panel open.
             updateTableOfContents:
-                ({ levels }) =>
+                (attributes) =>
                 ({ tr, dispatch }: CommandProps) => {
                     const { selection } = tr;
                     if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) return false;
-                    if (dispatch) tr.setNodeAttribute(selection.from, 'levels', readTocLevels(levels));
+                    if (!dispatch) return true;
+                    for (const [name, value] of Object.entries(attributes)) {
+                        const read = ATTRIBUTE_READERS.get(name);
+                        if (read && value !== undefined) tr.setNodeAttribute(selection.from, name, read(value));
+                    }
                     return true;
                 },
         };
