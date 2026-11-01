@@ -50,6 +50,7 @@ The page holds only open work: when work ships, its row or its done part goes in
 | Item | Status in code | Effort | Frozen-format | Notes |
 |---|---|---|---|---|
 | **The launcher's refusal check may still fail under dash** | `docker/test-launcher.sh` "an argument a command does not take is refused" failed once for `restore a --bogus`: the exit code was 2, but what the check read on stdout or stderr did not match. The likely cause is that `docker run` lost what the short-lived container printed, so the container's shell now writes the launcher's output into the fixture itself. That is a guess, not a proven cause. | XS | No | The refusal check now prints OUT and ERR when it fails, so the next failure names the cause. Close the row once a few CI runs pass, or fix what the printout shows. |
+| **Docs tests that still wait a fixed time** | `withBrowserFrames` (`apps/docs/src/test/fixtures/browser-frames.ts`) replaced the fixed 50 ms waits in the toolbar, editor-band and page-band focus tests, but some remain: `frames()` in `editor.test.tsx` waits 50 ms and has six users, `editor-toolbar.test.tsx` waits 50 ms in two more places, and `editor.test.tsx` waits 250 ms once. None has failed yet. | S | No | Move each to `withBrowserFrames`, or to a wait on the condition itself, and check with a mutation that the test still fails when the code it guards breaks. |
 
 ### Polish for the first visitors
 
