@@ -73,9 +73,9 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
         });
     };
 
-    // A font family / size change re-measures each arrow's own label and writes `labelWidth` (the sole
-    // width source, height derives from the line count) in the SAME transact as the font — after the face
-    // loads, or measureText reads fallback metrics. Per-element widths (each label differs), one undo step.
+    // A font family or size change measures each arrow's own label again and writes its `labelWidth` in the
+    // same transact as the font, so it is one undo step. The height follows from the line count. It measures
+    // once the slices of the label's text have loaded, or measureText reads the fallback's metrics.
     //
     // The Size field holds its own gesture only while it is focused, and on a cold face the write lands
     // after the blur that released it — every digit would be its own undo step. So the write takes the
@@ -86,7 +86,7 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
             await Promise.all(
                 arrows.map((el) => {
                     const patch = fields(el);
-                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily);
+                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily, el.text);
                 }),
             );
             hold();

@@ -706,16 +706,15 @@ export function CanvasEditor({
         },
     });
 
-    // The overlay awaits loadVectorFont on open, so commit-time measureVectorText is normally exact.
-    // The safety net for the rare commit-before-load-resolves race: if the face isn't loaded, load it
-    // and re-measure into the element once it swaps in (self-healing — stored dims are the server
-    // renderer's source of truth, and the measurement util stays the sole dim writer). Re-validated
-    // against the LIVE element at resolve time: a newer edit (text/font/size) owns the dims, so a
-    // slow load can never write stale dims over it — and the single .then can't loop.
+    // The overlay loads the slices of its text while the user types, so the width measured at commit is
+    // normally exact. A label committed before the slices of its text have loaded was measured in the
+    // fallback, and the stored width is what every renderer and export draws. So this loads those slices
+    // and measures the label again. It checks the live element first: a newer edit of the text, font or
+    // size owns the width, and a slow load must not write a stale width over it.
     const healLabelWidth = useCallback(
         (id: string, text: string, fontSize: number, fontFamily: string) => {
-            if (isVectorFontLoaded(fontSize, fontFamily)) return;
-            loadVectorFont(fontSize, fontFamily)
+            if (isVectorFontLoaded(fontSize, fontFamily, text)) return;
+            loadVectorFont(fontSize, fontFamily, text)
                 .then(() => {
                     const el = visibleRef.current.find((x) => x.id === id);
                     if (el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal

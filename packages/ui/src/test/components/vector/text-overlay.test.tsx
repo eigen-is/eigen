@@ -4,12 +4,25 @@ import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
 
+// Each face loads only the unicode-range slices its text needs, so the overlay hands the font set its text. The log
+// keeps the order of loads and commits.
+const events: string[] = [];
+Object.defineProperty(document, 'fonts', {
+    configurable: true,
+    value: {
+        load: async (_font: string, text?: string) => {
+            events.push(`load ${JSON.stringify(text)}`);
+            return [];
+        },
+    },
+});
+
 const { act, createElement, createRef } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { TextOverlay } = await import('../../../components/vector/text-overlay');
 
-// Types `typed` into a freshly opened label session and returns what the single commit carried.
-async function commitTyped(typed: string): Promise<string> {
+// Types `typed` into a label session opened on `initialText` and returns what the single commit carried.
+async function commitTyped(typed: string, initialText = ''): Promise<string> {
     const container = document.createElement('div');
     document.body.append(container);
     const root = createRoot(container);
@@ -25,12 +38,13 @@ async function commitTyped(typed: string): Promise<string> {
                 zoom: 1,
                 containerRef: createRef<HTMLElement>(),
                 boxToStyle: () => ({}),
-                initialText: '',
+                initialText,
                 fontSize: 20,
                 fontFamily: 'Excalifont',
                 textAlign: 'center' as const,
                 color: '#000000',
                 onCommit: (text: string) => {
+                    events.push(`commit ${text}`);
                     committed = text;
                 },
             }),
@@ -67,4 +81,18 @@ test('a label past the line cap commits truncated to what the reader keeps', asy
     const committed = await commitTyped(typed);
     expect(committed).toBe(labelText(typed));
     expect(committed.split('\n').length).toBeLessThan(200);
+});
+
+// The host measures the label at commit, so the slices of the typed text are asked for before then. A fresh label
+// has no text yet and loads the slice with the space.
+test('the overlay loads the slices of its text before the commit', async () => {
+    events.length = 0;
+    await commitTyped('茶 tea');
+    expect(events).toEqual(['load " "', 'load "茶 tea"', 'commit 茶 tea']);
+});
+
+test('an overlay opened on a label loads the slices of that label', async () => {
+    events.length = 0;
+    await commitTyped('😀 ok', '茶');
+    expect(events).toEqual(['load "茶"', 'load "😀 ok"', 'commit 😀 ok']);
 });

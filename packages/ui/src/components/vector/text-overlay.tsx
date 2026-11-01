@@ -1,15 +1,7 @@
-// The in-canvas text editor: a raw <textarea> (not shadcn — its border/ring/min-height are wrong
-// for a canvas overlay) absolutely positioned over the element via the viewport transform, styled
-// so WYSIWYG holds against the committed SVG <text>. `text` is a PLAIN string with \n, so a
-// contentEditable/Tiptap surface would smuggle HTML into a plain-string field — a textarea is
-// Excalidraw's own choice and the correct one here.
-//
-// Commit-once latch (audited against UX risk #1 — double-handling): exactly one commit per
-// session, or zero for an empty new element. Escape commits (claimed here via onKeyDown +
-// stopPropagation so the canvas's Escape-deselect never also fires); click-away commits and the
-// click is swallowed (a capture-phase document pointerdown: commit + stopPropagation so the
-// committing click can't also marquee/deselect/place); blur is the alt-tab fallback. Enter inserts
-// a newline (never commits). The textarea is uncontrolled so its native ⌘Z owns in-session undo.
+// The editor of an arrow label: a plain <textarea> placed over the label through the viewport transform and styled
+// like the SVG <text> it becomes. A label is a plain string, so a rich-text editor would let HTML into it. A session
+// commits exactly once, on Escape, a click elsewhere, blur or unmount, and the host decides what the text becomes.
+// Enter inserts a newline, and the textarea's own undo covers the session.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { Box, TextAlign } from '@workspace/lib/vector';
@@ -99,13 +91,16 @@ export function TextOverlay({
         else ta.setSelectionRange(0, 0);
     }, []);
 
-    // Ensure the face is registered before the user commits (measurement needs it); re-grow once it
-    // swaps in so the box fits the real metrics rather than the fallback font.
-    useEffect(() => {
-        loadVectorFont(fontSize, fontFamily)
+    // A face loads only the unicode-range slices its text needs. So the overlay loads the slices of its text as it
+    // opens and as the user types, before the host measures the label at commit. Once they swap in, the box grows
+    // again to fit the real metrics rather than the fallback's. An empty text matches no slice, so a fresh label
+    // loads the slice with the space.
+    const loadFont = (text: string) => {
+        loadVectorFont(fontSize, fontFamily, text || ' ')
             .then(grow)
             .catch(() => {});
-    }, [fontSize, fontFamily]);
+    };
+    useEffect(() => loadFont(valueRef.current), [fontSize, fontFamily]);
 
     // Click-away commit — capture phase so it runs before the canvas's React pointerdown. Clicks
     // inside the textarea (caret moves) pass through. A click elsewhere on the CANVAS commits and is
@@ -167,9 +162,11 @@ export function TextOverlay({
             onInput={(e) => {
                 valueRef.current = e.currentTarget.value;
                 grow();
+                loadFont(valueRef.current);
             }}
             onKeyDown={(e) => {
-                // Skip while composing: IME Escape cancels the composition, not the session.
+                // Escape stops here, so the canvas doesn't also deselect. While an IME composes, Escape cancels the
+                // composition, not the session.
                 if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     e.stopPropagation();
