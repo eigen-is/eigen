@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP, tocPreset } from '@workspace/lib/docs/eigendoc';
 import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
 import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { cpuClock } from '../../cpu-time';
@@ -398,5 +398,23 @@ describe("a docx table of contents' look", () => {
             const [read] = nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'tableOfContents');
             expect(read?.attrs).toEqual({ ...DEFAULTS, levels: 4, ...attrs });
         }
+    });
+
+    // Its entries' runs take Word's Hyperlink style, which draws them in the link colour and is no look of a level.
+    test('Links comes back as Links, with no look on any level', () => {
+        const toc = { type: 'tableOfContents', attrs: { levels: 3, pageNumbers: false } };
+        const headed = { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Intro' }] };
+        const docx = writeDocx(
+            {
+                json: { type: 'doc', content: [toc, headed] },
+                bands: {},
+                page: DEFAULT_PAGE_SETUP,
+                style: DEFAULT_NORMAL_STYLE,
+            },
+            { title: 'Report', media: [], lost: () => {} },
+        );
+        const [read] = nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'tableOfContents');
+        expect(tocPreset(read?.attrs ?? {}, false)).toBe('links');
+        expect(read?.attrs).toEqual({ ...DEFAULTS, pageNumbers: false });
     });
 });

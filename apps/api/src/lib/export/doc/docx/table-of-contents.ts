@@ -14,6 +14,7 @@ import {
     readTocLevelStyle,
     readTocLevels,
     TOC_LEVEL_KEYS,
+    tocPreset,
 } from '@workspace/lib/docs/eigendoc';
 import { halfPoints } from '../../../document/looks';
 import type { StyleId } from '../../../ooxml/wordml';
@@ -22,7 +23,7 @@ import { useFace } from './fonts';
 import type { Context } from './package';
 import type { Block, Paragraph, RightTab } from './paragraphs';
 import type { RunProps } from './runs';
-import { fieldEnd, fieldStart, textXml } from './runs';
+import { fieldEnd, fieldStart, rPrXml, textXml } from './runs';
 
 // The body's outline: its entries in document order, each heading's number in it, from 1, by its JSON node, and the
 // body's first table of contents, whose look the toc styles take.
@@ -60,12 +61,16 @@ export function withBookmark(blocks: Block[], number: number): Block[] {
 // One paragraph per entry in Word's `toc N` style, its text a link to the heading and, with page numbers, its page
 // number a PAGEREF field after a right tab at the column's edge, which leads with the node's leader. The first entry
 // opens the TOC field and a last paragraph ends it. The layout is the stored one whatever the doc's paper: Word always
-// lays out pages, so a page-less doc, which draws Links, keeps its own facts for the import.
+// lays out pages, so a page-less doc, which draws Links, keeps its own facts for the import. An entry the surfaces draw
+// as a link takes Word's Hyperlink style, the link colour. A page-less doc's draws as one too, as Word opens it in web
+// view, where the field hides the page numbers.
 export function tableOfContentsBlocks(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
     const levels = readTocLevels(attrs['levels']);
     const { pageNumbers, leader } = readTocLayout(attrs);
     const rightTab: RightTab = { pos: context.column, leader };
+    const rPr =
+        tocPreset(attrs, context.pkg.pageless) === 'links' ? `<w:rPr>${rPrXml({ style: 'Hyperlink' })}</w:rPr>` : '';
     // The docx embeds the face of each level an entry draws in. It also embeds the face of a level whose style names a
     // font, with no entries, as an entry Word's update adds draws in it.
     const listed = new Set(context.pkg.outline.entries.flatMap(({ level }) => (level > levels ? [] : [level])));
@@ -79,7 +84,7 @@ export function tableOfContentsBlocks(node: JSONContent, context: Context): Bloc
         const name = tocBookmark(index + 1);
         const style: StyleId = `TOC${level}`;
         const page = pageNumbers ? `<w:r><w:tab/></w:r>${fieldStart(`PAGEREF ${name} \\h`)}${fieldEnd()}` : '';
-        const runs = `<w:hyperlink w:anchor="${name}" w:history="1"><w:r>${textXml(text)}</w:r>${page}</w:hyperlink>`;
+        const runs = `<w:hyperlink w:anchor="${name}" w:history="1"><w:r>${rPr}${textXml(text)}</w:r>${page}</w:hyperlink>`;
         return [{ props: { style, rightTab }, runs }];
     });
     const open = fieldStart(tocInstruction(levels, pageNumbers), { dirty: true });
