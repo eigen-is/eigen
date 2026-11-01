@@ -3,16 +3,18 @@
 // earlier family claimed. The emoji slices then move so every RGI sequence sits whole in one slice. This works on sets
 // of code points only; build-font-slices does the downloads, the cutting and the writing.
 
+import {
+    EMOJI_COMPONENTS,
+    FIRST_NON_ASCII,
+    KEYCAP,
+    parseUnicodeRange,
+} from '../../packages/lib/src/constants/font-slices';
+
 export type Slice = { label: string; codePoints: Set<number> };
 
 // One rule of Google's CSS for a family: its subset's name, such as "latin" or "119", its style and its range.
 export type PublishedSubset = { label: string; style: string; unicodeRange: string };
 
-// The characters that only join others into one emoji: they repeat in every slice whose emoji need them.
-const ZWJ = 0x200d;
-const VS16 = 0xfe0f;
-const KEYCAP = 0x20e3;
-const EMOJI_COMPONENTS = new Set([ZWJ, VS16, KEYCAP, ...span(0xe0020, 0xe007f)]);
 // The text faces keep these three: Extended_Pictographic holds them, but body text writes them often.
 const TEXT_SYMBOLS = new Set([0xa9, 0xae, 0x2122]);
 
@@ -51,9 +53,9 @@ export function publishedSlices(
         .map((subset) => ({
             label: subset.label,
             codePoints: new Set(
-                parseRange(subset.unicodeRange).filter(
-                    (codePoint) => cmap.has(codePoint) && coverage.has(codePoint) && !claimed.has(codePoint),
-                ),
+                parseUnicodeRange(subset.unicodeRange)
+                    .flatMap(([start, end]) => span(start, end))
+                    .filter((codePoint) => cmap.has(codePoint) && coverage.has(codePoint) && !claimed.has(codePoint)),
             ),
         }))
         .filter((slice) => slice.codePoints.size > 0);
@@ -85,7 +87,8 @@ export function emojiCoverage(emojiData: string): Set<number> {
         const [start, end = start] = codePoints.split('..');
         for (const codePoint of span(Number.parseInt(start, 16), Number.parseInt(end, 16))) coverage.add(codePoint);
     }
-    for (const codePoint of coverage) if (codePoint < 0x80 || TEXT_SYMBOLS.has(codePoint)) coverage.delete(codePoint);
+    for (const codePoint of coverage)
+        if (codePoint < FIRST_NON_ASCII || TEXT_SYMBOLS.has(codePoint)) coverage.delete(codePoint);
     return coverage;
 }
 
@@ -132,7 +135,7 @@ export function closeSequences(
         parent.set(codePoint, top);
         return top;
     };
-    const joined = (codePoint: number) => codePoint >= 0x80 && !EMOJI_COMPONENTS.has(codePoint);
+    const joined = (codePoint: number) => codePoint >= FIRST_NON_ASCII && !EMOJI_COMPONENTS.has(codePoint);
     for (const sequence of sequences) {
         const [first, ...others] = sequence.filter(joined);
         if (first === undefined) continue;
@@ -199,13 +202,6 @@ export function formatRange(codePoints: ReadonlySet<number>): string {
         i = j;
     }
     return ranges.join(', ');
-}
-
-function parseRange(unicodeRange: string): number[] {
-    return unicodeRange.split(',').flatMap((part) => {
-        const [start, end = start] = part.trim().slice(2).split('-');
-        return span(Number.parseInt(start, 16), Number.parseInt(end, 16));
-    });
 }
 
 function span(start: number, end: number): number[] {

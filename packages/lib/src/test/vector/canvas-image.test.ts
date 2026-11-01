@@ -3,7 +3,7 @@
 import { describe, expect, test } from 'bun:test';
 import { FLAT_CHART_LOOK, newChartSpecParts, readChartSpec, sampleChartSpec } from '../../charts';
 import { buildChartClipboardItem } from '../../core/clipboard/clipboard';
-import { canvasImageFaces, canvasImageName, canvasImageScene, chartImageName } from '../../vector/canvas-image';
+import { canvasImageName, canvasImageScene, canvasImageSlices, chartImageName } from '../../vector/canvas-image';
 import { solidFill } from '../../vector/fill';
 import type { MeasuredRichText, MeasuredText } from '../../vector/rich-text-svg';
 import { arrow, chart, richtext, shape } from './element-factories';
@@ -118,9 +118,9 @@ describe('canvasImageName', () => {
     });
 });
 
-describe('canvasImageFaces', () => {
-    const files = async (...args: Parameters<typeof canvasImageFaces>) =>
-        (await canvasImageFaces(...args)).map((slice) => slice.file);
+describe('canvasImageSlices', () => {
+    const files = async (...args: Parameters<typeof canvasImageSlices>) =>
+        (await canvasImageSlices(...args)).map((slice) => slice.file);
     const run = (fontFamily: string, text: string, fontStyle = 'normal'): MeasuredText => ({
         ...measured(fontFamily, fontStyle),
         chars: Array.from(text, (char) => ({ text: char, x: 0, y: 0, width: 10, height: 20 })),
@@ -148,7 +148,7 @@ describe('canvasImageFaces', () => {
 
     test('an emoji or a Chinese character in a run embeds the fallback slice that draws it', async () => {
         const text = richtext({ id: 't', html: '<p>x</p>', fontFamily: 'Inter' });
-        const picked = await canvasImageFaces([text], new Map([['t', box(run('Inter', 'a😀中', 'italic'))]]));
+        const picked = await canvasImageSlices([text], new Map([['t', box(run('Inter', 'a😀中', 'italic'))]]));
 
         expect(picked.map((slice) => `${slice.family} ${slice.style}`)).toEqual([
             'Inter italic',
@@ -164,6 +164,6 @@ describe('canvasImageFaces', () => {
     });
 
     test('a drawing without text embeds no slice', async () => {
-        expect(await canvasImageFaces([shape({ id: 'r', type: 'rectangle' })], new Map())).toEqual([]);
+        expect(await canvasImageSlices([shape({ id: 'r', type: 'rectangle' })], new Map())).toEqual([]);
     });
 });

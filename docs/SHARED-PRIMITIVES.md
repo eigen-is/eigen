@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2062 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2067 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -989,7 +989,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1109)
+## Utilities & constants (1114)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1336,9 +1336,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VCARD_CONTENT_TYPE` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `VCARD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `EMOJI_COMPONENTS` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `FIRST_NON_ASCII` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `FONT_SLICES` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slice-data.gen.ts |
 | `fontFaceCss` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `KEYCAP` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `parseUnicodeRange` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `slicesFor` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `sliceStyle` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `isStaleWrite` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -1767,9 +1772,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
-| `canvasImageFaces` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasImageName` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasImageScene` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
+| `canvasImageSlices` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasPtToPx` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `canvasPxToPt` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
