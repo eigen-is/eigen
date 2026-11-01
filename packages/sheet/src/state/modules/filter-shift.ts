@@ -20,6 +20,7 @@ export function shiftFilterForInsert(sheet: Sheet, op: InsertRowColOp) {
     const range = shiftRangeForInsert(filterRange, op);
     const [firstRow, lastRow] = range.row;
     const [firstColumn, lastColumn] = range.column;
+    // A filter keys each entry by its column's offset from the filter's first column, so a column op re-keys them.
     let shifted: Record<string, FilterEntry> | undefined;
     if (filter) {
         shifted = {};
@@ -41,6 +42,8 @@ export function shiftFilterForDelete(sheet: Sheet, op: DeleteRowColOp) {
     const { filterRange, filter } = sheet;
     if (!filterRange || isEmpty(filterRange)) return;
     const { type, start, end } = op;
+    // The first row is the header that holds the filter buttons, so deleting it removes the filter. A column delete
+    // keeps the filter while any of its columns are left.
     const deletesHeader = type === 'row' && filterRange.row[0] >= start && filterRange.row[0] <= end;
     const range = deletesHeader ? null : shiftRangeForDelete(filterRange, op);
     if (!range) {
@@ -68,6 +71,7 @@ function writeFilter(sheet: Sheet, range: SingleRange | undefined, filter: Recor
     sheet.filterRange = range;
     sheet.filter = filter;
     if (!filter || !sheet.config) return;
+    // The rows a filter hides are hidden rows of the sheet too.
     const rowhidden = (sheet.config.rowhidden ??= {});
     for (const entry of Object.values(filter)) {
         for (const row of Object.keys(entry.rowhidden)) rowhidden[row] = 0;

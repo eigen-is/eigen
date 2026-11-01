@@ -137,7 +137,6 @@ export const InputBox: React.FC = () => {
         }
     }, [context.editingCellPosition]);
 
-    // Disallow editing when the selected row/column is hidden
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-checks hidden-row/col status when selection changes
     useEffect(() => {
         setIsOnHiddenRowCol(isSelectionOnHiddenRowCol(context));

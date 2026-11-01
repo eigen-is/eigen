@@ -1,10 +1,12 @@
-// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts the cells, merges
-// and formulas of every sheet (applySheetsInsertRowCol, applySheetsDeleteRowCol); this module writes that result
-// back into the editor's draft and shifts what only the editor keeps, such as the filter, read-only rows, the
-// calc chain, validation rules, links and the selection. A local edit and a peer's op both come through here.
+// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts the cells, merges and
+// formulas of every sheet (applySheetsInsertRowCol, applySheetsDeleteRowCol). This module writes that result back
+// into the editor's draft, then shifts what the engine leaves alone, such as the filter, read-only rows, the calc
+// chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
+// and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
 import { cloneDeep } from 'es-toolkit/compat';
+import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
     applySheetsDeleteRowCol,
     applySheetsInsertRowCol,
@@ -24,16 +26,10 @@ import { shiftFilterForDelete, shiftFilterForInsert } from './filter-shift';
 
 export function insertRowCol(
     ctx: Context,
-    op: {
-        type: 'row' | 'column';
-        index: number;
-        count: number;
-        direction: 'lefttop' | 'rightbottom';
-        id: string;
-    },
+    op: InsertRowColOp,
     changeSelection = true,
-    // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
-    // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own insert only.
+    // applyOpBatch sets fromBatch for a peer's op or an undo. Such a batch applies for a read-only viewer too, and
+    // applyOpBatch moves the selection itself. So the permission check stops only a viewer's own insert.
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
@@ -46,8 +42,8 @@ export function insertRowCol(
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
 
-    // The engine refuses an op on a read-only row or column but does not move them.
-    // They shift here, by the same rule as hidden rows and columns.
+    // The engine refuses an op on a read-only row or column, but it does not move them.
+    // They move here, by the same rule as hidden rows and columns.
     const { config } = sheet;
     if (type === 'row' && config?.rowReadOnly) {
         config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, direction);
@@ -63,14 +59,14 @@ export function insertRowCol(
 
     const insertAt = direction === 'lefttop' ? index : index + 1;
     const shift = (at: number) => (at >= insertAt ? at + count : at);
-    // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
+    // The calc chain is this tab's recalc list and is never stored, so the engine does not move it.
     sheet.calcChain = (sheet.calcChain ?? []).map((entry) =>
         type === 'row' ? { ...entry, r: shift(entry.r) } : { ...entry, c: shift(entry.c) },
     );
     shiftFilterForInsert(sheet, op);
     shiftFrozenFocus(sheet, type, shift);
 
-    // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
+    // The new rows or columns copy the validation rules of the one at the insert index, but not its links.
     sheet.dataVerification = shiftCellKeyedForInsert(sheet.dataVerification, type, index, count, direction, cloneDeep);
     sheet.hyperlink = shiftCellKeyedForInsert(sheet.hyperlink, type, index, count, direction);
 
@@ -90,14 +86,9 @@ export function insertRowCol(
 
 export function deleteRowCol(
     ctx: Context,
-    op: {
-        type: 'row' | 'column';
-        start: number;
-        end: number;
-        id: string;
-    },
-    // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
-    // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own delete only.
+    op: DeleteRowColOp,
+    // applyOpBatch sets fromBatch for a peer's op or an undo. Such a batch applies for a read-only viewer too, and
+    // applyOpBatch moves the selection itself. So the permission check stops only a viewer's own delete.
     fromBatch = false,
 ) {
     if (!fromBatch && ctx.allowEdit === false) return;
@@ -110,8 +101,8 @@ export function deleteRowCol(
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
 
-    // The engine refuses an op on a read-only row or column but does not move them.
-    // They shift here, by the same rule as hidden rows and columns.
+    // The engine refuses an op on a read-only row or column, but it does not move them.
+    // They move here, by the same rule as hidden rows and columns.
     const { config } = sheet;
     if (type === 'row' && config?.rowReadOnly) {
         config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
@@ -120,14 +111,11 @@ export function deleteRowCol(
         config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
     }
 
-    const alternateFormats = [];
-    for (const rule of sheet.alternateFormatRules ?? []) {
+    sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).flatMap((rule) => {
         const cellrange = shiftRangeForDelete(rule.cellrange, op);
-        if (cellrange) alternateFormats.push({ ...rule, cellrange });
-    }
-    sheet.alternateFormatRules = alternateFormats;
+        return cellrange ? [{ ...rule, cellrange }] : [];
+    });
 
-    // calcChain entries are sheet-local; entries inside the deleted range drop out.
     const deletedCount = end - start + 1;
     const calcChain: CalcChainEntry[] = [];
     for (const entry of sheet.calcChain ?? []) {
@@ -148,7 +136,8 @@ export function deleteRowCol(
     ctx.formulaCache.formulaCellInfoMap = null;
 }
 
-// Hide selected rows/columns
+// Hiding moves the selection one step off the rows or columns it hid: up when they end the sheet or a hidden one
+// follows them, down otherwise. More than one selection returns 'noMulti', which the context menu shows as an alert.
 export function hideSelectedRowCol(ctx: Context, type: 'row' | 'column') {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
     const sheet = getSheet(ctx);
@@ -167,11 +156,10 @@ export function hideSelectedRowCol(ctx: Context, type: 'row' | 'column') {
     return '';
 }
 
-// Show (unhide) selected rows/columns
 export function showSelectedRowCol(ctx: Context, type: 'row' | 'column') {
     if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
-    // Unhiding cannot create hidden state, so it must not seed the map: on a sheet with
-    // nothing hidden that would ship an op to peers and take an undo entry for a no-op.
+    // Showing never creates the hidden map. On a sheet with nothing hidden, a new empty map would still ship an op
+    // to peers and take an undo entry, for a change that does nothing.
     const config = getSheetConfig(ctx);
     const hidden = type === 'row' ? config?.rowhidden : config?.colhidden;
     if (hidden) {
@@ -181,19 +169,18 @@ export function showSelectedRowCol(ctx: Context, type: 'row' | 'column') {
     return '';
 }
 
-// Check if the current selection is on a hidden row/column
+// The cell editors refuse to edit a selection that starts on a hidden row or column, a cell nobody can see.
 export function isSelectionOnHiddenRowCol(ctx: Context): boolean {
     const selection = ctx.selections?.[0];
     if (!selection) return false;
     const config = getSheetConfig(ctx);
-    // If the current selection is on a hidden row/column, it is not editable
     return (
         (config?.colhidden != null && selection.column[0] in config.colhidden) ||
         (config?.rowhidden != null && selection.row[0] in config.rowhidden)
     );
 }
 
-// Count hidden rows/columns to skip during keyboard navigation
+// An arrow key moves the selection past a whole run of hidden rows or columns, so it lands on a visible one.
 export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
     if (!ctx.selections) return 0;
     const vertical = key === 'ArrowUp' || key === 'ArrowDown';
@@ -211,11 +198,11 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
     return count;
 }
 
-// Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
-// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
-// undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
-// its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
-// once survives, and the undo puts back only the entries the op moved; an image never moves.
+// Writes the engine's result back one sheet and one field at a time, never `ctx.sheets = ...` or a whole sheet.
+// A whole write makes immer emit one replace that carries the whole workbook, and collab would ship it on every
+// edit. Undoing a whole sheet would also put back its images and charts over a peer's later changes. A moved chart
+// gets only the fields that changed, and a keyed part of its spec one entry at a time. So a peer's move or delete
+// of that chart, or its edit of another entry, survives, and the undo puts back only the entries the op moved.
 function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     for (const [i, next] of sheets.entries()) {
         const sheet: Record<string, unknown> = ctx.sheets[i];
@@ -240,7 +227,8 @@ function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     }
 }
 
-// Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
+// Writes `frozen` whole, never a field inside it. A peer's unfreeze removes `frozen`, and a write into a field
+// that is gone would not apply.
 function shiftFrozenFocus(sheet: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
     const { frozen } = sheet;
     if (!frozen?.range) return;

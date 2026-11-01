@@ -36,7 +36,6 @@ export function FxEditor() {
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: re-renders fx box only on real cell/sheet/selection changes — derived helpers are read fresh from `context`
     useEffect(() => {
-        // If selected row/column is in hidden state, don't allow editing
         setIsOnHiddenRowCol(isSelectionOnHiddenRowCol(context));
         // An open edit owns the box: the text in it is the user's, and a collaborative update
         // landing mid-keystroke must not overwrite it with the cell's stored content.
