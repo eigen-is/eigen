@@ -1,7 +1,8 @@
 // ShadowContent draws HTML that someone else wrote, such as a mail message, inside a closed shadow root, so the
 // sender's CSS can't reach the app and the app's can't reach the message. It sets a readable base style in the app's
 // font, follows the app theme or forces a light canvas, scales a too-wide layout down to fit, and highlights a search
-// term. The mail reading pane is one caller.
+// term. Every caller, such as the mail reading pane, passes a body the API sanitized with DOMPurify, so scripts are
+// the server's concern. The text is never rewritten here: the theme rules and the highlight change the parsed tree.
 
 import type React from 'react';
 import { useEffect, useRef } from 'react';
@@ -21,10 +22,6 @@ type ShadowContentProps = {
     highlightTerm?: string;
 };
 
-// Renders the HTML it is handed inside a closed shadow root: every caller passes a body the API sanitized
-// with DOMPurify as it parsed it, and its text is never rewritten here — what this changes, it changes on
-// the parsed tree (color-scheme rules through the CSSOM, ?q= matches into <mark>). Shadow DOM provides
-// style isolation; script isolation is handled by BE sanitization.
 export function ShadowContent({
     content,
     className,
@@ -65,7 +62,7 @@ export function ShadowContent({
         if (shadowRootRef.current) {
             shadowRootRef.current.innerHTML = '';
         } else {
-            shadowRootRef.current = hostElement.attachShadow({ mode: 'closed', clonable: true } as ShadowRootInit);
+            shadowRootRef.current = hostElement.attachShadow({ mode: 'closed', clonable: true });
         }
 
         const shadowRoot = shadowRootRef.current;
@@ -148,14 +145,13 @@ export function ShadowContent({
 
 const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
 
-// Wrap case-insensitive literal matches of `term` under `root` in <mark class="search-highlight">
-// and scroll the first into view. Literal (no option toggles) — mail's ?q= landing has no find
-// bar. Runs inside the closed shadow root we own; the mark style is injected with the content
-// (see styleElement below), since app CSS can't reach across the boundary.
+// Wraps each match of `term` under `root` in <mark class="search-highlight"> and scrolls the first into view. A match
+// ignores case and reads the term literally, because mail's ?q= landing has no find bar with options. App CSS can't
+// reach into the shadow root, so the mark's look is in the style element ShadowContent adds beside the content.
 function highlightMatches(root: HTMLElement, term: string): void {
     const regex = new RegExp(term.replace(REGEX_SPECIALS, '\\$&'), 'gi');
-    // Sanitized email HTML keeps <style> elements — a <mark> around "red"/"10px" mid-rule would
-    // corrupt the email's CSS. Skip text under non-rendered elements.
+    // Sanitized mail keeps its <style> elements, and a <mark> inside a rule would break the mail's CSS. So text under
+    // an element that draws nothing is skipped.
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
         acceptNode: (n) =>
             n.parentElement?.closest('style,script,title') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
