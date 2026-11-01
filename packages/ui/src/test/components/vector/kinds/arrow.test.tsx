@@ -7,14 +7,22 @@ import { installHappyDom } from '../../../happy-dom';
 const window = installHappyDom();
 
 // happy-dom has no font set and no 2d context, and the label measurement needs both. The load is a
-// deferred the test resolves itself — that IS the cold face this covers.
+// deferred the test resolves itself — that IS the cold face this covers. It keeps the text of each load, because a
+// face loads only the slices its text needs.
 let resolveFont = () => {};
 const fontLoaded = new Promise<void>((resolve) => {
     resolveFont = resolve;
 });
+const loadedTexts: (string | undefined)[] = [];
 // biome-ignore lint/suspicious/noExplicitAny: test-only DOM stubs happy-dom does not implement
 const g = globalThis as any;
-g.document.fonts = { load: () => fontLoaded, check: () => false };
+g.document.fonts = {
+    load: (_font: string, text?: string) => {
+        loadedTexts.push(text);
+        return fontLoaded;
+    },
+    check: () => false,
+};
 // biome-ignore lint/suspicious/noExplicitAny: test-only DOM stubs happy-dom does not implement
 (window.HTMLCanvasElement.prototype as any).getContext = () => ({ font: '', measureText: () => ({ width: 40 }) });
 
@@ -102,6 +110,8 @@ test('a label size typed against a cold font face is one undo step', async () =>
 
     expect(element.get('fontSize')).toBe(12);
     expect(undoManager.undoStack.length).toBe(1);
+    // The face loads the slices of the label it re-measures.
+    expect(new Set(loadedTexts)).toEqual(new Set(['label']));
 
     await act(async () => root.unmount());
     container.remove();

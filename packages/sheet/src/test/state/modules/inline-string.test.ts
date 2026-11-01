@@ -3,6 +3,8 @@
 // cell's `ct.s`. Each test drives the toolbar handler the user reaches and reads what the commit wrote.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { escapeHtml } from '@workspace/lib/html';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -108,7 +110,7 @@ describe('a format on selected characters', () => {
     test('a cell style object holds only the keys the cell sets', () => {
         expect(getFontStyleByCell({ fc: '#ff0000' })).toEqual({ color: '#ff0000' });
         expect(getFontStyleByCell({ it: 1 })).toEqual({ fontStyle: 'italic' });
-        expect(getFontStyleByCell({ ff: 'Source Serif 4' })).toEqual({ fontFamily: "'Source Serif 4', sans-serif" });
+        expect(getFontStyleByCell({ ff: 'Source Serif 4' })).toEqual({ fontFamily: getFontFamily('Source Serif 4') });
     });
 
     // A conditional format colors the cell's text, and its underline is drawn in the same color.
@@ -225,6 +227,8 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
         { ff: 'x;background:url(//evil)' },
         { ff: 'x\nbackground:url(//evil)' },
         { ff: 'expression(alert(1))' },
+        { ff: "x';background:url(//evil);'" },
+        { ff: 'x\\' },
     ];
 
     test('a color, size or font that is not a plain value falls back to the default', () => {
@@ -350,7 +354,7 @@ describe('the editor DOM read into runs', () => {
         const data = [[{ ct: { fa: 'General', t: 'inlineStr', s: stored } }]];
         const html = getInlineStringHTML(0, 0, data);
         // A family name with a digit in it is no CSS identifier, so it is a quoted string.
-        expect(html).toContain('font-family:&quot;Source Serif 4&quot;, sans-serif');
+        expect(html).toContain(`font-family:${escapeHtml(getFontFamily('Source Serif 4'))}`);
         const edit = editing(html, data[0][0]);
         expect(committedRuns(edit.input, data[0][0])).toEqual(stored);
     });

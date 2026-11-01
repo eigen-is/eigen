@@ -15,12 +15,16 @@ export const SHEET_DEFAULT_FONT: EigenFont = EIGEN_FONTS[0];
 const { digitWidth, unitsPerEm } = getFontMetrics(SHEET_DEFAULT_FONT.name);
 export const SHEET_DEFAULT_DIGIT_WIDTH = Math.round((digitWidth / unitsPerEm) * ((SHEET_DEFAULT_FONT_SIZE * 96) / 72));
 
+// What would let a font name end its CSS string or declaration, or start a function, where it is written.
+const UNSAFE_FONT_NAME = /[;("'\\\p{Cc}]/u;
+
 // A cell's `ff` is an index into EIGEN_FONTS or a family name. A rich-text run may hold a CSS stack,
-// such as one an older editor commit stored. Undefined means the sheet default.
+// such as one an older editor commit stored. Undefined means the sheet default. A peer writes `ff`, and
+// the name reaches CSS in the editor and the exports, so a name that could break out of it is none too.
 export function cellFontName(ff: number | string | undefined): string | undefined {
     if (typeof ff === 'number') return EIGEN_FONTS[ff]?.name;
-    const family = ff?.split(',')[0].replace(/['"]/g, '').trim();
-    if (!family) return undefined;
+    const family = ff?.split(',')[0].replace(/^ *(['"]?)(.*?)\1 *$/s, '$2');
+    if (!family || UNSAFE_FONT_NAME.test(family)) return undefined;
     return EIGEN_FONTS.find((font) => font.name.toLowerCase() === family.toLowerCase())?.name ?? family;
 }
 

@@ -1,82 +1,25 @@
+// ShadowContent draws HTML that someone else wrote, such as a mail message, inside a closed shadow root, so the
+// sender's CSS can't reach the app and the app's can't reach the message. It sets a readable base style in the app's
+// font, follows the app theme or forces a light canvas, scales a too-wide layout down to fit, and highlights a search
+// term. Every caller, such as the mail reading pane, passes a body the API sanitized with DOMPurify, so scripts are
+// the server's concern. The text is never rewritten here: the theme rules and the highlight change the parsed tree.
+
 import type React from 'react';
 import { useEffect, useRef } from 'react';
 import { cn } from '../lib/utils';
-
-const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
-
-// Wrap case-insensitive literal matches of `term` under `root` in <mark class="search-highlight">
-// and scroll the first into view. Literal (no option toggles) — mail's ?q= landing has no find
-// bar. Runs inside the closed shadow root we own; the mark style is injected with the content
-// (see styleElement below), since app CSS can't reach across the boundary.
-function highlightMatches(root: HTMLElement, term: string): void {
-    const regex = new RegExp(term.replace(REGEX_SPECIALS, '\\$&'), 'gi');
-    // Sanitized email HTML keeps <style> elements — a <mark> around "red"/"10px" mid-rule would
-    // corrupt the email's CSS. Skip text under non-rendered elements.
-    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-        acceptNode: (n) =>
-            n.parentElement?.closest('style,script,title') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
-    });
-    const targets: Text[] = [];
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-        if (n.nodeValue && regex.test(n.nodeValue)) targets.push(n as Text);
-        regex.lastIndex = 0;
-    }
-    let first: HTMLElement | null = null;
-    for (const textNode of targets) {
-        const text = textNode.nodeValue ?? '';
-        const frag = document.createDocumentFragment();
-        let last = 0;
-        regex.lastIndex = 0;
-        for (let m = regex.exec(text); m; m = regex.exec(text)) {
-            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
-            const mark = document.createElement('mark');
-            mark.className = 'search-highlight';
-            mark.textContent = m[0];
-            if (!first) first = mark;
-            frag.appendChild(mark);
-            last = m.index + m[0].length;
-            if (m[0].length === 0) regex.lastIndex++;
-        }
-        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
-        textNode.parentNode?.replaceChild(frag, textNode);
-    }
-    first?.scrollIntoView({ block: 'center' });
-}
 
 type ShadowContentProps = {
     content: string;
     className?: string;
     contentType?: 'html' | 'text';
-    // Author-styled HTML (real formatted mail) is written against a light background but
-    // rarely declares one, so explicit text colors go dark-on-dark in the dark theme.
-    // 'light' renders it on a light canvas regardless of app theme (what mail clients do);
-    // 'theme' keeps unstyled/derived content theme-native.
+    // A formatted mail is written for a light background but rarely sets one, so its own text colors would
+    // draw dark on dark in the dark theme. 'light' draws it on a light canvas whatever the app theme, as mail
+    // clients do. 'theme' follows the app theme, for content that sets no colors of its own.
     scheme?: 'light' | 'theme';
-    // A ?q= landing term: literal matches in the rendered body are wrapped in <mark> and the
-    // first is scrolled into view. Highlighting lives here because the shadow root is closed.
+    // The term a ?q= link lands with. The highlight lives here because the shadow root is closed.
     highlightTerm?: string;
 };
 
-const COLOR_SCHEME_CONDITION = {
-    light: /prefers-color-scheme\s*:\s*light/i,
-    dark: /prefers-color-scheme\s*:\s*dark/i,
-};
-
-// The queries read the OS preference, not the canvas we draw on. Through the CSSOM, never over the style
-// text: deleting a span of sanitized text can splice its neighbours into a token the server refused.
-function dropColorSchemeRules(parent: CSSStyleSheet | CSSGroupingRule, scheme: 'light' | 'dark'): void {
-    for (let i = parent.cssRules.length - 1; i >= 0; i--) {
-        const rule = parent.cssRules[i];
-        if (rule instanceof CSSMediaRule && COLOR_SCHEME_CONDITION[scheme].test(rule.conditionText))
-            parent.deleteRule(i);
-        else if (rule instanceof CSSGroupingRule) dropColorSchemeRules(rule, scheme);
-    }
-}
-
-// Renders the HTML it is handed inside a closed shadow root: every caller passes a body the API sanitized
-// with DOMPurify as it parsed it, and its text is never rewritten here — what this changes, it changes on
-// the parsed tree (color-scheme rules through the CSSOM, ?q= matches into <mark>). Shadow DOM provides
-// style isolation; script isolation is handled by BE sanitization.
 export function ShadowContent({
     content,
     className,
@@ -88,7 +31,6 @@ export function ShadowContent({
     const shadowHostRef = useRef<HTMLDivElement>(null);
     const shadowRootRef = useRef<ShadowRoot | null>(null);
 
-    // Sync shadow DOM color-scheme with the app theme (.dark class on <html>)
     useEffect(() => {
         const hostElement = shadowHostRef.current;
         if (!hostElement) return;
@@ -117,16 +59,14 @@ export function ShadowContent({
         if (shadowRootRef.current) {
             shadowRootRef.current.innerHTML = '';
         } else {
-            shadowRootRef.current = hostElement.attachShadow({ mode: 'closed', clonable: true } as ShadowRootInit);
+            shadowRootRef.current = hostElement.attachShadow({ mode: 'closed', clonable: true });
         }
 
         const shadowRoot = shadowRootRef.current;
 
-        // Create container for content
         const contentContainer = document.createElement('div');
         contentContainer.className = 'shadow-content-container';
 
-        // Add content based on type
         if (contentType === 'html') {
             contentContainer.innerHTML = content;
         } else {
@@ -134,16 +74,15 @@ export function ShadowContent({
             contentContainer.style.whiteSpace = 'pre-wrap';
         }
 
-        // Add some base styles to maintain readability
         const styleElement = document.createElement('style');
         styleElement.textContent = `
       .shadow-content-container {
-        font-family: var(--font-sans, 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+        font-family: var(--font-sans);
         color: light-dark(#333, #e8eaed);
         line-height: 1.5;
-        /* fit-content exposes the content's natural width (fixed-width mail layouts exceed
-           the host; wrapping content measures at host width), driving the scale-to-fit below.
-           overflow-wrap keeps one unbreakable token (a long URL) out of that measurement. */
+        /* fit-content gives the content's natural width, which the scale-to-fit below reads. A mail
+           with a fixed-width layout is wider than the host, and text that wraps is as wide as the host.
+           overflow-wrap keeps one long word, such as a URL, from widening that measurement. */
         width: fit-content;
         min-width: 100%;
         box-sizing: border-box;
@@ -155,25 +94,24 @@ export function ShadowContent({
       img { max-width: 100%; height: auto; }
       mark.search-highlight { background-color: #fde047; color: #1f2937; border-radius: 2px; }
 
-      /* Add prose-like styling for better readability */
       p, ul, ol, blockquote { margin-bottom: 1em; }
       h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; font-weight: var(--font-weight-medium); }
     `;
 
-        // Append style and content to shadow DOM
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
 
-        // A forced-light canvas drops the dark rules whatever the app theme; theme-native content drops
-        // whichever side disagrees with it. Only now: a style element parses no sheet until it is in a tree.
+        // A forced-light canvas drops the mail's dark rules whatever the app theme. Content that follows the
+        // theme drops the rules of the other side. This runs only now, because a style element parses no
+        // sheet until it is in a tree.
         const renderDark = scheme === 'theme' && document.documentElement.classList.contains('dark');
         for (const style of contentContainer.querySelectorAll('style')) {
             if (style.sheet) dropColorSchemeRules(style.sheet, renderDark ? 'light' : 'dark');
         }
 
-        // Same trick as the doc canvas: content wider than the host is scaled down to fit
-        // instead of overflowing. offset* metrics ignore the transform, so the observer
-        // never feeds itself; the negative margin reclaims the scaled-away height.
+        // Content wider than the host is scaled down to fit instead of overflowing, as on the doc canvas.
+        // The offset* sizes ignore the transform, so the observer never triggers itself. The negative
+        // margin takes back the height the scale removed.
         const fitToHost = () => {
             // All reads before all writes: an offset* read after a style write forces a layout flush.
             const hostWidth = hostElement.offsetWidth;
@@ -189,8 +127,8 @@ export function ShadowContent({
                 hostElement.style.marginBottom = '';
             }
         };
-        // Fit before the highlight scroll: scrollIntoView must see the scaled geometry,
-        // not the layout the observer is about to shrink.
+        // Fit before the highlight scrolls, so scrollIntoView sees the scaled layout and not the one the
+        // observer is about to shrink.
         fitToHost();
         if (highlightTerm) highlightMatches(contentContainer, highlightTerm);
 
@@ -201,4 +139,61 @@ export function ShadowContent({
     }, [content, contentType, scheme, highlightTerm]);
 
     return <div ref={shadowHostRef} className={cn('shadow-host', className)} {...props} />;
+}
+
+const COLOR_SCHEME_CONDITION = {
+    light: /prefers-color-scheme\s*:\s*light/i,
+    dark: /prefers-color-scheme\s*:\s*dark/i,
+};
+
+// A prefers-color-scheme query reads the OS setting, not the canvas the mail draws on. So the rules for the other
+// scheme are deleted, through the CSSOM and never in the style text. Cutting a span out of sanitized text can join
+// its neighbors into a token the server refused.
+function dropColorSchemeRules(parent: CSSStyleSheet | CSSGroupingRule, scheme: 'light' | 'dark') {
+    for (let i = parent.cssRules.length - 1; i >= 0; i--) {
+        const rule = parent.cssRules[i];
+        if (rule instanceof CSSMediaRule && COLOR_SCHEME_CONDITION[scheme].test(rule.conditionText))
+            parent.deleteRule(i);
+        else if (rule instanceof CSSGroupingRule) dropColorSchemeRules(rule, scheme);
+    }
+}
+
+const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
+
+// Wraps each match of `term` under `root` in <mark class="search-highlight"> and scrolls the first into view. A match
+// ignores case and reads the term literally, because mail's ?q= landing has no find bar with options. App CSS can't
+// reach into the shadow root, so the mark's look is in the style element ShadowContent adds beside the content.
+function highlightMatches(root: HTMLElement, term: string) {
+    const regex = new RegExp(term.replace(REGEX_SPECIALS, '\\$&'), 'gi');
+    // Sanitized mail keeps its <style> elements, and a <mark> inside a rule would break the mail's CSS. So text under
+    // an element that draws nothing is skipped.
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+        acceptNode: (n) =>
+            n.parentElement?.closest('style,script,title') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT,
+    });
+    const targets: Text[] = [];
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (n instanceof Text && n.nodeValue && regex.test(n.nodeValue)) targets.push(n);
+        regex.lastIndex = 0;
+    }
+    let first: HTMLElement | null = null;
+    for (const textNode of targets) {
+        const text = textNode.nodeValue ?? '';
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        regex.lastIndex = 0;
+        for (let m = regex.exec(text); m; m = regex.exec(text)) {
+            if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+            const mark = document.createElement('mark');
+            mark.className = 'search-highlight';
+            mark.textContent = m[0];
+            if (!first) first = mark;
+            frag.appendChild(mark);
+            last = m.index + m[0].length;
+            if (m[0].length === 0) regex.lastIndex++;
+        }
+        if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+        textNode.parentNode?.replaceChild(frag, textNode);
+    }
+    first?.scrollIntoView({ block: 'center' });
 }

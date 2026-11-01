@@ -2,7 +2,7 @@
 // returns its bytes and the warnings that count what it left out.
 
 import type { JSONContent } from '@tiptap/core';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
@@ -27,7 +27,7 @@ import type * as Y from 'yjs';
 import type { EigendocBands } from '../../document/doc';
 import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
-import { FONT_STACK_MONO } from '../../document/font-stacks';
+import { FONT_STACK_MONO, MONO_FONT_NAME } from '../../document/font-stacks';
 import { BODY, CHARACTER_WIDTH_EM, FOOTNOTE_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
@@ -119,7 +119,10 @@ export async function renderEigendocExport(
     const notesCss = notes.length > 0 ? (pageNotes ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
-        fonts: usedFamilies(body, style),
+        // The bundled families eigen-prose.css draws a doc's body in: the Normal's, which names no other as its
+        // fallback, and the monospace one where code renders. exportHtmlDocument adds the families the body names
+        // itself, such as a font mark's or a chart's.
+        cssFamilies: body.includes('<code') ? [style.font, MONO_FONT_NAME] : [style.font],
         css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? `${PAGE_NUMBER_CSS}${TOC_CSS}` : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
@@ -244,17 +247,6 @@ function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
                 0,
             ) <= pageLines,
     );
-}
-
-// The bundled families a doc's export can draw in, as a face is up to 0.6 MB of base64 WeasyPrint reads per PDF: the
-// Normal's, in which eigen-prose.css draws the body and which names no other as its fallback, the monospace of code,
-// and each family a font mark's style or a chart's SVG names in the body. A body's text that names a family embeds it
-// for nothing, and misses none.
-function usedFamilies(body: string, style: NormalStyle): Set<string> {
-    const families = new Set([style.font]);
-    if (body.includes('<code')) families.add(getFontName(FONT_STACK_MONO));
-    for (const name of EIGEN_FONT_NAMES) if (body.includes(name)) families.add(name);
-    return families;
 }
 
 // The bands are running elements placed before the body, as element() takes the one placed on the page or the last one

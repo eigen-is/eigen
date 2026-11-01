@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
-import { DOCUMENT_FONT, DOCUMENT_FONT_SIZE } from '../../../constants/fonts';
+import { DOCUMENT_FONT, DOCUMENT_FONT_SIZE, getFontFamily } from '../../../constants/fonts';
 import { restoreYjsDoc } from '../../../core/collab/yjs-utils';
 import type { NormalStyle } from '../../../docs/eigendoc';
 import {
@@ -87,7 +87,7 @@ describe('the Normal style', () => {
         expect(normalStyleProperties(DEFAULT_NORMAL_STYLE)).toEqual({});
         expect(normalStyleProperties({ ...DEFAULT_NORMAL_STYLE, size: 12 })).toEqual({ '--doc-font-size': '12pt' });
         expect(normalStyleProperties(WORD_2013)).toEqual({
-            '--doc-font-family': "'Source Serif 4', serif",
+            '--doc-font-family': getFontFamily('Source Serif 4'),
             '--doc-font-size': '12pt',
             '--doc-line-height': '1.3068',
             '--doc-space-before': '6pt',

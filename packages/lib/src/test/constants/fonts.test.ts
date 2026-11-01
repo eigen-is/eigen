@@ -4,12 +4,18 @@ import {
     bundledFontOfCategory,
     bundledFontOfStack,
     EIGEN_FONT_NAMES,
-    fontFacesFor,
+    EMOJI_FAMILIES,
+    fontNameToCss,
+    getFontFamily,
+    getFontName,
+    MATH_FAMILIES,
+    MATH_FONT_STACK,
     MAX_FONT_SIZE,
     MIN_FONT_SIZE,
     nextFontSize,
     readCssFontSize,
     readFontSize,
+    TEXT_FALLBACK_FAMILIES,
 } from '../../constants/fonts';
 
 describe('bundledFont', () => {
@@ -71,6 +77,47 @@ describe('bundledFontOfCategory', () => {
     });
 });
 
+describe('getFontFamily', () => {
+    // The order of the fallbacks never decides a glyph: each slice's range is disjoint from the other families'.
+    test('a family, then the emoji and CJK faces, then the system faces and the generic family', () => {
+        expect(getFontFamily('Inter')).toBe(
+            "'Inter', 'Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR', ui-sans-serif, system-ui, sans-serif",
+        );
+        expect(getFontFamily('Source Serif 4')).toBe(
+            "'Source Serif 4', 'Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR', Georgia, 'Times New Roman', serif",
+        );
+        expect(fontNameToCss('Inter')).toBe(getFontFamily('Inter'));
+    });
+
+    // The emoji face holds the digits, # and * for its keycaps, so a font the browser lacks must not fall to it.
+    test("an unknown font falls back on its category's bundled stack, else the document font's", () => {
+        expect(getFontFamily('Georgia')).toBe(`'Georgia', ${getFontFamily('Source Serif 4')}`);
+        expect(getFontFamily('Bell MT')).toBe(`'Bell MT', ${getFontFamily('Inter')}`);
+    });
+
+    test('the lists of fallback families split the registry by kind', () => {
+        expect(TEXT_FALLBACK_FAMILIES).toEqual(['Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR']);
+        expect(EMOJI_FAMILIES).toEqual(['Eigen Emoji']);
+        expect(MATH_FAMILIES).toEqual(['New Computer Modern Math']);
+    });
+
+    // Only a formula draws in the math face, which covers Latin too.
+    test('no text stack names the math face, and the math stack names only it', () => {
+        for (const name of EIGEN_FONT_NAMES) expect(getFontFamily(name)).not.toContain(MATH_FAMILIES[0]);
+        expect(MATH_FONT_STACK).toBe("'New Computer Modern Math', math");
+    });
+
+    // A doc stored before marks held a name keeps its whole stack, the old short one or a longer one.
+    test('a stored stack, old or new, collapses to its name and draws as it is stored', () => {
+        for (const name of EIGEN_FONT_NAMES) {
+            expect(getFontName(getFontFamily(name))).toBe(name);
+        }
+        expect(getFontName("'Source Serif 4', serif")).toBe('Source Serif 4');
+        expect(getFontName('"JetBrains Mono", monospace')).toBe('JetBrains Mono');
+        expect(fontNameToCss("'Source Serif 4', serif")).toBe("'Source Serif 4', serif");
+    });
+});
+
 describe('font sizes', () => {
     test("a size lands in Google's 1 to 400 pt, in Word's half points", () => {
         expect(readFontSize(12)).toBe(12);
@@ -123,39 +170,5 @@ describe('bundledFontOfStack', () => {
     test('a stack of unknown and generic families maps to none', () => {
         expect(bundledFontOfStack('Wingdings, sans-serif')).toBeUndefined();
         expect(bundledFontOfStack('')).toBeUndefined();
-    });
-});
-
-describe('fontFacesFor', () => {
-    const files = (uses: { family: string; style: string }[]) => fontFacesFor(uses).map((face) => face.file);
-
-    test("an upright run needs only its family's upright face, an italic one only its italic face", () => {
-        expect(files([{ family: 'Inter', style: 'normal' }])).toEqual(['inter/Inter-Variable.woff2']);
-        expect(files([{ family: 'Source Serif 4', style: 'italic' }])).toEqual([
-            'source-serif/SourceSerif4-Variable-Italic.woff2',
-        ]);
-    });
-
-    test('a family without an italic face draws its italic from the upright one, which is embedded', () => {
-        expect(files([{ family: 'Excalifont', style: 'italic' }])).toEqual(['excalifont/Excalifont-Regular.woff2']);
-        expect(files([{ family: 'JetBrains Mono', style: 'oblique' }])).toEqual([
-            'jetbrains-mono/JetBrainsMono-Variable.woff2',
-        ]);
-    });
-
-    test('each face once, in registry order; an unknown family has none', () => {
-        expect(
-            files([
-                { family: 'Inter', style: 'italic' },
-                { family: 'Excalifont', style: 'normal' },
-                { family: 'Inter', style: 'normal' },
-                { family: 'Inter', style: 'italic' },
-                { family: 'Wingdings', style: 'normal' },
-            ]),
-        ).toEqual([
-            'inter/Inter-Variable.woff2',
-            'inter/Inter-Variable-Italic.woff2',
-            'excalifont/Excalifont-Regular.woff2',
-        ]);
     });
 });

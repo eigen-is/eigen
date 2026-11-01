@@ -1,15 +1,7 @@
-// The in-canvas text editor: a raw <textarea> (not shadcn — its border/ring/min-height are wrong
-// for a canvas overlay) absolutely positioned over the element via the viewport transform, styled
-// so WYSIWYG holds against the committed SVG <text>. `text` is a PLAIN string with \n, so a
-// contentEditable/Tiptap surface would smuggle HTML into a plain-string field — a textarea is
-// Excalidraw's own choice and the correct one here.
-//
-// Commit-once latch (audited against UX risk #1 — double-handling): exactly one commit per
-// session, or zero for an empty new element. Escape commits (claimed here via onKeyDown +
-// stopPropagation so the canvas's Escape-deselect never also fires); click-away commits and the
-// click is swallowed (a capture-phase document pointerdown: commit + stopPropagation so the
-// committing click can't also marquee/deselect/place); blur is the alt-tab fallback. Enter inserts
-// a newline (never commits). The textarea is uncontrolled so its native ⌘Z owns in-session undo.
+// The editor of an arrow label: a plain <textarea> placed over the label through the viewport transform and styled
+// like the SVG <text> it becomes. A label is a plain string, so a rich-text editor would let HTML into it. A session
+// commits exactly once, on Escape, a click elsewhere, blur or unmount, and the host decides what the text becomes.
+// Enter inserts a newline, and the textarea's own undo covers the session.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { Box, TextAlign } from '@workspace/lib/vector';
@@ -18,25 +10,25 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
 
 type TextOverlayProps = {
-    // Element top-left + box in scene units (box drives the rotation origin).
+    // The element's top-left corner and its box, in scene units. The box sets the rotation origin.
     x: number;
     y: number;
     width: number;
     height: number;
     angle: number;
     zoom: number;
-    // The canvas container — a click-away inside it commits AND is swallowed (never marquee/place);
-    // a click-away outside it (properties panel, toolbar) commits but is left untouched so the
-    // control receives its first click.
+    // The canvas container. A click away inside it commits and is swallowed, so it never starts a marquee
+    // or places an element. A click away outside it, such as on the properties panel or the toolbar, commits
+    // and is left alone, so that control still gets its first click.
     containerRef: React.RefObject<HTMLElement | null>;
-    // Host positioning of the overlay: reuses the canvas's boxToStyle for container-px left/top.
+    // The canvas's own boxToStyle, which places the overlay in the container's pixels.
     boxToStyle: (box: Box) => React.CSSProperties;
     initialText: string;
     fontSize: number;
     fontFamily: string;
     textAlign: TextAlign;
     color: string;
-    // Fires exactly once with the final text; the host decides add/update/delete and re-measures.
+    // Fires exactly once with the final text. The host decides what it becomes and measures it.
     onCommit: (text: string) => void;
 };
 
@@ -56,68 +48,71 @@ export function TextOverlay({
     color,
     onCommit,
 }: TextOverlayProps) {
-    const taRef = useRef<HTMLTextAreaElement>(null);
-    // Latest textarea value — the textarea is uncontrolled (native undo), so read it from here.
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    // The textarea's latest value. The textarea is uncontrolled, to keep the browser's own undo, so its
+    // value is read from here.
     const valueRef = useRef(initialText);
     const committedRef = useRef(false);
 
-    // Commit what the READER keeps: labelText caps bytes (not UTF-16 units) and lines, so the stored
-    // label is never longer than what every peer's read, render and export will show.
+    // The commit stores what the reader keeps. labelText caps the bytes, not the UTF-16 units, and the lines,
+    // so the stored label is never longer than what every peer's read, render and export will show.
     const commit = useCallback(() => {
         if (committedRef.current) return;
         committedRef.current = true;
         onCommit(labelText(valueRef.current));
     }, [onCommit]);
 
-    // Unmount commits (the latch makes it a no-op after any normal commit): a route change or a
-    // connection drop swapping the editor to its loading state must not silently drop the session's
-    // text. Via ref so a mid-session onCommit identity change can't fire it. (No StrictMode anywhere
-    // in Eigen — a simulated unmount would trip this latch and dead-lock the session if that changes.)
+    // An unmount commits too, and the latch makes that a no-op after a normal commit. A route change or a
+    // dropped connection swaps the editor for its loading state, and that must not lose the session's text.
+    // It reads commit through a ref, so a new onCommit during the session doesn't fire it. Eigen uses no
+    // StrictMode: its simulated unmount would trip the latch and lock the session.
     const commitRef = useRef(commit);
     commitRef.current = commit;
     useEffect(() => () => commitRef.current(), []);
 
-    // Grow snugly to content (wrap="off" → widest line drives width). scrollWidth/scrollHeight are
-    // fine for the live editing box; the STORED dims come from the canvas measurement util, never here.
+    // The box grows to fit its text, and with wrap off the widest line sets the width. The scroll sizes are
+    // good enough for the live box. The stored width and height come from measureVectorText, never from here.
     const grow = () => {
-        const ta = taRef.current;
-        if (!ta) return;
-        ta.style.width = '0px';
-        ta.style.width = `${ta.scrollWidth + 2}px`; // +2 leaves room for the caret at line end
-        ta.style.height = '0px';
-        ta.style.height = `${ta.scrollHeight}px`;
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.style.width = '0px';
+        textarea.style.width = `${textarea.scrollWidth + 2}px`; // +2 leaves room for the caret at line end
+        textarea.style.height = '0px';
+        textarea.style.height = `${textarea.scrollHeight}px`;
     };
 
     useLayoutEffect(() => {
-        const ta = taRef.current;
-        if (!ta) return;
+        const textarea = textareaRef.current;
+        if (!textarea) return;
         grow();
-        ta.focus();
-        // Canvas-label convention (Excalidraw/Figma/tldraw): editing an existing element selects
-        // all so the first keystroke replaces; a fresh element just gets the caret.
-        if (initialText) ta.select();
-        else ta.setSelectionRange(0, 0);
+        textarea.focus();
+        // Editing an existing label selects all of it, so the first key replaces it, as in Excalidraw, Figma and
+        // tldraw. A fresh label just gets the caret.
+        if (initialText) textarea.select();
+        else textarea.setSelectionRange(0, 0);
     }, []);
 
-    // Ensure the face is registered before the user commits (measurement needs it); re-grow once it
-    // swaps in so the box fits the real metrics rather than the fallback font.
-    useEffect(() => {
-        loadVectorFont(fontSize, fontFamily)
+    // A face loads only the unicode-range slices its text needs. So the overlay loads the slices of its text as it
+    // opens and as the user types, before the host measures the label at commit. Once they swap in, the box grows
+    // again to fit the real metrics rather than the fallback's. An empty text matches no slice, so a fresh label
+    // loads the slice with the space.
+    const loadFont = (text: string) => {
+        loadVectorFont(fontSize, fontFamily, text || ' ')
             .then(grow)
             .catch(() => {});
-    }, [fontSize, fontFamily]);
+    };
+    useEffect(() => loadFont(valueRef.current), [fontSize, fontFamily]);
 
-    // Click-away commit — capture phase so it runs before the canvas's React pointerdown. Clicks
-    // inside the textarea (caret moves) pass through. A click elsewhere on the CANVAS commits and is
-    // swallowed (never marquee/deselect/place). A click on the surrounding chrome (properties panel,
-    // toolbar) commits the session but is left untouched, so that control gets its first click
-    // instead of a dead one — and the session is committed before any panel write lands on it.
+    // A click away commits. It listens in the capture phase, so it runs before the canvas's own pointerdown.
+    // A click inside the textarea moves the caret and passes through. A click elsewhere on the canvas commits
+    // and is swallowed, so it never starts a marquee, deselects or places an element. A click on the chrome
+    // around it, such as the properties panel or the toolbar, commits and is left alone. That control gets
+    // its first click, and the session is committed before the control writes to the element.
     useEffect(() => {
         const onPointerDown = (e: PointerEvent) => {
-            const ta = taRef.current;
-            if (ta && (e.target === ta || ta.contains(e.target as Node))) return;
-            const container = containerRef.current;
-            if (container?.contains(e.target as Node)) {
+            const target = e.target instanceof Node ? e.target : null;
+            if (textareaRef.current?.contains(target)) return;
+            if (containerRef.current?.contains(target)) {
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -132,10 +127,10 @@ export function TextOverlay({
 
     return (
         <textarea
-            ref={taRef}
+            ref={textareaRef}
             defaultValue={initialText}
-            // Coarse DOM-side guard against a pathological paste — UTF-16 units, so it is always looser
-            // than the reader's byte budget. commit() is what actually caps.
+            // A rough guard against a huge paste. It counts UTF-16 units, so it is always looser than the
+            // reader's byte budget, and commit() is what caps the label.
             maxLength={MAX_ARROW_LABEL_BYTES}
             wrap="off"
             spellCheck={false}
@@ -144,8 +139,8 @@ export function TextOverlay({
                 left: pos.left,
                 top: pos.top,
                 transform: angle ? `rotate(${angle}deg)` : undefined,
-                // Rotate about the element center (matches the SVG's rotate-about-center), expressed
-                // in the textarea's local px frame; new/unrotated text has a 0,0 box so this is inert.
+                // Rotate about the element's center, as the SVG does, in the textarea's own pixels. A new or
+                // unrotated label has an empty box, so this does nothing there.
                 transformOrigin: `${(width * zoom) / 2}px ${(height * zoom) / 2}px`,
                 boxSizing: 'content-box',
                 margin: 0,
@@ -167,9 +162,11 @@ export function TextOverlay({
             onInput={(e) => {
                 valueRef.current = e.currentTarget.value;
                 grow();
+                loadFont(valueRef.current);
             }}
             onKeyDown={(e) => {
-                // Skip while composing: IME Escape cancels the composition, not the session.
+                // Escape stops here, so the canvas doesn't also deselect. While an IME composes, Escape cancels the
+                // composition, not the session.
                 if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
                     e.preventDefault();
                     e.stopPropagation();

@@ -495,10 +495,10 @@ describe('document transform (eigensheets preview)', () => {
 });
 
 // The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
-// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by clipping only
-// the cells whose text can pass their rows).
-const GOLDEN_EXPORT_HTML_SHA256 = '4d987ae8d45dd43720f67c95991509f573197cc69ba11cbff4db7d7c81d12ebd';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '72914e5497fcdb8d5183be54c7862fa2ca70d5cfc36bd2998c3a3fd78eb81fb8';
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved when it embedded
+// only the font slices its text touches and its stacks took the emoji and CJK faces).
+const GOLDEN_EXPORT_HTML_SHA256 = 'a7d1ebe83789b87ccd5cb32301eefb99125b59c43431cdece3696b8e99ba9bbf';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = '3ff130079f709fdabba354497d6705a7f3a94c9f060e446eb79ba34e6563c688';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -861,20 +861,21 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
-// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when the
-// table of contents' rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head took
-// the page-number rules of all three layouts, for every doc.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6f1c417956854ebe9cb63734a51c27a6788d9099e339f875395ee2b14630c1ea';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6a936e9608db69c4726650044fc086f06176463fa0526e22c49d5bfe85f5105c';
+// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when
+// they embedded only the font slices the doc's text touches and the math rule named New Computer Modern Math, after
+// the table of contents' rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head
+// took the page-number rules of all three layouts, for every doc.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6b8e113fac9f4d1b9de37578d9c4ef84169a0356011556a4224f4ede74679e6f';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '24c2a73f3646936c0b6498a7b88ae374bfa7ae38d4d04631760be4c8ce994756';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
-// The HTML download embeds canvas-text.css whole, its comments too, so it last moved with its header comment. The
-// PDF's last moved when the golden image went in as a JPEG made from its source instead of its WebP preview.
-const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ecaf8cfcc7d68e1388c6c291039d74a500b894a6bb5bccbe3dd5ffb5c6aab5d6';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'c160dfae9d26c67fe924166b5f6786cdbcd4035dff0646a62463a4d517f1fb78';
+// The HTML download embeds canvas-text.css whole, its comments too. The preview last moved when every font stack
+// took the emoji and CJK faces, and the HTML download and the PDF's when they also embedded only the slices it touches.
+const GOLDEN_DECK_PREVIEW_SHA256 = 'eaa231a9db70fc95ad6c50a9001c39efa94abd7a51cdfd5f6aebb6f5facd2399';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '93cf052f69b1fda0401ee48129977413cf67725706a53c216848d5b068d308c9';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'fc686ad1fa96200c42651a7ab9d06c9cdcfa5c45b92297ea6827ebb0c0889955';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.

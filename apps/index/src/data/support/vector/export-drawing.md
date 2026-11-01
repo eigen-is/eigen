@@ -6,7 +6,7 @@ category: Export
 tags: [vector, export, download, svg, pdf, print]
 related: [vector/get-started, vector/share-and-comment]
 order: 80
-updated: 2026-10-23
+updated: 2026-11-01
 ---
 
 You can download a drawing from Vector as an SVG image or as a PDF. Both formats include the whole drawing, cropped to its content with a small margin around the edges.
@@ -34,7 +34,7 @@ If the drawing has a background color, the SVG includes it. A drawing with a tra
 
 To download only part of a drawing, select it, right-click, and choose **Download image**. That SVG has no background, and a chart on its own gets a white one. See [Arrange and align](/support/vector/arrange-and-align#the-right-click-menu).
 
-Right-to-left text, such as Arabic or Hebrew, and emoji can look different in the SVG than on the canvas.
+Right-to-left text, such as Arabic or Hebrew, can look different in the SVG than on the canvas.
 
 ## PDF
 

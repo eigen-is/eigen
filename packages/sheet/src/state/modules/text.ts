@@ -1,8 +1,10 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
-// and where each piece of text sits, a rich cell's runs included. The painter lays out every cell it
-// draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
-// until clearMeasureTextCache.
+// and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
+// both lay out here. Text measurements are cached until clearMeasureTextCache, which the font watcher
+// calls when a font slice loads before it tells the grids to redraw. The cell editors ask for the font
+// slices of the text being typed, so a commit measures the real face.
 
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
@@ -111,19 +113,48 @@ function checkWordByteLength(value: string) {
 }
 
 export function hasChinaword(s: string) {
-    const patrn = /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi;
-
-    if (!patrn.exec(s)) {
-        return false;
-    }
-    return true;
+    return /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/.test(s);
 }
 
-const textHeightCache: Record<string, [number, number]> = {};
+let textHeightCache: Record<string, [number, number]> = {};
 let measureTextCache: Record<string, MeasureTextMetrics> = {};
 
+// A font slice that loads changes what the text measures, so the font watcher clears both caches when one arrives.
 export function clearMeasureTextCache() {
     measureTextCache = {};
+    textHeightCache = {};
+}
+
+// WebKit fires no loadingdone for the slices a canvas draw fetches, but a face's loaded promise settles in every
+// browser. A face that fails to load settles too, and its text then draws in the next face of its stack. The faces
+// one frame needs arrive over several frames, so the watcher waits for the set's ready promise and tells the grids
+// once for all of them. It lives at module scope because most faces, such as the CJK slices, never load in a
+// session: a reaction chained per grid would keep that grid's workbook alive for the page's lifetime.
+const watchedFaces = new WeakSet<FontFace>();
+const fontListeners = new Set<() => void>();
+let waitingForFonts = false;
+
+// Each call also watches the faces added to the page since the last one.
+export function watchFontFaces(listener: () => void) {
+    for (const face of document.fonts) {
+        if (face.status === 'loaded' || watchedFaces.has(face)) continue;
+        watchedFaces.add(face);
+        face.loaded.then(onFaceSettled, onFaceSettled);
+    }
+    fontListeners.add(listener);
+    return () => {
+        fontListeners.delete(listener);
+    };
+}
+
+function onFaceSettled() {
+    if (waitingForFonts) return;
+    waitingForFonts = true;
+    document.fonts.ready.then(() => {
+        waitingForFonts = false;
+        clearMeasureTextCache();
+        for (const listener of fontListeners) listener();
+    });
 }
 
 function getTextSize(text: string, font: string) {
@@ -132,12 +163,13 @@ function getTextSize(text: string, font: string) {
     }
 
     const ele = document.createElement('span');
+    ele.style.font = font;
     ele.style.float = 'left';
     ele.style.whiteSpace = 'nowrap';
     ele.style.visibility = 'hidden';
     ele.style.margin = '0';
     ele.style.padding = '0';
-    ele.innerHTML = text;
+    ele.textContent = text;
     document.body.append(ele);
 
     const w = Math.max(ele.scrollWidth, ele.offsetWidth, ele.clientWidth);
@@ -149,29 +181,22 @@ function getTextSize(text: string, font: string) {
     return [w, h];
 }
 
-// After the cell's font: the faces for a glyph it lacks, CJK among them, or for a name the browser doesn't have.
-const FALLBACK_FAMILIES = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
-
 export function defaultFont() {
     return getFontSet(null);
 }
 
 export function getFontSet(format: CellStyle | null | undefined) {
-    const fontAttr: string[] = [];
+    const style = format?.it ? 'italic' : 'normal';
+    const weight = format?.bl ? 'bold' : 'normal';
+    const family = getFontFamily(cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name);
+    return `${style} normal ${weight} ${cellFontSize(format?.fs)}pt ${family}`;
+}
 
-    // font-style
-    fontAttr.push(!format?.it ? 'normal' : 'italic');
-
-    // font-variant
-    fontAttr.push('normal');
-
-    // font-weight
-    fontAttr.push(!format?.bl ? 'normal' : 'bold');
-
-    // font-size
-    fontAttr.push(`${cellFontSize(format?.fs)}pt`);
-
-    return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
+// A face loads only the unicode-range slices its text needs. A wrapped cell's row height is measured once, when the
+// cell commits. So an editor loads the cell's font for its text as the user types, and the commit measures the real
+// face.
+export function loadCellFont(cell: CellStyle | null | undefined, text: string) {
+    document.fonts.load(getFontSet(cell), text).catch(() => {});
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.
@@ -234,12 +259,8 @@ export function getMeasureText(
     return metrics;
 }
 
-export function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
-    const measureText = ctx.measureText('田');
-    if (isNil(measureText.actualBoundingBoxAscent)) {
-        return false;
-    }
-    return true;
+function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
+    return !isNil(ctx.measureText('田').actualBoundingBoxAscent);
 }
 
 export function drawLineInfo(

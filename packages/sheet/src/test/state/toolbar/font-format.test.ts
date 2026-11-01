@@ -5,7 +5,7 @@
 // when they go through separate drafts.
 
 import { describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { enablePatches, produceWithPatches } from 'immer';
 import { setColumnWidth } from '../../../state/api/rowcol';
 import type { Context } from '../../../state/context';
@@ -17,13 +17,9 @@ import { contextFactory } from '../factories/context';
 
 enablePatches();
 
-// getTextSize falls back to a DOM span when a canvas reports no bounding box, so happy-dom
-// is installed at module scope the way modules/cell.test.ts does.
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-const win = new Window();
-g.window = win;
-g.document = win.document;
+// getTextSize falls back to a DOM span when a canvas reports no bounding box, so the page is
+// installed at module scope.
+const win = installHappyDom();
 
 // Only `font` and `measureText` are read on the auto-height path.
 function measuringCanvas(): CanvasRenderingContext2D {

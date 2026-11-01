@@ -1,8 +1,10 @@
 # Typography and Self-Hosted Fonts
 
-> **TLDR:** Four self-hosted font families (Inter, Source Serif 4, JetBrains Mono, Excalifont) ship as woff2 files in `packages/ui/src/assets/fonts/`, declared in `packages/ui/src/styles/fonts.css`, with no external CDN. `EIGEN_FONTS` (`packages/lib/src/constants/fonts.ts`) is the one list the pickers read. Its order is load-bearing, since a sheet cell can store a font as an index into it. Docs and the canvas store a font's name, never a CSS stack. A new font touches six places, because the canvas metrics, the export and the licenses page keep lists of their own.
+> **TLDR:** Eigen bundles every font it draws, with no external CDN: four text families a user picks (Inter, Source Serif 4, JetBrains Mono, Excalifont) and four fallback faces for what those lack (emoji, Chinese, Korean and math). Every face is cut into `unicode-range` slices in `packages/ui/src/assets/fonts/`, so a page loads and an export embeds only the slices its text draws. `EIGEN_FONTS` and `FALLBACK_FONTS` (`packages/lib/src/constants/fonts.ts`) are the lists everything reads, and `getFontFamily` builds every CSS stack from them. Docs and the canvas store a font's name, never a CSS stack.
 
-This doc governs the fonts every app, editor and export uses, and the weight scale of the UI. Read it before you add a font, change a weight or touch how an editor stores a font choice. A font choice is part of a document: a doc's text, a sheet cell and a canvas text box each store theirs in the document's Yjs data ([COLLAB.md](COLLAB.md)), and an export embeds the same faces ([EXPORT.md](EXPORT.md)). So the font list is a stored format as much as a menu, and most of its rules follow from that.
+This doc governs the fonts every app, editor and export uses, and the weight scale of the UI. Read it before you add a font, change a weight or touch how an editor stores a font choice. A font choice is part of a document: a doc's text, a sheet cell and a canvas text box each store theirs in the document's Yjs data ([COLLAB.md](COLLAB.md)), and an export embeds the same faces ([EXPORT.md](EXPORT.md#an-export-embeds-only-the-font-slices-its-text-draws)). So the font list is a stored format as much as a menu, and most of its rules follow from that.
+
+A fallback face is one no user picks: it draws the characters the text faces lack, so an emoji or a Chinese word looks the same on every computer, in the PDF and in the HTML download. A slice is one WOFF2 file of a face that draws a range of characters, as Google Fonts serves its fonts. A canvas measures text in a fallback until the slice that draws it has loaded, which surprises people ([§ A canvas waits for the slices of its text](#a-canvas-waits-for-the-slices-of-its-text)). The registry's order is load-bearing, since a sheet cell can store a font as an index into it ([§ The registry's order is load-bearing](#the-registrys-order-is-load-bearing)), and a new font touches six places ([§ A new font touches six places](#a-new-font-touches-six-places)).
 
 ## Four families ship with the app
 
@@ -15,11 +17,52 @@ This doc governs the fonts every app, editor and export uses, and the weight sca
 
 The files are Vite assets, so they are hashed and cached like any other. Nothing loads from a font CDN: a self-hosted server makes no request to a third party to render text. Every face uses `font-display: swap`, so text shows at once in the fallback and swaps when the font arrives.
 
-All four are licensed under the SIL Open Font License (OFL 1.1). The license asks that it travels with the font, so each font folder carries its `OFL.txt`, and the /licenses page of the index app lists every font.
+The text faces and the Noto faces are licensed under the SIL Open Font License (OFL 1.1), and New Computer Modern Math under the GUST Font License. Each license asks that it travels with the font, so each font folder carries its `OFL.txt` or `GUST-FONT-LICENSE.txt`, and the /licenses page of the index app lists every font.
+
+## Four fallback faces draw what the text faces lack
+
+| Family | Kind | Draws |
+|---|---|---|
+| Eigen Emoji | emoji | Noto Emoji's outlines at weights 400 to 700, monochrome in the text colour |
+| Noto Sans SC | cjk | Han, kana, Bopomofo and the CJK symbols and forms, all in Simplified Chinese forms |
+| Noto Sans KR | cjk | Hangul syllables and jamo |
+| New Computer Modern Math | math | Every equation, and nothing else |
+
+`FALLBACK_FONTS` lists them, and its order is load-bearing: the vendoring script gives a character to the first family whose kind covers it, before any text face, so no two families draw the same character. The keycap bases are the one exception: `#`, `*` and the digits sit in the emoji face's keycap slice as well as in the text faces, so a keycap draws whole. The text faces keep © ® ™, which body text writes often; every other symbol the emoji coverage holds, such as ❤ and ↔, draws in Eigen Emoji even where Inter has it.
+
+The emoji face is Noto Emoji. We add a colour table (COLR, the font table that holds coloured glyphs) with one layer per glyph, and that layer is the glyph in the text colour. Without the table, Chromium and Firefox skip the font for a flag, a skin tone or an emoji followed by VS16 (the invisible mark that asks for the emoji look of a character). They draw the system's colour emoji instead. With the table, every surface draws one monochrome emoji in the CSS `color`. Its family is "Eigen Emoji", never "Noto Emoji", because fontconfig gives that name an emoji alias, and WeasyPrint would then take the digits from another font. The PDF prints its outlines ([EXPORT.md](EXPORT.md#weasyprint-prints-the-slices-through-a-shim-in-its-render-script)).
+
+Han draws in Simplified Chinese forms, Japanese kana included, since one code point has regional forms and the stacks name one region; Japanese and Traditional Chinese forms are a [ROADMAP-POST-1.md](ROADMAP-POST-1.md) row. There is no serif CJK face: Source Serif 4 text gets the sans one. The math face is in no text stack, since only a formula draws in it: one `math` rule in `eigen-prose.css` names `--font-math`, in the editor, the panel and the HTML download, and the PDF draws each equation through MathJax, whose default font is New Computer Modern too ([DOCS.md](DOCS.md#every-equation-draws-in-new-computer-modern-math-with-css-for-what-chrome-leaves-out)).
+
+## Every face is cut into unicode-range slices
+
+A whole face is too much to load for a page or to embed in an export: Noto Sans SC's slices are about 10 MB, and whole faces made the HTML download of a short doc 1.16 MB. So `scripts/fonts/build-font-slices.ts` cuts every face once into slices on the ranges Google Fonts serves for it, from a committed snapshot of Google's CSS, and writes three things: the WOFF2 slices beside each face, `fonts.css` with one `@font-face` rule per slice and its `unicode-range`, and `FONT_SLICES` (`packages/lib/src/constants/font-slice-data.gen.ts`), the same table for code. The browser fetches a slice only when a page draws a character in its range, and `slicesFor` (`packages/lib/src/constants/font-slices.ts`) picks the slices an export or a downloaded image embeds from the same table ([EXPORT.md](EXPORT.md#an-export-embeds-only-the-font-slices-its-text-draws)). The script shells out to fontTools in a local venv and downloads each fallback from a URL pinned by SHA-256, so it is run by hand when a font changes and adds no package; its header comment says how.
+
+The planning half, `scripts/fonts/plan-slices.ts`, decides which characters each slice holds:
+
+- A slice declares its published range, cut to what the font maps, to what its kind covers and to what no earlier family claims.
+- The emoji slices are cut closed: every character an RGI sequence (an emoji sequence the Unicode standard lists, such as a flag or a skin tone, or a joined emoji, a ZWJ sequence, where the invisible zero width joiner glues emoji into one picture) joins moves, with all it is joined to, into one slice, and the script stops with an error if a sequence still spans two. Pango and WebKit pick a face per character, so a sequence split over two slices would draw as its parts.
+- What a font maps outside every published range goes to a rest slice (the slice that holds every character no published range names), cut in halves until each chunk is under 40 KB, 60 KB for Chinese. Korean's rest stays whole, 183 KB: it holds the conjoining jamo (the Hangul letter parts that stack into a syllable), which compose an old Hangul syllable only inside one font.
+- The math face and Excalifont stay one slice each, the math face because a formula's stretchy variants must sit in the face that lays it out.
+- The CJK cut drops the `dlig` feature, which CSS leaves off and which would pull whole ligature glyphs into every slice. Variable faces stay variable, so one slice draws every weight.
+
+The generated `fonts.css` is about 253 KB, 62 KB gzipped, in every app's CSS, because `globals.css` imports it ([ROADMAP.md](ROADMAP.md)).
+
+## Every stack comes from one builder
+
+`getFontFamily` in `packages/lib/src/constants/fonts.ts` gives the CSS stack of a font name: the bundled family, then Eigen Emoji, Noto Sans SC and Noto Sans KR, then the system faces of its category and the generic family. A doc's Normal and marks, a sheet's cells on the grid and in the export, a canvas label and the server's stacks all take it, so a character draws in the same face on every surface. The fallback faces' slices draw disjoint characters, so their order in a stack never decides which face draws a glyph. `MATH_FONT_STACK` is the math face, then the browser's own `math`.
+
+## A canvas waits for the slices of its text
+
+A canvas measures and draws a character in the fallback until the slice that draws it has loaded, and only text it draws starts that fetch. A height or a width measured too early is stored in some places, so a canvas whose measure is stored loads the slices of its text first, through `document.fonts.load(font, text)`: the sheet's cell editors as the user types, and the canvas's label editor and `healLabelWidth` ([CANVAS.md](CANVAS.md#the-label-cuts-a-hole-in-the-shaft)). The sheet's grid measures only to draw, so it loads nothing: one watcher per page waits on each face's `loaded` promise, and each grid listens to it and redraws once the slices its draw fetched have arrived ([SHEETS.md](SHEETS.md#the-grid-redraws-whole-when-a-font-slice-loads)). Print waits for `document.fonts.ready`, and for its images 3 s at most, since a lazy or stalled image may never decode (`printElement` in `packages/ui/src/lib/print-element.ts`).
+
+The keycap bases sit in the emoji face's keycap slice, so in Chromium and Firefox a `document.fonts.load` of text with a digit also fetches that 53 KB slice, once a session. WebKit doesn't, and drawing a digit fetches it in no browser. It stays, because a keycap must draw whole in Chromium and Firefox.
+
+WebKit draws a few emoji in parts, the same with the whole font as with its slices: a keycap such as 1️⃣ as a digit beside an empty frame, and some joined emoji such as ❤️‍🔥 as a heart and a flame. It also draws no emoji at all in text with a transparent fill and only a stroke, where Chromium and Firefox draw the outline. Both are accepted limits.
 
 ## CSS tokens name each category
 
-`globals.css` imports `fonts.css` and defines one token per category: `--font-sans`, `--font-serif`, `--font-mono` and `--font-hand`, each the bundled family followed by system fallbacks. They give the Tailwind utilities `font-sans`, `font-serif`, `font-mono` and `font-hand`. `eigen-prose.css` sets body text in `--font-sans` and code in `--font-mono`, so prose follows the tokens too.
+`globals.css` imports `fonts.css` and defines one token per category: `--font-sans`, `--font-serif`, `--font-mono` and `--font-hand`, each the stack `getFontFamily` gives its bundled family, and `--font-math`, `MATH_FONT_STACK`. CSS can't import the builder, so each token is a literal, and `packages/ui/src/test/styles/font-tokens.test.ts` fails when one drifts from the builder, printing the line to paste. The tokens give the Tailwind utilities `font-sans`, `font-serif`, `font-mono` and `font-hand`. `eigen-prose.css` sets body text in `--font-sans` and code in `--font-mono`, so prose follows the tokens too.
 
 ## The weight scale is lighter than Tailwind's
 
@@ -27,7 +70,7 @@ One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--f
 
 ## The registry's order is load-bearing
 
-`EIGEN_FONTS` holds each font's name, CSS stack, category and weights. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
+`EIGEN_FONTS` holds each font's name, category and single line; `getFontFamily` builds its CSS stack. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
 
 - A sheet cell's `ff` may be an index into the list rather than a name: the editor's default cell stores `0`. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
 - `EIGEN_FONTS[0]` is the default font in docs and sheets: `DOCUMENT_FONT` names it for docs, `SHEET_DEFAULT_FONT` (`packages/lib/src/sheets/fonts.ts`) for sheets. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.
@@ -38,7 +81,7 @@ The name expands to CSS only where it renders. A sheet cell is looser ([§ A she
 
 - The canvas reader accepts only a name from `EIGEN_FONT_NAMES` and falls back to its default (`fontFamily` in `packages/lib/src/vector/kinds/read-fields.ts`). The name ends up in a CSS declaration list, where a stray `;` would open a declaration of the writer's choosing.
 - The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
-- `getFontFamily` wraps an unknown name as `'<name>', sans-serif`. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
+- `getFontFamily` puts an unknown name before the stack of the bundled font it maps to, else Inter's, as `'Bell MT', 'Inter', …`: the emoji face holds the digits, `#` and `*` for its keycaps, so a font the browser lacks must not fall straight to it. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
 
 ## Foreign fonts map onto the bundled ones
 
@@ -48,7 +91,7 @@ A doc's text draws without a mark in its Normal font, the document font `DOCUMEN
 
 ## A sheet cell's font has one decoder
 
-A cell's `ff` is an index into `EIGEN_FONTS` or a font name, and a rich-text run edited in the cell stores its lowercased CSS stack. `cellFontName` (`packages/lib/src/sheets/fonts.ts`) turns any of them into a name: the editor's canvas and toolbar, the HTML export and the xlsx writer all call it, so a cell can't draw in one font and export in another. A numeric string is a name, not an index. A cell with no `ff` draws in `SHEET_DEFAULT_FONT`, Inter, at `SHEET_DEFAULT_FONT_SIZE`, 10 pt.
+A cell's `ff` is an index into `EIGEN_FONTS` or a font name, and a rich-text run edited in the cell stores its lowercased CSS stack. `cellFontName` (`packages/lib/src/sheets/fonts.ts`) turns any of them into a name: the editor's canvas and toolbar, the HTML export and the xlsx writer all call it, so a cell can't draw in one font and export in another. A numeric string is a name, not an index. A peer writes `ff`, and the name reaches CSS, so a name holding `;`, `(`, a quote, a backslash or a control character is none, and the cell draws in the default. A cell with no `ff` draws in `SHEET_DEFAULT_FONT`, Inter, at `SHEET_DEFAULT_FONT_SIZE`, 10 pt.
 
 ## The xlsx export makes Inter the workbook's default font
 
@@ -75,16 +118,17 @@ Docs, Sheets and Slides show and take a font size in pt, on the half-point grid 
 The registry drives the pickers and the sheet lists. The other places keep their own list of faces, so a new font touches six:
 
 1. The woff2 files, the static TrueType faces the docx embeds and the font's `OFL.txt` in `packages/ui/src/assets/fonts/<font-name>/`.
-2. Its `@font-face` rules in `fonts.css`.
+2. A rerun of `scripts/fonts/build-font-slices.ts`, which cuts the face into slices and writes them, `fonts.css` and `FONT_SLICES`.
 3. The entry in `EIGEN_FONTS`, appended at the end, with its single line (`lineHeight`), `(usWinAscent + usWinDescent) / unitsPerEm` of its Regular, which `fonts.test.ts` checks against the TTF. The editor's paragraph line, the docx writer and reader and the canvas read it through `fontLineHeight`.
 4. `FONT_METRICS` in `packages/lib/src/vector/font-metrics.ts`. The canvas places SVG text baselines from each face's vertical metrics, and an unknown font gets Excalifont's. A face's line there is its `EIGEN_FONTS` line, but Excalifont's, which the canvas draws at Excalidraw's 1.25 under the face's 1.26, the line every drawing's text is laid out at. The widest digit there sizes a sheet's xlsx column unit.
-5. `FONT_FACES` in `packages/lib/src/constants/fonts.ts`, each woff2 face by its path under `assets/fonts/`, and its bundled path in `FACE_PATHS` (`apps/api/src/lib/export/fonts.ts`) and its static faces in `DOCX_FONT_FILES` (`apps/api/src/lib/export/doc/docx/fonts.ts`). Exports and a drawing's downloaded SVG embed the faces as base64 `@font-face` rules ([EXPORT.md](EXPORT.md)), and a font missing there prints in a fallback; the docx embeds the static faces, keyed by the font's name ([EXPORT.md](EXPORT.md#the-docx-embeds-the-faces-a-doc-uses-its-600s-in-the-bold-slot)). `apps/api/src/test/export/fonts.test.ts` fails when the exported faces and `fonts.css` disagree, when `DOCX_FONT_FILES` misses a font, or when a face names another family, and pins the count of faces, so a new face updates the test too; `packages/ui/src/test/components/vector/canvas-image.test.ts` fails when `FONT_FACES` and `fonts.css` disagree.
+5. `FONT_FACES` in `packages/lib/src/constants/fonts.ts`, each woff2 face by its path under `assets/fonts/`, which the vendoring script reads to cut it, and its static faces in `DOCX_FONT_FILES` (`apps/api/src/lib/export/doc/docx/fonts.ts`). Exports and a drawing's downloaded SVG embed the slices as base64 `@font-face` rules ([EXPORT.md](EXPORT.md#an-export-embeds-only-the-font-slices-its-text-draws)); the docx embeds the static faces, keyed by the font's name ([EXPORT.md](EXPORT.md#the-docx-embeds-the-faces-a-doc-uses-its-600s-in-the-bold-slot)). `apps/api/src/test/export/fonts.test.ts` fails when an embedded slice and `fonts.css` disagree or when `DOCX_FONT_FILES` misses a font; `packages/ui/src/test/components/vector/canvas-image.test.ts` fails when `FONT_FACES`, `FONT_SLICES` and `fonts.css` disagree.
 6. The `FONTS` list in `apps/index/scripts/build-licenses.ts`, which the /licenses page reads. A bundled font is not a package, so the license build does not find it on its own.
 
-A `--font-*` token in `globals.css` is needed only when the font fills a new category.
+A `--font-*` token in `globals.css` is needed only when the font fills a new category. A new fallback face is an entry in `FALLBACK_FONTS`, a recipe in the vendoring script and its line on the licenses page.
 
 ## See also
 
-- [EXPORT.md](EXPORT.md): how exports embed the fonts
+- [EXPORT.md](EXPORT.md#an-export-embeds-only-the-font-slices-its-text-draws): how exports embed the fonts
+- [proposals/PROPOSAL_FALLBACK_FONTS.md](proposals/PROPOSAL_FALLBACK_FONTS.md): the measurements and rulings behind the fallback faces and the slices
 - [SHEETS.md](SHEETS.md): the sheet engine that stores `ff`
 - [EXPORT.md](EXPORT.md#a-sheet-export-recalcs-and-xlsx-carries-cells-charts-and-pictures): the xlsx writer

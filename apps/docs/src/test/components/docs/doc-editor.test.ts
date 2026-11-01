@@ -4,6 +4,7 @@
 import { afterEach, expect, jest, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 installHappyDom();
@@ -634,10 +635,11 @@ test('an image pasted into the open note settles in the note', async () => {
     expect(shown.session?.anchor).not.toBeNull();
 });
 
-// A stored stack collapses to its name in a note's text too, which NoteFormatting would otherwise give back.
+// A stored stack collapses to its name, the short one of an older doc and the one with the fallback faces alike, in
+// a note's text too, which NoteFormatting would otherwise give back.
 test("the font-name pass reaches a note's text", async () => {
     const doc = new Y.Doc();
-    const stack = (font: string) => [{ type: 'textStyle', attrs: { fontFamily: `'${font}', serif` } }];
+    const stack = (fontFamily: string) => [{ type: 'textStyle', attrs: { fontFamily } }];
     const fragment = doc.getXmlFragment('default');
     prosemirrorJSONToYXmlFragment(
         getSchema(getDocExtensions()),
@@ -647,13 +649,15 @@ test("the font-name pass reaches a note's text", async () => {
                 {
                     type: 'paragraph',
                     content: [
-                        { type: 'text', text: 'Body', marks: stack('Source Serif 4') },
+                        { type: 'text', text: 'Body', marks: stack("'Source Serif 4', serif") },
                         {
                             type: 'footnote',
                             content: [
                                 {
                                     type: 'paragraph',
-                                    content: [{ type: 'text', text: 'Note', marks: stack('Source Serif 4') }],
+                                    content: [
+                                        { type: 'text', text: 'Note', marks: stack(getFontFamily('Source Serif 4')) },
+                                    ],
                                 },
                             ],
                         },

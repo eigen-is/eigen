@@ -1,42 +1,102 @@
-import { expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
+import { FONT_SLICES } from '@workspace/lib/constants/font-slices';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/doc/docx/fonts';
-import { allFontFaceCss, fontFaceCssOf } from '../../lib/export/fonts';
+import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../../lib/export/fonts';
 
-const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
+const FONTS_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/assets/fonts');
 
-function faces(css: string, bytesOf: (src: string) => Buffer): string[] {
+function rules(css: string) {
     return css
         .split('@font-face')
         .slice(1)
-        .map((block) => {
-            const field = (name: string) => block.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
-            const src = block.match(/url\("([^"]+)"\)/)?.[1] ?? '';
-            const hash = new Bun.CryptoHasher('sha256').update(bytesOf(src)).digest('hex');
-            return `${field('font-family')} | ${field('font-weight')} | ${field('font-style')} | ${hash}`;
-        })
-        .sort();
+        .map((rule) => {
+            const field = (name: string) => rule.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
+            const src = rule.match(/url\("data:font\/woff2;base64,([^"]+)"\)/)?.[1] ?? '';
+            return {
+                family: field('font-family')?.replace(/"/g, ''),
+                style: field('font-style'),
+                weight: field('font-weight'),
+                unicodeRange: field('unicode-range'),
+                bytes: Buffer.from(src, 'base64'),
+            };
+        });
 }
 
-// An export inlines the faces the apps load from fonts.css; a face added or changed on one side only
-// renders an export in a fallback font. The math face is no font a user picks, so no export embeds it with the rest.
-test('the export fonts are the faces the apps load', () => {
-    const appCSS = fs.readFileSync(path.join(UI_STYLES_DIR, 'fonts.css'), 'utf8');
-    const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src))).filter(
-        (face) => !face.startsWith('"STIX Two Math"'),
+// Every character of every range, the keycap mark too, touches every slice once.
+const EVERY_CODE_POINT = new Set(
+    FONT_SLICES.flatMap((slice) =>
+        slice.unicodeRange.split(', ').flatMap((range) => {
+            const [start, end = start] = range.slice(2).split('-');
+            const from = Number.parseInt(start, 16);
+            return Array.from({ length: Number.parseInt(end, 16) - from + 1 }, (_, i) => from + i);
+        }),
+    ),
+);
+
+// A slice an export embeds is the file fonts.css loads, read through the server's own path to it, under the rule the
+// browser has for it.
+test('the export embeds each slice as the file the apps load, with its family, style, weight and range', () => {
+    const families = new Set(FONT_SLICES.map((slice) => slice.family));
+    expect(rules(slicesFaceCss(EVERY_CODE_POINT, families))).toEqual(
+        FONT_SLICES.map((slice) => ({
+            family: slice.family,
+            style: slice.style,
+            weight: slice.weight,
+            unicodeRange: slice.unicodeRange,
+            bytes: fs.readFileSync(path.join(FONTS_DIR, slice.file)),
+        })),
     );
-    const exportFaces = faces(allFontFaceCss(), (src) => Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'));
-    expect(appFaces).toHaveLength(6);
-    expect(exportFaces).toEqual(appFaces);
 });
 
-// The faces are the registry's, which the browser's image writer embeds too, in its order.
-test('the export embeds the registry faces, and only those of the families asked for', () => {
-    const families = (css: string) => [...css.matchAll(/font-family: "([^"]+)"/g)].map((m) => m[1]);
-    expect(families(allFontFaceCss())).toEqual(FONT_FACES.map((face) => face.family));
-    expect(families(fontFaceCssOf(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
+test('the export embeds only the slices of the families asked for that its characters touch', () => {
+    const families = (css: string) => rules(css).map((rule) => `${rule.family} ${rule.style}`);
+    expect(families(slicesFaceCss(drawnCodePoints('A'), ['Inter', 'Unknown']))).toEqual([
+        'Inter normal',
+        'Inter italic',
+    ]);
+    expect(slicesFaceCss(drawnCodePoints('中'), ['Inter'])).not.toContain('Noto Sans SC');
+});
+
+describe('drawnCodePoints', () => {
+    const chars = (markup: string) => new Set(Array.from(drawnCodePoints(markup), (cp) => String.fromCodePoint(cp)));
+
+    test('printable ASCII and the list disc are always drawn', () => {
+        expect(chars('')).toEqual(
+            new Set(['\u2022', ...Array.from({ length: 95 }, (_, i) => String.fromCharCode(0x20 + i))]),
+        );
+    });
+
+    test("a character, its other case for CSS caps, and a numeric reference's character", () => {
+        expect(chars('é中')).toEqual(new Set([...chars(''), 'é', 'É', '中']));
+        expect(chars('&#x4E2D;&#54620;')).toEqual(new Set([...chars(''), '中', '한']));
+    });
+
+    test('a character outside the BMP is one code point, its surrogates none', () => {
+        expect(chars('a😀b')).toEqual(new Set([...chars(''), '😀']));
+    });
+});
+
+describe('namedFamilies', () => {
+    test('the names of an SVG attribute, a style attribute, a stylesheet and a CSS variable', () => {
+        expect(namedFamilies('<text font-family="&apos;Excalifont&apos;, &apos;Noto Sans SC&apos;, cursive">')).toEqual(
+            new Set(['Excalifont', 'Noto Sans SC']),
+        );
+        expect(
+            namedFamilies(`<span style="font-size:2px;font-family:'Source Serif 4', 'Eigen Emoji', serif">`),
+        ).toEqual(new Set(['Source Serif 4', 'Eigen Emoji']));
+        expect(namedFamilies(`<style>.c1{font-family:'JetBrains Mono', 'Noto Sans KR'}</style>`)).toEqual(
+            new Set(['JetBrains Mono', 'Noto Sans KR']),
+        );
+        expect(namedFamilies(`<div style="--doc-font-family:'Inter', sans-serif">`)).toEqual(new Set(['Inter']));
+    });
+
+    test('only a whole name in a font-family counts', () => {
+        expect(namedFamilies('<text font-family="Interstate, sans-serif">x</text>')).toEqual(new Set());
+        expect(namedFamilies('<p>Set in Source Serif 4 and Inter.</p>')).toEqual(new Set());
+    });
 });
 
 function nameRecords(name: Buffer): string[] {

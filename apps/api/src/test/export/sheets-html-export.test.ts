@@ -5,6 +5,8 @@ import {
     newSheetChartSpecParts,
     sampleChartSpec,
 } from '@workspace/lib/charts';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { escapeHtml } from '@workspace/lib/html';
 import type {
     Cell,
     CellBorderSides,
@@ -27,7 +29,7 @@ import { serializeFill } from '@workspace/lib/vector';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
-import type { ExportMedia } from '../../lib/document/transform/protocol';
+import type { ExportMedia, HtmlExportMode } from '../../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
@@ -41,6 +43,8 @@ import {
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { cpuClock } from '../cpu-time';
+import { embeddedSliceFiles } from '../fixtures/font-slices';
+import { buildGoldenSheets } from '../fixtures/heavy-sheets';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA, NO_PIXELS } from '../setup';
 
@@ -90,6 +94,71 @@ describe('Sheets HTML export — rich text', () => {
         expect(renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: rich }])], NO_MEDIA, 'screen', NO_PIXELS).html).toContain(
             '>Rich text<',
         );
+    });
+});
+
+// A face is up to 0.6 MB of base64, so a workbook embeds only the families it draws in: Inter, in which the table
+// draws, and each bundled family a cell or a chart names. A missing one would print in a system font.
+describe('Sheets HTML export — fonts', () => {
+    const embedded = (sheets: Sheet[], mode: HtmlExportMode = 'pdf') => [
+        ...new Set(
+            [
+                ...sheetsHtmlDocument({
+                    title: 'T',
+                    sheets,
+                    mediaUrls: NO_MEDIA,
+                    mediaPixels: NO_PIXELS,
+                    mode,
+                    lost: () => {},
+                }).matchAll(/font-family: "([^"]+)";\s*src:/g),
+            ].map((m) => m[1]),
+        ),
+    ];
+
+    test.each(['screen', 'pdf'] as const)('the golden workbook in %s embeds Inter alone', (mode) => {
+        expect(embedded(buildGoldenSheets(), mode)).toEqual(['Inter']);
+    });
+
+    test('the golden workbook embeds only the Inter slices its text touches', () => {
+        const html = sheetsHtmlDocument({
+            title: 'T',
+            sheets: buildGoldenSheets(),
+            mediaUrls: NO_MEDIA,
+            mediaPixels: NO_PIXELS,
+            mode: 'pdf',
+            lost: () => {},
+        });
+        expect(embeddedSliceFiles(html)).toEqual([
+            'inter/Inter-Variable.latin.woff2',
+            'inter/Inter-Variable-Italic.latin.woff2',
+        ]);
+    });
+
+    test('a cell in Source Serif 4, by name or by registry index, embeds it', () => {
+        for (const ff of ['Source Serif 4', 1])
+            expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Serif', ff } }])])).toEqual(['Inter', 'Source Serif 4']);
+    });
+
+    test("a chart's font embeds its family", () => {
+        const chart: SheetChart = {
+            id: 'c1',
+            index: 'a0',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            ...newSheetChartSpecParts(sampleChartSpec('column', 'Excalifont')),
+        };
+        expect(embedded([{ ...makeSheet([]), charts: { c1: chart } }])).toEqual(['Inter', 'Excalifont']);
+    });
+
+    // A reader may lack Georgia, so the cell's stack names the bundled font it maps to next.
+    test('a cell in a font Eigen does not bundle embeds the bundled font of its category', () => {
+        expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Serif', ff: 'Georgia' } }])])).toEqual([
+            'Inter',
+            'Source Serif 4',
+        ]);
+        expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Odd', ff: 'Bell MT' } }])])).toEqual(['Inter']);
     });
 });
 
@@ -207,9 +276,9 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(out.css).not.toContain('&quot;');
     });
 
-    test('the inline table style carries the body font stack with entity quotes', () => {
+    test('the inline table style carries the body font stack, whose quotes fit in the attribute', () => {
         const { html } = renderSheetsPreviewHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
-        expect(html).toContain(`font-family:${FONT_STACK_SANS.replaceAll('"', '&quot;')};`);
+        expect(html).toContain(`font-family:${FONT_STACK_SANS};`);
     });
 
     // An unsized cell draws at the grid's default, in pt as the grid draws it.
@@ -403,7 +472,7 @@ describe('Sheets HTML export — preview stays inline', () => {
         expect(html).toContain('style="');
         expect(html).toContain('color:#ff0000');
         // Attribute context keeps the encoded font-family quotes.
-        expect(html).toContain('font-family:&quot;Georgia&quot;');
+        expect(html).toContain(`font-family:${escapeHtml(getFontFamily('Georgia'))}`);
         expect(html).not.toMatch(/class="s\d/);
     });
 });
@@ -751,7 +820,7 @@ describe('Sheets HTML export — cell styling', () => {
             'screen',
             NO_PIXELS,
         );
-        const cls = classesFor(out, 'font-family:"Georgia",sans-serif');
+        const cls = classesFor(out, `font-family:${getFontFamily('Georgia')}`);
         expect(cls.length).toBe(1);
         // Declarations after font-family must survive in the same rule.
         const rule = out.css.match(new RegExp(`\\.${cls[0]}\\{([^}]*)\\}`))?.[1] ?? '';
@@ -759,18 +828,17 @@ describe('Sheets HTML export — cell styling', () => {
         expect(rule).toContain('background:#0000ff');
     });
 
-    test('a font name containing & or an apostrophe survives into the stylesheet intact', () => {
+    test('a font name containing & survives into the stylesheet intact', () => {
         // CSS text never decodes entities, so HTML-escaping the name here would ask
-        // WeasyPrint for a font called "Bell MT &amp; O'Neill".
+        // WeasyPrint for a font called "Bell MT &amp; Co".
         const out = renderSheetsHtml(
-            [makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])],
+            [makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: 'Bell MT & Co' } }])],
             NO_MEDIA,
             'screen',
             NO_PIXELS,
         );
-        expect(out.css).toContain('font-family:"Bell MT & ONeill",sans-serif');
+        expect(out.css).toContain(`font-family:${getFontFamily('Bell MT & Co')}`);
         expect(out.css).not.toContain('&amp;');
-        expect(out.css).not.toContain('&#39;');
     });
 
     test('rt as a positive angle produces a CSS rotate anchored at bottom-left', () => {
@@ -987,6 +1055,20 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         ]) {
             expect(html).not.toContain('position:fixed');
             expect(html).not.toContain('inset');
+        }
+    });
+
+    // A newline ends a CSS string, so a font name with one would write declarations of its own in a style attribute.
+    test('a font name that could leave its CSS string writes no font, in the export and the preview', () => {
+        for (const ff of ['Inter\n;position:fixed;inset:0', "Inter';position:fixed;inset:0;'"]) {
+            const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'x', ff } }]);
+            for (const html of [
+                renderSheetsHtml([sheet], NO_MEDIA, 'screen', NO_PIXELS).css,
+                renderSheetsPreviewHtml([sheet], NO_MEDIA).html,
+            ]) {
+                expect(html).toContain('x');
+                expect(html).not.toContain('position:fixed');
+            }
         }
     });
 

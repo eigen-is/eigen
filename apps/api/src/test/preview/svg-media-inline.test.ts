@@ -6,11 +6,12 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { eigenMediaHref } from '@workspace/lib/vector';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { ManagedDatabase } from '../../lib/core';
-import { fontFaceCssOf } from '../../lib/export/fonts';
+import { drawnCodePoints, slicesFaceCss } from '../../lib/export/fonts';
 import { collectExportMedia } from '../../lib/export/media';
 import { sanitizeExportMedia } from '../../lib/export/sanitize';
 import { Mount } from '../../lib/mount/mount';
 import { inlineSvgMediaRefs, SVG_INLINE_MAX_BYTES } from '../../lib/preview/svg-media-inline';
+import { embeddedSliceFiles, sliceFileOf } from '../fixtures/font-slices';
 import { createTestMountConfig } from '../mount-test-helpers';
 import { authedRequest, driveGet, drivePost, driveUpload, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -208,6 +209,28 @@ describe('inlineSvgMediaRefs font injection', () => {
         expect(out).not.toContain('font-family: "Inter"');
     });
 
+    // The fallbacks draw what the named font lacks, each slice only where the text touches it.
+    test('a Chinese text gets its Noto Sans SC slice beside the Latin of its font', async () => {
+        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svgWithText('Inter', 'Hi 中')))).toString(
+            'utf8',
+        );
+        expect(embeddedSliceFiles(out)).toEqual([
+            'inter/Inter-Variable.latin.woff2',
+            'inter/Inter-Variable-Italic.latin.woff2',
+            sliceFileOf('Noto Sans SC', '中'),
+        ]);
+    });
+
+    // An older or uploaded SVG names Inter alone, so its Chinese draws in a system font, never in a slice it doesn't name.
+    test('a fallback the svg does not name embeds no slice', async () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><text font-family="&apos;Inter&apos;, sans-serif">Hi 中</text></svg>`;
+        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
+        expect(embeddedSliceFiles(out)).toEqual([
+            'inter/Inter-Variable.latin.woff2',
+            'inter/Inter-Variable-Italic.latin.woff2',
+        ]);
+    });
+
     test('a family whose name merely contains an EIGEN name is not matched', async () => {
         // "Interstate" contains "Inter" — a substring test would wrongly inject the Inter face. Token
         // matching (comma-split, exact) rejects it, so the svg serves byte-identical.
@@ -233,7 +256,7 @@ describe('inlineSvgMediaRefs font injection', () => {
     });
 
     test('an svg already carrying a font-face block is not doubled', async () => {
-        const faces = fontFaceCssOf(['Excalifont']);
+        const faces = slicesFaceCss(drawnCodePoints('hi'), ['Excalifont']);
         const fonted = Buffer.from(
             `<svg xmlns="http://www.w3.org/2000/svg"><defs><style>${faces}</style></defs>` +
                 `<text font-family="&apos;Excalifont&apos;, cursive">hi</text></svg>`,
@@ -285,7 +308,7 @@ describe('export media path (prepareMedia, then sanitizeExportMedia in the trans
         await mount.createFile(mediaId, 'pic.png', 'image/png', pngBytes.length, pngBytes);
         await mount.createFile(mediaId, 'figure.svg', SVG_MIME, 0, Buffer.from(svgReferencing('pic.png')));
         await mount.createFile(mediaId, 'text.svg', SVG_MIME, 0, Buffer.from(svgWithText('Excalifont')));
-        const faces = fontFaceCssOf(['Excalifont']);
+        const faces = slicesFaceCss(drawnCodePoints('hi'), ['Excalifont']);
         await mount.createFile(
             mediaId,
             'fonted.svg',

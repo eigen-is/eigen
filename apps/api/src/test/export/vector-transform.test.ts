@@ -37,4 +37,11 @@ describe('renderEigenvectorExport', () => {
         expect(html).toContain('.eigen-canvas-text p:empty');
         expect(html).toContain('.eigen-canvas-text p + p');
     });
+
+    // The golden drawing's text box and labels draw in Excalifont, so its PDF embeds that beside the page's Inter.
+    test('embeds only the families the drawing draws in', async () => {
+        const html = await pdfHtmlWithRichText('<p>hi</p>');
+        const families = new Set([...html.matchAll(/font-family: "([^"]+)";\s*src:/g)].map((m) => m[1]));
+        expect([...families]).toEqual(['Inter', 'Excalifont']);
+    });
 });

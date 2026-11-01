@@ -28,7 +28,7 @@ import { renderDocHtml } from '../../lib/export/doc/render';
 import { MAX_BAND_BLOCKS, MAX_BAND_TEXT, MAX_PAGE_NOTES, renderEigendocExport } from '../../lib/export/doc/transform';
 import * as mathSvg from '../../lib/export/math-svg';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
-import { isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
+import { weasyPrintPython } from '../../lib/export/weasyprint';
 import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
 import { EMU_PER_POINT, EMU_PER_PX } from '../../lib/ooxml/ooxml';
@@ -36,6 +36,7 @@ import { openZip } from '../../lib/ooxml/zip';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { sampleChartParts } from '../fixtures/chart-parts';
+import { embeddedSliceFiles, sliceFileOf } from '../fixtures/font-slices';
 import { corpusEquations, equation, seedBand, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
@@ -391,6 +392,46 @@ describe('doc export — fonts', () => {
         const serifChart = chart('Inter');
         for (const [key, value] of Object.entries(WORD_NORMAL)) serifChart.getMap(STYLE_ROOT).set(key, value);
         expect(await embedded(serifChart)).toEqual(['Inter', 'Source Serif 4']);
+    });
+
+    // Its Latin, upright and italic, as any doc draws ASCII; one emoji, Chinese and Korean slice each; and the math
+    // face where an equation draws as MathML. The PDF draws its equations as paths, so it embeds no math face.
+    const mixed = () =>
+        seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Hi 😀 中 한 ' },
+                        equation(writeMathml([{ kind: 'identifier', text: 'x' }])),
+                    ],
+                },
+            ],
+        });
+    const LATIN = ['inter/Inter-Variable.latin.woff2', 'inter/Inter-Variable-Italic.latin.woff2'];
+    const FALLBACKS = [
+        sliceFileOf('Eigen Emoji', '😀'),
+        sliceFileOf('Noto Sans SC', '中'),
+        sliceFileOf('Noto Sans KR', '한'),
+    ];
+
+    test('emoji, Chinese, Korean and an equation embed exactly the slices they touch, and no whole face', async () => {
+        expect(embeddedSliceFiles(await exportStyle('html', mixed()))).toEqual([
+            ...LATIN,
+            ...FALLBACKS,
+            sliceFileOf('New Computer Modern Math', 'x'),
+        ]);
+        expect(embeddedSliceFiles(await exportStyle('pdf-html', mixed()))).toEqual([...LATIN, ...FALLBACKS]);
+    });
+
+    test.each(['html', 'pdf-html'] as const)('a Latin doc in %s embeds Latin slices alone', async (format) => {
+        expect(embeddedSliceFiles(await exportStyle(format))).toEqual(LATIN);
+    });
+
+    test("the download's math rule names the math face it embeds", async () => {
+        const css = await exportStyle('html', mixed());
+        expect(css.match(/(?:^|\})\s*math \{\s*font-family: ["']([^"']+)["']/)?.[1]).toBe('New Computer Modern Math');
     });
 });
 
@@ -1341,7 +1382,7 @@ describe('doc export — caps', () => {
             { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },
         ]);
         expect(html).toContain(
-            `<p><span style="font-family: 'Source Serif 4', serif; font-variant-caps: small-caps">Serif</span></p>`,
+            `<p><span style="font-family: ${getFontFamily('Source Serif 4')}; font-variant-caps: small-caps">Serif</span></p>`,
         );
     });
 });
@@ -1674,14 +1715,12 @@ describe('doc export — ordered lists', () => {
     });
 });
 
-const weasyPrint = await isWeasyPrintAvailable();
-const launcher = Bun.which('weasyprint');
-const python = launcher ? shebangPython(await Bun.file(launcher).slice(0, 512).text()) : null;
+const python = await weasyPrintPython();
 
 // A Python script's whole output once it has exited. WeasyPrint hits a SIGSEGV now and then while renders run side by
 // side, which the export renders once more (weasyprint.ts), so this does too; any other failure throws its stderr.
 async function pythonOutput(args: string[], input: string): Promise<string> {
-    if (python === null) throw new Error('no python behind the weasyprint launcher');
+    if (python === null) throw new Error('no Python that imports WeasyPrint');
     for (let attempt = 0; ; attempt++) {
         const proc = Bun.spawn([python, '-I', ...args], { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
         proc.stdin.write(input);
@@ -1713,7 +1752,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     return (await pythonOutput(['-c', script], html)).trim().split('\n');
 }
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — positioned figures (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — positioned figures (WeasyPrint)', () => {
     // The PDF stretches a picture to its stored box, as the editor draws it.
     test('a stretched image prints at its stored width and height', async () => {
         const png = await sharp({ create: { width: 200, height: 100, channels: 3, background: '#888' } })
@@ -1782,7 +1821,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     );
 });
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — text boxes (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — text boxes (WeasyPrint)', () => {
     const box = (layout: string, verticalAlign: string | null): JSONContent => ({
         type: 'textBox',
         attrs: {
@@ -1839,7 +1878,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     }, 60_000);
 });
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — tables across pages (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — tables across pages (WeasyPrint)', () => {
     // As Word and Google Docs print one, a table taller than what is left of the page starts there and goes on over the
     // next, rather than leaving the page half empty. Word's "Allow row to break across pages" is on by default, so a row
     // does the same.
@@ -1872,7 +1911,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 
 // WeasyPrint's auto layout widens a column to its longest word and its padding, as a browser does, so a table whose
 // columns all store widths prints at them, fixed, as the docx writes it, and a long word breaks inside its cell.
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — wide tables (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — wide tables (WeasyPrint)', () => {
     const word = 'Antidisestablishmentarianism';
     const table = (widths: (number | null)[]) => ({
         type: 'table',
@@ -1946,7 +1985,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     }, 60_000);
 });
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — ordered list numbers (WeasyPrint)', () => {
     test('a start, a nested start and the letter and roman types are drawn', async () => {
         const html = await pdfHtml(
             orderedList(
@@ -2035,7 +2074,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
     );
 });
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — equations (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — equations (WeasyPrint)', () => {
     // MathJax breaks no equation into lines, so one wider than the column scales down to it.
     test('an equation wider than the column fits it, in its own proportions', async () => {
         const terms = (count: number): MathRow =>
@@ -2066,44 +2105,41 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 // as drawn: WeasyPrint 68 stores a computed line height as ('NUMBER', x) and 70 as a float.
 // What WeasyPrint prints on the line of each entry: its text boxes, the leader's and the page number's among them, with
 // the right edge of each and of the text column.
-(weasyPrint && python !== null ? describe : describe.skip)(
-    'doc export — table of contents layouts (WeasyPrint)',
-    () => {
-        const entryLine = async (attrs: Record<string, unknown>) => {
-            const html = await pdfHtml(
-                { type: 'tableOfContents', attrs: { levels: 1, ...attrs } },
-                { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Intro' }] },
-            );
-            const lines = await laidOut(
-                html,
-                "if tag == 'article': print('COLUMN', round(box.content_box_x() + box.width))\n        if tag == 'nav':\n            line = next(b for b in walk(box) if type(b).__name__ == 'LineBox')\n            for text in [b for b in walk(line) if type(b).__name__ == 'TextBox']: print('TEXT', round(text.position_x + text.width), repr(text.text))",
-            );
-            const column = Number(lines.find((line) => line.startsWith('COLUMN'))?.split(' ')[1]);
-            const boxes = lines
-                .filter((line) => line.startsWith('TEXT'))
-                .map((line) => {
-                    const [, right, ...text] = line.split(' ');
-                    return { right: Number(right), text: text.join(' ') };
-                });
-            return { column, boxes };
-        };
+(python !== null ? describe : describe.skip)('doc export — table of contents layouts (WeasyPrint)', () => {
+    const entryLine = async (attrs: Record<string, unknown>) => {
+        const html = await pdfHtml(
+            { type: 'tableOfContents', attrs: { levels: 1, ...attrs } },
+            { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Intro' }] },
+        );
+        const lines = await laidOut(
+            html,
+            "if tag == 'article': print('COLUMN', round(box.content_box_x() + box.width))\n        if tag == 'nav':\n            line = next(b for b in walk(box) if type(b).__name__ == 'LineBox')\n            for text in [b for b in walk(line) if type(b).__name__ == 'TextBox']: print('TEXT', round(text.position_x + text.width), repr(text.text))",
+        );
+        const column = Number(lines.find((line) => line.startsWith('COLUMN'))?.split(' ')[1]);
+        const boxes = lines
+            .filter((line) => line.startsWith('TEXT'))
+            .map((line) => {
+                const [, right, ...text] = line.split(' ');
+                return { right: Number(right), text: text.join(' ') };
+            });
+        return { column, boxes };
+    };
 
-        test('Dotted leads with dots to the number at the edge, Plain text with none, and Links prints no number', async () => {
-            const dotted = await entryLine({});
-            expect(dotted.boxes.filter(({ text }) => text === "'.'").length).toBeGreaterThan(10);
-            expect(dotted.boxes.at(-1)?.text).toBe("'1'");
-            const plain = await entryLine({ leader: 'none' });
-            expect(plain.boxes.some(({ text }) => text.includes('.'))).toBe(false);
-            expect(dotted.boxes.at(-1)?.right).toBe(plain.boxes.at(-1)?.right);
-            expect(plain.boxes.at(-1)?.text).toBe("'1'");
-            expect(Math.abs((plain.boxes.at(-1)?.right ?? 0) - plain.column)).toBeLessThan(2);
-            const links = await entryLine({ pageNumbers: false });
-            expect(links.boxes.map(({ text }) => text)).toEqual(["'Intro'"]);
-        }, 60_000);
-    },
-);
+    test('Dotted leads with dots to the number at the edge, Plain text with none, and Links prints no number', async () => {
+        const dotted = await entryLine({});
+        expect(dotted.boxes.filter(({ text }) => text === "'.'").length).toBeGreaterThan(10);
+        expect(dotted.boxes.at(-1)?.text).toBe("'1'");
+        const plain = await entryLine({ leader: 'none' });
+        expect(plain.boxes.some(({ text }) => text.includes('.'))).toBe(false);
+        expect(dotted.boxes.at(-1)?.right).toBe(plain.boxes.at(-1)?.right);
+        expect(plain.boxes.at(-1)?.text).toBe("'1'");
+        expect(Math.abs((plain.boxes.at(-1)?.right ?? 0) - plain.column)).toBeLessThan(2);
+        const links = await entryLine({ pageNumbers: false });
+        expect(links.boxes.map(({ text }) => text)).toEqual(["'Intro'"]);
+    }, 60_000);
+});
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
     test('an unformatted paragraph draws in the Normal: its font, size, line and spacing', async () => {
         const { data } = await renderEigendocExport(
             styledDoc({
@@ -2132,7 +2168,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 });
 
 // The bands sit in .page, which carries the Normal, so a running header inherits it in its margin box.
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal in the bands (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — the Normal in the bands (WeasyPrint)', () => {
     test("a 12 pt Times Normal draws in the PDF's header as in its body", async () => {
         const doc = styledDoc({ type: 'doc', content: [paragraph('Body text')] });
         seedBand(doc, 'header', paragraph('Acme header'));
@@ -2149,7 +2185,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 });
 
 // D13: a paragraph's own spacing and indents, as Word and Google Docs draw them.
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — paragraph format (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — paragraph format (WeasyPrint)', () => {
     const formatted = (attrs: Record<string, unknown>, text = 'x'): JSONContent => ({
         type: 'paragraph',
         attrs,
@@ -2443,7 +2479,7 @@ async function pageTexts(html: string): Promise<string[]> {
     return (await pythonOutput(['-c', PAGE_TEXT_SCRIPT], html)).trim().split('\n');
 }
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — headers and footers (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — headers and footers (WeasyPrint)', () => {
     test('every page prints the header and the footer with its number and the count', async () => {
         expect(await pageTexts(await exported('pdf-html', bandedDoc(3, false)))).toEqual([
             'Body 1Acme headerPage 1 of 3',
@@ -2545,7 +2581,7 @@ async function printedLines(
 const px = (mm: number) => (mm / 25.4) * 96;
 const MARGIN_PX = px(20);
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — a band taller than its margin', () => {
+(python !== null ? describe : describe.skip)('doc export — a band taller than its margin', () => {
     // A margin box pushes nothing, so a probe of the bands alone measures what they need before the one render.
     test('pushes the body below the header and above the footer on every page, in one render', async () => {
         const { renders, probes, pages } = await printedLines(tallBandsDoc(3, 5));
@@ -2866,7 +2902,7 @@ describe('doc export — footnotes', () => {
     });
 });
 
-(weasyPrint && python !== null ? describe : describe.skip)('doc export — footnotes (WeasyPrint)', () => {
+(python !== null ? describe : describe.skip)('doc export — footnotes (WeasyPrint)', () => {
     // Each page's text boxes, top down, as [text, y]: the body's and the footnote area's.
     const pagesOf = async (html: string): Promise<[string, number][][]> => {
         const lines = await laidOut(

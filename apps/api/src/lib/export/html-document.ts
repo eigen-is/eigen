@@ -1,8 +1,10 @@
 // The one HTML document every export builds, for each type's HTML download and the HTML WeasyPrint prints: the
-// doctype, the data-only policy, the title and the bundled fonts around a type's stylesheet and sanitized body.
+// doctype, the data-only policy, the title and the font slices its text draws with, around a type's stylesheet and
+// sanitized body.
 
+import { MATH_FAMILIES, TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
-import { allFontFaceCss, fontFaceCssOf } from './fonts';
+import { drawnCodePoints, namedFamilies, slicesFaceCss } from './fonts';
 import { EXPORT_CSP, KEEP_MATHML, sanitizeExportHtml } from './sanitize';
 
 // The data-only rule as a <meta>, so it still holds once a download is saved and opened.
@@ -14,32 +16,37 @@ const KEEP_LINK_TARGETS = { ADD_ATTR: ['target'] };
 
 const VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1">';
 
-// Every HTML download and every PDF's HTML: one self-contained document, the bundled fonts first in its stylesheet,
-// because neither a saved file nor WeasyPrint has an app to fetch from, every family or only `fonts`. The body carries
-// collaborator strings, so it is sanitized here; the stylesheet is generated.
+// One self-contained document, the font slices first in its stylesheet, because neither a saved file nor WeasyPrint
+// has an app to fetch fonts from. WeasyPrint reads every embedded byte on every PDF, so the document embeds only the
+// slices its characters touch, in the families its text can draw in: the type's stylesheet's `cssFamilies`, the ones
+// the body's font-family values name, such as a font mark's, and the emoji and CJK fallbacks. An equation adds the
+// math face. The body carries collaborator strings, so it is sanitized here. The stylesheet is generated.
 export function exportHtmlDocument({
     title,
     css,
     body,
     viewport = false,
-    fonts,
+    cssFamilies,
 }: {
     title: string;
     css: string;
     body: string;
     viewport?: boolean;
-    fonts?: Iterable<string>;
+    cssFamilies: Iterable<string>;
 }): string {
+    const sanitized = sanitizeExportHtml(body, { ...KEEP_LINK_TARGETS, ...KEEP_MATHML });
+    const families = new Set([...cssFamilies, ...namedFamilies(sanitized), ...TEXT_FALLBACK_FAMILIES]);
+    if (sanitized.includes('<math')) for (const name of MATH_FAMILIES) families.add(name);
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8">
     ${EXPORT_CSP_META}${viewport ? `\n    ${VIEWPORT_META}` : ''}
     <title>${escapeHtml(title)}</title>
-    <style>${fonts ? fontFaceCssOf(fonts) : allFontFaceCss()}${css}</style>
+    <style>${slicesFaceCss(drawnCodePoints(sanitized), families)}${css}</style>
 </head>
 <body>
-    ${sanitizeExportHtml(body, { ...KEEP_LINK_TARGETS, ...KEEP_MATHML })}
+    ${sanitized}
 </body>
 </html>`;
 }

@@ -5,7 +5,7 @@
 // committedRuns reads, so the cell gets what the editor shows.
 
 import { isHexColor } from '@workspace/lib/constants/colors';
-import { readCssFontSize } from '@workspace/lib/constants/fonts';
+import { getFontFamily, readCssFontSize } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import type { Cell, CellStyle, InlineStringSegment } from '../../engine/types';
@@ -64,14 +64,8 @@ export function runStyleOf(style: CellStyle | null | undefined): RunStyle {
         cl: Number(style?.cl) || 0,
         fc: hexColor(style?.fc) ?? DEFAULT_TEXT_COLOR,
         fs: cellFontSize(style?.fs),
-        ff: cssFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
+        ff: cellFontName(style?.ff) ?? SHEET_DEFAULT_FONT.name,
     };
-}
-
-// A stored font's name, or undefined when there is none or it could break out of a CSS font-family.
-export function cssFontName(ff: CellStyle['ff']): string | undefined {
-    const font = cellFontName(ff);
-    return font && !/[;\n("']/.test(font) ? font : undefined;
 }
 
 // A format applied to a whole cell outside the editor reaches each of its runs too.
@@ -266,7 +260,7 @@ function runCss(style: RunStyle, base: RunStyle): string {
     }
     if (style.fc !== base.fc) css.push(`color:${style.fc}`);
     if (style.fs !== base.fs) css.push(`font-size:${style.fs}pt`);
-    if (style.ff !== base.ff) css.push(`font-family:"${style.ff.replace(/["\\]/g, '')}", sans-serif`);
+    if (style.ff !== base.ff) css.push(`font-family:${getFontFamily(style.ff)}`);
     return css.join(';');
 }
 

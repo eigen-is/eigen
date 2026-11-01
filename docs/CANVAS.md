@@ -144,7 +144,7 @@ A selected line or arrow shows a dot per vertex and a translucent dot between ea
 
 ## The label cuts a hole in the shaft
 
-An arrow label is plain text whose `labelWidth` the client measures; its height follows from the line count. It sits at the polyline's middle, and the shaft is masked under it so nothing shows through the text. It is a `<mask>`, not an even-odd clip, because WeasyPrint ignores `clip-rule` ([EXPORT.md](EXPORT.md#weasyprint-dictates-how-a-layer-references-its-paint)).
+An arrow label is plain text whose `labelWidth` the client measures; its height follows from the line count. A canvas measures a character in the fallback until the `unicode-range` slice that draws it has loaded, and `document.fonts.load` and `check` called with the font alone test a space. So `loadVectorFont` and `isVectorFontLoaded` (`text-measure.ts`) take the text they will measure: the label editor loads the slices of its text as the user types, and `healLabelWidth` measures a label committed before them again once they load. The label sits at the polyline's middle, and the shaft is masked under it so nothing shows through the text. It is a `<mask>`, not an even-odd clip, because WeasyPrint ignores `clip-rule` ([EXPORT.md](EXPORT.md#weasyprint-dictates-how-a-layer-references-its-paint)).
 
 ## The live viewport is a ref
 

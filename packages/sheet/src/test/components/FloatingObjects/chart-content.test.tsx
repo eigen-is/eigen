@@ -218,6 +218,13 @@ async function pick(label: string) {
     await act(async () => item.click());
 }
 
+// The image writer loads the slice table on demand, so the file is saved a few ticks after the pick.
+async function savedPast(spy: { mock: { calls: unknown[] } }, count: number): Promise<void> {
+    await act(async () => {
+        while (spy.mock.calls.length <= count) await Bun.sleep(1);
+    });
+}
+
 // The range is read into inline data, the chart item a copy writes, and drawn by the canvas image writer.
 test('Download image saves the chart with its range read in, on white, its font embedded, for a viewer too', async () => {
     const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
@@ -232,7 +239,7 @@ test('Download image saves the chart with its range read in, on white, its font 
         expect(menuRows()).toEqual(['Download image']);
         fonts.takeFetched();
         await pick('Download image');
-        await act(async () => {});
+        await savedPast(saved, 0);
         expect(saved).toHaveBeenCalledTimes(1);
         const [blob, name] = saved.mock.calls[0];
         expect(name).toBe('Scores.svg');
@@ -241,7 +248,7 @@ test('Download image saves the chart with its range read in, on white, its font 
         expect(svg).toStartWith('<svg xmlns="http://www.w3.org/2000/svg" width="420" height="320"');
         expect(svg).toContain('fill="#ffffff"');
         for (const label of ['Scores', 'Ajax', 'PSV', 'Points']) expect(svg).toContain(`>${label}<`);
-        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
+        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.latin.woff2']);
         expect(svg).toContain('data:font/woff2;base64,AQID');
     } finally {
         saved.mockRestore();
@@ -268,8 +275,9 @@ test('Download image saves a chart in the sketch look it stores', async () => {
         const el = box()?.firstElementChild;
         if (!el) throw new Error('no chart');
         await openMenu(el);
+        const before = saved.mock.calls.length;
         await pick('Download image');
-        await act(async () => {});
+        await savedPast(saved, before);
         await cleanup?.();
         cleanup = undefined;
         return saved.mock.calls.at(-1)?.[0].text();

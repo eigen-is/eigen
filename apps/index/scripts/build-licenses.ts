@@ -1,9 +1,13 @@
+// Writes the data of the index app's /licenses page before it builds: every third-party package any workspace depends
+// on, read from its installed package.json, plus the code and fonts the repo carries itself, which no package.json
+// names and so are listed here by hand.
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Glob } from 'bun';
 import type { LicenseFont, LicensePackage, LicenseVendored } from './lib/content-types';
 
-// apps/index/scripts → repo root is three levels up.
+// The script sits in the index app's scripts folder, so the app is one level up and the repo root three.
 const INDEX_APP = join(import.meta.dir, '..');
 const REPO_ROOT = join(INDEX_APP, '..', '..');
 const OUT = join(INDEX_APP, 'src', 'content', '.generated', 'licenses.json');
@@ -48,7 +52,14 @@ const FONTS: LicenseFont[] = [
     { name: 'Source Serif 4', license: 'OFL-1.1', url: 'https://github.com/adobe-fonts/source-serif' },
     { name: 'JetBrains Mono', license: 'OFL-1.1', url: 'https://github.com/JetBrains/JetBrainsMono' },
     { name: 'Excalifont', license: 'OFL-1.1', url: 'https://plus.excalidraw.com/excalifont' },
-    { name: 'STIX Two Math', license: 'OFL-1.1', url: 'https://github.com/stipub/stixfonts' },
+    { name: 'Noto Emoji', license: 'OFL-1.1', url: 'https://github.com/googlefonts/noto-emoji' },
+    { name: 'Noto Sans SC', license: 'OFL-1.1', url: 'https://github.com/notofonts/noto-cjk' },
+    { name: 'Noto Sans KR', license: 'OFL-1.1', url: 'https://github.com/notofonts/noto-cjk' },
+    {
+        name: 'New Computer Modern Math',
+        license: 'GUST Font License',
+        url: 'https://download.gnu.org.ua/release/newcm/',
+    },
 ];
 
 type PackageJson = {
@@ -68,16 +79,17 @@ function workspacePackageJsons(): { dir: string; pkg: PackageJson }[] {
     for (const pattern of ['apps/*/package.json', 'packages/*/package.json']) {
         files.push(...new Glob(pattern).scanSync(REPO_ROOT));
     }
-    return files.sort().map((rel) => {
-        const abs = join(REPO_ROOT, rel);
-        return { dir: dirname(abs), pkg: JSON.parse(readFileSync(abs, 'utf-8')) as PackageJson };
+    return files.sort().map((relative) => {
+        const file = join(REPO_ROOT, relative);
+        return { dir: dirname(file), pkg: JSON.parse(readFileSync(file, 'utf-8')) };
     });
 }
 
 function normalizeLicense(pkg: PackageJson): string {
     if (typeof pkg.license === 'string') return pkg.license;
     if (pkg.license?.type) return pkg.license.type;
-    if (Array.isArray(pkg.licenses)) return pkg.licenses.map((l) => (typeof l === 'string' ? l : l.type)).join(' OR ');
+    if (Array.isArray(pkg.licenses))
+        return pkg.licenses.map((entry) => (typeof entry === 'string' ? entry : entry.type)).join(' OR ');
     return 'Unknown';
 }
 
@@ -95,14 +107,13 @@ function normalizeUrl(pkg: PackageJson, name: string): string {
     return url;
 }
 
-// Read a dependency's installed package.json directly. A direct fs read bypasses the
-// `exports` field that blocks `<name>/package.json` module resolution for many packages.
-// Isolated installs symlink each workspace's deps into its own node_modules; fall back
-// to the hoisted root copy.
+// A dependency's installed package.json, read from disk, because many packages' `exports` field blocks resolving
+// `<name>/package.json`. An isolated install links each workspace's dependencies into its own node_modules, and the
+// root's hoisted copy is the fallback.
 function readInstalled(dir: string, name: string): PackageJson | null {
     for (const base of [dir, REPO_ROOT]) {
-        const p = join(base, 'node_modules', name, 'package.json');
-        if (existsSync(p)) return JSON.parse(readFileSync(p, 'utf-8')) as PackageJson;
+        const file = join(base, 'node_modules', name, 'package.json');
+        if (existsSync(file)) return JSON.parse(readFileSync(file, 'utf-8'));
     }
     return null;
 }
@@ -112,7 +123,7 @@ const missing: string[] = [];
 
 for (const { dir, pkg } of workspacePackageJsons()) {
     for (const name of Object.keys({ ...pkg.dependencies, ...pkg.devDependencies })) {
-        // Skip internal workspace packages (not third-party OSS).
+        // The repo's own workspace packages are not third-party code.
         if (name.startsWith('@workspace/') || name.startsWith('@apps/') || byName.has(name)) continue;
         const installed = readInstalled(dir, name);
         if (!installed?.version) {

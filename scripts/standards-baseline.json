@@ -25,7 +25,6 @@
     "apps/docs/src/components/docs/extensions/comment-mark.ts": 2,
     "apps/drive/src/components/editor/markdown-editor.tsx": 4,
     "apps/drive/src/routes/_auth.shared.$to.tsx": 2,
-    "apps/index/scripts/build-licenses.ts": 2,
     "apps/index/scripts/build-search-index.ts": 2,
     "apps/index/scripts/prerender.tsx": 2,
     "apps/index/src/components/article-content.tsx": 1,
@@ -92,15 +91,12 @@
     "packages/ui/src/components/properties-panel/background-fill-block.tsx": 1,
     "packages/ui/src/components/properties-panel/merged-select.tsx": 1,
     "packages/ui/src/components/search/prosemirror-search-highlight.ts": 1,
-    "packages/ui/src/components/shadow-content.tsx": 2,
     "packages/ui/src/components/sonner.tsx": 1,
     "packages/ui/src/components/toggle-group.tsx": 1,
-    "packages/ui/src/components/vector/text-overlay.tsx": 2,
     "packages/ui/src/hooks/is-typing-target.ts": 1,
     "packages/ui/src/hooks/use-focus-trap.ts": 1,
     "packages/ui/src/hooks/use-keyboard-list-navigation.ts": 1,
-    "packages/ui/src/hooks/use-scroll-to-index.ts": 1,
-    "packages/ui/src/lib/printElement.ts": 1
+    "packages/ui/src/hooks/use-scroll-to-index.ts": 1
   },
   "non-null-assertions": {
     "apps/api/scripts/mail-bench.ts": 5,

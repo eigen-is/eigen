@@ -5,6 +5,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { TiptapEditorHTMLElement } from '@tiptap/core';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -863,7 +864,7 @@ test("Update 'Normal text' to match writes the doc's Normal, the page draws it, 
     await pick("Update 'Normal text' to match");
     expect(doc.getMap(STYLE_ROOT).toJSON()).toEqual({ font: 'Source Serif 4', size: 14 });
     expect(page()?.style.getPropertyValue('--doc-font-size')).toBe('14pt');
-    expect(page()?.style.getPropertyValue('--doc-font-family')).toBe("'Source Serif 4', serif");
+    expect(page()?.style.getPropertyValue('--doc-font-family')).toBe(getFontFamily('Source Serif 4'));
 
     await openMenu('Edit');
     await pick(`Undo${formatForDisplay('Mod+Z')}`);
@@ -1321,7 +1322,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
         expect(svg).toContain('fill="#ffffff"');
         expect(svg).toContain('>Light / dark<');
         expect(svg).toContain('fill="#123456"');
-        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
+        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.latin.woff2']);
         expect(svg).toContain('font-family: "Inter"');
     } finally {
         saved.mockRestore();

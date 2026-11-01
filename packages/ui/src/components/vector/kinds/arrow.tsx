@@ -1,6 +1,6 @@
-// The arrow's own panel rows: its type (sharp / curved / elbow), its two arrowheads, and — once every
-// selected arrow carries a label — the label's font. The generic capability rows (stroke, sketch,
-// opacity) stay the panel's; these are the questions only an arrow answers.
+// The properties panel's rows that only an arrow has: its type, such as sharp or elbow, its two arrowheads and,
+// once every selected arrow has a label, the label's font. The rows every kind shares, such as stroke and
+// opacity, stay the panel's own.
 
 import type { Arrowhead, ArrowShape, VectorArrowElement } from '@workspace/lib/vector';
 import {
@@ -42,10 +42,10 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
 export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
     const { hold, end: endGesture } = useHeldGesture();
     const pendingFontWrites = useRef(0);
-    // The panel mounts a kind's section only for a SOLE-kind selection, so this narrows rather than filters.
+    // The panel mounts a kind's section only when every selected element is of that kind, so this only narrows.
     const arrows = elements.filter((el): el is VectorArrowElement => el.type === 'arrow');
-    // An elbow arrow's route lives in the unrotated local frame, so a pure-elbow selection also pins the
-    // panel's Angle input (the panel's own gate).
+    // An elbow arrow's route lives in its unrotated local frame. So when every selected arrow is an elbow, the
+    // panel also pins its Angle input, through a check of its own.
     const allElbow = arrows.length > 0 && arrows.every((el) => el.elbow);
     // An empty label has no font to tune.
     const allLabeled = arrows.length > 0 && arrows.every((el) => el.text !== '');
@@ -56,10 +56,10 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
     const endArrowhead = getMergedValue(arrows, (el) => el.endArrowhead);
     const fontFamily = getMergedValue(arrows, (el) => el.fontFamily);
 
-    // arrowShapeFields owns the stored fields each shape writes back. Switching TO elbow first collapses
-    // the arrow to its two endpoints — an elbow route is DERIVED from them, so interior vertices would
-    // only linger as stray endpoint handles — and pins angle 0, all in the one sealed transact.
-    // Switching AWAY keeps the two endpoints (nothing to restore). One undo step.
+    // arrowShapeFields owns the stored fields each shape writes. A switch to elbow first collapses the arrow
+    // to its two endpoints, because an elbow route is derived from them, and the points in between would only
+    // linger as stray handles. It also sets the angle to 0, all in one sealed transact, so it is one undo step.
+    // A switch away from elbow keeps the two endpoints, since there is nothing to restore.
     const applyShape = (next: ArrowShape) => {
         const base = arrowShapeFields(next);
         onChangeEach((el) => {
@@ -73,20 +73,20 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
         });
     };
 
-    // A font family / size change re-measures each arrow's own label and writes `labelWidth` (the sole
-    // width source, height derives from the line count) in the SAME transact as the font — after the face
-    // loads, or measureText reads fallback metrics. Per-element widths (each label differs), one undo step.
+    // A font family or size change measures each arrow's own label again and writes its `labelWidth` in the
+    // same transact as the font, so it is one undo step. The height follows from the line count. It measures
+    // once the slices of the label's text have loaded, or measureText reads the fallback's metrics.
     //
-    // The Size field holds its own gesture only while it is focused, and on a cold face the write lands
-    // after the blur that released it — every digit would be its own undo step. So the write takes the
-    // window back itself and keeps it until the last pending load has landed.
+    // The Size field holds its own undo gesture only while it is focused. When the font has not loaded yet,
+    // the write lands after the blur has released that gesture, so each digit would be its own undo step.
+    // So the write takes the gesture back itself and keeps it until the last pending load has landed.
     const applyFont = async (fields: (el: VectorArrowElement) => { fontSize?: number; fontFamily?: string }) => {
         pendingFontWrites.current += 1;
         try {
             await Promise.all(
                 arrows.map((el) => {
                     const patch = fields(el);
-                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily);
+                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily, el.text);
                 }),
             );
             hold();
@@ -106,7 +106,7 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
     return (
         <>
             {allLabeled && (
-                /* Font + size only — the label is always centered and its color comes from Stroke. */
+                /* Only the font and size: the label is always centered, and its color comes from Stroke. */
                 <PropertySection title="Text">
                     <FontRow
                         value={fontFamily}
@@ -124,15 +124,14 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
                 </PropertySection>
             )}
 
-            {/* Titled for the kind, not "Shape": the panel's own Shape section sits BELOW Stroke, and a
-                kind section renders above it — a same-titled section must not move between selections. */}
+            {/* Titled for the kind, not "Shape". The panel's own Shape section sits below Stroke, and a kind's
+                section renders above it, so a section of the same title would move between selections. */}
             <PropertySection title="Arrow">
                 <PropertyRow label="Type">
                     <MergedSelect value={shape} onChange={applyShape} options={ARROW_SHAPE_OPTIONS} />
                 </PropertyRow>
-                {/* An elbow reuses Edges as its CORNER style (sharp bends vs round arcs) — its shaft is
-                    always orthogonal, so roundness is free to mean the corners. A sharp/curved arrow's
-                    Type already says it. */}
+                {/* An elbow's shaft is always made of straight segments at right angles, so its Edges row sets
+                    the corners, sharp bends or round arcs. For a sharp or curved arrow, Type already says it. */}
                 {allElbow && (
                     <PropertyRow label="Edges">
                         <MergedSelect

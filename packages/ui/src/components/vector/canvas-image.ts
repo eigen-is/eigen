@@ -1,11 +1,9 @@
-// The image writer behind Download image and Vector's File › Download › SVG: canvas elements, or a doc's or a
-// sheet's chart, drawn by the browser as one standalone SVG. Rich text is written as SVG text from the browser's
-// own layout of each box, the faces it and the labels draw in are embedded, and images are inlined from the
-// canvas's own media, so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the
-// writing in lib.
+// The image writer behind Download image and Vector's File › Download › SVG. It draws canvas elements, or a doc's
+// or a sheet's chart, as one standalone SVG. Rich text becomes SVG text from the browser's own layout of each box.
+// The file embeds the font slices its text draws in and inlines images from the canvas's own media, so it draws
+// the same in any SVG reader. Measuring needs the DOM, so it lives here, and lib writes the SVG.
 
 import { inlineSvgMedia } from '@workspace/lib/clipboard';
-import { fontFaceCss } from '@workspace/lib/constants/fonts';
 import { downloadBlob } from '@workspace/lib/download';
 import { bytesToBase64 } from '@workspace/lib/format';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
@@ -19,8 +17,8 @@ import type {
     VectorTextualElement,
 } from '@workspace/lib/vector';
 import {
-    canvasImageFaces,
     canvasImageScene,
+    canvasImageSlices,
     eigenMediaHref,
     hasText,
     isTextual,
@@ -30,7 +28,6 @@ import {
     sceneToSvg,
 } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
-import { bundledFontUrl } from './bundled-font-url';
 
 type CanvasImageOptions = {
     // The file's name, without its extension.
@@ -49,12 +46,15 @@ export async function downloadCanvasImage(
     const measured = await measureRichText(scene.elements);
     const richText = new Map([...measured].map(([id, box]) => [id, richTextSvg(box)]));
     const inlined = await inlineSvgMedia(sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }), fetchMedia);
+    // The slice table and the slice URLs are large, so they load only once a download starts.
+    const { fontFaceCss } = await import('@workspace/lib/constants/font-slices');
+    const { bundledFontUrl } = await import('./bundled-font-url');
     const faces = await Promise.all(
-        canvasImageFaces(scene.elements, measured).map(async (face) => {
-            const response = await fetch(bundledFontUrl(face.file));
-            if (!response.ok) throw new Error(`The ${face.family} font could not be loaded`);
+        (await canvasImageSlices(scene.elements, measured)).map(async (slice) => {
+            const response = await fetch(bundledFontUrl(slice.file));
+            if (!response.ok) throw new Error(`The ${slice.family} font could not be loaded`);
             const bytes = new Uint8Array(await response.arrayBuffer());
-            return fontFaceCss(face, `data:font/woff2;base64,${bytesToBase64(bytes)}`);
+            return fontFaceCss(slice, `data:font/woff2;base64,${bytesToBase64(bytes)}`);
         }),
     );
     const svg = spliceAfterSvgOpenTag(inlined, `<defs><style>${faces.join('\n')}</style></defs>`);

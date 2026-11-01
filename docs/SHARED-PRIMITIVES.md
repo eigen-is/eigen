@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2056 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2067 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -545,7 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (438)
+## Types (439)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -567,9 +567,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorChannels` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EigenFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `FontFaceFile` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `FallbackFont` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `StandardMailbox` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `TextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
+| `FontSlice` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `BandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `BandRoot` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
@@ -988,7 +989,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1104)
+## Utilities & constants (1114)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1265,11 +1266,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_INDICATOR_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `EMOJI_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
+| `FALLBACK_FONTS` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `FONT_FACES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `fontFaceCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `fontFacesFor` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `fontFacesOf` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `fontLineHeight` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `FOOTNOTE_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -1299,6 +1299,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mailboxDisplayName` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxListFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxRouteSegment` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MATH_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `MATH_FONT_STACK` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `MAX_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
 | `MAX_REQUEST_BODY_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
@@ -1325,6 +1327,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STANDARD_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
+| `TEXT_FALLBACK_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `THEME_COPY_KEY` | `@workspace/lib/constants` | packages/lib/src/constants/theme.ts |
 | `UNDO_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
@@ -1333,6 +1336,14 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VCARD_CONTENT_TYPE` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `VCARD_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `EMOJI_COMPONENTS` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `FIRST_NON_ASCII` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `FONT_SLICES` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slice-data.gen.ts |
+| `fontFaceCss` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `KEYCAP` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `parseUnicodeRange` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `slicesFor` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
+| `sliceStyle` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `isStaleWrite` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
@@ -1761,9 +1772,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
-| `canvasImageFaces` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasImageName` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasImageScene` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
+| `canvasImageSlices` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
 | `canvasPtToPx` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `canvasPxToPt` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `capabilitiesOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |

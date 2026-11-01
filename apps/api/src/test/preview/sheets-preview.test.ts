@@ -589,6 +589,6 @@ describe('eigensheets export and preview (hidden sheets)', () => {
 });
 
 // Recorded from the deterministic golden fixture. Regenerate (and justify) only on
-// an intentional renderer or preview-budget change. Last move: only a cell whose
-// text can pass its rows is clipped to them (2026-10-27).
-const GOLDEN_BODY_SHA256 = '22d84e290caeffe8920970fb650928580cc22e08175f49f604ed7f420b10c63f';
+// an intentional renderer or preview-budget change. Last move: the table's and the cells'
+// font stacks took the emoji and CJK faces (2026-11-01).
+const GOLDEN_BODY_SHA256 = 'c25e4be02567ca667b51ddddcbacd6c9446b26ca6d67a8e6d7a3bcde6225478b';

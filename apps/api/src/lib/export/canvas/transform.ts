@@ -8,7 +8,7 @@ import { readVectorFromDoc, round, slidePxToPt } from '@workspace/lib/vector';
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
-import { FONT_STACK_SANS } from '../../document/font-stacks';
+import { FONT_STACK_SANS, SANS_FONT_NAME } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import type {
     DocumentExportFormat,
@@ -30,13 +30,13 @@ type CanvasDocumentOptions = { title: string; pages: CanvasPage[]; resolveMedia?
     | { mode: 'pdf' }
 );
 
-export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
-    const { title, pages, resolveMedia } = opts;
-    const pdf = opts.mode === 'pdf';
+export function canvasHtmlDocument(options: CanvasDocumentOptions): string {
+    const { title, pages, resolveMedia } = options;
+    const pdf = options.mode === 'pdf';
     // The screen document wraps each page in the shared fit box, so a downloaded deck reads on a phone. The layers
     // inside stay in scene pixels. The PDF has no viewport, as WeasyPrint gives each page a sheet, so its pages stay
     // unwrapped, laid out where they print.
-    const scale = pdf ? 1 : opts.scale;
+    const scale = pdf ? 1 : options.scale;
     const rendered = pages.map((page) =>
         pdf ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
@@ -51,13 +51,14 @@ export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
     const css = pdf ? pdfCss(width, height) : screenCss(width);
     return exportHtmlDocument({
         title,
+        cssFamilies: [SANS_FONT_NAME],
         css: `${SHARED_CSS}${css}${canvasTextCSSRaw}`,
         body: pdf ? body : `<div class="deck">${body}</div>`,
         viewport: true,
     });
 }
 
-// Materialized doc + prepared media → a deck's HTML or PDF document: one page per frame.
+// A deck's HTML or PDF document, one page per frame, from its Y.Doc and its media.
 export async function renderEigenslidesHtml(
     doc: Y.Doc,
     format: DocumentExportFormat,

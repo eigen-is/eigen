@@ -4,6 +4,7 @@
 // where the editor floats them. Runs in the transform process, so it reaches no Mount: images arrive as URLs by media
 // name.
 
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -39,7 +40,7 @@ import {
     sheetChartPoints,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
-import { FONT_STACK_SANS } from '../../document/font-stacks';
+import { FONT_STACK_SANS, SANS_FONT_NAME } from '../../document/font-stacks';
 import type { HtmlExportMode, LossCounter } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
@@ -107,9 +108,10 @@ const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 // A line of text in Inter is about 1.2 times its font size. With its padding and gridline, such a line that fits its
 // rows with a pixel to spare grows them by two pixels at most, as a thick border does. A character Inter lacks takes a
-// fallback font's line, which can be taller. Noto Sans CJK's is 1.45 times, so a plain 10 to 11.5 pt line grows a
-// default row by 2 to 5 pixels, and a sheet of such rows prints up to a quarter more pages than printedPages charged.
-// That stays bounded, because a larger font is clipped.
+// fallback font's line, which can be taller. A Chinese or Japanese character prints in Noto Sans SC, whose line is
+// 1.448 times its size ((usWinAscent + usWinDescent) / unitsPerEm), as is Noto Sans KR's. So a plain 10 to 11.5 pt
+// line grows a default row by 2 to 5 pixels, and a sheet of such rows prints up to a quarter more pages than
+// printedPages charged. That stays bounded, because a larger font is clipped.
 const LINE_HEIGHT = 1.2;
 
 // Where a cell's text sits in its rows, as the canvas places the text's ink: in the middle, or 2 px from the top or
@@ -153,6 +155,7 @@ export function sheetsHtmlDocument({
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
+        cssFamilies: [SANS_FONT_NAME],
         css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
         body: `<style>${css}</style>\n${html}`,
     });
@@ -502,8 +505,7 @@ function renderSheet(
         rowTags.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    const q = fontQuote(forStylesheet);
-    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
+    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rowTags.join('')}</tbody></table>`;
     const html = withFloatingOverlay(table, tableWidth, offset, clip, overlay);
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
@@ -605,12 +607,10 @@ function buildCellStyle(
 
     if (v) {
         const family = cellFontName(v.ff);
-        // In stylesheet text entities stay literal, so escapeHtml there would draw "Bell MT & Co" as "Bell MT &amp;
-        // Co". The quotes are all that could end the quoted name early, and the stylesheet seam strips the rest.
+        // Stylesheet text decodes no entities, so escapeHtml there would draw "Bell MT & Co" as "Bell MT &amp; Co".
         if (family) {
-            const name = forStylesheet ? family.replace(/["'\\]/g, '') : escapeHtml(family);
-            const q = fontQuote(forStylesheet);
-            parts.push(`font-family:${q}${name}${q},sans-serif`);
+            const stack = getFontFamily(family);
+            parts.push(`font-family:${forStylesheet ? stack : escapeHtml(stack)}`);
         }
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
@@ -675,12 +675,6 @@ function cssColor(color: unknown): string | undefined {
     return cssColorToHex(color) !== undefined || isTransparentCssColor(color) || /^[a-z]+$/i.test(color)
         ? color
         : undefined;
-}
-
-// A font name's quote is a real `"` in stylesheet text and `&quot;` in a style attribute, where a `"` would end the
-// attribute and drop every later declaration.
-function fontQuote(forStylesheet: boolean): string {
-    return forStylesheet ? '"' : '&quot;';
 }
 
 function getCellDisplay(v: Cell | null): string {

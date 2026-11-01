@@ -7,7 +7,7 @@ import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Context, Freezen, Sheet as SheetType } from '../../state';
-import { clearMeasureTextCache, initFreeze, updateContextWithCanvas, updateContextWithSheetData } from '../../state';
+import { initFreeze, updateContextWithCanvas, updateContextWithSheetData, watchFontFaces } from '../../state';
 import type { ScrollPos } from '../../state/render/frame';
 import { drawFrame, scrollFrame } from '../../state/render/frame';
 import { SheetOverlay } from '../SheetOverlay';
@@ -81,7 +81,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
             const canvas = refs.canvas.current;
             if (!canvas) return;
             if (settings.devicePixelRatio === 0) {
-                draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
+                draftCtx.devicePixelRatio = window.devicePixelRatio;
             }
             updateContextWithSheetData(draftCtx, sheetData);
             updateContextWithCanvas(draftCtx, canvas, placeholder);
@@ -163,22 +163,19 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         });
     }, [refs.canvas, refs.globalCache, sheet.id]);
 
-    // Neither changes the context: a web font that finishes loading changes the text's widths, so the
-    // measurements go too, and a canvas whose bitmap the browser dropped comes back blank.
+    // A loaded font and a restored canvas each need a whole redraw, though neither changes the context. A font
+    // that finishes loading changes the text's widths, and the font watcher drops the cached measurements before
+    // it calls the grid. A canvas whose bitmap the browser dropped comes back blank.
     useEffect(() => {
         const canvas = refs.canvas.current;
         const drawWhole = () => {
             drawnRef.current = undefined;
             scheduleRedraw();
         };
-        const onFontsLoaded = () => {
-            clearMeasureTextCache();
-            drawWhole();
-        };
-        document.fonts.addEventListener('loadingdone', onFontsLoaded);
+        const stopWatchingFonts = watchFontFaces(drawWhole);
         canvas?.addEventListener('contextrestored', drawWhole);
         return () => {
-            document.fonts.removeEventListener('loadingdone', onFontsLoaded);
+            stopWatchingFonts();
             canvas?.removeEventListener('contextrestored', drawWhole);
         };
     }, [refs.canvas, scheduleRedraw]);
