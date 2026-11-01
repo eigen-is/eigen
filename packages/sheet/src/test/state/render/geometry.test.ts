@@ -22,22 +22,17 @@ const COLS = [74, 148, 222, 296, 370];
 
 describe('mainVisibleRange', () => {
     test('viewport inside the data picks the touched index span', () => {
-        expect(mainVisibleRange(ROWS, 0, 50, 0)).toEqual({ start: 0, end: 2 });
-        expect(mainVisibleRange(ROWS, 30, 40, 0)).toEqual({ start: 1, end: 3 });
+        expect(mainVisibleRange(ROWS, 0, 50)).toEqual({ start: 0, end: 2 });
+        expect(mainVisibleRange(ROWS, 30, 40)).toEqual({ start: 1, end: 3 });
     });
 
     test('a scroll position exactly on an edge starts at that index', () => {
-        expect(mainVisibleRange(ROWS, 20, 20, 0)).toEqual({ start: 0, end: 1 });
+        expect(mainVisibleRange(ROWS, 20, 20)).toEqual({ start: 0, end: 1 });
     });
 
     test('viewport past the last entry clamps end to the last index', () => {
-        expect(mainVisibleRange(ROWS, 30, 200, 0)).toEqual({ start: 1, end: 4 });
-        expect(mainVisibleRange(ROWS, 0, 1000, 0)).toEqual({ start: 0, end: 4 });
-    });
-
-    test('freeze-region cell offset shifts both ends, end stays clamped', () => {
-        expect(mainVisibleRange(ROWS, 0, 50, 2)).toEqual({ start: 2, end: 4 });
-        expect(mainVisibleRange(ROWS, 0, 1000, 2)).toEqual({ start: 2, end: 4 });
+        expect(mainVisibleRange(ROWS, 30, 200)).toEqual({ start: 1, end: 4 });
+        expect(mainVisibleRange(ROWS, 0, 1000)).toEqual({ start: 0, end: 4 });
     });
 });
 

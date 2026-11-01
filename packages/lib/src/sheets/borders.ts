@@ -46,9 +46,13 @@ export function borderSidesToCss(sides: CellBorderSides, mapColor: (color: strin
     return decls;
 }
 
-// Visits the map's entries inside a rectangle, walking whichever of the two is smaller. Select-all on a tall sheet is
-// a million-cell rectangle over a near-empty map, and a one-cell paste into a huge map is the reverse. The canvas asks
-// on every scroll frame.
+// A rectangle up to this many cells is walked cell by cell, whatever the map holds. The canvas asks for the cells it
+// paints on every frame, often several times, and counting a large map costs the whole map: `for...in` collects all
+// its keys before the first step. Walking cells also visits them in one order, row by row, however large the map.
+const RECT_WALK_CELLS = 100_000;
+
+// Visits the map's entries inside a rectangle. A larger rectangle walks the map instead when the map is smaller, as
+// select-all on a tall sheet is a million-cell rectangle over a near-empty map.
 export function forEachInRect(
     map: Record<string, CellBorderSides>,
     rowSt: number,
@@ -58,14 +62,16 @@ export function forEachInRect(
     visit: (key: string, r: number, c: number) => void,
 ) {
     const area = (rowEd - rowSt + 1) * (colEd - colSt + 1);
-    let size = 0;
-    for (const _ in map) if ((size += 1) >= area) break;
-    if (size < area) {
-        for (const key in map) {
-            const [r, c] = parseCellKey(key);
-            if (r >= rowSt && r <= rowEd && c >= colSt && c <= colEd) visit(key, r, c);
+    if (area > RECT_WALK_CELLS) {
+        let size = 0;
+        for (const _ in map) if ((size += 1) >= area) break;
+        if (size < area) {
+            for (const key in map) {
+                const [r, c] = parseCellKey(key);
+                if (r >= rowSt && r <= rowEd && c >= colSt && c <= colEd) visit(key, r, c);
+            }
+            return;
         }
-        return;
     }
     for (let r = rowSt; r <= rowEd; r += 1) {
         for (let c = colSt; c <= colEd; c += 1) {

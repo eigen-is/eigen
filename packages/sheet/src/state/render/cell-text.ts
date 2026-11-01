@@ -15,16 +15,20 @@ function isInlineStyle(value: unknown): value is { fontset: string; fc: string }
     return typeof value === 'object' && value !== null && 'fontset' in value && 'fc' in value;
 }
 
+// `origin` is where the sheet's top-left corner falls on the canvas. The strikethrough and underline snap to
+// the sheet's pixel grid, not the canvas's, so they move with the text when a scroll moves by half a pixel.
 export function cellTextRender(
     textInfo: CellTextInfo | null | undefined,
     ctx: CanvasRenderingContext2D,
-    option: { pos_x: number; pos_y: number },
+    option: { pos_x: number; pos_y: number; origin: { x: number; y: number } },
 ) {
     if (!textInfo) {
         return;
     }
     const { values, rotate, type, textLeftAll, textTopAll } = textInfo;
-    const { pos_x, pos_y } = option;
+    const { pos_x, pos_y, origin } = option;
+    const snapX = (x: number) => Math.floor(x - origin.x) + origin.x;
+    const snapY = (y: number) => Math.floor(y - origin.y) + origin.y;
     const rotated =
         rotate !== undefined &&
         rotate !== 0 &&
@@ -56,8 +60,8 @@ export function cellTextRender(
         if (word.cancelLine) {
             const c = word.cancelLine;
             ctx.beginPath();
-            ctx.moveTo(Math.floor(pos_x + c.startX) + 0.5, Math.floor(pos_y + c.startY) + 0.5);
-            ctx.lineTo(Math.floor(pos_x + c.endX) + 0.5, Math.floor(pos_y + c.endY) + 0.5);
+            ctx.moveTo(snapX(pos_x + c.startX) + 0.5, snapY(pos_y + c.startY) + 0.5);
+            ctx.lineTo(snapX(pos_x + c.endX) + 0.5, snapY(pos_y + c.endY) + 0.5);
             ctx.lineWidth = Math.floor(c.fs / 9);
             ctx.strokeStyle = ctx.fillStyle;
             ctx.stroke();
@@ -69,8 +73,8 @@ export function cellTextRender(
             for (let a = 0; a < underLines.length; a += 1) {
                 const item = underLines[a];
                 ctx.beginPath();
-                ctx.moveTo(Math.floor(pos_x + item.startX) + 0.5, Math.floor(pos_y + item.startY));
-                ctx.lineTo(Math.floor(pos_x + item.endX) + 0.5, Math.floor(pos_y + item.endY) + 0.5);
+                ctx.moveTo(snapX(pos_x + item.startX) + 0.5, snapY(pos_y + item.startY) + 0.5);
+                ctx.lineTo(snapX(pos_x + item.endX) + 0.5, snapY(pos_y + item.endY) + 0.5);
                 ctx.lineWidth = Math.floor(item.fs / 9);
                 ctx.strokeStyle = ctx.fillStyle;
                 ctx.stroke();
@@ -132,10 +136,7 @@ export function cellOverflowRender(pass: RenderPass, r: number, c: number, stc: 
         renderCtx.fillStyle = checksCF.textColor;
     }
 
-    cellTextRender(textInfo, renderCtx, {
-        pos_x,
-        pos_y,
-    });
+    cellTextRender(textInfo, renderCtx, { pos_x, pos_y, origin: pass.origin });
 
     renderCtx.restore();
 }

@@ -2,7 +2,13 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { setCellValue } from '../../../state/modules/cell';
-import { clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet } from '../../../state/modules/text';
+import {
+    clearMeasureTextCache,
+    defaultFont,
+    getCellTextInfo,
+    getFontSet,
+    getMeasureText,
+} from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { workbookContextFactory } from '../factories/context';
 
@@ -112,6 +118,25 @@ describe('state/modules/text — font sets', () => {
         expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 })).toStartWith(
             'italic normal normal 12pt "Source Serif 4",',
         );
+    });
+});
+
+// A glyph's ascent and descent are measured from the baseline, so the same text measures differently
+// under another baseline. A cache that mixed them up shifted numbers in one row up or down.
+describe('state/modules/text — measure cache', () => {
+    beforeEach(() => {
+        clearMeasureTextCache();
+    });
+
+    test('the same text under another baseline is measured again', () => {
+        const ctx = measuringCanvas((text, font) =>
+            ctx.textBaseline === 'top' ? { width: 14, ascent: 0, descent: 11 } : fixedGlyphs(text, font),
+        );
+
+        ctx.textBaseline = 'top';
+        expect(getMeasureText('22', ctx).actualBoundingBoxAscent).toBe(0);
+        ctx.textBaseline = 'alphabetic';
+        expect(getMeasureText('22', ctx).actualBoundingBoxAscent).toBe(8);
     });
 });
 

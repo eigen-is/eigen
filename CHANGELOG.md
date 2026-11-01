@@ -13,6 +13,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
+- **Scrolling in Sheets** — the grid keeps up with the scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets
 
 ### Fixed
 
@@ -20,6 +21,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
+- **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
+- **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
 
 ## [0.4.1] - 2026-10-28
 

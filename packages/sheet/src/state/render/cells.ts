@@ -1,6 +1,6 @@
 // nullCellRender/cellRender draw a single cell: background, indicators,
 // checkbox, data bar, text and grid lines. Text layout itself lives in
-// modules/text.ts.
+// getCellTextInfo.
 
 // One red for both attention marks: the invalid-value triangle, and the comment
 // triangle's fallback when its card carries no color of its own.
@@ -22,7 +22,6 @@ import {
 import { getCellTextInfo } from '../modules/text';
 import type { Rect } from '../types';
 import { cellOverflowRender, cellTextRender } from './cell-text';
-import { canvasColors } from './colors';
 import { drawDataBar } from './data-bar';
 import { BORDER_FIX, HALF_PIXEL } from './geometry';
 import { overflowColIn } from './overflow';
@@ -105,15 +104,26 @@ function renderDropdownChevron(pass: RenderPass, r: number, c: number, box: Rect
     renderCtx.restore();
 }
 
-// The right/bottom cell grid lines all share the same 1px default-color stroke.
-function strokeGridLine(renderCtx: CanvasRenderingContext2D, x1: number, y1: number, x2: number, y2: number) {
-    renderCtx.beginPath();
-    renderCtx.moveTo(x1, y1);
-    renderCtx.lineTo(x2, y2);
-    renderCtx.lineWidth = 1;
-    renderCtx.strokeStyle = canvasColors(renderCtx.canvas).gridLine;
-    renderCtx.stroke();
-    renderCtx.closePath();
+// A cell adds its grid lines to the pass's grid path, which drawMain strokes once. Spilled text hides the
+// right line. Both lines lie on the cell's own last pixel. The right line stops one pixel above the next
+// row, so it leaves no stub where the cell below draws no right line.
+function addGridLines(
+    pass: RenderPass,
+    startY: number,
+    startX: number,
+    endY: number,
+    endX: number,
+    rightLine: boolean,
+) {
+    const { gridLines, offsetLeft, offsetTop } = pass;
+    if (rightLine) {
+        const x = endX + offsetLeft - 2 + HALF_PIXEL;
+        gridLines.moveTo(x, startY + offsetTop);
+        gridLines.lineTo(x, endY + offsetTop - 1);
+    }
+    const y = endY + offsetTop - 2 + HALF_PIXEL;
+    gridLines.moveTo(startX + offsetLeft - 1, y);
+    gridLines.lineTo(endX + offsetLeft - 1, y);
 }
 
 // Empty cell rendering
@@ -199,29 +209,9 @@ export function nullCellRender(
         cellOverflowRender(pass, overflowInfo.rowIndex, overflowInfo.colIndex, overflowInfo.stc, overflowInfo.edc);
     }
 
-    // Overflow cell spans this cell, skip right border
-    if (!overflowInfo.colIn || overflowInfo.colLast) {
-        // Right border
-        if (drawGridLines) {
-            strokeGridLine(
-                renderCtx,
-                endX + offsetLeft - 2 + HALF_PIXEL,
-                startY + offsetTop,
-                endX + offsetLeft - 2 + HALF_PIXEL,
-                endY + offsetTop,
-            );
-        }
-    }
-
-    // Bottom border
+    // Text spilling across this cell hides its right grid line.
     if (drawGridLines) {
-        strokeGridLine(
-            renderCtx,
-            startX + offsetLeft - 1,
-            endY + offsetTop - 2 + HALF_PIXEL,
-            endX + offsetLeft - 1,
-            endY + offsetTop - 2 + HALF_PIXEL,
-        );
+        addGridLines(pass, startY, startX, endY, endX, !overflowInfo.colIn || overflowInfo.colLast);
     }
 }
 
@@ -384,10 +374,7 @@ export function cellRender(
             renderCtx.fillStyle = '#ff0000';
         }
 
-        cellTextRender(textInfo, renderCtx, {
-            pos_x,
-            pos_y,
-        });
+        cellTextRender(textInfo, renderCtx, { pos_x, pos_y, origin: pass.origin });
 
         renderCtx.restore();
     }
@@ -396,25 +383,7 @@ export function cellRender(
         renderDropdownChevron(pass, r, c, box);
     }
 
-    if (drawRightGridLine && drawGridLines) {
-        // Right border
-        strokeGridLine(
-            renderCtx,
-            endX + offsetLeft - 2 + HALF_PIXEL,
-            startY + offsetTop,
-            endX + offsetLeft - 2 + HALF_PIXEL,
-            endY + offsetTop,
-        );
-    }
-
-    // Bottom border
     if (drawGridLines) {
-        strokeGridLine(
-            renderCtx,
-            startX + offsetLeft - 1,
-            endY + offsetTop - 2 + HALF_PIXEL,
-            endX + offsetLeft - 1,
-            endY + offsetTop - 2 + HALF_PIXEL,
-        );
+        addGridLines(pass, startY, startX, endY, endX, drawRightGridLine);
     }
 }

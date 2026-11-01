@@ -174,87 +174,64 @@ export function getFontSet(format: CellStyle | null | undefined) {
     return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
 }
 
-// Get text size for cells with a value. Row/column headers pass numeric sequence
-// values (`r + 1`); cell values can also be boolean (e.g. TRUE/FALSE formula
-// results), all coerced via String() before measurement.
+// Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.
+// Headers pass row numbers, and a cell value can be a boolean, so the value is turned into a string.
+// A caller that has just set the font should pass it as `fontset`. Reading `renderCtx.font` back makes
+// the browser rebuild the font string, which costs far more than the cache lookup. The key holds the
+// baseline as well, because the ascent and descent below depend on it.
 export function getMeasureText(
     value: string | number | boolean,
     renderCtx: CanvasRenderingContext2D,
     fontset?: string,
 ): MeasureTextMetrics {
-    let mtc = measureTextCache[`${value}_${renderCtx.font}`];
-    if (fontset) {
-        mtc = measureTextCache[`${value}_${fontset}`];
-    }
-
-    if (mtc != null) {
-        return mtc;
+    const font = fontset || renderCtx.font;
+    const baseline = renderCtx.textBaseline;
+    const key = `${value}_${font}_${baseline}`;
+    const cached = measureTextCache[key];
+    if (cached != null) {
+        return cached;
     }
     if (fontset) {
         renderCtx.font = fontset;
     }
 
-    const measureText = renderCtx.measureText(String(value));
-    const cache: MeasureTextMetrics = {
-        width: measureText.width,
-        actualBoundingBoxAscent: measureText.actualBoundingBoxAscent,
-        actualBoundingBoxDescent: measureText.actualBoundingBoxDescent,
+    const measured = renderCtx.measureText(String(value));
+    const metrics: MeasureTextMetrics = {
+        width: measured.width,
+        actualBoundingBoxAscent: measured.actualBoundingBoxAscent,
+        actualBoundingBoxDescent: measured.actualBoundingBoxDescent,
     };
 
     if (
-        cache.actualBoundingBoxDescent == null ||
-        cache.actualBoundingBoxAscent == null ||
-        Number.isNaN(cache.actualBoundingBoxDescent) ||
-        Number.isNaN(cache.actualBoundingBoxAscent)
+        metrics.actualBoundingBoxDescent == null ||
+        metrics.actualBoundingBoxAscent == null ||
+        Number.isNaN(metrics.actualBoundingBoxDescent) ||
+        Number.isNaN(metrics.actualBoundingBoxAscent)
     ) {
-        let commonWord = 'M';
-        if (hasChinaword(String(value))) {
-            commonWord = '田';
-        }
-        const oneLineTextHeight = getTextSize(commonWord, renderCtx.font)[1] * 0.8;
-        if (renderCtx.textBaseline === 'top') {
-            cache.actualBoundingBoxDescent = oneLineTextHeight;
-            cache.actualBoundingBoxAscent = 0;
-        } else if (renderCtx.textBaseline === 'middle') {
-            cache.actualBoundingBoxDescent = oneLineTextHeight / 2;
-            cache.actualBoundingBoxAscent = oneLineTextHeight / 2;
+        const commonWord = hasChinaword(String(value)) ? '田' : 'M';
+        const oneLineTextHeight = getTextSize(commonWord, font)[1] * 0.8;
+        if (baseline === 'top') {
+            metrics.actualBoundingBoxDescent = oneLineTextHeight;
+            metrics.actualBoundingBoxAscent = 0;
+        } else if (baseline === 'middle') {
+            metrics.actualBoundingBoxDescent = oneLineTextHeight / 2;
+            metrics.actualBoundingBoxAscent = oneLineTextHeight / 2;
         } else {
-            cache.actualBoundingBoxDescent = 0;
-            cache.actualBoundingBoxAscent = oneLineTextHeight;
+            metrics.actualBoundingBoxDescent = 0;
+            metrics.actualBoundingBoxAscent = oneLineTextHeight;
         }
     }
 
-    if (renderCtx.textBaseline === 'alphabetic') {
-        const descText = 'gjpqy';
-        const matchText = 'abcdABCD';
-        let descTextMeasure: MeasureTextMetrics | TextMetrics = measureTextCache[`${descText}_${renderCtx.font}`];
-        if (fontset) {
-            descTextMeasure = measureTextCache[`${descText}_${fontset}`];
-        }
-
-        let matchTextMeasure: MeasureTextMetrics | TextMetrics = measureTextCache[`${matchText}_${renderCtx.font}`];
-        if (fontset) {
-            matchTextMeasure = measureTextCache[`${matchText}_${fontset}`];
-        }
-
-        if (descTextMeasure == null) {
-            descTextMeasure = renderCtx.measureText(descText);
-        }
-
-        if (matchTextMeasure == null) {
-            matchTextMeasure = renderCtx.measureText(matchText);
-        }
-
-        if (cache.actualBoundingBoxDescent <= matchTextMeasure.actualBoundingBoxDescent) {
-            cache.actualBoundingBoxDescent = descTextMeasure.actualBoundingBoxDescent;
-            if (!cache.actualBoundingBoxDescent) {
-                cache.actualBoundingBoxDescent = 0;
-            }
+    // Text without a descender gets the descent of letters like g and y, so every line of one font sits alike.
+    if (baseline === 'alphabetic') {
+        const noDescender = renderCtx.measureText('abcdABCD');
+        if (metrics.actualBoundingBoxDescent <= noDescender.actualBoundingBoxDescent) {
+            metrics.actualBoundingBoxDescent = renderCtx.measureText('gjpqy').actualBoundingBoxDescent || 0;
         }
     }
 
-    measureTextCache[`${value}_${renderCtx.font}`] = cache;
-    return cache;
+    measureTextCache[key] = metrics;
+    return metrics;
 }
 
 export function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
@@ -492,11 +469,11 @@ export function getCellTextInfo(
         } else {
             // value is non-nil here — isEmpty(value) returned null earlier.
             const valueStr = String(value);
-            const measureText = getMeasureText(valueStr, renderCtx);
+            const measureText = getMeasureText(valueStr, renderCtx, fontset);
             const textHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
 
             const vArr: string[] = valueStr.length > 1 ? valueStr.split('') : [valueStr];
-            const oneWordWidth = getMeasureText(vArr[0], renderCtx).width;
+            const oneWordWidth = getMeasureText(vArr[0], renderCtx, fontset).width;
 
             for (let i = 0; i < vArr.length; i += 1) {
                 const textW = oneWordWidth + space_width;
@@ -752,7 +729,7 @@ export function getCellTextInfo(
                 let parsedTextHeight = 0;
                 while (i <= valueStr.length) {
                     const str = valueStr.substring(anchor, i);
-                    const measureText = getMeasureText(str, renderCtx);
+                    const measureText = getMeasureText(str, renderCtx, fontset);
                     const textWidth = measureText.width;
                     const textHeight = measureText.actualBoundingBoxAscent + measureText.actualBoundingBoxDescent;
 
@@ -1299,7 +1276,7 @@ export function getCellTextInfo(
         } else {
             // value is non-nil here — isEmpty(value) returned null earlier.
             const valueStr = String(value);
-            const measureText = getMeasureText(valueStr, renderCtx);
+            const measureText = getMeasureText(valueStr, renderCtx, fontset);
             const textWidth = measureText.width;
             const textHeight = measureText.actualBoundingBoxDescent + measureText.actualBoundingBoxAscent;
 
