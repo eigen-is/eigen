@@ -713,6 +713,14 @@
     }
 }
 
+/* The editor's table of contents in the Links layout draws its entries as links. So does every one on a page-less doc,
+   which has no page numbers to show: the page carries data-pageless, as a switch to page-less redraws no node. */
+nav[data-type="table-of-contents"][data-preset="links"] > a[data-level],
+[data-pageless] nav[data-type="table-of-contents"] > a[data-level] {
+    color: var(--color-link, #2563eb);
+    text-decoration: underline;
+}
+
 /* ===== Task lists — TipTap output ===== */
 /* Top-level rather than nested under .eigen-prose/.tiptap so static HTML
    renderers (e.g. NoteCard description thumbnail) get the styling without

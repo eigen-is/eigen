@@ -1445,3 +1445,72 @@ test("on a phone the kebab's Show outline opens a pane over the editor, and a ta
     await render(PHONE);
     expect(outlineShown()).toBe(false);
 });
+
+// The Table of contents panel's own row.
+const tocPanelShown = () => [...document.querySelectorAll('span.w-14')].some((label) => label.textContent === 'Format');
+
+const selectedTableOfContents = () => {
+    const { selection } = bodyEditor().state;
+    return selection instanceof NodeSelection && selection.node.type.name === 'tableOfContents';
+};
+
+// "Intro" in the body, the caret at its end, and a table of contents inserted there.
+async function bodyTableOfContents(as = WRITER) {
+    write('default', 'Intro');
+    await render(as);
+    await act(async () => void bodyEditor().chain().setTextSelection(6).insertTableOfContents().run());
+    await act(async () => void bodyEditor().commands.setTextSelection(3));
+}
+
+const tocLine = () => bodyView()?.querySelector('nav[data-type="table-of-contents"]');
+
+// Mid-paragraph, where the insert alone would leave the caret in the paragraph's second half.
+test('Insert › Table of contents leaves the new one selected, so its panel opens', async () => {
+    write('default', 'Intro');
+    await render(WRITER);
+    await act(async () => void bodyEditor().commands.setTextSelection(3));
+    await openMenu('Insert');
+    await pick('Table of contents');
+    expect(selectedTableOfContents()).toBe(true);
+    expect(tocPanelShown()).toBe(true);
+});
+
+test('a right-click on a table of contents selects it and offers its options, the clipboard and its delete', async () => {
+    await bodyTableOfContents();
+    expect(tocPanelShown()).toBe(false);
+    const event = await rightClick(tocLine());
+    expect(event.defaultPrevented).toBe(true);
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Table of contents options', '—', 'Delete table of contents']);
+    expect(selectedTableOfContents()).toBe(true);
+    expect(tocPanelShown()).toBe(true);
+
+    await pick('Delete table of contents');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('tableOfContents');
+});
+
+// The comments panel holds the slot until Table of contents options closes it.
+test('Table of contents options shows the panel over an open comments panel', async () => {
+    await bodyTableOfContents();
+    await act(async () => button('Comments')?.click());
+    await rightClick(tocLine());
+    expect(tocPanelShown()).toBe(false);
+    await pick('Table of contents options');
+    expect(selectedTableOfContents()).toBe(true);
+    expect(tocPanelShown()).toBe(true);
+});
+
+test('a phone, with no panel, offers no Table of contents options', async () => {
+    await bodyTableOfContents({ canWrite: true, isMobile: true });
+    await rightClick(tocLine());
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Delete table of contents']);
+});
+
+test("a viewer's right-click on a table of contents opens no menu and leaves the browser's", async () => {
+    write('default', 'Intro');
+    const toc = new Y.XmlElement('tableOfContents');
+    doc.getXmlFragment('default').insert(0, [toc]);
+    await render({ canWrite: false, isMobile: false });
+    const event = await rightClick(tocLine());
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(event.defaultPrevented).toBe(false);
+});
