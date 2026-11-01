@@ -2,7 +2,7 @@
 
 This proposal gives Eigen one set of fallback fonts for the characters its text fonts lack: Noto Emoji for emoji, Noto Sans CJK for Chinese, Japanese and Korean, and a math font for equations. Every bundled face, the text faces included, is cut once into `unicode-range` slices. The browser fetches only the slices a page draws, and every export embeds only the slices its document touches. So a document looks the same in Docs, on the sheet grid, on a canvas, in the PDF and in the HTML download, and a file Eigen writes stops carrying whole fonts.
 
-**Status:** not built, proposed. It supersedes `PROPOSAL_EMOJI_FONT.md` (2026-10-30) and `PROPOSAL_MATH_FONTS.md` (2026-10-29) and keeps their owner decisions ([§ Decisions](#decisions)). [ROADMAP.md](../ROADMAP.md) has its row in P1, [DOCS-TODO.md](../DOCS-TODO.md) the per-doc math font, and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) the CJK phases. Each phase names the owner's yeses it needs ([§ Phases](#phases), [§ Open questions](#open-questions)). What this proposal says about the code was true on 2026-11-01 as far as a read could tell; verify each claim before building on it.
+**Status:** approved 2026-11-01, being built on branch `fonts-fallback`. It supersedes `PROPOSAL_EMOJI_FONT.md` (2026-10-30) and `PROPOSAL_MATH_FONTS.md` (2026-10-29) and keeps their owner decisions ([§ Decisions](#decisions)). [ROADMAP.md](../ROADMAP.md) has its row in P1, [DOCS-TODO.md](../DOCS-TODO.md) the per-doc math font, and [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) the CJK phases. Each phase names the owner's yeses it needs ([§ Phases](#phases), [§ Open questions](#open-questions)). What this proposal says about the code was true on 2026-11-01 as far as a read could tell; verify each claim before building on it.
 
 > **TLDR**: Eigen bundles no emoji or CJK font, so those characters draw in whatever the system has: Apple's fonts on a Mac, Segoe's on Windows, and in the API image Droid Sans Fallback for Chinese and Japanese, boxes for Korean and for most emoji. Equations draw in three different fonts across the editor, the PDF and the HTML download. Every HTML download is 98 to 99% whole base64 fonts: 1.16 MB for a short doc, 2.25 MB for a sheet. This proposal makes slices the one form of every bundled face. One vendoring script cuts each face once into Google-Fonts-style `unicode-range` slices and writes the WOFF2 files, the `@font-face` CSS and the range data. The browser loads them lazily. Every export embeds the slices whose range meets the document's code points, chosen by one lib function the server and the browser share, and WeasyPrint picks among them by `unicode-range` and subsets the PDF as it does today. One TypeScript builder spells every stack, and the CSS tokens are generated from it. No Python in the HTML download, no font in the Dockerfile, no database migration, no new npm package unless the owner picks STIX for the PDF. First a quick win: sheets and decks stop embedding all six faces. Six phases, about five weeks.
 
@@ -242,8 +242,20 @@ The branch `sheets-120fps` is reworking the sheet canvas renderer (`packages/she
 - **The apps draw WOFF2**, like every other bundled face. The slices are WOFF2. (Owner, 2026-10-30.)
 - **The math font is stored with the document**, chosen from Eigen's own list. (Owner, 2026-10-29.)
 - **Fonts under the GUST Font License are fine** to ship beside the OFL ones. (Owner, 2026-10-29.)
+- **Commit the slices of every face to git.** fontTools runs from a local venv, only when the vendoring script reruns, and enters no `package.json`, Dockerfile or CI image. (Owner, 2026-11-01.)
+- **CJK ships as variable fonts, Simplified Chinese and Korean now.** (Owner, 2026-11-01.)
+- **Han draws in Simplified Chinese** by default. (Owner, 2026-11-01.)
+- **New Computer Modern Math becomes the editor's default math font**, option (a), so the editor draws the PDF's glyphs. No `@mathjax/mathjax-stix2-font`. (Owner, 2026-11-01.)
+- **`--no-install-recommends` in `docker/api/Dockerfile`**, after the CJK phase, once what librsvg and libvips need is checked. (Owner, 2026-11-01.)
+- **Japanese and Traditional Chinese detection waits**, as a backlog row. (Owner, 2026-11-01.)
+- **A math font per doc (`mathFont`) waits.** This program changes no stored format. (Owner, 2026-11-01.)
+- **Emoji are monochrome Noto Emoji**, reconfirmed. (Owner, 2026-11-01.)
+- **No `harfbuzzjs`.** (Owner, 2026-11-01.)
+- **Mail's reading pane keeps a message's own inline fonts**, so its emoji and CJK draw in the system's fonts. (Owner, 2026-11-01.)
 
 ## Open questions
+
+The owner answered all eight on 2026-11-01, each as recommended ([§ Decisions](#decisions)). They stay here for their sizes and alternatives.
 
 1. **Commit the WOFF2 slices of every face** (phases 1 and 2). Size: the text faces' slices, about the 1.7 MB of their whole WOFF2s; Noto Emoji's variable slices about 1 MB (Google's static ones are 526 KB). Pulls in: binaries in git, rewritten on a font update, and fontTools from a venv when the script runs. Simpler: fetch them at build time, which needs the network in every build. Recommended: commit, as every bundled font is.
 2. **Commit the CJK slices, variable or static** (phase 3). Size, variable: SC 4.50 MB, KR not measured (about 3.5 MB at SC's ratio), JP 5.47 MB and TC later. Static Regular instead: SC 2.41 MB, KR 1.87 MB, but 600 draws as a faked bold, and adding Bold doubles it. Pulls in: about 8 MB of binaries for SC and KR, and every CJK page fetches its slices. Simpler: keep the system's CJK fonts. Recommended: variable, SC and KR now.
