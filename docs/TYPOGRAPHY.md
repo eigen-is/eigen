@@ -58,6 +58,8 @@ A canvas measures and draws a character in the fallback until the slice that dra
 
 The keycap bases sit in the emoji face's keycap slice, so a canvas that loads the font of text with a digit also fetches that 53 KB slice, once a session. The sheet grid measures every number it draws, so every sheet with a digit fetches it. It stays, because a keycap must draw whole in Chromium and Firefox.
 
+WebKit draws a few emoji in parts, the same with the whole font as with its slices: a keycap such as 1️⃣ as a digit beside an empty frame, and some joined emoji such as ❤️‍🔥 as a heart and a flame. It also draws no emoji at all in text with a transparent fill and only a stroke, where Chromium and Firefox draw the outline. Both are accepted limits.
+
 ## CSS tokens name each category
 
 `globals.css` imports `fonts.css` and defines one token per category: `--font-sans`, `--font-serif`, `--font-mono` and `--font-hand`, each the stack `getFontFamily` gives its bundled family, and `--font-math`, `MATH_FONT_STACK`. CSS can't import the builder, so each token is a literal, and `packages/ui/src/test/styles/font-tokens.test.ts` fails when one drifts from the builder, printing the line to paste. The tokens give the Tailwind utilities `font-sans`, `font-serif`, `font-mono` and `font-hand`. `eigen-prose.css` sets body text in `--font-sans` and code in `--font-mono`, so prose follows the tokens too.
