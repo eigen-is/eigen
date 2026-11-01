@@ -6,7 +6,7 @@ category: Files
 tags: [docs, export, download, word, pdf, html]
 related: [docs/import-word, docs/print]
 order: 90
-updated: 2026-10-28
+updated: 2026-11-01
 ---
 
 You can download a copy of any document as a Word file, a PDF, or a standalone web page. The original document in Eigen stays exactly as it was.
@@ -39,7 +39,7 @@ A text box looks in the PDF and the web page as it does in the editor, and is a 
 
 Footnotes print at the bottom of their page in the PDF and are Word footnotes in the Word file. When a document has more than 1,500 footnotes, or one footnote longer than a page, the PDF lists them all at the end instead, as the web page does. The web page numbers them in the text and lists them at the end, each linking back to its place.
 
-A table of contents shows each heading's page number in the PDF. In the Word file it is Word's own table of contents, and its page numbers fill in when Word updates it. The web page lists the headings as links, without page numbers. See [Add a table of contents](/support/docs/table-of-contents).
+A table of contents shows each heading's page number in the PDF, unless its format is **Links**. In the Word file it is Word's own table of contents, and its page numbers fill in when Word updates it. The web page lists the headings as links, without page numbers. See [Add a table of contents](/support/docs/table-of-contents).
 
 A page break starts a new page in the PDF and the Word file. Equations show in all three formats. A PDF draws up to 1,000 different equations; past that, or when the equations are very large, the rest print as one-line text, such as `(a+b)/2`. The web page download and the preview in Drive have a similar limit, which only far larger documents reach. In all three formats, links to other files in Eigen point to your Eigen server, and a numbered list keeps the number it starts at and its style (1, a, A, i, or I).
 

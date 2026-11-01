@@ -6,11 +6,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Added
 
-- **Table of contents levels in Docs** — on a computer, select a table of contents and choose under **Levels** how many heading levels it lists, from 1 to 6. PDFs and Word downloads list the same
+- **Table of contents options in Docs** — on a computer, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files keep them both ways
 
 ### Changed
 
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
+- **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
 
 ### Fixed
