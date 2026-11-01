@@ -4,29 +4,48 @@
 // busy with other suites makes it slower but never cuts it short.
 
 import { spyOn } from 'bun:test';
-import { act } from 'react';
+
+// A frame that asks for itself again never settles. Past this many turns the wait fails with a reason, before the
+// test's own timeout would skip the cleanup that puts the real frame functions back.
+const MAX_TURNS = 100;
 
 export async function withBrowserFrames(action: () => Promise<unknown>): Promise<void> {
-    let pending = 0;
+    // React loads only now, after the test installed happy-dom.
+    const { act } = await import('react');
+    const pending = new Map<number, ReturnType<typeof setTimeout>>();
+    let lastId = 0;
     let ran = false;
-    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
-        pending++;
-        setTimeout(() => {
-            pending--;
-            ran = true;
-            callback(performance.now());
-        });
-        return 0;
+    const request = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
+        const id = ++lastId;
+        pending.set(
+            id,
+            setTimeout(() => {
+                pending.delete(id);
+                ran = true;
+                callback(performance.now());
+            }),
+        );
+        return id;
+    });
+    const cancel = spyOn(globalThis, 'cancelAnimationFrame').mockImplementation((id) => {
+        clearTimeout(pending.get(id));
+        pending.delete(id);
     });
     try {
         await action();
         // A timer that a frame sets fires before the next turn does. So the frames are done, and what they set going
         // too, once a whole turn passes in which no frame ran or waited.
+        let turns = 0;
         do {
+            if (++turns > MAX_TURNS) throw new Error('frames never settled');
             ran = false;
             await act(() => new Promise((resolve) => setTimeout(resolve)));
-        } while (pending > 0 || ran);
+        } while (pending.size > 0 || ran);
     } finally {
-        frame.mockRestore();
+        // A frame still waiting would otherwise run after the cleanup. A frame it asks for then goes to happy-dom, which
+        // runs it at once, so a frame that asks for itself would recurse until the stack overflows.
+        for (const timer of pending.values()) clearTimeout(timer);
+        request.mockRestore();
+        cancel.mockRestore();
     }
 }
