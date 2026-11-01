@@ -81,7 +81,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
             const canvas = refs.canvas.current;
             if (!canvas) return;
             if (settings.devicePixelRatio === 0) {
-                draftCtx.devicePixelRatio = (typeof globalThis !== 'undefined' ? globalThis : window).devicePixelRatio;
+                draftCtx.devicePixelRatio = window.devicePixelRatio;
             }
             updateContextWithSheetData(draftCtx, sheetData);
             updateContextWithCanvas(draftCtx, canvas, placeholder);
