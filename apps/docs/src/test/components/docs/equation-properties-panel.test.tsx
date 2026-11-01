@@ -428,15 +428,34 @@ test("a draft typed back to where it started writes nothing over a peer's write"
     expect(field().value).toBe('z');
 });
 
-// The last writer wins.
-test("a peer's write to the equation leaves the draft, and Enter writes it", async () => {
+// The panel tells its equation by its content, so a peer's write to it ends the draft, and theirs stays.
+test("a peer's write to the equation drops the draft, and Enter keeps theirs", async () => {
     const { a, b, peer } = await peers(ONE);
     await type('y');
     await peer((tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
-    expect(field().value).toBe('y');
+    expect(field().value).toBe('z');
     await key('Enter', { metaKey: true });
-    expect(stored(a)?.['mathml']).toBe(typed('y'));
-    expect(stored(b)?.['mathml']).toBe(typed('y'));
+    expect(stored(a)?.['mathml']).toBe(typed('z'));
+    expect(stored(b)?.['mathml']).toBe(typed('z'));
+});
+
+// The binding selects the equation left in the deleted one's place, and may give it the deleted one's Yjs element.
+test.each([
+    ['right next to it', [equation('z')], 3],
+    ['and the text between them', [{ type: 'text', text: 'm' }, equation('z')], 4],
+])('a peer deleting the drafted equation %s drops the draft, and Enter leaves the next one', async (_, after, end) => {
+    const { a, b, peer } = await peers([
+        { type: 'text', text: 'a' },
+        equation('x^2'),
+        ...after,
+        { type: 'text', text: 'b' },
+    ]);
+    await type('y');
+    await peer((tr) => tr.delete(2, end));
+    expect(field().value).toBe('z');
+    await key('Enter', { metaKey: true });
+    expect(stored(a)?.['mathml']).toBe(typed('z'));
+    expect(stored(b)?.['mathml']).toBe(typed('z'));
 });
 
 // Text between the two, as two equations side by side look alike to the binding.
