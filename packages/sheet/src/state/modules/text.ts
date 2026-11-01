@@ -1,7 +1,8 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
 // and where each piece of text sits, a rich cell's runs included. The painter lays out every cell it
 // draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
-// until clearMeasureTextCache, which the grid calls when a font slice loads.
+// until clearMeasureTextCache, which the grid calls when a font slice loads. A cell editor loads the
+// font set's slices for the text being typed, so a commit measures in the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -162,6 +163,12 @@ export function getFontSet(format: CellStyle | null | undefined) {
     const weight = format?.bl ? 'bold' : 'normal';
     const family = getFontFamily(cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name);
     return `${style} normal ${weight} ${cellFontSize(format?.fs)}pt ${family}`;
+}
+
+// A face loads only the unicode-range slices its text needs, and a wrapped cell's row height is measured once, as
+// it commits. So an editor loads the cell's font for the text as it is typed, and the commit measures the real face.
+export function loadCellFont(cell: CellStyle | null | undefined, text: string) {
+    document.fonts.load(getFontSet(cell), text).catch(() => {});
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.

@@ -28,6 +28,7 @@ import {
     isInlineStringCell,
     israngeseleciton,
     isSelectionOnHiddenRowCol,
+    loadCellFont,
     moveHighlightCell,
     moveToEnd,
     rememberEditorSelection,
@@ -218,6 +219,7 @@ export const InputBox: React.FC = () => {
 
     const onChange = useCallback(
         (__: unknown, isBlur?: boolean) => {
+            if (inputRef.current) loadCellFont(editingCell, inputRef.current.innerText);
             const e = lastKeyDownEventRef.current;
             if (!e) return;
             const kcode = e.keyCode;
@@ -255,7 +257,7 @@ export const InputBox: React.FC = () => {
                 });
             }
         },
-        [refs.cellInput, refs.fxInput, setContext],
+        [editingCell, refs.cellInput, refs.fxInput, setContext],
     );
 
     // A paste into the open editor is its plain text, as in Google Sheets: it types as typed text would,
