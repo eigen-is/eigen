@@ -2,10 +2,11 @@
 // and the footer ending its distance above the bottom one, 1.27 cm unless set, a band taller than the room pushing the
 // body. A margin reaches the
 // paper's edges, so a double-click anywhere in it enters, the band under the pointer or the margin's own.
-import { afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, expect, mock, test } from 'bun:test';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { withBrowserFrames } from '../../fixtures/browser-frames';
 
 installHappyDom();
 
@@ -238,12 +239,6 @@ test.each([
             onRemove: () => {},
         }),
     ));
-    // A browser runs the frame that refocuses after a pick once the menu has closed, as a timer does here.
-    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
-        setTimeout(() => callback(performance.now()));
-        return 0;
-    });
-    const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     try {
         const trigger = document.querySelector('button[aria-haspopup="menu"]');
         await act(async () => {
@@ -252,18 +247,16 @@ test.each([
         const entry = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
             (candidate) => candidate.textContent?.trim() === item,
         );
-        await act(async () => entry?.click());
-        await settle();
+        // A browser runs the frame that refocuses after a pick once the menu has closed.
+        await withBrowserFrames(() => act(async () => entry?.click()));
         const button = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
             (candidate) => candidate.textContent === close,
         );
         if (!button) throw new Error(`no ${close} button`);
-        await act(async () => button.click());
-        await settle();
+        await withBrowserFrames(() => act(async () => button.click()));
         expect(document.querySelector('[role="dialog"]')).toBeNull();
         expect(document.activeElement === editor.view.dom).toBe(true);
     } finally {
-        frame.mockRestore();
         editor.destroy();
     }
 });
