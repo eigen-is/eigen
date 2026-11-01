@@ -18,7 +18,6 @@ import {
     compactSheetsSnapshot,
     readLiveSheets,
     readSheetsFromDoc,
-    SERVER_RECALC_BUDGET,
     writeSheetsSnapshotToYjs,
 } from '../../lib/document/sheets';
 import { sheetsHtmlDocument } from '../../lib/export/sheets/render';
@@ -937,61 +936,69 @@ describe('document/sheets — compactSheetsSnapshot', () => {
         ]);
     });
 
-    test('an uncomputed workbook is recalculated under the server budget, so the stored snapshot is computed', () => {
+    // A formula typed in the editor gives its sheet a calc chain, which alone would let the stale formulas pass as
+    // computed.
+    test('an uncomputed workbook stays uncomputed, and the compaction runs no recalc', () => {
+        const typed: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['data', 0, 1], value: { v: 4, f: '=2+2', m: '4' } },
+            { op: 'add', id: 'sheet-1', path: ['calcChain', 0], value: { r: 0, c: 1, id: 'sheet-1' } },
+        ];
         const original = { ...engine };
-        const budgets: unknown[] = [];
+        let recalcs = 0;
         mock.module('@workspace/sheet/engine', () => ({
             ...original,
-            recalcSheets: (input: Sheet[], options?: { maxDependencyBlocks?: number; maxCellsRead?: number }) => {
-                budgets.push(options);
-                return original.recalcSheets(input, options);
+            recalcSheets: (...args: Parameters<typeof original.recalcSheets>) => {
+                recalcs++;
+                return original.recalcSheets(...args);
             },
         }));
         try {
             const { snapshot: compacted } = compactSheetsSnapshot(
                 encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
-                JSON.stringify([]),
-            );
-            const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
-            expect(computed).toBe(true);
-            expect(result[0].celldata?.[0]?.v?.v).toBe(2);
-            expect(budgets).toEqual([SERVER_RECALC_BUDGET]);
-        } finally {
-            mock.module('@workspace/sheet/engine', () => original);
-        }
-    });
-
-    test('a tab added without a calc chain is recalculated, so an export of the compacted workbook pays no recalc', () => {
-        const snapshot = encodeSheetsSnapshot(sheets, { computed: true });
-        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }]];
-        const compacted = new Y.Doc();
-        sheetsStateMap(compacted).set('snapshot', compactSheetsSnapshot(snapshot, JSON.stringify(batches)).snapshot);
-
-        const read = readSheetsFromDoc(compacted, { recalc: false });
-        expect(sheetsNeedRecalc(read.sheets)).toBe(false);
-        expect(read.sheets[1].celldata?.[0]?.v?.v).toBe(2);
-        compacted.destroy();
-    });
-
-    test('a recalc that fails stores the replayed values uncomputed, so an export still recalculates them', () => {
-        const original = { ...engine };
-        mock.module('@workspace/sheet/engine', () => ({
-            ...original,
-            recalcSheets: () => {
-                throw new Error('forced recalc failure');
-            },
-        }));
-        try {
-            const { snapshot: compacted } = compactSheetsSnapshot(
-                encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: false }),
-                JSON.stringify([]),
+                JSON.stringify([typed]),
             );
             const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
             expect(computed).toBe(false);
             expect(result[0].celldata?.[0]?.v?.v).toBe(99);
+            expect(recalcs).toBe(0);
         } finally {
             mock.module('@workspace/sheet/engine', () => original);
         }
+    });
+
+    test('a computed workbook stays computed, with the values its editor wrote', () => {
+        const { snapshot: compacted } = compactSheetsSnapshot(
+            encodeSheetsSnapshot([formulaSheet('sheet-1', 0)], { computed: true }),
+            JSON.stringify([edit(1, 'a')]),
+        );
+        const { sheets: result, computed } = decodeSheetsWorkbook(compacted);
+        expect(computed).toBe(true);
+        expect(result[0].celldata?.[0]?.v?.v).toBe(99);
+    });
+
+    // Stored as computed, the decoder would give these formulas a calc chain, and no export would ever compute them.
+    test('a tab added without a calc chain stores the workbook uncomputed, so an export recalculates it', () => {
+        const batches: Op[][] = [[{ op: 'addSheet', id: 'sheet-2', path: [], value: formulaSheet('sheet-2', 1) }]];
+        const { snapshot } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(sheets, { computed: true }),
+            JSON.stringify(batches),
+        );
+        expect(decodeSheetsWorkbook(snapshot).computed).toBe(false);
+
+        const compacted = new Y.Doc();
+        sheetsStateMap(compacted).set('snapshot', snapshot);
+        const read = readSheetsFromDoc(compacted);
+        expect(read.sheets[1].celldata?.[0]?.v?.v).toBe(2);
+        compacted.destroy();
+    });
+
+    test('a formula written without its calc chain op stores the workbook uncomputed', () => {
+        const typed: Op[] = [{ op: 'replace', id: 'sheet-1', path: ['data', 0, 0], value: { f: '=1+1', v: 99 } }];
+        const { snapshot: compacted } = compactSheetsSnapshot(
+            encodeSheetsSnapshot(sheets, { computed: true }),
+            JSON.stringify([typed]),
+        );
+        expect(decodeSheetsWorkbook(compacted).computed).toBe(false);
     });
 
     test('a workbook with no snapshot compacts over the default sheets, computed', () => {

@@ -209,7 +209,7 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     }
 
-    test('the close stores the replayed log as the snapshot, empties the log and computes it', async () => {
+    test('the close stores the replayed log as the snapshot, empties the log and keeps the computed flag', async () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x'), POISON]);
         try {
@@ -223,8 +223,9 @@ describe('CollabDocument compacts a workbook at close', () => {
 
             const snapshot = readSheetsSnapshotJson(sheet.doc.doc);
             if (!snapshot) throw new Error('no snapshot');
+            // The workbook was stored uncomputed, and the compaction never recalculates.
             const { sheets, computed } = decodeSheetsWorkbook(snapshot);
-            expect(computed).toBe(true);
+            expect(computed).toBe(false);
             expect(sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v])).toEqual([
                 [0, 0, 7],
                 [0, 1, 'x'],
@@ -394,6 +395,38 @@ describe('CollabDocument compacts a workbook at close', () => {
             jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(stub.runs).toHaveLength(2);
         } finally {
+            home.drive.saveVersion = originalSave;
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('a socket that connects during the version stops the swap and keeps the document open', async () => {
+        const stub = stubRunner();
+        const sheet = await openLingeringSheet('compaction-version-subscribe', [edit(0, 0, 1)]);
+        const late = makeSpyConn();
+        const originalSave = home.drive.saveVersion.bind(home.drive);
+        let saved = () => {};
+        const versionSaved = new Promise<void>((resolve) => (saved = resolve));
+        home.drive.saveVersion = async (...args: Parameters<typeof originalSave>) => {
+            sheet.doc.subscribe(home.user, late);
+            const version = await originalSave(...args);
+            saved();
+            return version;
+        };
+        try {
+            const before = readSheetsSnapshotJson(sheet.doc.doc);
+            lingerOut(sheet.doc);
+            succeed(stub.runs[0]);
+            await versionSaved;
+            await tick();
+
+            expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(before);
+            expect(sheet.ops.length).toBe(1);
+            expect(sheet.closes()).toBe(0);
+        } finally {
+            sheet.doc.unsubscribe(late);
             home.drive.saveVersion = originalSave;
             stub.restore();
             sheet.restore();
@@ -631,25 +664,24 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
-    test('a subscribe and a leave during the run drop the swap, and the document lingers again before the next try', async () => {
+    // A tab that comes and goes during the run sends nothing, so it holds the base and every batch the run folded. The
+    // swap is right for it, and it keeps its grid when it comes back.
+    test('a subscribe and a leave during the run still swap, in one run and one close', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-one-run', [edit(0, 0, 1)]);
         try {
+            const closed = sheet.nextClose();
             lingerOut(sheet.doc);
-            // A reload during the run: its subscribe makes the result stale, and its leave arms a second timer.
+            // A reload during the run. Its leave arms a second timer, which finds the run in flight.
             lingerOut(sheet.doc);
             expect(stub.runs).toHaveLength(1);
             succeed(stub.runs[0]);
-            await tick();
-            expect(sheet.ops.length).toBe(1);
-            expect(sheet.closes()).toBe(0);
-
-            const closed = sheet.nextClose();
-            jest.advanceTimersByTime(CLOSE_LINGER_MS);
-            expect(stub.runs).toHaveLength(2);
-            succeed(stub.runs[1]);
             await closed;
             expect(sheet.ops.length).toBe(0);
+            expect(sheet.closes()).toBe(1);
+
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
+            expect(stub.runs).toHaveLength(1);
             expect(sheet.closes()).toBe(1);
         } finally {
             stub.restore();

@@ -134,8 +134,6 @@ An agent can't do this; it needs a person with Excel or Google Sheets. It's a do
 
 Verified, user-visible, bounded.
 
-- [ ] **A paste past the edge throws on a sheet with an empty matrix**: `expandRowsAndColumns` (`state/modules/sheet.ts`) reads `data[0].length` without the guard the old code had. **S**
-
 - [ ] **By-values checkboxes do nothing while a condition is set**: the filter menu (`FilterMenu` in `components/ContextMenu/FilterMenu.tsx`) shows the value list under a condition, but Confirm uses the condition alone. A user unticks values, picks a condition and confirms, and the ticks do nothing. Disable or collapse the list while a condition is set. **S**
 
 - [ ] **Plain-text paste doesn't unquote TSV**: the plain-text arm of `pasteHandler` (`state/events/paste.ts`) splits on tabs and newlines and drops rows shorter than the first, so a quoted cell holding a newline, which Sheets' own copy and Google write as `"two\nlines"`, lands split over two rows with its quotes ([SHEETS.md](SHEETS.md#a-copy-puts-the-cells-on-textplain-as-tsv)). Read it with `parseTsv` (`@workspace/lib/clipboard`), as the chart Edit data grid does. **S**
@@ -263,8 +261,6 @@ Both sides already work on the raw SpreadsheetML: the import reads it itself (`a
 
 The op log, its order and how edits reach the undo stack ([SHEETS.md](SHEETS.md#every-tab-applies-the-batches-in-the-logs-order)).
 
-- [ ] **An import can write into a document a compaction just closed**: `commitImport` (`apps/api/src/lib/import/import-document.ts`) gets the collab document before three awaits, and a compaction that finishes in between closes it, so the write lands in a destroyed `Y.Doc` while the route answers success. Get the document after the permission check. Rare. **S**
-
 - [ ] **Fold the op log while editors are connected**: the server compacts a workbook's log only when it closes (`closeAfterLinger` in `apps/api/src/lib/collab/collab-document.ts`), so a workbook some tab always has open never compacts, and every joiner and `readSheetsFromDoc` replays all of it. The cost is unmeasured. Trigger: joiners of a long-open sheet load measurably slower (measure at 100, 1,000 and 5,000 batches on the reference workbook). Then the server also compacts past a threshold while tabs are connected. A tab already keeps its grid through a compaction of the base it holds ([SHEETS.md](SHEETS.md#a-tab-keeps-its-grid-through-a-compaction-of-the-base-it-holds)). What is left is the trigger in `CollabDocument` and the broadcast: each fold sends the whole snapshot, which on a large sheet and a slow link needs the ROADMAP row "Collab: large documents on slow connections". Design in [the proposal](proposals/PROPOSAL_SHEETS_YJS_WORKBOOK.md#later-on-a-trigger-compact-while-editors-are-connected). **L**
 
 - [ ] **Two conditional-format rules added at once can lose one**: a write of the whole rule list drops a rule a peer added at the same time that the log puts before it. The first rule on a sheet that has none ships the whole list (`appendRule` and `setConditionRules` in `state/modules/condition-format.ts`), and so do a paste and a move that carry rules (`state/events/paste.ts`, `state/modules/selection.ts`). Fix: an append op for a new rule, never a whole-list replace, and give every sheet the list, as `normalizeSheetConfig` gives it its config collections. **S**
@@ -301,9 +297,8 @@ Measured on the 2.3 MB reference workbook: snapshot v2 12.6 MB, import 4.7 s, HT
 Opportunistic: fix when touching the area. None of it is worth scheduling on its own.
 
 - [ ] **The op-log compaction carries more policy than it needs** (2026-11-01 audit). Each cut is independent:
-  - Drop the recalc in `compactSheetsSnapshot` (`apps/api/src/lib/document/sheets.ts`) and store `computed && !sheetsNeedRecalc(replayed)`. Today a workbook whose recalc fails pays it again at every close, in the one transform child.
   - Drop `MAX_COMPACTION_FAILURES` and `resetSheetsCompactionFailures` with its import and restore hooks, or reuse preview's `rememberIfRepeatable`.
-  - Drop `COMPACTION_BUDGET_MS`, the abort on destruct and the counter bump in `subscribe`. Then fold `sheets-compaction.ts` into its callers.
+  - Drop `COMPACTION_BUDGET_MS` and the abort on destruct. Then fold `sheets-compaction.ts` into its callers.
   - Merge `writeSheetsSnapshotToYjs` into lib's `writeSheetsSnapshot`, with `compactedFrom` as a plain argument rather than read from the origin.
   - On the client, replace `ownRef` in `use-sheet.ts` with `event.transaction.local`, and rename the `force` flag on `addSheet`, `deleteSheet` and the row and column ops, which now means "applied from a batch".
   - Leads to test first: leave `calcChain` out of `pathKeys` (`state/utils/commute.ts`) so two formulas typed at once commute, and drop `resetEngine` in `replayOps`, whose idle rebuild freezes a large formula workbook. **S–M**

@@ -95,8 +95,9 @@ export class CollabDocument {
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
     private untouchedUpdateAt: number | null = null;
     private readonly editRecordedAtByUser = new Map<string, number>();
-    // Moves with every update and every subscribe. A compaction swaps its result in only while it hasn't moved since
-    // the compaction read the document.
+    // Moves with every update. A compaction swaps its result in only while it hasn't moved since the compaction read the
+    // document. A subscribe moves nothing. A socket that is still connected blocks the swap anyway, and one that left
+    // without an update changed nothing the compaction read.
     private generation = 0;
     // The compaction in flight, which a destruct aborts.
     private compaction: AbortController | null = null;
@@ -196,7 +197,6 @@ export class CollabDocument {
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
-        this.generation++;
         this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
@@ -353,8 +353,8 @@ export class CollabDocument {
             this.compaction = null;
             if (this.closed || this.connections.size > 0) return;
             if (snapshot !== null) {
-                // Anything since the read, a subscribe or an update during the version included, makes the result
-                // stale. The document lingers again, and the next close tries again.
+                // An update since the read, one during the version included, makes the result stale. The document
+                // lingers again, and the next close tries again.
                 if (this.generation !== generation) {
                     this.scheduleClose();
                     return;
