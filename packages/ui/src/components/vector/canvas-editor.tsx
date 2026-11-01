@@ -717,7 +717,8 @@ export function CanvasEditor({
             loadVectorFont(fontSize, fontFamily, text)
                 .then(() => {
                     const el = visibleRef.current.find((x) => x.id === id);
-                    if (el?.type !== 'arrow') return; // deleted meanwhile — nothing to heal
+                    // The label was deleted meanwhile, so there is nothing to heal.
+                    if (el?.type !== 'arrow') return;
                     if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
                     // A label's height derives from its line count, so only labelWidth is measured.
                     const healed = measureVectorText(text, fontSize, fontFamily);
