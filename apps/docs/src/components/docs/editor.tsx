@@ -106,6 +106,7 @@ import type { PageNumberPreset } from './page-numbers';
 import { applyPageNumberPreset } from './page-numbers';
 import { createDocUndoManager, TEXT_WIDTHS, writePageSetup } from './page-setup';
 import { tableMenuSections } from './table-menu-sections';
+import { TableOfContentsPropertiesPanel } from './table-of-contents-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
 import { TextBoxPropertiesPanel } from './text-box-properties-panel';
 
@@ -1010,6 +1011,8 @@ const TiptapEditor = ({
                                                         editor={activeEditor}
                                                         fieldRef={equationFieldRef}
                                                     />
+                                                ) : lastPanelRef.current === 'tableOfContents' ? (
+                                                    <TableOfContentsPropertiesPanel editor={activeEditor} />
                                                 ) : (
                                                     <TablePropertiesPanel editor={activeEditor} />
                                                 )}

@@ -1,12 +1,12 @@
 // The table of contents: an atomic block that stores only how deep it lists, as Word's TOC field does with \o "1-3".
 // Its entries are the doc's outline and are never stored. Every surface that draws one, such as the editor or an
 // export, reads them from the headings as they are, a collaborator's edit included. Insert puts one between the body's
-// blocks only.
+// blocks only, and a properties panel sets how deep the selected one lists.
 
 import type { CommandProps } from '@tiptap/core';
 import { canInsertNode, mergeAttributes, Node } from '@tiptap/core';
 import type { EditorState } from '@tiptap/pm/state';
-import { TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { MAX_HEADING_LEVEL } from '../heading';
 import { caretAfterInsertedBlock } from './page-break';
 
@@ -14,6 +14,7 @@ declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         tableOfContents: {
             insertTableOfContents: () => ReturnType;
+            updateTableOfContents: (attributes: { levels: number }) => ReturnType;
         };
     }
 }
@@ -82,6 +83,16 @@ export const TableOfContentsNode = Node.create({
                         .command(caretAfterInsertedBlock)
                         .scrollIntoView()
                         .run();
+                },
+            // The selected one's depth, as updateEquation writes. An attribute step moves no position, so the node
+            // stays selected and its panel open.
+            updateTableOfContents:
+                ({ levels }) =>
+                ({ tr, dispatch }: CommandProps) => {
+                    const { selection } = tr;
+                    if (!(selection instanceof NodeSelection) || selection.node.type.name !== this.name) return false;
+                    if (dispatch) tr.setNodeAttribute(selection.from, 'levels', readTocLevels(levels));
+                    return true;
                 },
         };
     },

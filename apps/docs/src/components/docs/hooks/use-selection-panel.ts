@@ -7,7 +7,7 @@ import type { Editor } from '@tiptap/react';
 import type { RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-export type SelectionPanel = 'document' | 'figure' | 'chart' | 'textBox' | 'equation' | 'table';
+export type SelectionPanel = 'document' | 'figure' | 'chart' | 'textBox' | 'equation' | 'tableOfContents' | 'table';
 
 type SelectionPanelState = {
     selectionPanel: SelectionPanel;
@@ -34,6 +34,8 @@ export function useSelectionPanel(editor: Editor, isMobile: boolean, closePanels
             if (editor.isActive('chart')) return 'chart';
             if (editor.isActive('textBox')) return 'textBox';
             if (editor.isActive('equation') && equation) return 'equation';
+            // Ahead of the table, as one pasted into a cell is selected inside it.
+            if (editor.isActive('tableOfContents')) return 'tableOfContents';
             if (editor.isActive('table')) return 'table';
             return 'document';
         };

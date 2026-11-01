@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import type { Content, JSONContent } from '@tiptap/core';
 import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
-import { TextSelection } from '@tiptap/pm/state';
+import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { getDocExtensions, readTocLevels } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
@@ -108,6 +108,43 @@ describe('insertTableOfContents', () => {
         editor.commands.setNodeSelection(0);
         editor.commands.deleteSelection();
         expect(blockTypes(editor.state.doc)).toEqual(['paragraph']);
+        editor.destroy();
+    });
+});
+
+// The panel's write: an attribute step moves no position, so the node stays selected and its panel open.
+describe('updateTableOfContents', () => {
+    const selected = (levels: number): Editor => {
+        const editor = mount(tocDoc(levels));
+        editor.commands.setNodeSelection(0);
+        return editor;
+    };
+
+    test('writes the levels of the selected table of contents and keeps it selected', () => {
+        const editor = selected(3);
+        expect(editor.commands.updateTableOfContents({ levels: 5 })).toBe(true);
+        expect(editor.state.doc.child(0).attrs['levels']).toBe(5);
+        const { selection } = editor.state;
+        expect(selection).toBeInstanceOf(NodeSelection);
+        expect(selection instanceof NodeSelection && selection.node.type.name).toBe('tableOfContents');
+        editor.destroy();
+    });
+
+    test.each([
+        [0, 1],
+        [9, 6],
+    ])('holds %p to the heading levels, writing %p', (levels, written) => {
+        const editor = selected(3);
+        editor.commands.updateTableOfContents({ levels });
+        expect(editor.state.doc.child(0).attrs['levels']).toBe(written);
+        editor.destroy();
+    });
+
+    test('refuses with the caret in text', () => {
+        const editor = mount(tocDoc(3));
+        editor.commands.setTextSelection(2);
+        expect(editor.commands.updateTableOfContents({ levels: 5 })).toBe(false);
+        expect(editor.state.doc.child(0).attrs['levels']).toBe(3);
         editor.destroy();
     });
 });
