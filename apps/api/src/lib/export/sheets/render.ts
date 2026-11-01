@@ -4,7 +4,7 @@
 // where the editor floats them. Runs in the transform process, so it reaches no Mount: images arrive as URLs by media
 // name.
 
-import { getFontName } from '@workspace/lib/constants/fonts';
+import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -505,8 +505,7 @@ function renderSheet(
         rowTags.push(`<tr ${styleAttr(styles, `height:${h}px`)}>${cells.join('')}</tr>`);
     }
 
-    const q = fontQuote(forStylesheet);
-    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS.replaceAll('"', q)};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
+    const tableStyle = `border-collapse:collapse;table-layout:fixed;font-family:${FONT_STACK_SANS};font-size:${SHEET_DEFAULT_FONT_SIZE}pt;color:#1a1a2e;background:#fff;width:${tableWidth}px`;
     const table = `<table ${styleAttr(styles, tableStyle)}>${colgroup}<tbody>${rowTags.join('')}</tbody></table>`;
     const html = withFloatingOverlay(table, tableWidth, offset, clip, overlay);
     return { html, size: { width: Math.max(tableWidth, extent.width), height: Math.max(tableHeight, extent.height) } };
@@ -608,12 +607,11 @@ function buildCellStyle(
 
     if (v) {
         const family = cellFontName(v.ff);
-        // In stylesheet text entities stay literal, so escapeHtml there would draw "Bell MT & Co" as "Bell MT &amp;
-        // Co". The quotes are all that could end the quoted name early, and the stylesheet seam strips the rest.
+        // The stack quotes the name, so a quote in it would end the name early; the stylesheet seam strips the rest.
+        // Stylesheet text decodes no entities, so escapeHtml there would draw "Bell MT & Co" as "Bell MT &amp; Co".
         if (family) {
-            const name = forStylesheet ? family.replace(/["'\\]/g, '') : escapeHtml(family);
-            const q = fontQuote(forStylesheet);
-            parts.push(`font-family:${q}${name}${q},sans-serif`);
+            const stack = getFontFamily(family.replace(/["'\\]/g, ''));
+            parts.push(`font-family:${forStylesheet ? stack : escapeHtml(stack)}`);
         }
         if (v.bl === 1) parts.push('font-weight:bold');
         if (v.it === 1) parts.push('font-style:italic');
@@ -678,12 +676,6 @@ function cssColor(color: unknown): string | undefined {
     return cssColorToHex(color) !== undefined || isTransparentCssColor(color) || /^[a-z]+$/i.test(color)
         ? color
         : undefined;
-}
-
-// A font name's quote is a real `"` in stylesheet text and `&quot;` in a style attribute, where a `"` would end the
-// attribute and drop every later declaration.
-function fontQuote(forStylesheet: boolean): string {
-    return forStylesheet ? '"' : '&quot;';
 }
 
 function getCellDisplay(v: Cell | null): string {

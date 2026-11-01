@@ -215,7 +215,7 @@ describe('chart painter', () => {
             rotate: -90,
         });
         expect(line).toBe(
-            `<text x="100" y="29.38" transform="rotate(-90 100 10)" font-family="&apos;Inter&apos;, sans-serif" font-size="20px" font-weight="600" fill="#123456" text-anchor="end" style="white-space: pre;">Title</text>`,
+            `<text x="100" y="29.38" transform="rotate(-90 100 10)" font-family="${escapeXml(getFontFamily('Inter'))}" font-size="20px" font-weight="600" fill="#123456" text-anchor="end" style="white-space: pre;">Title</text>`,
         );
     });
 

@@ -1,6 +1,7 @@
 // Quick look and the Drive thumbnail draw an eigendoc on the page it stores, as the editor does: the same width, and
 // the page's margins as its padding. A preview without a page, and every other text mode, keeps the default page.
 import { expect, mock, test } from 'bun:test';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import { DRIVE_MIME_DOC, DRIVE_TYPE_DOC } from '@workspace/lib/types/drive';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
@@ -145,7 +146,7 @@ test("quick look and the Drive thumbnail draw an eigendoc's text in its Normal",
         const quickLook = await renderQuickLook();
         const paper = quickLook.container.querySelector<HTMLElement>('.eigen-prose')?.parentElement;
         expect(paper?.style.getPropertyValue('--doc-font-size')).toBe('12pt');
-        expect(paper?.style.getPropertyValue('--doc-font-family')).toBe("'Source Serif 4', serif");
+        expect(paper?.style.getPropertyValue('--doc-font-family')).toBe(getFontFamily('Source Serif 4'));
         await quickLook.unmount();
         const hero = await renderInDocument(createElement(DrivePreview, { path }));
         expect(

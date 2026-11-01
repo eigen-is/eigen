@@ -429,10 +429,9 @@ describe('doc export — fonts', () => {
         expect(embeddedSliceFiles(await exportStyle(format))).toEqual(LATIN);
     });
 
-    // Until the math rule names the math face, a download draws its equations in the reader's own math font.
-    test.failing("the download's math rule names the math face it embeds", async () => {
+    test("the download's math rule names the math face it embeds", async () => {
         const css = await exportStyle('html', mixed());
-        expect(css.match(/(?:^|\})\s*math \{\s*font-family: "([^"]+)"/)?.[1]).toBe('New Computer Modern Math');
+        expect(css.match(/(?:^|\})\s*math \{\s*font-family: ["']([^"']+)["']/)?.[1]).toBe('New Computer Modern Math');
     });
 });
 
@@ -1383,7 +1382,7 @@ describe('doc export — caps', () => {
             { type: 'paragraph', content: [caps('Serif', 'small', 'Source Serif 4')] },
         ]);
         expect(html).toContain(
-            `<p><span style="font-family: 'Source Serif 4', serif; font-variant-caps: small-caps">Serif</span></p>`,
+            `<p><span style="font-family: ${getFontFamily('Source Serif 4')}; font-variant-caps: small-caps">Serif</span></p>`,
         );
     });
 });

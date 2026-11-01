@@ -1,11 +1,12 @@
+// eigen-prose.css, flattened once: the HTML and PDF exports embed it, and the docx writer reads
+// its sizes, spacing and colors through proseValue, so the editor's look lives in one file. A canvas text box's
+// look is canvas-text.css, which the pptx writer reads the same way through canvasTextValue.
+
+import { MATH_FONT_STACK } from '@workspace/lib/constants/fonts';
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import eigenProseCSSRaw from '@workspace/ui/styles/eigen-prose.css' with { type: 'text' };
 import fontWeightsCSSRaw from '@workspace/ui/styles/font-weights.css' with { type: 'text' };
 import { FONT_STACK_MONO, FONT_STACK_SANS } from './font-stacks';
-
-// eigen-prose.css, flattened once: the HTML and PDF exports embed it, and the docx writer reads
-// its sizes, spacing and colors through proseValue, so the editor's look lives in one file. A canvas text box's
-// look is canvas-text.css, which the pptx writer reads the same way through canvasTextValue.
 
 // The app's weight scale, rounded: WeasyPrint drops any font-weight that is not a multiple of 100.
 const FONT_WEIGHTS = new Map(
@@ -63,6 +64,7 @@ function flattenEigenProseCSS(raw: string): string {
     css = css
         .replace(/var\(--font-sans\)/g, FONT_STACK_SANS)
         .replace(/var\(--font-mono\)/g, FONT_STACK_MONO)
+        .replace(/var\(--font-math\)/g, MATH_FONT_STACK)
         .replace(/var\(--color-muted-foreground\)/g, '#6b7280')
         .replace(/var\(--color-primary\)/g, '#2563eb')
         .replace(/var\(--color-link,\s*#2563eb\)/g, '#2563eb')

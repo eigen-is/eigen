@@ -5,6 +5,7 @@
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { TiptapEditorHTMLElement } from '@tiptap/core';
 import { yUndoPluginKey } from '@tiptap/y-tiptap';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandRoot } from '@workspace/lib/docs/eigendoc';
 import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -863,7 +864,7 @@ test("Update 'Normal text' to match writes the doc's Normal, the page draws it, 
     await pick("Update 'Normal text' to match");
     expect(doc.getMap(STYLE_ROOT).toJSON()).toEqual({ font: 'Source Serif 4', size: 14 });
     expect(page()?.style.getPropertyValue('--doc-font-size')).toBe('14pt');
-    expect(page()?.style.getPropertyValue('--doc-font-family')).toBe("'Source Serif 4', serif");
+    expect(page()?.style.getPropertyValue('--doc-font-family')).toBe(getFontFamily('Source Serif 4'));
 
     await openMenu('Edit');
     await pick(`Undo${formatForDisplay('Mod+Z')}`);

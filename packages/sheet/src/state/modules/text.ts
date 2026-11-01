@@ -3,6 +3,7 @@
 // draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
 // until clearMeasureTextCache.
 
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cellWrapsText } from '../../engine/format';
@@ -149,9 +150,6 @@ function getTextSize(text: string, font: string) {
     return [w, h];
 }
 
-// After the cell's font: the faces for a glyph it lacks, CJK among them, or for a name the browser doesn't have.
-const FALLBACK_FAMILIES = `"Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Heiti SC", "Microsoft YaHei", "WenQuanYi Micro Hei", sans-serif`;
-
 export function defaultFont() {
     return getFontSet(null);
 }
@@ -171,7 +169,7 @@ export function getFontSet(format: CellStyle | null | undefined) {
     // font-size
     fontAttr.push(`${cellFontSize(format?.fs)}pt`);
 
-    return `${fontAttr.join(' ')} "${cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name}",${FALLBACK_FAMILIES}`;
+    return `${fontAttr.join(' ')} ${getFontFamily(cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name)}`;
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.

@@ -5,7 +5,7 @@
 // committedRuns reads, so the cell gets what the editor shows.
 
 import { isHexColor } from '@workspace/lib/constants/colors';
-import { readCssFontSize } from '@workspace/lib/constants/fonts';
+import { getFontFamily, readCssFontSize } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import type { Cell, CellStyle, InlineStringSegment } from '../../engine/types';
@@ -266,7 +266,7 @@ function runCss(style: RunStyle, base: RunStyle): string {
     }
     if (style.fc !== base.fc) css.push(`color:${style.fc}`);
     if (style.fs !== base.fs) css.push(`font-size:${style.fs}pt`);
-    if (style.ff !== base.ff) css.push(`font-family:"${style.ff.replace(/["\\]/g, '')}", sans-serif`);
+    if (style.ff !== base.ff) css.push(`font-family:${getFontFamily(style.ff.replace(/["'\\]/g, ''))}`);
     return css.join(';');
 }
 

@@ -782,7 +782,7 @@ ul[data-type="taskList"] ul[data-type="taskList"] {
 
 /* Every <math> Eigen draws, in the editor, its panel and an export. */
 math {
-    font-family: "STIX Two Math", math;
+    font-family: var(--font-math);
 }
 
 /* MathML's own cell spacing, which Tailwind's reset takes away, so a matrix's columns touch. An equations table's

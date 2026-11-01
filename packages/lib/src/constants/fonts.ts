@@ -1,7 +1,7 @@
 // The fonts Eigen bundles, and how a stored font name becomes CSS. EIGEN_FONTS are the fonts a user picks, and
-// FALLBACK_FONTS the faces that draw what those lack, such as emoji. The pickers, the readers of a stored font and the
-// exports all read these lists. The font sizes a doc and a sheet accept, and the map from a foreign font such as
-// Calibri to a bundled one, live here too.
+// FALLBACK_FONTS the faces that draw what those lack, such as emoji; fontStack joins them into every stack Eigen
+// writes. The pickers, the readers of a stored font and the exports all read these lists. The font sizes a doc and a
+// sheet accept, and the map from a foreign font such as Calibri to a bundled one, live here too.
 
 import { pxToPt } from '../docs/eigendoc/page';
 
@@ -14,34 +14,6 @@ export type EigenFont = {
     weights: number[];
     lineHeight: number;
 };
-
-// Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
-// default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and a category's
-// first font is the one a foreign font of that category maps to.
-export const EIGEN_FONTS: EigenFont[] = [
-    {
-        name: 'Inter',
-        family: "'Inter', sans-serif",
-        category: 'sans-serif',
-        weights: [400, 500, 600, 700],
-        lineHeight: 1.21,
-    },
-    {
-        name: 'Source Serif 4',
-        family: "'Source Serif 4', serif",
-        category: 'serif',
-        weights: [400, 600, 700],
-        lineHeight: 1.371,
-    },
-    {
-        name: 'JetBrains Mono',
-        family: "'JetBrains Mono', monospace",
-        category: 'monospace',
-        weights: [400, 700],
-        lineHeight: 1.32,
-    },
-    { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400], lineHeight: 1.26 },
-];
 
 // A font no one picks: it draws what the text faces lack. An emoji or CJK face covers the characters of its kind; the
 // math face draws only a formula.
@@ -57,6 +29,62 @@ export const FALLBACK_FONTS: readonly FallbackFont[] = [
     { family: 'Noto Sans SC', kind: 'cjk' },
     { family: 'Noto Sans KR', kind: 'cjk' },
     { family: 'New Computer Modern Math', kind: 'math' },
+];
+
+// What each category falls back to after Eigen's own faces: the system's faces of that kind, then the generic family.
+const SYSTEM_FALLBACKS: Record<EigenFont['category'], string> = {
+    'sans-serif': 'ui-sans-serif, system-ui, sans-serif',
+    serif: "Georgia, 'Times New Roman', serif",
+    monospace: "'Fira Code', ui-monospace, monospace",
+    'hand-drawn': "'Comic Sans MS', cursive",
+};
+
+// Every CSS stack Eigen writes for text: the family, then the emoji and CJK faces, then the system's. The fallback
+// faces' slices cover disjoint characters, so their order never decides which face draws a glyph. The math face is
+// left out, as only a formula draws in it.
+export function fontStack(family: string, category: EigenFont['category'] = 'sans-serif'): string {
+    const fallbacks = FALLBACK_FONTS.filter((font) => font.kind !== 'math').map((font) => `'${font.family}'`);
+    return [`'${family}'`, ...fallbacks, SYSTEM_FALLBACKS[category]].join(', ');
+}
+
+// The stack of a <math>: the bundled math face, then the browser's own math font.
+export const MATH_FONT_STACK = [
+    ...FALLBACK_FONTS.filter((font) => font.kind === 'math').map((font) => `'${font.family}'`),
+    'math',
+].join(', ');
+
+// Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
+// default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and a category's
+// first font is the one a foreign font of that category maps to.
+export const EIGEN_FONTS: EigenFont[] = [
+    {
+        name: 'Inter',
+        family: fontStack('Inter'),
+        category: 'sans-serif',
+        weights: [400, 500, 600, 700],
+        lineHeight: 1.21,
+    },
+    {
+        name: 'Source Serif 4',
+        family: fontStack('Source Serif 4', 'serif'),
+        category: 'serif',
+        weights: [400, 600, 700],
+        lineHeight: 1.371,
+    },
+    {
+        name: 'JetBrains Mono',
+        family: fontStack('JetBrains Mono', 'monospace'),
+        category: 'monospace',
+        weights: [400, 700],
+        lineHeight: 1.32,
+    },
+    {
+        name: 'Excalifont',
+        family: fontStack('Excalifont', 'hand-drawn'),
+        category: 'hand-drawn',
+        weights: [400],
+        lineHeight: 1.26,
+    },
 ];
 
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
@@ -114,9 +142,9 @@ export function nextFontSize(size: number, by: 1 | -1): number {
 // so an unknown one falls back instead of reaching a CSS declaration.
 export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((f) => f.name);
 
+// A font name as the CSS that draws it. A sheet cell may name a font Eigen doesn't bundle, which draws as a sans-serif.
 export function getFontFamily(fontName: string): string {
-    const font = EIGEN_FONTS.find((f) => f.name === fontName);
-    return font?.family ?? `'${fontName}', sans-serif`;
+    return EIGEN_FONTS.find((f) => f.name === fontName)?.family ?? fontStack(fontName);
 }
 
 // A stored font as the CSS that draws it, such as the docs `textStyle` mark's `fontFamily`. A name expands to its
