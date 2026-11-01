@@ -4,7 +4,7 @@
 
 import { newChartSpecParts, readChartSpec } from '../charts/spec';
 import type { FontSlice } from '../constants/font-slices';
-import { getFontName } from '../constants/fonts';
+import { getFontName, TEXT_FALLBACK_FAMILIES } from '../constants/fonts';
 import type { EigenClipboardChartItem } from '../types/clipboard';
 import { ELEMENT_KINDS } from './kinds';
 import { readElementFromFields } from './read-vector';
@@ -61,7 +61,7 @@ export async function canvasImageFaces(
     elements: VectorScene['elements'],
     measured: ReadonlyMap<string, MeasuredRichText>,
 ): Promise<FontSlice[]> {
-    const { FONT_SLICES, TEXT_FALLBACK_FAMILIES, slicesFor } = await import('../constants/font-slices');
+    const { FONT_SLICES, slicesFor } = await import('../constants/font-slices');
     const picked = new Set<FontSlice>();
     const draw = (family: string, style: string, text: string) => {
         const codePoints = new Set(Array.from(text, (char) => char.codePointAt(0) ?? 0));

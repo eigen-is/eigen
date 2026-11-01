@@ -4,7 +4,7 @@
 // fontFaceCss writes. It is a large table, so only code that embeds fonts imports this module, a browser on demand.
 
 import { FONT_SLICES } from './font-slice-data.gen';
-import { FALLBACK_FONTS } from './fonts';
+import { EMOJI_FAMILIES } from './fonts';
 
 export { FONT_SLICES };
 
@@ -16,11 +16,6 @@ export type FontSlice = {
     file: string;
     unicodeRange: string;
 };
-
-// The fallbacks any text may draw in: the emoji and CJK faces. The math face draws only a formula, so only a document
-// with one embeds it.
-export const TEXT_FALLBACK_FAMILIES = FALLBACK_FONTS.filter((font) => font.kind !== 'math').map((font) => font.family);
-export const MATH_FAMILIES = FALLBACK_FONTS.filter((font) => font.kind === 'math').map((font) => font.family);
 
 // One slice as the @font-face rule that embeds it, its bytes a data: URI.
 export function fontFaceCss(slice: FontSlice, dataUri: string): string {
@@ -35,7 +30,6 @@ export function fontFaceCss(slice: FontSlice, dataUri: string): string {
 }
 
 const KEYCAP = 0x20e3;
-const EMOJI_FAMILIES = new Set(FALLBACK_FONTS.filter((font) => font.kind === 'emoji').map((font) => font.family));
 
 // Each slice's ranges as start and end pairs, in the order of FONT_SLICES.
 const SLICE_RANGES = FONT_SLICES.map((slice) =>
@@ -57,7 +51,7 @@ export function slicesFor(codePoints: ReadonlySet<number>, families: Iterable<st
     return FONT_SLICES.filter(
         (slice, index) =>
             wanted.has(slice.family) &&
-            meets(SLICE_RANGES[index], drawn, EMOJI_FAMILIES.has(slice.family) ? firstEmoji : 0),
+            meets(SLICE_RANGES[index], drawn, EMOJI_FAMILIES.includes(slice.family) ? firstEmoji : 0),
     );
 }
 

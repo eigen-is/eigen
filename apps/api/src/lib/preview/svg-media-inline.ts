@@ -3,8 +3,7 @@
 // the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
 // embedded too. The screen preview cache calls it.
 
-import { TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/font-slices';
-import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS, TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
 import { drawnCodePoints, slicesFaceCss } from '../export/fonts';

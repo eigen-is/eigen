@@ -27,7 +27,7 @@ One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--f
 
 ## The registry's order is load-bearing
 
-`EIGEN_FONTS` holds each font's name, CSS stack, category and weights. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
+`EIGEN_FONTS` holds each font's name, category, weights and single line; `getFontFamily` builds its CSS stack. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
 
 - A sheet cell's `ff` may be an index into the list rather than a name: the editor's default cell stores `0`. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
 - `EIGEN_FONTS[0]` is the default font in docs and sheets: `DOCUMENT_FONT` names it for docs, `SHEET_DEFAULT_FONT` (`packages/lib/src/sheets/fonts.ts`) for sheets. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.
@@ -38,7 +38,7 @@ The name expands to CSS only where it renders. A sheet cell is looser ([§ A she
 
 - The canvas reader accepts only a name from `EIGEN_FONT_NAMES` and falls back to its default (`fontFamily` in `packages/lib/src/vector/kinds/read-fields.ts`). The name ends up in a CSS declaration list, where a stray `;` would open a declaration of the writer's choosing.
 - The docs `textStyle` mark stores a name, and its node (`packages/lib/src/docs/eigendoc/nodes/font-family.ts`) renders it through `fontNameToCss` (`packages/lib/src/constants/fonts.ts`). A value that is already a stack passes through unchanged, and `normalizeFontFamilyMarks` in the docs editor collapses it to its name on an editable load. `getFontName` does the reverse lookup for paste and import.
-- `getFontFamily` wraps an unknown name as `'<name>', sans-serif`. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
+- `getFontFamily` puts an unknown name before the stack of the bundled font it maps to, else Inter's, as `'Bell MT', 'Inter', …`: the emoji face holds the digits, `#` and `*` for its keycaps, so a font the browser lacks must not fall straight to it. `fontNameToCss` must not wrap, or a stored stack would be wrapped twice.
 
 ## Foreign fonts map onto the bundled ones
 

@@ -1266,12 +1266,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EIGEN_STICKIES_INDICATOR_MAP` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EIGEN_STICKIES_INDICATOR_ROW` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `EML_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `EMOJI_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `emptyContact` | `@workspace/lib/constants` | packages/lib/src/constants/contact.ts |
 | `FALLBACK_FONTS` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `FONT_FACES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `fontLineHeight` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `fontNameToCss` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
-| `fontStack` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `FOOTNOTE_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `getBytesTextPreviewMode` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `getExtension` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
@@ -1299,6 +1299,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mailboxDisplayName` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxListFlags` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `mailboxRouteSegment` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
+| `MATH_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `MATH_FONT_STACK` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `MAX_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `MAX_PUBLIC_USERS_PER_BATCH` | `@workspace/lib/constants` | packages/lib/src/constants/public.ts |
@@ -1326,6 +1327,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `STANDARD_MAILBOXES` | `@workspace/lib/constants` | packages/lib/src/constants/mailboxes.ts |
 | `STORAGE_TYPE_HINTS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
 | `STORAGE_TYPE_LABELS` | `@workspace/lib/constants` | packages/lib/src/constants/mount.ts |
+| `TEXT_FALLBACK_FAMILIES` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `TEXT_PREVIEW_MAX_BYTES` | `@workspace/lib/constants` | packages/lib/src/constants/preview.ts |
 | `THEME_COPY_KEY` | `@workspace/lib/constants` | packages/lib/src/constants/theme.ts |
 | `UNDO_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
@@ -1336,9 +1338,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `XLSX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `FONT_SLICES` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slice-data.gen.ts |
 | `fontFaceCss` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
-| `MATH_FAMILIES` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `slicesFor` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
-| `TEXT_FALLBACK_FAMILIES` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `handleContactsSSEvent` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/sse-handlers.ts |
 | `isStaleWrite` | `@workspace/lib/contacts` | packages/lib/src/core/contacts/hooks/use-contacts.ts |
 | `escapeContentText` | `@workspace/lib/content-line` | packages/lib/src/core/content-line.ts |
