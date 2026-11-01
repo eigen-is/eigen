@@ -3617,6 +3617,25 @@ describe("docx writer — a table of contents' look", () => {
         expect(xmlOf(body)).toContain('PAGEREF _Toc1 \\h');
     });
 
+    // Word puts its Hyperlink style on a linked entry's runs, so the Links layout draws in the link colour as it does in
+    // the editor. A page-less doc's docx opens in Word's web view, where the field's \z hides the page numbers.
+    test.each([
+        ['Links', 'Hyperlink', { pageNumbers: false }, false],
+        ['a page-less doc', 'Hyperlink', {}, true],
+        ['Dotted', undefined, {}, false],
+        ['Plain text', undefined, { leader: 'none' }, false],
+    ])("%s draws its entries' text in the style %p", async (_layout, runStyle, attrs, pageless) => {
+        const body = await bodyOf(looked(attrs), undefined, undefined, { ...DEFAULT_PAGE_SETUP, pageless });
+        const texts = descendants(only(xmlChildren(body, W, 'sdt')), W, 'r').flatMap((run) => {
+            const t = child(run, 't');
+            return t ? [{ text: xmlText(t), style: w(child(child(run, 'rPr'), 'rStyle'), 'val') }] : [];
+        });
+        expect(texts).toEqual([
+            { text: 'Intro', style: runStyle },
+            { text: 'Method', style: runStyle },
+        ]);
+    });
+
     // With no entries the styles still carry the look, so the import reads it back.
     test('an empty one with a look writes the toc styles, and one without none', async () => {
         const empty = (attrs: Record<string, unknown>) => doc(toc(attrs), p(text('No headings')));
