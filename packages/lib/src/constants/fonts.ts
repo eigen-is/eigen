@@ -1,3 +1,8 @@
+// The fonts Eigen bundles, and how a stored font name becomes CSS. EIGEN_FONTS are the fonts a user picks, and
+// FALLBACK_FONTS the faces that draw what those lack, such as emoji. The pickers, the readers of a stored font and the
+// exports all read these lists. The font sizes a doc and a sheet accept, and the map from a foreign font such as
+// Calibri to a bundled one, live here too.
+
 import { pxToPt } from '../docs/eigendoc/page';
 
 // lineHeight: its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm of its Regular, as Word
@@ -36,6 +41,22 @@ export const EIGEN_FONTS: EigenFont[] = [
         lineHeight: 1.32,
     },
     { name: 'Excalifont', family: "'Excalifont', cursive", category: 'hand-drawn', weights: [400], lineHeight: 1.26 },
+];
+
+// A font no one picks: it draws what the text faces lack. An emoji or CJK face covers the characters of its kind; the
+// math face draws only a formula.
+export type FallbackFont = {
+    family: string;
+    kind: 'emoji' | 'cjk' | 'math';
+};
+
+// Order is load-bearing: the vendoring script gives a character to the first of these whose kind covers it, before
+// any text face, so no two families draw the same character.
+export const FALLBACK_FONTS: readonly FallbackFont[] = [
+    { family: 'Eigen Emoji', kind: 'emoji' },
+    { family: 'Noto Sans SC', kind: 'cjk' },
+    { family: 'Noto Sans KR', kind: 'cjk' },
+    { family: 'New Computer Modern Math', kind: 'math' },
 ];
 
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
@@ -89,8 +110,8 @@ export function nextFontSize(size: number, by: 1 | -1): number {
     return Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size + by));
 }
 
-// The vocabulary a stored `fontFamily` must be one of — a name, never a CSS stack. Readers validate
-// against this so an unrecognised value falls back instead of reaching a CSS declaration.
+// The values a stored `fontFamily` may hold: a name, never a CSS stack. Readers check a stored value against these,
+// so an unknown one falls back instead of reaching a CSS declaration.
 export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((f) => f.name);
 
 export function getFontFamily(fontName: string): string {
@@ -98,19 +119,17 @@ export function getFontFamily(fontName: string): string {
     return font?.family ?? `'${fontName}', sans-serif`;
 }
 
-// Tolerant forward map for render seams (the docs textStyle `fontFamily` mark). An EIGEN_FONTS
-// name expands to its CSS stack; a value that is already a stack — or any unknown token — passes
-// through unchanged, so pre-canon docs (fontFamily stored as a full stack) render byte-identically
-// until the load-time normalizer collapses them. Unlike getFontFamily, this must NOT wrap an
-// unrecognized value, or a stored stack would be double-wrapped.
+// A stored font as the CSS that draws it, such as the docs `textStyle` mark's `fontFamily`. A name expands to its
+// stack. Any other value passes through unchanged, because an older doc may store a whole stack, which draws as it
+// did until an editable load collapses it to its name. Unlike getFontFamily, this must not wrap an unknown value, or
+// a stored stack would be wrapped twice.
 export function fontNameToCss(value: string): string {
     return EIGEN_FONTS.find((f) => f.name === value)?.family ?? value;
 }
 
-// Reverse lookup for write seams (docs paste/import parseHTML + the load-time normalizer): a
-// recognized EIGEN font given as its name OR its full CSS stack (any quote style) collapses to the
-// canonical EIGEN_FONTS name; any other value is returned unchanged, so fontNameToCss's
-// passthrough keeps it lossless. No second font list — it reads EIGEN_FONTS.
+// The reverse, for a paste, an import and the load that collapses old stacks: a bundled font given as its name or as
+// its stack, in any quotes, becomes its name. Any other value comes back unchanged, so fontNameToCss draws it as it
+// was.
 export function getFontName(value: string): string {
     const first = value.match(/^\s*['"]?([^'",]+)['"]?/)?.[1]?.trim();
     const match = first ? EIGEN_FONTS.find((f) => f.name === first) : undefined;

@@ -1,3 +1,7 @@
+// Writes the data of the index app's /licenses page before it builds: every third-party package any workspace depends
+// on, read from its installed package.json, plus the code and fonts the repo carries itself, which no package.json
+// names and so are listed here by hand.
+
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Glob } from 'bun';
@@ -49,6 +53,14 @@ const FONTS: LicenseFont[] = [
     { name: 'JetBrains Mono', license: 'OFL-1.1', url: 'https://github.com/JetBrains/JetBrainsMono' },
     { name: 'Excalifont', license: 'OFL-1.1', url: 'https://plus.excalidraw.com/excalifont' },
     { name: 'STIX Two Math', license: 'OFL-1.1', url: 'https://github.com/stipub/stixfonts' },
+    { name: 'Noto Emoji', license: 'OFL-1.1', url: 'https://github.com/googlefonts/noto-emoji' },
+    { name: 'Noto Sans SC', license: 'OFL-1.1', url: 'https://github.com/notofonts/noto-cjk' },
+    { name: 'Noto Sans KR', license: 'OFL-1.1', url: 'https://github.com/notofonts/noto-cjk' },
+    {
+        name: 'New Computer Modern Math',
+        license: 'GUST Font License',
+        url: 'https://download.gnu.org.ua/release/newcm/',
+    },
 ];
 
 type PackageJson = {
