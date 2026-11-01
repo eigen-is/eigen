@@ -155,21 +155,10 @@ export function defaultFont() {
 }
 
 export function getFontSet(format: CellStyle | null | undefined) {
-    const fontAttr: string[] = [];
-
-    // font-style
-    fontAttr.push(!format?.it ? 'normal' : 'italic');
-
-    // font-variant
-    fontAttr.push('normal');
-
-    // font-weight
-    fontAttr.push(!format?.bl ? 'normal' : 'bold');
-
-    // font-size
-    fontAttr.push(`${cellFontSize(format?.fs)}pt`);
-
-    return `${fontAttr.join(' ')} ${getFontFamily(cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name)}`;
+    const style = format?.it ? 'italic' : 'normal';
+    const weight = format?.bl ? 'bold' : 'normal';
+    const family = getFontFamily(cellFontName(format?.ff) ?? SHEET_DEFAULT_FONT.name);
+    return `${style} normal ${weight} ${cellFontSize(format?.fs)}pt ${family}`;
 }
 
 // Measures one piece of text in the canvas's current font, or in `fontset` when the caller passes it.
