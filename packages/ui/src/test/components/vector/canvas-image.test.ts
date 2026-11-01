@@ -23,8 +23,7 @@ test('fonts.css loads the slices of the range data, each a woff2 the image write
                     .replace(/\s+/g, ' ');
             const file = block.match(/url\("\.\.\/assets\/fonts\/([^"]+)"\)/)?.[1];
             return `${field('font-family')} | ${file} | ${field('font-weight')} | ${field('font-style')} | ${field('unicode-range')}`;
-        })
-        .filter((face) => !face.startsWith('"STIX Two Math"'));
+        });
     const slices = FONT_SLICES.map(
         (slice) => `"${slice.family}" | ${slice.file} | ${slice.weight} | ${slice.style} | ${slice.unicodeRange}`,
     );

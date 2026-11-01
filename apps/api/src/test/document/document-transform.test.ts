@@ -862,11 +862,11 @@ const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efa
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
 // and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when
-// the prose CSS's sans and mono stacks took the font stack builder's emoji and CJK faces, after the table of contents'
-// rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head took the page-number
-// rules of all three layouts, for every doc.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'd2001269fd0aa219a1a79f69cc180e6aa476af2e5f82427ef1a7424bfa757cb0';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'a68bf2b4a2bb8e215da01da7ff1add3f15d78fc9db42e98b9292eff428f80d3c';
+// the prose CSS's math rule named New Computer Modern Math instead of STIX Two Math, after its sans and mono stacks
+// took the font stack builder's emoji and CJK faces, the table of contents' rules in the prose stylesheet changed (the
+// Links rule, an entry's cursor) and the PDF's head took the page-number rules of all three layouts, for every doc.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '4a640d05bcda3ddd397a32c0132e77353586a1cef96dfe52e0266a2fffbca138';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '0c8911421d4ec9978df99d49fe97e7599defdfed37aa5ed4d097d5d354d73a7e';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';

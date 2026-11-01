@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { MATH_FONT_STACK } from '@workspace/lib/constants/fonts';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
 import { canvasTextValue, PROSE_CSS, proseValue } from '../../lib/document/prose-css';
 
@@ -24,6 +25,11 @@ describe('prose css — the lookup', () => {
         expect(proseValue('.eigen-prose', 'font-family')).toBe(FONT_STACK_SANS);
         expect(proseValue('.eigen-prose p', 'margin-bottom')).toBe('11pt');
         expect(PROSE_CSS).toContain('font-size: var(--doc-font-size, 11pt)');
+    });
+
+    // The editor reads the token from globals.css, which an export doesn't have.
+    test('an equation draws in the math stack', () => {
+        expect(proseValue('math', 'font-family')).toBe(MATH_FONT_STACK);
     });
 
     test('weights come from font-weights.css', () => {
