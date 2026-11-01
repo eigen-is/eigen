@@ -1,3 +1,6 @@
+// The types the canvas painter's passes share: the pass itself, which drawMain builds once per pane, the
+// cells it collects, and the map of text that spills into empty neighbours.
+
 import type { ComputeMap } from '../../engine/conditional-format';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
@@ -42,4 +45,7 @@ export type RenderPass = {
     dataVerification: Sheet['dataVerification'];
     cellOverflowMap: CellOverflowMap;
     drawGridLines: boolean;
+    // The cells add their grid lines here, and drawMain strokes them all at once. That saves thousands of
+    // strokes per draw, and a corner where two lines cross is blended once, not twice.
+    gridLines: Path2D;
 };

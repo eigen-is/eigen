@@ -1,7 +1,7 @@
 // Canvas renderer facade. The actual drawing lives in state/render/: drawMain
 // orchestrates the per-pass phases (collect cells -> render cells -> reprocess
-// merges -> borders -> edge clear -> filter UI); freeze regions invoke it once
-// per region with their own offsets.
+// merges -> grid lines -> borders -> edge clear -> filter UI); freeze regions
+// invoke it once per region with their own offsets.
 
 import type { Context } from './context';
 import { getFlowdata } from './context';
@@ -140,11 +140,15 @@ export class Canvas {
                 rowEnd,
             ),
             drawGridLines: !this.sheetCtx.currentSheetIsPivot && this.sheetCtx.showGridLines,
+            gridLines: new Path2D(),
         };
 
         const cells = collectVisibleCells(pass);
         const mergedCells = renderCells(pass, cells);
         renderMergedCells(pass, mergedCells);
+        renderCtx.lineWidth = 1;
+        renderCtx.strokeStyle = canvasColors(this.canvasElement).gridLine;
+        renderCtx.stroke(pass.gridLines);
         drawCellBorders(pass);
 
         // Clear right gray area when last column is rendered to prevent overflow

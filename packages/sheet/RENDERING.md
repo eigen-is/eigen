@@ -43,7 +43,7 @@ The grid itself (cells, text, gridlines, borders, fill colors) is drawn on an HT
 
 - `Sheet/index.tsx` creates a `<canvas>` element sized to the container. On a context change or a scroll it asks for a redraw through `requestAnimationFrame`, so several changes in one frame paint once.
 - `state/canvas.ts` holds the `Canvas` facade class (`drawMain()`, `drawRowHeader()`, `drawColumnHeader()`, `drawFreezeLine()`). Per-cell painting lives in `state/render/`: `cellRender` in `cells.ts`, driven by the `collectVisibleCells → renderCells → renderMergedCells` phases.
-- Gridlines are stroked paths in the default stroke color (`state/render/types.ts`), on each track's last pixel: a row or column is its stored size, gridline included (`calcRowColSize` in `state/context.ts`).
+- Gridlines sit on each track's last pixel: a row or column is its stored size, gridline included (`calcRowColSize` in `state/context.ts`). Each cell adds its lines to one path per pass (`gridLines` on `RenderPass`), which `drawMain` strokes once in the `--sheet-grid-line` color before the borders. One stroke per line made thousands of strokes per draw, and the color is translucent, so a corner stroked twice showed as a darker dot.
 - Cell text is `ctx.fillText()` with font metrics from `getMeasureText()`.
 - Text that overflows into empty neighbours paints once, over its whole span, when the span's last visible cell renders (`cellOverflowRender`); `computeCellOverflowMap` finds the spans for the visible rows on every draw ([SHEETS.md § Text spills into empty neighbours](../../docs/SHEETS.md#text-spills-into-empty-neighbours)).
 - Cell backgrounds are `ctx.fillRect()` with the cell's fill color.
