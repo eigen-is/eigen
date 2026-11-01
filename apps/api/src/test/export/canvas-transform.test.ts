@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { inflateSync } from 'node:zlib';
-import type { SlideSize } from '@workspace/lib/vector';
+import type { SlideSize, VectorScene } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { DocumentExportFormat } from '../../lib/document/transform/protocol';
 import type { CanvasPage } from '../../lib/export/canvas/render';
@@ -118,9 +118,34 @@ describe('renderEigenslidesHtml', () => {
         const screen = new TextDecoder().decode((await deckExport('html', '<p>hi</p>', '16:9', slideWidth)).data);
         expect(screen).toContain(`--page-w:${width}px`);
     });
+});
 
-    test('keeps the embedded font faces the document needs', async () => {
-        expect(await deckExportHtml('html', '<p>hi</p>')).toContain('@font-face');
+// A face is up to 0.6 MB of base64, so a deck embeds only the families it draws in: Inter, the page's own, and each
+// bundled family an element's text names. A missing one would print in a system font.
+describe('renderEigenslidesHtml — fonts', () => {
+    async function embedded(scene: VectorScene, format: DocumentExportFormat): Promise<string[]> {
+        const doc = new Y.Doc();
+        seedDeckDoc(doc, scene);
+        const html = new TextDecoder().decode((await renderEigenslidesHtml(doc, format, 'Deck', async () => [])).data);
+        return [...new Set([...html.matchAll(/font-family: "([^"]+)";\s*src:/g)].map((m) => m[1]))];
+    }
+
+    test.each(['html', 'pdf-html'] as const)('the golden deck in %s embeds Inter alone', async (format) => {
+        expect(await embedded(buildGoldenDeckScene(), format)).toEqual(['Inter']);
+    });
+
+    test.each(['html', 'pdf-html'] as const)('a text box in JetBrains Mono embeds it in %s', async (format) => {
+        const scene = buildGoldenDeckScene();
+        const elements = scene.elements.map((el) =>
+            el.id === 'el-3' && el.type === 'richtext' ? { ...el, fontFamily: 'JetBrains Mono' } : el,
+        );
+        expect(await embedded({ ...scene, elements }, format)).toEqual(['Inter', 'JetBrains Mono']);
+    });
+
+    test('a deck without text still embeds Inter, in which its page draws', async () => {
+        const scene = buildGoldenDeckScene();
+        const elements = scene.elements.filter((el) => el.type === 'image');
+        expect(await embedded({ ...scene, elements }, 'html')).toEqual(['Inter']);
     });
 });
 

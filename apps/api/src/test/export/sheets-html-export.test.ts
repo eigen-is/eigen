@@ -27,7 +27,7 @@ import { serializeFill } from '@workspace/lib/vector';
 import sharp from 'sharp';
 import * as Y from 'yjs';
 import { FONT_STACK_SANS } from '../../lib/document/font-stacks';
-import type { ExportMedia } from '../../lib/document/transform/protocol';
+import type { ExportMedia, HtmlExportMode } from '../../lib/document/transform/protocol';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { sanitizeExportHtml } from '../../lib/export/sanitize';
 import {
@@ -41,6 +41,7 @@ import {
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { cpuClock } from '../cpu-time';
+import { buildGoldenSheets } from '../fixtures/heavy-sheets';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA, NO_PIXELS } from '../setup';
 
@@ -90,6 +91,51 @@ describe('Sheets HTML export — rich text', () => {
         expect(renderSheetsHtml([makeSheet([{ r: 0, c: 0, v: rich }])], NO_MEDIA, 'screen', NO_PIXELS).html).toContain(
             '>Rich text<',
         );
+    });
+});
+
+// A face is up to 0.6 MB of base64, so a workbook embeds only the families it draws in: Inter, in which the table
+// draws, and each bundled family a cell or a chart names. A missing one would print in a system font.
+describe('Sheets HTML export — fonts', () => {
+    const embedded = (sheets: Sheet[], mode: HtmlExportMode = 'pdf') => [
+        ...new Set(
+            [
+                ...sheetsHtmlDocument({
+                    title: 'T',
+                    sheets,
+                    mediaUrls: NO_MEDIA,
+                    mediaPixels: NO_PIXELS,
+                    mode,
+                    lost: () => {},
+                }).matchAll(/font-family: "([^"]+)";\s*src:/g),
+            ].map((m) => m[1]),
+        ),
+    ];
+
+    test.each(['screen', 'pdf'] as const)('the golden workbook in %s embeds Inter alone', (mode) => {
+        expect(embedded(buildGoldenSheets(), mode)).toEqual(['Inter']);
+    });
+
+    test('a cell in Source Serif 4, by name or by registry index, embeds it', () => {
+        for (const ff of ['Source Serif 4', 1])
+            expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Serif', ff } }])])).toEqual(['Inter', 'Source Serif 4']);
+    });
+
+    test("a chart's font embeds its family", () => {
+        const chart: SheetChart = {
+            id: 'c1',
+            index: 'a0',
+            x: 0,
+            y: 0,
+            width: 400,
+            height: 300,
+            ...newSheetChartSpecParts(sampleChartSpec('column', 'Excalifont')),
+        };
+        expect(embedded([{ ...makeSheet([]), charts: { c1: chart } }])).toEqual(['Inter', 'Excalifont']);
+    });
+
+    test('a cell in a font Eigen does not bundle embeds Inter alone', () => {
+        expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Serif', ff: 'Georgia' } }])])).toEqual(['Inter']);
     });
 });
 

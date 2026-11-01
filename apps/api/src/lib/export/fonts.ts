@@ -32,12 +32,6 @@ export function hasSmallCaps(family: string, style: BundledFontFace['style']): b
     return FONT_FACES.some((face) => face.family === family && face.style === style && 'smallCaps' in face);
 }
 
-let allFacesCss: string | undefined;
-
-export function allFontFaceCss(): string {
-    return (allFacesCss ??= FONT_FACES.map(embeddedFaceCss).join('\n'));
-}
-
 // The @font-face blocks for just the given families (each an EIGEN_FONTS name, the same
 // value a vector text/label element stores in `fontFamily`). An export or an SVG preview inlines
 // only the whole faces its text actually uses; an unrecognized family contributes nothing.

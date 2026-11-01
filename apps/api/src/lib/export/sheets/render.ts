@@ -4,6 +4,7 @@
 // where the editor floats them. Runs in the transform process, so it reaches no Mount: images arrive as URLs by media
 // name.
 
+import { getFontName } from '@workspace/lib/constants/fonts';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -153,6 +154,7 @@ export function sheetsHtmlDocument({
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
+        cssFamilies: [getFontName(FONT_STACK_SANS)],
         css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
         body: `<style>${css}</style>\n${html}`,
     });
