@@ -169,9 +169,10 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         });
     }, [refs.canvas, refs.globalCache, sheet.id]);
 
-    // Neither changes the context: a web font that finishes loading changes the text's widths, so the
-    // measurements go too, and a canvas whose bitmap the browser dropped comes back blank. WebKit fires no
-    // loadingdone for the slices a canvas draws, so the measure's own loads report too.
+    // A loaded font and a restored canvas each need a whole redraw, though neither changes the context. A font
+    // that finishes loading changes the text's widths, so the cached measurements go too. A canvas whose bitmap
+    // the browser dropped comes back blank. WebKit fires no loadingdone for the slices a canvas draws, so the
+    // measure reports its own loads as well.
     useEffect(() => {
         const canvas = refs.canvas.current;
         const drawWhole = () => {

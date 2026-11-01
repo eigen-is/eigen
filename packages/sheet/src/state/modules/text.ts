@@ -1,8 +1,8 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
 // and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
-// both lay out here. Text measurements are cached until clearMeasureTextCache, which the grid calls when
-// a font slice loads. The measure and the cell editors ask for the slices of their text, so the grid
-// and a commit measure the real face.
+// both lay out here. Text measurements are cached until clearMeasureTextCache, which the grid calls, for
+// example, when a font slice loads. The measure and the cell editors ask for the font slices of their
+// text, so the grid and a commit measure the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -137,7 +137,7 @@ function getTextSize(text: string, font: string) {
     ele.style.visibility = 'hidden';
     ele.style.margin = '0';
     ele.style.padding = '0';
-    ele.innerHTML = text;
+    ele.textContent = text;
     document.body.append(ele);
 
     const w = Math.max(ele.scrollWidth, ele.offsetWidth, ele.clientWidth);
@@ -160,10 +160,10 @@ export function getFontSet(format: CellStyle | null | undefined) {
     return `${style} normal ${weight} ${cellFontSize(format?.fs)}pt ${family}`;
 }
 
-// WebKit fetches the slices a canvas draws but fires no loadingdone for them, so a grid that waits for that event
-// keeps the fallback faces. So the measure asks for the slices of the text it meets and tells the grid once they
-// arrive. It asks about each character of a font once: a slice that failed never checks as loaded, and asking
-// again would redraw the grid on every frame.
+// WebKit fetches the slices a canvas draws, but it fires no loadingdone event for them. A grid that waited for that
+// event alone would keep drawing in the fallback faces. So the measure asks for the slices of the text it meets, and
+// tells the grid when they arrive. It asks about each character of a font only once. A slice that failed to load
+// never checks as loaded, so asking again would redraw the grid on every frame.
 const askedChars = new Map<string, Set<string>>();
 const measuredFontsListeners = new Set<() => void>();
 
@@ -193,8 +193,9 @@ function loadUnseenSlices(text: string, font: string) {
     document.fonts.load(font, unseen).then(notify, notify);
 }
 
-// A face loads only the unicode-range slices its text needs, and a wrapped cell's row height is measured once, as
-// it commits. So an editor loads the cell's font for the text as it is typed, and the commit measures the real face.
+// A face loads only the unicode-range slices its text needs. A wrapped cell's row height is measured once, when the
+// cell commits. So an editor loads the cell's font for its text as the user types, and the commit measures the real
+// face.
 export function loadCellFont(cell: CellStyle | null | undefined, text: string) {
     document.fonts.load(getFontSet(cell), text).catch(() => {});
 }
