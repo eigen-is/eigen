@@ -134,8 +134,6 @@ An agent can't do this; it needs a person with Excel or Google Sheets. It's a do
 
 Verified, user-visible, bounded.
 
-- [ ] **The compaction swap keeps no copy it can be restored from**: `closeAfterLinger` (`apps/api/src/lib/collab/collab-document.ts`) replaces the log with the replayed snapshot, and the version taken at close comes after the swap. A session shorter than `writesPerSnapshot` writes leaves its raw log in no version, so a batch the replay dropped or a codec bug is lost for good. CODE-STANDARDS asks for a copy before an overwrite. Fix: save a version before the swap, as `commitImport` does before a replace. **S**
-
 - [ ] **A paste past the edge throws on a sheet with an empty matrix**: `expandRowsAndColumns` (`state/modules/sheet.ts`) reads `data[0].length` without the guard the old code had. **S**
 
 - [ ] **By-values checkboxes do nothing while a condition is set**: the filter menu (`FilterMenu` in `components/ContextMenu/FilterMenu.tsx`) shows the value list under a condition, but Confirm uses the condition alone. A user unticks values, picks a condition and confirms, and the ticks do nothing. Disable or collapse the list while a condition is set. **S**
