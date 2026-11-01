@@ -120,8 +120,8 @@ export async function renderEigendocExport(
     const html = exportHtmlDocument({
         title,
         // The bundled families eigen-prose.css draws a doc's body in: the Normal's, which names no other as its
-        // fallback, and the monospace where code renders. The families the body names itself, a font mark's or a
-        // chart's, the document builder adds.
+        // fallback, and the monospace one where code renders. exportHtmlDocument adds the families the body names
+        // itself, such as a font mark's or a chart's.
         cssFamilies: body.includes('<code') ? [style.font, MONO_FONT_NAME] : [style.font],
         css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? `${PAGE_NUMBER_CSS}${TOC_CSS}` : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,

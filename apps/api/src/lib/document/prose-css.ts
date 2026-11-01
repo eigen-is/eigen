@@ -45,9 +45,8 @@ export function canvasTextValue(selector: string, property: string): string {
     return value;
 }
 
-// ── CSS flattening ──────────────────────────────────────────────────────────
-// The source eigen-prose.css uses modern CSS nesting (.eigen-prose { h1 { … } }).
-// Standalone HTML and WeasyPrint need flat CSS, so we rewrite at init time.
+// eigen-prose.css nests its rules, as `.eigen-prose { h1 { … } }`. A standalone HTML file and WeasyPrint need flat CSS,
+// so the file is flattened once, when the module loads. Each token the exports can't read becomes its value.
 
 function flattenEigenProseCSS(raw: string): string {
     let css = raw.replace(/\s*\/\*[\s\S]*?\*\//g, '').replace(/\.eigen-prose,\s*\n\s*\.tiptap\s*\{/g, '.eigen-prose {');
@@ -84,8 +83,8 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
         if (declarations.trim()) results.push(`${parentSelector} { ${declarations.trim()} }`);
     };
 
-    for (const ch of body) {
-        if (ch === '{') {
+    for (const char of body) {
+        if (char === '{') {
             if (depth === 0) {
                 // The text since the last rule is the declarations that precede this selector.
                 const split = current.lastIndexOf(';') + 1;
@@ -93,10 +92,10 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
                 nestedSelector = current.slice(split).trim();
                 current = '';
             } else {
-                current += ch;
+                current += char;
             }
             depth++;
-        } else if (ch === '}') {
+        } else if (char === '}') {
             depth--;
             if (depth === 0) {
                 const selectors = nestedSelector.split(SELECTOR_LIST_COMMA).map((item) => {
@@ -108,10 +107,10 @@ function flattenNestedBlock(parentSelector: string, body: string): string {
                 results.push(`${selectors.join(', ')} { ${current.trim()} }`);
                 current = '';
             } else {
-                current += ch;
+                current += char;
             }
         } else {
-            current += ch;
+            current += char;
         }
     }
 

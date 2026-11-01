@@ -108,8 +108,8 @@ async function spawnRender(zoom: number, timeout: number, signal?: AbortSignal) 
 async function render(html: string | Uint8Array, zoom: number, timeout: number, signal?: AbortSignal) {
     const proc = await spawnRender(zoom, timeout, signal);
 
-    // A WeasyPrint that exits early (bad input) closes its stdin; writing to the dead pipe throws
-    // EPIPE. Guard it so an early exit becomes the exitCode-500 below, never a process crash.
+    // A WeasyPrint that exits early, on bad input, closes its stdin, and writing to the dead pipe throws EPIPE. The guard
+    // turns an early exit into the 500 of the exit code check below, never a process crash.
     try {
         proc.stdin.write(html);
         await proc.stdin.end();
@@ -125,10 +125,10 @@ async function render(html: string | Uint8Array, zoom: number, timeout: number, 
     return { exitCode, signalCode: proc.signalCode, stdout, stderr };
 }
 
-// Accepts the UTF-8 bytes the transform process returns as well as a plain string —
-// Bun's stdin sink writes both, and the render script reads stdin as UTF-8. `zoom` scales the
-// laid-out pages onto their sheets: at 0.5 a 1920 px page prints 960 px, 254 mm, wide. `signal` is the request's: a
-// client that is gone kills its render, or leaves the queue of renders waiting their turn.
+// The HTML is a plain string or the UTF-8 bytes the transform process returns. Bun's stdin sink writes both, and the
+// render script reads stdin as UTF-8. `zoom` scales the laid-out pages onto their sheets: at 0.5 a 1920 px page prints
+// 960 px, 254 mm, wide. `signal` is the request's. A client that is gone kills its render, or leaves the queue of
+// renders waiting their turn.
 export async function htmlToPdf(html: string | Uint8Array, zoom = 1, signal?: AbortSignal): Promise<Buffer> {
     if (renders.waiting >= MAX_WAITING_RENDERS) {
         console.warn(`[export] WeasyPrint refused waiting=${renders.waiting}`);
