@@ -312,6 +312,62 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     });
 
+    test("after a swap, the close takes no version of its own, so the session's one version keeps the log", async () => {
+        const stub = stubRunner();
+        const sheet = await registeredSheet('compaction-one-version', stub);
+        try {
+            const versionsBefore = (await home.drive.listVersions(mountId, sheet.id)).length;
+            expect(await sheet.closeOnce(succeed)).toBe(true);
+
+            expect(await home.drive.listVersions(mountId, sheet.id)).toHaveLength(versionsBefore + 1);
+            expect(await newestVersionOps(sheet.id)).toEqual([edit(0, 0, 1)]);
+        } finally {
+            sheet.restore();
+            stub.restore();
+        }
+    }, 30_000);
+
+    test("the next session's version leaves the first session's copy of the log in place", async () => {
+        const stub = stubRunner();
+        const sheet = await registeredSheet('compaction-next-session', stub);
+        try {
+            expect(await sheet.closeOnce(succeed)).toBe(true);
+            const [first] = await home.drive.listVersions(mountId, sheet.id);
+            sheetsOpLog((await sheet.open()).doc).push([edit(0, 1, 2)]);
+            expect(await sheet.closeOnce(succeed)).toBe(true);
+
+            const versions = await home.drive.listVersions(mountId, sheet.id);
+            expect(versions.map((version) => version.id)).toContain(first?.id ?? 'missing');
+            expect(versions).toHaveLength(2);
+            expect(await newestVersionOps(sheet.id)).toEqual([edit(0, 1, 2)]);
+        } finally {
+            sheet.restore();
+            stub.restore();
+        }
+    }, 30_000);
+
+    test('a close that swaps nothing takes its final version as before', async () => {
+        const stub = stubRunner();
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await registeredSheet('compaction-no-swap-version', stub);
+        const originalSave = home.drive.saveVersion;
+        home.drive.saveVersion = async () => {
+            throw new ApiError(500, 'Storage is down');
+        };
+        try {
+            const versionsBefore = (await home.drive.listVersions(mountId, sheet.id)).length;
+            expect(await sheet.closeOnce(succeed)).toBe(true);
+
+            expect(await home.drive.listVersions(mountId, sheet.id)).toHaveLength(versionsBefore + 1);
+            expect(await newestVersionOps(sheet.id)).toEqual([edit(0, 0, 1)]);
+        } finally {
+            home.drive.saveVersion = originalSave;
+            sheet.restore();
+            warn.mockRestore();
+            stub.restore();
+        }
+    }, 30_000);
+
     test('an update during the version drops the swap, and the document lingers again', async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-version-update', [edit(0, 0, 1)]);
