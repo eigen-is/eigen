@@ -68,7 +68,7 @@ function forceTypeRoot(doc: Y.Doc, name: string, kind: YjsRootKind): void {
 // biome-ignore lint/suspicious/noExplicitAny: see comment above
 type AnyYType = Y.AbstractType<any>;
 
-// What y-prosemirror writes as a node's attribute: a JSON value, which Yjs keeps as it is.
+// What y-tiptap writes as a node's attribute: a JSON value, which Yjs keeps as it is.
 type XmlAttributes = Record<string, object | string | number | boolean | null>;
 
 // In-place replace: clear `live`'s contents and rebuild from `source` by deep
@@ -111,7 +111,9 @@ function replaceYType(live: AnyYType, source: AnyYType): void {
 function cloneYType(source: AnyYType): AnyYType {
     if (source instanceof Y.XmlElement) {
         const c = new Y.XmlElement<XmlAttributes>(source.nodeName);
-        for (const [k, v] of Object.entries(source.getAttributes())) c.setAttribute(k, v);
+        for (const [k, v] of Object.entries(source.getAttributes())) {
+            c.setAttribute(k, v instanceof Y.AbstractType ? cloneYType(v) : v);
+        }
         const children = cloneXmlChildren(source);
         if (children.length) c.insert(0, children);
         return c;

@@ -105,7 +105,7 @@ describe('restoreYjsDoc', () => {
         const target = new Y.Doc();
         const toc = new Y.XmlElement('tableOfContents');
         target.getXmlFragment('default').insert(0, [toc]);
-        // Yjs types a fragment's element attributes as strings, but y-prosemirror writes each as its JSON value.
+        // Yjs types a fragment's element attributes as strings, but y-tiptap writes each as its JSON value.
         const attrs = { levels: 2, pageNumbers: false, level1: { bold: true } };
         for (const [name, value] of Object.entries(attrs)) Reflect.apply(toc.setAttribute, toc, [name, value]);
 

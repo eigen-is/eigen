@@ -26,11 +26,11 @@ export function tableOfContentsAttrs(reader: Reader, toc: OpenToc): Partial<TocA
     const { styles } = reader;
     const leads = toc.leads ?? entryLeads(styles.para(styles.named(tocStyleName(1))?.id));
     const defaults = readTocLayout({});
-    const layout = readTocLayout({ pageNumbers: toc.pageNumbers, ...(leads === false && { leader: 'none' }) });
+    const leader = leads === false ? 'none' : defaults.leader;
     const attrs: Partial<TocAttrs> = {
         levels: toc.levels,
-        ...(layout.pageNumbers !== defaults.pageNumbers && { pageNumbers: layout.pageNumbers }),
-        ...(layout.leader !== defaults.leader && { leader: layout.leader }),
+        ...(toc.pageNumbers !== defaults.pageNumbers && { pageNumbers: toc.pageNumbers }),
+        ...(leader !== defaults.leader && { leader }),
     };
     for (const [index, key] of TOC_LEVEL_KEYS.entries()) {
         const look = levelLook(reader, index + 1);

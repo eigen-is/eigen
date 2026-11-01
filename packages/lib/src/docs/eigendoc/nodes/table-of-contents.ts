@@ -25,13 +25,11 @@ type TocLeader = 'dot' | 'none';
 // Word's two facts that make the layout: whether entries show their page number, and the leader to it.
 type TocLayout = { pageNumbers: boolean; leader: TocLeader };
 
-// The numbers from 1 to Deepest, counted by a tuple that grows by one until its length reaches Deepest.
-type LevelsTo<Deepest extends number, Counted extends unknown[] = [unknown]> =
-    | Counted['length']
-    | (Counted['length'] extends Deepest ? never : LevelsTo<Deepest, [...Counted, unknown]>);
+// The attribute holding one heading level's look, level1 to the deepest heading's. The test pins the count to the
+// heading levels.
+export const TOC_LEVEL_KEYS = ['level1', 'level2', 'level3', 'level4', 'level5', 'level6'] as const;
 
-// The attribute holding one heading level's look, level1 to the deepest heading's.
-type TocLevelKey = `level${LevelsTo<typeof MAX_HEADING_LEVEL>}`;
+type TocLevelKey = (typeof TOC_LEVEL_KEYS)[number];
 
 // Every stored attribute. A level's look is an attribute of its own, so two peers who edit two levels both keep theirs.
 export type TocAttrs = TocLayout & { levels: number } & Record<TocLevelKey, TocLevelStyle | null>;
@@ -56,18 +54,6 @@ export function readTocLevels(value: unknown): number {
     return typeof value === 'number' && Number.isFinite(value)
         ? Math.min(MAX_HEADING_LEVEL, Math.max(1, Math.round(value)))
         : DEFAULT_TOC_LEVELS;
-}
-
-// The attribute of each heading level, from 1 down. A template string types a name as any number's, so the guard
-// narrows each to a heading level's.
-export const TOC_LEVEL_KEYS: readonly TocLevelKey[] = Array.from(
-    { length: MAX_HEADING_LEVEL },
-    (_, index) => `level${index + 1}`,
-).filter(isTocLevelKey);
-
-function isTocLevelKey(name: string): name is TocLevelKey {
-    const level = Number(name.slice('level'.length));
-    return name.startsWith('level') && Number.isInteger(level) && level >= 1 && level <= MAX_HEADING_LEVEL;
 }
 
 // One level's look as a peer, a paste or the import wrote it: the font and size are held to what a font and a size mark

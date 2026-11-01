@@ -7,6 +7,7 @@ import { getFontFamily, MAX_FONT_SIZE } from '../../../../constants/fonts';
 import type { TocLevelStyle, TocPreset } from '../../../../docs/eigendoc';
 import {
     getDocExtensions,
+    MAX_HEADING_LEVEL,
     readTocLayout,
     readTocLevelStyle,
     readTocLevels,
@@ -84,7 +85,7 @@ describe('table of contents attributes', () => {
     });
 
     test('names a key for each heading level', () => {
-        expect(TOC_LEVEL_KEYS).toEqual(['level1', 'level2', 'level3', 'level4', 'level5', 'level6']);
+        expect(TOC_LEVEL_KEYS).toHaveLength(MAX_HEADING_LEVEL);
     });
 
     test('an untouched one renders the nav it always did', () => {

@@ -45,6 +45,7 @@ const onReplaceImage = mock(() => {});
 const onEnterBand = mock((_band: unknown) => {});
 const onPageNumbers = mock((_preset: unknown) => {});
 const onToggleOutline = mock(() => {});
+const closePanels = mock(() => {});
 const onPageSetupChange = mock((_from: PageSetup, _to: PageSetup) => {});
 
 async function render(
@@ -92,7 +93,7 @@ async function render(
         onTextWidthChange: () => {},
         onUpdateNormalStyle: () => {},
         onAccessDialogOpen: () => {},
-        closePanels: () => {},
+        closePanels,
         onImageUpload: () => {},
         onReplaceImage,
         onEnterBand: bands ? onEnterBand : undefined,
@@ -1506,6 +1507,20 @@ test('Insert › Table of contents puts one in the body where the caret is', asy
     await openMenu('Insert');
     await clickItem('Table of contents');
     expect(editor.getJSON().content?.map((block) => block.type)).toEqual(['paragraph', 'tableOfContents', 'paragraph']);
+});
+
+// The comments column is a side panel on a computer and a sheet on a phone, which an Insert leaves alone.
+test.each([
+    [1920, 1],
+    [390, 0],
+])('at %ipx Insert › Table of contents closes the side panels %i times', async (width, closed) => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(2);
+    closePanels.mockClear();
+    await render(width, true);
+    await openMenu('Insert');
+    await clickItem('Table of contents');
+    expect(closePanels).toHaveBeenCalledTimes(closed);
 });
 
 // The command refuses in a cell, so the item says so rather than doing nothing.

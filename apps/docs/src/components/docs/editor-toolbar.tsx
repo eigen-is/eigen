@@ -351,7 +351,7 @@ export const EditorToolbar = ({
                                     editor={editor}
                                     active={active}
                                     keepEditorFocus={keepActiveEditorFocus}
-                                    closePanels={closePanels}
+                                    closePanels={isMobile ? undefined : closePanels}
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}
