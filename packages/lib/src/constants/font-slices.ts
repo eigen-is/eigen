@@ -54,17 +54,10 @@ const ITALIC_FAMILIES: ReadonlySet<string> = new Set(
     FONT_SLICES.filter((slice) => slice.style === 'italic').map((slice) => slice.family),
 );
 
-// A CSS unicode-range, such as "U+0-FF, U+131", as its ranges' first and last characters.
-export function parseUnicodeRange(unicodeRange: string): [number, number][] {
-    return unicodeRange.split(',').map((part) => {
-        const [start, end = start] = part.trim().slice(2).split('-');
-        return [Number.parseInt(start, 16), Number.parseInt(end, 16)];
-    });
-}
-
 // The slices of these families that draw any of these characters, in the order of FONT_SLICES. A character that only
 // joins an emoji to the next one selects no slice, since the slice of the emoji holds it too. The emoji face also
-// holds # * and the digits, for a keycap: they select it only beside the keycap mark, and draw in the text face else.
+// holds #, * and the digits for its keycaps. They select it only beside the keycap mark, and otherwise draw in the text
+// face.
 export function slicesFor(codePoints: ReadonlySet<number>, families: Iterable<string>): FontSlice[] {
     const wanted = new Set(families);
     const drawn = Int32Array.from([...codePoints].filter((codePoint) => !EMOJI_COMPONENTS.has(codePoint))).sort();
@@ -80,6 +73,14 @@ export function slicesFor(codePoints: ReadonlySet<number>, families: Iterable<st
 // slices where it has them. Elsewhere it draws in the upright ones, which the browser slants.
 export function sliceStyle(family: string, fontStyle: string): FontSlice['style'] {
     return fontStyle !== 'normal' && ITALIC_FAMILIES.has(family) ? 'italic' : 'normal';
+}
+
+// A CSS unicode-range, such as "U+0-FF, U+131", as its ranges' first and last characters.
+export function parseUnicodeRange(unicodeRange: string): [number, number][] {
+    return unicodeRange.split(',').map((part) => {
+        const [start, end = start] = part.trim().slice(2).split('-');
+        return [Number.parseInt(start, 16), Number.parseInt(end, 16)];
+    });
 }
 
 // Whether a sorted list holds a character of the ranges at or above `from`, by a binary search per range.

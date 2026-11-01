@@ -53,16 +53,16 @@ export function canvasImageName(elements: VectorElement[], fileName: string): st
     return elements.length === 1 && first.type === 'chart' ? chartImageName(first) : `${fileName} – selection`;
 }
 
-// The slices the file draws in: each measured run in the family its computed list starts with, and every other
-// element's text upright in its own. Each draws in the fallbacks too, for what its family lacks. The slice table is
-// large, so it loads here, on a download.
+// The slices the file draws in. A measured run draws in the first family of its computed stack, and every other
+// element's text draws upright in its own family. Each also draws in the fallbacks, for what its family lacks. The
+// slice table is large, so it loads here, when a download starts.
 export async function canvasImageSlices(
     elements: VectorScene['elements'],
     measured: ReadonlyMap<string, MeasuredRichText>,
 ): Promise<FontSlice[]> {
     const { FONT_SLICES, sliceStyle, slicesFor } = await import('../constants/font-slices');
     const picked = new Set<FontSlice>();
-    const draw = (family: string, style: string, text: string) => {
+    const pickSlices = (family: string, style: string, text: string) => {
         const codePoints = new Set(Array.from(text, (char) => char.codePointAt(0) ?? 0));
         for (const name of [family, ...TEXT_FALLBACK_FAMILIES]) {
             const wanted = sliceStyle(name, style);
@@ -73,9 +73,9 @@ export async function canvasImageSlices(
         const box = measured.get(el.id);
         if (box) {
             for (const { style, chars } of box.texts)
-                draw(getFontName(style.fontFamily), style.fontStyle, chars.map((char) => char.text).join(''));
+                pickSlices(getFontName(style.fontFamily), style.fontStyle, chars.map((char) => char.text).join(''));
         } else {
-            for (const { family, text } of ELEMENT_KINDS[el.type].fontRuns(el)) draw(family, 'normal', text);
+            for (const { family, text } of ELEMENT_KINDS[el.type].fontRuns(el)) pickSlices(family, 'normal', text);
         }
     }
     return FONT_SLICES.filter((slice) => picked.has(slice));
