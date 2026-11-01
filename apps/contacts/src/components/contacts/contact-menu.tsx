@@ -12,7 +12,7 @@ import { MenuSections } from '@workspace/ui/components/context-menu';
 import { ProgressDialog } from '@workspace/ui/components/drive';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { LabelAssignSubMenu } from '@workspace/ui/components/labels';
-import { printDocument } from '@workspace/ui/lib/printElement';
+import { printDocument } from '@workspace/ui/lib/print-element';
 import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
