@@ -2,7 +2,7 @@
 
 This proposal adds a bundled library of 2000s-era vector clipart to Eigen's canvas engine (`apps/vector` and `apps/slides`), built on the general-purpose `path` canvas element kind, so that every clipart asset can be restyled as a single canvas element and unpacked ("ungrouped") into native, individually editable canvas primitives.
 
-**Status:** the `path` kind is built, and [CANVAS.md § A path is stored in its unit box](../CANVAS.md#a-path-is-stored-in-its-unit-box) describes it. This page designs the rest, none of it built: the clipart catalog, the `clipart` kind, its Convert to shapes and the picker (Phases 2 to 4). [ROADMAP.md § Before 0.5.0](../ROADMAP.md#before-050-the-open-source-announcement) has its row.
+**Status:** the `path` kind is built, and [CANVAS.md § A path is stored in its unit box](../CANVAS.md#a-path-is-stored-in-its-unit-box) describes it. This page designs the rest, none of it built: the clipart catalog, the `clipart` kind, its Convert to shapes and the picker (Phases 2 to 4). On 2026-11-01 the owner added poster pieces (§ 6): a shape gallery of single paths, and part-based pieces that keep their ends when stretched and take text. [ROADMAP.md § Before 0.5.0](../ROADMAP.md#before-050-the-open-source-announcement) has its row.
 
 > **TLDR**: Eigen's canvas engine draws rectangles, diamonds, ellipses, pies, lines, arrows, freehand strokes, paths, rich text, images and charts. It has no bundled illustration library. This proposal adds one thing that fits the exact architecture charts established: a **`clipart` element kind** (`VectorClipartElement`) backed by a curated, offline, zero-AI-slop catalog of nostalgic 2000s Microsoft Office–style vector illustrations. On the canvas, a clipart element responds to the standard Fill, Stroke, Sketch (Architect / Artist / Cartoonist) and Opacity controls, re-stylizing the entire illustration in one click while allowing per-slot color overrides in its panel section. Selecting **Convert to shapes** (the same `toShapes` / `replaceElementInDoc` seam charts use) unpacks a clipart element in place into its constituent `path`, `ellipse`, `rectangle`, `pie` and `line` elements, each with a deterministic seed so not a single hatch line or rough stroke jumps on unpack.
 
@@ -67,6 +67,8 @@ export type ClipartPart =
           strokeSlot?: ClipartColorSlot | null; // null = no stroke
           strokeWeight?: number; // multiplier on element.strokeWidth (default 1)
            hatchable?: boolean; // true for primary/secondary/accent fills; false for tiny eyes/highlights
+          resizeX?: ClipartResize; // default 'scale' (§ 6)
+          resizeY?: ClipartResize;
       }
     | {
           kind: 'ellipse' | 'rectangle' | 'diamond' | 'pie' | 'line';
@@ -77,16 +79,25 @@ export type ClipartPart =
           strokeSlot?: ClipartColorSlot | null;
           strokeWeight?: number;
           hatchable?: boolean;
+          resizeX?: ClipartResize;
+          resizeY?: ClipartResize;
       };
+
+// How a part follows the element's box along one axis (§ 6). 'scale' is every illustration's: the part scales with
+// the box. 'start' and 'end' keep the part at its edge at the size it has at the asset's own aspect ratio, measured
+// against the other axis, so a banner's folded end grows with the banner's height and not with its width. 'fill'
+// takes what the pinned parts leave.
+export type ClipartResize = 'scale' | 'start' | 'end' | 'fill';
 
 export type ClipartAsset = {
     id: string; // e.g. 'person-idea', 'retro-pc', 'floppy-disk', 'trophy-gold', 'banner-scroll'
     title: string;
-    category: 'people' | 'office' | 'tech' | 'metaphors' | 'badges' | 'arrows-callouts';
+    category: 'people' | 'office' | 'tech' | 'metaphors' | 'badges' | 'arrows-callouts' | 'poster';
     keywords: readonly string[]; // feeds picker search and canvas ⌘F searchText
     aspectRatio: number; // default width / height
     defaultSlots: Partial<Record<ClipartColorSlot, string>>; // nostalgic 2000s default hex colors
     parts: readonly ClipartPart[];
+    textPart?: string; // the key of the closed part the element's text sits in (§ 6)
 };
 ```
 
@@ -159,13 +170,27 @@ To guarantee an authentic, cohesive 2000s aesthetic with zero AI artifacts (no s
    - At most **64 path commands** per `path` part.
    - Every hole must use opposite winding so `fill-rule="nonzero"` works in roughjs, browsers, WeasyPrint and PowerPoint alike.
    - Prefer native `ellipse`, `rectangle`, `diamond`, `pie` and `line` parts wherever a sub-shape is geometric, reserving `path` for true Bézier contours. This makes **Convert to shapes** yield clean ellipses and rectangles for wheels, screens, buttons and papers!
-2. **Initial ~60-asset starter pack across 6 categories**:
+2. **Initial ~75-asset starter pack across 7 categories**, plus the shape gallery's presets (§ 6):
    - *Stick people (16)*: Idea (lightbulb overhead), Confused (`?`), Sprinting with briefcase, Lifting heavy weight, Cheering (arms up), Jumping, Holding a trophy, Presenting at board, Magnifying glass detective, Juggling, Megaphone announcer, High-five pair. Cheering, Jumping and Holding a trophy double as rewards in [PROPOSAL_CELEBRATIONS.md](PROPOSAL_CELEBRATIONS.md). Four calm ones are for the apps' empty states ([PROPOSAL_CELEBRATIONS.md](PROPOSAL_CELEBRATIONS.md#stick-figures-in-the-empty-states)): Feet up on an empty desk, Sweeping with a broom, Holding Schrödinger's box (closed, a question mark on its side), Waving.
    - *Retro Tech (12)*: Beige CRT monitor, 3.5" floppy disk, CD-ROM with rainbow glint, Dot-matrix printer, Flip phone, Classic mouse, Server rack, Dial-up modem / globe-on-wire, Keyboard, Cassette tape, Battery, Retro laptop.
    - *Office & Desk (12)*: Rolodex, Red swingline stapler, Coffee mug ("#1"), Manila folder, Clipboard with checklist, Filing cabinet, Calculator, Pushpin, Paperclip (non-trademarked loop), Desk lamp, Hourglass, Briefcase.
    - *Metaphors & Targets (10)*: Bullseye with dart, Key & padlock, Magnet pulling coins, Puzzle pieces locking, Lightbulb, Gear pair, Trophy cup, Rocket launch, Anchor, Compass.
    - *Badges & Banners (8)*: 3D ribbon scroll, Starburst ("NEW"), Wax seal with ribbons, Checkmark shield, Warning triangle, Gold medal, Price tag, Certificate frame.
+   - *Poster (12)*: Ribbon banner with folded ends, Double-fold ribbon, Streamers, Bunting (short and long), Laurel wreath, Crossed arrows, Sunburst rays, Mountain badge, Wheat sprig, Double ring, "Est." plate between rules, Divider with a diamond (§ 6).
    - *Callouts & Pointers (6)*: Comic speech cloud, Jagged shout burst, Pointing manicule hand, Curved 3D-style block arrow, Question/Exclamation pair, Sticky note with tape.
+
+### 6. Poster pieces
+
+People make posters, invitations and title slides from building blocks: a ribbon banner with a name on it, a pennant, a badge, a row of bunting. PowerPoint has a whole Stars and Banners group of shapes for this. They come in two kinds, and each gets the mechanism that fits it.
+
+**A shape gallery of single outlines.** Pennant, name plate, flag, tag, ticket, shield, hexagon badge, scalloped seal, speech bubble, flat ribbon, arrow banner. Each is one closed path, so it goes on the canvas as a plain `path` element, not as a clipart: fill, stroke, sketch and text already work on a closed path ([CANVAS.md § Text is one block that a text box and the closed shapes share](../CANVAS.md#text-is-one-block-that-a-text-box-and-the-closed-shapes-share)), and a simple outline stretches cleanly with its unit box. No tool draws a path today, so the gallery is also the path kind's first way in. The presets live in `@workspace/lib/clipart` as `SHAPE_PRESETS`, under the same geometry budget and winding rule as the catalog, and **Insert › Shapes…** places one. It needs no new kind, so it can ship before the `clipart` kind (Phase 1.5).
+
+**Part-based pieces in a Poster category.** A ribbon banner with folded ends and a shaded back, streamers, bunting, a laurel wreath, crossed arrows, sunburst rays, a divider with a diamond or dots. These are cliparts, with two additions to the format:
+
+- **Resize rules per part** (`resizeX`, `resizeY`). A part pinned to `start` or `end` keeps its edge and its proportions, and a `fill` part takes the room between, the way 9-slice scaling works. So a banner made wider keeps its folded ends and only its band grows. An asset with a `fill` part starts with its aspect lock off, since being stretched is its purpose. Convert to shapes lays the parts out at the current box first, so the unpacked shapes sit exactly where the clipart drew them. Bunting and streamers have no part to repeat, so their flags widen with the box; the catalog can offer two lengths.
+- **A text slot** (`textPart`). The `clipart` element composes the `Textual` block, as the closed shapes do, and lays its text out in that part's box. A click on a banner and typing then works as on a rectangle. Convert to shapes moves the text onto that part, a closed path or rectangle that holds text itself, so nothing is lost.
+
+**Logo motifs.** The badge style of craft-beer and coffee logos fits here, as generic motifs drawn our own way: a laurel wreath, crossed arrows, sunburst rays, a mountain triangle, a wheat sprig, double rings, an "Est. 2026" plate between two rules, a row of stars. Nothing is traced from a real logo. That style also rests on text set along a circle or an arch, which the canvas cannot do: text on a curve is its own feature with its own [ROADMAP.md](../ROADMAP.md) row. Without it, a badge still takes straight text, which is half of that look. And it rests on its fonts, condensed sans, slab serif and script, so which of them Eigen bundles matters as much as the shapes.
 
 ## Security, Limits and Validation
 
@@ -177,23 +202,29 @@ To guarantee an authentic, cohesive 2000s aesthetic with zero AI artifacts (no s
 
 1. **Add `clipart` (`VectorClipartElement`) as a composite canvas kind** following the `chart` architecture: pure `layoutClipart` → `VectorElement[]` in local space, painted through the shape kinds' own renderers, and unpacked via `KindSpec.toShapes` ("Convert to shapes" + `⌘⇧G`).
 2. **Color model for `clipart`**: keep the asset's multi-slot 2000s palette (`primary`, `secondary`, `accent`, `surface`, `ink`) with per-slot overrides in the panel, while wiring the standard **Fill** block (hatch style + primary/monotone fill), **Stroke** block (ink color, width, dash, optional off) and **Sketch** block (`roughness`) directly to the element's base fields.
-3. **Ship an initial ~60-asset curated library** in `@workspace/lib/clipart`, compiled and budget-checked at build time with zero external network dependencies.
+3. **Ship an initial ~75-asset curated library** in `@workspace/lib/clipart`, compiled and budget-checked at build time with zero external network dependencies.
+4. **Poster pieces** (§ 6): single-outline presets inserted as plain `path` elements, and in the clipart format the per-part resize rules and the text slot.
 
 ## Phasing
 
 Each phase is self-contained and verifiable with `bun run check`.
 
+1. **Phase 1.5: The shape gallery (S–M).**
+   - `SHAPE_PRESETS` in `@workspace/lib/clipart` with the twelve single-outline presets of § 6, budget- and winding-checked.
+   - **Insert › Shapes…** in Slides and Vector places one as a `path` element, with the host's style defaults and an empty text block.
+   - Tests: every preset parses through `parseNormalizedPath`, holds text, and exports to pptx as a `custGeom` with its text.
 2. **Phase 2: Clipart model, `clipart` kind and Convert to shapes (M).**
    - Create `packages/lib/src/clipart/` (`@workspace/lib/clipart` BE-safe subpath) with `ClipartAsset` types, `layoutClipart`, `parseClipartColors` and the first 12 reference assets (2 per category).
    - Implement `packages/lib/src/vector/kinds/clipart.ts`, `clipart-render.ts` and `clipart-convert.ts` (`toShapes: clipartToElements`), plus `case 'clipart'` in `to-pptx.ts`.
    - Wire `⌘⇧G` (`Ctrl+Shift+G`) in `use-canvas-keyboard.ts` to `convertElementToShapes` for any single selected unpackable element (works for both `chart` and `clipart`).
-   - Unit tests for paint parity (clipart vs unpacked shapes are byte-identical up to element IDs), seed determinism, undo/redo of Convert to shapes, and placeholder fallback for unknown `clipartId`.
+   - The resize rules (`resizeX`, `resizeY`) in `layoutClipart` and the text slot (`textPart`, the element composing `Textual`), since both change the format and are cheapest before any clipart is stored.
+   - Unit tests for paint parity (clipart vs unpacked shapes are byte-identical up to element IDs), seed determinism, undo/redo of Convert to shapes, and placeholder fallback for unknown `clipartId`. A pinned part keeps its size when the box widens, and Convert to shapes moves the text onto the slot's part.
 3. **Phase 3: Clipart Picker UI & Properties Panel (S–M).**
    - Add `ClipartPanelSection` in `packages/ui/src/components/vector/kinds/clipart.tsx` (slot color swatches, Reset colors, Swap clipart, Convert to shapes).
    - Add the Clipart Picker dialog and `Insert → Clipart…` in `CanvasToolbar` + `CanvasHandle.insertClipart`.
    - Update `useAspectLock` so `clipart` defaults to aspect-locked on resize like `image`.
 4. **Phase 4: Full 2000s Clipart Catalog & Docs (M).**
-   - Expand the catalog to ~60+ assets across the 6 nostalgic categories, validated by `scripts/build-clipart.ts` (part count, command count, winding order, native primitive preference).
+   - Expand the catalog to ~75 assets across the 7 categories, the Poster category included, validated by `scripts/build-clipart.ts` (part count, command count, winding order, native primitive preference).
    - Update `docs/CANVAS.md`, `docs/SLIDES.md`, `docs/EXPORT.md` and the help center articles (`apps/index/src/data/support/`).
 
 ## Testing
