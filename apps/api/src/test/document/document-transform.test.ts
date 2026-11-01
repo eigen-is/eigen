@@ -495,10 +495,10 @@ describe('document transform (eigensheets preview)', () => {
 });
 
 // The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
-// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved by clipping only
-// the cells whose text can pass their rows).
-const GOLDEN_EXPORT_HTML_SHA256 = '4d987ae8d45dd43720f67c95991509f573197cc69ba11cbff4db7d7c81d12ebd';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '72914e5497fcdb8d5183be54c7862fa2ca70d5cfc36bd2998c3a3fd78eb81fb8';
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved when it stopped
+// embedding the faces it does not draw in).
+const GOLDEN_EXPORT_HTML_SHA256 = '5fd73d273ad5a3a8c476a3384ac2a8e15363ac42b833e14366d6815523c885a3';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = '3e5ff3028cd20ca46f2f68866dbec4fe9ce9129b53bfd3d9cae19d27366f062b';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -870,11 +870,11 @@ const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6a936e9608db69c4726650044fc086f061764
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
-// The HTML download embeds canvas-text.css whole, its comments too, so it last moved with its header comment. The
-// PDF's last moved when the golden image went in as a JPEG made from its source instead of its WebP preview.
+// The HTML download embeds canvas-text.css whole, its comments too. The HTML download and the PDF's last moved when
+// they stopped embedding the faces the deck does not draw in.
 const GOLDEN_DECK_PREVIEW_SHA256 = '14a851a54c70cb0e2514152aa405306b4944faf182170c6e48ee70c4095f8035';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'ecaf8cfcc7d68e1388c6c291039d74a500b894a6bb5bccbe3dd5ffb5c6aab5d6';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'c160dfae9d26c67fe924166b5f6786cdbcd4035dff0646a62463a4d517f1fb78';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = 'a1c55d7e66406de2c759606e088018883b0980e06ca462dea78b414a46b4a9cd';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'dd6cbd06779c78772c31bf6d762404da0ec11540ae55fc82bab7c1c5a96baa45';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.
