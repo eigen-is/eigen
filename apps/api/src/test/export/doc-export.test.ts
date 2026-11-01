@@ -1,5 +1,6 @@
 import { describe, expect, mock, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import { chartFontSize, FLAT_CHART_LOOK, newChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
@@ -18,6 +19,7 @@ import { MATHML_NAMESPACE, writeMathml, writeText } from '@workspace/math';
 import { JSDOM } from 'jsdom';
 import sharp from 'sharp';
 import * as Y from 'yjs';
+import { docSchema } from '../../lib/document/doc-schema';
 import * as storedEquation from '../../lib/document/equation';
 import { proseValue } from '../../lib/document/prose-css';
 import { toTransferableText } from '../../lib/document/transform/protocol';
@@ -2062,6 +2064,45 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 
 // D16: an unformatted paragraph draws the doc's Normal, and a paragraph's own format still wins. The line is measured
 // as drawn: WeasyPrint 68 stores a computed line height as ('NUMBER', x) and 70 as a float.
+// What WeasyPrint prints on the line of each entry: its text boxes, the leader's and the page number's among them, with
+// the right edge of each and of the text column.
+(weasyPrint && python !== null ? describe : describe.skip)(
+    'doc export — table of contents layouts (WeasyPrint)',
+    () => {
+        const entryLine = async (attrs: Record<string, unknown>) => {
+            const html = await pdfHtml(
+                { type: 'tableOfContents', attrs: { levels: 1, ...attrs } },
+                { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Intro' }] },
+            );
+            const lines = await laidOut(
+                html,
+                "if tag == 'article': print('COLUMN', round(box.content_box_x() + box.width))\n        if tag == 'nav':\n            line = next(b for b in walk(box) if type(b).__name__ == 'LineBox')\n            for text in [b for b in walk(line) if type(b).__name__ == 'TextBox']: print('TEXT', round(text.position_x + text.width), repr(text.text))",
+            );
+            const column = Number(lines.find((line) => line.startsWith('COLUMN'))?.split(' ')[1]);
+            const boxes = lines
+                .filter((line) => line.startsWith('TEXT'))
+                .map((line) => {
+                    const [, right, ...text] = line.split(' ');
+                    return { right: Number(right), text: text.join(' ') };
+                });
+            return { column, boxes };
+        };
+
+        test('Dotted leads with dots to the number at the edge, Plain text with none, and Links prints no number', async () => {
+            const dotted = await entryLine({});
+            expect(dotted.boxes.filter(({ text }) => text === "'.'").length).toBeGreaterThan(10);
+            expect(dotted.boxes.at(-1)?.text).toBe("'1'");
+            const plain = await entryLine({ leader: 'none' });
+            expect(plain.boxes.some(({ text }) => text.includes('.'))).toBe(false);
+            expect(dotted.boxes.at(-1)?.right).toBe(plain.boxes.at(-1)?.right);
+            expect(plain.boxes.at(-1)?.text).toBe("'1'");
+            expect(Math.abs((plain.boxes.at(-1)?.right ?? 0) - plain.column)).toBeLessThan(2);
+            const links = await entryLine({ pageNumbers: false });
+            expect(links.boxes.map(({ text }) => text)).toEqual(["'Intro'"]);
+        }, 60_000);
+    },
+);
+
 (weasyPrint && python !== null ? describe : describe.skip)('doc export — the Normal (WeasyPrint)', () => {
     test('an unformatted paragraph draws in the Normal: its font, size, line and spacing', async () => {
         const { data } = await renderEigendocExport(
@@ -2940,5 +2981,118 @@ describe('doc export — the table of contents', () => {
         const kept = sanitizeExportHtml(html);
         expect(kept).toContain('href="#h-1"');
         expect(kept).toContain('id="h-1"');
+    });
+});
+
+// A table of contents' look: Google's three layouts over Word's two facts, and a font, size, bold and italic per level.
+describe("doc export — a table of contents' look", () => {
+    const heading = (level: number, text: string): JSONContent => ({
+        type: 'heading',
+        attrs: { level },
+        content: [{ type: 'text', text }],
+    });
+    const toc = (attrs: Record<string, unknown> = {}): JSONContent => ({
+        type: 'tableOfContents',
+        attrs: { levels: 3, ...attrs },
+    });
+    const tocDoc = (attrs: Record<string, unknown> = {}, pageless = false) => {
+        const doc = seededDoc({ type: 'doc', content: [toc(attrs), heading(1, 'Intro'), heading(2, 'Method')] });
+        if (pageless) doc.getMap(PAGE_ROOT).set('pageless', true);
+        return doc;
+    };
+    const navOf = async (format: 'html' | 'pdf-html', doc: Y.Doc) => {
+        const nav = new JSDOM(await exported(format, doc)).window.document.querySelector(
+            'nav[data-type="table-of-contents"]',
+        );
+        if (!nav) throw new Error('no table of contents');
+        return nav;
+    };
+    const entryStyles = (nav: Element) =>
+        [...nav.querySelectorAll('[data-level]')].map((entry) => entry.getAttribute('style'));
+    const LINK = `color: ${proseValue('.eigen-prose a', 'color')}; text-decoration: ${proseValue('.eigen-prose a', 'text-decoration')}`;
+
+    // The bytes the exports wrote before the node stored a look, as written at 8bac3376b.
+    test.each(['html', 'pdf-html'] as const)('%s draws one with only the defaults as it did before', async (format) => {
+        const defaults = { pageNumbers: true, leader: 'dot', level1: null, level2: null };
+        for (const doc of [tocDoc(), tocDoc(defaults)]) {
+            const html = await exported(format, doc);
+            expect(html).toContain(
+                '<nav data-type="table-of-contents" data-levels="3"><a href="#h-1" data-level="1">Intro</a><a href="#h-2" data-level="2">Method</a></nav>',
+            );
+            const css = await exportStyle(format, doc);
+            expect(css.match(/a::after/g) ?? []).toHaveLength(format === 'pdf-html' ? 1 : 0);
+            if (format === 'pdf-html')
+                expect(css).toContain(
+                    `\n[data-type="table-of-contents"] a::after { content: leader('.') target-counter(attr(href), page); }\n`,
+                );
+        }
+    });
+
+    test.each(['html', 'pdf-html'] as const)("%s draws each level's entries in its look", async (format) => {
+        const doc = tocDoc({ level1: { font: 'Source Serif 4', size: 14, bold: true }, level2: { italic: true } });
+        const nav = await navOf(format, doc);
+        const bold = proseValue('.eigen-prose strong', 'font-weight');
+        expect(entryStyles(nav)).toEqual([
+            `font-family: ${getFontFamily('Source Serif 4')}; font-size: 14pt; font-weight: ${bold}`,
+            'font-style: italic',
+        ]);
+        // The level's face is embedded, as a font mark's is.
+        expect(await exportStyle(format, doc)).toContain('font-family: "Source Serif 4"');
+    });
+
+    test('the PDF draws Plain text as right-aligned numbers with no leader', async () => {
+        const doc = tocDoc({ leader: 'none' });
+        expect((await navOf('pdf-html', doc)).getAttribute('data-preset')).toBe('plain');
+        expect(await exportStyle('pdf-html', doc)).toContain(
+            `[data-type="table-of-contents"][data-preset="plain"] a::after { content: leader(' ') target-counter(attr(href), page); }`,
+        );
+        expect(entryStyles(await navOf('pdf-html', doc))).toEqual([null, null]);
+    });
+
+    test.each(['html', 'pdf-html'] as const)(
+        '%s draws Links in the link colour, and the PDF with no numbers',
+        async (format) => {
+            const doc = tocDoc({ pageNumbers: false, level2: { bold: true } });
+            const nav = await navOf(format, doc);
+            expect(nav.getAttribute('data-preset')).toBe('links');
+            const bold = proseValue('.eigen-prose strong', 'font-weight');
+            expect(entryStyles(nav)).toEqual([LINK, `font-weight: ${bold}; ${LINK}`]);
+            if (format === 'pdf-html')
+                expect(await exportStyle(format, doc)).toContain(
+                    '[data-type="table-of-contents"][data-preset="links"] a::after { content: none; }',
+                );
+        },
+    );
+
+    // Its stored facts stay on the nav, so a paste of the download back into Docs keeps them for when pages return.
+    test.each(['html', 'pdf-html'] as const)(
+        '%s of a page-less doc draws Links whatever the node stores',
+        async (format) => {
+            const nav = await navOf(format, tocDoc({ leader: 'none' }, true));
+            expect(nav.getAttribute('data-preset')).toBe('links');
+            expect(nav.getAttribute('data-leader')).toBe('none');
+            expect(nav.hasAttribute('data-page-numbers')).toBe(false);
+            expect(entryStyles(nav)).toEqual([LINK, LINK]);
+        },
+    );
+
+    test("the HTML download's nav carries what the node stores, so a paste back into Docs keeps it", async () => {
+        const attrs = { pageNumbers: false, leader: 'none', level3: { font: 'Excalifont', size: 9 } };
+        const nav = await navOf('html', tocDoc(attrs));
+        const clipboard = nav.ownerDocument.createElement('div');
+        clipboard.append(nav);
+        const pasted = PMDOMParser.fromSchema(docSchema()).parse(clipboard).firstChild;
+        expect(pasted?.type.name).toBe('tableOfContents');
+        expect(pasted?.attrs).toMatchObject(attrs);
+    });
+
+    test("the preview draws the looks too, its entries plain text, and a page-less doc's as Links", () => {
+        const json = { type: 'doc', content: [toc({ level1: { italic: true } }), heading(1, 'Intro')] };
+        const { body } = new JSDOM(renderDocHtml(json, () => null, { lazy: true })).window.document;
+        expect(body.querySelector('nav span[data-level="1"]')?.getAttribute('style')).toBe('font-style: italic');
+        const { body: pageless } = renderEigendocPreviewBody(tocDoc({}, true), new Map());
+        const preview = new JSDOM(pageless).window.document.querySelector('nav');
+        expect(preview?.getAttribute('data-preset')).toBe('links');
+        expect(preview ? entryStyles(preview) : []).toEqual([LINK, LINK]);
     });
 });

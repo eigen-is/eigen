@@ -3,7 +3,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
-import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { BandRoot, NormalStyle, PageSetup, TocPreset } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
     columnFit,
@@ -43,7 +43,7 @@ import { withSvgFallbacks } from '../export-image';
 import { exportHtmlDocument } from '../html-document';
 import { renderEquations, svgEquations } from './equations';
 import { figureMediaKey, pastedFigureMedia } from './pasted-media';
-import { renderDocHtml, withAbsoluteLinks } from './render';
+import { renderDocHtml, TOC_PRESET_ATTRIBUTE, withAbsoluteLinks } from './render';
 
 // HTML and PDF render the same document: WeasyPrint prints what the HTML download serves, but for the small caps the
 // PDF fakes and the equations it draws as SVG. The docx writer loads lazily, so an HTML export never evaluates it, its
@@ -106,6 +106,7 @@ export async function renderEigendocExport(
                     pageFootnotes: pageNotes,
                     band: part !== 'body',
                     anchors: part === 'body',
+                    pageless: page.pageless,
                     equations,
                 },
             );
@@ -118,7 +119,7 @@ export async function renderEigendocExport(
     const html = exportHtmlDocument({
         title,
         fonts: usedFamilies(body, style),
-        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? `${PAGE_NUMBER_CSS}${TOC_CSS}` : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
+        css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? `${PAGE_NUMBER_CSS}${tocCss(body)}` : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
     return { data: toTransferableText(html), warnings };
@@ -277,11 +278,28 @@ const PAGE_NUMBER_CSS = `
 [data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
 `;
 
-// A table of contents entry's page number, after a dotted leader to the right edge. attr() reads the link's #h-N; in the
-// head, as the sanitizer strips attr() from a body's CSS.
+// A table of contents entry's page number at the right edge: after a dotted leader in the Dotted layout, after spaces in
+// Plain text, and none in Links. attr() reads the link's #h-N; in the head, as the sanitizer strips attr() from a
+// body's CSS. The rule of Plain text or Links comes only with a table of contents the body draws in it, which the
+// renderer's data-preset marks, so a doc without one prints as before.
 const TOC_CSS = `
 [data-type="table-of-contents"] a::after { content: leader('.') target-counter(attr(href), page); }
 `;
+
+const TOC_PRESET_NUMBERS: [TocPreset, string][] = [
+    ['plain', "leader(' ') target-counter(attr(href), page)"],
+    ['links', 'none'],
+];
+
+function tocCss(body: string): string {
+    let css = TOC_CSS;
+    for (const [preset, content] of TOC_PRESET_NUMBERS) {
+        const attribute = `${TOC_PRESET_ATTRIBUTE}="${preset}"`;
+        if (body.includes(attribute))
+            css += `[data-type="table-of-contents"][${attribute}] a::after { content: ${content}; }\n`;
+    }
+    return css;
+}
 
 // A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google
 // prints it. The note inherits from its reference's paragraph, a heading's, a title's, a quote's or a list item's, and
