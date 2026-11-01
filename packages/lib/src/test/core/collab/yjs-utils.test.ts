@@ -101,6 +101,22 @@ describe('restoreYjsDoc', () => {
         );
     });
 
+    test('keeps a node attribute that is a number, a boolean or an object as it is', () => {
+        const target = new Y.Doc();
+        const toc = new Y.XmlElement('tableOfContents');
+        target.getXmlFragment('default').insert(0, [toc]);
+        // Yjs types a fragment's element attributes as strings, but y-tiptap writes each as its JSON value.
+        const attrs = { levels: 2, pageNumbers: false, level1: { bold: true } };
+        for (const [name, value] of Object.entries(attrs)) Reflect.apply(toc.setAttribute, toc, [name, value]);
+
+        const live = new Y.Doc();
+        restoreYjsDoc(live, Y.encodeStateAsUpdate(target), { default: 'xmlfragment' });
+
+        const restored = live.getXmlFragment('default').get(0);
+        const restoredAttrs: unknown = restored instanceof Y.XmlElement && restored.getAttributes();
+        expect(restoredAttrs).toEqual(attrs);
+    });
+
     test('restores XmlFragment when target side is AbstractType (server snapshot)', () => {
         // Mirror of the AbstractType regression for Map/Array, applied to XmlFragment.
         const seed = new Y.Doc();

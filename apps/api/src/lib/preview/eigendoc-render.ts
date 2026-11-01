@@ -36,8 +36,10 @@ export function renderEigendocPreviewBody(
     const truncated = kept.length < blocks.length;
     const content = truncated ? { ...json, content: kept } : json;
 
+    const page = readEigendocPage(doc);
     const html = renderDocHtml(content, (mediaName, src) => (mediaName ? (mediaUrls.get(mediaName) ?? null) : src), {
         lazy: true,
+        pageless: page.pageless,
     });
 
     const warnings: TransformWarning[] = [];
@@ -46,7 +48,7 @@ export function renderEigendocPreviewBody(
 
     return {
         body: applyPreviewByteGuard(body, warnings),
-        page: readEigendocPage(doc),
+        page,
         style: readEigendocStyle(doc),
         warnings,
     };

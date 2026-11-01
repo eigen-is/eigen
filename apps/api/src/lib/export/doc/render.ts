@@ -38,15 +38,22 @@ import {
     readOutline,
     readPageNumberKind,
     readTextBoxAttrs,
+    readTocLevelStyle,
     readTocLevels,
     TEXT_BOX_PARAGRAPH,
+    TOC_LEVEL_KEYS,
+    TOC_PRESET_ATTRIBUTE,
     textBoxHTMLAttributes,
+    tocLevelCss,
+    tocPreset,
 } from '@workspace/lib/docs/eigendoc';
+import { isRecord } from '@workspace/lib/guards';
 import { escapeHtml } from '@workspace/lib/html';
 import { docExtensions, inEditorMarkOrder } from '../../document/doc-schema';
 import { nodeLook, QUOTE_LOOK } from '../../document/looks';
 import type { CodeHighlighter } from '../../document/lowlight';
 import { codeHighlighter, hastToHtml } from '../../document/lowlight';
+import { proseValue } from '../../document/prose-css';
 import { hasSmallCaps } from '../fonts';
 import { renderEquations } from './equations';
 
@@ -60,7 +67,8 @@ type FigureImgSrcResolver = (mediaName: string | null, src: string | null) => st
 // preview draws one as the editor does. `smallCapsFont` fakes small caps where the font has none, and the screen lists
 // the notes after the body unless `pageFootnotes` floats them to their pages. A `band` is a header or a footer, where
 // no figure is positioned. With `anchors` each outline heading carries the id `h-N` that a table of contents links to:
-// an export's body only, as the PDF places the bands before it, where a band's id would be taken twice.
+// an export's body only, as the PDF places the bands before it, where a band's id would be taken twice. A `pageless`
+// doc's table of contents draws as Links.
 export function renderDocHtml(
     json: JSONContent,
     resolveImgSrc: FigureImgSrcResolver,
@@ -72,6 +80,7 @@ export function renderDocHtml(
         pageFootnotes?: boolean;
         band?: boolean;
         anchors?: boolean;
+        pageless?: boolean;
         equations?: ({ node }: { node: Node }) => string;
     },
 ): string {
@@ -98,7 +107,7 @@ export function renderDocHtml(
                 footnote:
                     footnotes?.reference ?? (({ node, renderElement }) => renderFootnoteSpans(node, renderElement)),
                 tableOfContents: ({ node }) =>
-                    renderTableOfContents(readTocLevels(node.attrs['levels']), outline, anchors),
+                    renderTableOfContents(node, outline, { anchors, pageless: options?.pageless ?? false }),
                 ...((options?.print || anchors) && {
                     heading: ({ node, children }) =>
                         renderHeading(node, children, {
@@ -301,19 +310,39 @@ function renderHeading(
     return html.replace(/^<h[1-6]/, (open) => `${open}${attrs}`);
 }
 
-// The body's headings to the node's level, each a block indented by its level: a link to its heading's id with
-// `anchors`, and plain text in the preview, whose DOM is live in the drive's page. The PDF's head draws each page
-// number after its link (TOC_CSS).
-function renderTableOfContents(levels: number, outline: OutlineHeading[], anchors: boolean): string {
+// The body's headings to the node's level, each a block indented by its level. With `anchors` an entry is a link to its
+// heading's id. In the preview it is plain text, as the preview's DOM is live in the drive's page. Each entry draws in
+// its level's look, and one with none draws as the body text, so an untouched one renders as it did. The nav carries the
+// node's stored attributes as its renderHTML writes them, so a paste of the download back into Docs keeps them. It also
+// names the layout it draws in when that is not Dotted. The stylesheet draws Links by that name, and the PDF's head
+// draws the page numbers by it.
+function renderTableOfContents(
+    node: Node,
+    outline: OutlineHeading[],
+    { anchors, pageless }: { anchors: boolean; pageless: boolean },
+): string {
+    const levels = readTocLevels(node.attrs['levels']);
+    const preset = tocPreset(node.attrs, pageless);
+    const looks = TOC_LEVEL_KEYS.map((key) => {
+        const css = tocLevelCss(readTocLevelStyle(node.attrs[key]), BOLD_WEIGHT);
+        return css ? ` style="${escapeHtml(css)}"` : '';
+    });
     const entries = outline.map(({ level, text }, index) => {
         if (level > levels) return '';
         const content = escapeHtml(text);
+        const look = looks[level - 1] ?? '';
         return anchors
-            ? `<a href="#h-${index + 1}" data-level="${level}">${content}</a>`
-            : `<span data-level="${level}">${content}</span>`;
+            ? `<a href="#h-${index + 1}" data-level="${level}"${look}>${content}</a>`
+            : `<span data-level="${level}"${look}>${content}</span>`;
     });
-    return `<nav data-type="table-of-contents" data-levels="${levels}">${entries.join('')}</nav>`;
+    const spec = node.type.spec.toDOM?.(node);
+    const stored = Array.isArray(spec) && isRecord(spec[1]) ? spec[1] : {};
+    const drawn = preset === 'dotted' ? {} : { [TOC_PRESET_ATTRIBUTE]: preset };
+    return domOutputSpecToHTMLString(['nav', { ...stored, ...drawn }, 0])(entries.join(''));
 }
+
+// The weight a bold mark draws at in the export.
+const BOLD_WEIGHT = proseValue('.eigen-prose strong', 'font-weight');
 
 // The size Chromium and WebKit draw the small caps they synthesize at, so the PDF's match the editor's.
 const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';

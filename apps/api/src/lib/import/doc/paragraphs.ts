@@ -57,7 +57,7 @@ import type { Item, ParagraphItem } from './assemble';
 import { buildBlocks, isFigureOnly, isWhitespace, paraOf, placeAnchors } from './assemble';
 import { isFill, isLightNeutral, markColor } from './colors';
 import type { FontTable, Theme } from './docx-fonts';
-import { byFace, fontMark, isMonospaceFont, readFontTable, readTheme } from './docx-fonts';
+import { byFace, fontMark, isMonospaceFont, latinFace, readFontTable, readTheme } from './docx-fonts';
 import type { DocxChart } from './drawings';
 import type { Numbering } from './numbering';
 import { readNumbering } from './numbering';
@@ -67,6 +67,7 @@ import type { Field, OpenToc, Piece, RunContext, TocCut } from './runs';
 import { walkInline } from './runs';
 import type { DocxRunProps, ParaProps, Role } from './styles';
 import { mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
+import { entryLeads, tableOfContentsAttrs } from './table-of-contents';
 import { readTable } from './tables';
 
 // The elements that only wrap content, such as a content control's or a tracked insertion's: their children are read
@@ -148,7 +149,7 @@ export function createReader(
     const page = { ...size, differentFirstPage: pkg.titlePg, pageless: pkg.webView };
     // A size past the range lands in it, as a run's does.
     const bodySize = 2 * (readFontSize((body.size ?? DEFAULT_RUN_SIZE) / 2) ?? DEFAULT_RUN_SIZE / 2);
-    const font = fontMark(byFace(' ', body.fonts, body, false)[0]?.font, fontTable) ?? DOCUMENT_FONT;
+    const font = fontMark(latinFace(body), fontTable) ?? DOCUMENT_FONT;
     const para = mergePara(styles.docPara, styles.para(styles.defaultParagraph));
     // Single where no auto line is set, as Google Docs reads an at-least one; in the font's own line, as a paragraph's.
     const line = (para.lineRule ?? 'auto') === 'auto' ? (para.line ?? SINGLE_LINE) : SINGLE_LINE;
@@ -219,6 +220,7 @@ export function readDocument(reader: Reader): JSONContent[] {
     const scope: Scope = { part: reader.pkg.document, story: 'body', tables: 0 };
     // A table of contents the file never ends would take the rest of the doc with it.
     const items = [...readBlocks(reader, xmlElements(body), scope), ...abandonToc(reader)];
+    for (const toc of reader.tocs) toc.node.attrs = tableOfContentsAttrs(reader, toc);
     return placeAnchors(buildBlocks(items), reader.normal);
 }
 
@@ -408,7 +410,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             .map((piece) => (piece.kind === 'node' ? (piece.node.text ?? '') : ''))
             .join('');
         const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
-        if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) toc.saved.push(saved);
+        if (!saved.trim() || saved.trim() === NO_TOC_ENTRIES) continue;
+        toc.saved.push(saved);
+        toc.leads ??= entryLeads(mergePara(styled, direct));
     }
     // What the paragraph gives besides its own lines, such as its section break, which follows the result. A text box
     // an entry anchors is no entry: it keeps a paragraph of its own.
@@ -426,10 +430,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         first.toc.held.push({ cut: extras, whole: itemsOf(pieces, WHOLE) });
         return released;
     }
-    const tocItem = (toc: OpenToc): Item => ({
-        kind: 'block',
-        node: { type: 'tableOfContents', attrs: { levels: toc.levels } },
-    });
+    const tocItem = (toc: OpenToc): Item => ({ kind: 'block', node: toc.node });
     // A result begun above and ended here gives what it held.
     const items = cuts.flatMap(({ toc, opened, to }) =>
         opened || to === undefined ? [] : toc.held.flatMap(({ cut }) => cut),
@@ -575,8 +576,7 @@ function paragraphItems(
     const line = autoLine(props);
     const baseLine = autoLine(base);
     const mark: RunFace = {
-        family:
-            fontMark(byFace(' ', paraRun.fonts, paraRun, false)[0]?.font, reader.fontTable, normal.font) ?? normal.font,
+        family: fontMark(latinFace(paraRun), reader.fontTable, normal.font) ?? normal.font,
         size: paraRun.size ?? DEFAULT_RUN_SIZE,
     };
     // Every run the writer counts: each run of text, whitespace too, and a field or a note reference in the style's run;
@@ -787,7 +787,7 @@ function isMonospace(reader: Reader, p: XmlElement, paraRun: DocxRunProps): bool
     const faces = textFaces(reader, p, paraRun);
     if (faces.length > 0) return faces.every((face) => isMonospaceFont(face.font, reader.fontTable));
     const mark = mergeRun(paraRun, readRunProps(wChild(wChild(p, 'pPr'), 'rPr'), reader.theme));
-    return isMonospaceFont(byFace(' ', mark.fonts, mark, false)[0]?.font, reader.fontTable);
+    return isMonospaceFont(latinFace(mark), reader.fontTable);
 }
 
 function splitAtBreaks(pieces: Piece[]): Piece[][] {

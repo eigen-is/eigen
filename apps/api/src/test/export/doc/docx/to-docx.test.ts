@@ -3486,6 +3486,147 @@ describe('docx writer — table of contents', () => {
     });
 });
 
+describe("docx writer — a table of contents' look", () => {
+    const toc = (attrs: Record<string, unknown> = {}): JSONContent => ({
+        type: 'tableOfContents',
+        attrs: { levels: 3, ...attrs },
+    });
+    const looked = (attrs: Record<string, unknown>) =>
+        doc(toc(attrs), heading(1, text('Intro')), heading(2, text('Method')));
+    // The field's paragraphs but its last, which only ends it.
+    const entries = async (json: JSONContent) => {
+        const content = child(only(xmlChildren(await bodyOf(json), W, 'sdt')), 'sdtContent');
+        if (!content) throw new Error('no w:sdtContent');
+        return xmlChildren(content, W, 'p').slice(0, -1);
+    };
+    const instructions = async (json: JSONContent) =>
+        (await entries(json)).flatMap((entry) => descendants(entry, W, 'instrText').map((i) => xmlText(i).trim()));
+    const tabsOf = (paragraph: XmlElement | undefined) => xmlOf(child(child(paragraph, 'pPr'), 'tabs'));
+    const rPrOf = (all: Map<string, XmlElement>, level: number) => xmlOf(child(style(all, `TOC${level}`), 'rPr'));
+
+    // The bytes a table of contents wrote before it stored a look, as written at 8bac3376b: its field, its entries and
+    // the toc styles. So one with only the defaults exports as it did.
+    test('one with only the defaults writes the field, the entries and the styles it did before', async () => {
+        const json = doc(toc(), heading(1, text('Intro')), p(text('x')), heading(2, text('Method')));
+        const field =
+            '<w:r><w:fldChar w:fldCharType="begin" w:dirty="true"/></w:r><w:r><w:instrText xml:space="preserve"> TOC \\o "1-3" \\h \\z \\u </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r>';
+        const entry = (number: number, name: string) =>
+            `<w:p><w:pPr><w:pStyle w:val="TOC${number}"/><w:tabs><w:tab w:val="right" w:leader="dot" w:pos="9638"/></w:tabs></w:pPr>${number === 1 ? field : ''}<w:hyperlink w:anchor="_Toc${number}" w:history="1"><w:r><w:t xml:space="preserve">${name}</w:t></w:r><w:r><w:tab/></w:r><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve"> PAGEREF _Toc${number} \\h </w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:hyperlink></w:p>`;
+        const zip = await unzip(json);
+        expect(entryText(zip, 'word/document.xml')).toContain(
+            `<w:sdt><w:sdtPr><w:docPartObj><w:docPartGallery w:val="Table of Contents"/><w:docPartUnique/></w:docPartObj></w:sdtPr><w:sdtContent>${entry(1, 'Intro')}${entry(2, 'Method')}<w:p><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p></w:sdtContent></w:sdt>`,
+        );
+        const written = entryText(zip, 'word/styles.xml');
+        expect(written).toContain(
+            '<w:style w:type="paragraph" w:styleId="TOC1"><w:name w:val="toc 1"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:before="0" w:after="66"/></w:pPr></w:style>',
+        );
+        expect(written).toContain(
+            '<w:style w:type="paragraph" w:styleId="TOC3"><w:name w:val="toc 3"/><w:basedOn w:val="Normal"/><w:next w:val="Normal"/><w:uiPriority w:val="39"/><w:unhideWhenUsed/><w:pPr><w:spacing w:before="0" w:after="66"/><w:ind w:left="660"/></w:pPr></w:style>',
+        );
+        // The attributes at their defaults, as a doc whose panel set them back stores them.
+        const defaults = { pageNumbers: true, leader: 'dot', level1: null, level6: null };
+        expect(docx(looked(defaults))).toEqual(docx(looked({})));
+    });
+
+    test('with no page numbers its field takes \\n and its entries hold no tab or PAGEREF', async () => {
+        const json = looked({ pageNumbers: false });
+        expect(await instructions(json)).toEqual(['TOC \\o "1-3" \\n \\h \\z \\u']);
+        for (const entry of await entries(json))
+            expect(descendants(entry, W, 'tab').filter((tab) => w(tab, 'pos') === undefined)).toEqual([]);
+    });
+
+    test("a leader of none is each entry's right tab and the toc styles' too", async () => {
+        const json = looked({ leader: 'none' });
+        const none = '<w:tabs><w:tab w:val="right" w:leader="none" w:pos="9638"/></w:tabs>';
+        for (const entry of await entries(json)) expect(tabsOf(entry)).toBe(none);
+        const all = await styles(json);
+        for (const level of [1, 2, 3, 4, 5, 6]) expect(tabsOf(style(all, `TOC${level}`))).toBe(none);
+        expect(await instructions(json)).toEqual([
+            'TOC \\o "1-3" \\h \\z \\u',
+            'PAGEREF _Toc1 \\h',
+            'PAGEREF _Toc2 \\h',
+        ]);
+    });
+
+    test("the toc styles take each level's look, and a level without one no run properties", async () => {
+        const all = await styles(
+            looked({
+                level1: { font: 'Source Serif 4', size: 14, bold: true },
+                level3: { italic: true },
+                level4: { bold: false, italic: false },
+            }),
+        );
+        expect(rPrOf(all, 1)).toBe(
+            '<w:rPr><w:rFonts w:ascii="Source Serif 4" w:hAnsi="Source Serif 4" w:eastAsia="Source Serif 4" w:cs="Source Serif 4"/><w:b/><w:bCs/><w:sz w:val="28"/><w:szCs w:val="28"/></w:rPr>',
+        );
+        expect(rPrOf(all, 3)).toBe('<w:rPr><w:i/><w:iCs/></w:rPr>');
+        for (const level of [2, 4, 5, 6]) expect(child(style(all, `TOC${level}`), 'rPr')).toBeUndefined();
+        expect(tabsOf(style(all, 'TOC1'))).toBe('');
+    });
+
+    test("a level's font is embedded in the face its entries draw in", async () => {
+        const fonts = entryText(
+            await unzip(looked({ level2: { font: 'JetBrains Mono', bold: true } })),
+            'word/fontTable.xml',
+        );
+        const mono = fonts?.slice(fonts.indexOf('w:name="JetBrains Mono"')) ?? '';
+        expect(mono.slice(0, mono.indexOf('</w:font>'))).toContain('<w:embedBold ');
+    });
+
+    // Its toc style names the font, so an entry Word's update adds draws in it.
+    test.each([
+        ['with no headings at all', doc(toc({ level1: { font: 'JetBrains Mono' } }), p(text('x')))],
+        [
+            'deeper than it lists',
+            doc(
+                toc({ levels: 1, level2: { font: 'JetBrains Mono' } }),
+                heading(1, text('Intro')),
+                heading(2, text('Sub')),
+            ),
+        ],
+    ])("a level's font is embedded %s", async (_what, json) => {
+        const zip = await unzip(json);
+        const fonts = entryText(zip, 'word/fontTable.xml');
+        const mono = fonts?.slice(fonts.indexOf('w:name="JetBrains Mono"')) ?? '';
+        expect(mono.slice(0, mono.indexOf('</w:font>'))).toContain('<w:embedRegular ');
+    });
+
+    test("only the first table of contents' look goes into the toc styles", async () => {
+        const all = await styles(
+            doc(
+                toc({ level1: { bold: true } }),
+                toc({ level1: { italic: true }, leader: 'none' }),
+                heading(1, text('A')),
+            ),
+        );
+        expect(rPrOf(all, 1)).toBe('<w:rPr><w:b/><w:bCs/></w:rPr>');
+        expect(tabsOf(style(all, 'TOC1'))).toBe('');
+    });
+
+    // Word always lays out pages, so the docx keeps what the node stores, which a page-less doc draws as Links.
+    test("a page-less doc's docx writes the facts the node stores", async () => {
+        const json = looked({ leader: 'none' });
+        const pageless = { ...DEFAULT_PAGE_SETUP, pageless: true };
+        const body = xmlChild(
+            await part(await unzip(json, undefined, undefined, pageless), 'word/document.xml'),
+            W,
+            'body',
+        );
+        expect(xmlOf(body)).toContain('TOC \\o "1-3" \\h \\z \\u');
+        expect(xmlOf(body)).toContain('w:leader="none"');
+        expect(xmlOf(body)).toContain('PAGEREF _Toc1 \\h');
+    });
+
+    // With no entries the styles still carry the look, so the import reads it back.
+    test('an empty one with a look writes the toc styles, and one without none', async () => {
+        const empty = (attrs: Record<string, unknown>) => doc(toc(attrs), p(text('No headings')));
+        expect([...(await styles(empty({}))).keys()].filter((id) => id.startsWith('TOC'))).toEqual([]);
+        const all = await styles(empty({ level2: { bold: true }, leader: 'none' }));
+        expect(rPrOf(all, 2)).toBe('<w:rPr><w:b/><w:bCs/></w:rPr>');
+        expect(tabsOf(style(all, 'TOC1'))).toContain('w:leader="none"');
+    });
+});
+
 describe('docx writer — the page', () => {
     test('A4 with 2 cm margins, from pageTwips', async () => {
         const body = await bodyOf(doc(p(text('x'))));

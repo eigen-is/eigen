@@ -106,6 +106,8 @@ import type { PageNumberPreset } from './page-numbers';
 import { applyPageNumberPreset } from './page-numbers';
 import { createDocUndoManager, TEXT_WIDTHS, writePageSetup } from './page-setup';
 import { tableMenuSections } from './table-menu-sections';
+import { tableOfContentsMenuSections } from './table-of-contents-menu-sections';
+import { TableOfContentsPropertiesPanel } from './table-of-contents-properties-panel';
 import { TablePropertiesPanel } from './table-properties-panel';
 import { TextBoxPropertiesPanel } from './text-box-properties-panel';
 
@@ -244,13 +246,14 @@ const TiptapEditor = ({
     const handleAddCommentRef = useRef<(() => void) | null>(null);
     const allCommentsRef = useRef<CommentEntry[]>([]);
     const cardsRef = useRef<Record<string, CommentCard>>({});
-    // The extensions keep the closures they were created with, so the figure, table and equation menus read this render's
-    // state here.
+    // The extensions keep the closures they were created with, so the figure, table, equation and table of contents menus
+    // read this render's state here.
     const figureContextMenuRef = useRef<(node: Node, pos: number, event: React.MouseEvent) => void>(() => {});
     const tableContextMenuRef = useRef<(editor: Editor, pos: number, event: MouseEvent) => boolean>(() => false);
     const equationContextMenuRef = useRef<(editor: Editor, node: Node, pos: number, event: React.MouseEvent) => void>(
         () => {},
     );
+    const tableOfContentsContextMenuRef = useRef<(editor: Editor, pos: number, event: MouseEvent) => void>(() => {});
     const editEquationRef = useRef(() => {});
     const openNoteRef = useRef((_pos: number) => {});
     const openBoxRef = useRef((_pos: number, _at: { left: number; top: number } | null) => {});
@@ -314,6 +317,11 @@ const TiptapEditor = ({
         onEdit: isMobile ? undefined : () => editEquationRef.current(),
         onContextMenu: (...args) => equationContextMenuRef.current(...args),
     };
+    // Every editor's tables of contents open the one menu. Only the body's jumps: a note's lists the note's headings.
+    const tableOfContentsMenu = {
+        onContextMenu: (target: Editor, pos: number, event: MouseEvent) =>
+            tableOfContentsContextMenuRef.current(target, pos, event),
+    };
     const editor = useDocEditor(
         {
             media,
@@ -338,7 +346,7 @@ const TiptapEditor = ({
                 onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
                 onOpen: (pos, at) => openBoxRef.current(pos, at),
             },
-            tableOfContents: { onJump: (pos) => jumpToHeadingRef.current(pos) },
+            tableOfContents: { ...tableOfContentsMenu, onJump: (pos) => jumpToHeadingRef.current(pos) },
             extensions: [
                 SearchHighlight,
                 CommentMark.configure({
@@ -397,6 +405,7 @@ const TiptapEditor = ({
         editable: canWrite,
         target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'footnote' },
         equation,
+        tableOfContents: tableOfContentsMenu,
     });
     // The open text box's live editor, which draws in the box itself.
     const boxEditor = useDocEditor({
@@ -406,6 +415,7 @@ const TiptapEditor = ({
         editable: canWrite,
         target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'textBox' },
         equation,
+        tableOfContents: tableOfContentsMenu,
     });
     const storyEditors = useMemo(() => ({ footnote: noteEditor, textBox: boxEditor }), [noteEditor, boxEditor]);
     const story = useOpenStory(editor, storyEditors, bandsAllowed);
@@ -572,6 +582,14 @@ const TiptapEditor = ({
     };
     // Edit equation opens the panel once the menu has closed, or the menu would hand the focus back from its field.
     const afterEquationMenuRef = useRef<(() => void) | null>(null);
+    const tableOfContentsContextMenu = useContextMenu<Editor>();
+    tableOfContentsContextMenuRef.current = (target, pos, event) => {
+        if (!target.isEditable) return;
+        // Selected as any press selects it, so the menu's rows act on it and its panel opens.
+        event.preventDefault();
+        target.commands.setNodeSelection(pos);
+        tableOfContentsContextMenu.openAt(target, event.clientX, event.clientY);
+    };
 
     const removeCommentMarks = (cardId: string) => {
         removeCommentAnchors(editor, cardId);
@@ -742,6 +760,11 @@ const TiptapEditor = ({
                   },
         );
 
+    const tableOfContentsItem = tableOfContentsContextMenu.item;
+    // An open comments or activity panel holds the slot the table of contents panel needs.
+    const tableOfContentsRows =
+        tableOfContentsItem && tableOfContentsMenuSections(tableOfContentsItem, isMobile ? undefined : closePanels);
+
     const bandControls = editingBand && (
         <BandControls
             band={editingBand}
@@ -807,6 +830,7 @@ const TiptapEditor = ({
                                     // Always offered: desktop draws the side panel, mobile the Column.
                                     onToggleCommentPanel={toggleComments}
                                     commentPanelOpen={commentPanelOpen}
+                                    closePanels={closePanels}
                                     onToggleActivityPanel={toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
@@ -1010,6 +1034,11 @@ const TiptapEditor = ({
                                                         editor={activeEditor}
                                                         fieldRef={equationFieldRef}
                                                     />
+                                                ) : lastPanelRef.current === 'tableOfContents' ? (
+                                                    <TableOfContentsPropertiesPanel
+                                                        editor={activeEditor}
+                                                        pageless={pageless}
+                                                    />
                                                 ) : (
                                                     <TablePropertiesPanel editor={activeEditor} />
                                                 )}
@@ -1157,6 +1186,20 @@ const TiptapEditor = ({
                                 {equationRows.destructive}
                                 {commentDelete(equationItem)}
                             </>
+                        }
+                    />
+                )}
+            </ContextMenuAnchor>
+
+            <ContextMenuAnchor contextMenu={tableOfContentsContextMenu}>
+                {tableOfContentsItem && tableOfContentsRows && (
+                    <MenuSections
+                        {...tableOfContentsRows}
+                        clipboard={
+                            <ClipboardMenuItems
+                                onCut={() => runClipboardCommand(tableOfContentsItem, 'cut')}
+                                onCopy={() => runClipboardCommand(tableOfContentsItem, 'copy')}
+                            />
                         }
                     />
                 )}

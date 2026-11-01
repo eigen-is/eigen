@@ -48,6 +48,14 @@ describe("prose css — Docs' own rules", () => {
         expect(PROSE_CSS).not.toMatch(/\.(eigen-prose|tiptap) (ul|ol)[^{]*\{[^}]*flow-root;/);
     });
 
+    // In an editor you can type in, a press on an entry selects the table of contents, so it shows no underline there.
+    test('a table of contents entry underlines on hover outside an editable editor only', () => {
+        const selector =
+            '.eigen-prose:not([contenteditable="true"]) nav[data-type="table-of-contents"] > a[data-level]:hover';
+        expect(proseValue(selector, 'text-decoration')).toBe('underline');
+        expect(PROSE_CSS).not.toMatch(/\n\.eigen-prose nav\[data-type="table-of-contents"\] > a\[data-level\]:hover/);
+    });
+
     // A figure in front of or behind the text counts its offsets from its paragraph's box, in one of two layers.
     test('a paragraph places its positioned figures, in front of the text or behind it, only in Docs', () => {
         for (const block of ['p', 'h1', 'h6']) expect(proseValue(`.eigen-doc ${block}`, 'position')).toBe('relative');

@@ -44,6 +44,9 @@ type InsertMenuProps = {
     editor: Editor;
     active: ToolbarState;
     keepEditorFocus: (e: Event) => void;
+    // The comments or activity panel would hold the slot the new chart's or table of contents' panel needs. Left out
+    // on a phone, where the panel is a sheet that leaves the comments column alone.
+    closePanels?: () => void;
     onLink: () => void;
     onInsertImage?: () => void;
     onAddComment?: () => void;
@@ -66,6 +69,7 @@ export function InsertMenu({
     editor,
     active,
     keepEditorFocus,
+    closePanels,
     onLink,
     onInsertImage,
     onAddComment,
@@ -110,9 +114,10 @@ export function InsertMenu({
                     {CHART_TYPE_OPTIONS.map((option) => (
                         <DropdownMenuItem
                             key={option.value}
-                            onClick={() =>
-                                editor.chain().focus().insertChart(option.value, pageWidths(editor).column).run()
-                            }
+                            onClick={() => {
+                                closePanels?.();
+                                editor.chain().focus().insertChart(option.value, pageWidths(editor).column).run();
+                            }}
                         >
                             <option.icon className="h-4 w-4" /> {option.label}
                         </DropdownMenuItem>
@@ -217,7 +222,10 @@ export function InsertMenu({
             {/* Last before the comment, as Google's Insert lists its table of contents. Only between the body's blocks. */}
             <DropdownMenuItem
                 disabled={inStory || !active.canInsertTableOfContents}
-                onClick={() => editor.chain().focus().insertTableOfContents().run()}
+                onClick={() => {
+                    closePanels?.();
+                    editor.chain().focus().insertTableOfContents().run();
+                }}
             >
                 <TableOfContents className="h-4 w-4" /> Table of contents
             </DropdownMenuItem>

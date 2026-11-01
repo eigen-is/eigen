@@ -188,3 +188,45 @@ test('a body selection never carries into a band: the panel reads the editor it 
     await act(async () => void band.commands.setNodeSelection(2));
     expect(state?.selectionPanel).toBe('figure');
 });
+
+// A press beside the entries or an arrow selects the node. One pasted into a table cell is selected while the table is
+// active too, and its own panel wins.
+test.each([
+    ['between the blocks', [{ type: 'tableOfContents' }, { type: 'paragraph' }]],
+    [
+        'in a table cell',
+        [
+            {
+                type: 'table',
+                content: [
+                    { type: 'tableRow', content: [{ type: 'tableCell', content: [{ type: 'tableOfContents' }] }] },
+                ],
+            },
+        ],
+    ],
+])('a selected table of contents %s opens its panel, and a caret in text does not', async (_where, content) => {
+    const editor = new Editor({
+        element: document.body.appendChild(document.createElement('div')),
+        extensions: getDocExtensions(),
+        content: { type: 'doc', content: [...content, { type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] },
+    });
+    function Host() {
+        state = useSelectionPanel(editor, false, closePanels);
+        return null;
+    }
+    const rendered = await renderInDocument(createElement(Host));
+    unmount = async () => {
+        await rendered.unmount();
+        editor.destroy();
+    };
+    let toc = -1;
+    editor.state.doc.descendants((node, pos) => {
+        if (node.type.name === 'tableOfContents') toc = pos;
+    });
+
+    await act(async () => void editor.commands.setNodeSelection(toc));
+    expect(state?.selectionPanel).toBe('tableOfContents');
+
+    await act(async () => void editor.commands.setTextSelection(editor.state.doc.content.size - 1));
+    expect(state?.selectionPanel).toBe('document');
+});

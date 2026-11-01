@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
+import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/eigendoc';
+import { writeDocx } from '../../../lib/export/doc/docx/to-docx';
+import { docxToPmJson } from '../../../lib/import/doc/from-docx';
 import { cpuClock } from '../../cpu-time';
 import { importDocxBody, nodesOfType } from '../../fixtures/golden-docx';
 
@@ -256,4 +259,144 @@ describe('many docx tables of contents', () => {
         expect(cpuMs()).toBeLessThan(3000);
         expect(nodesOfType(json, 'heading')).toHaveLength(8000);
     }, 60_000);
+});
+
+// What a table of contents stores of its look, read from what Word writes: the field's \n, the entries' right tab and
+// the toc N styles.
+describe("a docx table of contents' look", () => {
+    const tab = (leader?: string) =>
+        `<w:tabs><w:tab w:val="right"${leader === undefined ? '' : ` w:leader="${leader}"`} w:pos="9350"/></w:tabs>`;
+    const tocOf = (code: string, pPr = '') =>
+        `${paragraph(`${field(code)}${entry('Intro', 1, 1)}`, 'TOC1', pPr)}${paragraph(entry('Method', 2, 2), 'TOC1', pPr)}${paragraph(END)}`;
+    const tocStyle = (level: number, inner: string) =>
+        `<w:style w:type="paragraph" w:styleId="TOC${level}"><w:name w:val="toc ${level}"/><w:basedOn w:val="Normal"/>${inner}</w:style>`;
+    const NORMAL = '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style>';
+    const attrsOf = async (body: string, styles = STYLES) =>
+        nodesOfType(
+            (await importDocxBody(`${body}${heading('Intro')}${heading('Method')}`, { styles })).json,
+            'tableOfContents',
+        ).map((node) => node.attrs);
+    const DEFAULTS = {
+        levels: 3,
+        pageNumbers: true,
+        leader: 'dot',
+        level1: null,
+        level2: null,
+        level3: null,
+        level4: null,
+        level5: null,
+        level6: null,
+    };
+
+    test("Word's own imports with every look at its default", async () => {
+        expect(await attrsOf(tocOf('TOC \\o "1-3" \\h \\z \\u', tab('dot')))).toEqual([DEFAULTS]);
+    });
+
+    test.each([
+        ['TOC \\o "1-3" \\n \\h \\z \\u', false],
+        ['TOC \\o "1-3" \\n "1-3" \\h', false],
+        ['TOC \\o "1-2" \\n "1-5" \\h', false],
+        ['TOC \\o "1-3" \\n "1-2" \\h', true],
+        ['TOC \\o "1-3" \\n "2-3" \\h', true],
+        // The field lists from \o's first level, so a range from there leaves out every level it lists.
+        ['TOC \\o "2-4" \\n "2-4" \\h', false],
+        ['TOC \\o "2-4" \\n "1-4" \\h', false],
+        ['TOC \\o "1-4" \\n "3-4" \\h', true],
+        ['TOC \\o "2-4" \\n "3-4" \\h', true],
+        ['TOC \\o "1-3" \\h \\z \\u', true],
+    ])('%s shows page numbers: %p', async (code, pageNumbers) => {
+        expect((await attrsOf(tocOf(code, tab('dot'))))[0]?.['pageNumbers']).toBe(pageNumbers);
+    });
+
+    test.each([
+        ['dot', 'dot'],
+        ['none', 'none'],
+        // ST_TabTlc's default.
+        [undefined, 'none'],
+        ['hyphen', 'dot'],
+        ['middleDot', 'dot'],
+    ])("the first entry's right tab with leader %p leads with %p", async (leader, stored) => {
+        expect((await attrsOf(tocOf('TOC \\o "1-3" \\h', tab(leader))))[0]?.['leader']).toBe(stored);
+    });
+
+    test("an entry with no right tab of its own leads as its toc style's does", async () => {
+        const styles = `${STYLES.replace(/<w:style w:type="paragraph" w:styleId="TOC1">.*?<\/w:style>/, '')}${tocStyle(1, `<w:pPr>${tab('none')}</w:pPr>`)}`;
+        expect((await attrsOf(tocOf('TOC \\o "1-3" \\h'), styles))[0]?.['leader']).toBe('none');
+        // The entry's own tab wins over its style's.
+        expect((await attrsOf(tocOf('TOC \\o "1-3" \\h', tab('dot')), styles))[0]?.['leader']).toBe('dot');
+    });
+
+    test("each toc N style's own run properties are its level's look on every table of contents", async () => {
+        const styles = [
+            NORMAL,
+            tocStyle(
+                1,
+                '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/><w:sz w:val="28"/></w:rPr>',
+            ),
+            tocStyle(2, '<w:rPr><w:i/></w:rPr>'),
+            tocStyle(3, '<w:rPr><w:b w:val="0"/><w:sz w:val="20"/><w:rFonts w:ascii="Arial" w:hAnsi="Arial"/></w:rPr>'),
+            tocStyle(4, '<w:rPr><w:color w:val="FF0000"/></w:rPr>'),
+        ].join('');
+        const attrs = await attrsOf(
+            `${tocOf('TOC \\o "1-3" \\h', tab('dot'))}${tocOf('TOC \\o "1-2" \\h', tab('dot'))}`,
+            styles,
+        );
+        const looks = { level1: { font: 'Source Serif 4', size: 14, bold: true }, level2: { italic: true } };
+        expect(attrs).toEqual([
+            { ...DEFAULTS, ...looks },
+            { ...DEFAULTS, levels: 2, ...looks },
+        ]);
+    });
+
+    // As a run's size and font: what the entry draws in anyway, the doc's Normal, is no look.
+    test("a toc style's size and font that the Normal draws, and what it inherits, are no look", async () => {
+        const defaults =
+            '<w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Georgia" w:hAnsi="Georgia"/><w:sz w:val="24"/></w:rPr></w:rPrDefault></w:docDefaults>';
+        const styles = [
+            defaults,
+            '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:b/></w:rPr></w:style>',
+            tocStyle(
+                1,
+                '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:sz w:val="24"/></w:rPr>',
+            ),
+        ].join('');
+        expect((await attrsOf(tocOf('TOC \\o "1-3" \\h', tab('dot')), styles))[0]?.['level1']).toBeNull();
+    });
+
+    // A template may base toc 2 to toc 6 on toc 1, as it bases headings on one another. The Normal ends the chain.
+    test("a toc style's look follows its basedOn chain up to the Normal", async () => {
+        const basedOn = (level: number, parent: string, inner: string) =>
+            `<w:style w:type="paragraph" w:styleId="TOC${level}"><w:name w:val="toc ${level}"/><w:basedOn w:val="${parent}"/>${inner}</w:style>`;
+        const styles = [
+            '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:i/></w:rPr></w:style>',
+            tocStyle(1, '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/></w:rPr>'),
+            basedOn(2, 'TOC1', '<w:rPr><w:sz w:val="28"/></w:rPr>'),
+            basedOn(3, 'TOC2', '<w:rPr><w:b w:val="0"/></w:rPr>'),
+        ].join('');
+        const [attrs] = await attrsOf(tocOf('TOC \\o "1-3" \\h', tab('dot')), styles);
+        expect(attrs).toEqual({
+            ...DEFAULTS,
+            level1: { font: 'Source Serif 4', bold: true },
+            level2: { font: 'Source Serif 4', size: 14, bold: true },
+            level3: { font: 'Source Serif 4', size: 14 },
+        });
+    });
+
+    // Every attribute out of Eigen into Word and back, the leader through the styles when no entry holds a tab.
+    test.each([
+        [{ pageNumbers: false, leader: 'none' }],
+        [{ leader: 'none', level1: { font: 'Source Serif 4', size: 16, bold: true, italic: true } }],
+        [{ pageNumbers: false, level2: { font: 'JetBrains Mono' }, level6: { size: 8, italic: true } }],
+    ])('%j comes back from the docx Eigen writes', (attrs) => {
+        const toc = { type: 'tableOfContents', attrs: { levels: 4, ...attrs } };
+        const headed = { type: 'heading', attrs: { level: 1 }, content: [{ type: 'text', text: 'Intro' }] };
+        for (const content of [[toc, headed], [toc]]) {
+            const docx = writeDocx(
+                { json: { type: 'doc', content }, bands: {}, page: DEFAULT_PAGE_SETUP, style: DEFAULT_NORMAL_STYLE },
+                { title: 'Report', media: [], lost: () => {} },
+            );
+            const [read] = nodesOfType(docxToPmJson(Buffer.from(docx)).json, 'tableOfContents');
+            expect(read?.attrs).toEqual({ ...DEFAULTS, levels: 4, ...attrs });
+        }
+    });
 });

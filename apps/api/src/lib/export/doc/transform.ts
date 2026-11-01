@@ -21,6 +21,7 @@ import {
     pxToPt,
     readChartAttrs,
     readFigureAttrs,
+    TOC_PRESET_ATTRIBUTE,
 } from '@workspace/lib/docs/eigendoc';
 import type * as Y from 'yjs';
 import type { EigendocBands } from '../../document/doc';
@@ -106,6 +107,7 @@ export async function renderEigendocExport(
                     pageFootnotes: pageNotes,
                     band: part !== 'body',
                     anchors: part === 'body',
+                    pageless: page.pageless,
                     equations,
                 },
             );
@@ -277,10 +279,13 @@ const PAGE_NUMBER_CSS = `
 [data-type="page-number"][data-kind="pages"]::after { content: counter(pages); }
 `;
 
-// A table of contents entry's page number, after a dotted leader to the right edge. attr() reads the link's #h-N; in the
-// head, as the sanitizer strips attr() from a body's CSS.
+// A table of contents entry's page number at the right edge. It follows a dotted leader in the Dotted layout and spaces
+// in Plain text, and Links has none. The renderer names a layout other than Dotted on the nav. attr() reads the link's
+// #h-N. The rules sit in the head, as the sanitizer strips attr() from a body's CSS.
 const TOC_CSS = `
 [data-type="table-of-contents"] a::after { content: leader('.') target-counter(attr(href), page); }
+[data-type="table-of-contents"][${TOC_PRESET_ATTRIBUTE}="plain"] a::after { content: leader(' ') target-counter(attr(href), page); }
+[data-type="table-of-contents"][${TOC_PRESET_ATTRIBUTE}="links"] a::after { content: none; }
 `;
 
 // A note floats to the foot of its reference's page, numbered in the text and at the note, under a short rule, as Google

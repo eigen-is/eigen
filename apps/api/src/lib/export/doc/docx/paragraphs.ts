@@ -30,7 +30,7 @@ import {
 import type { HastNode } from '../../../document/lowlight';
 import { lowlight } from '../../../document/lowlight';
 import { proseValueIfSet } from '../../../document/prose-css';
-import type { StyleId } from '../../../ooxml/wordml';
+import type { StyleId, TabLeader } from '../../../ooxml/wordml';
 import {
     BODY_TEXT_OUTLINE_LEVEL,
     BORDER_SIDES,
@@ -53,6 +53,8 @@ import { anchoredTextBox, inlineTextBox } from './text-boxes';
 
 type Spacing = { before?: number; after?: number; line?: number; exact?: true };
 
+export type RightTab = { pos: number; leader: TabLeader };
+
 export type NumberingRef = { numId: number; ilvl: number };
 
 export type ParagraphProps = {
@@ -64,8 +66,8 @@ export type ParagraphProps = {
     numPr?: NumberingRef;
     pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
     shading?: string;
-    // A right tab at this many twips, dotted up to it, which a table of contents entry ends its page number on.
-    rightTab?: number;
+    // A right tab, at its position in twips and with its leader, which a table of contents entry ends its page number on.
+    rightTab?: RightTab;
     spacing?: Spacing;
     ind?: { left: number; right?: number; firstLine?: number; hanging?: number };
     contextualSpacing?: true;
@@ -105,7 +107,7 @@ export function pPrXml(props: ParagraphProps): string {
         numPr && `<w:numPr><w:ilvl w:val="${numPr.ilvl}"/><w:numId w:val="${numPr.numId}"/></w:numPr>`,
         pBdr && `<w:pBdr>${bordersXml(BORDER_SIDES, pBdr)}</w:pBdr>`,
         shading && `<w:shd w:val="clear" w:color="auto" w:fill="${shading}"/>`,
-        rightTab !== undefined && `<w:tabs><w:tab w:val="right" w:leader="dot" w:pos="${rightTab}"/></w:tabs>`,
+        rightTab && `<w:tabs><w:tab w:val="right" w:leader="${rightTab.leader}" w:pos="${rightTab.pos}"/></w:tabs>`,
         spacing &&
             `<w:spacing${spacing.before === undefined ? '' : ` w:before="${spacing.before}"`}${spacing.after === undefined ? '' : ` w:after="${spacing.after}"`}${spacing.line === undefined ? '' : ` w:line="${spacing.line}" w:lineRule="${spacing.exact ? 'exact' : 'auto'}"`}/>`,
         ind &&

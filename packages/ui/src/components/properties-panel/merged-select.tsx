@@ -1,3 +1,7 @@
+// The properties panel's select, such as a chart's type or a table of contents' levels. It shows a merged value: the
+// option all selected objects share, or a '—' placeholder when they disagree. A numeric value goes through numToStr
+// first, as a select holds strings.
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import type { MergedValue } from './merged-value';
 import { isMixed } from './merged-value';
@@ -5,24 +9,16 @@ import { isMixed } from './merged-value';
 type MergedSelectProps<T extends string> = {
     value: MergedValue<T>;
     onChange: (v: T) => void;
-    options: { value: T; label: string }[];
+    options: readonly { value: T; label: string }[];
 };
-
-// MergedSelect is string-typed; project a stored numeric value to its Select string (MIXED and
-// undefined pass through). A value not in the option list round-trips to its string and simply shows
-// no selected preset — the value keeps rendering, nothing is overwritten. Pair with `Number(v)` in
-// onChange.
-export const numToStr = (v: MergedValue<number>): MergedValue<string> =>
-    isMixed(v) ? v : v === undefined ? undefined : String(v);
 
 export function MergedSelect<T extends string>({ value, onChange, options }: MergedSelectProps<T>) {
     const mixed = isMixed(value);
-    // Always-controlled: '' (never undefined) for mixed — Radix renders the placeholder for '',
-    // while flipping to undefined would switch the Select controlled→uncontrolled (React warning).
+    // The select stays controlled. Radix shows the placeholder for '', and a switch to undefined would make React
+    // warn that the select went from controlled to uncontrolled.
     const controlled = mixed || value === undefined ? '' : value;
     return (
-        // onValueChange is the library seam: Radix types it (value: string) => void, so the cast back
-        // to the option union lives here and nowhere else.
+        // Radix types onValueChange as taking any string, so the cast back to the option union lives here only.
         <Select value={controlled} onValueChange={(v) => onChange(v as T)}>
             <SelectTrigger size="xs" className="w-full">
                 <SelectValue placeholder={mixed ? '—' : undefined} />
@@ -37,3 +33,8 @@ export function MergedSelect<T extends string>({ value, onChange, options }: Mer
         </Select>
     );
 }
+
+// A stored number as the select's string; MIXED and undefined pass through. A value missing from the options keeps
+// its string, so the select shows no option and nothing is overwritten. Its onChange turns it back with Number(v).
+export const numToStr = (v: MergedValue<number>): MergedValue<string> =>
+    isMixed(v) ? v : v === undefined ? undefined : String(v);
