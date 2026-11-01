@@ -1,7 +1,7 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
 // and where each piece of text sits, a rich cell's runs included. The painter lays out every cell it
 // draws, and the row's auto height asks for the same layout. Only the text measurements are cached,
-// until clearMeasureTextCache.
+// until clearMeasureTextCache, which the grid calls when a font slice loads.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -120,11 +120,13 @@ export function hasChinaword(s: string) {
     return true;
 }
 
-const textHeightCache: Record<string, [number, number]> = {};
+let textHeightCache: Record<string, [number, number]> = {};
 let measureTextCache: Record<string, MeasureTextMetrics> = {};
 
+// A font slice that loads changes what the text measures, so the grid clears both caches when one arrives.
 export function clearMeasureTextCache() {
     measureTextCache = {};
+    textHeightCache = {};
 }
 
 function getTextSize(text: string, font: string) {

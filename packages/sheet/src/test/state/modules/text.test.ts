@@ -2,6 +2,7 @@
 
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { setCellValue } from '../../../state/modules/cell';
 import {
     clearMeasureTextCache,
@@ -12,6 +13,8 @@ import {
 } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { workbookContextFactory } from '../factories/context';
+
+const window = installHappyDom();
 
 type Measure = (text: string, font: string) => { width: number; ascent: number; descent: number };
 
@@ -145,6 +148,23 @@ describe('state/modules/text — measure cache', () => {
         expect(getMeasureText('22', ctx).actualBoundingBoxAscent).toBe(0);
         ctx.textBaseline = 'alphabetic';
         expect(getMeasureText('22', ctx).actualBoundingBoxAscent).toBe(8);
+    });
+
+    // A canvas without bounding boxes takes a line's height from a DOM span, which a font slice that arrives later
+    // makes taller. The grid clears the caches when a slice loads, so the next measure sees the loaded font.
+    test('a line height taken from the DOM is measured again once the caches are cleared', () => {
+        let lineHeight = 10;
+        Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', {
+            configurable: true,
+            get: () => lineHeight,
+        });
+        const ctx = measuringCanvas((text) => ({ width: text.length * 7, ascent: Number.NaN, descent: Number.NaN }));
+        const font = getFontSet({});
+
+        expect(getMeasureText('M', ctx, font).actualBoundingBoxAscent).toBe(8);
+        lineHeight = 20;
+        clearMeasureTextCache();
+        expect(getMeasureText('M', ctx, font).actualBoundingBoxAscent).toBe(16);
     });
 });
 
