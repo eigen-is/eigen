@@ -134,6 +134,10 @@ An agent can't do this; it needs a person with Excel or Google Sheets. It's a do
 
 Verified, user-visible, bounded.
 
+- [ ] **A wrapped cell can still store a row height measured in a fallback face**: the cell editor and the formula bar load the cell's own font for the typed text (`loadCellFont`, `state/modules/text.ts`), so a rich-text run in another family is measured in the system's font when the commit writes `cfg.rowlen`, and so is any text whose slice is still on its way. Fix: load each run's font with its text, and heal the stored height when a slice arrives after the commit. **S–M**
+
+- [ ] **The DOM line height is cached by font alone**: `getTextSize` (`state/modules/text.ts`) keys `textHeightCache` by the font string, so a Chinese cell's line height, measured on 田, and a Latin cell's, measured on M, share one entry in the same font. Only a canvas without text bounding boxes reaches it. Fix: key it by the sample character too. **XS**
+
 - [ ] **By-values checkboxes do nothing while a condition is set**: the filter menu (`FilterMenu` in `components/ContextMenu/FilterMenu.tsx`) shows the value list under a condition, but Confirm uses the condition alone. A user unticks values, picks a condition and confirms, and the ticks do nothing. Disable or collapse the list while a condition is set. **S**
 
 - [ ] **Plain-text paste doesn't unquote TSV**: the plain-text arm of `pasteHandler` (`state/events/paste.ts`) splits on tabs and newlines and drops rows shorter than the first, so a quoted cell holding a newline, which Sheets' own copy and Google write as `"two\nlines"`, lands split over two rows with its quotes ([SHEETS.md](SHEETS.md#a-copy-puts-the-cells-on-textplain-as-tsv)). Read it with `parseTsv` (`@workspace/lib/clipboard`), as the chart Edit data grid does. **S**
