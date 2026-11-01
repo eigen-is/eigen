@@ -1,10 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import { encodeSheetsSnapshot } from '@workspace/lib/sheets';
+import { encodeSheetsSnapshot, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import { DEFAULT_SCENE_META } from '@workspace/lib/vector';
 import { MATHML_NAMESPACE, readLatex, writeMathml } from '@workspace/math';
 import * as Y from 'yjs';
-import { writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import { extractCollabText } from '../../lib/search/extract-render';
 import { CONTENT_INDEX_MAX_BYTES } from '../../lib/search/limits';
 import { sampleChartParts } from '../fixtures/chart-parts';
@@ -320,7 +319,7 @@ describe('extractCollabText', () => {
             celldata: [{ r: 0, c: 0, v: { v: 'A1' } }],
         };
         const snapshot = encodeSheetsSnapshot([sheet], { computed: false });
-        writeSheetsSnapshotToYjs(doc, snapshot.replace('"name":"Sheet1"', '"name":"Sheet1","charts":{"c1":null}'));
+        writeSheetsSnapshot(doc, snapshot.replace('"name":"Sheet1"', '"name":"Sheet1","charts":{"c1":null}'), null);
         const { text } = await extractCollabText('eigensheets', doc);
         expect(text).toBe('A1');
         doc.destroy();

@@ -16,11 +16,10 @@ import type {
     SheetChart,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { encodeSheetsSnapshot, nextFloatingIndex, sheetFloatingBox } from '@workspace/lib/sheets';
+import { encodeSheetsSnapshot, nextFloatingIndex, sheetFloatingBox, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { normalizeSheetConfig, numberDisplay, parseA1Range, recalcSheets } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
-import { writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import type { SheetCellSpec, SheetRowSpec, SheetSpec } from './content';
 
 const RULE: BorderSide = { style: 1, color: '#000000' };
@@ -43,7 +42,7 @@ export function buildWorkbook(specs: SheetSpec[]): Sheet[] {
 
 // The workbook as a sheets container's snapshot, written the way an import commits one.
 export function buildWorkbookDoc(doc: Y.Doc, specs: SheetSpec[]): void {
-    writeSheetsSnapshotToYjs(doc, encodeSheetsSnapshot(buildWorkbook(specs), { computed: true }));
+    writeSheetsSnapshot(doc, encodeSheetsSnapshot(buildWorkbook(specs), { computed: true }), null);
 }
 
 function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): Sheet {

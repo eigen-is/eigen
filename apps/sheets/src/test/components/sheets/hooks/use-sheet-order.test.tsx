@@ -350,14 +350,10 @@ test("a peer's edit of the tab's cell that lands before the tab's edits clears t
 // The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
 // the folded batches deleted, all in one transaction.
 function compact(doc: YDoc) {
-    const ops = doc.getArray<Op[]>('ops');
-    const batches = ops.toArray();
+    const batches = doc.getArray<Op[]>('ops').toArray();
     const stored = decodeSheetsSnapshot(readSheetsSnapshotJson(doc) ?? '');
     const json = encodeSheetsSnapshot(replaySheetsOps(stored, batches), { computed: true });
-    doc.transact(() => {
-        writeSheetsSnapshot(doc, json, readSheetsBase(doc)?.id ?? null);
-        ops.delete(0, batches.length);
-    });
+    writeSheetsSnapshot(doc, json, readSheetsBase(doc)?.id ?? null);
 }
 
 test('a batch that lands before what a kept compaction left keeps the grid and ends as the log', async () => {

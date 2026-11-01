@@ -1,6 +1,7 @@
 // A workbook's Yjs doc, read and written on the server. The transform process reads it as Sheet[], for example for an
 // export or a preview, and replays the pending ops over the snapshot as a browser does. It also folds the ops into a
-// new snapshot when the document closes. Writers, such as an import or a compaction, change the doc through it.
+// new snapshot when the document closes. Some writers change the doc through it, such as an import that adds tabs or
+// a version restore that stamps a fresh base.
 
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
 import {
@@ -11,7 +12,6 @@ import {
     readSheetsSnapshotJson,
     sheetsOpLog,
     stampSheetsBase,
-    writeSheetsSnapshot,
 } from '@workspace/lib/sheets';
 import type { DrivePathType } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
@@ -98,17 +98,6 @@ export function readLiveSheets(doc: Y.Doc): Sheet[] {
     const snapshot = readSheetsSnapshotJson(doc);
     const stored = snapshot ? decodeSheetsSnapshot(snapshot) : createDefaultSheets();
     return replaySheetsOps(stored, sheetsOpLog(doc).toArray());
-}
-
-// Puts a new snapshot into the live doc and empties the op log, whose edits the snapshot holds. The snapshot goes in as
-// it came, never parsed here. A replacing import starts a fresh base, so an open tab loads the snapshot anew. A
-// compaction passes its origin and names the base it folded, so a tab that holds that base keeps its grid.
-export function writeSheetsSnapshotToYjs(doc: Y.Doc, snapshotJson: string, compactionOrigin?: symbol): void {
-    doc.transact(() => {
-        writeSheetsSnapshot(doc, snapshotJson, compactionOrigin ? (readSheetsBase(doc)?.id ?? null) : null);
-        const ops = sheetsOpLog(doc);
-        if (ops.length > 0) ops.delete(0, ops.length);
-    }, compactionOrigin);
 }
 
 // A workbook opened without a base, such as a new one or one stored before bases existed, gets one. Then its first

@@ -3,6 +3,7 @@
 // Parsing, guards, recalc and serialization run in the transform process, so an import whose transform fails creates
 // and changes nothing. Drive's import and convert routes, for example, call it.
 
+import { writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { ConvertTarget, DocumentImportOptions, DrivePath } from '@workspace/lib/types/drive';
 import {
     CONVERT_SOURCES,
@@ -20,7 +21,7 @@ import { getPublicOrigin } from '../config/server-config';
 import { getMaxUploadSize } from '../config/server-settings';
 import { ApiError } from '../core/errors';
 import { commitEigendocImport } from '../document/doc';
-import { appendSheetsToYjs, readLiveSheets, writeSheetsSnapshotToYjs } from '../document/sheets';
+import { appendSheetsToYjs, readLiveSheets } from '../document/sheets';
 import { resetSheetsCompactionFailures } from '../document/sheets-compaction';
 import { insertSlidesIntoYjs, readSlidesUpdate, replaceSlidesInYjs } from '../document/slides';
 import { lossSummary } from '../document/transform/losses';
@@ -89,7 +90,7 @@ export async function convertToDocument(
         // again.
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
         const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
-        return fillNewDocument(drive, newPath, user, images, (doc) => writeSheetsSnapshotToYjs(doc, snapshotJson));
+        return fillNewDocument(drive, newPath, user, images, (doc) => writeSheetsSnapshot(doc, snapshotJson, null));
     }
 
     if (targetType === 'eigenslides') {
@@ -135,7 +136,7 @@ export async function importIntoDocument(
         }
         await commitImport(commit, images, mode === 'replace', (doc) => {
             if (mode === 'replace') {
-                writeSheetsSnapshotToYjs(doc, snapshotJson);
+                writeSheetsSnapshot(doc, snapshotJson, null);
                 resetSheetsCompactionFailures(path);
                 return;
             }
