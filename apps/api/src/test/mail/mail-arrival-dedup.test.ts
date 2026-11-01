@@ -1,16 +1,18 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_ARCHIVE, MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
-import { boxDir, WATCHER_TEST_TIMEOUT_MS } from '../mail-test-helpers';
-import type { TestUser } from '../setup';
+import { boxDir, makeEml, seedMaildirFile, WATCHER_TEST_TIMEOUT_MS } from '../mail-test-helpers';
+import type { SSECollector, TestUser } from '../setup';
 import { assertJson, authedRequest, collectSSE, createTestUser, eventually, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
+// How often a watcher test files another message while it waits. The test's own timeout bounds the wait.
+const REFILE_INTERVAL_MS = 500;
 let ctx: TestCtx;
 
 beforeAll(async () => {
@@ -141,6 +143,21 @@ describe('Mail read in another mail app', () => {
         }
     }
 
+    // Files a message into a mailbox's new/ until the tab hears it indexed, filing another when an event got lost. On
+    // macOS each watcher the tab attaches rebuilds the process's one FSEvents stream, and a rebuild drops an event
+    // still queued. The sync that indexes the newest message moves every older one too, so none is left in new/ for a
+    // later sync to move under the phone.
+    async function fileUntilIndexed(user: TestUser, tab: SSECollector, mailbox: string): Promise<void> {
+        let indexed: Promise<boolean>;
+        do {
+            const id = `${Date.now()}.filed`;
+            seedMaildirFile(user.id, mailbox, id, makeEml('Filed on the phone', { to: user.email }), { dir: 'new' });
+            indexed = tab
+                .next((event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.messageId === id)
+                .then(() => true);
+        } while (!(await Promise.race([indexed, Bun.sleep(REFILE_INTERVAL_MS).then(() => false)])));
+    }
+
     test(
         'while an Eigen tab is open reads the notification without anyone opening Mail',
         async () => {
@@ -149,8 +166,13 @@ describe('Mail read in another mail app', () => {
             await evictHome(user.id);
             const tab = await collectSSE(user.id);
             try {
+                // The tab attaches the watchers mailbox by mailbox, Archive last, so a message indexed there means
+                // they all listen and no rebuild can drop the phone's event.
+                await fileUntilIndexed(user, tab, MAILBOX_ARCHIVE);
                 await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
                 expect(await mailNewUnread(user)).toBe(true);
+                // The delivery waited out the inbox's first sync, so only a live watcher indexes what is filed now.
+                await fileUntilIndexed(user, tab, MAILBOX_INBOX);
 
                 readOnThePhone(user);
                 // The watcher's event can come seconds late on macOS, so the test waits for the tab to hear the bell change.
