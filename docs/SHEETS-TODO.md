@@ -134,8 +134,6 @@ An agent can't do this; it needs a person with Excel or Google Sheets. It's a do
 
 Verified, user-visible, bounded.
 
-- [ ] **A paste past the edge throws on a sheet with an empty matrix**: `expandRowsAndColumns` (`state/modules/sheet.ts`) reads `data[0].length` without the guard the old code had. **S**
-
 - [ ] **By-values checkboxes do nothing while a condition is set**: the filter menu (`FilterMenu` in `components/ContextMenu/FilterMenu.tsx`) shows the value list under a condition, but Confirm uses the condition alone. A user unticks values, picks a condition and confirms, and the ticks do nothing. Disable or collapse the list while a condition is set. **S**
 
 - [ ] **Plain-text paste doesn't unquote TSV**: the plain-text arm of `pasteHandler` (`state/events/paste.ts`) splits on tabs and newlines and drops rows shorter than the first, so a quoted cell holding a newline, which Sheets' own copy and Google write as `"two\nlines"`, lands split over two rows with its quotes ([SHEETS.md](SHEETS.md#a-copy-puts-the-cells-on-textplain-as-tsv)). Read it with `parseTsv` (`@workspace/lib/clipboard`), as the chart Edit data grid does. **S**
