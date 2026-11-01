@@ -298,6 +298,11 @@ describe("a docx table of contents' look", () => {
         ['TOC \\o "1-2" \\n "1-5" \\h', false],
         ['TOC \\o "1-3" \\n "1-2" \\h', true],
         ['TOC \\o "1-3" \\n "2-3" \\h', true],
+        // The field lists from \o's first level, so a range from there leaves out every level it lists.
+        ['TOC \\o "2-4" \\n "2-4" \\h', false],
+        ['TOC \\o "2-4" \\n "1-4" \\h', false],
+        ['TOC \\o "1-4" \\n "3-4" \\h', true],
+        ['TOC \\o "2-4" \\n "3-4" \\h', true],
         ['TOC \\o "1-3" \\h \\z \\u', true],
     ])('%s shows page numbers: %p', async (code, pageNumbers) => {
         expect((await attrsOf(tocOf(code, tab('dot'))))[0]?.['pageNumbers']).toBe(pageNumbers);

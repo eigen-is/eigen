@@ -61,8 +61,8 @@ export type Field = { inCode: boolean; code: string; link?: Link; checkbox?: boo
 // text, which the import compares with its own. A paragraph that holds only the field's result waits in `held` until
 // the field ends. If the field ends, only the paragraph's `cut` stays, such as its section break. If a heading, a table
 // or the body's end comes first, the paragraph comes back `whole`. `node` is the one node the field becomes, which
-// takes its look's attributes once the body is read: whether the entries show page numbers, and whether the first
-// entry's right tab `leads` to the number.
+// takes all its attributes once the body is read: its levels, whether the entries show page numbers, and whether the
+// first entry's right tab `leads` to the number.
 export type OpenToc = {
     field: Field;
     levels: number;
@@ -298,7 +298,7 @@ function fieldChar(reader: Reader, element: XmlElement, context: RunContext): vo
             if (levels !== undefined && reader.tocs.length >= MAX_TABLES_OF_CONTENTS) reader.lost('blocks-flattened');
             else if (levels !== undefined) {
                 const pageNumbers = tocFieldPageNumbers(field.code, levels);
-                const node = { type: 'tableOfContents', attrs: { levels } };
+                const node = { type: 'tableOfContents' };
                 reader.openToc = { field, levels, pageNumbers, node, saved: [], held: [] };
                 reader.tocs.push(reader.openToc);
                 context.tocCuts?.push({ toc: reader.openToc, from: context.pieces.length, opened: true });

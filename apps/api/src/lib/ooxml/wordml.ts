@@ -222,12 +222,14 @@ export function tocFieldLevels(code: string): number | undefined {
 }
 
 // Whether a table of contents' entries show their page numbers. A bare \n leaves them out of every level and \n "a-b"
-// out of levels a to b, so only a range that leaves out a level the field lists still shows numbers.
+// out of levels a to b, so only a range that leaves out a level the field lists still shows numbers. The field lists
+// from \o's first level, so \o "2-4" \n "2-4" shows none.
 export function tocFieldPageNumbers(code: string, levels: number): boolean {
     const omitted = /\\n\b(?:\s*"\s*(\d+)\s*-\s*(\d+)\s*")?/i.exec(code);
     if (!omitted) return true;
     const [, from, to] = omitted;
-    return from !== undefined && to !== undefined && (Number(from) > 1 || Number(to) < levels);
+    const first = Number(/\\o\b\s*"\s*(\d+)\s*-/i.exec(code)?.[1] ?? 1);
+    return from !== undefined && to !== undefined && (Number(from) > first || Number(to) < levels);
 }
 
 export const TOC_GALLERY = 'Table of Contents';
