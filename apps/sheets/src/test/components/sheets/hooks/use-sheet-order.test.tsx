@@ -151,7 +151,21 @@ async function openTab(from: YDoc, clientID: number) {
     };
     const edit = (run: (workbook: WorkbookInstance) => void) => act(async () => run(workbook()));
     const cell = (r: number, c: number) => workbook().getFlowdata()?.[r]?.[c] ?? null;
-    return { doc, workbook, edit, cell, seen, sync: () => act(async () => syncs.get(pathId)?.()) };
+    // Types `text` into a cell through this tab's own cell editor and commits it with Enter, as a person does.
+    const type = async (r: number, c: number, text: string) => {
+        await edit((w) => w.setSelection([{ row: [r, r], column: [c, c] }]));
+        const input = container.querySelector<HTMLElement>('#sheet-rich-text-editor');
+        if (!input) throw new Error('no cell editor');
+        input.focus();
+        await act(async () => {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'x', keyCode: 88, bubbles: true }));
+        });
+        input.textContent = text;
+        await act(async () => {
+            input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
+        });
+    };
+    return { doc, workbook, edit, cell, type, seen, sync: () => act(async () => syncs.get(pathId)?.()) };
 }
 type Tab = Awaited<ReturnType<typeof openTab>>;
 
@@ -345,6 +359,31 @@ test("a peer's edit of the tab's cell that lands before the tab's edits clears t
     await tab.edit((w) => w.undo());
     expect(opsIn(tab.doc)).toBe(sent);
     expect([tab.cell(0, 0)?.v, tab.cell(1, 1)?.bl ?? null]).toEqual(['mine', null]);
+});
+
+// The recalc list is never stored, but it rides the log, and overwriting a formula sends the whole list. A tab that
+// took that list on top of its own new formula would lose the formula from its list, and so from every formula map it
+// builds from the list, such as the one after a peer's row op.
+test('a formula typed while a peer overwrites another keeps recalculating on the typing tab', async () => {
+    const s = server({ '0_0': '1' });
+    const a = await openTab(s, 1);
+    const b = await openTab(s, 2);
+    await a.type(1, 2, '=A1+1');
+    await deliver(a.doc, b.doc);
+    await a.type(1, 2, '5');
+    await b.type(2, 1, '=A1*3');
+    await deliver(a.doc, b.doc);
+    await deliver(b.doc, a.doc);
+    const chain = (sheet: Sheet & { calcChain?: { r: number; c: number }[] }) =>
+        sheet.calcChain?.map(({ r, c }) => [r, c]);
+    const joiner = replaySheetsOps(decodeSheetsSnapshot(readSheetsSnapshotJson(b.doc) ?? ''), opsOf(b.doc));
+    for (const tab of [a, b]) expect(chain(tab.workbook().getAllSheets()[0])).toEqual(chain(joiner[0]));
+    const peer = replica(b.doc, 3);
+    push(peer, rowInsert(11));
+    await deliver(peer, b.doc);
+    await b.type(0, 0, '10');
+    expect(b.cell(2, 1)?.v).toBe(30);
+    expectJoined(b);
 });
 
 // The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
