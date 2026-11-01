@@ -302,7 +302,7 @@ Opportunistic: fix when touching the area. None of it is worth scheduling on its
 
 - [ ] **The op-log compaction carries more policy than it needs** (2026-11-01 audit). Each cut is independent:
   - Drop `MAX_COMPACTION_FAILURES` and `resetSheetsCompactionFailures` with its import and restore hooks, or reuse preview's `rememberIfRepeatable`.
-  - Drop `COMPACTION_BUDGET_MS`, the abort on destruct and the counter bump in `subscribe`. Then fold `sheets-compaction.ts` into its callers.
+  - Drop `COMPACTION_BUDGET_MS` and the abort on destruct. Then fold `sheets-compaction.ts` into its callers.
   - Merge `writeSheetsSnapshotToYjs` into lib's `writeSheetsSnapshot`, with `compactedFrom` as a plain argument rather than read from the origin.
   - On the client, replace `ownRef` in `use-sheet.ts` with `event.transaction.local`, and rename the `force` flag on `addSheet`, `deleteSheet` and the row and column ops, which now means "applied from a batch".
   - Leads to test first: leave `calcChain` out of `pathKeys` (`state/utils/commute.ts`) so two formulas typed at once commute, and drop `resetEngine` in `replayOps`, whose idle rebuild freezes a large formula workbook. **S–M**
