@@ -1,8 +1,8 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
 // and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
-// both lay out here. Text measurements are cached until clearMeasureTextCache, which the grid calls, for
-// example, when a font slice loads. The cell editors ask for the font slices of the text being typed, so
-// a commit measures the real face.
+// both lay out here. Text measurements are cached until clearMeasureTextCache, which the font watcher
+// calls when a font slice loads before it tells the grids to redraw. The cell editors ask for the font
+// slices of the text being typed, so a commit measures the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -119,10 +119,42 @@ export function hasChinaword(s: string) {
 let textHeightCache: Record<string, [number, number]> = {};
 let measureTextCache: Record<string, MeasureTextMetrics> = {};
 
-// A font slice that loads changes what the text measures, so the grid clears both caches when one arrives.
+// A font slice that loads changes what the text measures, so the font watcher clears both caches when one arrives.
 export function clearMeasureTextCache() {
     measureTextCache = {};
     textHeightCache = {};
+}
+
+// WebKit fires no loadingdone for the slices a canvas draw fetches, but a face's loaded promise settles in every
+// browser. A face that fails to load settles too, and its text then draws in the next face of its stack. The faces
+// one frame needs arrive over several frames, so the watcher waits for the set's ready promise and tells the grids
+// once for all of them. It lives at module scope because most faces, such as the CJK slices, never load in a
+// session: a reaction chained per grid would keep that grid's workbook alive for the page's lifetime.
+const watchedFaces = new WeakSet<FontFace>();
+const fontListeners = new Set<() => void>();
+let waitingForFonts = false;
+
+// Each call also watches the faces added to the page since the last one.
+export function watchFontFaces(listener: () => void) {
+    for (const face of document.fonts) {
+        if (face.status === 'loaded' || watchedFaces.has(face)) continue;
+        watchedFaces.add(face);
+        face.loaded.then(onFaceSettled, onFaceSettled);
+    }
+    fontListeners.add(listener);
+    return () => {
+        fontListeners.delete(listener);
+    };
+}
+
+function onFaceSettled() {
+    if (waitingForFonts) return;
+    waitingForFonts = true;
+    document.fonts.ready.then(() => {
+        waitingForFonts = false;
+        clearMeasureTextCache();
+        for (const listener of fontListeners) listener();
+    });
 }
 
 function getTextSize(text: string, font: string) {

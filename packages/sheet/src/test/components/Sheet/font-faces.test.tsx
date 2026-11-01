@@ -1,7 +1,7 @@
 // A font slice that arrives changes what the grid's text measures, so the grid clears its measure caches and
-// redraws whole. WebKit fires no loadingdone for the slices a canvas draw fetches, so the grid listens to each
-// face's own loaded promise, and waits for the set to be ready so that the faces of one load redraw it once. A
-// face that settles after the grid is gone does nothing.
+// redraws whole. WebKit fires no loadingdone for the slices a canvas draw fetches, so one watcher per page listens
+// to each face's own loaded promise, and waits for the set to be ready so that the faces of one load redraw each
+// grid once. A grid that is gone is no longer listening, and no face holds on to it.
 
 import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -25,17 +25,22 @@ function deferred() {
     return settled;
 }
 
+// A face still on its way, which counts the reactions chained on its loaded promise.
+function loadingFace() {
+    const load = deferred();
+    const reactions = spyOn(load.promise, 'then');
+    return { status: 'loading', loaded: load.promise, reactions, resolve: load.resolve, reject: load.reject };
+}
+
 // Two faces still on their way and one loaded before the grid mounted. The page's fonts belong to this file's
 // happy-dom window, which goes when the file ends.
-let faces: ReturnType<typeof deferred>[] = [];
+let faces: ReturnType<typeof loadingFace>[] = [];
+let faceSet: object[] = [];
 let ready = deferred();
 beforeEach(() => {
-    faces = [deferred(), deferred()];
+    faces = [loadingFace(), loadingFace()];
+    faceSet = [...faces, { status: 'loaded', loaded: Promise.resolve() }];
     ready = deferred();
-    const faceSet = [
-        ...faces.map((face) => ({ status: 'loading', loaded: face.promise })),
-        { status: 'loaded', loaded: Promise.resolve() },
-    ];
     Object.defineProperty(document, 'fonts', {
         configurable: true,
         value: { ready: ready.promise, [Symbol.iterator]: () => faceSet[Symbol.iterator]() },
@@ -52,9 +57,13 @@ const draws = spyOn(frameModule, 'drawFrame').mockImplementation(() => {});
 
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
+// The watcher lives as long as the page, so each test ends with the set ready and the watcher idle.
 let unmount = async () => {};
 afterEach(async () => {
     await unmount();
+    ready.resolve();
+    await settle();
+    clears.mockClear();
 });
 
 async function mountGrid() {
@@ -103,12 +112,54 @@ test('a face that fails to load redraws the grid too', async () => {
     expect(draws).toHaveBeenCalledTimes(1);
 });
 
-test('a face that arrives after the grid is gone does nothing', async () => {
+test('a face that arrives after the grid is gone redraws nothing', async () => {
     await mountGrid();
     await unmount();
     faces[0].resolve();
     ready.resolve();
     await settle();
-    expect(clears).not.toHaveBeenCalled();
     expect(draws).not.toHaveBeenCalled();
+});
+
+// Most faces, such as the CJK slices, never load in a session. A reaction per grid would keep every workbook the
+// page ever opened alive through those pending promises.
+test('mounting the grid again and again chains one reaction on each face', async () => {
+    for (let mount = 0; mount < 3; mount++) {
+        await mountGrid();
+        await unmount();
+    }
+    await mountGrid();
+    expect(faces.map((face) => face.reactions.mock.calls.length)).toEqual([1, 1]);
+});
+
+test('a listener that unsubscribed is not called', async () => {
+    let calls = 0;
+    const stop = textModule.watchFontFaces(() => calls++);
+    stop();
+    faces[0].resolve();
+    ready.resolve();
+    await settle();
+    expect(calls).toBe(0);
+});
+
+test('one settled face clears the caches once and calls each listener once', async () => {
+    const calls = [0, 0];
+    const stops = [textModule.watchFontFaces(() => calls[0]++), textModule.watchFontFaces(() => calls[1]++)];
+    faces[0].resolve();
+    faces[1].resolve();
+    ready.resolve();
+    await settle();
+    expect(clears).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([1, 1]);
+    for (const stop of stops) stop();
+});
+
+test('a face added after the first subscribe is watched at the next one', async () => {
+    const stops = [textModule.watchFontFaces(() => {})];
+    const added = loadingFace();
+    faceSet.push(added);
+    stops.push(textModule.watchFontFaces(() => {}));
+    expect(added.reactions).toHaveBeenCalledTimes(1);
+    expect(faces.map((face) => face.reactions.mock.calls.length)).toEqual([1, 1]);
+    for (const stop of stops) stop();
 });
