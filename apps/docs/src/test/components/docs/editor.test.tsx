@@ -10,6 +10,7 @@ import { stubCanvasImageFonts } from '@workspace/ui/test/canvas-image';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { withBrowserFrames } from '../../fixtures/browser-frames';
 
 // happy-dom lays nothing out: a test that needs the editor's width stubs it and fires these.
 let resizes: (() => void)[] = [];
@@ -172,18 +173,7 @@ const frames = () => act(() => new Promise((resolve) => setTimeout(resolve, 50))
 
 // An action, with Tiptap's frame run as a browser runs it: after React has drawn what the action changed. happy-dom runs
 // a frame before act lets React draw, when the band the caret goes to is not editable yet.
-async function inBrowserFrames(action: () => void) {
-    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
-        setTimeout(() => callback(performance.now()));
-        return 0;
-    });
-    try {
-        await act(async () => action());
-        await frames();
-    } finally {
-        frame.mockRestore();
-    }
-}
+const inBrowserFrames = (action: () => void) => withBrowserFrames(() => act(async () => action()));
 
 function write(root: string, text: string, attributes: Record<string, unknown> = {}) {
     const paragraph = new Y.XmlElement('paragraph');
