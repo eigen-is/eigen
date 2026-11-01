@@ -7,29 +7,24 @@ import { fontFaceCssOf } from '../../lib/export/fonts';
 
 const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
 
-function faces(css: string, bytesOf: (src: string) => Buffer): string[] {
-    return css
+function faces(css: string): string[] {
+    const keys = css
         .split('@font-face')
         .slice(1)
         .map((block) => {
             const field = (name: string) => block.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
-            const src = block.match(/url\("([^"]+)"\)/)?.[1] ?? '';
-            const hash = new Bun.CryptoHasher('sha256').update(bytesOf(src)).digest('hex');
-            return `${field('font-family')} | ${field('font-weight')} | ${field('font-style')} | ${hash}`;
-        })
-        .sort();
+            return `${field('font-family')} | ${field('font-weight')} | ${field('font-style')}`;
+        });
+    return [...new Set(keys)].sort();
 }
 
-// An export inlines the faces the apps load from fonts.css; a face added or changed on one side only
-// renders an export in a fallback font. The math face is no font a user picks, so no export embeds it with the rest.
+// An export inlines the whole faces whose slices the apps load from fonts.css, which the vendoring script cuts from
+// these same files; a face added on one side only renders an export in a fallback font. This compares the fonts a
+// user picks, so the fallback and math faces stay out.
 test('the export fonts are the faces the apps load', () => {
     const appCSS = fs.readFileSync(path.join(UI_STYLES_DIR, 'fonts.css'), 'utf8');
-    const appFaces = faces(appCSS, (src) => fs.readFileSync(path.join(UI_STYLES_DIR, src))).filter(
-        (face) => !face.startsWith('"STIX Two Math"'),
-    );
-    const exportFaces = faces(fontFaceCssOf(EIGEN_FONT_NAMES), (src) =>
-        Buffer.from(src.slice(src.indexOf(',') + 1), 'base64'),
-    );
+    const appFaces = faces(appCSS).filter((face) => EIGEN_FONT_NAMES.some((name) => face.startsWith(`"${name}" |`)));
+    const exportFaces = faces(fontFaceCssOf(EIGEN_FONT_NAMES));
     expect(appFaces).toHaveLength(6);
     expect(exportFaces).toEqual(appFaces);
 });
