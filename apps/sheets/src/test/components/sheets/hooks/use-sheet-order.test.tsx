@@ -386,6 +386,23 @@ test('a formula typed while a peer overwrites another keeps recalculating on the
     expectJoined(b);
 });
 
+// A batch of the tab's own can apply before a peer's batch arrives and fail once the log puts the peer's first. The
+// formula map learned the batch's formula, so a replay that kept the map would let the next edit of a cell the formula
+// reads write the formula back.
+test("the tab's own formula that the log's order rejects stays gone after the next edit", async () => {
+    const s = server({ '0_0': '1' });
+    push(s, [{ op: 'replace', id: 's1', path: ['data', 0, 3], value: { f: '=C1+1', v: 1, m: '1' } }]);
+    const tab = await openTab(s, 50);
+    const peer = replica(s, 1);
+    push(peer, [{ op: 'replace', id: 's1', path: ['data', 0, 3], value: null }]);
+    await tab.type(0, 2, '=A1*2');
+    await deliver(peer, tab.doc);
+    expect(tab.cell(0, 2)).toBeNull();
+    await tab.type(0, 0, '5');
+    expect(tab.cell(0, 2)).toBeNull();
+    expectJoined(tab);
+});
+
 // The server's compaction: the log replayed over the snapshot, swapped in with a base that names the one it folded, and
 // the folded batches deleted, all in one transaction.
 function compact(doc: YDoc) {
