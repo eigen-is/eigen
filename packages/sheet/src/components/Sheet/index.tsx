@@ -12,7 +12,8 @@ import type { ScrollPos } from '../../state/render/frame';
 import { drawFrame, scrollFrame } from '../../state/render/frame';
 import { SheetOverlay } from '../SheetOverlay';
 
-type DrawnFrame = { ctx: Context; freeze: Freezen | undefined; scroll: ScrollPos; width: number; height: number };
+// What the canvas shows. When only the scroll changed since, scrollFrame moves it instead of drawing it again.
+type DrawnFrame = { ctx: Context; freeze: Freezen | undefined; scroll: ScrollPos };
 
 // ---------------------------------------------------------------------------
 // Stable serialization for object-type dependency values
@@ -51,6 +52,8 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     dataRef.current = data;
 
     const rafIdRef = useRef(0);
+    // Sizing the canvas clears its bitmap, even to the same size, so whatever sizes it forgets the frame.
+    const drawnRef = useRef<DrawnFrame | undefined>(undefined);
     // Latched by the 0×0 guards below so the rAF redraw skips a hidden surface.
     const visibleRef = useRef(true);
 
@@ -73,6 +76,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
 
         const sheetData = dataRef.current;
         if (!sheetData) return;
+        drawnRef.current = undefined;
         setContext((draftCtx) => {
             const canvas = refs.canvas.current;
             if (!canvas) return;
@@ -117,6 +121,7 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
         if (!placeholder || !canvas) return;
         visibleRef.current = placeholder.clientWidth > 0 && placeholder.clientHeight > 0;
         if (!visibleRef.current) return;
+        drawnRef.current = undefined;
         setContext((draftCtx) => updateContextWithCanvas(draftCtx, canvas, placeholder));
     }, [refs.canvas, setContext]);
 
@@ -129,14 +134,12 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     // -----------------------------------------------------------------------
     // Canvas redraw – rAF-throttled, reads scroll from globalCache.
     //
-    // Two triggers:
+    // Triggers:
     //   1. context changes (cell edits, selection, etc.) → useEffect
     //   2. scroll changes (native cellArea scroll) → globalCache scroll listener
-    // Both call scheduleRedraw which coalesces to one paint per frame.
+    //   3. a font that finishes loading, or a canvas bitmap the browser restores → their listeners
+    // All call scheduleRedraw which coalesces to one paint per frame.
     // -----------------------------------------------------------------------
-
-    // What the canvas shows. When only the scroll changed since, scrollFrame moves it instead of drawing it again.
-    const drawnRef = useRef<DrawnFrame | undefined>(undefined);
 
     const scheduleRedraw = useCallback(() => {
         cancelAnimationFrame(rafIdRef.current);
@@ -152,32 +155,33 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
                 scrollTop: refs.globalCache.scrollTop,
             };
             const drawn = drawnRef.current;
-            const scrolledOnly =
-                drawn != null &&
-                drawn.ctx === ctx &&
-                drawn.freeze === freeze &&
-                drawn.width === canvas.width &&
-                drawn.height === canvas.height;
+            const scrolledOnly = drawn != null && drawn.ctx === ctx && drawn.freeze === freeze;
             if (!scrolledOnly || !scrollFrame(canvas, ctx, freeze, drawn.scroll, scroll)) {
                 drawFrame(canvas, ctx, scroll, freeze);
             }
-            drawnRef.current = { ctx, freeze, scroll, width: canvas.width, height: canvas.height };
+            drawnRef.current = { ctx, freeze, scroll };
         });
     }, [refs.canvas, refs.globalCache, sheet.id]);
 
-    // A web font that finishes loading changes the text's widths but not the context, so the measurements
-    // and the frame drawn with the fallback face both go.
+    // Neither changes the context: a web font that finishes loading changes the text's widths, so the
+    // measurements go too, and a canvas whose bitmap the browser dropped comes back blank.
     useEffect(() => {
-        const fonts = document.fonts;
-        if (!fonts) return;
-        const onFontsLoaded = () => {
-            clearMeasureTextCache();
+        const canvas = refs.canvas.current;
+        const drawWhole = () => {
             drawnRef.current = undefined;
             scheduleRedraw();
         };
-        fonts.addEventListener('loadingdone', onFontsLoaded);
-        return () => fonts.removeEventListener('loadingdone', onFontsLoaded);
-    }, [scheduleRedraw]);
+        const onFontsLoaded = () => {
+            clearMeasureTextCache();
+            drawWhole();
+        };
+        document.fonts.addEventListener('loadingdone', onFontsLoaded);
+        canvas?.addEventListener('contextrestored', drawWhole);
+        return () => {
+            document.fonts.removeEventListener('loadingdone', onFontsLoaded);
+            canvas?.removeEventListener('contextrestored', drawWhole);
+        };
+    }, [refs.canvas, scheduleRedraw]);
 
     // Redraw on context changes (non-scroll: cell edits, selection, etc.)
     // biome-ignore lint/correctness/useExhaustiveDependencies: full `context` is the trigger — any change should redraw the canvas

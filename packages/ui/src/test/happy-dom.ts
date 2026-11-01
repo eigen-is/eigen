@@ -60,6 +60,17 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
     for (const key of OVERRIDDEN) borrow(key, (window as any)[key]);
     borrow('window', window);
     borrow('document', window.document);
+    // happy-dom has no FontFaceSet. Code that waits for the fonts, or listens for one that finishes
+    // loading, gets a set that has nothing to load.
+    Object.defineProperty(window.document, 'fonts', {
+        configurable: true,
+        writable: true,
+        value: Object.assign(new EventTarget(), {
+            ready: Promise.resolve(),
+            check: () => true,
+            load: async () => [],
+        }),
+    });
     borrow('navigator', window.navigator);
     borrow('getComputedStyle', window.getComputedStyle.bind(window));
     borrow('IS_REACT_ACT_ENVIRONMENT', true);
