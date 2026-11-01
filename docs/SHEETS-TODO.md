@@ -301,7 +301,6 @@ Measured on the 2.3 MB reference workbook: snapshot v2 12.6 MB, import 4.7 s, HT
 Opportunistic: fix when touching the area. None of it is worth scheduling on its own.
 
 - [ ] **The op-log compaction carries more policy than it needs** (2026-11-01 audit). Each cut is independent:
-  - Drop the recalc in `compactSheetsSnapshot` (`apps/api/src/lib/document/sheets.ts`) and store `computed && !sheetsNeedRecalc(replayed)`. Today a workbook whose recalc fails pays it again at every close, in the one transform child.
   - Drop `MAX_COMPACTION_FAILURES` and `resetSheetsCompactionFailures` with its import and restore hooks, or reuse preview's `rememberIfRepeatable`.
   - Drop `COMPACTION_BUDGET_MS`, the abort on destruct and the counter bump in `subscribe`. Then fold `sheets-compaction.ts` into its callers.
   - Merge `writeSheetsSnapshotToYjs` into lib's `writeSheetsSnapshot`, with `compactedFrom` as a plain argument rather than read from the origin.

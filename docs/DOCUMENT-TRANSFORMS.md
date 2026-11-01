@@ -114,7 +114,7 @@ A child costs 20 to 130 ms to start on Linux (the job line's `startupMs`: spawn,
 
 Not after a timeout, a crash, an out-of-memory, an overload or a module that fails to load. A fallback would bring back the server-wide freeze this layer exists to remove, and an out-of-memory on the main thread would take the API down.
 
-- A recalc failure returns the replayed values with a `recalc-failed` warning and never fails the job. Of the reads only an export recalcs, and a compaction recalcs a workbook nobody computed ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). A compaction whose recalc fails logs it and stores the replayed values as not computed, so the next export recalcs.
+- A recalc failure returns the replayed values with a `recalc-failed` warning and never fails the job. Of the reads only an export recalcs ([SHEETS.md](SHEETS.md#the-editor-computes-on-write-the-server-only-what-nobody-computed)). A compaction never does: it stores a workbook nobody computed as not computed, so the next export recalcs.
 - Sanitizing runs inside the child. Every HTML preview and export body goes through `sanitizeExportHtml` ([EXPORT.md](EXPORT.md#the-sanitizer-keeps-only-data-references-because-a-browser-fetches), [PREVIEWS.md](PREVIEWS.md#no-preview-body-may-fetch-a-url-the-file-chose)). The `.eml` preview uses the mail reader's DOMPurify config plus hooks of its own that strip every reference but an inlined raster image and every CSS fetch, and it forbids more tags, such as `svg` and `video` (`apps/api/src/lib/preview/eml-preview.ts`).
 - The import commit stays on the main thread ([EXPORT.md](EXPORT.md#an-import-writes-nothing-until-the-transform-succeeds)).
 

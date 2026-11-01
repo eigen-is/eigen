@@ -86,21 +86,10 @@ export function compactSheetsSnapshot(
         : { sheets: createDefaultSheets(), computed: true };
     let dropped = 0;
     const replayed = replaySheetsOps(sheets, JSON.parse(batchesJson), () => dropped++);
-    if (computed && !sheetsNeedRecalc(replayed)) {
-        return { snapshot: encodeSheetsSnapshot(replayed, { computed: true }), dropped };
-    }
-    // A workbook nobody computed, such as an import whose recalc failed, is computed here, and so is one with a tab an
-    // import added. Its exports then stop paying for the recalc. A recalc that fails stores the replayed values, and
-    // an export tries again.
-    try {
-        return {
-            snapshot: encodeSheetsSnapshot(recalcSheets(replayed, SERVER_RECALC_BUDGET), { computed: true }),
-            dropped,
-        };
-    } catch (e) {
-        console.warn('[sheets] server recalc failed, storing replayed values:', e instanceof Error ? e.message : e);
-        return { snapshot: encodeSheetsSnapshot(replayed, { computed: false }), dropped };
-    }
+    // The compaction never recalculates, so a workbook nobody computed stays uncomputed, and an export computes it. So
+    // does one that gained formulas without a calc chain, such as a tab an import added, or the decoder would give
+    // those formulas a calc chain and no reader would ever compute them.
+    return { snapshot: encodeSheetsSnapshot(replayed, { computed: computed && !sheetsNeedRecalc(replayed) }), dropped };
 }
 
 // The workbook as a tab opening the doc shows it: the stored snapshot, or the default sheets for a workbook with no

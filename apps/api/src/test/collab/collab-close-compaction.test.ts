@@ -209,7 +209,7 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     }
 
-    test('the close stores the replayed log as the snapshot, empties the log and computes it', async () => {
+    test('the close stores the replayed log as the snapshot, empties the log and keeps the computed flag', async () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x'), POISON]);
         try {
@@ -223,8 +223,9 @@ describe('CollabDocument compacts a workbook at close', () => {
 
             const snapshot = readSheetsSnapshotJson(sheet.doc.doc);
             if (!snapshot) throw new Error('no snapshot');
+            // The workbook was stored uncomputed, and the compaction never recalculates.
             const { sheets, computed } = decodeSheetsWorkbook(snapshot);
-            expect(computed).toBe(true);
+            expect(computed).toBe(false);
             expect(sheets[0].celldata?.map(({ r, c, v }) => [r, c, v?.v])).toEqual([
                 [0, 0, 7],
                 [0, 1, 'x'],
