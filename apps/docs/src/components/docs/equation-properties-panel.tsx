@@ -1,7 +1,14 @@
+// The Docs Equation panel for the selected equation: a preview, its Style, and a LaTeX field with Google's symbol
+// menus. The field edits a draft that only this tab sees and that is written to the equation once it parses. The
+// draft follows its equation through this tab's edits and peers' changes. The panel writes through whichever editor
+// holds the equation, such as a band's.
+
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { equationMath, parseMathml, readEquation, unlessRefused } from '@workspace/lib/docs/eigendoc';
 import type { MathRow, MathXmlElement } from '@workspace/math';
 import {
@@ -112,10 +119,11 @@ type EquationPropertiesPanelProps = {
     fieldRef: RefObject<HTMLTextAreaElement | null>;
 };
 
-// The LaTeX field edits a draft that no peer sees. A keystroke or a menu item starts it; Cmd or Ctrl and Enter, or a blur out of the
-// field and its menus writes it if it parses and differs from the LaTeX it started from, and Escape drops it. Until
-// then the field shows the equation as stored, a peer's write too. A draft stays through a transaction that moves the
-// equation, a collaborator typing above it, and through a peer's write to it, the last writer winning.
+// The LaTeX field edits a draft that no peer sees. A keystroke or a menu item starts it. Cmd or Ctrl and Enter, or a
+// blur out of the field and its menus, writes it if it parses and differs from the LaTeX it started from, and Escape
+// drops it. Until then the field shows the equation as stored, a peer's write too. A draft stays through a
+// transaction that moves the equation and through a collaborator typing above it. A peer's write to the equation or a
+// delete of it ends the draft, and the peer's write stays.
 export function EquationPropertiesPanel({ editor, fieldRef }: EquationPropertiesPanelProps) {
     // useEditor re-renders on no transaction, and a write that keeps the equation selected fires no selectionUpdate.
     const { latex, stored, display } = useEditorState({
@@ -156,20 +164,35 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
         caretRef.current = null;
     });
 
-    // A draft is its equation's. A peer's write to that equation makes a new node where it stood; a node the document
-    // already held is another equation, which a click or the delete of this one moved under the selection.
+    // A draft is its equation's. This tab's own change keeps the equation's node, or a write to it makes a new node
+    // where it stood. A node the document already held is another equation, which a click or a delete moved under the
+    // selection. A change through the Yjs binding builds every node anew, and that is every change a peer makes and
+    // this tab's own undo and redo too. After a peer's change the binding puts the selection back by a Yjs position
+    // that sticks to the equation, or to the character just before it. So the draft stays only while an equation is
+    // still selected and its content is unchanged. A peer's delete can leave another equation selected, and the
+    // binding may even give it the deleted one's Yjs element, so only the content tells the two apart.
     useEffect(() => {
         let owner = shownEquation(editor.state);
         const onTransaction = ({ transaction }: { transaction: Transaction }) => {
             const next = shownEquation(editor.state);
-            if (!next || next.node === owner?.node) return;
-            let held = false;
-            transaction.before.descendants((node) => {
-                held ||= node === next.node;
-                return !held;
-            });
-            if (held || next.pos !== owner?.pos) setDraft(null);
-            owner = next;
+            if (transaction.getMeta(ySyncPluginKey)) {
+                const { selection } = editor.state;
+                if (
+                    !(selection instanceof NodeSelection) ||
+                    selection.node !== next?.node ||
+                    next.node.attrs['mathml'] !== owner?.node.attrs['mathml']
+                ) {
+                    setDraft(null);
+                }
+            } else if (next && next.node !== owner?.node) {
+                let held = false;
+                transaction.before.descendants((node) => {
+                    held ||= node === next.node;
+                    return !held;
+                });
+                if (held || next.pos !== owner?.pos) setDraft(null);
+            }
+            owner = next ?? owner;
         };
         editor.on('transaction', onTransaction);
         return () => {

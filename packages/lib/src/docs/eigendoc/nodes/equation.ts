@@ -1,3 +1,8 @@
+// The Docs equation node, which the editor and the server's renderers share: an inline atom that stores its MathML.
+// Any peer can write that string, so every consumer reads it through readEquation, which parses only what the math
+// package's writer could have written. It also holds the paste rule for a <math> and the commands that insert an
+// equation and set its display.
+
 import type { CommandProps } from '@tiptap/core';
 import { Node } from '@tiptap/core';
 import { NodeSelection } from '@tiptap/pm/state';
@@ -80,6 +85,8 @@ export const EquationNode = Node.create({
     inline: true,
 
     atom: true,
+
+    draggable: true,
 
     addAttributes() {
         return {

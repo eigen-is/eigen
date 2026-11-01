@@ -2,7 +2,7 @@
 // writes it when it parses, Enter returning to the document after the equation, and Escape drops it. A draft that
 // doesn't parse is never written and shows where the reader stopped. `\name` and a space give the command's braces,
 // and a symbol menu inserts its command at the field's caret. A draft that starts with <math is MathML, read as a stored
-// one is.
+// one is. A peer's write, text and delete come from a second tab on a Y.Doc synced by hand.
 import { afterEach, expect, test } from 'bun:test';
 import { readEquation } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -10,8 +10,10 @@ import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
+const Y = await import('yjs');
 const { act, createElement, createRef } = await import('react');
 const { Editor } = await import('@tiptap/react');
+const { default: Collaboration } = await import('@tiptap/extension-collaboration');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { NodeSelection } = await import('@tiptap/pm/state');
 const { MATH_LIMITS, MATHML_NAMESPACE, readLatex, writeMathml } = await import('@workspace/math');
@@ -53,6 +55,47 @@ async function mount(attrs: object = { mathml: typed('x^2') }, next?: object) {
     return editor;
 }
 
+const equation = (latex: string) => ({ type: 'equation', attrs: { mathml: typed(latex) } });
+
+// Tabs A and B on two Y.Docs that hear each other at once, A's panel over the equation at 2 of `content`. The binding
+// builds every node of A anew on each of B's changes.
+async function peers(content: object[]) {
+    const yA = new Y.Doc();
+    const yB = new Y.Doc();
+    const send = (to: InstanceType<typeof Y.Doc>) => (update: Uint8Array, origin: unknown) => {
+        if (origin !== 'peer') Y.applyUpdate(to, update, 'peer');
+    };
+    yA.on('update', send(yB));
+    yB.on('update', send(yA));
+    const editorOn = (doc: InstanceType<typeof Y.Doc>) =>
+        new Editor({
+            element: document.body.appendChild(document.createElement('div')),
+            extensions: [
+                ...getDocExtensions({ exclude: ['equation'] }),
+                Equation,
+                Collaboration.configure({ document: doc }),
+            ],
+        });
+    const a = editorOn(yA);
+    const b = editorOn(yB);
+    a.commands.setContent({ type: 'doc', content: [{ type: 'paragraph', content }] });
+    a.commands.setNodeSelection(2);
+    const fieldRef = createRef<HTMLTextAreaElement>();
+    const rendered = await renderInDocument(createElement(EquationPropertiesPanel, { editor: a, fieldRef }));
+    unmount = async () => {
+        await rendered.unmount();
+        a.destroy();
+        b.destroy();
+    };
+    const peer = (edit: (tr: InstanceType<typeof Editor>['state']['tr']) => void) =>
+        act(async () => {
+            const { tr } = b.state;
+            edit(tr);
+            b.view.dispatch(tr);
+        });
+    return { a, b, peer };
+}
+
 const field = () => {
     const input = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="LaTeX"]');
     if (!input) throw new Error('no LaTeX field');
@@ -80,13 +123,6 @@ const typeAt = (value: string, caret: number) =>
         nativeValueSetter?.call(input, value);
         input.setSelectionRange(caret, caret);
         input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-// A peer's transaction.
-const remote = (editor: InstanceType<typeof Editor>, edit: (tr: InstanceType<typeof Editor>['state']['tr']) => void) =>
-    act(async () => {
-        const { tr } = editor.state;
-        edit(tr);
-        editor.view.dispatch(tr);
     });
 const key = (name: string, init: KeyboardEventInit = {}) =>
     act(async () => {
@@ -370,47 +406,109 @@ test('a draft whose write finds no equation stays', async () => {
     expect(stored(editor)?.['mathml']).toBe(typed('x^2'));
 });
 
+const ONE = [{ type: 'text', text: 'a' }, equation('x^2'), { type: 'text', text: 'b' }];
+
 // A visit is no draft: a peer's write shows, and the blur after it leaves theirs.
 test('a peer writing the equation of a focused, untouched field keeps theirs', async () => {
-    const editor = await mount();
+    const { a, peer } = await peers(ONE);
     await act(async () => field().focus());
-    await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
+    await peer((tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
     expect(field().value).toBe('z');
     await act(async () => field().blur());
-    expect(stored(editor)?.['mathml']).toBe(typed('z'));
+    expect(stored(a)?.['mathml']).toBe(typed('z'));
 });
 
 test("a draft typed back to where it started writes nothing over a peer's write", async () => {
-    const editor = await mount();
+    const { a, peer } = await peers(ONE);
     await type('y');
     await type('x^2');
-    await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
+    await peer((tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
     await act(async () => field().blur());
-    expect(stored(editor)?.['mathml']).toBe(typed('z'));
+    expect(stored(a)?.['mathml']).toBe(typed('z'));
     expect(field().value).toBe('z');
 });
 
-// The last writer wins.
-test("a peer's write to the equation leaves the draft, and Enter writes it", async () => {
-    const editor = await mount();
+// The panel tells its equation by its content, so a peer's write to it ends the draft, and theirs stays.
+test("a peer's write to the equation drops the draft, and Enter keeps theirs", async () => {
+    const { a, b, peer } = await peers(ONE);
     await type('y');
-    await remote(editor, (tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
-    expect(field().value).toBe('y');
+    await peer((tr) => tr.setNodeAttribute(2, 'mathml', typed('z')));
+    expect(field().value).toBe('z');
     await key('Enter', { metaKey: true });
-    expect(stored(editor)?.['mathml']).toBe(typed('y'));
+    expect(stored(a)?.['mathml']).toBe(typed('z'));
+    expect(stored(b)?.['mathml']).toBe(typed('z'));
 });
 
-// The Yjs binding selects whatever node then sits where the selected one stood.
+// The binding selects the equation left in the deleted one's place, and may give it the deleted one's Yjs element.
+test.each([
+    ['right next to it', [equation('z')], 3],
+    ['and the text between them', [{ type: 'text', text: 'm' }, equation('z')], 4],
+])('a peer deleting the drafted equation %s drops the draft, and Enter leaves the next one', async (_, after, end) => {
+    const { a, b, peer } = await peers([
+        { type: 'text', text: 'a' },
+        equation('x^2'),
+        ...after,
+        { type: 'text', text: 'b' },
+    ]);
+    await type('y');
+    await peer((tr) => tr.delete(2, end));
+    expect(field().value).toBe('z');
+    await key('Enter', { metaKey: true });
+    expect(stored(a)?.['mathml']).toBe(typed('z'));
+    expect(stored(b)?.['mathml']).toBe(typed('z'));
+});
+
+// Text between the two, as two equations side by side look alike to the binding.
 test('a peer deleting the equation ends its draft, which never lands on the next one', async () => {
-    const editor = await mount({ mathml: typed('x^2') }, { mathml: typed('z') });
+    const { a, peer } = await peers([
+        { type: 'text', text: 'a' },
+        equation('x^2'),
+        { type: 'text', text: 'm' },
+        equation('z'),
+        { type: 'text', text: 'b' },
+    ]);
     await type('y');
-    await remote(editor, (tr) => tr.delete(2, 3).setSelection(NodeSelection.create(tr.doc, 2)));
+    await peer((tr) => tr.delete(2, 3));
+    expect(field().value).not.toBe('y');
+    await act(async () => a.commands.setNodeSelection(3));
     expect(field().value).toBe('z');
     await key('Enter', { metaKey: true });
-    expect(stored(editor)?.['mathml']).toBe(typed('z'));
+    expect(a.state.doc.nodeAt(3)?.attrs['mathml']).toBe(typed('z'));
 });
 
-// A collaborator typing above the equation moves it, and the selection with it.
+// The binding builds the moved equation anew at its new place, and it is still the draft's.
+test.each([
+    ['a half-typed draft', '\\frac{a', typed('x^2')],
+    ['a draft that parses', 'y', typed('y')],
+])("a peer's text above the equation leaves %s and the selection on it", async (_, draft, written) => {
+    const { a, b, peer } = await peers(ONE);
+    await type(draft);
+    await peer((tr) => tr.insertText('x', 1));
+
+    expect(a.state.selection.toJSON()).toEqual({ type: 'node', anchor: 3 });
+    expect(document.activeElement).toBe(field());
+    expect(field().value).toBe(draft);
+    await key('Enter', { metaKey: true });
+    expect(b.state.doc.nodeAt(3)?.attrs['mathml']).toBe(written);
+});
+
+// A drop into another paragraph reinserts the same node, which the binding writes as a new element.
+test('a half-typed draft stays with an equation this tab moved, through a peer typing above it', async () => {
+    const { a, peer } = await peers(ONE);
+    await type('\\frac{a');
+    await act(async () => {
+        const moved = a.state.doc.nodeAt(2);
+        if (!moved) throw new Error('no equation');
+        const tr = a.state.tr.delete(2, 3).insert(4, a.schema.node('paragraph', null, moved));
+        a.view.dispatch(tr.setSelection(NodeSelection.create(tr.doc, 5)));
+    });
+    await peer((tr) => tr.insertText('x', 1));
+
+    expect(a.state.selection.toJSON()).toEqual({ type: 'node', anchor: 6 });
+    expect(field().value).toBe('\\frac{a');
+});
+
+// This tab's own edit above the equation moves it, and the selection with it.
 test('an edit above the equation leaves a half-typed draft and its focus alone', async () => {
     const editor = await mount();
     await type('\\frac{a');

@@ -1,7 +1,8 @@
 // The equation's node view draws the tree readEquation reads, never the stored string; a displayed equation as a
 // block, an empty one as an empty box and an empty argument as a dotted one, a selected one in the selection ring, and
-// a commented one with the corner mark that opens its comment.
-import { afterEach, expect, mock, test } from 'bun:test';
+// a commented one with the corner mark that opens its comment. A press and a drag move it, and a drag that empties its
+// paragraph removes it.
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -20,22 +21,14 @@ afterEach(() => unmount());
 const typed = (latex: string) => writeMathml(readLatex(latex), latex);
 const onOpenComment = mock((_cardId: string) => {});
 
-// "a" at 1, the equation at 2.
-async function mount(attrs: object) {
+const paragraph = (...content: object[]) => ({ type: 'paragraph', content });
+const text = (t: string) => ({ type: 'text', text: t });
+
+// By default "a" at 1, the equation at 2.
+async function mount(attrs: object, content: object[] = [paragraph(text('a'), { type: 'equation', attrs })]) {
     const editor = new Editor({
         extensions: [...getDocExtensions({ exclude: ['equation'] }), Equation.configure({ onOpenComment })],
-        content: {
-            type: 'doc',
-            content: [
-                {
-                    type: 'paragraph',
-                    content: [
-                        { type: 'text', text: 'a' },
-                        { type: 'equation', attrs },
-                    ],
-                },
-            ],
-        },
+        content: { type: 'doc', content },
     });
     const rendered = await renderInDocument(createElement(EditorContent, { editor }));
     unmount = async () => {
@@ -111,4 +104,56 @@ test('an equation with no comment has no corner mark', async () => {
     const { view } = await mount({ mathml: typed('x') });
     expect(view.querySelector('button')).toBeNull();
     expect(view.style.paddingRight).toBe('');
+});
+
+// happy-dom's DragEvent keeps no dataTransfer, which ProseMirror's drag and drop read, and its dataTransfer can't set
+// the drag image TipTap sets.
+const dragEvent = (type: string, dataTransfer: DataTransfer) =>
+    Object.defineProperty(new DragEvent(type, { bubbles: true, cancelable: true }), 'dataTransfer', {
+        value: dataTransfer,
+    });
+
+// A press on the equation and the browser's drag of it, dropped at `to` in the last paragraph, as ProseMirror's own
+// handlers see them. The page has no layout, so the drop point is the one posAtCoords would find.
+async function drag(content: object[], to: number) {
+    const { editor, view } = await mount({}, content);
+    const dataTransfer = new DataTransfer();
+    spyOn(dataTransfer, 'setDragImage').mockImplementation(() => {});
+    const start = dragEvent('dragstart', dataTransfer);
+    await act(async () => {
+        view.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0 }));
+        view.dispatchEvent(start);
+        spyOn(editor.view, 'posAtCoords').mockReturnValue({ pos: to, inside: -1 });
+        editor.view.dom.querySelector('p:last-child')?.dispatchEvent(dragEvent('drop', dataTransfer));
+    });
+    const blocks = editor
+        .getJSON()
+        .content?.map((block) => block.content?.map((node) => ('text' in node ? node.text : node.type)) ?? []);
+    return { editor, view, start, blocks };
+}
+
+test('an equation drags from a press on it and drops where it lands, selected', async () => {
+    // "a" at 1, the equation at 2, the end of "b" at 6, where the equation lands at 5.
+    const { editor, view, start, blocks } = await drag(
+        [paragraph(text('a'), { type: 'equation', attrs: { mathml: typed('x') } }), paragraph(text('b'))],
+        6,
+    );
+    expect(view.getAttribute('draggable')).toBe('true');
+    expect(start.defaultPrevented).toBe(false);
+    expect(blocks).toEqual([['a'], ['b', 'equation']]);
+    expect(editor.state.selection.toJSON()).toEqual({ type: 'node', anchor: 5 });
+});
+
+test('a displayed equation dragged out of a paragraph of its own takes the paragraph with it', async () => {
+    // The equation at 4, the end of "b" at 8.
+    const equation = { type: 'equation', attrs: { mathml: typed('x'), display: true } };
+    const { blocks } = await drag([paragraph(text('a')), paragraph(equation), paragraph(text('b'))], 8);
+    expect(blocks).toEqual([['a'], ['b', 'equation']]);
+});
+
+test('an equation dragged out of a paragraph with text leaves the text', async () => {
+    // The equation at 5, the end of "b" at 9.
+    const equation = { type: 'equation', attrs: { mathml: typed('x') } };
+    const { blocks } = await drag([paragraph(text('a')), paragraph(text('x'), equation), paragraph(text('b'))], 9);
+    expect(blocks).toEqual([['a'], ['x'], ['b', 'equation']]);
 });

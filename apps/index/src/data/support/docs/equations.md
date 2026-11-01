@@ -6,7 +6,7 @@ category: Basics
 tags: [docs, equations, math, latex, editor]
 related: [docs/images-and-tables, docs/export, docs/comments]
 order: 56
-updated: 2026-10-27
+updated: 2026-11-01
 ---
 
 You can put math in a document, from a quick x² in a sentence to a formula on a line of its own. You write each equation in LaTeX, the notation most math tools use, and a preview shows how it will look as you type.
@@ -51,7 +51,7 @@ An equation sits in the line of text by default. To give it a line of its own, c
 
 ## Change or remove an equation
 
-Click an equation to select it and open its panel, then edit its LaTeX. To open the panel with the cursor in its **LaTeX** field, move onto the equation with the arrow keys and press **Enter**, or click the selected equation again. To remove an equation, select it and press Backspace or Delete.
+Click an equation to select it and open its panel, then edit its LaTeX. To open the panel with the cursor in its **LaTeX** field, move onto the equation with the arrow keys and press **Enter**, or click the selected equation again. To move an equation, drag it to its new place in the text. To remove an equation, select it and press Backspace or Delete.
 
 Right-click an equation for **Cut**, **Copy**, **Edit equation**, which opens its panel with the cursor in the **LaTeX** field, **Style**, where a check marks **In line with text** or **On its own line**, **Add comment**, and, last and in red, **Delete equation**.
 

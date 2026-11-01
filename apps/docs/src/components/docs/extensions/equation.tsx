@@ -1,6 +1,7 @@
 // The Docs editor's equation: the shared equation node with a view that draws its MathML inline, a dotted box in each
 // empty argument as Word draws one, and its comment mark. Enter on a selected equation opens the Equation panel, and
-// a right-click asks the editor for its menu.
+// a right-click asks the editor for its menu. A press drags it as a figure drags, and one dragged out of a paragraph
+// of its own takes the paragraph with it.
 
 import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
@@ -14,6 +15,7 @@ import { writeMathml } from '@workspace/math';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import { useLayoutEffect, useMemo, useRef } from 'react';
+import { dragOutOfParagraph } from './figure-frame';
 
 const SLOT = '\u2B1A';
 
@@ -89,8 +91,11 @@ function EquationView({ editor, node, getPos, selected, extension, decorations }
     return (
         <NodeViewWrapper
             as="span"
-            className={cn('equation', selected && 'eigen-selection-ring')}
+            className={cn('equation', selected && 'eigen-selection-ring', editor.isEditable && 'cursor-grab')}
             data-display={equation.display || undefined}
+            // As a figure in the flow: TipTap lets the browser drag a node view only from a press on its drag handle.
+            data-drag-handle=""
+            draggable={editor.isEditable}
             // Room for the corner mark beside the glyphs, which it would cover.
             style={commentCardId ? { paddingRight: CELL_INDICATOR_SIZE } : undefined}
             // ProseMirror never sees a node view's right-click (stopEvent), so the equation asks here, as a figure does.
@@ -143,6 +148,7 @@ export const Equation = EquationNode.extend<EquationOptions>({
     addProseMirrorPlugins() {
         const { name, options } = this;
         return [
+            dragOutOfParagraph(name),
             new Plugin({
                 key: new PluginKey('equationClickSelected'),
                 props: {
