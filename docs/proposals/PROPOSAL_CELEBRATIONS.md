@@ -60,7 +60,7 @@ Every app draws an empty view through one component, `EmptyState` (`packages/ui/
 | Mail, an empty inbox | Feet up on an empty desk. This is the calm inbox zero: no party, and no trigger to write, since the empty view is the moment |
 | A search with no results | The detective with a magnifying glass, shrugging |
 | Drive, the Trash | Sweeping with a broom |
-| Drive, an empty folder | Holding an open, empty box |
+| Drive, an empty folder | Holding Schrödinger's box: closed, a question mark on its side, so nobody knows whether anything is in it. It goes with `EmptyState`'s own default line, "Within this void, all possibilities are yet unobserved." |
 | Contacts or Chat with nobody in it yet | Waving |
 
 These are illustrations, not celebrations, so the rules above don't apply. A figure is still, and the same each time: its seed comes from the view's name, so it doesn't jitter on a re-render. The Celebrations switch leaves them on. A fresh install is nothing but empty views, so this is the first thing a new user sees of Eigen's character.
