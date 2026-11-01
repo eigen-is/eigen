@@ -1,8 +1,9 @@
 // Cuts every bundled face into unicode-range slices, as Google Fonts serves its fonts, so a page or an export loads
 // only the slices its text draws. It writes the WOFF2 slices beside each face, the fonts.css the apps load and the
-// range data slicesFor reads. Run it by hand when a font changes: it needs a Python venv with fontTools and brotli,
-// and downloads each fallback font from a pinned URL. The ranges come from a snapshot of Google's CSS, which
-// `ranges` refreshes.
+// range data slicesFor reads. What no published range holds goes to a face's rest, cut into chunks about the size of
+// a published slice, so one rare character fetches a small file. Run it by hand when a font changes: it needs a Python
+// venv with fontTools and brotli, and downloads each fallback font from a pinned URL. The ranges come from a snapshot
+// of Google's CSS, which `ranges` refreshes.
 //
 //   bun scripts/fonts/build-font-slices.ts           cut the slices, write fonts.css and the range data
 //   bun scripts/fonts/build-font-slices.ts ranges    fetch Google's CSS again and rewrite the snapshot
@@ -106,6 +107,11 @@ const ALL_FEATURES = ['*'];
 const SC_FEATURES = 'aalt,ccmp,fwid,halt,hist,hwid,kern,liga,locl,mark,palt,pwid,ruby,vert,vhal,vkrn,vpal,vrt2';
 const KR_FEATURES = `${SC_FEATURES},calt,ljmo,tjmo,vjmo`;
 
+// The most a chunk of a face's rest may weigh, about one of Google's published slices for that kind of face. Korean's
+// rest stays whole: it is the conjoining jamo, which compose an old Hangul syllable only inside one font.
+const CJK_REST_BOUND = 60 * 1024;
+const REST_BOUND = 40 * 1024;
+
 type Snapshot = {
     fetched: string;
     userAgent: string;
@@ -123,6 +129,7 @@ type Face = {
     slices: Slice[];
     features: string[];
     colorForeground: boolean;
+    restBound: number;
 };
 
 if (process.argv[2] === 'ranges') await writeSnapshot();
@@ -177,6 +184,7 @@ async function build(): Promise<void> {
 
     for (const face of faces) clearSlices(face);
     await cutAll(faces, work);
+    await chunkRests(faces, work);
     await writeLicenses();
     fs.writeFileSync(CSS_OUT, fontsCss(faces));
     fs.writeFileSync(DATA_OUT, sliceData(faces));
@@ -219,6 +227,7 @@ async function planFallback(
             slices,
             features: ALL_FEATURES,
             colorForeground: true,
+            restBound: REST_BOUND,
         };
     }
     if (fallback.family === 'Noto Sans SC' || fallback.family === 'Noto Sans KR') {
@@ -237,6 +246,7 @@ async function planFallback(
             slices: withRest(slices, cmap, coverage, claimed),
             features: (sc ? SC_FEATURES : KR_FEATURES).split(','),
             colorForeground: false,
+            restBound: sc ? CJK_REST_BOUND : Number.POSITIVE_INFINITY,
         };
     }
     if (fallback.family === 'New Computer Modern Math') {
@@ -252,6 +262,7 @@ async function planFallback(
             slices: [{ label: '', codePoints: await cmapOf(font) }],
             features: ALL_FEATURES,
             colorForeground: false,
+            restBound: Number.POSITIVE_INFINITY,
         };
     }
     throw new Error(`no recipe for the fallback ${fallback.family}`);
@@ -276,6 +287,7 @@ async function planTextFace(face: BundledFontFace, snapshot: Snapshot, claimed: 
         slices: withRest(slices, cmap, cmap, claimed),
         features: ALL_FEATURES,
         colorForeground: false,
+        restBound: REST_BOUND,
     };
 }
 
@@ -300,26 +312,85 @@ function clearSlices(face: Face): void {
     }
 }
 
-// The math face is converted whole; every other slice is cut, many fonts at a time.
+// The math face is converted whole, its glyphs and tables untouched, since its license asks that a changed font be
+// renamed. Every other slice is cut.
 async function cutAll(faces: Face[], work: string): Promise<void> {
-    const jobs = faces.flatMap((face) =>
-        face.family === 'New Computer Modern Math'
-            ? []
-            : face.slices.map((slice) => ({
-                  font: face.font,
-                  codePoints: [...slice.codePoints].sort((a, b) => a - b),
-                  out: path.join(FONTS_DIR, sliceFile(face, slice)),
-                  features: face.features,
-                  colorForeground: face.colorForeground,
-              })),
-    );
     const math = faces.find((face) => face.family === 'New Computer Modern Math');
     if (math) await python('woff2', math.font, path.join(FONTS_DIR, sliceFile(math, math.slices[0])));
+    const sliced = faces.filter((face) => face !== math);
+    await cut(
+        sliced.flatMap((face) =>
+            face.slices.map((slice) =>
+                cutJob(face, sorted(slice.codePoints), path.join(FONTS_DIR, sliceFile(face, slice))),
+            ),
+        ),
+        work,
+    );
+}
 
+// A rest heavier than its bound is cut in two halves of consecutive code points, and each half again until every chunk
+// fits. Halves in code-point order keep a block such as the arrows in one chunk or two. The chunks replace the rest,
+// numbered in that order.
+async function chunkRests(faces: Face[], work: string): Promise<void> {
+    type Chunk = { face: Face; codePoints: number[]; out: string };
+    const heavy = (chunk: Chunk) => chunk.codePoints.length > 1 && fs.statSync(chunk.out).size > chunk.face.restBound;
+    let splitting = faces.flatMap((face) =>
+        face.slices
+            .filter((slice) => slice.label === 'rest')
+            .map((slice) => ({
+                face,
+                codePoints: sorted(slice.codePoints),
+                out: path.join(FONTS_DIR, sliceFile(face, slice)),
+            }))
+            .filter(heavy),
+    );
+    const chunks: Chunk[] = [];
+    while (splitting.length > 0) {
+        const halves = splitting.flatMap(({ face, codePoints }) => {
+            const middle = Math.ceil(codePoints.length / 2);
+            return [codePoints.slice(0, middle), codePoints.slice(middle)].map((half) => ({
+                face,
+                codePoints: half,
+                out: path.join(work, `${face.base}.${half[0]}-${half.length}.woff2`),
+            }));
+        });
+        await cut(
+            halves.map((half) => cutJob(half.face, half.codePoints, half.out)),
+            work,
+        );
+        splitting = halves.filter(heavy);
+        chunks.push(...halves.filter((half) => !heavy(half)));
+    }
+    for (const face of faces) {
+        const own = chunks.filter((chunk) => chunk.face === face).sort((a, b) => a.codePoints[0] - b.codePoints[0]);
+        if (own.length === 0) continue;
+        const rest = face.slices.findIndex((slice) => slice.label === 'rest');
+        fs.rmSync(path.join(FONTS_DIR, sliceFile(face, face.slices[rest])));
+        const numbered = own.map((chunk, index) => {
+            const slice = { label: `rest-${index + 1}`, codePoints: new Set(chunk.codePoints) };
+            fs.copyFileSync(chunk.out, path.join(FONTS_DIR, sliceFile(face, slice)));
+            return slice;
+        });
+        face.slices.splice(rest, 1, ...numbered);
+    }
+}
+
+type CutJob = { font: string; codePoints: number[]; out: string; features: string[]; colorForeground: boolean };
+
+function cutJob(face: Face, codePoints: number[], out: string): CutJob {
+    return { font: face.font, codePoints, out, features: face.features, colorForeground: face.colorForeground };
+}
+
+function sorted(codePoints: ReadonlySet<number>): number[] {
+    return [...codePoints].sort((a, b) => a - b);
+}
+
+// The jobs, many fonts at a time.
+async function cut(jobs: CutJob[], work: string): Promise<void> {
     const workers = Math.max(1, availableParallelism() - 2);
     const batches = Array.from({ length: workers }, (_, worker) =>
         jobs.filter((_, index) => index % workers === worker),
-    );
+    ).filter((batch) => batch.length > 0);
     await Promise.all(
         batches.map(async (batch, worker) => {
             const file = path.join(work, `jobs-${worker}.json`);
