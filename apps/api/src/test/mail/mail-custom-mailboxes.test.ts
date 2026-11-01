@@ -10,22 +10,19 @@ import {
 } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary, MaildirMailbox } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
-import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import {
     boxDir,
+    fileUntilIndexed,
     maildirOf,
     makeEml,
     seedMaildirFile,
     seedMaildirFolder,
     WATCHER_TEST_TIMEOUT_MS,
 } from '../mail-test-helpers';
-import type { SSECollector } from '../setup';
 import { app, assertJson, authedRequest, collectSSE, createTestUser, ensureServer, findOrFail } from '../setup';
 
 const isWindows = process.platform === 'win32';
-// How often a rewatch test files another message while it waits. The test's own timeout bounds the wait.
-const REFILE_INTERVAL_MS = 500;
 
 // createTestUser hits the auth DB directly, so the setup wizard must have run first.
 beforeAll(async () => {
@@ -448,28 +445,14 @@ describe.skipIf(isWindows)('A folder outside the standard six stays fresh withou
 describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its watcher back', () => {
     let userId: string;
     let token: string;
-    let email: string;
 
     beforeAll(async () => {
-        email = `rewatch-${Date.now()}@test.eigen.is`;
-        const user = await createTestUser(email, 'testpassword123', 'Rewatch Test');
+        const user = await createTestUser(`rewatch-${Date.now()}@test.eigen.is`, 'testpassword123', 'Rewatch Test');
         userId = user.id;
         token = user.sessionToken;
         // The first listing attaches the standard folders' watchers.
         await listMailboxes(token, userId);
     }, WATCHER_TEST_TIMEOUT_MS);
-
-    // On macOS an fs.watch event comes seconds late under load, and one still queued when the process opens or
-    // closes another watcher is dropped. So each try files a fresh message, until the open tab hears one indexed.
-    async function fileUntilReceived(sse: SSECollector, mailbox: string): Promise<void> {
-        const indexed = sse
-            .next((event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.mailbox === mailbox)
-            .then(() => true);
-        do {
-            const eml = makeEml(`Filed into ${mailbox}`, { to: email });
-            seedMaildirFile(userId, mailbox, `${Date.now()}.filed`, eml, { dir: 'new' });
-        } while (!(await Promise.race([indexed, Bun.sleep(REFILE_INTERVAL_MS).then(() => false)])));
-    }
 
     async function counted(mailbox: string): Promise<boolean> {
         return findOrFail(await listMailboxes(token, userId), (box) => box.path === mailbox).total > 0;
@@ -487,7 +470,7 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
                 seedMaildirFolder(userId, MAILBOX_JUNK);
                 await listMailboxes(token, userId);
 
-                await fileUntilReceived(sse, MAILBOX_JUNK);
+                await fileUntilIndexed(sse, userId, MAILBOX_JUNK);
                 expect(await counted(MAILBOX_JUNK)).toBe(true);
             } finally {
                 sse.stop();
@@ -505,7 +488,7 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
             try {
                 // Opening waits out the syncs the removal itself kicked, so only a live watcher can index what follows.
                 expect((await authedRequest(token, `/mail/${userId}/mailbox/${MAILBOX_TRASH}`)).status).toBe(200);
-                await fileUntilReceived(sse, MAILBOX_TRASH);
+                await fileUntilIndexed(sse, userId, MAILBOX_TRASH);
             } finally {
                 sse.stop();
             }
@@ -525,7 +508,7 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
             // Opened after the listing, so only the listing can have given the folder its watcher.
             const sse = await collectSSE(userId);
             try {
-                await fileUntilReceived(sse, MAILBOX_ARCHIVE);
+                await fileUntilIndexed(sse, userId, MAILBOX_ARCHIVE);
                 expect(await counted(MAILBOX_ARCHIVE)).toBe(true);
             } finally {
                 sse.stop();
@@ -547,7 +530,7 @@ describe.skipIf(isWindows)('A standard folder an IMAP client removes gets its wa
             // Only a watcher on new/, or the sync its attach runs, can index what lands there.
             const sse = await collectSSE(userId);
             try {
-                await fileUntilReceived(sse, MAILBOX_INBOX);
+                await fileUntilIndexed(sse, userId, MAILBOX_INBOX);
             } finally {
                 sse.stop();
             }
