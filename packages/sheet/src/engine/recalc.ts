@@ -34,9 +34,9 @@ type GraphCtx = {
 
 type Extent = { rows: number; columns: number };
 
-// A workbook needs the server's recalc when a sheet has formula cells but no calcChain, which is true only for an
-// import whose recalc failed. The editor's ops and the import's recalc both write a calcChain, so the read path
-// pays nothing.
+// A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
+// recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
+// write a calcChain, so a computed workbook's read path pays nothing.
 export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {
     for (const sheet of sheets) {
         // recalcSheets skips a sheet without an id, so one must not arm the gate, or every read runs the pass for nothing.
