@@ -1,11 +1,12 @@
 // A writer always has the Format and Insert menus; the icon row beside them folds from its right end as the window narrows.
 // View and Tools reach everyone, viewers included.
 
-import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
+import { withBrowserFrames } from '../../fixtures/browser-frames';
 
 const window = installHappyDom();
 
@@ -969,24 +970,11 @@ test('Format › Page orientation opens Page setup', async () => {
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Page setup');
 });
 
-// Tiptap refocuses the editor a frame after a pick. A browser runs that frame once the menu has closed and before its
-// exit animation unmounts it, and the unmounting menu then hands focus back to its trigger unless told not to; happy-dom
-// runs it before the menu closes, under its focus trap, so a pick here defers it to a timer, as a frame would.
-async function pickInBrowserFrames(pick: () => Promise<void>) {
-    const frame = spyOn(globalThis, 'requestAnimationFrame').mockImplementation((callback) => {
-        setTimeout(() => callback(performance.now()));
-        return 0;
-    });
-    try {
-        await pick();
-        await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
-    } finally {
-        frame.mockRestore();
-    }
-}
-
 const ONE_PARAGRAPH = { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'a' }] }] };
 
+// Tiptap refocuses the editor a frame after a pick. A browser runs that frame once the menu has closed and before its
+// exit animation unmounts it, and the unmounting menu then hands focus back to its trigger unless told not to; happy-dom
+// runs it before the menu closes, under its focus trap, so the picks below run in browser frames.
 test.each([
     ['the style picker', 'Normal text', 'Heading 2'],
     ['the font picker', 'Inter', 'Source Serif 4'],
@@ -995,7 +983,7 @@ test.each([
     editor.commands.setTextSelection(1);
     await render(1920, true);
     await openMenu(trigger);
-    await pickInBrowserFrames(() => clickItem(choice));
+    await withBrowserFrames(() => clickItem(choice));
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
@@ -1005,7 +993,7 @@ test.each(['File', 'Edit', 'Format', 'Insert', 'Tools'])(
     async (menu) => {
         await render(1920, true);
         await openMenu(menu);
-        await pickInBrowserFrames(async () => {
+        await withBrowserFrames(async () => {
             await act(async () =>
                 document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
             );
@@ -1018,7 +1006,7 @@ test.each(['File', 'Edit', 'Format', 'Insert', 'Tools'])(
 test('a press on Edit while Format is open opens Edit, and the focus stays in it', async () => {
     await render(1920, true);
     await openMenu('Format');
-    await pickInBrowserFrames(() => openMenu('Edit'));
+    await withBrowserFrames(() => openMenu('Edit'));
     const menu = document.activeElement?.closest('[role="menu"]');
     expect(menu?.getAttribute('aria-labelledby')).toBe(menuTrigger('Edit')?.id);
 });
@@ -1029,7 +1017,7 @@ test('a second press on Format closes it and gives focus back to the editor', as
     await openMenu('Format');
     const trigger = menuTrigger('Format');
     if (!(trigger instanceof HTMLElement)) throw new Error('no Format trigger');
-    await pickInBrowserFrames(async () => {
+    await withBrowserFrames(async () => {
         await act(async () => {
             trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
             trigger.focus();
@@ -1050,7 +1038,7 @@ test.each(['Format', 'Normal text', 'Align'])(
         await openMenu(menu);
         const box = document.querySelector<HTMLInputElement>('input[aria-label="Font size"]');
         if (!box) throw new Error('no size box');
-        await pickInBrowserFrames(async () => {
+        await withBrowserFrames(async () => {
             await act(async () => {
                 box.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
                 box.focus();
@@ -1064,7 +1052,7 @@ test.each(['Format', 'Normal text', 'Align'])(
 test('a dialog a menu opens keeps focus', async () => {
     await render(1920, true);
     await openMenu('Format');
-    await pickInBrowserFrames(() => clickItem('Page orientation'));
+    await withBrowserFrames(() => clickItem('Page orientation'));
     expect(document.activeElement?.closest('[role="dialog"]')).not.toBeNull();
 });
 
@@ -1074,12 +1062,12 @@ test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the e
     editor.commands.setTextSelection(1);
     await render(1920, true);
     await openMenu('Format');
-    await pickInBrowserFrames(() => clickItem('Page orientation'));
+    await withBrowserFrames(() => clickItem('Page orientation'));
     const button = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
         (candidate) => candidate.textContent === label,
     );
     if (!button) throw new Error(`no ${label} button`);
-    await pickInBrowserFrames(async () => {
+    await withBrowserFrames(async () => {
         await act(async () => button.click());
     });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
@@ -1408,13 +1396,13 @@ test('Edit › Select all selects the whole doc and Edit › Delete removes it, 
     editor.commands.setTextSelection(1);
     await render(1920, true);
     await openMenu('Edit');
-    await pickInBrowserFrames(() => clickItem(`Select all${formatForDisplay('Mod+A')}`));
+    await withBrowserFrames(() => clickItem(`Select all${formatForDisplay('Mod+A')}`));
     expect([editor.state.selection.from, editor.state.selection.to]).toEqual([0, editor.state.doc.content.size]);
     expect(document.activeElement === editor.view.dom).toBe(true);
 
     editor.commands.setTextSelection({ from: 1, to: 7 });
     await openMenu('Edit');
-    await pickInBrowserFrames(() => clickItem('Delete'));
+    await withBrowserFrames(() => clickItem('Delete'));
     expect(editor.getText()).toBe('world');
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
@@ -1431,7 +1419,7 @@ test.each([
     editor.commands.setTextSelection({ from: 1, to: 6 });
     await render(1920, true);
     await openMenu('Edit');
-    await pickInBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
+    await withBrowserFrames(() => clickItem(`${label}${formatForDisplay(shortcut)}`));
     expect(execCommand.mock.calls).toEqual([[command]]);
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
