@@ -134,8 +134,6 @@ An agent can't do this; it needs a person with Excel or Google Sheets. It's a do
 
 Verified, user-visible, bounded.
 
-- [ ] **A sheet just added can lose its grid after a rollback**: `keepAnchor` (`apps/sheets/src/components/sheets/hooks/use-sheet.ts`) saves the sheets inside the observer of the tab's own push, and for a local `addSheet` that runs before the Workbook's effect gives the new sheet its matrix. A later rollback to that anchor (`replayOps` in `components/Workbook/api.ts`) restores a current sheet with no matrix, the effect doesn't run again, and typing into it is dropped until the user switches sheets. A copied sheet has the same gap. Fix: give the current sheet its matrix (`initSheetData`) after the replay, or let `keepAnchor` skip a sheet with none. A failing test and the fix sketch are in the 2026-11-01 op-log audit. **S**
-
 - [ ] **The compaction swap keeps no copy it can be restored from**: `closeAfterLinger` (`apps/api/src/lib/collab/collab-document.ts`) replaces the log with the replayed snapshot, and the version taken at close comes after the swap. A session shorter than `writesPerSnapshot` writes leaves its raw log in no version, so a batch the replay dropped or a codec bug is lost for good. CODE-STANDARDS asks for a copy before an overwrite. Fix: save a version before the swap, as `commitImport` does before a replace. **S**
 
 - [ ] **A paste past the edge throws on a sheet with an empty matrix**: `expandRowsAndColumns` (`state/modules/sheet.ts`) reads `data[0].length` without the guard the old code had. **S**
