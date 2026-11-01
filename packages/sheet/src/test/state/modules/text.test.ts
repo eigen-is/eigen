@@ -1,6 +1,7 @@
 // Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { setCellValue } from '../../../state/modules/cell';
 import {
     clearMeasureTextCache,
@@ -109,14 +110,14 @@ test("a cell draws at its imported size, held to Excel's range", () => {
 
 describe('state/modules/text — font sets', () => {
     test('a cell with no font, and the canvas default, draw in Inter', () => {
-        expect(getFontSet({})).toStartWith('normal normal normal 10pt "Inter",');
-        expect(defaultFont()).toStartWith('normal normal normal 10pt "Inter",');
+        expect(getFontSet({})).toBe(`normal normal normal 10pt ${getFontFamily('Inter')}`);
+        expect(defaultFont()).toBe(getFontSet({}));
     });
 
     test("a cell's font is its first family, an index the bundled font at it", () => {
-        expect(getFontSet({ ff: 2, bl: 1 })).toStartWith('normal normal bold 10pt "JetBrains Mono",');
-        expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 })).toStartWith(
-            'italic normal normal 12pt "Source Serif 4",',
+        expect(getFontSet({ ff: 2, bl: 1 })).toBe(`normal normal bold 10pt ${getFontFamily('JetBrains Mono')}`);
+        expect(getFontSet({ ff: "'source serif 4', sans-serif", it: 1, fs: 12 })).toBe(
+            `italic normal normal 12pt ${getFontFamily('Source Serif 4')}`,
         );
     });
 });

@@ -2,6 +2,7 @@
 // conditional formats. Its items run the same toolbar handlers as the format toolbar.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BorderType } from '@workspace/lib/sheets';
 import {
     ChoiceMenuItems,
@@ -172,7 +173,7 @@ function TextSubmenu({ caretColor }: { caretColor: string | undefined }) {
                                     });
                                 }}
                             >
-                                <span style={{ fontFamily: `'${o}', sans-serif` }}>{o}</span>
+                                <span style={{ fontFamily: getFontFamily(o) }}>{o}</span>
                             </DropdownMenuItem>
                         ))}
                     </DropdownMenuSubContent>

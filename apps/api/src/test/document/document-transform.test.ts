@@ -495,10 +495,10 @@ describe('document transform (eigensheets preview)', () => {
 });
 
 // The golden workbook's HTML download and the document fed to WeasyPrint, its @page fit to the widest and tallest
-// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved when it stopped
-// embedding the faces it does not draw in).
-const GOLDEN_EXPORT_HTML_SHA256 = '5fd73d273ad5a3a8c476a3384ac2a8e15363ac42b833e14366d6815523c885a3';
-const GOLDEN_EXPORT_PDF_HTML_SHA256 = '3e5ff3028cd20ca46f2f68866dbec4fe9ce9129b53bfd3d9cae19d27366f062b';
+// sheet, pinned byte for byte: a hash moves only with an intentional renderer change (last moved when its body and
+// cell fonts took the font stack builder's emoji and CJK faces).
+const GOLDEN_EXPORT_HTML_SHA256 = '6444d0af14b5cd474a39efe1e27ffe40d3dbc634129fbd54cfd1e0957f5cc74e';
+const GOLDEN_EXPORT_PDF_HTML_SHA256 = '9fa074e2acc351f74f91e6f461960609832a4666b9a1cf678ddec23223c86d1c';
 
 describe('document transform (eigensheets export)', () => {
     let golden: { mount: Mount; path: DrivePath };
@@ -861,20 +861,21 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
-// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when the
-// table of contents' rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head took
-// the page-number rules of all three layouts, for every doc.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6f1c417956854ebe9cb63734a51c27a6788d9099e339f875395ee2b14630c1ea';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6a936e9608db69c4726650044fc086f06176463fa0526e22c49d5bfe85f5105c';
+// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when
+// the prose CSS's sans and mono stacks took the font stack builder's emoji and CJK faces, after the table of contents'
+// rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head took the page-number
+// rules of all three layouts, for every doc.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = 'd2001269fd0aa219a1a79f69cc180e6aa476af2e5f82427ef1a7424bfa757cb0';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = 'a68bf2b4a2bb8e215da01da7ff1add3f15d78fc9db42e98b9292eff428f80d3c';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';
 // The deck's preview body, its HTML download in the .page-fit wrapper, and its slides as WeasyPrint prints them.
-// The HTML download embeds canvas-text.css whole, its comments too. All three last moved when every font stack took
-// the emoji and CJK faces after its family.
+// The HTML download embeds canvas-text.css whole, its comments too. The preview last moved when every font stack
+// took the emoji and CJK faces after its family, and the HTML download and the PDF when their body's stack did too.
 const GOLDEN_DECK_PREVIEW_SHA256 = 'eaa231a9db70fc95ad6c50a9001c39efa94abd7a51cdfd5f6aebb6f5facd2399';
-const GOLDEN_DECK_EXPORT_HTML_SHA256 = '6baf45cc7c0803acd8c18d9d2c2587079fd608e98d5a840e57b9e1de138098d8';
-const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = 'a59cf60715dcf187e3869ded46d2847cac59207c08b50979e77f7374b3bd1979';
+const GOLDEN_DECK_EXPORT_HTML_SHA256 = '76b6681234b5f55fa2f9d2800230dc884bd30a097a74c241c6ba877e960c3b46';
+const GOLDEN_DECK_EXPORT_PDF_HTML_SHA256 = '7be5757fdb5a11fbc5d93d0cd06d4216b28da8e83ffc61c1364b9e96cecb9221';
 
 // Preview media is embedded as an absolute API URL carrying per-run owner/path ids —
 // normalize them out so the golden pins the rendering, not the fixture's uuids.

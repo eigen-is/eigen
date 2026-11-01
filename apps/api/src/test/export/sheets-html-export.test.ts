@@ -5,6 +5,8 @@ import {
     newSheetChartSpecParts,
     sampleChartSpec,
 } from '@workspace/lib/charts';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
+import { escapeHtml } from '@workspace/lib/html';
 import type {
     Cell,
     CellBorderSides,
@@ -253,9 +255,9 @@ describe('Sheets HTML export — class-based styles', () => {
         expect(out.css).not.toContain('&quot;');
     });
 
-    test('the inline table style carries the body font stack with entity quotes', () => {
+    test('the inline table style carries the body font stack, whose quotes fit in the attribute', () => {
         const { html } = renderSheetsPreviewHtml([makeSheet([{ r: 0, c: 0, v: { v: 'x' } }])], NO_MEDIA);
-        expect(html).toContain(`font-family:${FONT_STACK_SANS.replaceAll('"', '&quot;')};`);
+        expect(html).toContain(`font-family:${FONT_STACK_SANS};`);
     });
 
     // An unsized cell draws at the grid's default, in pt as the grid draws it.
@@ -449,7 +451,7 @@ describe('Sheets HTML export — preview stays inline', () => {
         expect(html).toContain('style="');
         expect(html).toContain('color:#ff0000');
         // Attribute context keeps the encoded font-family quotes.
-        expect(html).toContain('font-family:&quot;Georgia&quot;');
+        expect(html).toContain(`font-family:${escapeHtml(getFontFamily('Georgia'))}`);
         expect(html).not.toMatch(/class="s\d/);
     });
 });
@@ -797,7 +799,7 @@ describe('Sheets HTML export — cell styling', () => {
             'screen',
             NO_PIXELS,
         );
-        const cls = classesFor(out, 'font-family:"Georgia",sans-serif');
+        const cls = classesFor(out, `font-family:${getFontFamily('Georgia')}`);
         expect(cls.length).toBe(1);
         // Declarations after font-family must survive in the same rule.
         const rule = out.css.match(new RegExp(`\\.${cls[0]}\\{([^}]*)\\}`))?.[1] ?? '';
@@ -814,7 +816,7 @@ describe('Sheets HTML export — cell styling', () => {
             'screen',
             NO_PIXELS,
         );
-        expect(out.css).toContain('font-family:"Bell MT & ONeill",sans-serif');
+        expect(out.css).toContain(`font-family:${getFontFamily('Bell MT & ONeill')}`);
         expect(out.css).not.toContain('&amp;');
         expect(out.css).not.toContain('&#39;');
     });
