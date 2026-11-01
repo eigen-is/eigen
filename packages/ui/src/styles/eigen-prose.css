@@ -276,17 +276,27 @@
         margin: 1em 0;
     }
 
-    /* An entry is body text, not a link's look, until the pointer is on it */
+    /* An entry is body text, not a link's look, until the pointer is on it. In an editor you can type in a press
+       selects the table of contents, so there an entry keeps the default cursor and shows no underline. */
     nav[data-type="table-of-contents"] > [data-level] {
         display: block;
         padding: 0.15em 0;
         color: inherit;
         text-decoration: none;
+        cursor: default;
     }
 
-    nav[data-type="table-of-contents"] > a[data-level]:hover {
+    &:not([contenteditable="true"]) nav[data-type="table-of-contents"] > a[data-level]:hover {
         text-decoration: underline;
         cursor: pointer;
+    }
+
+    /* The Links layout draws its entries as links. So does every table of contents on a page-less doc, which has no
+       page numbers to show. The page carries data-pageless, as a switch to page-less redraws no node. */
+    nav[data-type="table-of-contents"][data-preset="links"] > [data-level],
+    [data-pageless] & nav[data-type="table-of-contents"] > [data-level] {
+        color: var(--color-link, #2563eb);
+        text-decoration: underline;
     }
 
     nav[data-type="table-of-contents"] > [data-level="2"] {
@@ -711,14 +721,6 @@
     .text-box .tiptap {
         min-height: 0;
     }
-}
-
-/* The editor's table of contents in the Links layout draws its entries as links. So does every one on a page-less doc,
-   which has no page numbers to show: the page carries data-pageless, as a switch to page-less redraws no node. */
-nav[data-type="table-of-contents"][data-preset="links"] > a[data-level],
-[data-pageless] nav[data-type="table-of-contents"] > a[data-level] {
-    color: var(--color-link, #2563eb);
-    text-decoration: underline;
 }
 
 /* ===== Task lists — TipTap output ===== */

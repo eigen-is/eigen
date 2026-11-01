@@ -861,12 +861,11 @@ describe('document transform (xlsx import)', () => {
 const GOLDEN_DOC_PREVIEW_SHA256 = 'c42f198a67ecebd6671edce35decb7edf51ec295a3efaa4bf7e60e908232122b';
 // The doc's HTML download and the document fed to WeasyPrint. The golden doc holds nothing that prints otherwise on
 // paper, no band, note, equation or small caps, so the two differ by the page-number counters every PDF's head holds,
-// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. The HTML last moved
-// when the text box's font, size, line height and color joined the prose base rule's selector list
-// (`.eigen-prose, .eigen-doc .text-box`). The PDF's last moved when the golden image, an opaque PNG, went in as that
-// JPEG, the only bytes that changed.
-const GOLDEN_DOC_EXPORT_HTML_SHA256 = '377cbeee6c018cf9a051e682ee0c6ddf208a66441052e3a9087ae3003d890a7b';
-const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '2c7b36f8fe94a65f37aa5bc108b43ec377eded19a8cbab8b93194aa7cf27f793';
+// and by the image: the download embeds its WebP preview, the PDF a JPEG made from its source. Both last moved when the
+// table of contents' rules in the prose stylesheet changed (the Links rule, an entry's cursor) and the PDF's head took
+// the page-number rules of all three layouts, for every doc.
+const GOLDEN_DOC_EXPORT_HTML_SHA256 = '6f1c417956854ebe9cb63734a51c27a6788d9099e339f875395ee2b14630c1ea';
+const GOLDEN_DOC_EXPORT_PDF_HTML_SHA256 = '6a936e9608db69c4726650044fc086f06176463fa0526e22c49d5bfe85f5105c';
 // The doc's docx: the writer's parts and embedded fonts, deflated by libdeflate, and the thumbnail Worker's JPEG of the
 // image. It last moved when the Hyperlink style took the editor's underline.
 const GOLDEN_DOC_EXPORT_DOCX_SHA256 = '7e18568669cea9afc673aed909d64df660e1e9edec779d7ff7cf82fbe3f4fa36';

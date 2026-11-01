@@ -11,14 +11,13 @@ import {
     serializeChildrenToHTMLString,
 } from '@tiptap/static-renderer/pm/html-string';
 import { readChartSpec } from '@workspace/lib/charts';
-import { fontNameToCss, getFontName } from '@workspace/lib/constants/fonts';
+import { getFontName } from '@workspace/lib/constants/fonts';
 import type {
     ChartAttrs,
     FigureAttrs,
     FigureFrameAttrs,
     OutlineHeading,
     TextBoxAttrs,
-    TocLevelStyle,
 } from '@workspace/lib/docs/eigendoc';
 import {
     BLOCK_ONLY_FIGURE_PARENTS,
@@ -43,7 +42,9 @@ import {
     readTocLevels,
     TEXT_BOX_PARAGRAPH,
     TOC_LEVEL_KEYS,
+    TOC_PRESET_ATTRIBUTE,
     textBoxHTMLAttributes,
+    tocLevelCss,
     tocPreset,
 } from '@workspace/lib/docs/eigendoc';
 import { isRecord } from '@workspace/lib/guards';
@@ -309,11 +310,12 @@ function renderHeading(
     return html.replace(/^<h[1-6]/, (open) => `${open}${attrs}`);
 }
 
-// The body's headings to the node's level, each a block indented by its level: a link to its heading's id with
-// `anchors`, and plain text in the preview, whose DOM is live in the drive's page. Each entry draws in its level's look,
-// and in a link's in the Links layout. The nav carries the node's stored attributes as its renderHTML writes them, so a
-// paste of the download back into Docs keeps them, and the layout it draws in when that is not Dotted, for which the
-// PDF's head draws each page number after its link (tocCss in transform.ts).
+// The body's headings to the node's level, each a block indented by its level. With `anchors` an entry is a link to its
+// heading's id. In the preview it is plain text, as the preview's DOM is live in the drive's page. Each entry draws in
+// its level's look, and one with none draws as the body text, so an untouched one renders as it did. The nav carries the
+// node's stored attributes as its renderHTML writes them, so a paste of the download back into Docs keeps them. It also
+// names the layout it draws in when that is not Dotted. The stylesheet draws Links by that name, and the PDF's head
+// draws the page numbers by it.
 function renderTableOfContents(
     node: Node,
     outline: OutlineHeading[],
@@ -321,7 +323,10 @@ function renderTableOfContents(
 ): string {
     const levels = readTocLevels(node.attrs['levels']);
     const preset = tocPreset(node.attrs, pageless);
-    const looks = TOC_LEVEL_KEYS.map((key) => entryStyle(readTocLevelStyle(node.attrs[key]), preset === 'links'));
+    const looks = TOC_LEVEL_KEYS.map((key) => {
+        const css = tocLevelCss(readTocLevelStyle(node.attrs[key]), BOLD_WEIGHT);
+        return css ? ` style="${escapeHtml(css)}"` : '';
+    });
     const entries = outline.map(({ level, text }, index) => {
         if (level > levels) return '';
         const content = escapeHtml(text);
@@ -331,30 +336,13 @@ function renderTableOfContents(
             : `<span data-level="${level}"${look}>${content}</span>`;
     });
     const spec = node.type.spec.toDOM?.(node);
-    const stored = Array.isArray(spec) && isRecord(spec[1]) ? spec[1] : { 'data-type': 'table-of-contents' };
+    const stored = Array.isArray(spec) && isRecord(spec[1]) ? spec[1] : {};
     const drawn = preset === 'dotted' ? {} : { [TOC_PRESET_ATTRIBUTE]: preset };
     return domOutputSpecToHTMLString(['nav', { ...stored, ...drawn }, 0])(entries.join(''));
 }
 
-// The attribute that names the layout a table of contents draws in, which the PDF's head selects its numbers by.
-export const TOC_PRESET_ATTRIBUTE = 'data-preset';
-
+// The weight a bold mark draws at in the export.
 const BOLD_WEIGHT = proseValue('.eigen-prose strong', 'font-weight');
-
-const LINK_STYLE = `color: ${proseValue('.eigen-prose a', 'color')}; text-decoration: ${proseValue('.eigen-prose a', 'text-decoration')}`;
-
-// An entry's own look as a style attribute: its level's font, size, bold and italic, as their marks draw them, and the
-// link's colour in the Links layout. None for an entry drawn as the body text, so an untouched one renders as it did.
-function entryStyle(look: TocLevelStyle | null, links: boolean): string {
-    const declarations = [
-        look?.font !== undefined && `font-family: ${fontNameToCss(look.font)}`,
-        look?.size !== undefined && `font-size: ${look.size}pt`,
-        look?.bold === true && `font-weight: ${BOLD_WEIGHT}`,
-        look?.italic === true && 'font-style: italic',
-        links && LINK_STYLE,
-    ].filter((declaration) => typeof declaration === 'string');
-    return declarations.length > 0 ? ` style="${escapeHtml(declarations.join('; '))}"` : '';
-}
 
 // The size Chromium and WebKit draw the small caps they synthesize at, so the PDF's match the editor's.
 const SYNTHESIZED_SMALL_CAPS_SIZE = '0.7em';

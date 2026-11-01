@@ -3009,9 +3009,10 @@ describe("doc export — a table of contents' look", () => {
     };
     const entryStyles = (nav: Element) =>
         [...nav.querySelectorAll('[data-level]')].map((entry) => entry.getAttribute('style'));
-    const LINK = `color: ${proseValue('.eigen-prose a', 'color')}; text-decoration: ${proseValue('.eigen-prose a', 'text-decoration')}`;
+    // The rule that draws the Links layout's entries, which the editor's stylesheet shares.
+    const LINKS_RULE = '.eigen-prose nav[data-type="table-of-contents"][data-preset="links"] > [data-level]';
 
-    // The bytes the exports wrote before the node stored a look, as written at 8bac3376b.
+    // The nav the exports wrote before the node stored a look, as written at 8bac3376b.
     test.each(['html', 'pdf-html'] as const)('%s draws one with only the defaults as it did before', async (format) => {
         const defaults = { pageNumbers: true, leader: 'dot', level1: null, level2: null };
         for (const doc of [tocDoc(), tocDoc(defaults)]) {
@@ -3019,12 +3020,20 @@ describe("doc export — a table of contents' look", () => {
             expect(html).toContain(
                 '<nav data-type="table-of-contents" data-levels="3"><a href="#h-1" data-level="1">Intro</a><a href="#h-2" data-level="2">Method</a></nav>',
             );
-            const css = await exportStyle(format, doc);
-            expect(css.match(/a::after/g) ?? []).toHaveLength(format === 'pdf-html' ? 1 : 0);
-            if (format === 'pdf-html')
-                expect(css).toContain(
-                    `\n[data-type="table-of-contents"] a::after { content: leader('.') target-counter(attr(href), page); }\n`,
-                );
+        }
+    });
+
+    // One stylesheet for every doc, whatever layout its tables of contents draw in.
+    test('the PDF carries the page numbers of all three layouts, a doc with none at all too', async () => {
+        for (const doc of [tocDoc(), seededDoc({ type: 'doc', content: [heading(1, 'Intro')] })]) {
+            const css = await exportStyle('pdf-html', doc);
+            expect(css).toContain(
+                `[data-type="table-of-contents"] a::after { content: leader('.') target-counter(attr(href), page); }`,
+            );
+            expect(css).toContain(
+                `[data-type="table-of-contents"][data-preset="plain"] a::after { content: leader(' ') target-counter(attr(href), page); }`,
+            );
+            expect(css).toContain('[data-type="table-of-contents"][data-preset="links"] a::after { content: none; }');
         }
     });
 
@@ -3056,7 +3065,10 @@ describe("doc export — a table of contents' look", () => {
             const nav = await navOf(format, doc);
             expect(nav.getAttribute('data-preset')).toBe('links');
             const bold = proseValue('.eigen-prose strong', 'font-weight');
-            expect(entryStyles(nav)).toEqual([LINK, `font-weight: ${bold}; ${LINK}`]);
+            expect(entryStyles(nav)).toEqual([null, `font-weight: ${bold}`]);
+            expect(proseValue(LINKS_RULE, 'color')).toBe(proseValue('.eigen-prose a', 'color'));
+            expect(proseValue(LINKS_RULE, 'text-decoration')).toBe('underline');
+            expect(await exportStyle(format, doc)).toContain(`${LINKS_RULE}, `);
             if (format === 'pdf-html')
                 expect(await exportStyle(format, doc)).toContain(
                     '[data-type="table-of-contents"][data-preset="links"] a::after { content: none; }',
@@ -3072,7 +3084,7 @@ describe("doc export — a table of contents' look", () => {
             expect(nav.getAttribute('data-preset')).toBe('links');
             expect(nav.getAttribute('data-leader')).toBe('none');
             expect(nav.hasAttribute('data-page-numbers')).toBe(false);
-            expect(entryStyles(nav)).toEqual([LINK, LINK]);
+            expect(entryStyles(nav)).toEqual([null, null]);
         },
     );
 
@@ -3093,6 +3105,6 @@ describe("doc export — a table of contents' look", () => {
         const { body: pageless } = renderEigendocPreviewBody(tocDoc({}, true), new Map());
         const preview = new JSDOM(pageless).window.document.querySelector('nav');
         expect(preview?.getAttribute('data-preset')).toBe('links');
-        expect(preview ? entryStyles(preview) : []).toEqual([LINK, LINK]);
+        expect(preview ? entryStyles(preview) : []).toEqual([null, null]);
     });
 });
