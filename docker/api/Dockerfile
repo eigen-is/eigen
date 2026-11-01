@@ -13,9 +13,9 @@ FROM oven/bun:${BUN_VERSION}-slim
 
 WORKDIR /app
 
-# Runtime deps. No compiler: the install runs no scripts, and sharp ships its own binary with its own libvips, so the
-# image has no libvips or ImageMagick, which nothing else calls. No recommended packages, whose fonts would draw text
-# that dev and CI draw in Eigen's: ghostscript's Droid Sans Fallback once printed production's CJK.
+# Runtime deps. No compiler, since the install runs no scripts. No libvips or ImageMagick: sharp ships its own binary
+# with its own libvips, and nothing else calls them. No recommended packages: they bring fonts, and production would
+# then draw some text in another font than dev and CI. Ghostscript's Droid Sans Fallback once printed its Chinese.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libimage-exiftool-perl \
     python3-venv \
@@ -37,10 +37,10 @@ RUN python3 -m venv /opt/weasyprint \
     && ln -s /opt/weasyprint/bin/weasyprint /usr/local/bin/weasyprint \
     && rm /tmp/weasyprint-requirements.txt
 
-# librsvg draws an SVG's text in the system's fonts, and the image has only DejaVu, fontconfig's dependency, which is
-# wider than Eigen's and has no CJK. An SVG's PNG fallback in an Office file, such as a canvas selection pasted into a
-# doc, and an SVG's thumbnail draw Eigen-font text, so the image carries each Eigen font's regular and its bold, the 600
-# a bold label takes.
+# librsvg draws an SVG's text in the system's fonts. The image's only other font is DejaVu, which fontconfig needs, and
+# it is wider than Eigen's and has no Chinese or Korean. An SVG's thumbnail and its PNG fallback in an Office file, such
+# as a canvas selection pasted into a doc, draw Eigen-font text. So the image carries each Eigen font's regular and its
+# bold, the 600 a bold label takes.
 COPY packages/ui/src/assets/fonts/inter/Inter-Regular.ttf \
     packages/ui/src/assets/fonts/inter/Inter-Bold-renamed.ttf \
     packages/ui/src/assets/fonts/source-serif/SourceSerif4-Regular.ttf \
@@ -49,8 +49,9 @@ COPY packages/ui/src/assets/fonts/inter/Inter-Regular.ttf \
     packages/ui/src/assets/fonts/jetbrains-mono/JetBrainsMono-Bold-renamed.ttf \
     packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.ttf \
     /usr/share/fonts/truetype/eigen/
-# Chinese and Korean draw in Noto's slices, as TrueType the venv's fontTools writes from the WOFF2s: sharp's own libvips
-# has no brotli, so its FreeType reads no WOFF2 and draws boxes. A bind mount keeps the WOFF2s off this layer.
+# Chinese and Korean draw in Noto's slices. sharp's own libvips has no brotli, so its FreeType can't read a WOFF2 and
+# would draw boxes. So the venv's fontTools writes each slice as TrueType, and a bind mount keeps the WOFF2s out of
+# this layer.
 RUN --mount=type=bind,source=packages/ui/src/assets/fonts,target=/tmp/fonts \
     /opt/weasyprint/bin/python3 -I -c 'import pathlib, sys; from fontTools.ttLib.woff2 import decompress; \
         [decompress(f, f"/usr/share/fonts/truetype/eigen/{pathlib.Path(f).stem}.ttf") for f in sys.argv[1:]]' \
