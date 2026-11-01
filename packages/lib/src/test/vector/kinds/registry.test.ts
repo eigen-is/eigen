@@ -350,8 +350,8 @@ describe('ELEMENT_KINDS', () => {
 
     test('a shape with text embeds its face in an SVG download; one without embeds none', () => {
         const el = shape({ id: 'r', type: 'rectangle', html: '<p>hi</p>', fontFamily: 'Inter' });
-        expect(ELEMENT_KINDS.rectangle.fontFamilies(el)).toEqual(['Inter']);
-        expect(ELEMENT_KINDS.rectangle.fontFamilies(shape({ id: 'r', type: 'rectangle' }))).toEqual([]);
+        expect(ELEMENT_KINDS.rectangle.fontRuns(el)).toEqual([{ family: 'Inter', text: 'hi' }]);
+        expect(ELEMENT_KINDS.rectangle.fontRuns(shape({ id: 'r', type: 'rectangle' }))).toEqual([]);
     });
 });
 

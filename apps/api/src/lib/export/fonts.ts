@@ -1,55 +1,60 @@
-// The bundled fonts as @font-face rules, each WOFF2 face base64'd into a data: URI, for the HTML and PDF exports and
-// the SVG previews, which have no app to fetch a font from. Also whether a face draws its own small caps.
+// The bundled fonts as @font-face rules for the HTML and PDF exports and the SVG previews, which have no app to fetch a
+// font from. Each rule embeds one slice that the text draws with, its WOFF2 base64'd into a data: URI, picked by
+// slicesFor as the browser's image download picks them. Also whether a face draws its own small caps.
 
 import * as fs from 'node:fs';
-import type { BundledFontFace, FontFaceFile } from '@workspace/lib/constants/fonts';
-import { FONT_FACES, fontFaceCss, fontFacesOf } from '@workspace/lib/constants/fonts';
-import fontExcalifont from '@workspace/ui/assets/fonts/excalifont/Excalifont-Regular.woff2' with { type: 'file' };
-import fontInterRegular from '@workspace/ui/assets/fonts/inter/Inter-Variable.woff2' with { type: 'file' };
-import fontInterItalic from '@workspace/ui/assets/fonts/inter/Inter-Variable-Italic.woff2' with { type: 'file' };
-import fontMonoRegular from '@workspace/ui/assets/fonts/jetbrains-mono/JetBrainsMono-Variable.woff2' with {
-    type: 'file',
-};
-import fontSerifRegular from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-Variable.woff2' with {
-    type: 'file',
-};
-import fontSerifItalic from '@workspace/ui/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2' with {
-    type: 'file',
-};
-
-// The bundler's path of each registry face (its asset in the build), keyed by the file FONT_FACES names: the record
-// type makes it list every face and nothing else, so the faces themselves are only ever the registry's.
-const FACE_PATHS: Record<FontFaceFile, string> = {
-    'inter/Inter-Variable.woff2': fontInterRegular,
-    'inter/Inter-Variable-Italic.woff2': fontInterItalic,
-    'source-serif/SourceSerif4-Variable.woff2': fontSerifRegular,
-    'source-serif/SourceSerif4-Variable-Italic.woff2': fontSerifItalic,
-    'jetbrains-mono/JetBrainsMono-Variable.woff2': fontMonoRegular,
-    'excalifont/Excalifont-Regular.woff2': fontExcalifont,
-};
+import type { FontSlice } from '@workspace/lib/constants/font-slices';
+import { fontFaceCss, slicesFor } from '@workspace/lib/constants/font-slices';
+import type { BundledFontFace } from '@workspace/lib/constants/fonts';
+import { FONT_FACES } from '@workspace/lib/constants/fonts';
 
 export function hasSmallCaps(family: string, style: BundledFontFace['style']): boolean {
     return FONT_FACES.some((face) => face.family === family && face.style === style && 'smallCaps' in face);
 }
 
-// The @font-face blocks for just the given families (each an EIGEN_FONTS name, the same
-// value a vector text/label element stores in `fontFamily`). An export or an SVG preview inlines
-// only the whole faces its text actually uses; an unrecognized family contributes nothing.
-export function fontFaceCssOf(families: Iterable<string>): string {
-    return fontFacesOf(families).map(embeddedFaceCss).join('\n');
+// What an export's own CSS draws besides its text: list markers (the disc, numbers, letters and roman numerals), a
+// contents entry's dotted leader, and page and footnote numbers. All of it is printable ASCII but the disc, U+2022.
+const CSS_DRAWN = [0x2022, ...Array.from({ length: 0x7f - 0x20 }, (_, i) => 0x20 + i)];
+
+// A numeric character reference, which an SVG from elsewhere may spell its text in.
+const CHARACTER_REFERENCE = /&#(?:x([\da-f]+)|(\d+));/gi;
+
+// The characters a document may draw: those of its markup, the ones its CSS draws, and each letter's other case, since
+// CSS caps draw a lowercase letter as its capital. ASCII is always among them, so only the rest of the markup is read,
+// which skips the base64 of its pictures quickly.
+export function drawnCodePoints(markup: string): Set<number> {
+    const chars = new Set(markup.match(/\P{ASCII}/gu));
+    for (const [, hex, decimal] of markup.matchAll(CHARACTER_REFERENCE)) {
+        const codePoint = hex ? Number.parseInt(hex, 16) : Number(decimal);
+        if (codePoint <= 0x10ffff) chars.add(String.fromCodePoint(codePoint));
+    }
+    const codePoints = new Set(CSS_DRAWN);
+    for (const char of chars) {
+        for (const cased of char + char.toUpperCase() + char.toLowerCase()) codePoints.add(cased.codePointAt(0) ?? 0);
+    }
+    return codePoints;
 }
 
-// Read + base64 once per bundled font (~2 MB resident): the main-thread SVG preview path
-// asks for faces on every request, while a one-shot export's child process pays it once anyway.
-// A bundled asset that cannot be read is a build defect, so the read is unguarded.
-const faceCssByFile = new Map<FontFaceFile, string>();
+// The @font-face rules of the slices these families draw these characters with. An unknown family has none.
+export function slicesFaceCss(codePoints: ReadonlySet<number>, families: Iterable<string>): string {
+    return slicesFor(codePoints, families).map(embeddedSliceCss).join('\n');
+}
 
-function embeddedFaceCss(face: BundledFontFace): string {
-    let css = faceCssByFile.get(face.file);
+// The API runs from the repository, so a slice's file is read where the UI package keeps it, by its path under
+// assets/fonts/: the path the slice table and the browser's font URLs name it by.
+const FONTS_SPECIFIER = '@workspace/ui/assets/fonts/';
+
+// Read and base64 once per slice: the main-thread SVG preview path asks for slices on every request, while a one-shot
+// export's child process pays it once anyway. All slices are about 20 MB of base64, but a server holds only those its
+// previews touched. A bundled slice that cannot be read is a build defect, so the read is unguarded.
+const sliceCssByFile = new Map<string, string>();
+
+function embeddedSliceCss(slice: FontSlice): string {
+    let css = sliceCssByFile.get(slice.file);
     if (css === undefined) {
-        const bytes = fs.readFileSync(FACE_PATHS[face.file]);
-        css = fontFaceCss(face, `data:font/woff2;base64,${bytes.toString('base64')}`);
-        faceCssByFile.set(face.file, css);
+        const bytes = fs.readFileSync(Bun.resolveSync(`${FONTS_SPECIFIER}${slice.file}`, import.meta.dir));
+        css = fontFaceCss(slice, `data:font/woff2;base64,${bytes.toString('base64')}`);
+        sliceCssByFile.set(slice.file, css);
     }
     return css;
 }

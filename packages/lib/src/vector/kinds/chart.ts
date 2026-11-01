@@ -64,7 +64,8 @@ export const chartKind = defineKind<VectorChartElement>({
     outline: (el, inflate) => rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, 0, inflate),
     render: (el) => ({ svg: renderChartSvg(el) }),
     searchText: (el) => chartSearchText(readChartSpec(el).spec),
-    // The font its labels draw in; the placeholder adds none.
-    fontFamilies: (el) => chartElementLayout(el)?.labels.map((label) => label.fontFamily) ?? [],
+    // Its labels, in the font they draw in; the placeholder adds none.
+    fontRuns: (el) =>
+        chartElementLayout(el)?.labels.map(({ fontFamily, text }) => ({ family: fontFamily, text })) ?? [],
     toShapes: chartToElements,
 });

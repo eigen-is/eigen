@@ -1,11 +1,10 @@
 // The image writer behind Download image and Vector's File › Download › SVG: canvas elements, or a doc's or a
 // sheet's chart, drawn by the browser as one standalone SVG. Rich text is written as SVG text from the browser's
-// own layout of each box, the faces it and the labels draw in are embedded, and images are inlined from the
+// own layout of each box, the font slices it and the labels draw in are embedded, and images are inlined from the
 // canvas's own media, so the file draws the same in any SVG reader. DOM work, so the measuring lives here and the
 // writing in lib.
 
 import { inlineSvgMedia } from '@workspace/lib/clipboard';
-import { fontFaceCss } from '@workspace/lib/constants/fonts';
 import { downloadBlob } from '@workspace/lib/download';
 import { bytesToBase64 } from '@workspace/lib/format';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
@@ -49,12 +48,13 @@ export async function downloadCanvasImage(
     const measured = await measureRichText(scene.elements);
     const richText = new Map([...measured].map(([id, box]) => [id, richTextSvg(box)]));
     const inlined = await inlineSvgMedia(sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }), fetchMedia);
+    const { fontFaceCss } = await import('@workspace/lib/constants/font-slices');
     const faces = await Promise.all(
-        canvasImageFaces(scene.elements, measured).map(async (face) => {
-            const response = await fetch(bundledFontUrl(face.file));
-            if (!response.ok) throw new Error(`The ${face.family} font could not be loaded`);
+        (await canvasImageFaces(scene.elements, measured)).map(async (slice) => {
+            const response = await fetch(bundledFontUrl(slice.file));
+            if (!response.ok) throw new Error(`The ${slice.family} font could not be loaded`);
             const bytes = new Uint8Array(await response.arrayBuffer());
-            return fontFaceCss(face, `data:font/woff2;base64,${bytesToBase64(bytes)}`);
+            return fontFaceCss(slice, `data:font/woff2;base64,${bytesToBase64(bytes)}`);
         }),
     );
     const svg = spliceAfterSvgOpenTag(inlined, `<defs><style>${faces.join('\n')}</style></defs>`);

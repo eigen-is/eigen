@@ -6,6 +6,7 @@ import type { DocumentExportFormat } from '../../lib/document/transform/protocol
 import type { CanvasPage } from '../../lib/export/canvas/render';
 import { canvasHtmlDocument, renderEigenslidesHtml } from '../../lib/export/canvas/transform';
 import { htmlToPdf, isWeasyPrintAvailable } from '../../lib/export/weasyprint';
+import { embeddedSliceFiles } from '../fixtures/font-slices';
 import { buildGoldenDeckScene, seedDeckDoc } from '../fixtures/golden-documents';
 
 // The standalone HTML document a canvas export leaves through. The screen document must fit a
@@ -132,6 +133,16 @@ describe('renderEigenslidesHtml — fonts', () => {
 
     test.each(['html', 'pdf-html'] as const)('the golden deck in %s embeds Inter alone', async (format) => {
         expect(await embedded(buildGoldenDeckScene(), format)).toEqual(['Inter']);
+    });
+
+    test('the golden deck embeds only the Inter slices its text touches', async () => {
+        const doc = new Y.Doc();
+        seedDeckDoc(doc, buildGoldenDeckScene());
+        const { data } = await renderEigenslidesHtml(doc, 'html', 'Deck', async () => []);
+        expect(embeddedSliceFiles(new TextDecoder().decode(data))).toEqual([
+            'inter/Inter-Variable.latin.woff2',
+            'inter/Inter-Variable-Italic.latin.woff2',
+        ]);
     });
 
     test.each(['html', 'pdf-html'] as const)('a text box in JetBrains Mono embeds it in %s', async (format) => {

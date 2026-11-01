@@ -1,39 +1,78 @@
-import { expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { EIGEN_FONT_NAMES, EIGEN_FONTS, FONT_FACES } from '@workspace/lib/constants/fonts';
+import { FONT_SLICES } from '@workspace/lib/constants/font-slices';
+import { EIGEN_FONT_NAMES, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/doc/docx/fonts';
-import { fontFaceCssOf } from '../../lib/export/fonts';
+import { drawnCodePoints, slicesFaceCss } from '../../lib/export/fonts';
 
-const UI_STYLES_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/styles');
+const FONTS_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/assets/fonts');
 
-function faces(css: string): string[] {
-    const keys = css
+function rules(css: string) {
+    return css
         .split('@font-face')
         .slice(1)
-        .map((block) => {
-            const field = (name: string) => block.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
-            return `${field('font-family')} | ${field('font-weight')} | ${field('font-style')}`;
+        .map((rule) => {
+            const field = (name: string) => rule.match(new RegExp(`${name}:\\s*([^;]+);`))?.[1].trim();
+            const src = rule.match(/url\("data:font\/woff2;base64,([^"]+)"\)/)?.[1] ?? '';
+            return {
+                family: field('font-family')?.replace(/"/g, ''),
+                style: field('font-style'),
+                weight: field('font-weight'),
+                unicodeRange: field('unicode-range'),
+                bytes: Buffer.from(src, 'base64'),
+            };
         });
-    return [...new Set(keys)].sort();
 }
 
-// An export inlines the whole faces whose slices the apps load from fonts.css, which the vendoring script cuts from
-// these same files; a face added on one side only renders an export in a fallback font. This compares the fonts a
-// user picks, so the fallback and math faces stay out.
-test('the export fonts are the faces the apps load', () => {
-    const appCSS = fs.readFileSync(path.join(UI_STYLES_DIR, 'fonts.css'), 'utf8');
-    const appFaces = faces(appCSS).filter((face) => EIGEN_FONT_NAMES.some((name) => face.startsWith(`"${name}" |`)));
-    const exportFaces = faces(fontFaceCssOf(EIGEN_FONT_NAMES));
-    expect(appFaces).toHaveLength(6);
-    expect(exportFaces).toEqual(appFaces);
+// Every character of every range, the keycap mark too, touches every slice once.
+const EVERY_CODE_POINT = new Set(
+    FONT_SLICES.flatMap((slice) =>
+        slice.unicodeRange.split(', ').flatMap((range) => {
+            const [start, end = start] = range.slice(2).split('-');
+            const from = Number.parseInt(start, 16);
+            return Array.from({ length: Number.parseInt(end, 16) - from + 1 }, (_, i) => from + i);
+        }),
+    ),
+);
+
+// A slice an export embeds is the file fonts.css loads, read through the server's own path to it, under the rule the
+// browser has for it.
+test('the export embeds each slice as the file the apps load, with its family, style, weight and range', () => {
+    const families = new Set(FONT_SLICES.map((slice) => slice.family));
+    expect(rules(slicesFaceCss(EVERY_CODE_POINT, families))).toEqual(
+        FONT_SLICES.map((slice) => ({
+            family: slice.family,
+            style: slice.style,
+            weight: slice.weight,
+            unicodeRange: slice.unicodeRange,
+            bytes: fs.readFileSync(path.join(FONTS_DIR, slice.file)),
+        })),
+    );
 });
 
-// The faces are the registry's, which the browser's image writer embeds too, in its order.
-test('the export embeds the registry faces, and only those of the families asked for', () => {
-    const families = (css: string) => [...css.matchAll(/font-family: "([^"]+)"/g)].map((m) => m[1]);
-    expect(families(fontFaceCssOf(EIGEN_FONT_NAMES))).toEqual(FONT_FACES.map((face) => face.family));
-    expect(families(fontFaceCssOf(['Inter', 'Unknown']))).toEqual(['Inter', 'Inter']);
+test('the export embeds only the slices of the families asked for that its characters touch', () => {
+    const families = (css: string) => rules(css).map((rule) => `${rule.family} ${rule.style}`);
+    expect(families(slicesFaceCss(drawnCodePoints('A'), ['Inter', 'Unknown']))).toEqual([
+        'Inter normal',
+        'Inter italic',
+    ]);
+    expect(slicesFaceCss(drawnCodePoints('中'), ['Inter'])).not.toContain('Noto Sans SC');
+});
+
+describe('drawnCodePoints', () => {
+    const chars = (markup: string) => new Set(Array.from(drawnCodePoints(markup), (cp) => String.fromCodePoint(cp)));
+
+    test('printable ASCII and the list disc are always drawn', () => {
+        expect(chars('')).toEqual(
+            new Set(['\u2022', ...Array.from({ length: 95 }, (_, i) => String.fromCharCode(0x20 + i))]),
+        );
+    });
+
+    test("a character, its other case for CSS caps, and a numeric reference's character", () => {
+        expect(chars('é中')).toEqual(new Set([...chars(''), 'é', 'É', '中']));
+        expect(chars('&#x4E2D;&#54620;')).toEqual(new Set([...chars(''), '中', '한']));
+    });
 });
 
 function nameRecords(name: Buffer): string[] {

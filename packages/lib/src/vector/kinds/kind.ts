@@ -17,6 +17,9 @@ import { DEFAULT_ELEMENT_PROPS, prop } from '../types';
 import type { YMapLike } from './read-fields';
 import { fontFamily } from './read-fields';
 
+// A piece of text an element draws, in an EIGEN_FONTS family.
+type FontRun = { family: string; text: string };
+
 // What a host's new elements look like: vector draws rough and hatched in Excalifont, slides flat and
 // solid in Inter. One table per app, not a per-kind fork.
 export type StyleDefaults = {
@@ -110,9 +113,9 @@ type KindSpec<T extends VectorElement> = {
     paintsNothing?(el: T): boolean;
     // What the kind contributes to the search index. Omit when it carries no text.
     searchText?(el: T): string;
-    // The EIGEN_FONTS families this element draws text in, which the SVG download embeds. Omit for the
-    // default: the kind's `fontFamily` field when it has one and the element has text.
-    fontFamilies?(el: T): string[];
+    // The text this element draws, each run with the EIGEN_FONTS family it draws in, which the SVG download embeds
+    // the slices of. Omit for the default: its search text in the kind's `fontFamily` field, when it has both.
+    fontRuns?(el: T): FontRun[];
     // Convert to shapes: the plain elements that draw what this one draws, in its coordinate space; [] when
     // there is nothing to unpack. Omit where no element of the kind unpacks.
     toShapes?(el: T): VectorElement[];
@@ -139,7 +142,7 @@ export type ElementKind<T extends VectorElement = VectorElement> = {
     render(el: VectorElement, ctx: RenderContext): RenderOutput;
     paintsNothing(el: VectorElement): boolean;
     searchText(el: VectorElement): string;
-    fontFamilies(el: VectorElement): string[];
+    fontRuns(el: VectorElement): FontRun[];
     toShapes(el: VectorElement): VectorElement[];
 };
 
@@ -231,10 +234,11 @@ export function defineKind<T extends VectorElement>(spec: KindSpec<T>): ElementK
         render: (el, ctx) => (spec.is(el) ? spec.render(el, ctx) : { svg: '' }),
         paintsNothing: (el) => (spec.is(el) && spec.paintsNothing ? spec.paintsNothing(el) : false),
         searchText: (el) => (spec.is(el) && spec.searchText ? spec.searchText(el) : ''),
-        fontFamilies: (el) => {
+        fontRuns: (el) => {
             if (!spec.is(el)) return [];
-            if (spec.fontFamilies) return spec.fontFamilies(el);
-            return hasFont && spec.searchText?.(el) ? [fontFamily(prop(el, 'fontFamily'))] : [];
+            if (spec.fontRuns) return spec.fontRuns(el);
+            const text = spec.searchText?.(el);
+            return hasFont && text ? [{ family: fontFamily(prop(el, 'fontFamily')), text }] : [];
         },
         toShapes: (el) => (spec.is(el) && spec.toShapes ? spec.toShapes(el) : []),
     };

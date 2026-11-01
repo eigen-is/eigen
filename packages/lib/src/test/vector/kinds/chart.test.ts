@@ -293,7 +293,7 @@ describe('chart text', () => {
 
     test('a chart draws its labels in the font of its spec, and none for a placeholder', () => {
         const serif = chart({ id: 'c1' }, sampleChartSpec('column', 'Source Serif 4'));
-        const families = (el: VectorElement) => new Set(ELEMENT_KINDS[el.type].fontFamilies(el));
+        const families = (el: VectorElement) => new Set(ELEMENT_KINDS[el.type].fontRuns(el).map((run) => run.family));
         expect(families(serif)).toEqual(new Set(['Source Serif 4']));
         expect(families(chart({ id: 'c2', specData: 'nope' }))).toEqual(new Set());
         expect(families(chart({ id: 'c3' }, RANGE_SPEC))).toEqual(new Set());

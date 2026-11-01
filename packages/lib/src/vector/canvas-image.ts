@@ -1,10 +1,10 @@
 // The pure half of Download image, the browser-drawn SVG of canvas elements: the elements it draws, what they are
-// drawn on, which faces the file embeds and what it is called. packages/ui's canvas image writer does the layout and
-// the fetches.
+// drawn on, which font slices the file embeds and what it is called. The canvas image writer in the UI package does
+// the layout and the fetches.
 
 import { newChartSpecParts, readChartSpec } from '../charts/spec';
-import type { BundledFontFace } from '../constants/fonts';
-import { fontFacesFor, getFontName } from '../constants/fonts';
+import type { FontSlice } from '../constants/font-slices';
+import { getFontName } from '../constants/fonts';
 import type { EigenClipboardChartItem } from '../types/clipboard';
 import { ELEMENT_KINDS } from './kinds';
 import { readElementFromFields } from './read-vector';
@@ -53,21 +53,33 @@ export function canvasImageName(elements: VectorElement[], fileName: string): st
     return elements.length === 1 && first.type === 'chart' ? chartImageName(first) : `${fileName} – selection`;
 }
 
-// The faces the file draws in: a measured box's runs, each in the face its computed family list starts with, and
-// every other element's labels, upright.
-export function canvasImageFaces(
+// The slices the file draws in: each measured run in the family its computed list starts with, and every other
+// element's text upright in its own. Each draws in the fallbacks too, for what its family lacks. An italic run takes a
+// family's italic slices where it has them; elsewhere the reader slants the upright ones. The slice table is large,
+// so it loads here, on a download.
+export async function canvasImageFaces(
     elements: VectorScene['elements'],
     measured: ReadonlyMap<string, MeasuredRichText>,
-): BundledFontFace[] {
-    const uses: { family: string; style: string }[] = [];
+): Promise<FontSlice[]> {
+    const { FONT_SLICES, TEXT_FALLBACK_FAMILIES, slicesFor } = await import('../constants/font-slices');
+    const picked = new Set<FontSlice>();
+    const draw = (family: string, style: string, text: string) => {
+        const codePoints = new Set(Array.from(text, (char) => char.codePointAt(0) ?? 0));
+        for (const name of [family, ...TEXT_FALLBACK_FAMILIES]) {
+            const italic =
+                style !== 'normal' && FONT_SLICES.some((slice) => slice.family === name && slice.style === 'italic');
+            for (const slice of slicesFor(codePoints, [name]))
+                if (slice.style === (italic ? 'italic' : 'normal')) picked.add(slice);
+        }
+    };
     for (const el of elements) {
         const box = measured.get(el.id);
         if (box) {
-            for (const { style } of box.texts)
-                uses.push({ family: getFontName(style.fontFamily), style: style.fontStyle });
+            for (const { style, chars } of box.texts)
+                draw(getFontName(style.fontFamily), style.fontStyle, chars.map((char) => char.text).join(''));
         } else {
-            for (const family of ELEMENT_KINDS[el.type].fontFamilies(el)) uses.push({ family, style: 'normal' });
+            for (const { family, text } of ELEMENT_KINDS[el.type].fontRuns(el)) draw(family, 'normal', text);
         }
     }
-    return fontFacesFor(uses);
+    return FONT_SLICES.filter((slice) => picked.has(slice));
 }

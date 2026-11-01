@@ -1321,7 +1321,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
         expect(svg).toContain('fill="#ffffff"');
         expect(svg).toContain('>Light / dark<');
         expect(svg).toContain('fill="#123456"');
-        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
+        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.latin.woff2']);
         expect(svg).toContain('font-family: "Inter"');
     } finally {
         saved.mockRestore();
