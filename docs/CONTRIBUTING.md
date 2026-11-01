@@ -46,7 +46,7 @@ Areas that cross apps need owners too: search, accessibility, phones and tablets
 
 Where to find the open work:
 
-- **[ROADMAP.md](ROADMAP.md)**: the work for every app and area, most important first, with **Next up** at the top. What waits until after 1.0 is in [ROADMAP-POST-1.md](ROADMAP-POST-1.md).
+- **[ROADMAP.md](ROADMAP.md)**: the work for every app and area, most important first, with **Before 0.5.0** at the top. What waits until after 1.0 is in [ROADMAP-POST-1.md](ROADMAP-POST-1.md).
 - **The app backlogs**: [DOCS-TODO.md](DOCS-TODO.md), [SHEETS-TODO.md](SHEETS-TODO.md), [CHARTS-TODO.md](CHARTS-TODO.md) and [CANVAS-TODO.md](CANVAS-TODO.md) (Slides, Vector and Stickies).
 - **[docs/proposals/](proposals/)**: designs for larger features that aren't built yet. A good place to start if you want to own something bigger.
 
