@@ -4,7 +4,7 @@
 // where the editor floats them. Runs in the transform process, so it reaches no Mount: images arrive as URLs by media
 // name.
 
-import { getFontFamily, getFontName } from '@workspace/lib/constants/fonts';
+import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import { escapeHtml } from '@workspace/lib/html';
 import type {
@@ -40,7 +40,7 @@ import {
     sheetChartPoints,
 } from '@workspace/sheet/engine';
 import { cssColorToHex, isTransparentCssColor } from '../../document/colors';
-import { FONT_STACK_SANS } from '../../document/font-stacks';
+import { FONT_STACK_SANS, SANS_FONT_NAME } from '../../document/font-stacks';
 import type { HtmlExportMode, LossCounter } from '../../document/transform/protocol';
 import { exportHtmlDocument } from '../html-document';
 import { MAX_PDF_PAGE_PX } from '../weasyprint';
@@ -155,7 +155,7 @@ export function sheetsHtmlDocument({
     const page = mode === 'pdf' ? pdfPageCss(size) : '@page { size: landscape; margin: 1.5cm; }';
     return exportHtmlDocument({
         title,
-        cssFamilies: [getFontName(FONT_STACK_SANS)],
+        cssFamilies: [SANS_FONT_NAME],
         css: `${SHEET_CSS_BASE}${page}${SHEET_CSS_PRINT}`,
         body: `<style>${css}</style>\n${html}`,
     });

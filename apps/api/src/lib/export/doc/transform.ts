@@ -2,7 +2,7 @@
 // returns its bytes and the warnings that count what it left out.
 
 import type { JSONContent } from '@tiptap/core';
-import { EIGEN_FONTS, getFontName } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import type { BandRoot, NormalStyle, PageSetup } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
@@ -27,7 +27,7 @@ import type * as Y from 'yjs';
 import type { EigendocBands } from '../../document/doc';
 import { readEigendocBands, readEigendocFromDoc, readEigendocPage, readEigendocStyle } from '../../document/doc';
 import { docSchema } from '../../document/doc-schema';
-import { FONT_STACK_MONO } from '../../document/font-stacks';
+import { FONT_STACK_MONO, MONO_FONT_NAME } from '../../document/font-stacks';
 import { BODY, CHARACTER_WIDTH_EM, FOOTNOTE_LOOK, TABLE_CELL_PADDING } from '../../document/looks';
 import { mediaNamesIn, toDataUriMap } from '../../document/media';
 import { PROSE_CSS } from '../../document/prose-css';
@@ -119,7 +119,10 @@ export async function renderEigendocExport(
     const notesCss = notes.length > 0 ? (pageNotes ? PAGE_FOOTNOTES_CSS : FOOTNOTE_LIST_CSS) : '';
     const html = exportHtmlDocument({
         title,
-        cssFamilies: proseFamilies(body, style),
+        // The bundled families eigen-prose.css draws a doc's body in: the Normal's, which names no other as its
+        // fallback, and the monospace where code renders. The families the body names itself, a font mark's or a
+        // chart's, the document builder adds.
+        cssFamilies: body.includes('<code') ? [style.font, MONO_FONT_NAME] : [style.font],
         css: `${PROSE_CSS}${printExtras(page, style)}${notesCss}${pdf ? `${PAGE_NUMBER_CSS}${TOC_CSS}` : ''}${pdf && Object.keys(printed).length > 0 ? bandsCss(page) : ''}`,
         body: `<div class="page">${body}</div>`,
     });
@@ -244,13 +247,6 @@ function notesFitPages(notes: JSONContent[], page: PageSetup): boolean {
                 0,
             ) <= pageLines,
     );
-}
-
-// The bundled families eigen-prose.css draws a doc's body in: the Normal's, which names no other as its fallback, and
-// the monospace where code renders. The families the body names itself, a font mark's or a chart's, the document
-// builder adds.
-function proseFamilies(body: string, style: NormalStyle): string[] {
-    return body.includes('<code') ? [style.font, getFontName(FONT_STACK_MONO)] : [style.font];
 }
 
 // The bands are running elements placed before the body, as element() takes the one placed on the page or the last one
