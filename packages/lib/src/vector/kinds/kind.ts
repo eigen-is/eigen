@@ -1,11 +1,7 @@
-// The kind contract. One entry per element type, and everything the engine needs to treat a kind
-// generically: what a new one looks like, how a stored one is validated, what it can do, where its edge
-// is, how it draws, what it contributes to search. Adding `graph` = add it to VectorElementType, write
-// the kind's module and add it to the registry. Nothing else in the engine changes.
-//
-// FRAMES: `outline(el, inflate)` works in the element's unrotated SCENE frame (it includes el.x/el.y;
-// callers rotate around the element center). `render(el, ctx)` draws in the element's LOCAL frame
-// (origin at its top-left) — elementToSvg's <g transform> is what places and rotates it.
+// The kind contract: what each element type tells the engine, so the engine can treat every kind the same way. A kind
+// says what a new element looks like, how a stored one is validated, what it can do, where its edge is, how it draws
+// and what it adds to search. A new kind is a new VectorElementType, the kind's own module and a registry entry, and
+// nothing else in the engine changes.
 
 import { serializeFill, TRANSPARENT_FILL } from '../fill';
 import type { Bounds, Point } from '../geometry';
@@ -101,11 +97,14 @@ type KindSpec<T extends VectorElement> = {
     // Omit for the rotated-box default (only a routed arrow spills past its box).
     bounds?(el: T, route?: Point[]): Bounds;
     hitTest(el: T, point: Point, threshold: number, route?: Point[]): boolean;
+    // In the element's unrotated scene frame, which includes el.x and el.y. Callers rotate it around the element's center.
     outline(el: T, inflate: number): OutlineShape;
     // The dock and snap anchors, in SCENE space. Omit for the box default.
     anchorPoints?(el: T): Point[];
     // The two lines a straight arrow's bind-time aim projects onto. Omit for the box default.
     aimLines?(el: T): [[Point, Point], [Point, Point]];
+    // Draws in the element's local frame, with its origin at the element's top-left. elementToSvg's <g transform> places
+    // and rotates it.
     render(el: T, ctx: RenderContext): RenderOutput;
     // Whether THIS element puts no ink on the page at all — an empty text box, a shape with neither
     // fill nor border, an image with no picture. The canvas rings such an element while editing so it
@@ -113,8 +112,8 @@ type KindSpec<T extends VectorElement> = {
     paintsNothing?(el: T): boolean;
     // What the kind contributes to the search index. Omit when it carries no text.
     searchText?(el: T): string;
-    // The text this element draws, each run with the EIGEN_FONTS family it draws in, which the SVG download embeds
-    // the slices of. Omit for the default: its search text in the kind's `fontFamily` field, when it has both.
+    // The text this element draws, each run in the EIGEN_FONTS family it draws in. The SVG download embeds the slices
+    // these runs need. Omit for the default: the kind's search text in its `fontFamily` field, when it has both.
     fontRuns?(el: T): FontRun[];
     // Convert to shapes: the plain elements that draw what this one draws, in its coordinate space; [] when
     // there is nothing to unpack. Omit where no element of the kind unpacks.
@@ -166,10 +165,10 @@ export function boxAnchorPoints(el: VectorElement): Point[] {
 function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
     const { x, y, width: w, height: h } = el;
     const center = boxCenter(el);
-    const rot = (p: Point): Point => rotatePoint(p, center, el.angle);
+    const rotate = (point: Point): Point => rotatePoint(point, center, el.angle);
     return [
-        [rot({ x: x + w / 2, y }), rot({ x: x + w / 2, y: y + h })],
-        [rot({ x, y: y + h / 2 }), rot({ x: x + w, y: y + h / 2 })],
+        [rotate({ x: x + w / 2, y }), rotate({ x: x + w / 2, y: y + h })],
+        [rotate({ x, y: y + h / 2 }), rotate({ x: x + w, y: y + h / 2 })],
     ];
 }
 

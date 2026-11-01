@@ -25,7 +25,6 @@
     "apps/docs/src/components/docs/extensions/comment-mark.ts": 2,
     "apps/drive/src/components/editor/markdown-editor.tsx": 4,
     "apps/drive/src/routes/_auth.shared.$to.tsx": 2,
-    "apps/index/scripts/build-licenses.ts": 2,
     "apps/index/scripts/build-search-index.ts": 2,
     "apps/index/scripts/prerender.tsx": 2,
     "apps/index/src/components/article-content.tsx": 1,

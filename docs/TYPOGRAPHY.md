@@ -70,7 +70,7 @@ One `@theme` block in `font-weights.css`, which `globals.css` imports, sets `--f
 
 ## The registry's order is load-bearing
 
-`EIGEN_FONTS` holds each font's name, category, weights and single line; `getFontFamily` builds its CSS stack. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
+`EIGEN_FONTS` holds each font's name, category and single line; `getFontFamily` builds its CSS stack. Each category has exactly one font. A foreign font maps to its category's bundled font (`bundledFontOfCategory`), the first entry of that category, so a second font in a category would never be picked by an import or a paste. Its order matters for two reasons:
 
 - A sheet cell's `ff` may be an index into the list rather than a name: the editor's default cell stores `0`. Reordering or inserting changes the font of every stored index, so **a new font goes at the end**.
 - `EIGEN_FONTS[0]` is the default font in docs and sheets: `DOCUMENT_FONT` names it for docs, `SHEET_DEFAULT_FONT` (`packages/lib/src/sheets/fonts.ts`) for sheets. The canvas has its own default, `DEFAULT_FONT_FAMILY` (Excalifont), in `packages/lib/src/vector/types.ts`.

@@ -5,12 +5,11 @@
 
 import { pxToPt } from '../docs/eigendoc/page';
 
-// lineHeight: its single line as a multiple of its size, (usWinAscent + usWinDescent) / unitsPerEm of its Regular, as Word
-// and Google Docs draw it; the API's fonts.test.ts pins each against the TTF.
+// lineHeight is the font's single line as a multiple of its size, as Word and Google Docs draw it. It is
+// (usWinAscent + usWinDescent) / unitsPerEm of its Regular, and a test checks each against the TTF.
 export type EigenFont = {
     name: string;
     category: 'sans-serif' | 'serif' | 'monospace' | 'hand-drawn';
-    weights: number[];
     lineHeight: number;
 };
 
@@ -53,32 +52,28 @@ const SYSTEM_FALLBACKS: Record<EigenFont['category'], string> = {
 // The stack of a <math>: the bundled math face, then the browser's own math font.
 export const MATH_FONT_STACK = [...MATH_FAMILIES.map((family) => `'${family}'`), 'math'].join(', ');
 
-// Order is load-bearing: numeric xlsx font indices (ff) index into this array, [0] is the
-// default in docs and sheets (the canvas has its own, DEFAULT_FONT_FAMILY), and a category's
-// first font is the one a foreign font of that category maps to.
+// Order is load-bearing. A sheet cell's `ff` may be an index into this list, so a new font goes at the end. [0] is the
+// default in docs and sheets; the canvas has its own, DEFAULT_FONT_FAMILY. A foreign font maps to the first font of its
+// category.
 export const EIGEN_FONTS: readonly EigenFont[] = [
     {
         name: 'Inter',
         category: 'sans-serif',
-        weights: [400, 500, 600, 700],
         lineHeight: 1.21,
     },
     {
         name: 'Source Serif 4',
         category: 'serif',
-        weights: [400, 600, 700],
         lineHeight: 1.371,
     },
     {
         name: 'JetBrains Mono',
         category: 'monospace',
-        weights: [400, 700],
         lineHeight: 1.32,
     },
     {
         name: 'Excalifont',
         category: 'hand-drawn',
-        weights: [400],
         lineHeight: 1.26,
     },
 ];
@@ -86,7 +81,7 @@ export const EIGEN_FONTS: readonly EigenFont[] = [
 // A doc's text draws in it without a font mark, so a paste or an import gives it none.
 export const DOCUMENT_FONT = EIGEN_FONTS[0].name;
 
-// A family's single line; one no font of Eigen's names draws in the document's.
+// A family's single line. A family Eigen doesn't bundle draws in the document font, so it takes that font's line.
 export function fontLineHeight(name: string): number {
     return (EIGEN_FONTS.find((font) => font.name === name) ?? EIGEN_FONTS[0]).lineHeight;
 }
@@ -95,10 +90,10 @@ export function fontLineHeight(name: string): number {
 // of a paragraph's runs.
 export const DOCUMENT_LINE_RATIO = fontLineHeight(DOCUMENT_FONT);
 
-// A doc's text draws at it without a size mark: eigen-prose.css's body, in pt.
+// The size a doc's text draws at without a size mark, as eigen-prose.css sets the body, in pt.
 export const DOCUMENT_FONT_SIZE = 11;
 
-// Small's: eigen-prose.css's small, in pt.
+// The size of the Small style, as eigen-prose.css sets it, in pt.
 export const SMALL_FONT_SIZE = 9;
 
 // A footnote's text, at Google's and Word's footnote size, in pt: the editor's notes (the Docs app's globals.css), the
@@ -136,14 +131,14 @@ export function nextFontSize(size: number, by: 1 | -1): number {
 
 // The values a stored `fontFamily` may hold: a name, never a CSS stack. Readers check a stored value against these,
 // so an unknown one falls back instead of reaching a CSS declaration.
-export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((f) => f.name);
+export const EIGEN_FONT_NAMES: readonly string[] = EIGEN_FONTS.map((font) => font.name);
 
 // A font name as the CSS that draws it. A sheet cell may name a font Eigen doesn't bundle, which the browser may lack,
 // so the stack of the bundled font it maps to follows it, else the document font's. The emoji face holds the digits,
 // # and * for its keycaps, and a stack without a text face before it would draw them there.
 export function getFontFamily(fontName: string): string {
-    const font = EIGEN_FONTS.find((f) => f.name === fontName);
-    if (font) return fontStack(font);
+    const bundled = EIGEN_FONTS.find((font) => font.name === fontName);
+    if (bundled) return fontStack(bundled);
     return `'${fontName}', ${getFontFamily(bundledFont(fontName) ?? DOCUMENT_FONT)}`;
 }
 
@@ -152,8 +147,8 @@ export function getFontFamily(fontName: string): string {
 // did until an editable load collapses it to its name. Unlike getFontFamily, this must not wrap an unknown value, or
 // a stored stack would be wrapped twice.
 export function fontNameToCss(value: string): string {
-    const font = EIGEN_FONTS.find((f) => f.name === value);
-    return font ? fontStack(font) : value;
+    const bundled = EIGEN_FONTS.find((font) => font.name === value);
+    return bundled ? fontStack(bundled) : value;
 }
 
 // Every CSS stack Eigen writes for text: the bundled family, then the emoji and CJK faces, then the system's faces of
@@ -169,7 +164,7 @@ function fontStack(font: EigenFont): string {
 // was.
 export function getFontName(value: string): string {
     const first = value.match(/^\s*['"]?([^'",]+)['"]?/)?.[1]?.trim();
-    const match = first ? EIGEN_FONTS.find((f) => f.name === first) : undefined;
+    const match = first ? EIGEN_FONTS.find((font) => font.name === first) : undefined;
     return match ? match.name : value;
 }
 

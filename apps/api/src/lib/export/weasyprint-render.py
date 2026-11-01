@@ -1,8 +1,7 @@
-# Renders the HTML on stdin to a PDF on stdout, scaled by the zoom in the first argument, 1 without one. WeasyPrint's
-# own fetcher opens any URL the HTML names, from the API host, and an export embeds everything it needs as a data: URI,
-# so this one opens data: URIs and refuses the rest: http(s), file:, a path, any other scheme. It also teaches
-# WeasyPrint to tell the slices of one font apart, which it reads as one font, and prints every font's outlines, never
-# its colour layers, on every host. Needs WeasyPrint 68, the first with the URLFetcher class.
+# Renders the HTML on stdin to a PDF on stdout, scaled by the zoom in the first argument, 1 without one. An export
+# embeds all it needs as data: URIs, so the fetcher opens those and refuses every other URL, where WeasyPrint's own
+# would fetch from the API host. It also teaches WeasyPrint to tell the slices of one font apart, and to print every
+# font's outlines, never its colour layers, on every host. Needs WeasyPrint 68, the first with the URLFetcher class.
 import sys
 from hashlib import md5
 from itertools import count
@@ -44,7 +43,7 @@ def band_margins(html, font_config):
     try:
         from weasyprint.formatting_structure.boxes import MarginBox
 
-        # PAGE_BAND_CLASS: only a doc with bands pays for the probe.
+        # Only a doc with bands, which carry the doc export's PAGE_BAND_CLASS, pays for the probe.
         if not any('page-band' in (element.get('class') or '').split() for element in html.etree_element.iter()):
             return None
         margins, grown = [], False
@@ -83,11 +82,14 @@ def band_margins(html, font_config):
 # An export embeds each font as slices: files of one family that each draw some of its characters. WeasyPrint tells
 # fonts apart by their family, style and weight, but not by their file. So it embedded the first slice's file and drew
 # every slice's glyph ids with it, and Chinese, Korean or emoji printed as other characters. Here a font's key and the
-# tag of its embedded file also take a digest of the file. WeasyPrint draws a colour font only with a HarfBuzz newer
-# than the image's, and leaves it blank otherwise. The emoji face paints in the text colour anyway, so every font prints
-# its outlines instead. WeasyPrint is pinned. One that renamed these internals fails every PDF here, and one that
-# changed a signature fails with a traceback. One whose add_font stopped calling stream.get_pango_font_key would skip the
-# key silently and print wrong glyphs again, which the glyph test in CI catches.
+# tag of its embedded file also take a digest of the file.
+#
+# WeasyPrint draws a colour font only with a HarfBuzz newer than the image's, and leaves it blank otherwise. The emoji
+# face paints in the text colour anyway, so every font prints its outlines instead.
+#
+# WeasyPrint is pinned. One that renamed these internals fails every PDF here, and one that changed a signature fails
+# with a traceback. If add_font stopped calling stream.get_pango_font_key, the key would be skipped silently and wrong
+# glyphs would print again. The glyph test in CI catches that.
 def patch_font_embedding():
     try:
         from weasyprint.pdf import fonts, stream
@@ -124,12 +126,12 @@ def patch_font_embedding():
     stream.get_pango_font_key, fonts.Font.__init__ = key_by_file, init_by_file
 
 
-# Pango asks fontconfig for the best font of a description and then for all of them in order, and it skips the first of
-# that list as the best one it already has. The slices of one family tie on every score fontconfig sorts by. glibc's
-# sort keeps tied fonts in the order they came, so the best one stays first, but the sort of macOS and musl does not.
-# There Pango skipped a slice it never had, and its characters printed as .notdef. A distinct font version for each
-# slice file breaks the tie. Should WeasyPrint stop writing its font rules through tostring, this does nothing, and
-# glibc still prints right. So only the glyph test on a macOS or musl host pins it: CI's glibc passes without it.
+# Pango asks fontconfig for the best font of a description, then for all of them in order, and skips the first of that
+# list as the best one it already has. The slices of one family tie on every score fontconfig sorts by. glibc's sort
+# keeps tied fonts in the order they came, so the best one stays first, but the sort of macOS and musl does not. There
+# Pango skipped a slice it never had, and its characters printed as .notdef. A distinct font version for each slice
+# file breaks the tie. Should WeasyPrint stop writing its font rules through tostring, this does nothing, and glibc
+# still prints right. So only the glyph test on a macOS or musl host pins it, as CI's glibc passes without it.
 def break_font_ties():
     try:
         from weasyprint.text import fonts

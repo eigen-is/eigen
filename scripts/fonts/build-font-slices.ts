@@ -1,7 +1,8 @@
 // Cuts every bundled face into unicode-range slices, as Google Fonts serves its fonts, so a page or an export loads
-// only the slices its text draws. It writes the WOFF2 slices beside each face, the @font-face CSS the apps load and the
-// range data slicesFor reads. Run it by hand when a font changes, with a Python venv that has fontTools and brotli: it
-// downloads each fallback font from a pinned URL. The argument `ranges` refreshes its snapshot of Google's CSS instead.
+// only the slices its text draws. It downloads each fallback font from a pinned URL, and writes the WOFF2 slices beside
+// each face, the @font-face CSS the apps load and the range data slicesFor reads. Run it by hand when a font changes,
+// with a Python venv that has fontTools and brotli, at EIGEN_FONTS_PYTHON or ~/.cache/eigen-fonts-venv. With the
+// argument `ranges` it refreshes its snapshot of Google's CSS instead.
 
 import * as fs from 'node:fs';
 import { availableParallelism, homedir, tmpdir } from 'node:os';
@@ -188,7 +189,12 @@ async function build(): Promise<void> {
     await cutAll(faces, work);
     await chunkRests(faces, work);
     await writeLicenses();
-    const slices = faces.flatMap((face) => face.slices.map((slice) => fontSlice(face, slice)));
+    const slices = faces.flatMap((face) =>
+        face.slices.map((slice): FontSlice => {
+            const { family, style, weight } = face;
+            return { family, style, weight, file: sliceFile(face, slice), unicodeRange: formatRange(slice.codePoints) };
+        }),
+    );
     fs.writeFileSync(CSS_OUT, fontsCss(slices));
     fs.writeFileSync(DATA_OUT, sliceData(slices));
     await formatAsTheRepo(CSS_OUT);
@@ -410,12 +416,6 @@ async function writeLicenses(): Promise<void> {
         ['gustLicense', 'new-computer-modern-math/GUST-FONT-LICENSE.txt'],
     ] as const;
     for (const [key, file] of copies) fs.copyFileSync(await source(key), path.join(FONTS_DIR, file));
-}
-
-// A slice as the slice table holds it.
-function fontSlice(face: Face, slice: Slice): FontSlice {
-    const { family, style, weight } = face;
-    return { family, style, weight, file: sliceFile(face, slice), unicodeRange: formatRange(slice.codePoints) };
 }
 
 function fontsCss(slices: readonly FontSlice[]): string {

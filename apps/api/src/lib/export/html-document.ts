@@ -16,12 +16,11 @@ const KEEP_LINK_TARGETS = { ADD_ATTR: ['target'] };
 
 const VIEWPORT_META = '<meta name="viewport" content="width=device-width, initial-scale=1">';
 
-// Every HTML download and every PDF's HTML: one self-contained document, the bundled fonts first in its stylesheet,
-// because neither a saved file nor WeasyPrint has an app to fetch from. WeasyPrint reads every embedded byte on every
-// PDF, so the document embeds only the slices its characters touch, in the families its text can draw in. The type's
-// stylesheet draws in `cssFamilies`. The body's font-family values name more, such as a font mark or a chart's labels.
-// Any text may need the emoji and CJK fallbacks. An equation needs the math face. The body carries collaborator
-// strings, so it is sanitized here; the stylesheet is generated.
+// One self-contained document, the font slices first in its stylesheet, because neither a saved file nor WeasyPrint
+// has an app to fetch fonts from. WeasyPrint reads every embedded byte on every PDF, so the document embeds only the
+// slices its characters touch, in the families its text can draw in: the type's stylesheet's `cssFamilies`, the ones
+// the body's font-family values name, such as a font mark's, and the emoji and CJK fallbacks. An equation adds the
+// math face. The body carries collaborator strings, so it is sanitized here. The stylesheet is generated.
 export function exportHtmlDocument({
     title,
     css,
