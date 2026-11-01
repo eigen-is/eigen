@@ -135,6 +135,7 @@ function getTextSize(text: string, font: string) {
     }
 
     const ele = document.createElement('span');
+    ele.style.font = font;
     ele.style.float = 'left';
     ele.style.whiteSpace = 'nowrap';
     ele.style.visibility = 'hidden';
