@@ -2,12 +2,8 @@
 // moves with its column, so a strip of the canvas copied after the scroll and one painted fresh agree.
 
 import { afterEach, beforeEach, expect, test } from 'bun:test';
-import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { drawColumnHeader } from '../../../state/render/headers';
 import { workbookContextFactory } from '../factories/context';
-
-// The measure asks the page's fonts for the slices of the letters it measures.
-installHappyDom();
 
 const realGetComputedStyle = globalThis.getComputedStyle;
 beforeEach(() => {

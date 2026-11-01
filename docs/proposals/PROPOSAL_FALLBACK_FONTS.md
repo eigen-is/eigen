@@ -189,7 +189,7 @@ The sheet's system CJK list (PingFang SC, Hiragino Sans GB, Heiti SC, Microsoft 
 
 The DOM surfaces get lazy loading from the browser: Docs, Stickies, Chat, Mail's own UI, the canvas layers, quick look and the thumbnails. Text a page draws in Inter's Latin fetches one slice, an emoji one Eigen Emoji slice, a page of Chinese a few dozen SC slices. Our variable slices are up to 1.8 times Google's static ones ([§ Measured](#measured)). What a canvas or a print measures needs a wait:
 
-- **The sheet grid** listens to `document.fonts`' `loadingdone`, clears `measureTextCache` and `textHeightCache`, and redraws whole. Drawing a cell starts its slice's fetch on its own (measured). A commit must stay synchronous and one undo step, so it can't await a load; instead the cell editor and the formula bar load the cell's font for the text as it is typed (`loadCellFont`), and the commit that writes `cfg.rowlen` measures the real face ([SHEETS.md](../SHEETS.md#the-grid-redraws-whole-when-a-font-slice-loads)).
+- **The sheet grid** waits on the `loaded` promise of each face in `document.fonts`, then on `document.fonts.ready`, clears `measureTextCache` and `textHeightCache`, and redraws whole. Drawing a cell starts its slice's fetch on its own (measured). A commit must stay synchronous and one undo step, so it can't await a load; instead the cell editor and the formula bar load the cell's font for the text as it is typed (`loadCellFont`), and the commit that writes `cfg.rowlen` measures the real face ([SHEETS.md](../SHEETS.md#the-grid-redraws-whole-when-a-font-slice-loads)).
 - **The canvas measurer**: `loadVectorFont` and `isVectorFontLoaded` take the text, `text-overlay.tsx` loads again with the text at commit, and `healLabelWidth` passes the label's text.
 - **Printing**: `printElement` awaits `document.fonts.ready` after the clone instead of a fixed 450 ms, and the copy's images, 3 s at most.
 - **The SVG download**: `downloadCanvasImage` already awaits `document.fonts.ready` after its layout, so the slices its text needs have loaded before it reads the characters' boxes.
@@ -255,7 +255,7 @@ Once Eigen's slices cover CJK and emoji, the image's Droid Sans Fallback and Not
 
 ### Coordination
 
-The branch `sheets-120fps` reworked the sheet canvas renderer (`packages/sheet/src/state/canvas.ts`, `state/render/*`, `components/Sheet/index.tsx`). Once it merged, this program built the grid's `loadingdone` redraw and the typed-text load itself ([§ The browser fetches slices](#the-browser-fetches-slices)).
+The branch `sheets-120fps` reworked the sheet canvas renderer (`packages/sheet/src/state/canvas.ts`, `state/render/*`, `components/Sheet/index.tsx`). Once it merged, this program built the grid's font redraw and the typed-text load itself ([§ The browser fetches slices](#the-browser-fetches-slices)).
 
 ## Phases
 
@@ -264,7 +264,7 @@ The branch `sheets-120fps` reworked the sheet canvas renderer (`packages/sheet/s
 Phases 1 to 3 are built, together, on branch `fonts-fallback`.
 
 1. **Text faces sliced, exports embed touched slices** (M, about four days). The vendoring script and its css2 range snapshot, `font-slices.ts` and `slicesFor`, the generated `fonts.css`, the text faces' slices, every export path above embedding slices, and the WeasyPrint shim with its glyph test. Yes: the committed slices (question 1).
-2. **Emoji and math through the registry** (L, seven to ten days). `FALLBACK_FONTS`, the builder in all seven places, the token literals and their drift test, the closed emoji slices in their one color-table form, the math font through the registry, the measurer's text, `printElement`, the three-engine check of every slice, the licenses page (`apps/index/scripts/build-licenses.ts`), TYPOGRAPHY.md, EXPORT.md, DOCS.md and the CHANGELOG. The grid's `loadingdone` redraw and the typed-text load came after the `sheets-120fps` work merged ([§ Coordination](#coordination)). Yes: the emoji slices (question 1) and the math option (question 3).
+2. **Emoji and math through the registry** (L, seven to ten days). `FALLBACK_FONTS`, the builder in all seven places, the token literals and their drift test, the closed emoji slices in their one color-table form, the math font through the registry, the measurer's text, `printElement`, the three-engine check of every slice, the licenses page (`apps/index/scripts/build-licenses.ts`), TYPOGRAPHY.md, EXPORT.md, DOCS.md and the CHANGELOG. The grid's font redraw and the typed-text load came after the `sheets-120fps` work merged ([§ Coordination](#coordination)). Yes: the emoji slices (question 1) and the math option (question 3).
 3. **CJK: SC and KR** (M, about three days). The two region entries and their slices, SC's extra slice, the sheet's system CJK list removed, `LINE_HEIGHT`'s comment restated for Noto Sans CJK. Yes: the CJK slices (question 2). Then `--no-install-recommends` (question 4).
 4. **Japanese and Traditional Chinese** (M, about three days). The root-level script heuristic, the JP and TC slices. Yes: question 5 and the slices.
 5. **A math font per doc** (M, about four days). As in [§ Math](#math). Yes: the stored format and each MathJax font package (question 6), and the owner's call on the picker's place.

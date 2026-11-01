@@ -7,13 +7,7 @@ import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Context, Freezen, Sheet as SheetType } from '../../state';
-import {
-    clearMeasureTextCache,
-    initFreeze,
-    onMeasuredFontsLoaded,
-    updateContextWithCanvas,
-    updateContextWithSheetData,
-} from '../../state';
+import { clearMeasureTextCache, initFreeze, updateContextWithCanvas, updateContextWithSheetData } from '../../state';
 import type { ScrollPos } from '../../state/render/frame';
 import { drawFrame, scrollFrame } from '../../state/render/frame';
 import { SheetOverlay } from '../SheetOverlay';
@@ -171,24 +165,36 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
 
     // A loaded font and a restored canvas each need a whole redraw, though neither changes the context. A font
     // that finishes loading changes the text's widths, so the cached measurements go too. A canvas whose bitmap
-    // the browser dropped comes back blank. WebKit fires no loadingdone for the slices a canvas draws, so the
-    // measure reports its own loads as well.
+    // the browser dropped comes back blank.
     useEffect(() => {
         const canvas = refs.canvas.current;
         const drawWhole = () => {
             drawnRef.current = undefined;
             scheduleRedraw();
         };
+        // WebKit fires no loadingdone for the slices a canvas draw fetches, but a face's loaded promise settles
+        // in every browser, so the grid listens to each face. The faces are declared in the stylesheet, so all of
+        // them exist when the grid mounts. A face that fails to load settles too, and its text then draws in the
+        // next face of its stack. The faces one frame needs arrive over several frames, so the grid waits for the
+        // set's ready promise and redraws once for all of them.
+        let disposed = false;
+        let waiting = false;
         const onFontsLoaded = () => {
-            clearMeasureTextCache();
-            drawWhole();
+            if (waiting) return;
+            waiting = true;
+            document.fonts.ready.then(() => {
+                waiting = false;
+                if (disposed) return;
+                clearMeasureTextCache();
+                drawWhole();
+            });
         };
-        document.fonts.addEventListener('loadingdone', onFontsLoaded);
-        const stopMeasuredFonts = onMeasuredFontsLoaded(onFontsLoaded);
+        for (const face of document.fonts) {
+            if (face.status !== 'loaded') face.loaded.then(onFontsLoaded, onFontsLoaded);
+        }
         canvas?.addEventListener('contextrestored', drawWhole);
         return () => {
-            document.fonts.removeEventListener('loadingdone', onFontsLoaded);
-            stopMeasuredFonts();
+            disposed = true;
             canvas?.removeEventListener('contextrestored', drawWhole);
         };
     }, [refs.canvas, scheduleRedraw]);

@@ -1,8 +1,8 @@
 // Measures and lays out a cell's text for the canvas: the font set it draws in, where its lines wrap,
 // and where each piece of text sits, a rich cell's runs included. The painter and the row's auto height
 // both lay out here. Text measurements are cached until clearMeasureTextCache, which the grid calls, for
-// example, when a font slice loads. The measure and the cell editors ask for the font slices of their
-// text, so the grid and a commit measure the real face.
+// example, when a font slice loads. The cell editors ask for the font slices of the text being typed, so
+// a commit measures the real face.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { cellFontName, cellFontSize, SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
@@ -160,39 +160,6 @@ export function getFontSet(format: CellStyle | null | undefined) {
     return `${style} normal ${weight} ${cellFontSize(format?.fs)}pt ${family}`;
 }
 
-// WebKit fetches the slices a canvas draws, but it fires no loadingdone event for them. A grid that waited for that
-// event alone would keep drawing in the fallback faces. So the measure asks for the slices of the text it meets, and
-// tells the grid when they arrive. It asks about each character of a font only once. A slice that failed to load
-// never checks as loaded, so asking again would redraw the grid on every frame.
-const askedChars = new Map<string, Set<string>>();
-const measuredFontsListeners = new Set<() => void>();
-
-export function onMeasuredFontsLoaded(listener: () => void) {
-    measuredFontsListeners.add(listener);
-    return () => {
-        measuredFontsListeners.delete(listener);
-    };
-}
-
-function loadUnseenSlices(text: string, font: string) {
-    let asked = askedChars.get(font);
-    if (!asked) {
-        asked = new Set();
-        askedChars.set(font, asked);
-    }
-    let unseen = '';
-    for (const char of text) {
-        if (asked.has(char)) continue;
-        asked.add(char);
-        unseen += char;
-    }
-    if (!unseen || document.fonts.check(font, unseen)) return;
-    const notify = () => {
-        for (const listener of measuredFontsListeners) listener();
-    };
-    document.fonts.load(font, unseen).then(notify, notify);
-}
-
 // A face loads only the unicode-range slices its text needs. A wrapped cell's row height is measured once, when the
 // cell commits. So an editor loads the cell's font for its text as the user types, and the commit measures the real
 // face.
@@ -221,7 +188,6 @@ export function getMeasureText(
         renderCtx.font = fontset;
     }
 
-    loadUnseenSlices(String(value), font);
     const measured = renderCtx.measureText(String(value));
     const metrics: MeasureTextMetrics = {
         width: measured.width,
