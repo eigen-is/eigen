@@ -102,7 +102,7 @@ The inline grid stays for one case: a chart past its limits or holding data this
 
 ### Paste
 
-A chart item on the clipboard carries the chart's parts as stored, `workbook` included, and its cache as the numbers. A paste into Docs, Slides or Vector stores the parts as it does today. The chart draws its cache at once, and its first Edit data gives it its own sheet by the table above: a copy of the source's sheet when it was copied within the document, else a sheet filled with the numbers it carries. So a chart copied from another tab, another document, Sheets or another Eigen app ends with a sheet of its own holding its numbers, and a paste writes no file: it stays synchronous, works offline, and an undone paste leaves no sheet behind.
+A chart item on the clipboard carries the chart's parts as stored, `workbook` included, and its cache as the numbers. A paste into Docs, Slides or Vector stores the parts as it does today. The chart draws its cache at once, and its first Edit data gives it its own sheet by the table above: a copy of the source's sheet when it was copied within the document, else a sheet filled with the numbers it carries. So a chart copied from another tab, another document, Sheets or another Eigen app ends with a sheet of its own holding its numbers. Creating the sheet at the first Edit data rather than at paste keeps a paste synchronous and offline, an undone paste leaves no sheet behind, and a chart nobody edits never costs a container. A copy within the document keeps the source's formulas even when the source chart is deleted first: its sheet still resolves, and since no chart names it any more, the copy's first Edit data opens it.
 
 A chart copied from Sheets carries its range read into numbers, so its pasted sheet holds the values, not the source cells' formulas. A paste into Sheets stores an inline chart, as today (open question 4).
 
@@ -133,7 +133,6 @@ Phase 1 ends with the domain docs: CHARTS.md's Edit data sections rewritten, MED
 ## Decisions
 
 - **One sheet per chart** (owner, 2026-10-29). A chart and its numbers copy, paste and delete together, as an Office chart and its embedded workbook do. A sheet shared by charts is not offered.
-- **A pasted chart gets a sheet filled with its numbers, created at its first Edit data** (owner, 2026-10-29). A paste stays synchronous and offline-safe, an undone paste leaves no file, and a chart nobody edits never costs a container. A copy within the document keeps the source's formulas even when the source chart is deleted first: its sheet still resolves, and since no chart names it any more, the copy's first Edit data opens it.
 - **The `sheets/` folder and a chart naming its sheet** (owner, 2026-10-29): a new seam beside `media/` and `chat/`, approved as designed here. A route change for open question 1 still needs its own yes.
 
 ## Open questions

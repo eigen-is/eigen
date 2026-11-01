@@ -30,13 +30,13 @@ A copy writes `EigenClipboardData` twice: on the `application/eigen-clipboard` t
 
 Neither feature has to wait for the other. The block shape is fixed by item 1 (lib's `Cell`, keyed relative to the block's top-left corner), and the clipboard item is a wire shape, not a stored one, so it can still change between builds. Building cells first is the cheaper order: chart sheets' phase 1 then moves `embeddedChartSheet` to the engine as a function that builds a block from numbers, and writes it with the same writer.
 
-A chart copied from Sheets is the one case that could get better than either proposal alone. Its tab has the source cells live, so the copy can put a `cells` item of the chart's range beside the `chart` item, formulas included. The pasted chart's sheet could then start with those formulas instead of the numbers. That needs the block to wait somewhere until the first Edit data, and chart sheets decided a paste writes no file. So there are three ways, and an owner's choice between them:
+A chart copied from Sheets is the one case that could get better than either proposal alone. Its tab has the source cells live, so the copy can put a `cells` item of the chart's range beside the `chart` item, formulas included. The pasted chart's sheet could then start with those formulas instead of the numbers. Chart sheets creates a pasted chart's sheet at its first Edit data, so the block has to get there somehow. There are three ways, and the choice is the owner's:
 
 - **Numbers only**, as chart sheets plans now. Nothing extra to build. A chart moved from Sheets to a doc loses its formulas.
 - **Keep the block on the chart until its first Edit data**, as a key beside `workbook` in the chart's `data` part. The formulas survive, but the doc stores up to a range of cells it may never use, and the key is a stored-format addition.
-- **Create the sheet at paste when a block rides along.** The formulas survive and nothing waits in the doc, but this paste writes a file, which reverses the owner's decision for that one case.
+- **Create the sheet at paste when a block rides along.** The formulas survive and nothing waits in the doc. The cost is that this paste writes a file: it needs the server, and an undone paste leaves an unused sheet behind, as a deleted chart already does.
 
-The first is the default until someone asks for the formulas. A docs chart copied to Sheets gets only its numbers in any case: its sheet is a separate document that a copy event can't load in time.
+The first is the default for chart sheets' phase 1. When the formulas are wanted, the third is the cleaner of the other two: it adds no stored key and keeps the doc small. A docs chart copied to Sheets gets only its numbers in any case: its sheet is a separate document that a copy event can't load in time.
 
 ## 3. Styled text runs reach a slide or a drawing (after 1.0)
 
