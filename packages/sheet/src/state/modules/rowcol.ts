@@ -1,11 +1,12 @@
-// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts the cells, merges
-// and formulas of every sheet (applySheetsInsertRowCol, applySheetsDeleteRowCol); this module writes that result
-// back into the editor's draft and shifts what only the editor keeps, such as the filter, read-only rows, the
-// calc chain, validation rules, links and the selection. A local edit and a peer's op both come through here.
+// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts the cells, merges and
+// formulas of every sheet (applySheetsInsertRowCol, applySheetsDeleteRowCol). This module writes that result back
+// into the editor's draft, then shifts what the engine leaves alone, such as the filter, read-only rows, the calc
+// chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
+// and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
-import type { SingleRange } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, isEmpty, size } from 'es-toolkit/compat';
+import { cloneDeep } from 'es-toolkit/compat';
+import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
     applySheetsDeleteRowCol,
     applySheetsInsertRowCol,
@@ -19,379 +20,190 @@ import {
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getSheetConfig } from '../context';
-import type { FilterEntry, FormulaCell, Sheet } from '../types';
+import type { CalcChainEntry, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
+import { shiftFilterForDelete, shiftFilterForInsert } from './filter-shift';
 
-type FilterObj = { filterRange: SingleRange | null; filter: Record<string, FilterEntry> | null };
-
-// Writes `frozen` whole, never into it: a peer's unfreeze removes it, and a write inside it would resolve on nothing.
-function shiftFrozenFocus(file: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
-    const { frozen } = file;
-    if (!frozen?.range) return;
-    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
-    if (!ranged && frozen.type !== 'rangeBoth') return;
-    const axis = type === 'row' ? 'row_focus' : 'column_focus';
-    const focus = shift(frozen.range[axis]);
-    if (focus !== frozen.range[axis]) file.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
-}
-
-function shiftStateOnlyFieldsForInsert(
+export function insertRowCol(
     ctx: Context,
-    op: { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom'; id: string },
+    op: InsertRowColOp,
+    changeSelection = true,
+    // applyOpBatch sets fromBatch for a peer's op or an undo. Such a batch applies for a read-only viewer too, and
+    // applyOpBatch moves the selection itself. So the permission check stops only a viewer's own insert.
+    fromBatch = false,
 ) {
-    const { type, index, count, direction } = op;
+    if (!fromBatch && ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
+    const { type, index, count, direction } = op;
 
-    // calcChain entries are sheet-local; cross-sheet formula text is rewritten by the engine.
-    const newCalcChain: FormulaCell[] = [];
-    if (file.calcChain != null) {
-        for (const entry of file.calcChain) {
-            const calc: FormulaCell = cloneDeep(entry);
-            if (type === 'row') {
-                if (direction === 'lefttop' && calc.r >= index) calc.r += count;
-                else if (direction === 'rightbottom' && calc.r > index) calc.r += count;
-            } else {
-                if (direction === 'lefttop' && calc.c >= index) calc.c += count;
-                else if (direction === 'rightbottom' && calc.c > index) calc.c += count;
-            }
-            newCalcChain.push(calc);
-        }
+    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }));
+
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
+    const sheet = ctx.sheets[sheetIndex];
+
+    // The engine refuses an op on a read-only row or column, but it does not move them.
+    // They move here, by the same rule as hidden rows and columns.
+    const { config } = sheet;
+    if (type === 'row' && config?.rowReadOnly) {
+        config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, direction);
     }
-    file.calcChain = newCalcChain;
-
-    const cfg = file.config || {};
-    const { filterRange } = file;
-    const { filter } = file;
-    let newFilterObj: FilterObj | null = null;
-    if (!isEmpty(filterRange) && filterRange != null) {
-        newFilterObj = { filterRange: null, filter: null };
-
-        let f_r1 = filterRange.row[0];
-        let f_r2 = filterRange.row[1];
-        let f_c1 = filterRange.column[0];
-        let f_c2 = filterRange.column[1];
-
-        if (type === 'row') {
-            if (f_r1 < index) {
-                if (f_r2 === index && direction === 'lefttop') {
-                    f_r2 += count;
-                } else if (f_r2 > index) {
-                    f_r2 += count;
-                }
-            } else if (f_r1 === index) {
-                if (direction === 'lefttop') {
-                    f_r1 += count;
-                    f_r2 += count;
-                } else if (direction === 'rightbottom' && f_r2 > index) {
-                    f_r2 += count;
-                }
-            } else {
-                f_r1 += count;
-                f_r2 += count;
-            }
-
-            if (filter != null) {
-                const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: Record<string, number> = {};
-                    forEach(f_rowhidden, (_v1, nstr) => {
-                        const n = parseFloat(nstr);
-
-                        if (n < index) {
-                            f_rowhidden_new[n] = 0;
-                        } else if (n === index) {
-                            if (direction === 'lefttop') {
-                                f_rowhidden_new[n + count] = 0;
-                            } else if (direction === 'rightbottom') {
-                                f_rowhidden_new[n] = 0;
-                            }
-                        } else {
-                            f_rowhidden_new[n + count] = 0;
-                        }
-                    });
-                    shifted[k] = cloneDeep(filter[k]);
-                    shifted[k].rowhidden = f_rowhidden_new;
-                    shifted[k].str = f_r1;
-                    shifted[k].edr = f_r2;
-                });
-                newFilterObj.filter = shifted;
-            }
-        } else if (type === 'column') {
-            if (f_c1 < index) {
-                if (f_c2 === index && direction === 'lefttop') {
-                    f_c2 += count;
-                } else if (f_c2 > index) {
-                    f_c2 += count;
-                }
-            } else if (f_c1 === index) {
-                if (direction === 'lefttop') {
-                    f_c1 += count;
-                    f_c2 += count;
-                } else if (direction === 'rightbottom' && f_c2 > index) {
-                    f_c2 += count;
-                }
-            } else {
-                f_c1 += count;
-                f_c2 += count;
-            }
-
-            if (filter != null) {
-                const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    let f_cindex = filter[k].cindex;
-
-                    if (f_cindex === index && direction === 'lefttop') {
-                        f_cindex += count;
-                    } else if (f_cindex > index) {
-                        f_cindex += count;
-                    }
-
-                    shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
-                    shifted[f_cindex - f_c1].cindex = f_cindex;
-                    shifted[f_cindex - f_c1].stc = f_c1;
-                    shifted[f_cindex - f_c1].edc = f_c2;
-                });
-                newFilterObj.filter = shifted;
-            }
-        }
-
-        newFilterObj.filterRange = { row: [f_r1, f_r2], column: [f_c1, f_c2] };
+    if (type === 'column' && config?.colReadOnly) {
+        config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, direction);
     }
 
-    if (newFilterObj != null && newFilterObj.filter != null) {
-        const rowhidden = (cfg.rowhidden ??= {});
-        forEach(newFilterObj.filter, (entry) => {
-            forEach(entry.rowhidden, (_v1, n) => {
-                rowhidden[n] = 0;
-            });
-        });
+    sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).map((rule) => ({
+        ...rule,
+        cellrange: shiftRangeForInsert(rule.cellrange, op),
+    }));
+
+    const insertAt = direction === 'lefttop' ? index : index + 1;
+    const shift = (at: number) => (at >= insertAt ? at + count : at);
+    // The calc chain is this tab's recalc list and is never stored, so the engine does not move it.
+    sheet.calcChain = (sheet.calcChain ?? []).map((entry) =>
+        type === 'row' ? { ...entry, r: shift(entry.r) } : { ...entry, c: shift(entry.c) },
+    );
+    shiftFilterForInsert(sheet, op);
+    shiftFrozenFocus(sheet, type, shift);
+
+    // The new rows or columns copy the validation rules of the one at the insert index, but not its links.
+    sheet.dataVerification = shiftCellKeyedForInsert(sheet.dataVerification, type, index, count, direction, cloneDeep);
+    sheet.hyperlink = shiftCellKeyedForInsert(sheet.hyperlink, type, index, count, direction);
+
+    const { data } = sheet;
+    if (changeSelection && data) {
+        const span = [insertAt, insertAt + count - 1];
+        const selections =
+            type === 'row'
+                ? [{ row: span, column: [0, data[0].length - 1] }]
+                : [{ row: [0, data.length - 1], column: span }];
+        sheet.selections = selections;
+        if (id === ctx.currentSheetId) ctx.selections = selections;
     }
 
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter ?? undefined;
-        file.filterRange = newFilterObj.filterRange ?? undefined;
-    }
-
-    const normalizedIndex = direction === 'lefttop' ? index - 1 : index;
-    shiftFrozenFocus(file, type, (focus) => (focus > normalizedIndex ? focus + count : focus));
-
-    // Inserted rows/columns clone the template's validation rules, not its hyperlinks.
-    file.dataVerification = shiftCellKeyedForInsert(file.dataVerification, type, index, count, direction, cloneDeep);
-    file.hyperlink = shiftCellKeyedForInsert(file.hyperlink, type, index, count, direction);
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
-function shiftStateOnlyFieldsForDelete(
+export function deleteRowCol(
     ctx: Context,
-    op: { type: 'row' | 'column'; start: number; end: number; id: string },
+    op: DeleteRowColOp,
+    // applyOpBatch sets fromBatch for a peer's op or an undo. Such a batch applies for a read-only viewer too, and
+    // applyOpBatch moves the selection itself. So the permission check stops only a viewer's own delete.
+    fromBatch = false,
 ) {
+    if (!fromBatch && ctx.allowEdit === false) return;
+    const id = op.id || ctx.currentSheetId;
     const { type, start, end } = op;
-    const id = op.id || ctx.currentSheetId;
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
 
-    const slen = end - start + 1;
+    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
 
-    // calcChain entries are sheet-local; entries inside the deleted range drop out.
-    const newCalcChain: FormulaCell[] = [];
-    if (file.calcChain != null) {
-        for (const entry of file.calcChain) {
-            const calc: FormulaCell = cloneDeep(entry);
-            if (type === 'row') {
-                if (calc.r < start) newCalcChain.push(calc);
-                else if (calc.r > end) {
-                    calc.r -= slen;
-                    newCalcChain.push(calc);
-                }
-            } else {
-                if (calc.c < start) newCalcChain.push(calc);
-                else if (calc.c > end) {
-                    calc.c -= slen;
-                    newCalcChain.push(calc);
-                }
-            }
+    const sheetIndex = getSheetIndex(ctx, id);
+    if (sheetIndex == null) return;
+    const sheet = ctx.sheets[sheetIndex];
+
+    // The engine refuses an op on a read-only row or column, but it does not move them.
+    // They move here, by the same rule as hidden rows and columns.
+    const { config } = sheet;
+    if (type === 'row' && config?.rowReadOnly) {
+        config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
+    }
+    if (type === 'column' && config?.colReadOnly) {
+        config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
+    }
+
+    sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).flatMap((rule) => {
+        const cellrange = shiftRangeForDelete(rule.cellrange, op);
+        return cellrange ? [{ ...rule, cellrange }] : [];
+    });
+
+    const deletedCount = end - start + 1;
+    const calcChain: CalcChainEntry[] = [];
+    for (const entry of sheet.calcChain ?? []) {
+        const at = type === 'row' ? entry.r : entry.c;
+        if (at < start) calcChain.push(entry);
+        else if (at > end) {
+            calcChain.push(type === 'row' ? { ...entry, r: at - deletedCount } : { ...entry, c: at - deletedCount });
         }
     }
-    file.calcChain = newCalcChain;
+    sheet.calcChain = calcChain;
+    shiftFilterForDelete(sheet, op);
+    shiftFrozenFocus(sheet, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
 
-    const cfg = file.config || {};
-    const { filterRange } = file;
-    const { filter } = file;
-    let newFilterObj: FilterObj | null = null;
-    if (!isEmpty(filterRange) && filterRange != null) {
-        newFilterObj = { filterRange: null, filter: null };
+    sheet.dataVerification = shiftCellKeyedForDelete(sheet.dataVerification, type, start, end);
+    sheet.hyperlink = shiftCellKeyedForDelete(sheet.hyperlink, type, start, end);
+    if (!fromBatch) ctx.selections = undefined;
 
-        let f_r1 = filterRange.row[0];
-        let f_r2 = filterRange.row[1];
-        let f_c1 = filterRange.column[0];
-        let f_c2 = filterRange.column[1];
-
-        if (type === 'row') {
-            if (f_r1 > end) {
-                f_r1 -= slen;
-                f_r2 -= slen;
-
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            } else if (f_r1 < start) {
-                if (f_r2 < start) {
-                } else if (f_r2 <= end) {
-                    f_r2 = start - 1;
-                } else {
-                    f_r2 -= slen;
-                }
-
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            }
-
-            if (newFilterObj.filterRange != null && filter != null) {
-                const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    const f_rowhidden = filter[k].rowhidden;
-                    const f_rowhidden_new: Record<string, number> = {};
-                    forEach(f_rowhidden, (_v1, nstr) => {
-                        const n = parseFloat(nstr);
-
-                        if (n < start) {
-                            f_rowhidden_new[n] = 0;
-                        } else if (n > end) {
-                            f_rowhidden_new[n - slen] = 0;
-                        }
-                    });
-
-                    if (!isEmpty(f_rowhidden_new)) {
-                        shifted[k] = cloneDeep(filter[k]);
-                        shifted[k].rowhidden = f_rowhidden_new;
-                        shifted[k].str = f_r1;
-                        shifted[k].edr = f_r2;
-                    }
-                });
-                if (!isEmpty(shifted)) newFilterObj.filter = shifted;
-            }
-        } else if (type === 'column') {
-            if (f_c1 > end) {
-                f_c1 -= slen;
-                f_c2 -= slen;
-
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            } else if (f_c1 < start) {
-                if (f_c2 < start) {
-                } else if (f_c2 <= end) {
-                    f_c2 = start - 1;
-                } else {
-                    f_c2 -= slen;
-                }
-
-                newFilterObj.filterRange = {
-                    row: [f_r1, f_r2],
-                    column: [f_c1, f_c2],
-                };
-            } else {
-                if (f_c2 > end) {
-                    f_c1 = start;
-                    f_c2 -= slen;
-
-                    newFilterObj.filterRange = {
-                        row: [f_r1, f_r2],
-                        column: [f_c1, f_c2],
-                    };
-                }
-            }
-
-            if (newFilterObj.filterRange != null && filter != null) {
-                const shifted: Record<string, FilterEntry> = {};
-                forEach(filter, (_v, k) => {
-                    let f_cindex = filter[k].cindex;
-
-                    if (f_cindex < start) {
-                        shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        shifted[f_cindex - f_c1].edc = f_c2;
-                    } else if (f_cindex > end) {
-                        f_cindex -= slen;
-                        shifted[f_cindex - f_c1] = cloneDeep(filter[k]);
-                        shifted[f_cindex - f_c1].cindex = f_cindex;
-                        shifted[f_cindex - f_c1].stc = f_c1;
-                        shifted[f_cindex - f_c1].edc = f_c2;
-                    }
-                });
-                if (!isEmpty(shifted)) newFilterObj.filter = shifted;
-            }
-        }
-    }
-
-    if (newFilterObj != null && newFilterObj.filter != null) {
-        const rowhidden = (cfg.rowhidden ??= {});
-        forEach(newFilterObj.filter, (entry) => {
-            forEach(entry.rowhidden, (_v1, n) => {
-                rowhidden[n] = 0;
-            });
-        });
-    }
-
-    if (newFilterObj != null) {
-        file.filter = newFilterObj.filter ?? undefined;
-        file.filterRange = newFilterObj.filterRange ?? undefined;
-    }
-
-    shiftFrozenFocus(file, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
-
-    file.dataVerification = shiftCellKeyedForDelete(file.dataVerification, type, start, end);
-    file.hyperlink = shiftCellKeyedForDelete(file.hyperlink, type, start, end);
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
-function adjustSelectionForInsert(
-    ctx: Context,
-    op: { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom'; id: string },
-) {
-    const { type, index, count, direction } = op;
-    const id = op.id || ctx.currentSheetId;
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
-    const d = file.data;
-    if (!d) return;
-
-    let range = null;
-    if (type === 'row') {
-        if (direction === 'lefttop') {
-            range = [{ row: [index, index + count - 1], column: [0, d[0].length - 1] }];
-        } else {
-            range = [{ row: [index + 1, index + count], column: [0, d[0].length - 1] }];
-        }
-    } else {
-        if (direction === 'lefttop') {
-            range = [{ row: [0, d.length - 1], column: [index, index + count - 1] }];
-        } else {
-            range = [{ row: [0, d.length - 1], column: [index + 1, index + count] }];
-        }
-    }
-
-    file.selections = range;
-    if (file.id === ctx.currentSheetId) {
-        ctx.selections = range;
-    }
+// Hiding moves the selection one step off the rows or columns it hid: up when they end the sheet or a hidden one
+// follows them, down otherwise. More than one selection returns 'noMulti', which the context menu shows as an alert.
+export function hideSelectedRowCol(ctx: Context, type: 'row' | 'column') {
+    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
+    const sheet = getSheet(ctx);
+    const { data } = sheet;
+    // A sheet that is not loaded has nothing to hide.
+    if (!data) return '';
+    const config = (sheet.config ??= {});
+    const key = type === 'row' ? 'rowhidden' : 'colhidden';
+    // A peer's replace can leave a hidden value that is no map. The hide starts a new map then, as on a sheet that
+    // has none, because writing into a number or a string throws.
+    const kept = config[key];
+    const hidden = isRecord(kept) ? kept : (config[key] = {});
+    const span = ctx.selections[0][type];
+    const [first, last] = span;
+    for (let i = first; i <= last; i += 1) hidden[i] = 0;
+    const length = type === 'row' ? data.length : data[0].length;
+    const step = last === length - 1 || hidden[last + 1] != null ? -1 : 1;
+    span[0] += step;
+    span[1] += step;
+    return '';
 }
 
-// Per sheet and per field, never `ctx.sheets = ...` or a whole sheet: a wholesale reassignment makes immer emit one
-// replace carrying the whole workbook, shipped over collab on every edit (rowcol-patches.test.ts), and a whole sheet's
-// undo would put back its images and charts over a peer's later ones. A moved chart gets only the fields that changed,
-// its spec parts, a keyed part an entry at a time, so a peer's move or delete of it, or its edit of another entry, at
-// once survives, and the undo puts back only the entries the op moved; an image never moves.
+export function showSelectedRowCol(ctx: Context, type: 'row' | 'column') {
+    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
+    // Showing never creates the hidden map. On a sheet with nothing hidden, a new empty map would still ship an op
+    // to peers and take an undo entry, for a change that does nothing.
+    const config = getSheetConfig(ctx);
+    const hidden = type === 'row' ? config?.rowhidden : config?.colhidden;
+    if (hidden) {
+        const [first, last] = ctx.selections[0][type];
+        for (let i = first; i <= last; i += 1) delete hidden[i];
+    }
+    return '';
+}
+
+// The cell editors refuse to edit a selection that starts on a hidden row or column, a cell nobody can see.
+export function isSelectionOnHiddenRowCol(ctx: Context): boolean {
+    const selection = ctx.selections?.[0];
+    if (!selection) return false;
+    const config = getSheetConfig(ctx);
+    return config?.colhidden?.[selection.column[0]] != null || config?.rowhidden?.[selection.row[0]] != null;
+}
+
+// An arrow key moves the selection past a whole run of hidden rows or columns, so it lands on a visible one.
+export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
+    if (!ctx.selections) return 0;
+    const vertical = key === 'ArrowUp' || key === 'ArrowDown';
+    if (!vertical && key !== 'ArrowLeft' && key !== 'ArrowRight') return 1;
+    const step = key === 'ArrowUp' || key === 'ArrowLeft' ? -1 : 1;
+    const config = getSheetConfig(ctx);
+    const hidden = (vertical ? config?.rowhidden : config?.colhidden) ?? {};
+    const [selection] = ctx.selections;
+    let at = (vertical ? selection.row[0] : selection.column[0]) + step;
+    let count = 1;
+    while (hidden[at] != null) {
+        count += 1;
+        at += step;
+    }
+    return count;
+}
+
+// Writes the engine's result back one sheet and one field at a time, never `ctx.sheets = ...` or a whole sheet.
+// A whole write makes immer emit one replace that carries the whole workbook, and collab would ship it on every
+// edit. Undoing a whole sheet would also put back its images and charts over a peer's later changes. A moved chart
+// gets only the fields that changed, and a keyed part of its spec one entry at a time. So a peer's move or delete
+// of that chart, or its edit of another entry, survives, and the undo puts back only the entries the op moved.
 function writeBackSheets(ctx: Context, sheets: Sheet[]) {
     for (const [i, next] of sheets.entries()) {
         const sheet: Record<string, unknown> = ctx.sheets[i];
@@ -405,272 +217,25 @@ function writeBackSheets(ctx: Context, sheets: Sheet[]) {
             for (const [field, value] of Object.entries(chart)) {
                 const record = stored[field];
                 if (record === value) continue;
-                if (isRecord(record) && isRecord(value)) writeEntries(record, value);
-                else stored[field] = value;
-            }
-        }
-    }
-}
-
-function writeEntries(record: Record<string, unknown>, next: Record<string, unknown>) {
-    for (const [entry, value] of Object.entries(next)) if (record[entry] !== value) record[entry] = value;
-    for (const entry of Object.keys(record)) if (!Object.hasOwn(next, entry)) delete record[entry];
-}
-
-export function insertRowCol(
-    ctx: Context,
-    op: {
-        type: 'row' | 'column';
-        index: number;
-        count: number;
-        direction: 'lefttop' | 'rightbottom';
-        id: string;
-    },
-    changeSelection = true,
-    // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
-    // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own insert only.
-    fromBatch = false,
-) {
-    if (!fromBatch && ctx.allowEdit === false) return;
-    const id = op.id || ctx.currentSheetId;
-    if (typeof id !== 'string') return;
-
-    const { type, index, count } = op;
-
-    writeBackSheets(ctx, applySheetsInsertRowCol(ctx.sheets, { ...op, id }));
-
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
-
-    // The engine refuses an op on a read-only row or column but does not move them.
-    // They shift here, by the same rule as hidden rows and columns.
-    const { config } = file;
-    if (type === 'row' && config?.rowReadOnly) {
-        config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, op.direction);
-    }
-    if (type === 'column' && config?.colReadOnly) {
-        config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, op.direction);
-    }
-
-    file.alternateFormatRules = (file.alternateFormatRules ?? []).map((af) => ({
-        ...af,
-        cellrange: shiftRangeForInsert(af.cellrange, op),
-    }));
-
-    shiftStateOnlyFieldsForInsert(ctx, { ...op, id });
-    if (changeSelection) adjustSelectionForInsert(ctx, { ...op, id });
-
-    ctx.formulaCache.formulaCellInfoMap = null;
-}
-
-export function deleteRowCol(
-    ctx: Context,
-    op: {
-        type: 'row' | 'column';
-        start: number;
-        end: number;
-        id: string;
-    },
-    // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
-    // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own delete only.
-    fromBatch = false,
-) {
-    if (!fromBatch && ctx.allowEdit === false) return;
-    const id = op.id || ctx.currentSheetId;
-    if (typeof id !== 'string') return;
-
-    const { type, start, end } = op;
-
-    writeBackSheets(ctx, applySheetsDeleteRowCol(ctx.sheets, { ...op, id }));
-
-    const curOrder = getSheetIndex(ctx, id);
-    if (curOrder == null) return;
-
-    const file = ctx.sheets[curOrder];
-    if (!file) return;
-
-    // The engine refuses an op on a read-only row or column but does not move them.
-    // They shift here, by the same rule as hidden rows and columns.
-    const { config } = file;
-    if (type === 'row' && config?.rowReadOnly) {
-        config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
-    }
-    if (type === 'column' && config?.colReadOnly) {
-        config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
-    }
-
-    const alternateFormats = [];
-    for (const af of file.alternateFormatRules ?? []) {
-        const cellrange = shiftRangeForDelete(af.cellrange, op);
-        if (cellrange) alternateFormats.push({ ...af, cellrange });
-    }
-    file.alternateFormatRules = alternateFormats;
-
-    shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
-    if (!fromBatch) ctx.selections = undefined;
-
-    ctx.formulaCache.formulaCellInfoMap = null;
-}
-
-// Hide selected rows/columns
-export function hideSelected(ctx: Context, type: string) {
-    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
-    const sheet = getSheet(ctx);
-    const { data } = sheet;
-    // A sheet that is not loaded has nothing to hide.
-    if (!data) return '';
-    const cfg = (sheet.config ??= {});
-    if (type === 'row') {
-        const rowhidden = (cfg.rowhidden ??= {});
-        const [r1, r2] = ctx.selections[0].row;
-        const rowhiddenNumber = r2;
-        for (let r = r1; r <= r2; r += 1) {
-            rowhidden[r] = 0;
-        }
-        const rowLen = data.length;
-        const isEndRow =
-            rowLen - 1 === rowhiddenNumber ||
-            Object.keys(rowhidden).findIndex((o) => parseInt(o, 10) - 1 === rowhiddenNumber) >= 0;
-        if (isEndRow) {
-            ctx.selections[0].row[0] -= 1;
-            ctx.selections[0].row[1] -= 1;
-        } else {
-            ctx.selections[0].row[0] += 1;
-            ctx.selections[0].row[1] += 1;
-        }
-    } else if (type === 'column') {
-        const colhidden = (cfg.colhidden ??= {});
-        const c1 = ctx.selections[0].column[0];
-        const c2 = ctx.selections[0].column[1];
-        const colhiddenNumber = c2;
-        for (let c = c1; c <= c2; c += 1) {
-            colhidden[c] = 0;
-        }
-        const columnLen = data[0].length;
-        const isEndColumn =
-            columnLen - 1 === colhiddenNumber ||
-            Object.keys(colhidden).findIndex((o) => parseInt(o, 10) - 1 === colhiddenNumber) >= 0;
-        if (isEndColumn) {
-            ctx.selections[0].column[0] -= 1;
-            ctx.selections[0].column[1] -= 1;
-        } else {
-            ctx.selections[0].column[0] += 1;
-            ctx.selections[0].column[1] += 1;
-        }
-    }
-    return '';
-}
-
-// Show (unhide) selected rows/columns
-export function showSelected(ctx: Context, type: string) {
-    if (!ctx.selections || ctx.selections.length > 1) return 'noMulti';
-    // Unhiding cannot create hidden state, so it must not seed the map: on a sheet with
-    // nothing hidden that would ship an op to peers and take an undo entry for a no-op.
-    const cfg = getSheetConfig(ctx);
-    if (type === 'row' && cfg?.rowhidden) {
-        const [r1, r2] = ctx.selections[0].row;
-        for (let r = r1; r <= r2; r += 1) {
-            delete cfg.rowhidden[r];
-        }
-    } else if (type === 'column' && cfg?.colhidden) {
-        const [c1, c2] = ctx.selections[0].column;
-        for (let c = c1; c <= c2; c += 1) {
-            delete cfg.colhidden[c];
-        }
-    }
-    return '';
-}
-
-// Check if the current selection is on a hidden row/column
-export function isShowHidenCR(ctx: Context): boolean {
-    const cfg = getSheetConfig(ctx);
-    if (!ctx.selections || (!cfg?.colhidden && !cfg?.rowhidden)) return false;
-    // If the current selection is on a hidden row/column, it is not editable
-    if (cfg?.colhidden && size(cfg.colhidden) >= 1) {
-        const ctxColumn = ctx.selections[0]?.column?.[0];
-        const isHidenColumn =
-            Object.keys(cfg.colhidden).findIndex((o) => {
-                return ctxColumn === parseInt(o, 10);
-            }) >= 0;
-        if (isHidenColumn) {
-            return true;
-        }
-    }
-    if (cfg?.rowhidden && size(cfg.rowhidden) >= 1) {
-        const ctxRow = ctx.selections[0]?.row?.[0];
-        const isHidenRow =
-            Object.keys(cfg.rowhidden).findIndex((o) => {
-                return ctxRow === parseInt(o, 10);
-            }) >= 0;
-        if (isHidenRow) {
-            return true;
-        }
-    }
-    return false;
-}
-
-// Count hidden rows/columns to skip during keyboard navigation
-export function hideCRCount(ctx: Context, type: string): number {
-    let count = 1;
-    if (!ctx.selections) return 0;
-    const section = ctx.selections[0];
-    const cfg = getSheetConfig(ctx);
-    const rowhidden = cfg?.rowhidden ?? {};
-    const colhidden = cfg?.colhidden ?? {};
-    if (type === 'ArrowUp' || type === 'ArrowDown') {
-        const rowArr = Object.keys(rowhidden);
-        if (type === 'ArrowUp') {
-            let row = section.row[0] - 1;
-            const rowIndex = rowArr.indexOf(row.toString());
-            for (let i = rowIndex; i >= 0; i -= 1) {
-                if (parseInt(rowArr[i], 10) === row) {
-                    count += 1;
-                    row -= 1;
-                } else {
-                    return count;
+                if (!isRecord(record) || !isRecord(value)) {
+                    stored[field] = value;
+                    continue;
                 }
-            }
-        } else {
-            let row = section.row[0] + 1;
-            const rowIndex = rowArr.indexOf(`${row}`);
-            for (let i = rowIndex; i < rowArr.length; i += 1) {
-                if (parseInt(rowArr[i], 10) === row) {
-                    count += 1;
-                    row += 1;
-                } else {
-                    return count;
-                }
-            }
-        }
-    } else if (type === 'ArrowLeft' || type === 'ArrowRight') {
-        const columnArr = Object.keys(colhidden);
-        if (type === 'ArrowLeft') {
-            let column = section.column[0] - 1;
-            const columnIndex = columnArr.indexOf(column.toString());
-            for (let i = columnIndex; i >= 0; i -= 1) {
-                if (parseInt(columnArr[i], 10) === column) {
-                    count += 1;
-                    column -= 1;
-                } else {
-                    return count;
-                }
-            }
-        } else {
-            let column = section.column[0] + 1;
-            const columnIndex = columnArr.indexOf(`${column}`);
-            for (let i = columnIndex; i < columnArr.length; i += 1) {
-                if (parseInt(columnArr[i], 10) === column) {
-                    count += 1;
-                    column += 1;
-                } else {
-                    return count;
-                }
+                for (const [entry, part] of Object.entries(value)) if (record[entry] !== part) record[entry] = part;
+                for (const entry of Object.keys(record)) if (!Object.hasOwn(value, entry)) delete record[entry];
             }
         }
     }
+}
 
-    return count;
+// Writes `frozen` whole, never a field inside it. A peer's unfreeze removes `frozen`, and a write into a field
+// that is gone would not apply.
+function shiftFrozenFocus(sheet: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
+    const { frozen } = sheet;
+    if (!frozen?.range) return;
+    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
+    if (!ranged && frozen.type !== 'rangeBoth') return;
+    const axis = type === 'row' ? 'row_focus' : 'column_focus';
+    const focus = shift(frozen.range[axis]);
+    if (focus !== frozen.range[axis]) sheet.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
 }

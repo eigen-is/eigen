@@ -27,7 +27,7 @@ import {
     isAllowEdit,
     isInlineStringCell,
     israngeseleciton,
-    isShowHidenCR,
+    isSelectionOnHiddenRowCol,
     moveHighlightCell,
     moveToEnd,
     rememberEditorSelection,
@@ -52,7 +52,7 @@ export const InputBox: React.FC = () => {
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
     const prevEditingCellPosition = usePrevious(context.editingCellPosition);
     const prevSheetId = usePrevious(context.currentSheetId);
-    const [isHidenRC, setIsHidenRC] = useState<boolean>(false);
+    const [isOnHiddenRowCol, setIsOnHiddenRowCol] = useState<boolean>(false);
     const firstSelection = context.selections?.[0];
     const row_index = firstSelection?.row_focus;
     const col_index = firstSelection?.column_focus;
@@ -137,10 +137,9 @@ export const InputBox: React.FC = () => {
         }
     }, [context.editingCellPosition]);
 
-    // Disallow editing when the selected row/column is hidden
     // biome-ignore lint/correctness/useExhaustiveDependencies: only re-checks hidden-row/col status when selection changes
     useEffect(() => {
-        setIsHidenRC(isShowHidenCR(context));
+        setIsOnHiddenRowCol(isSelectionOnHiddenRowCol(context));
     }, [context.selections]);
 
     // The selection is kept for a toolbar control that takes the focus, such as the size box.
@@ -333,7 +332,7 @@ export const InputBox: React.FC = () => {
                     onPaste={onPaste}
                     onFocus={() => setInputFocused(true)}
                     onBlur={() => setInputFocused(false)}
-                    allowEdit={edit ? !isHidenRC : edit}
+                    allowEdit={edit ? !isOnHiddenRowCol : edit}
                 />
             </div>
             <FormulaSearch

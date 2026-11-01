@@ -41,10 +41,10 @@ import {
     handleCut,
     handleLink,
     handlePasteByClick,
-    hideSelected,
+    hideSelectedRowCol,
     insertCheckbox,
     readClipboardText,
-    showSelected,
+    showSelectedRowCol,
     sortSelection,
     tryDeleteRowCol,
     tryInsertRowCol,
@@ -180,7 +180,7 @@ function HideItem({ type, label }: { type: RowColType; label: string }) {
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
-                    if (hideSelected(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
+                    if (hideSelectedRowCol(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
                 })
             }
         >
@@ -197,7 +197,7 @@ function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
-                    if (showSelected(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
+                    if (showSelectedRowCol(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
                 })
             }
         >

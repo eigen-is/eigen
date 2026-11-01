@@ -21,7 +21,7 @@ import { setChartLook, setChartSpec } from '../../state/modules/chart';
 import { clearFilter } from '../../state/modules/filter';
 import { deleteFloatingObject, reorderFloatingObject, updateFloatingBox } from '../../state/modules/floating';
 import { removeImageByMediaName, replaceImageMediaName } from '../../state/modules/image';
-import { showSelected } from '../../state/modules/rowcol';
+import { showSelectedRowCol } from '../../state/modules/rowcol';
 import { pasteHandlerOfPaintModel } from '../../state/modules/selection';
 import { initSheetData } from '../../state/modules/sheet';
 import { handleBorder, handleClearFormat, handleMerge, updateFormatCell } from '../../state/modules/toolbar';
@@ -103,8 +103,8 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
     ['removing the media of no image', (ctx) => removeImageByMediaName(ctx, 'pending:gone')],
     ['unhiding a row via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'row')],
     ['unhiding a column via the api when nothing is hidden', (ctx) => showRowOrColumn(ctx, ['1'], 'column')],
-    ['unhiding a selected row when nothing is hidden', (ctx) => showSelected(ctx, 'row')],
-    ['unhiding a selected column when nothing is hidden', (ctx) => showSelected(ctx, 'column')],
+    ['unhiding a selected row when nothing is hidden', (ctx) => showSelectedRowCol(ctx, 'row')],
+    ['unhiding a selected column when nothing is hidden', (ctx) => showSelectedRowCol(ctx, 'column')],
     [
         'an internal copy-paste released with no destination selection',
         (ctx) => {

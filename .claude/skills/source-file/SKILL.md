@@ -51,7 +51,7 @@ import * as path from 'node:path';
 
 ## Report
 
-A sweep of more than one file reports one row per file, with a cell for each of steps 2 to 9: what changed, or "nothing" with the reason in a few words ("no shorthand names", "248 lines, one concern"). Headers and comments are the visible half; renames, order, moves, splits, types, visibility and imports are what make a file easier to read, and an empty cell must say why it is empty.
+A sweep of more than one file reports one row per file, with a cell for each of steps 2 to 9: what changed, or "nothing" with the reason in a few words ("no shorthand names", "248 lines, one concern"). Headers and comments are the visible half; renames, order, moves, splits, types, visibility and imports are what make a file easier to read, and an empty cell must say why it is empty. "It would bury the change in the diff" is not a reason: a rename, a move or a split goes in a commit of its own beside the change. A step that can't be done in this unit is the only kind that becomes a backlog row.
 
 | File | 2 simplify | 3 rename | 4 order, move | 5 split | 6 types | 7 visibility | 8 imports | 9 comments |
 |---|---|---|---|---|---|---|---|---|
