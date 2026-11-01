@@ -197,7 +197,7 @@ describe('htmlToPdf with a stub WeasyPrint', () => {
             const started = Date.now();
             const renders = [outcome(htmlToPdf(HTML, 1, controller.signal)), outcome(htmlToPdf(HTML, 1, controller.signal))];
             const { readFileSync, existsSync } = await import('node:fs');
-            const pids = () => existsSync(process.env.PATH + '/python3.13.pids') ? readFileSync(process.env.PATH + '/python3.13.pids', 'utf8').trim().split('\\n').map(Number) : [];
+            const pids = () => existsSync(process.env.PATH + '/python3.13.pids') ? readFileSync(process.env.PATH + '/python3.13.pids', 'utf8').trim().split('\\n').filter(Boolean).map(Number) : [];
             while (pids().length === 0) await Bun.sleep(20);
             controller.abort();
             const outcomes = await Promise.all(renders);
