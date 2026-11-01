@@ -2,7 +2,7 @@
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so their changes reach every
 // editor too. The Drive opens each document once, however many sockets connect, and closes it a while after the last
-// one leaves. A workbook first folds its op log into its snapshot.
+// one leaves. A workbook first folds its op log into its snapshot, once a version keeps the log.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -336,17 +336,35 @@ export class CollabDocument {
             this.compaction = new AbortController();
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
             const snapshot = await compactSheets(this.path, this.doc, this.compaction.signal);
+            // The swap deletes the log, so a result that is still current first gets a version that keeps the log.
+            // Nothing here holds the container lock or the data.db slot, so the version may wait for both.
+            const saved =
+                snapshot !== null &&
+                !this.closed &&
+                this.connections.size === 0 &&
+                this.generation === generation &&
+                (await this.drive.saveVersion(this.path.mountId, this.path.id).then(
+                    () => true,
+                    (err: unknown) => {
+                        console.warn(
+                            `[sheets] version before compaction failed path=${this.path.id}, kept the log:`,
+                            err instanceof Error ? err.message : err,
+                        );
+                        return false;
+                    },
+                ));
             this.compaction = null;
             if (this.closed || this.connections.size > 0) return;
             if (snapshot !== null) {
-                // Anything since the read, a subscribe included, makes the result stale. The document lingers again,
-                // and the next close tries again.
+                // Anything since the read, a subscribe or an update during the version included, makes the result
+                // stale. The document lingers again, and the next close tries again.
                 if (this.generation !== generation) {
                     this.scheduleClose();
                     return;
                 }
                 // Nothing changed, so the op log holds exactly the batches the snapshot folded, and the swap drops them.
-                writeSheetsSnapshotToYjs(this.doc, snapshot, COMPACTION_ORIGIN);
+                // A version that failed stops the swap, and the document closes with its log, as after a failed run.
+                if (saved) writeSheetsSnapshotToYjs(this.doc, snapshot, COMPACTION_ORIGIN);
             }
         }
         await this.drive.closeCollabDocument(this.path.mountId, this.path.id);

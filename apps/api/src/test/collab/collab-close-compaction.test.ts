@@ -10,7 +10,9 @@ import {
 } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
+import * as Y from 'yjs';
 import { CLOSE_LINGER_MS, CollabDocument } from '../../lib/collab/collab-document';
+import { readYjsStateFromFile } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
 import { compactSheetsSnapshot, writeSheetsSnapshotToYjs } from '../../lib/document/sheets';
 import type { DocumentTransformRequest, DocumentTransformResponse } from '../../lib/document/transform/protocol';
@@ -192,6 +194,21 @@ describe('CollabDocument compacts a workbook at close', () => {
         };
     }
 
+    // The op log of the newest version, read from its data.db as a restore reads it.
+    async function newestVersionOps(fileId: string): Promise<Op[][]> {
+        const [newest] = await home.drive.listVersions(mountId, fileId);
+        if (!newest) throw new Error('no version');
+        const { mount } = await home.drive.resolveFile(mountId, fileId);
+        const tempId = crypto.randomUUID();
+        try {
+            const doc = new Y.Doc();
+            Y.applyUpdate(doc, readYjsStateFromFile(await mount.downloadToTemp(newest.id, tempId)));
+            return sheetsOpLog(doc).toArray();
+        } finally {
+            await mount.cleanupTemp(tempId);
+        }
+    }
+
     test('the close stores the replayed log as the snapshot, empties the log and computes it', async () => {
         const warn = spyOn(console, 'warn').mockImplementation(() => {});
         const sheet = await openLingeringSheet('compaction-stores', [edit(0, 0, 7), POISON, edit(0, 1, 'x'), POISON]);
@@ -238,14 +255,105 @@ describe('CollabDocument compacts a workbook at close', () => {
         }
     }, 30_000);
 
+    test('a version keeps the log before the swap, with the batch the replay drops', async () => {
+        const stub = stubRunner();
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await openLingeringSheet('compaction-version', [edit(0, 0, 7), POISON]);
+        try {
+            const versionsBefore = (await home.drive.listVersions(mountId, sheet.id)).length;
+            const closed = sheet.nextClose();
+            lingerOut(sheet.doc);
+            jest.useRealTimers();
+            succeed(stub.runs[0]);
+            await closed;
+
+            expect(sheet.ops.length).toBe(0);
+            expect(await home.drive.listVersions(mountId, sheet.id)).toHaveLength(versionsBefore + 1);
+            expect(await newestVersionOps(sheet.id)).toEqual([edit(0, 0, 7), POISON]);
+        } finally {
+            warn.mockRestore();
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('a version that fails stops the swap, and the document closes with its log, counting no failure', async () => {
+        const stub = stubRunner();
+        const warn = spyOn(console, 'warn').mockImplementation(() => {});
+        const sheet = await openLingeringSheet('compaction-version-fails', [edit(0, 0, 1)]);
+        const originalSave = home.drive.saveVersion;
+        home.drive.saveVersion = async () => {
+            throw new ApiError(500, 'Storage is down');
+        };
+        try {
+            const before = readSheetsSnapshotJson(sheet.doc.doc);
+            // One more close than the failures that stop the compaction.
+            for (let i = 0; i < 4; i++) {
+                const closed = sheet.nextClose();
+                jest.useFakeTimers();
+                lingerOut(sheet.doc);
+                jest.useRealTimers();
+                succeed(stub.runs[i]);
+                await closed;
+            }
+
+            expect(stub.runs).toHaveLength(4);
+            expect(sheet.closes()).toBe(4);
+            expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(before);
+            expect(sheet.ops.length).toBe(1);
+            expect(warn.mock.calls.filter((args) => String(args[0]).includes('gave up'))).toHaveLength(0);
+        } finally {
+            home.drive.saveVersion = originalSave;
+            warn.mockRestore();
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
+    test('an update during the version drops the swap, and the document lingers again', async () => {
+        const stub = stubRunner();
+        const sheet = await openLingeringSheet('compaction-version-update', [edit(0, 0, 1)]);
+        const originalSave = home.drive.saveVersion.bind(home.drive);
+        let saved = () => {};
+        const versionSaved = new Promise<void>((resolve) => (saved = resolve));
+        home.drive.saveVersion = async (...args: Parameters<typeof originalSave>) => {
+            sheet.ops.push([edit(0, 1, 2)]);
+            const version = await originalSave(...args);
+            saved();
+            return version;
+        };
+        try {
+            const before = readSheetsSnapshotJson(sheet.doc.doc);
+            lingerOut(sheet.doc);
+            succeed(stub.runs[0]);
+            await versionSaved;
+            await tick();
+
+            expect(readSheetsSnapshotJson(sheet.doc.doc)).toBe(before);
+            expect(sheet.ops.length).toBe(2);
+            expect(sheet.closes()).toBe(0);
+
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
+            expect(stub.runs).toHaveLength(2);
+        } finally {
+            home.drive.saveVersion = originalSave;
+            stub.restore();
+            sheet.restore();
+            sheet.doc.destruct();
+        }
+    });
+
     test("the swap doesn't stamp Modified, now or at the close", async () => {
         const stub = stubRunner();
         const sheet = await openLingeringSheet('compaction-untouched', [edit(0, 0, 1)]);
         try {
+            const closed = sheet.nextClose();
             lingerOut(sheet.doc);
             expect(stub.runs).toHaveLength(1);
             succeed(stub.runs[0]);
-            await tick();
+            await closed;
             expect(sheet.ops.length).toBe(0);
             sheet.doc.destruct();
             expect(sheet.touches()).toBe(0);
@@ -309,10 +417,11 @@ describe('CollabDocument compacts a workbook at close', () => {
             expect(sheet.ops.length).toBe(2);
             expect(sheet.closes()).toBe(0);
 
+            const closed = sheet.nextClose();
             jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(stub.runs).toHaveLength(2);
             succeed(stub.runs[1]);
-            await tick();
+            await closed;
             expect(sheet.ops.length).toBe(0);
             expect(sheet.closes()).toBe(1);
         } finally {
@@ -437,8 +546,9 @@ describe('CollabDocument compacts a workbook at close', () => {
             const [run] = stub.runs;
             if (run.request.kind !== 'compact') throw new Error(`unexpected ${run.request.kind} job`);
             expect(run.request.batches).toBe(JSON.stringify([edit(0, 0, 1), edit(0, 1, 2)]));
+            const closed = sheet.nextClose();
             succeed(run);
-            await tick();
+            await closed;
             expect(sheet.ops.length).toBe(0);
         } finally {
             stub.restore();
@@ -478,10 +588,11 @@ describe('CollabDocument compacts a workbook at close', () => {
             expect(sheet.ops.length).toBe(1);
             expect(sheet.closes()).toBe(0);
 
+            const closed = sheet.nextClose();
             jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(stub.runs).toHaveLength(2);
             succeed(stub.runs[1]);
-            await tick();
+            await closed;
             expect(sheet.ops.length).toBe(0);
             expect(sheet.closes()).toBe(1);
         } finally {
