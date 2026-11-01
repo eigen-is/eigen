@@ -59,8 +59,9 @@ def main(command, *args):
     elif command == "woff2":
         woff2(*args)
     elif command == "subset":
-        for job in json.load(open(args[0])):
-            cut(job)
+        with open(args[0]) as jobs:
+            for job in json.load(jobs):
+                cut(job)
     else:
         sys.exit(f"unknown command {command}")
 
