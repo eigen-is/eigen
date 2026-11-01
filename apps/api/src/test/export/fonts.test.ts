@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { FONT_SLICES } from '@workspace/lib/constants/font-slices';
 import { EIGEN_FONT_NAMES, EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { DOCX_FONT_FILES, sfntTables } from '../../lib/export/doc/docx/fonts';
-import { drawnCodePoints, slicesFaceCss } from '../../lib/export/fonts';
+import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../../lib/export/fonts';
 
 const FONTS_DIR = path.join(import.meta.dir, '../../../../../packages/ui/src/assets/fonts');
 
@@ -72,6 +72,30 @@ describe('drawnCodePoints', () => {
     test("a character, its other case for CSS caps, and a numeric reference's character", () => {
         expect(chars('é中')).toEqual(new Set([...chars(''), 'é', 'É', '中']));
         expect(chars('&#x4E2D;&#54620;')).toEqual(new Set([...chars(''), '中', '한']));
+    });
+
+    test('a character outside the BMP is one code point, its surrogates none', () => {
+        expect(chars('a😀b')).toEqual(new Set([...chars(''), '😀']));
+    });
+});
+
+describe('namedFamilies', () => {
+    test('the names of an SVG attribute, a style attribute, a stylesheet and a CSS variable', () => {
+        expect(namedFamilies('<text font-family="&apos;Excalifont&apos;, &apos;Noto Sans SC&apos;, cursive">')).toEqual(
+            new Set(['Excalifont', 'Noto Sans SC']),
+        );
+        expect(
+            namedFamilies(`<span style="font-size:2px;font-family:'Source Serif 4', 'Eigen Emoji', serif">`),
+        ).toEqual(new Set(['Source Serif 4', 'Eigen Emoji']));
+        expect(namedFamilies(`<style>.c1{font-family:'JetBrains Mono', 'Noto Sans KR'}</style>`)).toEqual(
+            new Set(['JetBrains Mono', 'Noto Sans KR']),
+        );
+        expect(namedFamilies(`<div style="--doc-font-family:'Inter', sans-serif">`)).toEqual(new Set(['Inter']));
+    });
+
+    test('only a whole name in a font-family counts', () => {
+        expect(namedFamilies('<text font-family="Interstate, sans-serif">x</text>')).toEqual(new Set());
+        expect(namedFamilies('<p>Set in Source Serif 4 and Inter.</p>')).toEqual(new Set());
     });
 });
 
