@@ -6,6 +6,7 @@ import { getPublicOrigin } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core';
 import { readEigendocFromDoc } from '../../lib/document/doc';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
+import { documentTransformRunner } from '../../lib/document/transform/runner';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
 import { docxToPmJson } from '../../lib/import/doc/from-docx';
@@ -377,10 +378,11 @@ describe('Eigendoc docx import/convert', () => {
         const { path } = await home.drive.resolveFile(mountId, docPath.id);
         const before = await readDocJson(docPath.id);
         const controller = new AbortController();
-        const realGet = home.drive.getCollabDocument.bind(home.drive);
-        const getSpy = spyOn(home.drive, 'getCollabDocument').mockImplementation((id, pathId) => {
+        const realRun = documentTransformRunner.run.bind(documentTransformRunner);
+        const runSpy = spyOn(documentTransformRunner, 'run').mockImplementation(async (...args) => {
+            const response = await realRun(...args);
             controller.abort();
-            return realGet(id, pathId);
+            return response;
         });
         const buffer = Buffer.from(await buildGoldenDocx(TEST_PNG_BYTES));
         try {
@@ -388,16 +390,15 @@ describe('Eigendoc docx import/convert', () => {
                 importIntoDocument(home.drive, path, buffer, REPLACE, home.user, controller.signal),
             ).rejects.toMatchObject({ name: 'AbortError' });
         } finally {
-            getSpy.mockRestore();
+            runSpy.mockRestore();
         }
         expect(await mediaNames(docPath.id)).toEqual([]);
         expect(await readDocJson(docPath.id)).toEqual(before);
     }, 60_000);
 
-    test('write revoked during the collab-document lookup blocks the commit', async () => {
-        // The recheck only closes the race if it is the LAST await before the write:
-        // resolving the collab document is itself an await, read-checked only.
-        const docPath = await createDoc('acl-race-lookup-target');
+    test('write revoked during the version blocks the commit', async () => {
+        // The recheck closes the race only if it comes after every slow await before the write, the version included.
+        const docPath = await createDoc('acl-race-version-target');
         const home = await getHome(ctx.alice.user.id);
         const collab = await home.drive.getCollabDocument(mountId, docPath.id);
         seedEigendoc(collab.doc, {
@@ -412,12 +413,13 @@ describe('Eigendoc docx import/convert', () => {
         const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
         const { path } = await bobDrive.resolveFile(mountId, docPath.id);
 
-        const realGet = bobDrive.getCollabDocument.bind(bobDrive);
-        const getSpy = spyOn(bobDrive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
+        const realSave = bobDrive.saveVersion.bind(bobDrive);
+        const saveSpy = spyOn(bobDrive, 'saveVersion').mockImplementation(async (id, containerId) => {
+            const version = await realSave(id, containerId);
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${docPath.id}/acl`, {
                 add: [{ id: ctx.bob.user.email, read: true, write: false }],
             });
-            return realGet(id, pathId);
+            return version;
         });
 
         const before = await readDocJson(docPath.id);
@@ -428,7 +430,7 @@ describe('Eigendoc docx import/convert', () => {
         } catch (e) {
             error = e;
         } finally {
-            getSpy.mockRestore();
+            saveSpy.mockRestore();
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(403);

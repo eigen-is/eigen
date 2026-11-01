@@ -15,7 +15,7 @@ import { readLiveSheets, readSheetsFromDoc } from '../../lib/document/sheets';
 import { toTransferableBuffer } from '../../lib/document/transform/protocol';
 import { getSharedDrive } from '../../lib/drive/get-drive';
 import { getHome } from '../../lib/home/get-home';
-import { importIntoDocument } from '../../lib/import/import-document';
+import { convertToDocument, importIntoDocument } from '../../lib/import/import-document';
 import { IMPORT_MESSAGES } from '../../lib/import/messages';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { assertInsertFits, MAX_CELLS, MAX_TEXT, sheetsWeight } from '../../lib/import/sheets/limits';
@@ -714,12 +714,11 @@ describe('Sheets xlsx import/convert', () => {
         expect(await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual(before);
     }, 60_000);
 
-    test('write revoked during the collab-document lookup blocks the commit', async () => {
-        // The recheck only closes the race if it is the LAST await before the write:
-        // resolving the collab document is itself an await, read-checked only.
+    test('write revoked during the version blocks the commit', async () => {
+        // The recheck closes the race only if it comes after every slow await before the write, the version included.
         const sheetsDoc = await uploadAndConvert(
             buildXlsxBuffer([{ a1: 'A1', value: 'Alice' }]),
-            'acl-race-lookup.xlsx',
+            'acl-race-version.xlsx',
         );
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: true }],
@@ -729,12 +728,13 @@ describe('Sheets xlsx import/convert', () => {
         const bobDrive = await getSharedDrive(ctx.alice.user.id, bob!);
         const { path } = await bobDrive.resolveFile(mountId, sheetsDoc.id);
 
-        const realGet = bobDrive.getCollabDocument.bind(bobDrive);
-        const getSpy = spyOn(bobDrive, 'getCollabDocument').mockImplementation(async (id, pathId) => {
+        const realSave = bobDrive.saveVersion.bind(bobDrive);
+        const saveSpy = spyOn(bobDrive, 'saveVersion').mockImplementation(async (id, containerId) => {
+            const version = await realSave(id, containerId);
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${sheetsDoc.id}/acl`, {
                 add: [{ id: ctx.bob.user.email, read: true, write: false }],
             });
-            return realGet(id, pathId);
+            return version;
         });
 
         const before = await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id);
@@ -745,12 +745,70 @@ describe('Sheets xlsx import/convert', () => {
         } catch (e) {
             error = e;
         } finally {
-            getSpy.mockRestore();
+            saveSpy.mockRestore();
         }
         expect(error).toBeInstanceOf(ApiError);
         expect((error as ApiError).status).toBe(403);
         expect((error as ApiError).message).toBe('No write permission');
         expect(await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id)).toEqual(before);
+    }, 60_000);
+
+    // A compaction that ends while the import waits closes the document, and a write into a closed one is lost.
+    test('an import writes into the document open at the write, not one that closed during the commit', async () => {
+        const sheetsDoc = await uploadAndConvert(
+            buildXlsxBuffer([{ a1: 'A1', value: 'Old' }]),
+            'closed-meanwhile.xlsx',
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const { path } = await home.drive.resolveFile(mountId, sheetsDoc.id);
+        const user = await getUserById(ctx.alice.user.id);
+        if (!user) throw new Error('alice missing');
+        await home.drive.getCollabDocument(mountId, sheetsDoc.id);
+        const realCanWrite = home.drive.canWrite.bind(home.drive);
+        const canWriteSpy = spyOn(home.drive, 'canWrite').mockImplementation(async (...args) => {
+            await home.drive.closeCollabDocument(mountId, sheetsDoc.id);
+            return realCanWrite(...args);
+        });
+        try {
+            const replacement = Buffer.from(buildXlsxBuffer([{ a1: 'A1', value: 'New' }], 'Replaced'));
+            await importIntoDocument(home.drive, path, replacement, { mode: 'replace' }, user);
+        } finally {
+            canWriteSpy.mockRestore();
+        }
+        await home.drive.closeCollabDocument(mountId, sheetsDoc.id);
+        const [sheet] = await readSnapshot(ctx.alice.user.id, mountId, sheetsDoc.id);
+        expect(sheet.name).toBe('Replaced');
+    }, 60_000);
+
+    test('a convert writes into the new document open at the write, not one that closed while its pictures were saved', async () => {
+        const xlsxFile = new File([await pictureWorkbook()], 'closed-convert.xlsx', { type: XLSX_MIME });
+        const uploaded = await driveUpload<DrivePath>(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            mountId,
+            rootId,
+            xlsxFile,
+        );
+        const home = await getHome(ctx.alice.user.id);
+        const { mount, path } = await home.drive.resolveFile(mountId, uploaded.id);
+        const user = await getUserById(ctx.alice.user.id);
+        if (!user) throw new Error('alice missing');
+        const realCreate = home.drive.createFileFromData.bind(home.drive);
+        const createSpy = spyOn(home.drive, 'createFileFromData').mockImplementation(async (...args) => {
+            const created = await realCreate(...args);
+            const docId = (await mount.getPath(args[1]))?.parentId;
+            if (docId) await home.drive.closeCollabDocument(mountId, docId);
+            return created;
+        });
+        let converted: DrivePath;
+        try {
+            converted = await convertToDocument(home.drive, mount, path, 'eigensheets', user, Infinity);
+        } finally {
+            createSpy.mockRestore();
+        }
+        await home.drive.closeCollabDocument(mountId, converted.id);
+        const [sheet] = await readSnapshot(ctx.alice.user.id, mountId, converted.id);
+        expect(Object.keys(sheet.images ?? {})).toHaveLength(1);
     }, 60_000);
 });
 

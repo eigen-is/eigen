@@ -488,7 +488,7 @@ describe('Import… into a deck', () => {
         expect(await readDeck(deck.id)).toEqual(before);
     }, 60_000);
 
-    test('write revoked during the collab-document lookup blocks the commit', async () => {
+    test('write revoked during the deck lookup blocks the commit', async () => {
         const deck = await seededDeck('import-acl-race');
         await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, `path/${deck.id}/acl`, {
             add: [{ id: ctx.bob.user.email, read: true, write: true }],

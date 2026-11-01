@@ -89,10 +89,7 @@ export async function convertToDocument(
         // again.
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
         const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
-        return fillNewDocument(drive, newPath, user, async (doc) => {
-            await saveImportedImages(drive, newPath, images, user);
-            writeSheetsSnapshotToYjs(doc, snapshotJson);
-        });
+        return fillNewDocument(drive, newPath, user, images, (doc) => writeSheetsSnapshotToYjs(doc, snapshotJson));
     }
 
     if (targetType === 'eigenslides') {
@@ -101,20 +98,18 @@ export async function convertToDocument(
         const { update, images } = await importPptxUpdate(buffer, undefined);
         await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
         const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
-        return fillNewDocument(drive, newPath, user, async (doc) => {
-            await saveImportedImages(drive, newPath, images, user);
-            // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
-            replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update)));
-        });
+        // A file with no slides makes a deck with none, which the Slides editor seeds as it does a new one.
+        return fillNewDocument(drive, newPath, user, images, (doc) =>
+            replaceSlidesInYjs(doc, readSlidesUpdate(new Uint8Array(update))),
+        );
     }
 
     const { update, page, style, images } = await importDocxUpdate(buffer);
     await enforceMountQuota(sourcePath.ownerId, sourcePath.mountId, imagesSize(images));
     const newPath = await drive.create(sourcePath.mountId, parentId, name, type, user);
-    return fillNewDocument(drive, newPath, user, async (doc) => {
-        await saveImportedImages(drive, newPath, images, user);
-        commitEigendocImport(doc, { update: new Uint8Array(update), page, style });
-    });
+    return fillNewDocument(drive, newPath, user, images, (doc) =>
+        commitEigendocImport(doc, { update: new Uint8Array(update), page, style }),
+    );
 }
 
 // Answers the summary of what the file held that did not come over, for the toast. A replace saves a version first, so
@@ -182,23 +177,22 @@ export async function importIntoDocument(
     throw new ApiError(400, `Import into ${path.mimeType} is not supported`);
 }
 
-// Every format commits in one order. The document is opened after the transform, because the last tab leaving during
-// it closes the document, and a write into a closed one is lost. A replace saves a version first. The pictures
-// are saved before the write that names them, because an open tab looks each name up once, as the write arrives. The
-// write check is the last await before the synchronous write. Each import prefixes its picture names, so they land
-// beside the document's media, never over it.
+// Every format commits in one order. A replace saves a version first. The pictures are saved before the write that
+// names them, because an open tab looks each name up once, as the write arrives. Then the write is checked again. The
+// document is opened last, right before the synchronous write. The document can close during any earlier await, such
+// as when a compaction ends, and a write into a closed one is lost. Each import prefixes its picture names, so they
+// land beside the document's media, never over it.
 async function commitImport(
     { drive, path, user, signal }: { drive: DriveLike; path: DrivePath; user: User; signal?: AbortSignal },
     images: TransformMedia[],
     replace: boolean,
     write: (doc: Y.Doc) => void,
 ): Promise<void> {
-    const collabDoc = await drive.getCollabDocument(path.mountId, path.id);
     signal?.throwIfAborted();
     if (replace) await drive.saveVersion(path.mountId, path.id);
     await saveImportedImages(drive, path, images, user);
     await requireWritePermission(drive, path, user);
-    write(collabDoc.doc);
+    write((await drive.getCollabDocument(path.mountId, path.id)).doc);
 }
 
 // A job the runner won't admit is refused before the copy: a view over a larger pool is copied out, and IPC copies the
@@ -277,17 +271,19 @@ function imagesSize(images: TransformMedia[]): number {
     return images.reduce((sum, image) => sum + image.data.byteLength, 0);
 }
 
-// A convert that fails after its create (quota another write spent) trashes the document it made through Drive's own
-// delete, so the error it answers leaves no half-filled document behind.
+// A convert saves the pictures, then opens the new document right before the write, as an import does. A convert that
+// fails after its create (quota another write spent) trashes the document it made through Drive's own delete, so the
+// error it answers leaves no half-filled document behind.
 async function fillNewDocument(
     drive: DriveLike,
     newPath: DrivePath,
     user: User,
-    fill: (doc: Y.Doc) => Promise<void> | void,
+    images: TransformMedia[],
+    write: (doc: Y.Doc) => void,
 ): Promise<DrivePath> {
     try {
-        const collabDoc = await drive.getCollabDocument(newPath.mountId, newPath.id);
-        await fill(collabDoc.doc);
+        await saveImportedImages(drive, newPath, images, user);
+        write((await drive.getCollabDocument(newPath.mountId, newPath.id)).doc);
         return newPath;
     } catch (error) {
         await drive.deletePath(newPath.mountId, newPath.id, user).catch((deleteError: unknown) => {
