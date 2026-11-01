@@ -2,9 +2,9 @@
 
 This proposal adds a small surprise when you finish something in Eigen: a burst of confetti or a cheering stick figure when you tick the last box of a sticky's checklist.
 
-**Status:** Phase 1 is built: `useCelebrate`, the confetti burst, the setting and the checklist trigger ([STICKIES.md](../STICKIES.md#ticking-the-last-box-of-a-checklist-celebrates-now-and-then)). Phases 2 and 3 are not started.
+**Status:** Phase 1 is built: `useCelebrate`, the confetti burst, the setting and the checklist trigger ([STICKIES.md](../STICKIES.md#ticking-the-last-box-of-a-checklist-celebrates-now-and-then)). Phases 2 to 4 are not started. The empty states and the new triggers were added on 2026-11-01.
 
-> **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a sticky's task list, in `NoteCardDialog`. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti. One personal setting turns it all off. No package, no new route, no migration.
+> **TLDR**: One shared `useCelebrate()` hook in `packages/ui` draws a short burst from the point where you finished something, then removes itself. The first trigger is the last checkbox of a sticky's task list, in `NoteCardDialog`. It fires only for your own click, only now and then, and never for a teammate's edit. Later celebrations can show a stick figure from the clipart catalog ([PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md)) instead of confetti, and the same figures sit in the apps' empty states, which is where a new user meets them first. One personal setting turns the celebrations off. No package, no new route, no migration.
 
 ## Why
 
@@ -18,6 +18,8 @@ The apps that do this well (Asana's flying unicorn, Apple's activity rings, Thin
 - Sound.
 - An admin or team setting. If a customer asks to turn it off for a whole organization, that is a one-line addition then.
 - Celebrations for something another person did.
+- Seasonal decorations. Not everyone celebrates the same holidays, and Eigen doesn't know where a user lives.
+- A mascot that talks or interrupts, as Clippy did. A figure never speaks, never moves on its own and never covers the page.
 
 ## The rules
 
@@ -49,6 +51,28 @@ Once the clipart catalog exists, a celebration can be a stick figure instead of 
 
 When a celebration fires, it is usually confetti. About one in four is a stick figure. This waits on Phase 2 of [PROPOSAL_CLIPART.md](PROPOSAL_CLIPART.md), which adds `layoutClipart` and the stick-people category.
 
+### Stick figures in the empty states
+
+Every app draws an empty view through one component, `EmptyState` (`packages/ui/src/components/layout/app/empty-state.tsx`), which takes an `icon`. A stick figure with one prop goes there, saying what the view is about:
+
+| Empty view | Figure |
+|---|---|
+| Mail, an empty inbox | Feet up on an empty desk. This is the calm inbox zero: no party, and no trigger to write, since the empty view is the moment |
+| A search with no results | The detective with a magnifying glass, shrugging |
+| Drive, the Trash | Sweeping with a broom |
+| Drive, an empty folder | Holding an open, empty box |
+| Contacts or Chat with nobody in it yet | Waving |
+
+These are illustrations, not celebrations, so the rules above don't apply. A figure is still, and the same each time: its seed comes from the view's name, so it doesn't jitter on a re-render. The Celebrations switch leaves them on. A fresh install is nothing but empty views, so this is the first thing a new user sees of Eigen's character.
+
+### More triggers
+
+Each follows the rules: your own action, in your tab.
+
+- **Setup is done.** The first sign-in of the admin who ran `./eigen setup` shows a figure cutting a ribbon. Once ever, and always, since it can only happen once: a `UserSettings` flag remembers it, through the existing settings route.
+- **The last open comment is resolved.** Resolving a thread that leaves the document with no open threads: a figure dusting off their hands. One in three.
+- **The board is done.** A sticky moved into the last column that leaves the other columns empty. One in three.
+
 ### The setting
 
 `UserSettings` (`packages/lib/src/types/settings.ts`) gets `celebrations?: boolean`, where missing means on. The `PUT /space/:ownerId/settings` body schema in `apps/api/src/routes/space.ts` gains the field, and the hook reads it through `useSpaceSettings`. A **Celebrations** switch under **Preferences** on Space's Personal info page reads "A small surprise now and then when you finish something". Existing route, existing `settings.json`, no migration.
@@ -58,7 +82,6 @@ It is on by default. A delight that's off by default is never found.
 ## Later
 
 - **Docs word goal.** The word-count dialog (`apps/docs/src/components/docs/word-count-dialog.tsx`) gets an optional goal, and the toolbar shows a thin progress ring. Crossing the goal always celebrates.
-- **Inbox zero in Mail.** A calm version: a stick figure on an empty desk, not a party.
 - **Scripts.** The scripting platform's result actions ([PROPOSAL_SCRIPTING_PLATFORM.md](PROPOSAL_SCRIPTING_PLATFORM.md#scripts-app-and-editor-integration)) get a `celebrate` action with no parameters beyond a closed list of effects. A triggered run has no tab, so its celebration travels as a notification and the open tab shows it. This is how "celebrate when this person answers my mail" would work, once event triggers exist.
 
 ## Phases
@@ -66,8 +89,9 @@ It is on by default. A delight that's off by default is never found.
 | | Phase | Delivers | Size |
 |---|---|---|---|
 | **1** | `useCelebrate`, the burst, the setting, the sticky checklist trigger (built) | Confetti on a finished checklist | S |
-| **2** | Stick figure celebrations | Needs clipart Phase 2 | S |
-| **3** | Docs word goal | Goal, progress ring, celebration | S–M |
+| **2** | Stick figures in the empty states | Needs clipart Phase 2 and the four calm poses | S |
+| **3** | Stick figure celebrations and the three triggers under More triggers | Needs Phase 2's figures | S–M |
+| **4** | Docs word goal | Goal, progress ring, celebration | S–M |
 
 After Phase 1, use it for two weeks before building more. If it still makes you smile, go on. If it annoys you, delete it.
 

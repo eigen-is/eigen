@@ -90,6 +90,8 @@ export type ClipartAsset = {
 };
 ```
 
+**The web apps load the catalog one category at a time, on first use.** An app that shows only an empty state's figure loads the stick people, not the whole catalog. Until a category is in, the view shows nothing in the figure's place.
+
 **Why each part carries its own sub-box (`box`) inside the asset.** If a coffee mug has a circular rim (`ellipse`), a rectangular label (`rectangle`) and a curved handle (`path`), storing each part in its own tight local sub-box means that when the user clicks **Convert to shapes**, the rim unpacks as a true `ellipse` bounded tightly around the rim, the label unpacks as a `rectangle` bounded tightly around the label, and the handle unpacks as a `path` bounded tightly around the handle—never 15 overlapping full-canvas bounding boxes!
 
 ### 2. The `clipart` canvas element kind (`VectorClipartElement`)
@@ -158,7 +160,7 @@ To guarantee an authentic, cohesive 2000s aesthetic with zero AI artifacts (no s
    - Every hole must use opposite winding so `fill-rule="nonzero"` works in roughjs, browsers, WeasyPrint and PowerPoint alike.
    - Prefer native `ellipse`, `rectangle`, `diamond`, `pie` and `line` parts wherever a sub-shape is geometric, reserving `path` for true Bézier contours. This makes **Convert to shapes** yield clean ellipses and rectangles for wheels, screens, buttons and papers!
 2. **Initial ~60-asset starter pack across 6 categories**:
-   - *Stick people (12)*: Idea (lightbulb overhead), Confused (`?`), Sprinting with briefcase, Lifting heavy weight, Cheering (arms up), Jumping, Holding a trophy, Presenting at board, Magnifying glass detective, Juggling, Megaphone announcer, High-five pair. Cheering, Jumping and Holding a trophy double as rewards in [PROPOSAL_CELEBRATIONS.md](PROPOSAL_CELEBRATIONS.md).
+   - *Stick people (16)*: Idea (lightbulb overhead), Confused (`?`), Sprinting with briefcase, Lifting heavy weight, Cheering (arms up), Jumping, Holding a trophy, Presenting at board, Magnifying glass detective, Juggling, Megaphone announcer, High-five pair. Cheering, Jumping and Holding a trophy double as rewards in [PROPOSAL_CELEBRATIONS.md](PROPOSAL_CELEBRATIONS.md). Four calm ones are for the apps' empty states ([PROPOSAL_CELEBRATIONS.md](PROPOSAL_CELEBRATIONS.md#stick-figures-in-the-empty-states)): Feet up on an empty desk, Sweeping with a broom, Holding an open empty box, Waving.
    - *Retro Tech (12)*: Beige CRT monitor, 3.5" floppy disk, CD-ROM with rainbow glint, Dot-matrix printer, Flip phone, Classic mouse, Server rack, Dial-up modem / globe-on-wire, Keyboard, Cassette tape, Battery, Retro laptop.
    - *Office & Desk (12)*: Rolodex, Red swingline stapler, Coffee mug ("#1"), Manila folder, Clipboard with checklist, Filing cabinet, Calculator, Pushpin, Paperclip (non-trademarked loop), Desk lamp, Hourglass, Briefcase.
    - *Metaphors & Targets (10)*: Bullseye with dart, Key & padlock, Magnet pulling coins, Puzzle pieces locking, Lightbulb, Gear pair, Trophy cup, Rocket launch, Anchor, Compass.
