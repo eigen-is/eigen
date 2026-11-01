@@ -237,7 +237,7 @@
     --color-selected-hover: var(--selected-hover);
     --color-link: var(--link);
     --color-selection-handle: var(--selection-handle);
-    /* The stacks fontStack builds. CSS can't import it, so a test checks each literal against it. */
+    /* The stacks getFontFamily builds. CSS can't import it, so a test checks each literal against it. */
     --font-sans: "Inter", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", ui-sans-serif, system-ui, sans-serif;
     --font-serif: "Source Serif 4", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", Georgia, "Times New Roman", serif;
     --font-mono: "JetBrains Mono", "Eigen Emoji", "Noto Sans SC", "Noto Sans KR", "Fira Code", ui-monospace, monospace;

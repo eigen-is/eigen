@@ -2,8 +2,7 @@
 // doctype, the data-only policy, the title and the font slices its text draws with, around a type's stylesheet and
 // sanitized body.
 
-import { MATH_FAMILIES, TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/font-slices';
-import { EIGEN_FONT_NAMES } from '@workspace/lib/constants/fonts';
+import { EIGEN_FONT_NAMES, MATH_FAMILIES, TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/fonts';
 import { escapeHtml } from '@workspace/lib/html';
 import { drawnCodePoints, slicesFaceCss } from './fonts';
 import { EXPORT_CSP, KEEP_MATHML, sanitizeExportHtml } from './sanitize';

@@ -39,7 +39,7 @@ import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/med
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { focusLeftToEditor, Menubar } from '@workspace/ui/components/menubar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
-import { printDocument } from '@workspace/ui/lib/printElement';
+import { printDocument } from '@workspace/ui/lib/print-element';
 import {
     Baseline,
     Bold,

@@ -8,7 +8,7 @@ import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { MessageView } from '@workspace/ui/components/mail';
 import { Separator } from '@workspace/ui/components/separator';
-import { printDocument } from '@workspace/ui/lib/printElement';
+import { printDocument } from '@workspace/ui/lib/print-element';
 import { AlertTriangle, Archive, Forward, Reply, ReplyAll, Trash2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { CalendarInviteWidget } from './calendar-invite-widget';

@@ -5,7 +5,7 @@
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
@@ -33,7 +33,6 @@ import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from 
 import type { RunStyleKey } from './inline-string';
 import {
     committedRuns,
-    cssFontName,
     DEFAULT_TEXT_COLOR,
     hexColor,
     isInlineStringCell,
@@ -881,7 +880,7 @@ export function getFontStyleByCell(cell: Cell | null | undefined, checksCF?: Cel
     const { bl, it, cl, fs, fc } = runStyleOf(cell);
     if (bl) style.fontWeight = 'bold';
     if (it) style.fontStyle = 'italic';
-    const font = cssFontName(cell.ff);
+    const font = cellFontName(cell.ff);
     if (font) style.fontFamily = getFontFamily(font);
     if (fs !== SHEET_DEFAULT_FONT_SIZE) style.fontSize = `${fs}pt`;
     const color = hexColor(checksCF?.textColor) ?? fc;

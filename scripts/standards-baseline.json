@@ -92,7 +92,6 @@
     "packages/ui/src/components/properties-panel/background-fill-block.tsx": 1,
     "packages/ui/src/components/properties-panel/merged-select.tsx": 1,
     "packages/ui/src/components/search/prosemirror-search-highlight.ts": 1,
-    "packages/ui/src/components/shadow-content.tsx": 1,
     "packages/ui/src/components/sonner.tsx": 1,
     "packages/ui/src/components/toggle-group.tsx": 1,
     "packages/ui/src/components/vector/text-overlay.tsx": 2,

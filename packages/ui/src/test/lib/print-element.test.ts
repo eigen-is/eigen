@@ -3,7 +3,7 @@ import { installHappyDom } from '../happy-dom';
 
 const window = installHappyDom();
 
-const { printDocument } = await import('../../lib/printElement');
+const { printDocument } = await import('../../lib/print-element');
 
 function deferred(): { promise: Promise<void>; resolve: () => void } {
     let resolve = () => {};
@@ -69,5 +69,16 @@ test('an image that fails to decode still prints', async () => {
     });
     printDocument();
     await wait(0);
+    expect(printed).toEqual([1]);
+});
+
+// A lazy image in the hidden copy may never load, and print must not wait for it forever.
+test('an image that never decodes holds print only a few seconds', async () => {
+    fonts.resolve();
+    printDocument();
+    await wait(600);
+    expect(printed).toEqual([]);
+
+    await wait(3000);
     expect(printed).toEqual([1]);
 });

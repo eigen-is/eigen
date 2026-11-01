@@ -4,7 +4,7 @@
 
 import { newChartSpecParts, readChartSpec } from '../charts/spec';
 import type { FontSlice } from '../constants/font-slices';
-import { getFontName } from '../constants/fonts';
+import { getFontName, TEXT_FALLBACK_FAMILIES } from '../constants/fonts';
 import type { EigenClipboardChartItem } from '../types/clipboard';
 import { ELEMENT_KINDS } from './kinds';
 import { readElementFromFields } from './read-vector';
@@ -54,22 +54,19 @@ export function canvasImageName(elements: VectorElement[], fileName: string): st
 }
 
 // The slices the file draws in: each measured run in the family its computed list starts with, and every other
-// element's text upright in its own. Each draws in the fallbacks too, for what its family lacks. An italic run takes a
-// family's italic slices where it has them; elsewhere the reader slants the upright ones. The slice table is large,
-// so it loads here, on a download.
-export async function canvasImageFaces(
+// element's text upright in its own. Each draws in the fallbacks too, for what its family lacks. The slice table is
+// large, so it loads here, on a download.
+export async function canvasImageSlices(
     elements: VectorScene['elements'],
     measured: ReadonlyMap<string, MeasuredRichText>,
 ): Promise<FontSlice[]> {
-    const { FONT_SLICES, TEXT_FALLBACK_FAMILIES, slicesFor } = await import('../constants/font-slices');
+    const { FONT_SLICES, sliceStyle, slicesFor } = await import('../constants/font-slices');
     const picked = new Set<FontSlice>();
     const draw = (family: string, style: string, text: string) => {
         const codePoints = new Set(Array.from(text, (char) => char.codePointAt(0) ?? 0));
         for (const name of [family, ...TEXT_FALLBACK_FAMILIES]) {
-            const italic =
-                style !== 'normal' && FONT_SLICES.some((slice) => slice.family === name && slice.style === 'italic');
-            for (const slice of slicesFor(codePoints, [name]))
-                if (slice.style === (italic ? 'italic' : 'normal')) picked.add(slice);
+            const wanted = sliceStyle(name, style);
+            for (const slice of slicesFor(codePoints, [name])) if (slice.style === wanted) picked.add(slice);
         }
     };
     for (const el of elements) {

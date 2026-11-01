@@ -77,9 +77,9 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
     // same transact as the font, so it is one undo step. The height follows from the line count. It measures
     // once the slices of the label's text have loaded, or measureText reads the fallback's metrics.
     //
-    // The Size field holds its own gesture only while it is focused, and on a cold face the write lands
-    // after the blur that released it — every digit would be its own undo step. So the write takes the
-    // window back itself and keeps it until the last pending load has landed.
+    // The Size field holds its own undo gesture only while it is focused. When the font has not loaded yet,
+    // the write lands after the blur has released that gesture, so each digit would be its own undo step.
+    // So the write takes the gesture back itself and keeps it until the last pending load has landed.
     const applyFont = async (fields: (el: VectorArrowElement) => { fontSize?: number; fontFamily?: string }) => {
         pendingFontWrites.current += 1;
         try {

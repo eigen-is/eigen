@@ -4,17 +4,18 @@ import {
     bundledFontOfCategory,
     bundledFontOfStack,
     EIGEN_FONT_NAMES,
-    FALLBACK_FONTS,
+    EMOJI_FAMILIES,
     fontNameToCss,
-    fontStack,
     getFontFamily,
     getFontName,
+    MATH_FAMILIES,
     MATH_FONT_STACK,
     MAX_FONT_SIZE,
     MIN_FONT_SIZE,
     nextFontSize,
     readCssFontSize,
     readFontSize,
+    TEXT_FALLBACK_FAMILIES,
 } from '../../constants/fonts';
 
 describe('bundledFont', () => {
@@ -76,28 +77,33 @@ describe('bundledFontOfCategory', () => {
     });
 });
 
-describe('fontStack', () => {
+describe('getFontFamily', () => {
     // The order of the fallbacks never decides a glyph: each slice's range is disjoint from the other families'.
     test('a family, then the emoji and CJK faces, then the system faces and the generic family', () => {
-        expect(fontStack('Inter')).toBe(
+        expect(getFontFamily('Inter')).toBe(
             "'Inter', 'Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR', ui-sans-serif, system-ui, sans-serif",
         );
-        expect(fontStack('Source Serif 4', 'serif')).toBe(
+        expect(getFontFamily('Source Serif 4')).toBe(
             "'Source Serif 4', 'Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR', Georgia, 'Times New Roman', serif",
         );
+        expect(fontNameToCss('Inter')).toBe(getFontFamily('Inter'));
     });
 
-    test('every stack Eigen writes for a font name is its stack, an unknown name as a sans-serif', () => {
-        expect(getFontFamily('JetBrains Mono')).toBe(fontStack('JetBrains Mono', 'monospace'));
-        expect(getFontFamily('Excalifont')).toBe(fontStack('Excalifont', 'hand-drawn'));
-        expect(getFontFamily('Bell MT')).toBe(fontStack('Bell MT'));
-        expect(fontNameToCss('Inter')).toBe(fontStack('Inter'));
+    // The emoji face holds the digits, # and * for its keycaps, so a font the browser lacks must not fall to it.
+    test("an unknown font falls back on its category's bundled stack, else the document font's", () => {
+        expect(getFontFamily('Georgia')).toBe(`'Georgia', ${getFontFamily('Source Serif 4')}`);
+        expect(getFontFamily('Bell MT')).toBe(`'Bell MT', ${getFontFamily('Inter')}`);
+    });
+
+    test('the lists of fallback families split the registry by kind', () => {
+        expect(TEXT_FALLBACK_FAMILIES).toEqual(['Eigen Emoji', 'Noto Sans SC', 'Noto Sans KR']);
+        expect(EMOJI_FAMILIES).toEqual(['Eigen Emoji']);
+        expect(MATH_FAMILIES).toEqual(['New Computer Modern Math']);
     });
 
     // Only a formula draws in the math face, which covers Latin too.
     test('no text stack names the math face, and the math stack names only it', () => {
-        const [math] = FALLBACK_FONTS.filter((font) => font.kind === 'math');
-        for (const name of EIGEN_FONT_NAMES) expect(getFontFamily(name)).not.toContain(math.family);
+        for (const name of EIGEN_FONT_NAMES) expect(getFontFamily(name)).not.toContain(MATH_FAMILIES[0]);
         expect(MATH_FONT_STACK).toBe("'New Computer Modern Math', math");
     });
 

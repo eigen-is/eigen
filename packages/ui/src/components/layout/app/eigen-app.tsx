@@ -8,7 +8,7 @@ import { AuthProvider } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type React from 'react';
 import { useEffect, useState } from 'react';
-import { printDocument } from '../../../lib/printElement';
+import { printDocument } from '../../../lib/print-element';
 import { PreviewProvider } from '../../preview-provider/preview-provider';
 import { Toaster } from '../../sonner';
 import { SSEProvider } from '../../sse-provider';

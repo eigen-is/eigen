@@ -18,8 +18,8 @@ import type {
     VectorTextualElement,
 } from '@workspace/lib/vector';
 import {
-    canvasImageFaces,
     canvasImageScene,
+    canvasImageSlices,
     eigenMediaHref,
     hasText,
     isTextual,
@@ -29,7 +29,6 @@ import {
     sceneToSvg,
 } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
-import { bundledFontUrl } from './bundled-font-url';
 
 type CanvasImageOptions = {
     // The file's name, without its extension.
@@ -49,8 +48,9 @@ export async function downloadCanvasImage(
     const richText = new Map([...measured].map(([id, box]) => [id, richTextSvg(box)]));
     const inlined = await inlineSvgMedia(sceneToSvg(scene, { resolveMedia: eigenMediaHref, richText }), fetchMedia);
     const { fontFaceCss } = await import('@workspace/lib/constants/font-slices');
+    const { bundledFontUrl } = await import('./bundled-font-url');
     const faces = await Promise.all(
-        (await canvasImageFaces(scene.elements, measured)).map(async (slice) => {
+        (await canvasImageSlices(scene.elements, measured)).map(async (slice) => {
             const response = await fetch(bundledFontUrl(slice.file));
             if (!response.ok) throw new Error(`The ${slice.family} font could not be loaded`);
             const bytes = new Uint8Array(await response.arrayBuffer());

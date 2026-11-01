@@ -17,9 +17,9 @@ type TextOverlayProps = {
     height: number;
     angle: number;
     zoom: number;
-    // The canvas container — a click-away inside it commits AND is swallowed (never marquee/place);
-    // a click-away outside it (properties panel, toolbar) commits but is left untouched so the
-    // control receives its first click.
+    // The canvas container. A click away inside it commits and is swallowed, so it never starts a marquee
+    // or places an element. A click away outside it, such as on the properties panel or the toolbar, commits
+    // and is left alone, so that control still gets its first click.
     containerRef: React.RefObject<HTMLElement | null>;
     // Host positioning of the overlay: reuses the canvas's boxToStyle for container-px left/top.
     boxToStyle: (box: Box) => React.CSSProperties;
@@ -49,22 +49,23 @@ export function TextOverlay({
     onCommit,
 }: TextOverlayProps) {
     const taRef = useRef<HTMLTextAreaElement>(null);
-    // Latest textarea value — the textarea is uncontrolled (native undo), so read it from here.
+    // The textarea's latest value. The textarea is uncontrolled, to keep the browser's own undo, so its
+    // value is read from here.
     const valueRef = useRef(initialText);
     const committedRef = useRef(false);
 
-    // Commit what the READER keeps: labelText caps bytes (not UTF-16 units) and lines, so the stored
-    // label is never longer than what every peer's read, render and export will show.
+    // The commit stores what the reader keeps. labelText caps the bytes, not the UTF-16 units, and the lines,
+    // so the stored label is never longer than what every peer's read, render and export will show.
     const commit = useCallback(() => {
         if (committedRef.current) return;
         committedRef.current = true;
         onCommit(labelText(valueRef.current));
     }, [onCommit]);
 
-    // Unmount commits (the latch makes it a no-op after any normal commit): a route change or a
-    // connection drop swapping the editor to its loading state must not silently drop the session's
-    // text. Via ref so a mid-session onCommit identity change can't fire it. (No StrictMode anywhere
-    // in Eigen — a simulated unmount would trip this latch and dead-lock the session if that changes.)
+    // An unmount commits too, and the latch makes that a no-op after a normal commit. A route change or a
+    // dropped connection swaps the editor for its loading state, and that must not lose the session's text.
+    // It reads commit through a ref, so a new onCommit during the session doesn't fire it. Eigen uses no
+    // StrictMode: its simulated unmount would trip the latch and lock the session.
     const commitRef = useRef(commit);
     commitRef.current = commit;
     useEffect(() => () => commitRef.current(), []);
@@ -102,11 +103,11 @@ export function TextOverlay({
     };
     useEffect(() => loadFont(valueRef.current), [fontSize, fontFamily]);
 
-    // Click-away commit — capture phase so it runs before the canvas's React pointerdown. Clicks
-    // inside the textarea (caret moves) pass through. A click elsewhere on the CANVAS commits and is
-    // swallowed (never marquee/deselect/place). A click on the surrounding chrome (properties panel,
-    // toolbar) commits the session but is left untouched, so that control gets its first click
-    // instead of a dead one — and the session is committed before any panel write lands on it.
+    // A click away commits. It listens in the capture phase, so it runs before the canvas's own pointerdown.
+    // A click inside the textarea moves the caret and passes through. A click elsewhere on the canvas commits
+    // and is swallowed, so it never starts a marquee, deselects or places an element. A click on the chrome
+    // around it, such as the properties panel or the toolbar, commits and is left alone. That control gets
+    // its first click, and the session is committed before the control writes to the element.
     useEffect(() => {
         const onPointerDown = (e: PointerEvent) => {
             const ta = taRef.current;
@@ -129,8 +130,8 @@ export function TextOverlay({
         <textarea
             ref={taRef}
             defaultValue={initialText}
-            // Coarse DOM-side guard against a pathological paste — UTF-16 units, so it is always looser
-            // than the reader's byte budget. commit() is what actually caps.
+            // A rough guard against a huge paste. It counts UTF-16 units, so it is always looser than the
+            // reader's byte budget, and commit() is what caps the label.
             maxLength={MAX_ARROW_LABEL_BYTES}
             wrap="off"
             spellCheck={false}

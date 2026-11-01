@@ -2,14 +2,13 @@
 // share one @page rule, one font block and one reset. Also a deck's HTML and PDF export, one page per frame. Runs in
 // the transform process, so it reaches no Mount and no preview cache.
 
-import { getFontName } from '@workspace/lib/constants/fonts';
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { MediaResolver } from '@workspace/lib/vector';
 import { readVectorFromDoc, round, slidePxToPt } from '@workspace/lib/vector';
 import canvasTextCSSRaw from '@workspace/ui/styles/canvas-text.css' with { type: 'text' };
 import type * as Y from 'yjs';
 import { ApiError } from '../../core/errors';
-import { FONT_STACK_SANS } from '../../document/font-stacks';
+import { FONT_STACK_SANS, SANS_FONT_NAME } from '../../document/font-stacks';
 import { toDataUriMap } from '../../document/media';
 import type {
     DocumentExportFormat,
@@ -52,7 +51,7 @@ export function canvasHtmlDocument(opts: CanvasDocumentOptions): string {
     const css = pdf ? pdfCss(width, height) : screenCss(width);
     return exportHtmlDocument({
         title,
-        cssFamilies: [getFontName(FONT_STACK_SANS)],
+        cssFamilies: [SANS_FONT_NAME],
         css: `${SHARED_CSS}${css}${canvasTextCSSRaw}`,
         body: pdf ? body : `<div class="deck">${body}</div>`,
         viewport: true,

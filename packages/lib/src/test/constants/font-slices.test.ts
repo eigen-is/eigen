@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { FontSlice } from '../../constants/font-slices';
-import { FONT_SLICES, slicesFor } from '../../constants/font-slices';
+import { FONT_SLICES, parseUnicodeRange, sliceStyle, slicesFor } from '../../constants/font-slices';
 import { FALLBACK_FONTS, FONT_FACES } from '../../constants/fonts';
 
 const FONTS_DIR = path.join(import.meta.dir, '../../../../ui/src/assets/fonts');
@@ -23,11 +23,9 @@ function codePoints(...parts: (string | number)[]): Set<number> {
 }
 
 function rangeCodePoints(slice: FontSlice): number[] {
-    return slice.unicodeRange.split(', ').flatMap((range) => {
-        const [start, end = start] = range.slice(2).split('-');
-        const from = Number.parseInt(start, 16);
-        return Array.from({ length: Number.parseInt(end, 16) - from + 1 }, (_, i) => from + i);
-    });
+    return parseUnicodeRange(slice.unicodeRange).flatMap(([start, end]) =>
+        Array.from({ length: end - start + 1 }, (_, i) => start + i),
+    );
 }
 
 function sizeOf(slice: FontSlice): number {
@@ -92,6 +90,26 @@ describe('slicesFor', () => {
     test('only the families asked for, each slice once', () => {
         expect(slicesFor(codePoints('中😀'), ['Inter'])).toEqual([]);
         expect(slicesFor(codePoints('AB'), ['Inter'])).toHaveLength(2);
+    });
+});
+
+describe('sliceStyle', () => {
+    test("an italic run draws in its family's italic slices, and a family without them in its upright ones", () => {
+        expect(sliceStyle('Inter', 'italic')).toBe('italic');
+        expect(sliceStyle('Source Serif 4', 'oblique')).toBe('italic');
+        expect(sliceStyle('Inter', 'normal')).toBe('normal');
+        expect(sliceStyle('Excalifont', 'italic')).toBe('normal');
+        expect(sliceStyle('Eigen Emoji', 'italic')).toBe('normal');
+    });
+});
+
+describe('parseUnicodeRange', () => {
+    test('a range is its first and last character, and a lone character is both', () => {
+        expect(parseUnicodeRange('U+0-FF, U+131,U+2000-206F')).toEqual([
+            [0, 0xff],
+            [0x131, 0x131],
+            [0x2000, 0x206f],
+        ]);
     });
 });
 
