@@ -2,7 +2,7 @@
 // beside the list.
 
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
-import type { Attachment, Email, MaildirMailbox } from '@workspace/lib/types/mail';
+import type { Email, MaildirMailbox } from '@workspace/lib/types/mail';
 import { isCalendarPart } from '@workspace/lib/types/mail';
 import { KebabTrigger, Toolbar, TooltipButton } from '@workspace/ui';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
@@ -63,32 +63,24 @@ export function EmailDetailToolbar({
                     <DropdownMenuContent className="w-56">
                         <EmailContextMenu
                             messageIds={[email.id]}
-                            isSingleSelect={true}
+                            isSingleSelect
                             mailboxes={mailboxes}
                             currentMailboxId={email.mailbox}
                             onReply={onReply}
                             onReplyAll={onReplyAll}
                             onForward={onForward}
-                            onArchive={(ids) =>
-                                ids.forEach((id) => {
-                                    onArchive(id);
-                                })
-                            }
-                            onReportSpam={(ids) =>
-                                ids.forEach((id) => {
-                                    onReportSpam(id);
-                                })
-                            }
-                            onDelete={(ids) =>
-                                ids.forEach((id) => {
-                                    onDelete(id);
-                                })
-                            }
-                            onMoveToFolder={(ids, folderId) =>
-                                ids.forEach((id) => {
-                                    onMoveToFolder(id, folderId);
-                                })
-                            }
+                            onArchive={(ids) => {
+                                for (const id of ids) onArchive(id);
+                            }}
+                            onReportSpam={(ids) => {
+                                for (const id of ids) onReportSpam(id);
+                            }}
+                            onDelete={(ids) => {
+                                for (const id of ids) onDelete(id);
+                            }}
+                            onMoveToFolder={(ids, folderId) => {
+                                for (const id of ids) onMoveToFolder(id, folderId);
+                            }}
                             onClose={() => {}}
                             onPrint={() => printDocument()}
                         />
@@ -116,7 +108,8 @@ export function EmailDetail({
 }: EmailDetailProps) {
     const hasMarkedAsRead = useRef<string | null>(null);
 
-    // Mark on email change only; read the latest (unstable) toggleMailRead via an Effect Event.
+    // Marks the message read when it changes, and only then. The Effect Event reads the latest toggleMailRead, which is
+    // a new function on every render.
     const markRead = useEffectEvent((mail: Email) => {
         toggleMailRead(mail, true);
     });
@@ -149,8 +142,8 @@ export function EmailDetail({
                     remoteImagesLoaded={remoteImagesLoaded}
                     onLoadRemoteImages={onLoadRemoteImages}
                     attachments={<ReadAttachments emailId={email.id} attachments={email.attachments} />}
-                    footer={email.attachments?.map(
-                        (attachment: Attachment) =>
+                    footer={email.attachments.map(
+                        (attachment) =>
                             isCalendarPart(attachment) && (
                                 <CalendarInviteWidget key={attachment.index} invite={attachment.calendarInvite} />
                             ),

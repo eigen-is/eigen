@@ -1,3 +1,7 @@
+// The contact menu rows that the list's context menu and the detail pane's kebab share, such as Send email, Start chat,
+// labels, Export and Delete, and the dialogs those rows open. Also isSelfContact, the one test of whether a card is the
+// signed-in user's own, which every contact surface asks.
+
 import type { AuthUser } from '@workspace/lib/auth';
 import { useAuth } from '@workspace/lib/auth';
 import { useStartChatWith } from '@workspace/lib/chat';
@@ -17,12 +21,11 @@ import { Download, Mail, MessageSquare, Pencil, Printer, Trash2 } from 'lucide-r
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-// One "is this card me?" test for every contact surface: a card is you if it carries your
-// X-EIGEN-ID self-link (eigenId) or shares your account email.
+// A card is yours if it carries your X-EIGEN-ID self-link, its eigenId, or shares your account email.
 export function isSelfContact(contact: Contact, user: AuthUser | null): boolean {
     if (user && contact.eigenId === user.id) return true;
     const myEmail = (user?.email ?? '').trim().toLowerCase();
-    return myEmail.length > 0 && contact.email.some((e) => e.trim().toLowerCase() === myEmail);
+    return myEmail.length > 0 && contact.email.some((email) => email.trim().toLowerCase() === myEmail);
 }
 
 export type ContactMenuActions = {
@@ -30,11 +33,11 @@ export type ContactMenuActions = {
     onEdit?: (contact: Contact) => void;
     onDelete?: (contacts: Contact[]) => void;
     onToggleLabel?: (contacts: Contact[], labelId: string) => void;
-    // Print clones the on-screen [data-document] detail pane, so it only belongs where a single
-    // contact's detail is showing — the detail kebab, never the multi-context list.
+    // Print clones the on-screen [data-document] detail pane, so it belongs only where one contact's detail shows: the
+    // detail kebab, never the list.
     showPrint?: boolean;
-    // Export asks the server for these cards by id, so it only belongs where the cards are stored
-    // ones — never the synthetic team-member card, whose id is a stand-in.
+    // Export asks the server for these cards by id, so it belongs only where the cards are stored ones, never on the
+    // made-up team member card, whose id is a stand-in.
     showExport?: boolean;
 };
 
@@ -48,8 +51,8 @@ export function useContactMenu() {
     const [chatWith, setChatWith] = useState<{ email: string; name: string }[] | null>(null);
 
     const startChat = async (emails: string[], name: string) => {
-        // startChatWith prefers the registered account address; an existing writable 1:1 opens
-        // directly, otherwise the wizard opens pre-filled.
+        // startChatWith prefers the registered account address. An existing one-to-one chat the user can write in opens
+        // directly, otherwise the wizard opens filled in.
         const result = await startChatWith(emails);
         if (result !== 'opened') setChatWith([{ email: result.email, name }]);
     };
@@ -57,24 +60,26 @@ export function useContactMenu() {
     const renderItems = (contacts: Contact[], close: () => void, actions: ContactMenuActions): ReactNode => {
         const { labels = [], onEdit, onDelete, onToggleLabel, showPrint, showExport } = actions;
         const single = contacts.length === 1 ? contacts[0] : undefined;
-        const hasSelf = contacts.some((c) => isSelfContact(c, user));
+        const hasSelf = contacts.some((contact) => isSelfContact(contact, user));
 
-        // Send email / Start chat act on everyone selected who isn't me and has an address — self is
-        // silently dropped. Each contact contributes its first email (the single-select convention).
-        const eligible = contacts.filter((c) => !isSelfContact(c, user) && c.email.some((e) => e.trim().length > 0));
-        const eligiblePeople = eligible.map((c) => ({
-            email: c.email.find((e) => e.trim().length > 0)?.trim() ?? '',
-            name: `${c.firstName} ${c.lastName}`.trim(),
+        // Send email and Start chat act on everyone selected who has an address, except the user, who is left out
+        // without a word. Each contact gives its first email, as a single selection does.
+        const eligible = contacts.filter(
+            (contact) => !isSelfContact(contact, user) && contact.email.some((email) => email.trim().length > 0),
+        );
+        const eligiblePeople = eligible.map((contact) => ({
+            email: contact.email.find((email) => email.trim().length > 0)?.trim() ?? '',
+            name: `${contact.firstName} ${contact.lastName}`.trim(),
         }));
         const canReach = eligible.length > 0;
         const canMail = canReach && mailEnabled;
 
         const canExport = !!showExport && contacts.length > 0;
 
-        const labelIds = labels.map((l) => l.id);
-        const assignedToAll = labelIds.filter((id) => contacts.every((c) => (c.labels ?? []).includes(id)));
+        const labelIds = labels.map((label) => label.id);
+        const assignedToAll = labelIds.filter((id) => contacts.every((contact) => (contact.labels ?? []).includes(id)));
         const assignedToSome = labelIds.filter(
-            (id) => !assignedToAll.includes(id) && contacts.some((c) => (c.labels ?? []).includes(id)),
+            (id) => !assignedToAll.includes(id) && contacts.some((contact) => (contact.labels ?? []).includes(id)),
         );
 
         return (
@@ -85,7 +90,7 @@ export function useContactMenu() {
                             {canMail && (
                                 <DropdownMenuItem
                                     onClick={() => {
-                                        openWriteEmailTo(eligiblePeople.map((p) => p.email));
+                                        openWriteEmailTo(eligiblePeople.map((person) => person.email));
                                         close();
                                     }}
                                 >
@@ -95,12 +100,12 @@ export function useContactMenu() {
                             )}
                             <DropdownMenuItem
                                 onClick={() => {
-                                    // One eligible contact keeps the direct-open probe (its full address
-                                    // list lets startChatWith prefer the registered account); several open
-                                    // the wizard directly, pre-filled with every eligible person.
+                                    // One contact may open an existing chat, and its whole address list lets
+                                    // startChatWith prefer the registered account. Several open the wizard, filled
+                                    // in with every eligible person.
                                     if (eligible.length === 1) {
                                         void startChat(
-                                            eligible[0].email.filter((e) => e.trim().length > 0),
+                                            eligible[0].email.filter((email) => email.trim().length > 0),
                                             eligiblePeople[0].name,
                                         );
                                     } else {
@@ -149,7 +154,7 @@ export function useContactMenu() {
                             <DropdownMenuItem
                                 disabled={isExporting}
                                 onClick={() => {
-                                    void exportContacts(contacts.map((c) => c.id));
+                                    void exportContacts(contacts.map((contact) => contact.id));
                                     close();
                                 }}
                             >
