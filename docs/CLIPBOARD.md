@@ -125,4 +125,4 @@ The menu Copy and Cut also append `<img src="data:image/svg+xml;base64,…">` wi
 
 - [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md): name-based media references
 - [CANVAS.md](CANVAS.md), [SHEETS.md](SHEETS.md)
-- [PROPOSAL_COPY_PASTE.md](proposals/PROPOSAL_COPY_PASTE.md): what a v2 wire would add
+- [PROPOSAL_COPY_PASTE.md](proposals/PROPOSAL_COPY_PASTE.md): what the clipboard still lacks

@@ -51,7 +51,7 @@ The only open part: keep the cache, or drop it for one code path? Dropping it co
 
 ### Q4: Should a block of cells become its own kind of clipboard item?
 
-**The problem.** The shared clipboard understands two things: a piece of text, and a picture. A block of cells is neither, so today it's squeezed into the text slot and only the visible values survive.
+**The problem.** The shared clipboard carries text, pictures, canvas elements and charts. A block of cells is none of them, so today only the HTML table beside the payload carries it, and only the visible values survive.
 
 **Options.**
 - **A. Add a "cells" kind.** Values, formulas, formats, colors, merges, row heights and column widths travel properly. Copying between two spreadsheet files finally works, and cross-tab copying stops losing things. Costs a new type every app must at least know to ignore, plus a size limit.

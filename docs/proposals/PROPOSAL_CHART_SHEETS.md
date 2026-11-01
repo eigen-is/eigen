@@ -150,4 +150,5 @@ Phase 1 ends with the domain docs: CHARTS.md's Edit data sections rewritten, MED
 - [COMMENTS.md](../COMMENTS.md) and [MEDIA-REFERENCES.md](../MEDIA-REFERENCES.md): the `chat/` pattern this copies
 - [PROPOSAL_PORTABLE_DOCUMENTS.md](PROPOSAL_PORTABLE_DOCUMENTS.md): the package would carry `sheets/`
 - [PROPOSAL_SHEETS_YJS_WORKBOOK.md](PROPOSAL_SHEETS_YJS_WORKBOOK.md): how a sheet stores its ops, which a nested sheet shares
+- [PROPOSAL_COPY_PASTE.md](PROPOSAL_COPY_PASTE.md#2-cells-and-chart-sheets-share-one-block-writer): the clipboard's `cells` item, which fills a sheet with the same block writer as a chart's first Edit data
 - [ROADMAP-POST-1.md](../ROADMAP-POST-1.md): linked data, the chart whose sheet lives elsewhere in Drive

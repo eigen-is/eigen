@@ -1,459 +1,78 @@
-# Proposal: Cross-App Copy-Paste System (ECP v2)
+# Proposal: what Eigen's clipboard still lacks
 
-This proposal grows Eigen's clipboard into a typed protocol, so that a table, a slide object or a card keeps its structure when it is pasted into another Eigen app, and still pastes as useful text and HTML anywhere else.
+Copy and paste between Eigen apps works for text, images, canvas elements and charts. This proposal lists what is still missing, in the order to build it, and how the first item fits with the chart sheets of [PROPOSAL_CHART_SHEETS.md](PROPOSAL_CHART_SHEETS.md).
 
-**Status:** v1 is built, and [CLIPBOARD.md](../CLIPBOARD.md) describes it, canvas elements and charts included. This page designs v2 on top of it (Phases 1 to 4 and a chart's live link), none of it built. Phase 0 needs no change ([§ Phase 0](#phase-0-the-async-write-needs-no-custom-type)). [ROADMAP-POST-1.md](../ROADMAP-POST-1.md) keeps the v2 row.
+**Status:** v1 is built and [CLIPBOARD.md](../CLIPBOARD.md) describes it. A block of cells on the clipboard is planned before 1.0 and has its row in [ROADMAP.md](../ROADMAP.md). The rest waits until after 1.0, in [ROADMAP-POST-1.md](../ROADMAP-POST-1.md). What this proposal says about the code was true on 2026-11-01; verify it before building on it.
 
-## TLDR
+> **TLDR**: The clipboard carries one typed JSON payload, `EigenClipboardData`, and four hosts read it: Docs, Sheets, Slides and Vector. The gap a user hits most is a block of cells. Sheets carries no cells on the wire, so a range pasted in another tab or by another user loses its formulas and formats. Fixing that is a new `cells` item, planned step by step in [SHEETS-TODO.md](../SHEETS-TODO.md#clipboard-put-sheets-on-the-shared-system). The block of cells it carries is the same thing a chart's own sheet is filled with, so the two share one block writer in the sheet engine, and neither has to wait for the other. After that come styled text runs into a slide, the apps with no clipboard yet, and small polish. The old v2 design's envelope, BroadcastChannel bus and converter registry are dropped: the v1 payload already grows by adding an item kind.
 
-Upgrade Eigen's clipboard from a two-type (text/image) system to a multi-type protocol that preserves
-structure across all apps. Use HTML attribute smuggling as the universal transport (already proven in
-Sheets), add a BroadcastChannel bus for cut coordination and large payloads, and implement cross-app
-content converters incrementally. The current system is a solid foundation -- this is an evolution, not
-a rewrite.
+## What works today
 
-## Design rationale
+A copy writes `EigenClipboardData` twice: on the `application/eigen-clipboard` type and inside a hidden marker span in `text/html`. An item is `text`, `image`, `elements` or `chart`. The reader validates every item and drops what it doesn't know, so a new kind is additive: an older build drops it and falls back to the HTML or plain text beside it (`isValidItem` in `packages/lib/src/core/clipboard/clipboard.ts`). An image travels as a name and re-uploads as the pasting user. Each host reads the flavors in its own order through `classifyPaste`. [CLIPBOARD.md](../CLIPBOARD.md) has the details.
 
-The four arguments the v2 shape rests on:
+## 1. A block of cells travels on the clipboard (before 1.0)
 
-1. **Three representations per copy.** Every payload carries plain text, visual HTML, and structured
-   JSON. Plain text and HTML make Eigen content paste usefully into any external app; the JSON makes
-   Eigen-to-Eigen paste lossless. This is what Google Docs, Notion, and Linear do.
-2. **HTML attribute smuggling is the universal transport.** Custom MIME types are stripped by the
-   system clipboard on the way between browser sessions, and the `web ` MIME prefix is Chromium-only.
-   `text/html` carrying a `data-*` attribute survives everywhere. Eigen already does this in the async
-   path and in Sheets -- v2 makes every path do it.
-3. **BroadcastChannel for cross-tab coordination.** Same-origin, synchronous, purpose-built, and
-   unused elsewhere in the codebase, so no conflicts. It carries cut coordination and the >100KB
-   payloads that do not belong in an HTML attribute.
-4. **A typed content taxonomy, not a bag.** `richtext`, `cells`, `slideobjects`, `image`, `file`,
-   `card` cover the current apps; `calendarevent`, `contact`, `chatmessages`, `vectorelements` and
-   `chart` are added with the app that needs them. The `EigenStyle` shared style vocabulary from the
-   original research is deliberately **not** part of this -- no app produces or consumes it, and the
-   HTML preview serves the same purpose with less coupling.
+**The gap.** A sheets copy writes the payload but puts no cells in it. A paste in the same tab is served from `ctx.copyState`, which holds coordinates and re-reads the live cells, so formulas and formats survive. In another tab or another login there is no `copyState`, and the paste falls back to the HTML table: values and some styling, no formulas, number formats, conditional formats, validation or links ([CLIPBOARD.md § Sheets serves its own copies from memory](../CLIPBOARD.md#sheets-serves-its-own-copies-from-memory)).
 
-## Known constraints
+**The plan** lives in [SHEETS-TODO.md § Clipboard](../SHEETS-TODO.md#clipboard-put-sheets-on-the-shared-system): a `cells` item built from lib's `Cell` records (`packages/lib/src/sheets/types.ts`, already the shape ops carry), a producer beside `rangeValueToClipboard`, one paste path that takes the block whether it came from the wire or from `copyState`, and a flipped read order. Its "must not break" list holds: the visible `<table>` keeps going out verbatim for Excel, Google Sheets and Docs. Before building it the owner answers SHEETS-TODO's Q3 to Q9 (the in-memory cache, the item, the size cap, images, formula references, cut, and paste into a doc or slide).
 
-- **The sheet engine has its own internal clipboard.** `ctx.copyState` handles internal copy/paste separately from the system clipboard. It holds **coordinates only** — a sheet id and the copied rectangles; formulas, formatting and merge info survive because the paste re-reads the live cells at those coordinates, which is exactly why it cannot cross a tab or a login boundary. The eigen clipboard integration sits **on top of** it, not inside it. Consequences: the `cells` content type carries display values, formatting, merge info and dimensions -- not the internal `Cell` state (calculation results, dependency graphs), which is neither serializable nor meaningful in another sheet. Formulas travel as strings, with references that will be wrong in a different sheet context. Undo behavior after a paste into Sheets depends on whether the engine's paste handler wraps the operation in a single `setContextWithProduce` update -- verify during implementation, not design.
-- **Sheets-to-Docs table paste is lossy.** Tiptap has `@tiptap/extension-table` configured with
-  `resizable: true`, so a pasted sheet table does become a Tiptap table node. But the engine emits
-  `<table data-type="sheet-copy-action-table">` with pixel-valued inline styles, which Tiptap's
-  resizable column model may not respect; background colors, borders and font formatting survive
-  only partially through `transformPastedHTML`; and formula content flattens to display values.
-  Acceptable for Phase 2, but document it as lossy rather than promising fidelity.
-- **Clipboard permission modes differ per browser.** `navigator.clipboard.write()` may need a
-  permission grant on Firefox and only works inside a user gesture on iOS Safari, so the async path
-  can fail silently. The sync `copy`-event path is the primary one; the async path exists for
-  context-menu and button copies and must keep the `write()` call inside the click handler and show
-  a toast on failure. Related, lower-severity: browser extensions (password/clipboard managers) may
-  rewrite clipboard contents, so a malformed `data-eigen-clipboard` attribute must degrade to
-  "treat as external HTML", never throw. Incognito needs no special handling -- both
-  BroadcastChannel and `navigator.clipboard` work there.
+**Why the item and not a v2 envelope.** A `cells` item is one more kind in the existing union. The reader drops an unknown kind, so a tab on an older build pastes the HTML table as it does now. The item carries its own source anchor and sheet name, which Q7 needs to shift formula references, so nothing else needs a source block.
 
-Concurrent paste in a collaborative document is not a clipboard concern: each paste is a Yjs
-transaction and the CRDT merge resolves it, exactly as it already does for typing.
+## 2. Cells and chart sheets share one block writer
 
----
+[PROPOSAL_CHART_SHEETS.md](PROPOSAL_CHART_SHEETS.md) gives every chart in Docs, Slides and Vector a sheet of its own, filled from the chart's numbers the first time Edit data opens. That fill and the paste of a `cells` item do the same thing: write a block of cells into a sheet at an anchor. So the sheet engine gets one pair of functions, one that reads a block from a sheet and one that writes it, and both features use it:
 
-## Integration Proposal
-
-### Phase 0: the async write needs no custom type
-
-`writeEigenClipboardAsync` writes `text/html` and `text/plain` only, where the sync `writeEigenClipboard` also sets `application/eigen-clipboard`. That is not a loss. The marker span carries the same JSON, and a menu copy builds the same `EigenClipboardData` as ⌘C (`buildData` in `packages/ui/src/components/vector/hooks/use-canvas-clipboard.ts`), so the reader gets identical data either way ([CLIPBOARD.md § One payload rides two channels](../CLIPBOARD.md#one-payload-rides-two-channels)).
-
-Adding the custom type would break the write. Chromium and Firefox reject a `ClipboardItem` with `application/eigen-clipboard` and fail the whole `write`, marker and plain text included. WebKit accepts it, but its paste event does not hand the payload back.
-
----
-
-### Phase 1: Version 2 Protocol (2-3 sessions)
-
-**Goal:** Define the v2 data model, implement the new write/read functions, and migrate all three document apps.
-
-#### 1a. Data Format
-
-**File:** `../../packages/lib/src/types/clipboard.ts`
-
-Add the v2 types alongside v1 (v1 stays for backward-compatible reading):
-
-```typescript
-type EigenClipboardSource = {
-    app: 'docs' | 'sheets' | 'slides' | 'stickies' | 'chat' | 'calendar' | 'contacts' | 'drive' | 'mail';
-    ownerId: string;
-    mountId?: string;
-    fileId?: string;
-    timestamp: number;
-    isCut: boolean;
-    cutId?: string;
-}
-
-type EigenClipboardRichText = {
-    kind: 'richtext';
-    tiptapJson: object;
-    html: string;
-    text: string;
-    images: Array<{ src: string; sourcePath?: DrivePath; width?: number; height?: number }>;
-}
-
-type EigenClipboardCells = {
-    kind: 'cells';
-    cells: unknown[][]; // sheet cell data (display values + formatting, not internal state)
-    rows: Array<{ index: number; height: number }>;
-    cols: Array<{ index: number; width: number }>;
-    merges: Array<{ r: number; c: number; rs: number; cs: number }>;
-    html: string; // the sheet HTML table
-    tsv: string;
-}
-
-type EigenClipboardSlideObjects = {
-    kind: 'slideobjects';
-    objects: Array<Record<string, unknown>>; // SlideObject serialization
-    html: string;
-}
-
-type EigenClipboardImage = {
-    kind: 'image';
-    src: string;
-    sourcePath?: DrivePath;
-    width?: number;
-    height?: number;
-    mimeType: string;
-    dataUrl?: string;
-}
-
-type EigenClipboardFile = {
-    kind: 'file';
-    files: Array<{ id: string; name: string; mimeType: string; ownerId: string; mountId: string; size: number; isFolder: boolean }>;
-}
-
-type EigenClipboardCard = {
-    kind: 'card';
-    cards: Array<{ title: string; description: string; color?: string; columnTitle?: string }>;
-    html: string;
-}
-
-type EigenClipboardContent =
-    | EigenClipboardRichText
-    | EigenClipboardCells
-    | EigenClipboardSlideObjects
-    | EigenClipboardImage
-    | EigenClipboardFile
-    | EigenClipboardCard;
-
-type EigenClipboardPayload = {
-    version: 2;
-    source: EigenClipboardSource;
-    content: EigenClipboardContent[];
-    plainText: string;
-    htmlPreview: string;
-}
-```
-
-Types deliberately omitted from Phase 1: `calendarevent`, `contact`, `chatmessages`.
-These are added when the corresponding app integration is built (Phase 3+). Canvas elements and charts
-already travel as v1's `elements` and `chart` items.
-
-#### 1b. Transport Layer
-
-**File:** `../../packages/lib/src/core/clipboard/clipboard.ts`
-
-Add v2 write/read functions. Keep v1 functions for backward compatibility during migration.
-
-```typescript
-export function writeEigenPayload(e: ClipboardEvent, payload: EigenClipboardPayload) {
-    const json = JSON.stringify(payload);
-    e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, json);
-    const encoded = encodeURIComponent(json);
-    const marker = `<span data-eigen-clipboard="${encoded}"></span>`;
-    e.clipboardData?.setData('text/html', marker + payload.htmlPreview);
-    e.clipboardData?.setData('text/plain', payload.plainText);
-}
-
-export async function writeEigenPayloadAsync(payload: EigenClipboardPayload) {
-    const json = JSON.stringify(payload);
-    const encoded = encodeURIComponent(json);
-    const marker = `<span data-eigen-clipboard="${encoded}"></span>`;
-    const html = marker + payload.htmlPreview;
-    const items: Record<string, Blob> = {
-        'text/html': new Blob([html], { type: 'text/html' }),
-        'text/plain': new Blob([payload.plainText], { type: 'text/plain' }),
-    };
-    try {
-        await navigator.clipboard.write([new ClipboardItem(items)]);
-    } catch {
-        // Async clipboard write failed (permissions denied, not in user gesture, etc.)
-        // Caller should handle this gracefully.
-        throw new Error('Clipboard write failed. Use Ctrl+C instead.');
-    }
-}
-
-export function readEigenPayload(clipboardData: DataTransfer): EigenClipboardPayload | null {
-    // Try custom MIME first (same-tab)
-    const raw = clipboardData.getData(EIGEN_CLIPBOARD_MIME);
-    if (raw) {
-        const parsed = tryParsePayload(raw);
-        if (parsed) return parsed;
-    }
-    // Try HTML attribute (cross-tab)
-    const html = clipboardData.getData('text/html');
-    if (html) {
-        const match = html.match(/data-eigen-clipboard="([^"]*?)"/);
-        if (match?.[1]) {
-            try {
-                const decoded = decodeURIComponent(match[1]);
-                return tryParsePayload(decoded);
-            } catch { /* invalid encoding */ }
-        }
-    }
-    return null;
-}
-
-function tryParsePayload(raw: string): EigenClipboardPayload | null {
-    try {
-        const data = JSON.parse(raw);
-        if (data.version === 2 && data.source && Array.isArray(data.content)) return data;
-        // v1 backward compat: wrap in v2 envelope
-        if (data.version === 1 && Array.isArray(data.items)) return upgradeV1ToV2(data);
-    } catch { /* invalid JSON */ }
-    return null;
-}
-```
-
-#### 1c. BroadcastChannel Bus
-
-**New file:** `packages/lib/src/core/clipboard/bus.ts`
-
-```typescript
-class EigenClipboardBus {
-    private channel: BroadcastChannel | null;
-    private lastPayload: EigenClipboardPayload | null = null;
-    private pendingCut: { cutId: string; cleanup: () => void } | null = null;
-
-    constructor() {
-        try {
-            this.channel = new BroadcastChannel('eigen-clipboard');
-            this.channel.onmessage = this.handleMessage;
-        } catch {
-            this.channel = null; // BroadcastChannel not available
-        }
-    }
-
-    broadcast(payload: EigenClipboardPayload) { ... }
-    getLastPayload(): EigenClipboardPayload | null { ... }
-    registerCut(cutId: string, cleanup: () => void) { ... }
-    confirmCut(cutId: string) { ... }
-    private handleMessage = (e: MessageEvent) => { ... }
-    destroy() { this.channel?.close(); }
-}
-```
-
-Expose as a singleton via a React context or module-level instance. The bus is instantiated once per tab.
-
-#### 1d. Migrate Apps to v2
-
-**Docs** (`../../apps/docs/src/components/docs/editor.tsx`):
-- Copy handler: Extract Tiptap JSON fragment via `editor.state.doc.slice(from, to).toJSON()` for the selection.
-  Wrap in `EigenClipboardRichText` content with the existing image extraction. Produce `htmlPreview` via
-  `editor.getHTML()` (scoped to selection). Produce `plainText` via `editor.state.doc.textBetween(from, to)`.
-- Paste handler: Check for v2 payload first. If `content` contains `richtext`, use `editor.commands.insertContent(tiptapJson)` for lossless paste. If `content` contains `cells`, let Tiptap's built-in
-  HTML paste handle it via the `html` field (produces a table node). Fall back to v1 compat, then native paste.
-
-**Slides** (`../../apps/slides/src/components/slides/editor.tsx`):
-- Copy handler: Wrap slide objects in `EigenClipboardSlideObjects`. The canvas already copies its selection
-  as an `elements` item ([CLIPBOARD.md § A canvas selection rides as its stored records](../CLIPBOARD.md#a-canvas-selection-rides-as-its-stored-records)) -- restructure it into the v2 content type.
-- Paste handler: Prefer `slideobjects` content for lossless paste. Accept `richtext` to create a text box.
-  Accept `image` for image objects.
-
-**Sheets** (`../../packages/sheet/src/components/Workbook/index.tsx`):
-- Copy handler: Wrap the existing sheet HTML table and plain text in `EigenClipboardCells`. Include
-  cell data for the selected range (display values + formatting, extracted from the sheet context).
-- Paste handler: Prefer `cells` content for lossless paste (feed back into sheet's paste handler).
-  Accept `richtext` to extract text into cells.
-
-**File changes summary for Phase 1:**
-
-| File | Action |
-|---|---|
-| `../../packages/lib/src/types/clipboard.ts` | Add v2 types |
-| `../../packages/lib/src/core/clipboard/clipboard.ts` | Add v2 write/read, v1->v2 upgrade, keep v1 functions |
-| `packages/lib/src/core/clipboard/bus.ts` | New: BroadcastChannel bus |
-| `../../packages/lib/src/core/clipboard/index.ts` | Re-export new functions and bus |
-| `../../apps/docs/src/components/docs/editor.tsx` | Migrate copy/paste to v2 |
-| `../../apps/slides/src/components/slides/editor.tsx` | Migrate copy/paste to v2 |
-| `../../packages/sheet/src/components/Workbook/index.tsx` | Migrate copy/paste to v2 |
-
----
-
-### Phase 2: Cross-App Content Converters (2-3 sessions)
-
-**Goal:** When pasting cross-app content, convert it intelligently instead of falling back to plain text.
-
-**New files in `packages/lib/src/core/clipboard/converters/`:**
-
-| File | Conversion | Notes |
+| User | Reads a block from | Writes the block into |
 |---|---|---|
-| `cells-to-richtext.ts` | Sheet cells -> Tiptap table JSON | Generate a `{ type: 'table', content: [...rows] }` Tiptap node from the cell matrix. Map cell formatting (bold, italic, color) to Tiptap marks. |
-| `richtext-to-cells.ts` | Tiptap table node -> cell matrix | Parse Tiptap table JSON, extract text content per cell. Non-table richtext becomes a single cell. |
-| `richtext-to-slideobjects.ts` | Rich text -> slide text box | Extract text, font size, color. Create a text-type slide object. |
-| `slideobjects-to-richtext.ts` | Slide objects -> Tiptap content | Text objects become paragraphs. Image objects become inline images. |
-| `cells-to-slideobjects.ts` | Sheet cells -> slide table image | Render the HTML table to a text box or image. |
+| A sheets copy and paste | The copied range | The target sheet, at the selected cell |
+| A chart's first Edit data | The chart's inline numbers, laid out as `embeddedChartSheet` lays them out | The chart's new sheet, at A1 |
+| A docs, slides or vector chart pasted into Sheets (chart sheets' open question 4) | The chart's inline numbers | The workbook, beside the chart, which then stores a range chart over them |
 
-**Changes to paste handlers:**
+Neither feature has to wait for the other. The block shape is fixed by item 1 (lib's `Cell`, keyed relative to the block's top-left corner), and the clipboard item is a wire shape, not a stored one, so it can still change between builds. Building cells first is the cheaper order: chart sheets' phase 1 then moves `embeddedChartSheet` to the engine as a function that builds a block from numbers, and writes it with the same writer.
 
-Each app's paste handler adds a content negotiation step:
+A chart copied from Sheets is the one case that could get better than either proposal alone. Its tab has the source cells live, so the copy can put a `cells` item of the chart's range beside the `chart` item, formulas included. The pasted chart's sheet could then start with those formulas instead of the numbers. That needs the block to wait somewhere until the first Edit data, and chart sheets decided a paste writes no file. So there are three ways, and an owner's choice between them:
 
-```typescript
-function handleEigenPaste(payload: EigenClipboardPayload) {
-    for (const content of payload.content) {
-        if (content.kind === NATIVE_KIND) {
-            // Lossless paste
-            pasteNative(content);
-            return;
-        }
-    }
-    // Cross-app: find best converter
-    for (const content of payload.content) {
-        const converter = getConverter(content.kind, TARGET_APP);
-        if (converter) {
-            pasteConverted(converter(content));
-            return;
-        }
-    }
-    // Last resort: paste plain text
-    pastePlainText(payload.plainText);
-}
-```
+- **Numbers only**, as chart sheets plans now. Nothing extra to build. A chart moved from Sheets to a doc loses its formulas.
+- **Keep the block on the chart until its first Edit data**, as a key beside `workbook` in the chart's `data` part. The formulas survive, but the doc stores up to a range of cells it may never use, and the key is a stored-format addition.
+- **Create the sheet at paste when a block rides along.** The formulas survive and nothing waits in the doc, but this paste writes a file, which reverses the owner's decision for that one case.
 
-**External content classification** (`packages/lib/src/core/clipboard/classify.ts`):
+The first is the default until someone asks for the formulas. A docs chart copied to Sheets gets only its numbers in any case: its sheet is a separate document that a copy event can't load in time.
 
-Add the `classifyPasteContent` function from the research. Start with detecting: eigen data, HTML tables,
-rich HTML, plain text, images, TSV, and URLs. Google Docs / Excel / Notion detection are nice-to-have and
-can be added iteratively.
+## 3. Styled text runs reach a slide or a drawing (after 1.0)
 
----
+A `text` item is plain text plus one set of box typography (`EigenClipboardTypography`). So text copied from Docs to a slide keeps its font and color, but a bold word or a link inside it is lost. A canvas rich-text box stores HTML (`Textual.html`, `packages/lib/src/vector/types.ts`), and the canvas already sanitizes pasted records with `sanitizeToLightEditorHtml`. The fix is for the canvas to read the copied `text/html` beside a text item through that sanitizer, rather than for the item to grow a second copy of the text. Check first that a docs copy's HTML maps onto the light editor's marks. S to M.
 
-### Phase 3: Non-Document Apps + Cut + Drag-and-Drop (3-4 sessions)
+## 4. The apps outside the four hosts (after 1.0)
 
-**Goal:** Clipboard support for remaining apps, cut coordination, drag-and-drop.
-
-#### 3a. Stickies Clipboard
-
-**File:** `../../apps/stickies/src/components/stickies/board.tsx` (or wherever the board-level keyboard handler lives)
-
-- Copy: Serialize selected cards as `EigenClipboardCard`. Plain text = card titles. HTML = card visual.
-- Paste: Accept `card` for lossless paste. Accept `richtext` to create a card with description. Accept `cells`
-  to create one card per row.
-- This is straightforward since stickies uses Yjs and cards are simple data objects.
-
-#### 3b. Chat Clipboard
-
-- Copy: Serialize selected messages as `EigenClipboardChatMessages` (add this type when needed).
-- Paste: Accept any content kind, convert to message text. Images -> upload and attach.
-
-#### 3c. Calendar, Contacts, Drive
-
-- Calendar: Copy event as `EigenClipboardCalendarEvent` with iCal fallback.
-- Contacts: Copy contact as `EigenClipboardContact` with vCard fallback.
-- Drive: Copy file references as `EigenClipboardFile`. Paste file references into folders (move/copy).
-
-#### 3d. Cut Coordination
-
-- Implement the BroadcastChannel cut protocol as designed in the research.
-- Add visual "pending cut" state (dashed border / dimmed opacity) to Docs, Slides, Sheets, Stickies.
-- Handle the same-tab case (BroadcastChannel does not fire for self-sent messages).
-
-#### 3e. Drag-and-Drop
-
-- Add `dragstart`/`drop` handlers that use the same serialization as clipboard.
-- Drive file drag into Docs/Slides/Chat.
-- Desktop only (no mobile touch drag).
-
----
-
-### Phase 4: Polish (1-2 sessions)
-
-- "Paste Special" (Ctrl+Shift+V) dialog.
-- Smart URL paste (image URLs become images, YouTube URLs become embeds).
-- Clipboard indicator in status bar via BroadcastChannel.
-- Async clipboard write failure toast.
-
----
-
-### Phase 5: Chart live linking
-
-- Chart copy with `sourceRef` for live linking. A chart item carries its data inline ([CLIPBOARD.md § A chart travels as its spec with the numbers inline](../CLIPBOARD.md#a-chart-travels-as-its-spec-with-the-numbers-inline)).
-
----
-
-## Migration Path
-
-The migration is non-breaking because:
-
-1. **Phase 1 adds v2 alongside v1.** The `readEigenPayload` function includes a `upgradeV1ToV2` path that
-   wraps v1 data in a v2 envelope. Old clipboard data written by code not yet migrated will still be readable.
-2. **Apps are migrated one at a time.** During migration, one app may write v2 while another still writes v1.
-   The read path handles both.
-3. **Once all apps are on v2, v1 types and the upgrade function can be removed.**
-
----
-
-## Testing Strategy
-
-### Unit Tests
-
-**File:** `packages/lib/src/core/clipboard/__tests__/clipboard.test.ts`
-
-- `writeEigenPayload` produces correct `text/html` with embedded JSON.
-- `readEigenPayload` parses custom MIME, HTML attribute, and v1 upgrade.
-- `tryParsePayload` rejects invalid/malformed JSON.
-- Each content converter: cells-to-richtext, richtext-to-cells, etc.
-- `EigenClipboardBus`: broadcast, receive, cut registration, cut confirmation.
-
-### Integration Tests
-
-- Copy in Docs, paste in Docs (same tab): lossless richtext round-trip.
-- Copy in Sheets, paste in Docs: cells become a Tiptap table.
-- Copy in Docs, paste in Slides: richtext becomes a text box.
-- Copy in Slides, paste in Docs: slide objects become paragraphs + images.
-- Large payload (>100KB): BroadcastChannel bus stores payload, clipboard gets token.
-
-### Manual Testing Checklist
-
-- Cross-tab copy-paste (Docs -> Docs in another tab).
-- Cross-app copy-paste (Sheets -> Docs, Docs -> Slides, etc.).
-- External paste (from Google Docs, from Excel, from Notion, from plain text editor).
-- Paste into external apps (Eigen -> Google Docs, Eigen -> plain text editor).
-- Cut from Docs, paste in Slides (verify source content is deleted).
-- Clipboard permissions denied in Firefox/Safari (verify graceful fallback).
-- Large sheet selection (1000+ cells) copy and paste.
-- Undo after paste in each app.
-- Mobile paste (iOS Safari, Android Chrome).
-
----
-
-## Risks and Mitigations
-
-| Risk | Severity | Mitigation |
+| App | What a copy would carry | What a paste would do |
 |---|---|---|
-| **HTML attribute sanitization differs across browsers.** Some browser versions may strip `data-*` attributes in specific contexts. | Medium | Test on Chrome, Firefox, Safari, Edge. The `data-eigen-clipboard` attribute on `<span>` is safe in all current browsers. If a browser strips it, the content degrades to external HTML paste (not a crash). |
-| **Sheet cell serialization is complex.** The internal Cell type has many fields; deciding which to include in the clipboard is non-trivial. | Medium | Start with display values + basic formatting (bold, italic, color, background, number format, merge). Add more fields as needed. Formulas as strings, with a comment that references will be wrong. |
-| **Tiptap `insertContent(tiptapJson)` may not handle all node types from a different document.** Custom extensions (resizable images, comments) in the source doc may not exist in the target. | Low | Tiptap silently drops unknown node types. Comments should be stripped during copy (they are document-specific). Images use the standard `figure` node (`mediaName` attribute), present in all Docs instances. |
-| **URI-encoded JSON in HTML attributes could be very large.** | Medium | The 100KB threshold with BroadcastChannel fallback handles this. For cross-browser-session paste of very large payloads, the HTML table/text fallback is lossy but functional. |
-| **Async clipboard write fails on iOS Safari outside user gesture.** | Medium | The sync path (`writeEigenPayload` in a `copy` event handler) is the primary path. The async path is only used for context menu buttons. For these, ensure the `navigator.clipboard.write()` call is synchronous within the click handler. Show a toast on failure. |
-| **Drag-and-drop does not work on mobile.** | Low | This is a known platform limitation. Document it. Mobile users use copy-paste. |
-| **Cut coordination fails if source tab is closed before paste.** | Low | This is acceptable behavior (same as OS file managers). The pasted content is still correct; only the source cleanup is skipped. |
-| **BroadcastChannel not available in some contexts (e.g., SharedWorker).** | Very Low | The bus constructor catches the error and sets `channel = null`. All bus methods become no-ops. Cut coordination and large payload transfer degrade gracefully to clipboard-only. |
+| Stickies | A card's title and description as a `text` item, and as HTML | Accept text as a new card; accept a cells block as one card per row |
+| Chat | Messages as text | Nothing new: chat already takes text and files |
+| Calendar | An event as text, with an `.ics` flavor | Paste an `.ics` as a new event |
+| Contacts | A contact as text, with a `.vcf` flavor | Paste a `.vcf` as a new contact |
+| Drive | Files as references | Copy or move into the open folder, as drag already does |
 
----
+None of them needs a new item kind to be useful: text and the standard file formats reach every other app too. A kind gets added only when an Eigen-to-Eigen paste would lose something the text form can't carry.
 
-## Timeline Estimate
+## 5. Smaller polish (after 1.0)
 
-| Phase | Scope | Effort |
-|---|---|---|
-| Phase 1 | v2 protocol + app migration (Docs, Sheets, Slides) | 2-3 sessions |
-| Phase 2 | Cross-app converters + external content classification | 2-3 sessions |
-| Phase 3 | Non-document apps + cut + drag-and-drop | 3-4 sessions |
-| Phase 4 | Polish (Paste Special, smart URL, clipboard indicator) | 1-2 sessions |
-| Phase 5 | Chart live linking | |
+- **Cut across tabs copies.** Docs and the canvas delete on cut, so a paste anywhere carries the content. A sheets cut moves the cells only when pasted in the same tab (`pasteIsCut`); in another tab it acts as a copy and says nothing. SHEETS-TODO's Q8 recommends keeping that and saying so. No cross-tab bus is needed.
+- **Paste special in Sheets**: values only, formats only. Sheets has neither today.
+- **Docs: Edit › Paste and Paste without formatting**, already a ROADMAP-POST-1 row. Reading the clipboard from a menu asks the browser's permission, and the owner chose to wait.
+- **An image URL pasted alone becomes an image** in Docs and on the canvas. The browser can rarely fetch it, since few sites allow cross-origin reads, so this needs the server-side fetch route that ROADMAP's row on doc figures with an external `src` already asks for, and the owner's yes.
+- **A canvas copy pastes nothing into mail compose**, a row in [CANVAS-TODO.md](../CANVAS-TODO.md).
+- **A chart linked to a sheet elsewhere in Drive** is the "linked data" part of ROADMAP-POST-1's charts row, not a clipboard feature.
 
-Phases 0 and 1 should be done first and can be shipped independently. Phases 2-4 are incremental
-improvements that can be interleaved with other work.
+## Dropped from the old v2 design
+
+- **A v2 envelope with a `source` block and a `content` list.** The v1 union already grows by kind, and the one kind that needs a source anchor carries its own.
+- **A BroadcastChannel bus** for cut and large payloads. It reaches only tabs of one browser profile, so it helps neither another login nor another machine. Cut needs no bus (item 5), and the size question has a cap and an honest fallback (SHEETS-TODO's Q5).
+- **A converter registry.** Each host keeps its own paste ladder ([CLIPBOARD.md § Each app keeps its own paste ladder](../CLIPBOARD.md#each-app-keeps-its-own-paste-ladder)), and a conversion is a function in the host that needs it.
+- **An async write that throws for the caller to toast.** Errors surface through the hooks' own notifications ([NOTIFICATIONS.md](../NOTIFICATIONS.md)).
+
+## Related
+
+- [CLIPBOARD.md](../CLIPBOARD.md): how the clipboard works today
+- [SHEETS-TODO.md](../SHEETS-TODO.md#clipboard-put-sheets-on-the-shared-system): the step-by-step plan and questions for the `cells` item
+- [PROPOSAL_CHART_SHEETS.md](PROPOSAL_CHART_SHEETS.md): a chart's own sheet, which shares the block writer
+- [MEDIA-REFERENCES.md](../MEDIA-REFERENCES.md): why an image travels as a name
