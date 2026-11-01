@@ -129,7 +129,7 @@ def patch_font_embedding():
 # sort keeps tied fonts in the order they came, so the best one stays first, but the sort of macOS and musl does not.
 # There Pango skipped a slice it never had, and its characters printed as .notdef. A distinct font version for each
 # slice file breaks the tie. Should WeasyPrint stop writing its font rules through tostring, this does nothing, and
-# glibc still prints right.
+# glibc still prints right. So only the glyph test on a macOS or musl host pins it: CI's glibc passes without it.
 def break_font_ties():
     try:
         from weasyprint.text import fonts

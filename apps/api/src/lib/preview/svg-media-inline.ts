@@ -78,8 +78,8 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
 function injectFontFaces(svg: string, budget: Budget): string {
     const used = namedFamilies(svg);
     if (used.size === 0) return svg;
-    // An SVG that names only a fallback, with none of that fallback's characters, needs no slice.
     const faceCss = slicesFaceCss(drawnCodePoints(svg), used);
+    // An SVG that names only a fallback, with none of that fallback's characters, needs no slice.
     if (faceCss === '') return svg;
     const defs = `<defs><style>${faceCss}</style></defs>`;
     budget.remaining -= Buffer.byteLength(defs);

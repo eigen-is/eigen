@@ -47,9 +47,9 @@ def cut(job):
     options.layout_features = job["features"]
     options.flavor = "woff2"
     font = subset.load_font(job["font"], options)
-    cmap = font.getBestCmap()
+    mapped = font.getBestCmap()
     subsetter = subset.Subsetter(options)
-    subsetter.populate(unicodes=job["codePoints"] + [space for space in SPACES if space in cmap])
+    subsetter.populate(unicodes=job["codePoints"] + [space for space in SPACES if space in mapped])
     subsetter.subset(font)
     if job["colorForeground"]:
         glyphs = [glyph for glyph in font.getGlyphOrder() if glyph != ".notdef"]
