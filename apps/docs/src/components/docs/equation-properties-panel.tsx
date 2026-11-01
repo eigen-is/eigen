@@ -1,7 +1,14 @@
+// The Docs Equation panel for the selected equation: a preview, its Style, and a LaTeX field with Google's symbol
+// menus. The field edits a draft that only this tab sees and that is written to the equation once it parses. The
+// draft follows its equation through this tab's edits and peers' changes. The panel writes through whichever editor
+// holds the equation, such as a band's.
+
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorState, Transaction } from '@tiptap/pm/state';
+import { NodeSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
+import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import { equationMath, parseMathml, readEquation, unlessRefused } from '@workspace/lib/docs/eigendoc';
 import type { MathRow, MathXmlElement } from '@workspace/math';
 import {
@@ -156,20 +163,28 @@ export function EquationPropertiesPanel({ editor, fieldRef }: EquationProperties
         caretRef.current = null;
     });
 
-    // A draft is its equation's. A peer's write to that equation makes a new node where it stood; a node the document
-    // already held is another equation, which a click or the delete of this one moved under the selection.
+    // A draft is its equation's. This tab's own change keeps the equation's node, or a write to it makes a new node
+    // where it stood. A node the document already held is another equation, which a click or a delete moved under the
+    // selection. A change through the Yjs binding builds every node anew, and that is every change a peer makes and
+    // this tab's own undo and redo too. After a peer's change the binding puts the selection back by a Yjs position
+    // that sticks to the equation, or to the character just before it, so the draft stays only while an equation is
+    // still selected.
     useEffect(() => {
         let owner = shownEquation(editor.state);
         const onTransaction = ({ transaction }: { transaction: Transaction }) => {
             const next = shownEquation(editor.state);
-            if (!next || next.node === owner?.node) return;
-            let held = false;
-            transaction.before.descendants((node) => {
-                held ||= node === next.node;
-                return !held;
-            });
-            if (held || next.pos !== owner?.pos) setDraft(null);
-            owner = next;
+            if (transaction.getMeta(ySyncPluginKey)) {
+                const { selection } = editor.state;
+                if (!(selection instanceof NodeSelection) || selection.node !== next?.node) setDraft(null);
+            } else if (next && next.node !== owner?.node) {
+                let held = false;
+                transaction.before.descendants((node) => {
+                    held ||= node === next.node;
+                    return !held;
+                });
+                if (held || next.pos !== owner?.pos) setDraft(null);
+            }
+            owner = next ?? owner;
         };
         editor.on('transaction', onTransaction);
         return () => {

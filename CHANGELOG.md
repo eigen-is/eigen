@@ -12,6 +12,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Fixed
 
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
+- **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 
 ## [0.4.1] - 2026-10-28
