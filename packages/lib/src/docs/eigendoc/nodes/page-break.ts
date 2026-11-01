@@ -19,19 +19,6 @@ declare module '@tiptap/core' {
 // The HTML and PDF exports page at exactly this class.
 export const PAGE_BREAK_CLASS = 'page-break';
 
-// The caret after a block atom an insert just put in, as the horizontal rule's insert leaves it: on a new paragraph at
-// the doc's end, else in the textblock after it. Before a table or a rule it waits in a gap cursor: selected, the
-// block is one Backspace from deleted.
-export function caretAfterInsertedBlock({ tr, commands }: CommandProps): boolean {
-    const { $to } = tr.selection;
-    if (!$to.nodeAfter) return commands.insertContentAt($to.end(), { type: 'paragraph' });
-    if ($to.nodeAfter.isTextblock) return commands.setTextSelection($to.pos + 1);
-    // GapCursor.valid is untyped, but map applies it: a valid gap stays, anywhere else Selection.near takes over,
-    // mid-paragraph the second half and before a list its first item.
-    tr.setSelection(new GapCursor($to).map(tr.doc, StepMap.empty));
-    return true;
-}
-
 export const PageBreakNode = Node.create({
     name: 'pageBreak',
 
@@ -92,3 +79,16 @@ export const PageBreakNode = Node.create({
         };
     },
 });
+
+// The caret after a block atom an insert just put in, as the horizontal rule's insert leaves it: on a new paragraph at
+// the doc's end, else in the textblock after it. Before a table or a rule it waits in a gap cursor: selected, the
+// block is one Backspace from deleted.
+function caretAfterInsertedBlock({ tr, commands }: CommandProps): boolean {
+    const { $to } = tr.selection;
+    if (!$to.nodeAfter) return commands.insertContentAt($to.end(), { type: 'paragraph' });
+    if ($to.nodeAfter.isTextblock) return commands.setTextSelection($to.pos + 1);
+    // GapCursor.valid is untyped, but map applies it: a valid gap stays, anywhere else Selection.near takes over,
+    // mid-paragraph the second half and before a list its first item.
+    tr.setSelection(new GapCursor($to).map(tr.doc, StepMap.empty));
+    return true;
+}
