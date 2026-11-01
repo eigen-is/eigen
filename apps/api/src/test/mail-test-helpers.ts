@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { SSEventType } from '@workspace/lib/types/sse';
 import { maildirFolder } from '../lib/mail/mailutils';
+import type { SSECollector } from './setup';
 import { TEST_DATA_DIR } from './setup';
 
 // One spelling of the mail layout for every mail test that reaches past the API and touches the files
@@ -12,6 +14,8 @@ export const boxDir = (userId: string, mailbox: string) => maildirFolder(maildir
 // CI's per-test budget, for a test that waits on a folder watcher. Under load on macOS an fs.watch event
 // arrives seconds late, and each watcher blocks the event loop while it attaches: twelve can pass bun's 5 s default.
 export const WATCHER_TEST_TIMEOUT_MS = 30_000;
+// How often fileUntilIndexed files another message while it waits. The test's own timeout bounds the wait.
+const REFILE_INTERVAL_MS = 500;
 
 // Fabricates a Maildir++ folder the way Dovecot does: a dot-prefixed directory with cur/new/tmp and
 // the `maildirfolder` marker. Eigen itself makes no folder but the standard six.
@@ -50,4 +54,20 @@ export function seedMaildirFile(
     const filePath = join(boxDir(userId, mailbox), dir, name);
     writeFileSync(filePath, eml);
     return filePath;
+}
+
+// Files a message into a mailbox's new/ until the open tab hears it indexed, filing another when an event got lost.
+// On macOS an fs.watch event comes seconds late under load, and each watcher attached or closed rebuilds the
+// process's one FSEvents stream, which drops an event still queued. The wait matches the message's id, because
+// next() also matches an event the tab heard before, such as a delivery into the same mailbox. The sync that
+// indexes the newest message moves every older one too, so none is left in new/ for a later sync to move.
+export async function fileUntilIndexed(tab: SSECollector, userId: string, mailbox: string): Promise<void> {
+    let indexed: Promise<boolean>;
+    do {
+        const id = `${Date.now()}.filed`;
+        seedMaildirFile(userId, mailbox, id, makeEml(`Filed into ${mailbox}`), { dir: 'new' });
+        indexed = tab
+            .next((event) => event.type === SSEventType.MAIL_RECEIVED && event.mail.messageId === id)
+            .then(() => true);
+    } while (!(await Promise.race([indexed, Bun.sleep(REFILE_INTERVAL_MS).then(() => false)])));
 }

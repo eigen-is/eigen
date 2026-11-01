@@ -1,4 +1,4 @@
-import { describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, jest, spyOn, test } from 'bun:test';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from '../../lib/core/errors';
@@ -104,6 +104,10 @@ function errorCode(response: DocumentTransformResponse): string | undefined {
 }
 
 describe('DocumentTransformRunner', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
     test('runs at most one child at a time, FIFO within a priority', async () => {
         const runner = makeRunner();
         const results = await Promise.all([
@@ -531,28 +535,30 @@ describe('DocumentTransformRunner', () => {
         await runner.close();
     });
 
-    // The prep runs inside the job, so the request's abort and the deadline both end it.
+    // The prep runs inside the job, so the request's abort and the deadline both end it. The deadline counts from the
+    // spawn, and a busy machine can take longer than any short deadline to start the child. So the clock is fake, and
+    // the test moves it past the deadline only once the prep has begun.
     test.each(['canceled', 'timeout'] as const)(
         'a job %s during its media prep kills the child and aborts the prep',
         async (outcome) => {
             const runner = makeRunner();
             const controller = new AbortController();
-            let prepSignal: AbortSignal | undefined;
-            const start = Date.now();
+            const { promise: prepStarted, resolve: startPrep } = Promise.withResolvers<AbortSignal>();
+            if (outcome === 'timeout') jest.useFakeTimers();
             const pending = runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
                 ...EXPORT_OPTIONS,
-                ...(outcome === 'timeout' && { deadlineMs: 1_000 }),
                 signal: controller.signal,
                 prepareMedia: (_, signal) => {
-                    prepSignal = signal;
-                    if (outcome === 'canceled') controller.abort();
+                    startPrep(signal);
                     return new Promise(() => {});
                 },
             });
-            const response = await pending;
-            expect(Date.now() - start).toBeLessThan(5_000);
-            expect(errorCode(response)).toBe(outcome);
-            expect(prepSignal?.aborted).toBe(true);
+            const prepSignal = await prepStarted;
+            expect(prepSignal.aborted).toBe(false);
+            if (outcome === 'canceled') controller.abort();
+            else jest.advanceTimersByTime(EXPORT_OPTIONS.deadlineMs);
+            expect(errorCode(await pending)).toBe(outcome);
+            expect(prepSignal.aborted).toBe(true);
             expect((await runner.run(makeRequest(), PREVIEW_OPTIONS)).ok).toBe(true);
             await runner.close();
         },

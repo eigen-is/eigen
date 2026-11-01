@@ -96,8 +96,6 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **Enter on a selected text box on a phone does nothing** (XS): The text box's `Enter` shortcut (`addKeyboardShortcuts` in `apps/docs/src/components/docs/extensions/text-box.tsx`) calls `onOpen` and returns true, but a phone opens no story, so the key only reselects the box. Fix: return false where the host opens no story.
 
-- **Two Esc-focus tests fail under full load** (XS): "Insert closed with Esc gives focus back to the editor" (`editor-toolbar.test.tsx`) and "a menu closed with Esc hands focus back to the band being edited, and Options to the band too" (`editor.test.tsx`) failed once in `bun run check` on 2026-11-01 and passed alone and in three loaded reruns. Both run `requestAnimationFrame` as a timer and then wait a fixed 50 ms (`pickInBrowserFrames`, `inBrowserFrames`) before they read `document.activeElement`, so a machine busy with every suite can run past the window. Wait for the focus change itself (poll until `activeElement` settles, with a generous timeout) instead of a fixed delay.
-
 ## After 1.0
 
 Large builds that wait for a trigger or for the editor to draw pages.

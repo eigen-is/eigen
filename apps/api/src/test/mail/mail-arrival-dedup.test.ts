@@ -1,12 +1,12 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAILBOX_INBOX } from '@workspace/lib/constants/mailboxes';
+import { MAILBOX_INBOX, STANDARD_MAILBOXES } from '@workspace/lib/constants/mailboxes';
 import type { EmailSummary } from '@workspace/lib/types/mail';
 import type { Notification } from '@workspace/lib/types/notification';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { evictHome } from '../../lib/home/get-home';
-import { boxDir, WATCHER_TEST_TIMEOUT_MS } from '../mail-test-helpers';
+import { boxDir, fileUntilIndexed, WATCHER_TEST_TIMEOUT_MS } from '../mail-test-helpers';
 import type { TestUser } from '../setup';
 import { assertJson, authedRequest, collectSSE, createTestUser, eventually, getTestContext } from '../setup';
 
@@ -149,8 +149,14 @@ describe('Mail read in another mail app', () => {
             await evictHome(user.id);
             const tab = await collectSSE(user.id);
             try {
+                // The tab attaches the watchers one mailbox at a time, in the order of the standard list. A message
+                // indexed in the last one means they all listen, so no rebuild can drop the phone's event.
+                const [lastWatched] = STANDARD_MAILBOXES.slice(-1);
+                await fileUntilIndexed(tab, user.id, lastWatched);
                 await deliverEmail(user.email, 'phone@external.com', 'Read on the phone', 'body');
                 expect(await mailNewUnread(user)).toBe(true);
+                // The delivery waited out the inbox's first sync, so only a live watcher indexes what is filed now.
+                await fileUntilIndexed(tab, user.id, MAILBOX_INBOX);
 
                 readOnThePhone(user);
                 // The watcher's event can come seconds late on macOS, so the test waits for the tab to hear the bell change.

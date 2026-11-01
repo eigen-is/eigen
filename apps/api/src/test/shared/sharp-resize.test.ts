@@ -6,6 +6,7 @@ import { deflateSync } from 'node:zlib';
 import sharp from 'sharp';
 import { sharpResize } from '../../lib/shared/sharp-resize';
 import type { WorkerInput } from '../../lib/shared/thumbnail-worker';
+import { cpuClock } from '../cpu-time';
 
 const TMP_DIR = join(tmpdir(), `eigen-sharp-resize-test-${Date.now()}`);
 
@@ -101,17 +102,6 @@ describe('sharpResize to JPEG reports whether the picture it sends shows through
     });
 });
 
-// The fastest of three runs, as other work on the machine slows any one of them.
-async function fastest(run: () => Promise<unknown>): Promise<number> {
-    let best = Number.POSITIVE_INFINITY;
-    for (let i = 0; i < 3; i++) {
-        const start = performance.now();
-        await run();
-        best = Math.min(best, performance.now() - start);
-    }
-    return best;
-}
-
 describe('sharpResize of a large source', () => {
     const source = join(TMP_DIR, 'large.png');
 
@@ -122,14 +112,26 @@ describe('sharpResize of a large source', () => {
 
     afterAll(() => rmSync(TMP_DIR, { recursive: true, force: true }));
 
-    // Asking the source whether it is opaque decoded all 64 Mpx of it a second time, which took the JPEG two and a
-    // half times as long as its resize. Measured beside the resize, so a slow machine slows both.
+    // Asking the source whether it is opaque decoded all 64 Mpx of it a second time, which cost the JPEG eight times
+    // the CPU of its resize. Sharp decodes in native code, where a test cannot count the decodes, so the test weighs
+    // the CPU each one spends beside the plain resize. CPU time, unlike the clock, does not grow when other processes
+    // keep the machine busy. The two take turns and each keeps its cheapest run, so a pause that slows one fails nothing.
     test('decodes the source once to test the alpha of the 2560 px picture', async () => {
-        const resize = await fastest(() =>
-            sharp(source).resize(2560, 2560, { fit: 'inside' }).jpeg({ quality: 90 }).toBuffer(),
-        );
+        const cpuOf = async (run: () => Promise<unknown>) => {
+            const cpuMs = cpuClock();
+            await run();
+            return cpuMs();
+        };
+        let [resize, resized] = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+        for (let run = 0; run < 3; run++) {
+            resize = Math.min(
+                resize,
+                await cpuOf(() => sharp(source).resize(2560, 2560, { fit: 'inside' }).jpeg({ quality: 90 }).toBuffer()),
+            );
+            resized = Math.min(resized, await cpuOf(() => sharpResize(source, AS_JPEG)));
+        }
         const result = await sharpResize(source, AS_JPEG);
         expect(result?.hasAlpha).toBe(false);
-        expect(await fastest(() => sharpResize(source, AS_JPEG))).toBeLessThan(resize * 1.6);
+        expect(resized).toBeLessThan(resize * 1.6);
     }, 30_000);
 });

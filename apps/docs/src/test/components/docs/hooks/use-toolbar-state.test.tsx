@@ -136,18 +136,24 @@ test('a long selection draws what its first 10,000 positions are, a short one wh
     expect(seen.at(-1)).toMatchObject({ bold: false, selectionEmpty: false });
 
     // CPU time against a selection under the cap, so load slows both. Capped, the whole document costs about five times
-    // what 9,000 positions do, and read whole, over a hundred times. A first round warms the JIT.
-    const cost = async () => {
+    // what 9,000 positions do, and read whole, over a hundred times. The two take turns and each keeps its cheapest run,
+    // so a pause from the collector that slows one run fails nothing. A first round warms the JIT.
+    const cost = async (select: () => boolean) => {
+        await act(async () => select());
         const started = process.cpuUsage();
         for (let index = 0; index < 20; index++)
             await act(async () => long.view.dispatch(long.state.tr.setMeta('remote', index)));
         const { user, system } = process.cpuUsage(started);
         return user + system;
     };
-    await cost();
-    const all = await cost();
-    await act(async () => long.commands.setTextSelection({ from: 1, to: 9000 }));
-    const short = await cost();
+    const selectAll = () => long.commands.selectAll();
+    const selectShort = () => long.commands.setTextSelection({ from: 1, to: 9000 });
+    await cost(selectAll);
+    let [all, short] = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
+    for (let run = 0; run < 5; run++) {
+        all = Math.min(all, await cost(selectAll));
+        short = Math.min(short, await cost(selectShort));
+    }
     expect(all).toBeLessThan(20 * short);
     long.destroy();
 });
