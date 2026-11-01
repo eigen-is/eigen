@@ -92,6 +92,7 @@ async function render(
         onTextWidthChange: () => {},
         onUpdateNormalStyle: () => {},
         onAccessDialogOpen: () => {},
+        closePanels: () => {},
         onImageUpload: () => {},
         onReplaceImage,
         onEnterBand: bands ? onEnterBand : undefined,

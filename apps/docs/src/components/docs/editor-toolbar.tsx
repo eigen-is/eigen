@@ -110,6 +110,7 @@ type EditorToolbarProps = {
     path: DrivePath;
     onToggleCommentPanel?: () => void;
     commentPanelOpen?: boolean;
+    closePanels: () => void;
     onToggleActivityPanel?: () => void;
     activityPanelOpen?: boolean;
     assignedCommentCount?: number;
@@ -149,6 +150,7 @@ export const EditorToolbar = ({
     onAccessDialogOpen,
     onToggleCommentPanel,
     commentPanelOpen,
+    closePanels,
     onToggleActivityPanel,
     activityPanelOpen,
     assignedCommentCount,
@@ -349,6 +351,7 @@ export const EditorToolbar = ({
                                     editor={editor}
                                     active={active}
                                     keepEditorFocus={keepActiveEditorFocus}
+                                    closePanels={closePanels}
                                     onLink={handleLinkOperation}
                                     onInsertImage={onImageUpload ? () => setImagePickerOpen(true) : undefined}
                                     onAddComment={onAddComment}

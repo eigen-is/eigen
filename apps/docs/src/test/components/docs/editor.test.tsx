@@ -1475,6 +1475,27 @@ test('Insert › Table of contents leaves the new one selected, so its panel ope
     expect(tocPanelShown()).toBe(true);
 });
 
+// The comments panel holds the slot the new node's panel needs, so the insert closes it.
+test('Insert › Table of contents shows its panel over an open comments panel', async () => {
+    write('default', 'Intro');
+    await render(WRITER);
+    await act(async () => button('Comments')?.click());
+    await openMenu('Insert');
+    await pick('Table of contents');
+    expect(selectedTableOfContents()).toBe(true);
+    expect(tocPanelShown()).toBe(true);
+});
+
+test('Insert › Chart shows its panel over an open comments panel', async () => {
+    write('default', 'Intro');
+    await render(WRITER);
+    await act(async () => button('Comments')?.click());
+    await openMenu('Insert');
+    await openSubmenu('Chart');
+    await pick('Column');
+    expect(button('Edit data')).toBeDefined();
+});
+
 test('a right-click on a table of contents selects it and offers its options, the clipboard and its delete', async () => {
     await bodyTableOfContents();
     expect(tocPanelShown()).toBe(false);

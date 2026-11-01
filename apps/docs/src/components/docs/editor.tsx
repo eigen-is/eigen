@@ -830,6 +830,7 @@ const TiptapEditor = ({
                                     // Always offered: desktop draws the side panel, mobile the Column.
                                     onToggleCommentPanel={toggleComments}
                                     commentPanelOpen={commentPanelOpen}
+                                    closePanels={closePanels}
                                     onToggleActivityPanel={toggleActivity}
                                     activityPanelOpen={activityPanelOpen}
                                     assignedCommentCount={assignedCount}
