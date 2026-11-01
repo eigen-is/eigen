@@ -5,17 +5,18 @@
 // contents' look, as Word keeps a look there.
 
 import type { JSONContent } from '@tiptap/core';
-import type { OutlineEntry, TocLevelStyle } from '@workspace/lib/docs/eigendoc';
+import type { OutlineEntry } from '@workspace/lib/docs/eigendoc';
 import {
+    MAX_HEADING_LEVEL,
     outlineEntry,
     PROSE_TEXTBLOCKS,
+    readTocLayout,
     readTocLevelStyle,
     readTocLevels,
     TOC_LEVEL_KEYS,
-    tocPreset,
 } from '@workspace/lib/docs/eigendoc';
 import { halfPoints } from '../../../document/looks';
-import type { StyleId, TabLeader } from '../../../ooxml/wordml';
+import type { StyleId } from '../../../ooxml/wordml';
 import { NO_TOC_ENTRIES, TOC_GALLERY, tocBookmark, tocInstruction } from '../../../ooxml/wordml';
 import { useFace } from './fonts';
 import type { Context } from './package';
@@ -56,29 +57,27 @@ export function withBookmark(blocks: Block[], number: number): Block[] {
     );
 }
 
-// Word's two facts as the node stores them, whatever the doc's paper: Word always lays out pages, so a page-less doc,
-// which draws Links, keeps its own facts for the import. The leader is the stored one even with no page numbers, as
-// Links stores none of its own.
-function storedLayout(attrs: Record<string, unknown>): { pageNumbers: boolean; leader: TabLeader } {
-    return {
-        pageNumbers: tocPreset(attrs, false) !== 'links',
-        leader: tocPreset({ ...attrs, pageNumbers: true }, false) === 'plain' ? 'none' : 'dot',
-    };
-}
-
 // One paragraph per entry in Word's `toc N` style, its text a link to the heading and, with page numbers, its page
 // number a PAGEREF field after a right tab at the column's edge, which leads with the node's leader. The first entry
-// opens the TOC field and a last paragraph ends it. Each entry draws in its level's face, which the docx embeds.
+// opens the TOC field and a last paragraph ends it. The layout is the stored one whatever the doc's paper: Word always
+// lays out pages, so a page-less doc, which draws Links, keeps its own facts for the import.
 export function tableOfContentsBlocks(node: JSONContent, context: Context): Block[] {
     const attrs = node.attrs ?? {};
     const levels = readTocLevels(attrs['levels']);
-    const { pageNumbers, leader } = storedLayout(attrs);
+    const { pageNumbers, leader } = readTocLayout(attrs);
     const rightTab: RightTab = { pos: context.column, leader };
+    // The docx embeds the face of each level an entry draws in. It also embeds the face of a level whose style names a
+    // font, with no entries, as an entry Word's update adds draws in it.
+    const listed = new Set(context.pkg.outline.entries.flatMap(({ level }) => (level > levels ? [] : [level])));
+    for (let level = 1; level <= MAX_HEADING_LEVEL; level++) {
+        const style: StyleId = `TOC${level}`;
+        if (listed.has(level) || context.pkg.styles.get(style)?.rPr?.font !== undefined)
+            useFace(context.pkg, {}, style);
+    }
     const entries: Paragraph[] = context.pkg.outline.entries.flatMap(({ level, text }, index) => {
         if (level > levels) return [];
         const name = tocBookmark(index + 1);
         const style: StyleId = `TOC${level}`;
-        useFace(context.pkg, {}, style);
         const page = pageNumbers ? `<w:r><w:tab/></w:r>${fieldStart(`PAGEREF ${name} \\h`)}${fieldEnd()}` : '';
         const runs = `<w:hyperlink w:anchor="${name}" w:history="1"><w:r>${textXml(text)}</w:r>${page}</w:hyperlink>`;
         return [{ props: { style, rightTab }, runs }];
@@ -99,28 +98,26 @@ export function tableOfContentsBlocks(node: JSONContent, context: Context): Bloc
 // What Word's toc 1 to toc 6 styles take from the body's first table of contents: each level's run properties, by
 // level - 1, and the right tab when its leader is not the dots Word's own entries draw. Word's Update Table rewrites the
 // entries in these styles, so their look survives it, and a second table of contents comes back with the first's.
-export type TocStyleLook = { runs: (RunProps | undefined)[]; tab?: RightTab };
+export type TocStyleLook = { runs: readonly (RunProps | undefined)[]; tab?: RightTab };
 
 // None for a body with no table of contents, or with one that lists nothing and has no look, as Word writes no toc
 // styles then.
 export function tocStyleLook(outline: DocxOutline, column: number): TocStyleLook | undefined {
     const attrs = outline.first?.attrs;
     if (!attrs) return undefined;
-    const runs = TOC_LEVEL_KEYS.map((key) => levelRun(readTocLevelStyle(attrs[key])));
-    const { leader } = storedLayout(attrs);
+    // A false flag draws as the body text does, so it writes nothing, as the import reads nothing from none.
+    const runs = TOC_LEVEL_KEYS.map((key): RunProps | undefined => {
+        const look = readTocLevelStyle(attrs[key]);
+        const run: RunProps = {
+            ...(look?.font !== undefined && { font: look.font }),
+            ...(look?.bold === true && { bold: true }),
+            ...(look?.italic === true && { italic: true }),
+            ...(look?.size !== undefined && { size: halfPoints(look.size) }),
+        };
+        return Object.keys(run).length > 0 ? run : undefined;
+    });
+    const { leader } = readTocLayout(attrs);
     const tab: RightTab | undefined = leader === 'none' ? { pos: column, leader } : undefined;
     if (outline.entries.length === 0 && !tab && runs.every((run) => run === undefined)) return undefined;
     return { runs, ...(tab && { tab }) };
-}
-
-// A level's look as run properties. A false flag draws as the body text does, so it writes nothing, as the import
-// reads nothing from none.
-function levelRun(look: TocLevelStyle | null): RunProps | undefined {
-    const run: RunProps = {
-        ...(look?.font !== undefined && { font: look.font }),
-        ...(look?.bold === true && { bold: true }),
-        ...(look?.italic === true && { italic: true }),
-        ...(look?.size !== undefined && { size: halfPoints(look.size) }),
-    };
-    return Object.keys(run).length > 0 ? run : undefined;
 }

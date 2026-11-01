@@ -92,6 +92,11 @@ function faceOf(fonts: Fonts | undefined, slot: (typeof FONT_SLOTS)[number]): st
     return fonts?.[slot];
 }
 
+// The face Word draws Latin text of a run or a style in, such as its mark's or its Normal's.
+export function latinFace(props: { fonts?: Fonts } & Script): string | undefined {
+    return byFace(' ', props.fonts, props, false)[0]?.font;
+}
+
 // A run's text in the faces Word draws it in, split where the face changes or, where the complex script draws in a
 // look of its own (its bold, italic and size), where complex script starts or ends; Latin text in one face is one
 // piece. split charges each piece past the first before it is built.

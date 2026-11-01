@@ -363,6 +363,25 @@ describe("a docx table of contents' look", () => {
         expect((await attrsOf(tocOf('TOC \\o "1-3" \\h', tab('dot')), styles))[0]?.['level1']).toBeNull();
     });
 
+    // A template may base toc 2 to toc 6 on toc 1, as it bases headings on one another. The Normal ends the chain.
+    test("a toc style's look follows its basedOn chain up to the Normal", async () => {
+        const basedOn = (level: number, parent: string, inner: string) =>
+            `<w:style w:type="paragraph" w:styleId="TOC${level}"><w:name w:val="toc ${level}"/><w:basedOn w:val="${parent}"/>${inner}</w:style>`;
+        const styles = [
+            '<w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/><w:rPr><w:i/></w:rPr></w:style>',
+            tocStyle(1, '<w:rPr><w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman"/><w:b/></w:rPr>'),
+            basedOn(2, 'TOC1', '<w:rPr><w:sz w:val="28"/></w:rPr>'),
+            basedOn(3, 'TOC2', '<w:rPr><w:b w:val="0"/></w:rPr>'),
+        ].join('');
+        const [attrs] = await attrsOf(tocOf('TOC \\o "1-3" \\h', tab('dot')), styles);
+        expect(attrs).toEqual({
+            ...DEFAULTS,
+            level1: { font: 'Source Serif 4', bold: true },
+            level2: { font: 'Source Serif 4', size: 14, bold: true },
+            level3: { font: 'Source Serif 4', size: 14 },
+        });
+    });
+
     // Every attribute out of Eigen into Word and back, the leader through the styles when no entry holds a tab.
     test.each([
         [{ pageNumbers: false, leader: 'none' }],

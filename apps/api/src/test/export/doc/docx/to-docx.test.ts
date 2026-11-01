@@ -3573,6 +3573,24 @@ describe("docx writer — a table of contents' look", () => {
         expect(mono.slice(0, mono.indexOf('</w:font>'))).toContain('<w:embedBold ');
     });
 
+    // Its toc style names the font, so an entry Word's update adds draws in it.
+    test.each([
+        ['with no headings at all', doc(toc({ level1: { font: 'JetBrains Mono' } }), p(text('x')))],
+        [
+            'deeper than it lists',
+            doc(
+                toc({ levels: 1, level2: { font: 'JetBrains Mono' } }),
+                heading(1, text('Intro')),
+                heading(2, text('Sub')),
+            ),
+        ],
+    ])("a level's font is embedded %s", async (_what, json) => {
+        const zip = await unzip(json);
+        const fonts = entryText(zip, 'word/fontTable.xml');
+        const mono = fonts?.slice(fonts.indexOf('w:name="JetBrains Mono"')) ?? '';
+        expect(mono.slice(0, mono.indexOf('</w:font>'))).toContain('<w:embedRegular ');
+    });
+
     test("only the first table of contents' look goes into the toc styles", async () => {
         const all = await styles(
             doc(
