@@ -7,7 +7,13 @@ import type React from 'react';
 import { memo, useCallback, useContext, useEffect, useRef } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Context, Freezen, Sheet as SheetType } from '../../state';
-import { clearMeasureTextCache, initFreeze, updateContextWithCanvas, updateContextWithSheetData } from '../../state';
+import {
+    clearMeasureTextCache,
+    initFreeze,
+    onMeasuredFontsLoaded,
+    updateContextWithCanvas,
+    updateContextWithSheetData,
+} from '../../state';
 import type { ScrollPos } from '../../state/render/frame';
 import { drawFrame, scrollFrame } from '../../state/render/frame';
 import { SheetOverlay } from '../SheetOverlay';
@@ -164,7 +170,8 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
     }, [refs.canvas, refs.globalCache, sheet.id]);
 
     // Neither changes the context: a web font that finishes loading changes the text's widths, so the
-    // measurements go too, and a canvas whose bitmap the browser dropped comes back blank.
+    // measurements go too, and a canvas whose bitmap the browser dropped comes back blank. WebKit fires no
+    // loadingdone for the slices a canvas draws, so the measure's own loads report too.
     useEffect(() => {
         const canvas = refs.canvas.current;
         const drawWhole = () => {
@@ -176,9 +183,11 @@ export const Sheet: React.FC<Props> = ({ sheet }) => {
             drawWhole();
         };
         document.fonts.addEventListener('loadingdone', onFontsLoaded);
+        const stopMeasuredFonts = onMeasuredFontsLoaded(onFontsLoaded);
         canvas?.addEventListener('contextrestored', drawWhole);
         return () => {
             document.fonts.removeEventListener('loadingdone', onFontsLoaded);
+            stopMeasuredFonts();
             canvas?.removeEventListener('contextrestored', drawWhole);
         };
     }, [refs.canvas, scheduleRedraw]);

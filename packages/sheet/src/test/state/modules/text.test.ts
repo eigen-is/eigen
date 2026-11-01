@@ -1,6 +1,6 @@
 // Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { setCellValue } from '../../../state/modules/cell';
@@ -10,6 +10,7 @@ import {
     getCellTextInfo,
     getFontSet,
     getMeasureText,
+    onMeasuredFontsLoaded,
 } from '../../../state/modules/text';
 import type { Cell } from '../../../state/types';
 import { workbookContextFactory } from '../factories/context';
@@ -180,6 +181,73 @@ describe('state/modules/text — measure cache', () => {
 
         expect(getMeasureText('M', ctx, getFontSet({ fs: 20 })).actualBoundingBoxAscent).toBe(16);
         expect(getMeasureText('M', ctx, getFontSet({ fs: 30 })).actualBoundingBoxAscent).toBe(24);
+    });
+});
+
+// WebKit fetches the slices a canvas draws but fires no loadingdone for them, so a grid waiting for that event
+// kept the fallback, colour emoji included. The measure asks for the slices of new text itself and tells the grid.
+describe('state/modules/text — font slices of measured text', () => {
+    const pageFonts = document.fonts;
+    const loads: [string, string][] = [];
+    const loaded = new Set<string>();
+    const broken = new Set<string>();
+    let heard = 0;
+    let stopListening = () => {};
+
+    beforeEach(() => {
+        clearMeasureTextCache();
+        loads.length = 0;
+        loaded.clear();
+        broken.clear();
+        heard = 0;
+        stopListening = onMeasuredFontsLoaded(() => {
+            heard += 1;
+        });
+        Object.defineProperty(document, 'fonts', {
+            configurable: true,
+            value: {
+                check: (_font: string, text: string) => [...text].every((char) => loaded.has(char)),
+                load: async (font: string, text: string) => {
+                    loads.push([font, text]);
+                    if ([...text].some((char) => broken.has(char))) throw new Error('the slice failed to load');
+                    for (const char of text) loaded.add(char);
+                    return [];
+                },
+            },
+        });
+    });
+
+    afterEach(() => {
+        stopListening();
+        Object.defineProperty(document, 'fonts', { configurable: true, value: pageFonts });
+    });
+
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+    test('text whose slice has not loaded is loaded, and the grid hears once it arrives', async () => {
+        const font = getFontSet({ fs: 11 });
+        loaded.add('a');
+
+        getMeasureText('a😀', measuringCanvas(), font);
+        expect(loads).toEqual([[font, 'a😀']]);
+        await settle();
+        expect(heard).toBe(1);
+    });
+
+    // A slice that failed never checks as loaded. Asking for it on every measure would redraw the grid forever.
+    test('each character of a font is asked about once, and loaded text asks for nothing', async () => {
+        const font = getFontSet({ fs: 12 });
+        loaded.add('b');
+        broken.add('中');
+
+        getMeasureText('b', measuringCanvas(), font);
+        getMeasureText('中', measuringCanvas(), font);
+        clearMeasureTextCache();
+        getMeasureText('中', measuringCanvas(), font);
+        getMeasureText('b中', measuringCanvas(), font);
+        await settle();
+        expect(loads).toEqual([[font, '中']]);
+        expect(heard).toBe(1);
     });
 });
 

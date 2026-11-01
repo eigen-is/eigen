@@ -54,9 +54,9 @@ The generated `fonts.css` is about 253 KB, 62 KB gzipped, in every app's CSS, be
 
 ## A canvas waits for the slices of its text
 
-A canvas measures and draws a character in the fallback until the slice that draws it has loaded, and only text it draws starts that fetch. A height or a width measured too early is stored in some places, so each canvas loads the slices of the text it measures, through `document.fonts.load(font, text)`: the sheet's cell editors as the user types ([SHEETS.md](SHEETS.md#the-grid-redraws-whole-when-a-font-slice-loads)), and the canvas's label editor and `healLabelWidth` ([CANVAS.md](CANVAS.md#the-label-cuts-a-hole-in-the-shaft)). Print waits for `document.fonts.ready`, and for its images 3 s at most, since a lazy or stalled image may never decode (`printElement` in `packages/ui/src/lib/print-element.ts`).
+A canvas measures and draws a character in the fallback until the slice that draws it has loaded, and only text it draws starts that fetch. A height or a width measured too early is stored in some places, so each canvas loads the slices of the text it measures, through `document.fonts.load(font, text)`: the sheet's grid as it measures a cell and its cell editors as the user types ([SHEETS.md](SHEETS.md#the-grid-redraws-whole-when-a-font-slice-loads)), and the canvas's label editor and `healLabelWidth` ([CANVAS.md](CANVAS.md#the-label-cuts-a-hole-in-the-shaft)). Print waits for `document.fonts.ready`, and for its images 3 s at most, since a lazy or stalled image may never decode (`printElement` in `packages/ui/src/lib/print-element.ts`).
 
-The keycap bases sit in the emoji face's keycap slice, so a canvas that loads the font of text with a digit also fetches that 53 KB slice, once a session. It stays, because a keycap must draw whole in Chromium and Firefox.
+The keycap bases sit in the emoji face's keycap slice, so a canvas that loads the font of text with a digit also fetches that 53 KB slice, once a session. The sheet grid measures every number it draws, so every sheet with a digit fetches it. It stays, because a keycap must draw whole in Chromium and Firefox.
 
 ## CSS tokens name each category
 
