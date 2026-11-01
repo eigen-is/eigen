@@ -2,7 +2,7 @@
 
 This proposal lets a user download an Eigen document from Drive as one file and upload that file again, on the same server or another one, where it becomes a document again. It covers docs, sheets, slides, stickies and vector drawings, with their media and comment threads.
 
-**Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row. The decisions below were made by the owner on 2026-10-09. What this proposal says about the code was true on 2026-10-09, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it.
+**Status:** not built. [ROADMAP.md](../ROADMAP.md) has its row. The decisions below were made by the owner on 2026-10-09. What this proposal says about the code was true on 2026-10-09, as far as a read of the repository could tell. Treat every such claim as a pointer and verify it in the code before building on it. On 2026-11-01 the owner changed how the download is packed (§ Download): the media streams from storage on the main thread and never crosses into the transform process.
 
 > **TLDR**: A document is a Drive folder (`Report.eigendoc/` with `data.db`, `comments.db`, `media/`, `chat/`, `versions/`), and Drive offers no download for it. This proposal packs a document into one zip file, `Report.eigendoc`, whose first entry is `mimetype`, stored uncompressed, holding the type's MIME string, the way ODF and EPUB mark their type. Inside are the document's Yjs state, its media and its comment threads as JSON. No SQLite file goes in, so the server never opens a database a stranger wrote, and the internal storage layout stays free to change. Each type's Yjs shape does become public. So each type has its own package format number: before 1.0 a package of an older format is refused, and from 1.0 every break of a type's shape ships a converter for its packages. Download is a new format in the type's `exportFormats`, served by the existing export route. Drive's upload and Save to Drive recognize a package and unpack it into a new document. WebDAV and attachments keep the file as it is, and a file action unpacks it later. Comments travel, because a document names people by email only. Whispers stay behind, and so do versions. No new API route, no database migration. About 7 working days.
 
@@ -19,7 +19,7 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 - Chat rooms. A room is its membership, not a document to hand to someone else.
 - Version history. A package starts the document with a clean history, as Copy does.
 - The document's sharing. The ACL lives in Drive's rows, not in the container, and an upload is shared like any new file.
-- Downloading a folder as a zip. That is a separate feature, though this format would be its building block.
+- Downloading a folder as a zip. That is a separate feature with its own [ROADMAP.md](../ROADMAP.md) row. It shares the streaming zip writer, and a document in the folder goes in as its package.
 - Replacing an existing document from a package. An upload always creates a new document.
 - A desktop app that opens packages. The format is plain enough that one could, later.
 - Archiving before 1.0. A package is for moving a document, and before 1.0 a package can stop importing (§ The format policy).
@@ -40,7 +40,7 @@ This proposal lets a user download an Eigen document from Drive as one file and 
 
 **Conversion already makes a document from a file.** `convertToDocument` (`apps/api/src/lib/import/import-document.ts`) turns an xlsx or docx into a new document next to it: the transform Worker parses, then the main thread runs `drive.create`, applies the update to the new collab document and writes the media. Nothing is created before the Worker succeeds.
 
-**Eigen has its own zip.** `apps/api/src/lib/ooxml/zip.ts` reads with `openZip`, bounded per entry and in total (`MAX_DECOMPRESSED_BYTES`, 200 MB; `MAX_ZIP_ENTRIES`, 10,000), and writes with `writeZip`, every entry dated the DOS epoch. The docx writer uses it.
+**Eigen has its own zip.** `apps/api/src/lib/ooxml/zip.ts` reads with `openZip`, bounded per entry and in total (`MAX_DECOMPRESSED_BYTES`, 200 MB; `MAX_ZIP_ENTRIES`, 10,000), and writes with `writeZip`, every entry dated the DOS epoch. The docx writer uses it. `writeZip` builds the whole archive in memory and writes no ZIP64; the ROADMAP row for folder downloads turns it into the one streaming writer every zip goes through, with the same bytes for what the Office exports write today.
 
 **An upload trusts the client's MIME.** `streamFilesToTemp` (`apps/api/src/lib/drive/streaming.ts`) keeps the multipart part's media type, and `finalizeUpload` stores it. `Mount.getPathsByMimeType` lists by MIME alone. So a plain file uploaded as `application/eigendoc` shows up in the Docs app's list as if it were a document.
 
@@ -121,9 +121,11 @@ The ROADMAP's Frozen-format column flags this row for the same reason.
 
 `driveInfo` gives a container a `downloadUrl`: the export URL with format `eigen`. Download in every Drive menu then works for a document as it does for a file.
 
-The main thread gathers, the Worker packs, as with every export ([EXPORT.md](../EXPORT.md#the-transform-process-renders-and-the-main-thread-prepares)). The main thread reads the document's state the way the other exports read it, reads every media file, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. The Worker builds the zip with `writeZip`.
+The transform process ([DOCUMENT-TRANSFORMS.md](../DOCUMENT-TRANSFORMS.md)) makes the small parts, and the main thread streams the zip. The main thread captures the document's state the way the other exports do, and reads each thread's messages through `ChatRoom` and its index row through `CommentIndex`, without the whispers. The transform process turns that into `content.yjs` and the threads' JSON. Root-relative links in a doc become absolute through `absoluteHref`, as the docx export does, so a link back to the source server still works from another one. It returns those parts and nothing else: the media never crosses into it, since the media is most of a document's bytes and the process has no storage access of its own.
 
-A document whose package would exceed what `openZip` accepts is refused on export with a message that says so. No file goes out that cannot come back (Open question 3).
+The main thread then writes the package through the streaming zip writer, straight into the response: `mimetype`, `manifest.json`, `content.yjs` and the threads, then every media file and thread attachment read from storage chunk by chunk and stored as it is. So memory holds a chunk, not the document, and the stored media costs no CPU. The writer deflates the JSON and `content.yjs` in chunks and yields between them, measured with `countLoopTurns` as the backup's packing is. A media file whose bytes come out a different size than its row declares ends the download, so a broken package never looks finished.
+
+A document whose package would exceed what `openZip` accepts is refused on export with a message that says so, before the first byte goes out: the parts' sizes and the media's declared sizes are known by then, and once the response has started it can no longer answer with an error. No file goes out that cannot come back (Open question 3).
 
 ### Upload
 
@@ -169,7 +171,7 @@ Sharing or Copy is still the better way between two users on one server. Copy ke
 
 | Phase | Work | Days |
 |---|---|---|
-| 1. Pack | The format, the `eigen` export format and envelope, the main-thread gather, the Worker pack, `downloadUrl` for containers, the size refusal. Tests: a document of every type with media, threads, a whisper and a deleted message with an attachment packs without the whisper and without the attachment; two packs are the same bytes | 2.5 |
+| 1. Pack | The format, the `eigen` export format and envelope, the parts made in the transform process, the streamed pack on the main thread (it needs the streaming zip writer of the folder-download row first), `downloadUrl` for containers, the size refusal. Tests: a document of every type with media, threads, a whisper and a deleted message with an attachment packs without the whisper and without the attachment; two packs are the same bytes | 2.5 |
 | 2. Unpack on upload | `importEigenPackage`, its checks, the commit, the hook in `uploadFiles`, the MIME fix in `finalizeUpload`. Tests: every type round-trips through pack and upload with its Yjs JSON, media bytes and thread rows equal; every refusal in the check list; a crafted package (extra root, `../` media name, older or newer format, wrong `mimetype`, oversize) is refused and creates nothing; a golden package per type imports and opens | 3 |
 | 3. The other surfaces | Mail Save to Drive, the picker, **Open as document**, the convert route's package source. Help center and docs | 1.5 |
 
@@ -205,6 +207,7 @@ Docs: [EXPORT.md](../EXPORT.md) gets the format and the unpack, [STORAGE.md](../
 6. A name clash deduplicates. An upload never replaces a document. (Owner, 2026-10-09.)
 7. Versions and chat rooms stay out. Whispers do not travel in clear text. (Owner, 2026-10-09.)
 8. Each type has its own package format. Before 1.0 an older package is refused; from 1.0 every break of a type's shape ships a converter for its packages. A newer package is always refused. (Owner, 2026-10-09.)
+9. The transform process makes `content.yjs` and the threads' JSON only. The main thread streams the package with the one streaming zip writer, the media read from storage and never sent into the transform process. (Owner, 2026-11-01.)
 
 ## Open questions
 
