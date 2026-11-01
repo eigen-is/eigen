@@ -152,8 +152,13 @@ describe('Sheets HTML export — fonts', () => {
         expect(embedded([{ ...makeSheet([]), charts: { c1: chart } }])).toEqual(['Inter', 'Excalifont']);
     });
 
-    test('a cell in a font Eigen does not bundle embeds Inter alone', () => {
-        expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Serif', ff: 'Georgia' } }])])).toEqual(['Inter']);
+    // A reader may lack Georgia, so the cell's stack names the bundled font it maps to next.
+    test('a cell in a font Eigen does not bundle embeds the bundled font of its category', () => {
+        expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Serif', ff: 'Georgia' } }])])).toEqual([
+            'Inter',
+            'Source Serif 4',
+        ]);
+        expect(embedded([makeSheet([{ r: 0, c: 0, v: { v: 'Odd', ff: 'Bell MT' } }])])).toEqual(['Inter']);
     });
 });
 
