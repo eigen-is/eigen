@@ -426,12 +426,12 @@ export function insertRowCol(
         direction: 'lefttop' | 'rightbottom';
         id: string;
     },
-    changeSelection: boolean = true,
+    changeSelection = true,
     // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
     // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own insert only.
-    force: boolean = false,
+    fromBatch = false,
 ) {
-    if (!force && ctx.allowEdit === false) return;
+    if (!fromBatch && ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 
@@ -476,9 +476,9 @@ export function deleteRowCol(
     },
     // A batch through applyOpBatch, such as a peer's op or an undo, applies for a read-only viewer too, and
     // applyOpBatch moves the selection with the cells. The permission guard blocks a viewer's own delete only.
-    force: boolean = false,
+    fromBatch = false,
 ) {
-    if (!force && ctx.allowEdit === false) return;
+    if (!fromBatch && ctx.allowEdit === false) return;
     const id = op.id || ctx.currentSheetId;
     if (typeof id !== 'string') return;
 
@@ -510,7 +510,7 @@ export function deleteRowCol(
     file.alternateFormatRules = alternateFormats;
 
     shiftStateOnlyFieldsForDelete(ctx, { ...op, id });
-    if (!force) ctx.selections = undefined;
+    if (!fromBatch) ctx.selections = undefined;
 
     ctx.formulaCache.formulaCellInfoMap = null;
 }
@@ -523,14 +523,7 @@ export function hideSelected(ctx: Context, type: string) {
     // A sheet that is not loaded has nothing to hide.
     if (!data) return '';
     const cfg = (sheet.config ??= {});
-    // Hide rows
     if (type === 'row') {
-        /* TODO: Sheet protection check
-        if (
-          !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
-        ) {
-          return ;
-        } */
         const rowhidden = (cfg.rowhidden ??= {});
         const [r1, r2] = ctx.selections[0].row;
         const rowhiddenNumber = r2;
@@ -549,7 +542,6 @@ export function hideSelected(ctx: Context, type: string) {
             ctx.selections[0].row[1] += 1;
         }
     } else if (type === 'column') {
-        // Hide columns
         const colhidden = (cfg.colhidden ??= {});
         const c1 = ctx.selections[0].column[0];
         const c2 = ctx.selections[0].column[1];
@@ -558,7 +550,6 @@ export function hideSelected(ctx: Context, type: string) {
             colhidden[c] = 0;
         }
         const columnLen = data[0].length;
-        // Check if the column to hide is the last column
         const isEndColumn =
             columnLen - 1 === colhiddenNumber ||
             Object.keys(colhidden).findIndex((o) => parseInt(o, 10) - 1 === colhiddenNumber) >= 0;

@@ -23,9 +23,7 @@ export function storeSheetSelections(ctx: Context) {
 }
 
 export function changeSheet(ctx: Context, id: string) {
-    if (id === ctx.currentSheetId) {
-        return;
-    }
+    if (id === ctx.currentSheetId) return;
 
     const idx = getSheetIndex(ctx, id);
     if (idx == null) return;
@@ -83,25 +81,22 @@ export function applySheetView(ctx: Context) {
 export function addSheet(
     ctx: Context,
     // A copy or a peer's add names the new sheet's id, and the add then stays on the current sheet.
-    newSheetID: string | undefined = undefined,
+    newSheetID?: string,
     isPivotTable = false,
-    sheetName: string | undefined = undefined,
-    sheetData: Sheet | undefined = undefined,
+    sheetName?: string,
+    sheetData?: Sheet,
     // A batch through applyOpBatch, such as a peer's add, lands for a read-only viewer too, and leaves the other
     // sheets' orders to the order ops its batch carries.
-    force = false,
+    fromBatch = false,
 ) {
-    if (!force && ctx.allowEdit === false) {
-        return;
-    }
+    if (!fromBatch && ctx.allowEdit === false) return;
     const order = ctx.sheets.length;
     // The add switches to the sheet it adds, so a sheet that comes with an id keeps it.
     const id = newSheetID ?? sheetData?.id ?? crypto.randomUUID();
-    const sheetname = sheetName || generateRandomSheetName(ctx.sheets, isPivotTable);
     if (!isNil(sheetData)) delete sheetData.data;
     const sheetconfig: Sheet = isNil(sheetData)
         ? {
-              name: sheetName === undefined ? sheetname : sheetName,
+              name: sheetName || generateRandomSheetName(ctx.sheets, isPivotTable),
               status: 0,
               order,
               id,
@@ -114,7 +109,7 @@ export function addSheet(
         : sheetData;
     normalizeSheetConfig(sheetconfig);
     if (sheetName !== undefined) sheetconfig.name = sheetName;
-    if (!isNil(sheetData) && !force) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
+    if (!isNil(sheetData) && !fromBatch) shiftSheetOrders(ctx.sheets, sheetOrder(sheetData), 1);
 
     ctx.sheets.push(sheetconfig);
 
@@ -151,20 +146,16 @@ export function deleteSheet(
     id: string,
     // A batch through applyOpBatch, such as a peer's delete, lands for a read-only viewer too. It leaves the other
     // sheets' orders to the order ops its batch carries, and the current sheet to applyOpBatch.
-    force = false,
+    fromBatch = false,
 ) {
-    if (!force && ctx.allowEdit === false) {
-        return;
-    }
+    if (!fromBatch && ctx.allowEdit === false) return;
 
     const arrIndex = getSheetIndex(ctx, id);
 
-    if (arrIndex == null) {
-        return;
-    }
+    if (arrIndex == null) return;
 
     const [deleted] = ctx.sheets.splice(arrIndex, 1);
-    if (force) return;
+    if (fromBatch) return;
     shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
 }
@@ -206,11 +197,9 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     if (index == null) return;
 
-    for (let i = 0; i < ctx.sheets.length; i += 1) {
-        if (index !== i && ctx.sheets[i].name === txt) {
-            editable.innerText = oldtxt;
-            return;
-        }
+    if (ctx.sheets.some((sheet, i) => i !== index && sheet.name === txt)) {
+        editable.innerText = oldtxt;
+        return;
     }
 
     ctx.sheets[index].name = txt;
