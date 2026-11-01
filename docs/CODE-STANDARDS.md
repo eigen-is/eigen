@@ -33,6 +33,7 @@ Types flow end-to-end: Elysia route handler return type → Eden Treaty → hook
 - `import type` for type-only imports, as a statement of its own next to the value import from the same module (`import type { A } from 'x'` and `import { b } from 'x'`), so each import fits on one line
 - Drizzle `.$inferSelect` for DB row types: never redefine column types by hand
 - One type per concept: pass `User` or `DrivePath` even when a function reads two of its fields, never a narrower projection type. Convert a library's narrower shape where it enters. Test fixtures may keep their own
+- Readonly where the holder doesn't let you write: a hook, store or class that hands out a collection it owns types it `ReadonlySet`, `ReadonlyMap` or `readonly T[]`, so a caller changes it only through the API that re-renders or persists. A function takes a collection it doesn't change as readonly too. TypeScript enforces it once the type says so, and no lint rule asks for it, so review does. Apply it to the code you touch, not as a sweep
 - Only `apps/api`'s tsconfig sets `noPropertyAccessFromIndexSignature`; `packages/sheet`'s does not, so an index-signature read that compiles there fails in the API
 
 ## Code Style
@@ -102,6 +103,7 @@ Before declaring any task complete, review every changed file against this list:
 - Did you avoid adding try-catch, null checks, or fallbacks for cases that can't happen?
 - Do new `useQuery` hooks have `enabled` guards and `staleTime`?
 - Does the new code match the patterns and naming of its neighbors?
+- Does a hook, store or class you changed hand out a collection it owns as a mutable type, or take one it never changes as mutable?
 - Does every file you changed open with a header comment that is still true?
 - Would a colleague understand every comment you wrote on the first read, and does each one clarify something the code doesn't say?
 - Any new `z-index` set above 50? If yes, is it on the documented exceptions or does it have a `// Why:` comment? (See [LAYOUT.md § One z-index scale, and app code sets none](LAYOUT.md#one-z-index-scale-and-app-code-sets-none))
