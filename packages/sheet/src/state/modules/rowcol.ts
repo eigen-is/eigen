@@ -145,12 +145,16 @@ export function hideSelectedRowCol(ctx: Context, type: 'row' | 'column') {
     // A sheet that is not loaded has nothing to hide.
     if (!data) return '';
     const config = (sheet.config ??= {});
-    const hidden = type === 'row' ? (config.rowhidden ??= {}) : (config.colhidden ??= {});
+    const key = type === 'row' ? 'rowhidden' : 'colhidden';
+    // A peer's replace can leave a hidden value that is no map. The hide starts a new map then, as on a sheet that
+    // has none, because writing into a number or a string throws.
+    const kept = config[key];
+    const hidden = isRecord(kept) ? kept : (config[key] = {});
     const span = ctx.selections[0][type];
     const [first, last] = span;
     for (let i = first; i <= last; i += 1) hidden[i] = 0;
     const length = type === 'row' ? data.length : data[0].length;
-    const step = last === length - 1 || last + 1 in hidden ? -1 : 1;
+    const step = last === length - 1 || hidden[last + 1] != null ? -1 : 1;
     span[0] += step;
     span[1] += step;
     return '';
@@ -174,10 +178,7 @@ export function isSelectionOnHiddenRowCol(ctx: Context): boolean {
     const selection = ctx.selections?.[0];
     if (!selection) return false;
     const config = getSheetConfig(ctx);
-    return (
-        (config?.colhidden != null && selection.column[0] in config.colhidden) ||
-        (config?.rowhidden != null && selection.row[0] in config.rowhidden)
-    );
+    return config?.colhidden?.[selection.column[0]] != null || config?.rowhidden?.[selection.row[0]] != null;
 }
 
 // An arrow key moves the selection past a whole run of hidden rows or columns, so it lands on a visible one.
@@ -191,7 +192,7 @@ export function moveCountPastHiddenRowCol(ctx: Context, key: string): number {
     const [selection] = ctx.selections;
     let at = (vertical ? selection.row[0] : selection.column[0]) + step;
     let count = 1;
-    while (at in hidden) {
+    while (hidden[at] != null) {
         count += 1;
         at += step;
     }

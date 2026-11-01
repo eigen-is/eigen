@@ -155,7 +155,8 @@ export type FilterCondition = {
 // retired `caljs`) flow through the `[key]: unknown` overflow.
 export type FilterEntry = {
     byCondition?: FilterCondition;
-    rowhidden: Record<string, number>;
+    // Legacy data and a peer's op can leave it out on an entry that hides no rows.
+    rowhidden?: Record<string, number>;
     optionstate: boolean;
     str: number;
     edr: number;

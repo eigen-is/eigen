@@ -27,7 +27,7 @@ export function shiftFilterForInsert(sheet: Sheet, op: InsertRowColOp) {
         const insertAt = direction === 'lefttop' ? index : index + 1;
         for (const [key, entry] of Object.entries(filter)) {
             if (type === 'row') {
-                const rowhidden = shiftKeyedMapForInsert(entry.rowhidden, index, count, direction);
+                const rowhidden = shiftKeyedMapForInsert(entry.rowhidden ?? {}, index, count, direction);
                 shifted[key] = { ...entry, rowhidden, str: firstRow, edr: lastRow };
             } else {
                 const cindex = entry.cindex >= insertAt ? entry.cindex + count : entry.cindex;
@@ -55,7 +55,7 @@ export function shiftFilterForDelete(sheet: Sheet, op: DeleteRowColOp) {
     const shifted: Record<string, FilterEntry> = {};
     for (const [key, entry] of Object.entries(filter ?? {})) {
         if (type === 'row') {
-            const rowhidden = shiftKeyedMapForDelete(entry.rowhidden, start, end);
+            const rowhidden = shiftKeyedMapForDelete(entry.rowhidden ?? {}, start, end);
             if (!isEmpty(rowhidden)) shifted[key] = { ...entry, rowhidden, str: firstRow, edr: lastRow };
         } else if (entry.cindex < start) {
             shifted[entry.cindex - firstColumn] = { ...entry, edc: lastColumn };
@@ -74,6 +74,6 @@ function writeFilter(sheet: Sheet, range: SingleRange | undefined, filter: Recor
     // The rows a filter hides are hidden rows of the sheet too.
     const rowhidden = (sheet.config.rowhidden ??= {});
     for (const entry of Object.values(filter)) {
-        for (const row of Object.keys(entry.rowhidden)) rowhidden[row] = 0;
+        for (const row of Object.keys(entry.rowhidden ?? {})) rowhidden[row] = 0;
     }
 }
