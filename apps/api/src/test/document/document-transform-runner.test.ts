@@ -1,4 +1,4 @@
-import { describe, expect, jest, spyOn, test } from 'bun:test';
+import { afterEach, describe, expect, jest, spyOn, test } from 'bun:test';
 import { availableParallelism } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { ApiError } from '../../lib/core/errors';
@@ -104,6 +104,10 @@ function errorCode(response: DocumentTransformResponse): string | undefined {
 }
 
 describe('DocumentTransformRunner', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
     test('runs at most one child at a time, FIFO within a priority', async () => {
         const runner = makeRunner();
         const results = await Promise.all([
@@ -541,24 +545,20 @@ describe('DocumentTransformRunner', () => {
             const controller = new AbortController();
             const { promise: prepStarted, resolve: startPrep } = Promise.withResolvers<AbortSignal>();
             if (outcome === 'timeout') jest.useFakeTimers();
-            try {
-                const pending = runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
-                    ...EXPORT_OPTIONS,
-                    signal: controller.signal,
-                    prepareMedia: (_, signal) => {
-                        startPrep(signal);
-                        return new Promise(() => {});
-                    },
-                });
-                const prepSignal = await prepStarted;
-                expect(prepSignal.aborted).toBe(false);
-                if (outcome === 'canceled') controller.abort();
-                else jest.advanceTimersByTime(EXPORT_OPTIONS.deadlineMs);
-                expect(errorCode(await pending)).toBe(outcome);
-                expect(prepSignal.aborted).toBe(true);
-            } finally {
-                jest.useRealTimers();
-            }
+            const pending = runner.run(makeExportRequest({ behavior: 'export-echo-media', mediaNames: ['a'] }), {
+                ...EXPORT_OPTIONS,
+                signal: controller.signal,
+                prepareMedia: (_, signal) => {
+                    startPrep(signal);
+                    return new Promise(() => {});
+                },
+            });
+            const prepSignal = await prepStarted;
+            expect(prepSignal.aborted).toBe(false);
+            if (outcome === 'canceled') controller.abort();
+            else jest.advanceTimersByTime(EXPORT_OPTIONS.deadlineMs);
+            expect(errorCode(await pending)).toBe(outcome);
+            expect(prepSignal.aborted).toBe(true);
             expect((await runner.run(makeRequest(), PREVIEW_OPTIONS)).ok).toBe(true);
             await runner.close();
         },
