@@ -10,7 +10,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
 
 type TextOverlayProps = {
-    // Element top-left + box in scene units (box drives the rotation origin).
+    // The element's top-left corner and its box, in scene units. The box sets the rotation origin.
     x: number;
     y: number;
     width: number;
@@ -21,14 +21,14 @@ type TextOverlayProps = {
     // or places an element. A click away outside it, such as on the properties panel or the toolbar, commits
     // and is left alone, so that control still gets its first click.
     containerRef: React.RefObject<HTMLElement | null>;
-    // Host positioning of the overlay: reuses the canvas's boxToStyle for container-px left/top.
+    // The canvas's own boxToStyle, which places the overlay in the container's pixels.
     boxToStyle: (box: Box) => React.CSSProperties;
     initialText: string;
     fontSize: number;
     fontFamily: string;
     textAlign: TextAlign;
     color: string;
-    // Fires exactly once with the final text; the host decides add/update/delete and re-measures.
+    // Fires exactly once with the final text. The host decides what it becomes and measures it.
     onCommit: (text: string) => void;
 };
 
@@ -48,7 +48,7 @@ export function TextOverlay({
     color,
     onCommit,
 }: TextOverlayProps) {
-    const taRef = useRef<HTMLTextAreaElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
     // The textarea's latest value. The textarea is uncontrolled, to keep the browser's own undo, so its
     // value is read from here.
     const valueRef = useRef(initialText);
@@ -70,26 +70,26 @@ export function TextOverlay({
     commitRef.current = commit;
     useEffect(() => () => commitRef.current(), []);
 
-    // Grow snugly to content (wrap="off" → widest line drives width). scrollWidth/scrollHeight are
-    // fine for the live editing box; the STORED dims come from the canvas measurement util, never here.
+    // The box grows to fit its text, and with wrap off the widest line sets the width. The scroll sizes are
+    // good enough for the live box. The stored width and height come from measureVectorText, never from here.
     const grow = () => {
-        const ta = taRef.current;
-        if (!ta) return;
-        ta.style.width = '0px';
-        ta.style.width = `${ta.scrollWidth + 2}px`; // +2 leaves room for the caret at line end
-        ta.style.height = '0px';
-        ta.style.height = `${ta.scrollHeight}px`;
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.style.width = '0px';
+        textarea.style.width = `${textarea.scrollWidth + 2}px`; // +2 leaves room for the caret at line end
+        textarea.style.height = '0px';
+        textarea.style.height = `${textarea.scrollHeight}px`;
     };
 
     useLayoutEffect(() => {
-        const ta = taRef.current;
-        if (!ta) return;
+        const textarea = textareaRef.current;
+        if (!textarea) return;
         grow();
-        ta.focus();
-        // Canvas-label convention (Excalidraw/Figma/tldraw): editing an existing element selects
-        // all so the first keystroke replaces; a fresh element just gets the caret.
-        if (initialText) ta.select();
-        else ta.setSelectionRange(0, 0);
+        textarea.focus();
+        // Editing an existing label selects all of it, so the first key replaces it, as in Excalidraw, Figma and
+        // tldraw. A fresh label just gets the caret.
+        if (initialText) textarea.select();
+        else textarea.setSelectionRange(0, 0);
     }, []);
 
     // A face loads only the unicode-range slices its text needs. So the overlay loads the slices of its text as it
@@ -110,10 +110,9 @@ export function TextOverlay({
     // its first click, and the session is committed before the control writes to the element.
     useEffect(() => {
         const onPointerDown = (e: PointerEvent) => {
-            const ta = taRef.current;
-            if (ta && (e.target === ta || ta.contains(e.target as Node))) return;
-            const container = containerRef.current;
-            if (container?.contains(e.target as Node)) {
+            const target = e.target instanceof Node ? e.target : null;
+            if (textareaRef.current?.contains(target)) return;
+            if (containerRef.current?.contains(target)) {
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -128,7 +127,7 @@ export function TextOverlay({
 
     return (
         <textarea
-            ref={taRef}
+            ref={textareaRef}
             defaultValue={initialText}
             // A rough guard against a huge paste. It counts UTF-16 units, so it is always looser than the
             // reader's byte budget, and commit() is what caps the label.
@@ -140,8 +139,8 @@ export function TextOverlay({
                 left: pos.left,
                 top: pos.top,
                 transform: angle ? `rotate(${angle}deg)` : undefined,
-                // Rotate about the element center (matches the SVG's rotate-about-center), expressed
-                // in the textarea's local px frame; new/unrotated text has a 0,0 box so this is inert.
+                // Rotate about the element's center, as the SVG does, in the textarea's own pixels. A new or
+                // unrotated label has an empty box, so this does nothing there.
                 transformOrigin: `${(width * zoom) / 2}px ${(height * zoom) / 2}px`,
                 boxSizing: 'content-box',
                 margin: 0,

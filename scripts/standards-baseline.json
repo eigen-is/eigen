@@ -94,7 +94,6 @@
     "packages/ui/src/components/search/prosemirror-search-highlight.ts": 1,
     "packages/ui/src/components/sonner.tsx": 1,
     "packages/ui/src/components/toggle-group.tsx": 1,
-    "packages/ui/src/components/vector/text-overlay.tsx": 2,
     "packages/ui/src/hooks/is-typing-target.ts": 1,
     "packages/ui/src/hooks/use-focus-trap.ts": 1,
     "packages/ui/src/hooks/use-keyboard-list-navigation.ts": 1,

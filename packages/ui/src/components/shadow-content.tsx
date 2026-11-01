@@ -12,13 +12,11 @@ type ShadowContentProps = {
     content: string;
     className?: string;
     contentType?: 'html' | 'text';
-    // Author-styled HTML (real formatted mail) is written against a light background but
-    // rarely declares one, so explicit text colors go dark-on-dark in the dark theme.
-    // 'light' renders it on a light canvas regardless of app theme (what mail clients do);
-    // 'theme' keeps unstyled/derived content theme-native.
+    // A formatted mail is written for a light background but rarely sets one, so its own text colors would
+    // draw dark on dark in the dark theme. 'light' draws it on a light canvas whatever the app theme, as mail
+    // clients do. 'theme' follows the app theme, for content that sets no colors of its own.
     scheme?: 'light' | 'theme';
-    // A ?q= landing term: literal matches in the rendered body are wrapped in <mark> and the
-    // first is scrolled into view. Highlighting lives here because the shadow root is closed.
+    // The term a ?q= link lands with. The highlight lives here because the shadow root is closed.
     highlightTerm?: string;
 };
 
@@ -33,7 +31,6 @@ export function ShadowContent({
     const shadowHostRef = useRef<HTMLDivElement>(null);
     const shadowRootRef = useRef<ShadowRoot | null>(null);
 
-    // Sync shadow DOM color-scheme with the app theme (.dark class on <html>)
     useEffect(() => {
         const hostElement = shadowHostRef.current;
         if (!hostElement) return;
@@ -83,9 +80,9 @@ export function ShadowContent({
         font-family: var(--font-sans);
         color: light-dark(#333, #e8eaed);
         line-height: 1.5;
-        /* fit-content exposes the content's natural width (fixed-width mail layouts exceed
-           the host; wrapping content measures at host width), driving the scale-to-fit below.
-           overflow-wrap keeps one unbreakable token (a long URL) out of that measurement. */
+        /* fit-content gives the content's natural width, which the scale-to-fit below reads. A mail
+           with a fixed-width layout is wider than the host, and text that wraps is as wide as the host.
+           overflow-wrap keeps one long word, such as a URL, from widening that measurement. */
         width: fit-content;
         min-width: 100%;
         box-sizing: border-box;
@@ -104,16 +101,17 @@ export function ShadowContent({
         shadowRoot.appendChild(styleElement);
         shadowRoot.appendChild(contentContainer);
 
-        // A forced-light canvas drops the dark rules whatever the app theme; theme-native content drops
-        // whichever side disagrees with it. Only now: a style element parses no sheet until it is in a tree.
+        // A forced-light canvas drops the mail's dark rules whatever the app theme. Content that follows the
+        // theme drops the rules of the other side. This runs only now, because a style element parses no
+        // sheet until it is in a tree.
         const renderDark = scheme === 'theme' && document.documentElement.classList.contains('dark');
         for (const style of contentContainer.querySelectorAll('style')) {
             if (style.sheet) dropColorSchemeRules(style.sheet, renderDark ? 'light' : 'dark');
         }
 
-        // Same trick as the doc canvas: content wider than the host is scaled down to fit
-        // instead of overflowing. offset* metrics ignore the transform, so the observer
-        // never feeds itself; the negative margin reclaims the scaled-away height.
+        // Content wider than the host is scaled down to fit instead of overflowing, as on the doc canvas.
+        // The offset* sizes ignore the transform, so the observer never triggers itself. The negative
+        // margin takes back the height the scale removed.
         const fitToHost = () => {
             // All reads before all writes: an offset* read after a style write forces a layout flush.
             const hostWidth = hostElement.offsetWidth;
@@ -129,8 +127,8 @@ export function ShadowContent({
                 hostElement.style.marginBottom = '';
             }
         };
-        // Fit before the highlight scroll: scrollIntoView must see the scaled geometry,
-        // not the layout the observer is about to shrink.
+        // Fit before the highlight scrolls, so scrollIntoView sees the scaled layout and not the one the
+        // observer is about to shrink.
         fitToHost();
         if (highlightTerm) highlightMatches(contentContainer, highlightTerm);
 
@@ -143,12 +141,29 @@ export function ShadowContent({
     return <div ref={shadowHostRef} className={cn('shadow-host', className)} {...props} />;
 }
 
+const COLOR_SCHEME_CONDITION = {
+    light: /prefers-color-scheme\s*:\s*light/i,
+    dark: /prefers-color-scheme\s*:\s*dark/i,
+};
+
+// A prefers-color-scheme query reads the OS setting, not the canvas the mail draws on. So the rules for the other
+// scheme are deleted, through the CSSOM and never in the style text. Cutting a span out of sanitized text can join
+// its neighbors into a token the server refused.
+function dropColorSchemeRules(parent: CSSStyleSheet | CSSGroupingRule, scheme: 'light' | 'dark') {
+    for (let i = parent.cssRules.length - 1; i >= 0; i--) {
+        const rule = parent.cssRules[i];
+        if (rule instanceof CSSMediaRule && COLOR_SCHEME_CONDITION[scheme].test(rule.conditionText))
+            parent.deleteRule(i);
+        else if (rule instanceof CSSGroupingRule) dropColorSchemeRules(rule, scheme);
+    }
+}
+
 const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
 
 // Wraps each match of `term` under `root` in <mark class="search-highlight"> and scrolls the first into view. A match
 // ignores case and reads the term literally, because mail's ?q= landing has no find bar with options. App CSS can't
 // reach into the shadow root, so the mark's look is in the style element ShadowContent adds beside the content.
-function highlightMatches(root: HTMLElement, term: string): void {
+function highlightMatches(root: HTMLElement, term: string) {
     const regex = new RegExp(term.replace(REGEX_SPECIALS, '\\$&'), 'gi');
     // Sanitized mail keeps its <style> elements, and a <mark> inside a rule would break the mail's CSS. So text under
     // an element that draws nothing is skipped.
@@ -181,20 +196,4 @@ function highlightMatches(root: HTMLElement, term: string): void {
         textNode.parentNode?.replaceChild(frag, textNode);
     }
     first?.scrollIntoView({ block: 'center' });
-}
-
-const COLOR_SCHEME_CONDITION = {
-    light: /prefers-color-scheme\s*:\s*light/i,
-    dark: /prefers-color-scheme\s*:\s*dark/i,
-};
-
-// The queries read the OS preference, not the canvas we draw on. Through the CSSOM, never over the style
-// text: deleting a span of sanitized text can splice its neighbours into a token the server refused.
-function dropColorSchemeRules(parent: CSSStyleSheet | CSSGroupingRule, scheme: 'light' | 'dark'): void {
-    for (let i = parent.cssRules.length - 1; i >= 0; i--) {
-        const rule = parent.cssRules[i];
-        if (rule instanceof CSSMediaRule && COLOR_SCHEME_CONDITION[scheme].test(rule.conditionText))
-            parent.deleteRule(i);
-        else if (rule instanceof CSSGroupingRule) dropColorSchemeRules(rule, scheme);
-    }
 }
