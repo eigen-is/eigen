@@ -13,6 +13,9 @@ const VS16 = 0xfe0f;
 const KEYCAP = 0x20e3;
 const COMPONENTS = [ZWJ, VS15, VS16, KEYCAP, 0xe0020, 0xe0067, 0xe007f];
 const KEYCAP_BASES = [...'#*0123456789'].map((char) => char.charCodeAt(0));
+// The most a chunk of a face's rest may weigh, about one of Google's published slices for that face.
+const CJK_REST_BOUND = 60 * 1024;
+const REST_BOUND = 40 * 1024;
 
 function codePoints(...parts: (string | number)[]): Set<number> {
     const text = parts.map((part) => (typeof part === 'number' ? String.fromCodePoint(part) : part)).join('');
@@ -25,6 +28,10 @@ function rangeCodePoints(slice: FontSlice): number[] {
         const from = Number.parseInt(start, 16);
         return Array.from({ length: Number.parseInt(end, 16) - from + 1 }, (_, i) => from + i);
     });
+}
+
+function sizeOf(slice: FontSlice): number {
+    return fs.statSync(path.join(FONTS_DIR, slice.file)).size;
 }
 
 const kindOf = new Map(FALLBACK_FONTS.map((font) => [font.family, font.kind]));
@@ -64,9 +71,22 @@ describe('slicesFor', () => {
         expect(slicesFor(codePoints('한'), ALL_FAMILIES).map((slice) => slice.family)).toEqual(['Noto Sans KR']);
     });
 
-    test('a Han character outside every published range picks the rest of Noto Sans SC', () => {
+    test('a Han character outside every published range picks one rest chunk of Noto Sans SC, no larger than a slice', () => {
         const picked = slicesFor(codePoints('囒'), ALL_FAMILIES);
-        expect(picked.map((slice) => slice.file)).toEqual(['noto-sans-sc/NotoSansSC.rest.woff2']);
+        expect(picked).toHaveLength(1);
+        expect(picked[0].file).toMatch(/^noto-sans-sc\/NotoSansSC\.rest-\d+\.woff2$/);
+        expect(sizeOf(picked[0])).toBeLessThanOrEqual(CJK_REST_BOUND);
+    });
+
+    test('→, which no published range of Inter holds, picks one small Inter slice', () => {
+        const picked = slicesFor(codePoints('→'), ['Inter']);
+        expect(picked.map((slice) => slice.style)).toEqual(['normal', 'italic']);
+        for (const slice of picked) expect(sizeOf(slice)).toBeLessThanOrEqual(REST_BOUND);
+    });
+
+    test('a leading, a vowel and a trailing jamo pick one Korean slice, as they compose only inside one font', () => {
+        expect(slicesFor(codePoints(0x1100, 0x1161, 0x11a8), ALL_FAMILIES)).toHaveLength(1);
+        expect(slicesFor(codePoints(0xa960, 0xd7b0, 0xd7cb), ALL_FAMILIES)).toHaveLength(1);
     });
 
     test('only the families asked for, each slice once', () => {
@@ -112,6 +132,17 @@ describe('the range data', () => {
         }
         const components = new Set([ZWJ, VS16, KEYCAP]);
         expect([...repeated].filter((codePoint) => !components.has(codePoint) && codePoint < 0xe0020)).toEqual([]);
+    });
+
+    test('every chunk of a rest is within its bound, unless it draws one character or is the jamo', () => {
+        const rests = FONT_SLICES.filter(
+            (slice) => /\.rest(-\d+)?\.woff2$/.test(slice.file) && slice.family !== 'Noto Sans KR',
+        );
+        expect(rests.length).toBeGreaterThan(0);
+        for (const slice of rests) {
+            const bound = kindOf.get(slice.family) === 'cjk' ? CJK_REST_BOUND : REST_BOUND;
+            if (rangeCodePoints(slice).length > 1) expect(sizeOf(slice)).toBeLessThanOrEqual(bound);
+        }
     });
 
     test('no CJK slice holds Basic Latin', () => {
