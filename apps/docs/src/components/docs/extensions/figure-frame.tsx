@@ -584,30 +584,34 @@ export function figureFramePlugins(name: FigureFrameNode): Plugin[] {
                 },
             },
         }),
-        new Plugin({
-            key: new PluginKey('figureDragOut'),
-            // A figure dragged out of a paragraph of its own takes the paragraph with it, where the paragraph's
-            // parent can do without it. ProseMirror's drop moves the selected node.
-            appendTransaction(transactions, oldState, newState) {
-                const dragged = oldState.selection;
-                if (
-                    !transactions.some((tr) => tr.getMeta('uiEvent') === 'drop') ||
-                    !(dragged instanceof NodeSelection) ||
-                    dragged.node.type.name !== name
-                )
-                    return null;
-                const mapping = new Mapping();
-                for (const tr of transactions) mapping.appendMapping(tr.mapping);
-                const $start = newState.doc.resolve(mapping.map(dragged.$from.before(), 1));
-                const paragraph = $start.nodeAfter;
-                if (
-                    !paragraph?.isTextblock ||
-                    paragraph.content.size > 0 ||
-                    !$start.parent.canReplace($start.index(), $start.index() + 1)
-                )
-                    return null;
-                return newState.tr.delete($start.pos, $start.pos + paragraph.nodeSize);
-            },
-        }),
+        dragOutOfParagraph(name),
     ];
+}
+
+// An inline atom named `name`, such as a figure or an equation, dragged out of a paragraph of its own takes the
+// paragraph with it, where the paragraph's parent can do without it. ProseMirror's drop moves the selected node.
+export function dragOutOfParagraph(name: string): Plugin {
+    return new Plugin({
+        key: new PluginKey(`${name}DragOut`),
+        appendTransaction(transactions, oldState, newState) {
+            const dragged = oldState.selection;
+            if (
+                !transactions.some((tr) => tr.getMeta('uiEvent') === 'drop') ||
+                !(dragged instanceof NodeSelection) ||
+                dragged.node.type.name !== name
+            )
+                return null;
+            const mapping = new Mapping();
+            for (const tr of transactions) mapping.appendMapping(tr.mapping);
+            const $start = newState.doc.resolve(mapping.map(dragged.$from.before(), 1));
+            const paragraph = $start.nodeAfter;
+            if (
+                !paragraph?.isTextblock ||
+                paragraph.content.size > 0 ||
+                !$start.parent.canReplace($start.index(), $start.index() + 1)
+            )
+                return null;
+            return newState.tr.delete($start.pos, $start.pos + paragraph.nodeSize);
+        },
+    });
 }
