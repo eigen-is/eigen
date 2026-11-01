@@ -8,7 +8,7 @@ import type { CommandProps } from '@tiptap/core';
 import { canInsertNode, getChangedRanges, mergeAttributes, Node } from '@tiptap/core';
 import type { EditorState } from '@tiptap/pm/state';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
-import { EIGEN_FONT_NAMES, readFontSize } from '../../../constants/fonts';
+import { EIGEN_FONT_NAMES, getFontFamily, readFontSize } from '../../../constants/fonts';
 import { isRecord } from '../../../core/guards';
 import { MAX_HEADING_LEVEL } from '../heading';
 
@@ -19,17 +19,22 @@ export type TocLevelStyle = { font?: string; size?: number; bold?: boolean; ital
 // Google's three layouts, each a pair of Word's two facts.
 export type TocPreset = 'dotted' | 'plain' | 'links';
 
-// The character that leads from an entry to its page number. Word's dashes or line could join it later.
+// The character that leads from an entry to its page number.
 type TocLeader = 'dot' | 'none';
 
 // Word's two facts that make the layout: whether entries show their page number, and the leader to it.
 type TocLayout = { pageNumbers: boolean; leader: TocLeader };
 
-// The attribute holding one heading level's look.
-type TocLevelKey = `level${number}`;
+// The numbers from 1 to Deepest, counted by a tuple that grows by one until its length reaches Deepest.
+type LevelsTo<Deepest extends number, Counted extends unknown[] = [unknown]> =
+    | Counted['length']
+    | (Counted['length'] extends Deepest ? never : LevelsTo<Deepest, [...Counted, unknown]>);
+
+// The attribute holding one heading level's look, level1 to the deepest heading's.
+type TocLevelKey = `level${LevelsTo<typeof MAX_HEADING_LEVEL>}`;
 
 // Every stored attribute. A level's look is an attribute of its own, so two peers who edit two levels both keep theirs.
-type TocAttrs = TocLayout & { levels: number } & Record<TocLevelKey, TocLevelStyle | null>;
+export type TocAttrs = TocLayout & { levels: number } & Record<TocLevelKey, TocLevelStyle | null>;
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -53,14 +58,17 @@ export function readTocLevels(value: unknown): number {
         : DEFAULT_TOC_LEVELS;
 }
 
-export function tocLevelKey(level: number): TocLevelKey {
-    return `level${level}`;
-}
+// The attribute of each heading level, from 1 down. A template string types a name as any number's, so the guard
+// narrows each to a heading level's.
+export const TOC_LEVEL_KEYS: readonly TocLevelKey[] = Array.from(
+    { length: MAX_HEADING_LEVEL },
+    (_, index) => `level${index + 1}`,
+).filter(isTocLevelKey);
 
-// The attribute of each heading level, from 1 down.
-export const TOC_LEVEL_KEYS: readonly TocLevelKey[] = Array.from({ length: MAX_HEADING_LEVEL }, (_, index) =>
-    tocLevelKey(index + 1),
-);
+function isTocLevelKey(name: string): name is TocLevelKey {
+    const level = Number(name.slice('level'.length));
+    return name.startsWith('level') && Number.isInteger(level) && level >= 1 && level <= MAX_HEADING_LEVEL;
+}
 
 // One level's look as a peer, a paste or the import wrote it: the font and size are held to what a font and a size mark
 // allow, and the flags must be booleans. Anything else is dropped, and a look with nothing left is no look.
@@ -84,11 +92,33 @@ export const TOC_PRESETS: Readonly<Record<TocPreset, Readonly<Partial<TocLayout>
     links: { pageNumbers: false },
 };
 
+// The attribute that names the layout a surface draws a table of contents in, when that is not Dotted.
+export const TOC_PRESET_ATTRIBUTE = 'data-preset';
+
+// Word's two facts as a peer, a paste or the import stored them, whatever the doc's paper.
+export function readTocLayout(attrs: Record<string, unknown>): TocLayout {
+    return { pageNumbers: readPageNumbers(attrs['pageNumbers']), leader: readTocLeader(attrs['leader']) };
+}
+
 // The layout every surface draws. A page-less doc has no page numbers to show, so it draws Links whatever is stored,
 // and the stored facts come back when its pages do.
 export function tocPreset(attrs: Record<string, unknown>, pageless: boolean): TocPreset {
-    if (pageless || !readPageNumbers(attrs['pageNumbers'])) return 'links';
-    return readTocLeader(attrs['leader']) === 'none' ? 'plain' : 'dotted';
+    const { pageNumbers, leader } = readTocLayout(attrs);
+    if (pageless || !pageNumbers) return 'links';
+    return leader === 'none' ? 'plain' : 'dotted';
+}
+
+// A level's look as CSS declarations, as the marks draw them: the font's bundled stack, the size in pt, and italic.
+// Bold draws at the weight a bold mark draws at on the surface, which each surface passes. Empty for no look.
+export function tocLevelCss(look: TocLevelStyle | null, boldWeight: string): string {
+    return [
+        look?.font !== undefined && `font-family: ${getFontFamily(look.font)}`,
+        look?.size !== undefined && `font-size: ${look.size}pt`,
+        look?.bold === true && `font-weight: ${boldWeight}`,
+        look?.italic === true && 'font-style: italic',
+    ]
+        .filter((declaration) => typeof declaration === 'string')
+        .join('; ');
 }
 
 function readPageNumbers(value: unknown): boolean {
@@ -103,15 +133,6 @@ function readTocLeader(value: unknown): TocLeader {
 
 // A pasted level's JSON is read only up to this length, far past any look the reader keeps.
 const MAX_PASTED_STYLE_LENGTH = 256;
-
-function parseTocLevelStyle(text: string | null): TocLevelStyle | null {
-    if (text === null || text.length > MAX_PASTED_STYLE_LENGTH) return null;
-    try {
-        return readTocLevelStyle(JSON.parse(text));
-    } catch {
-        return null;
-    }
-}
 
 // The reader of each attribute, by name, so the command writes only what a parse or a render would keep.
 const ATTRIBUTE_READERS = new Map<string, (value: unknown) => unknown>([
@@ -168,7 +189,15 @@ export const TableOfContentsNode = Node.create({
                     key,
                     {
                         default: null,
-                        parseHTML: (element: HTMLElement) => parseTocLevelStyle(element.getAttribute(`data-${key}`)),
+                        parseHTML: (element: HTMLElement) => {
+                            const text = element.getAttribute(`data-${key}`);
+                            if (text === null || text.length > MAX_PASTED_STYLE_LENGTH) return null;
+                            try {
+                                return readTocLevelStyle(JSON.parse(text));
+                            } catch {
+                                return null;
+                            }
+                        },
                         renderHTML: (attributes: Record<string, unknown>) => {
                             const style = readTocLevelStyle(attributes[key]);
                             return style ? { [`data-${key}`]: JSON.stringify(style) } : {};

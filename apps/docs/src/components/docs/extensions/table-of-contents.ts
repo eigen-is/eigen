@@ -9,21 +9,22 @@ import type { Node as PMNode } from '@tiptap/pm/model';
 import { NodeSelection, Plugin, PluginKey } from '@tiptap/pm/state';
 import type { EditorView, NodeView } from '@tiptap/pm/view';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { OutlineEntry } from '@workspace/lib/docs/eigendoc';
 import {
     readOutline,
     readTocLevelStyle,
     readTocLevels,
     TableOfContentsNode,
-    tocLevelKey,
+    TOC_LEVEL_KEYS,
+    TOC_PRESET_ATTRIBUTE,
+    tocLevelCss,
     tocPreset,
 } from '@workspace/lib/docs/eigendoc';
 
 export type TableOfContentsOptions = {
     // A mod-press on the entry for the heading at `pos`; the body's editor jumps there as the outline sidebar does.
     onJump: (pos: number) => void;
-    // A right-click on the table of contents at `pos` in `editor`, the body's or a note's.
+    // A right-click on the table of contents at `pos` in `editor`, such as the body's.
     onContextMenu: (editor: Editor, pos: number, event: MouseEvent) => void;
 };
 
@@ -32,6 +33,9 @@ type Outline = { entries: readonly OutlineEntry[]; decorations: DecorationSet };
 const outlineKey = new PluginKey<Outline>('tableOfContentsOutline');
 
 const NO_ENTRIES: readonly OutlineEntry[] = [];
+
+// The weight a bold mark draws at in the editor.
+const BOLD_WEIGHT = 'var(--font-weight-bold)';
 
 // The key a click holds to act on a node rather than on the text, as ProseMirror reads it. On a Mac, control and a click
 // is the right-click.
@@ -104,7 +108,8 @@ class TableOfContentsView implements NodeView {
         this.dom.setAttribute('data-levels', String(levels));
         // A page-less doc draws Links whatever is stored. A switch to it is no transaction, so the stylesheet draws
         // that from the page instead.
-        this.dom.setAttribute('data-preset', tocPreset(node.attrs, false));
+        this.dom.setAttribute(TOC_PRESET_ATTRIBUTE, tocPreset(node.attrs, false));
+        const looks = TOC_LEVEL_KEYS.map((key) => tocLevelCss(readTocLevelStyle(node.attrs[key]), BOLD_WEIGHT));
         const lines: HTMLElement[] = entries.flatMap(({ level, text }, index) => {
             if (level > levels) return [];
             const line = document.createElement('a');
@@ -112,11 +117,8 @@ class TableOfContentsView implements NodeView {
             // As wide as its text, so a press beside an entry selects the table of contents too.
             line.className = 'w-fit';
             line.textContent = text;
-            const look = readTocLevelStyle(node.attrs[tocLevelKey(level)]);
-            if (look?.font) line.style.fontFamily = getFontFamily(look.font);
-            if (look?.size !== undefined) line.style.fontSize = `${look.size}pt`;
-            if (look?.bold) line.style.fontWeight = 'bold';
-            if (look?.italic) line.style.fontStyle = 'italic';
+            const look = looks[level - 1];
+            if (look) line.setAttribute('style', look);
             // A jump puts the caret in the heading. ProseMirror leaves a press whose default is prevented alone, so
             // it doesn't select the node on the release either.
             line.addEventListener('mousedown', (event) => {

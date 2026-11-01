@@ -3,15 +3,16 @@ import type { Content, JSONContent } from '@tiptap/core';
 import { createDocument, Editor, generateHTML, getSchema } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import { NodeSelection } from '@tiptap/pm/state';
-import { MAX_FONT_SIZE } from '../../../../constants/fonts';
+import { getFontFamily, MAX_FONT_SIZE } from '../../../../constants/fonts';
 import type { TocLevelStyle, TocPreset } from '../../../../docs/eigendoc';
 import {
     getDocExtensions,
+    readTocLayout,
     readTocLevelStyle,
     readTocLevels,
     TOC_LEVEL_KEYS,
     TOC_PRESETS,
-    tocLevelKey,
+    tocLevelCss,
     tocPreset,
 } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
@@ -84,7 +85,6 @@ describe('table of contents attributes', () => {
 
     test('names a key for each heading level', () => {
         expect(TOC_LEVEL_KEYS).toEqual(['level1', 'level2', 'level3', 'level4', 'level5', 'level6']);
-        expect(tocLevelKey(2)).toBe('level2');
     });
 
     test('an untouched one renders the nav it always did', () => {
@@ -172,6 +172,27 @@ describe('readTocLevelStyle', () => {
         ['a string', '{"bold":true}'],
     ])('reads %s as no style', (_what, value) => {
         expect(readTocLevelStyle(value)).toBeNull();
+    });
+});
+
+describe('tocLevelCss', () => {
+    test('draws each fact of a look as its mark does, bold at the weight the surface gives', () => {
+        expect(tocLevelCss({ font: 'JetBrains Mono', size: 9.5, bold: true, italic: true }, '600')).toBe(
+            `font-family: ${getFontFamily('JetBrains Mono')}; font-size: 9.5pt; font-weight: 600; font-style: italic`,
+        );
+    });
+
+    test('draws nothing for no look, or for flags turned off', () => {
+        expect(tocLevelCss(null, '600')).toBe('');
+        expect(tocLevelCss({ bold: false, italic: false }, '600')).toBe('');
+    });
+});
+
+describe('readTocLayout', () => {
+    test('reads the two facts through their readers, defaulting to page numbers on a dotted leader', () => {
+        expect(readTocLayout({})).toEqual({ pageNumbers: true, leader: 'dot' });
+        expect(readTocLayout({ pageNumbers: false, leader: 'none' })).toEqual({ pageNumbers: false, leader: 'none' });
+        expect(readTocLayout({ pageNumbers: 'false', leader: 'dash' })).toEqual({ pageNumbers: true, leader: 'dot' });
     });
 });
 
@@ -351,8 +372,16 @@ describe('updateTableOfContents', () => {
 
     test('writes one level by its key', () => {
         const editor = selected(3);
-        editor.commands.updateTableOfContents({ [tocLevelKey(4)]: { italic: true } });
+        editor.commands.updateTableOfContents({ level4: { italic: true } });
         expect(editor.state.doc.child(0).attrs['level4']).toEqual({ italic: true });
+        editor.destroy();
+    });
+
+    test('names only the six heading levels', () => {
+        const editor = selected(3);
+        // @ts-expect-error: a heading goes no deeper than level 6.
+        editor.commands.updateTableOfContents({ level9: { italic: true } });
+        expect(editor.state.doc.child(0).attrs['level9']).toBeUndefined();
         editor.destroy();
     });
 

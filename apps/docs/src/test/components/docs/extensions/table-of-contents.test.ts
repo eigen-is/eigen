@@ -270,8 +270,9 @@ test("each entry draws its level's look, and a level with none draws as the body
     // The family as an element writes it back, with the quotes it uses.
     const { style } = document.createElement('a');
     style.fontFamily = getFontFamily('Source Serif 4');
+    // Bold at the weight a bold mark draws at.
     expect(looks(editor)).toEqual([
-        [style.fontFamily, '14pt', 'bold', ''],
+        [style.fontFamily, '14pt', 'var(--font-weight-bold)', ''],
         ['', '', '', ''],
         ['', '', '', 'italic'],
     ]);
