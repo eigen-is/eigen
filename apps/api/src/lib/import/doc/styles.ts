@@ -81,6 +81,8 @@ export type ParaProps = {
     markDeleted?: boolean;
     sectionBreak?: boolean;
     frame?: 'left' | 'right';
+    // ST_TabTlc's leader of the right tab furthest right, where a table of contents entry's page number stands.
+    tabLeader?: string;
 };
 
 export const TOGGLES = ['bold', 'boldCs', 'italic', 'italicCs', 'caps', 'smallCaps', 'strike'] as const;
@@ -326,10 +328,26 @@ export function readParaProps(pPr: XmlElement | undefined): ParaProps {
                 props.sectionBreak = type === undefined || PAGE_SECTION_TYPES.has(type);
                 break;
             }
+            case 'tabs': {
+                // A w:tabs with no right tab leaves the style's; a leader left out is none.
+                let furthest: number | undefined;
+                for (const tab of xmlElements(child)) {
+                    const pos = twipsOf(w(tab, 'pos'));
+                    if (!hasXmlName(tab, W_NS, 'tab') || !RIGHT_TABS.has(w(tab, 'val') ?? '') || pos === undefined)
+                        continue;
+                    if (furthest !== undefined && pos < furthest) continue;
+                    furthest = pos;
+                    props.tabLeader = w(tab, 'leader') ?? 'none';
+                }
+                break;
+            }
         }
     }
     return props;
 }
+
+// A right tab in a left-to-right paragraph, in the transitional spelling and the strict one.
+const RIGHT_TABS = new Set(['right', 'end']);
 
 export function mergeRun(...layers: DocxRunProps[]): DocxRunProps {
     const merged: DocxRunProps = {};
@@ -496,6 +514,12 @@ export class Styles {
 
     public get(id: string | undefined): Style | undefined {
         return id === undefined ? undefined : this.byId.get(id);
+    }
+
+    // The first paragraph style of a name, as Word lists a built-in style by its name whatever its id.
+    public named(name: string): Style | undefined {
+        const lower = name.toLowerCase();
+        return [...this.byId.values()].find((style) => style.type === 'paragraph' && style.name === lower);
     }
 
     // Its chain, nearest first, ends at MAX_CHAIN or at the first repeat of a cycle.

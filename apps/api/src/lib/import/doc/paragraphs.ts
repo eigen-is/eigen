@@ -67,6 +67,7 @@ import type { Field, OpenToc, Piece, RunContext, TocCut } from './runs';
 import { walkInline } from './runs';
 import type { DocxRunProps, ParaProps, Role } from './styles';
 import { mergePara, mergeRun, readParaProps, readRunProps, Styles } from './styles';
+import { entryLeads, tableOfContentsAttrs } from './table-of-contents';
 import { readTable } from './tables';
 
 // The elements that only wrap content, such as a content control's or a tracked insertion's: their children are read
@@ -219,6 +220,7 @@ export function readDocument(reader: Reader): JSONContent[] {
     const scope: Scope = { part: reader.pkg.document, story: 'body', tables: 0 };
     // A table of contents the file never ends would take the rest of the doc with it.
     const items = [...readBlocks(reader, xmlElements(body), scope), ...abandonToc(reader)];
+    for (const toc of reader.tocs) toc.node.attrs = tableOfContentsAttrs(reader, toc);
     return placeAnchors(buildBlocks(items), reader.normal);
 }
 
@@ -408,7 +410,9 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
             .map((piece) => (piece.kind === 'node' ? (piece.node.text ?? '') : ''))
             .join('');
         const saved = text.includes('\t') ? text.slice(0, text.lastIndexOf('\t')) : text;
-        if (saved.trim() && saved.trim() !== NO_TOC_ENTRIES) toc.saved.push(saved);
+        if (!saved.trim() || saved.trim() === NO_TOC_ENTRIES) continue;
+        toc.saved.push(saved);
+        toc.leads ??= entryLeads(mergePara(styled, direct));
     }
     // What the paragraph gives besides its own lines, such as its section break, which follows the result. A text box
     // an entry anchors is no entry: it keeps a paragraph of its own.
@@ -426,10 +430,7 @@ function readParagraph(reader: Reader, p: XmlElement, scope: Scope): Item[] {
         first.toc.held.push({ cut: extras, whole: itemsOf(pieces, WHOLE) });
         return released;
     }
-    const tocItem = (toc: OpenToc): Item => ({
-        kind: 'block',
-        node: { type: 'tableOfContents', attrs: { levels: toc.levels } },
-    });
+    const tocItem = (toc: OpenToc): Item => ({ kind: 'block', node: toc.node });
     // A result begun above and ended here gives what it held.
     const items = cuts.flatMap(({ toc, opened, to }) =>
         opened || to === undefined ? [] : toc.held.flatMap(({ cut }) => cut),

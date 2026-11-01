@@ -36,6 +36,7 @@ import type { ParagraphProps } from './paragraphs';
 import { pPrXml, TITLE_STYLES } from './paragraphs';
 import type { RunProps } from './runs';
 import { rPrXml } from './runs';
+import type { TocStyleLook } from './table-of-contents';
 
 export type Styles = Map<StyleId, StyleDef>;
 
@@ -116,8 +117,12 @@ export function stylesXml({ normal, styles, languages }: Package): string {
 }
 
 // Built per export on the doc's Normal. A quote's paragraphs take none of its space before, as the editor draws them.
-// Word's table of contents styles come only with a table of contents that lists something, as Word writes them.
-export function styleDefinitions(normal: NormalStyle, { contents }: { contents: boolean }): StyleDef[] {
+// Word's table of contents styles come only with a table of contents that lists something or has a look, which they
+// carry (tocStyleLook).
+export function styleDefinitions(
+    normal: NormalStyle,
+    { contents }: { contents: TocStyleLook | undefined },
+): StyleDef[] {
     const body = normalTextLook(normal);
     const note = noteTextLook(normal);
     const before = normal.spaceBefore > 0 ? { before: 0 } : {};
@@ -163,7 +168,8 @@ export function styleDefinitions(normal: NormalStyle, { contents }: { contents: 
             rPr: { spacing: tracking, size: halfPoints(sizePt), ...look },
         };
     });
-    // Word's own, as its Update Table rewrites the entries in them: spaced and indented by level as the editor draws them.
+    // Word's own, as its Update Table rewrites the entries in them: spaced and indented by level as the editor draws them,
+    // in the first table of contents' look.
     const entryPadding = proseValue(`${TOC_ENTRY} > [data-level]`, 'padding');
     const tocs = (contents ? HEADING_LOOKS : []).map((_look, index): StyleDef => {
         const level = index + 1;
@@ -177,9 +183,11 @@ export function styleDefinitions(normal: NormalStyle, { contents }: { contents: 
             uiPriority: 39,
             unhideWhenUsed: true,
             pPr: {
+                ...(contents?.tab && { rightTab: contents.tab }),
                 spacing: { before: 0, after: twips(2 * cssPt(boxSide(entryPadding, 'top'), BODY.sizePt)) },
                 ...(indent && { ind: { left: twips(cssPt(indent, BODY.sizePt)) } }),
             },
+            rPr: contents?.runs[index],
         };
     });
     return [

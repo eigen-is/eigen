@@ -192,12 +192,17 @@ export const PAGE_SECTION_TYPES = new Set(['nextPage', 'oddPage', 'evenPage']);
 // The field each page number kind writes, as w:instr names it.
 export const PAGE_NUMBER_FIELDS: Record<PageNumberKind, string> = { page: 'PAGE', pages: 'NUMPAGES' };
 
-// A table of contents as Word writes its field: the headings to `levels` by outline level (\o), each entry a link (\h),
-// no page numbers in Web Layout (\z), and paragraphs given an outline level directly (\u). It stands in a content
-// control of Word's gallery, so Word's Update Table and its references pane find it.
-export function tocInstruction(levels: number): string {
-    return `TOC \\o "1-${levels}" \\h \\z \\u`;
+// A table of contents as Word writes its field: the headings to `levels` by outline level (\o), no page numbers where
+// the entries show none (\n, of every level), each entry a link (\h), no page numbers in Web Layout (\z), and
+// paragraphs given an outline level directly (\u). It stands in a content control of Word's gallery, so Word's Update
+// Table and its references pane find it.
+export function tocInstruction(levels: number, pageNumbers: boolean): string {
+    return `TOC \\o "1-${levels}"${pageNumbers ? '' : ' \\n'} \\h \\z \\u`;
 }
+
+// The leaders of a right tab the writer writes, in ST_TabTlc's spelling: a table of contents entry's dots to its page
+// number, or none.
+export type TabLeader = 'dot' | 'none';
 
 // A field's name is case-insensitive.
 const TOC_FIELD = /^TOC\b/i;
@@ -214,6 +219,15 @@ export function tocFieldLevels(code: string): number | undefined {
     const outline = /\\o\b(?:\s*"\s*\d+\s*-\s*(\d+)\s*")?/i.exec(code);
     if (!outline) return readTocLevels(undefined);
     return outline[1] === undefined ? MAX_HEADING_LEVEL : readTocLevels(Number(outline[1]));
+}
+
+// Whether a table of contents' entries show their page numbers. A bare \n leaves them out of every level and \n "a-b"
+// out of levels a to b, so only a range that leaves out a level the field lists still shows numbers.
+export function tocFieldPageNumbers(code: string, levels: number): boolean {
+    const omitted = /\\n\b(?:\s*"\s*(\d+)\s*-\s*(\d+)\s*")?/i.exec(code);
+    if (!omitted) return true;
+    const [, from, to] = omitted;
+    return from !== undefined && to !== undefined && (Number(from) > 1 || Number(to) < levels);
 }
 
 export const TOC_GALLERY = 'Table of Contents';
