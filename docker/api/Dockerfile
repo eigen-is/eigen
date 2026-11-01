@@ -13,8 +13,10 @@ FROM oven/bun:${BUN_VERSION}-slim
 
 WORKDIR /app
 
-# Runtime deps. No compiler: the install runs no scripts, and sharp ships its own binary.
-RUN apt-get update && apt-get install -y \
+# Runtime deps. No compiler: the install runs no scripts, and sharp ships its own binary. No recommended packages:
+# libvips's pull in ImageMagick and ghostscript, whose fonts made production's PDFs draw CJK in Droid Sans Fallback,
+# a face dev and CI don't have.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libvips \
     libimage-exiftool-perl \
     python3-venv \
@@ -38,8 +40,8 @@ RUN python3 -m venv /opt/weasyprint \
 
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0
 
-# librsvg draws an SVG's text in the system's fonts, and the image has only DejaVu and URW's, which are wider than
-# Eigen's. An SVG's PNG fallback in an Office file, such as a canvas selection pasted into a doc, and an SVG's thumbnail
+# librsvg draws an SVG's text in the system's fonts, and the image has only DejaVu, fontconfig's dependency, which is
+# wider than Eigen's and has no CJK. An SVG's PNG fallback in an Office file, such as a canvas selection pasted into a doc, and an SVG's thumbnail
 # draw Eigen-font text, so the image carries each Eigen font's regular and its bold, the 600 a bold label takes.
 COPY packages/ui/src/assets/fonts/inter/Inter-Regular.ttf \
     packages/ui/src/assets/fonts/inter/Inter-Bold-renamed.ttf \
