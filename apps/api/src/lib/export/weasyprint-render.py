@@ -1,8 +1,10 @@
 # Renders the HTML on stdin to a PDF on stdout, scaled by the zoom in the first argument, 1 without one. WeasyPrint's
 # own fetcher opens any URL the HTML names, from the API host, and an export embeds everything it needs as a data: URI,
-# so this one opens data: URIs and refuses the rest: http(s), file:, a path, any other scheme. Needs WeasyPrint 68, the
-# first with the URLFetcher class.
+# so this one opens data: URIs and refuses the rest: http(s), file:, a path, any other scheme. It also teaches
+# WeasyPrint to tell the slices of one font apart, which it reads as one font. Needs WeasyPrint 68, the first with the
+# URLFetcher class.
 import sys
+from hashlib import md5
 
 import weasyprint
 
@@ -52,7 +54,8 @@ def band_margins(html, font_config):
                 boxes = list(descendants(margin_box)) if isinstance(margin_box, MarginBox) else []
                 if not boxes:
                     continue
-                height = max(box.position_y + box.margin_height() for box in boxes) - min(box.position_y for box in boxes)
+                bottom_y = max(box.position_y + box.margin_height() for box in boxes)
+                height = bottom_y - min(box.position_y for box in boxes)
                 if margin_box.at_keyword.startswith('@top'):
                     top = max(top, margin_box.padding_top + height)
                 elif margin_box.at_keyword.startswith('@bottom'):
@@ -74,6 +77,39 @@ def band_margins(html, font_config):
         print(f'band_margins: WeasyPrint layout moved, bands grow no margin ({reason})', file=sys.stderr)
         return None
 
+
+# An export embeds each font as slices: files of one family that each draw some of its characters. WeasyPrint tells
+# fonts apart by their family, style and weight, but not by their file. So it embedded the first slice's file and drew
+# every slice's glyph ids with it, and Chinese, Korean or emoji printed as other characters. Here a font's key and the
+# tag of its embedded file also take a digest of the file. WeasyPrint draws a colour font only with a HarfBuzz newer
+# than the image's, and leaves it blank otherwise. The emoji face paints in the text colour anyway, so it prints its
+# outlines instead. WeasyPrint is pinned: one that moved these internals fails every PDF here, rather than print wrong
+# glyphs.
+def tell_font_slices_apart():
+    try:
+        from weasyprint.pdf import fonts, stream
+        from weasyprint.text.fonts import get_hb_object_data, get_pango_font_hb_face
+
+        font_key, font_init = stream.get_pango_font_key, fonts.Font.__init__
+    except (AttributeError, ImportError) as error:
+        sys.exit(f'weasyprint-render.py: WeasyPrint moved its font internals ({type(error).__name__}: {error})')
+
+    def key_by_file(pango_font):
+        key, description, font_size = font_key(pango_font)
+        face = get_hb_object_data(get_pango_font_hb_face(pango_font))
+        return (key, md5(face, usedforsecurity=False).digest()), description, font_size
+
+    def init_by_file(font, pango_font, description, font_size):
+        font_init(font, pango_font, description, font_size)
+        digest = md5(font.hash.encode() + font.file_content, usedforsecurity=False).digest()
+        tag = ''.join(chr(65 + byte % 26) for byte in digest[:6])
+        font.name, font.hash = b'/' + tag.encode() + font.name[len(font.hash) + 1:], tag
+        font.colr = False
+
+    stream.get_pango_font_key, fonts.Font.__init__ = key_by_file, init_by_file
+
+
+tell_font_slices_apart()
 
 # A passed stylesheet is the user's, so the margins it grows are !important to win over the document's @page. The probe
 # and the render share one font configuration, so the doc's @font-face fonts load once.
