@@ -13,6 +13,7 @@ import {
     xmlElements,
     xmlText,
 } from '../../lib/core';
+import { cpuClock } from '../cpu-time';
 
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
@@ -331,13 +332,13 @@ describe('parseXml namespaces', () => {
     test('undoing a declaration costs the declaration, not the bindings in scope, in parse and serialize', () => {
         // Against the same body without the root's bindings, so an undo that pays per binding in scope shows as a
         // multiple rather than as a clock this machine may or may not beat. Such an undo costs thousands of times more,
-        // and the two run here at about the same speed. The two sides take turns and each keeps its fastest run, so a
-        // pause from the collector or another process that slows one run fails nothing.
+        // and the two cost about the same here. Each side is weighed in CPU time, which other processes do not grow.
+        // The two take turns and each keeps its cheapest run, so a pause from the collector fails nothing.
         const timed = (declarations: string): number => {
             const body = `<w><r ${declarations}>${'<b xmlns:q="urn:q"/>'.repeat(40_000)}</r></w>`;
-            const start = performance.now();
+            const cpuMs = cpuClock();
             expect(serializeXmlChildren(parsed(body)).length).toBeLessThan(2 * body.length);
-            return performance.now() - start;
+            return cpuMs();
         };
         const declarations = Array.from({ length: 10_000 }, (_, i) => `xmlns:p${i}="urn:${i}"`).join(' ');
         let [base, declared] = [Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY];
@@ -429,9 +430,9 @@ describe('children and text', () => {
         expect(trimXmlSpace(' \t\r\n\u00a0a b\u00a0\n')).toBe('\u00a0a b\u00a0');
         expect(trimXmlSpace(' \t ')).toBe('');
         const text = `a${' '.repeat(100_000)}b`;
-        const started = performance.now();
+        const cpuMs = cpuClock();
         expect(trimXmlSpace(` ${text} `)).toBe(text);
-        expect(performance.now() - started).toBeLessThan(100);
+        expect(cpuMs()).toBeLessThan(100);
     });
 });
 
