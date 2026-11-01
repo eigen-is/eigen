@@ -113,12 +113,7 @@ function checkWordByteLength(value: string) {
 }
 
 export function hasChinaword(s: string) {
-    const patrn = /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/gi;
-
-    if (!patrn.exec(s)) {
-        return false;
-    }
-    return true;
+    return /[\u4E00-\u9FA5]|[\uFE30-\uFFA0]/.test(s);
 }
 
 let textHeightCache: Record<string, [number, number]> = {};
@@ -265,12 +260,8 @@ export function getMeasureText(
     return metrics;
 }
 
-export function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
-    const measureText = ctx.measureText('田');
-    if (isNil(measureText.actualBoundingBoxAscent)) {
-        return false;
-    }
-    return true;
+function isSupportBoundingBox(ctx: CanvasRenderingContext2D) {
+    return !isNil(ctx.measureText('田').actualBoundingBoxAscent);
 }
 
 export function drawLineInfo(
