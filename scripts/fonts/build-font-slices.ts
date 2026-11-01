@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import { availableParallelism, homedir, tmpdir } from 'node:os';
 import * as path from 'node:path';
 import type { FontSlice } from '../../packages/lib/src/constants/font-slices';
-import { fontFaceCss } from '../../packages/lib/src/constants/font-slices';
+import { FIRST_NON_ASCII, fontFaceCss } from '../../packages/lib/src/constants/font-slices';
 import type { BundledFontFace, FallbackFont } from '../../packages/lib/src/constants/fonts';
 import { FALLBACK_FONTS, FONT_FACES } from '../../packages/lib/src/constants/fonts';
 import type { PublishedSubset, Slice } from './plan-slices';
@@ -178,7 +178,7 @@ async function build(): Promise<void> {
         if (fallback.kind === 'math') continue;
         // The keycap bases stay with the text faces too, so an emoji slice claims no ASCII.
         for (const slice of face.slices) {
-            for (const codePoint of slice.codePoints) if (codePoint >= 0x80) claimed.add(codePoint);
+            for (const codePoint of slice.codePoints) if (codePoint >= FIRST_NON_ASCII) claimed.add(codePoint);
         }
     }
     const textFaces = await Promise.all(FONT_FACES.map((face) => planTextFace(face, snapshot, claimed)));
