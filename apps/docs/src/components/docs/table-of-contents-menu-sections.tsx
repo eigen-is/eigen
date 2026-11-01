@@ -1,6 +1,6 @@
 // The right-click rows of a table of contents, which the Docs editor's menu shows in MenuSections' groups, as Google's
-// menu holds its Table of contents options. Each acts on the editor that holds the table of contents, the body's or
-// an open note's, which the right-click has selected it in.
+// menu holds its Table of contents options. Each acts on the editor that holds the table of contents, such as the
+// body's, which the right-click has selected it in.
 
 import type { Editor } from '@tiptap/react';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';

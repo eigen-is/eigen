@@ -1,7 +1,7 @@
 // The Docs panel for the selected table of contents: its layout, how many heading levels it lists, as Word's Show
 // levels does, and the font, size, bold and italic of each level's entries, for all levels at once or for one. It
-// opens beside the page when the node is selected and writes through the editor that holds it, the body's or a note's,
-// so that editor's undo takes the change back. Every write keeps the node selected, so the panel stays open.
+// opens beside the page when the node is selected and writes through the editor that holds it, such as the body's, so
+// that editor's undo takes the change back. Every write keeps the node selected, so the panel stays open.
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
@@ -16,12 +16,11 @@ import {
     tocPreset,
 } from '@workspace/lib/docs/eigendoc';
 import { FontSizeStepper } from '@workspace/ui/components/media';
-import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import {
+    FontRow,
     getMergedValue,
     isMixed,
     MergedSelect,
-    MIXED,
     numToStr,
     PropertiesPanel,
     PropertyRow,
@@ -31,13 +30,16 @@ import {
 import { Bold, Italic } from 'lucide-react';
 import { useState } from 'react';
 
-const LEVEL_OPTIONS = Array.from({ length: MAX_HEADING_LEVEL }, (_, index) => ({
-    value: String(index + 1),
-    label: String(index + 1),
-}));
+const LEVEL_OPTIONS: readonly { value: string; label: string }[] = Array.from(
+    { length: MAX_HEADING_LEVEL },
+    (_, index) => ({
+        value: String(index + 1),
+        label: String(index + 1),
+    }),
+);
 
 // Google's three layouts, in the order its panel lists them.
-const PRESET_OPTIONS: { value: TocPreset; label: string }[] = [
+const PRESET_OPTIONS: readonly { value: TocPreset; label: string }[] = [
     { value: 'plain', label: 'Plain text' },
     { value: 'dotted', label: 'Dotted' },
     { value: 'links', label: 'Links' },
@@ -48,7 +50,7 @@ const PAGELESS_PRESET_OPTIONS = PRESET_OPTIONS.filter(({ value }) => value === '
 
 const ALL_LEVELS = 'all';
 
-const PICKED_OPTIONS = [
+const PICKED_OPTIONS: readonly { value: string; label: string }[] = [
     { value: ALL_LEVELS, label: 'All levels' },
     ...TOC_LEVEL_KEYS.map((key, index) => ({ value: key, label: `Level ${index + 1}` })),
 ];
@@ -94,13 +96,7 @@ export function TableOfContentsPropertiesPanel({ editor, pageless }: { editor: E
                 <PropertyRow label="Level">
                     <MergedSelect value={picked} onChange={setPicked} options={PICKED_OPTIONS} />
                 </PropertyRow>
-                <PropertyRow label="Font">
-                    <FontPicker
-                        value={isMixed(font) || font === undefined ? '—' : font}
-                        onChange={(name) => restyle((look) => ({ ...look, font: name }))}
-                        className="h-7 w-full justify-between rounded-md border border-input bg-transparent px-2 font-normal shadow-xs"
-                    />
-                </PropertyRow>
+                <FontRow value={font} onChange={(name) => restyle((look) => ({ ...look, font: name }))} />
                 <PropertyRow label="Size">
                     <FontSizeStepper
                         value={isMixed(size) ? undefined : size}
@@ -116,7 +112,7 @@ export function TableOfContentsPropertiesPanel({ editor, pageless }: { editor: E
                             aria-label="Bold"
                             pressed={bold === true}
                             onPressedChange={(pressed) => restyle((look) => ({ ...look, bold: pressed }))}
-                            data-mixed={bold === MIXED ? '' : undefined}
+                            data-mixed={isMixed(bold) ? '' : undefined}
                         >
                             <Bold className="h-4 w-4" />
                         </PropertyToggle>
@@ -124,7 +120,7 @@ export function TableOfContentsPropertiesPanel({ editor, pageless }: { editor: E
                             aria-label="Italic"
                             pressed={italic === true}
                             onPressedChange={(pressed) => restyle((look) => ({ ...look, italic: pressed }))}
-                            data-mixed={italic === MIXED ? '' : undefined}
+                            data-mixed={isMixed(italic) ? '' : undefined}
                         >
                             <Italic className="h-4 w-4" />
                         </PropertyToggle>
