@@ -119,23 +119,51 @@ describe('canvasImageName', () => {
 });
 
 describe('canvasImageFaces', () => {
-    const files = (...args: Parameters<typeof canvasImageFaces>) => canvasImageFaces(...args).map((face) => face.file);
+    const files = async (...args: Parameters<typeof canvasImageFaces>) =>
+        (await canvasImageFaces(...args)).map((slice) => slice.file);
+    const run = (fontFamily: string, text: string, fontStyle = 'normal'): MeasuredText => ({
+        ...measured(fontFamily, fontStyle),
+        chars: Array.from(text, (char) => ({ text: char, x: 0, y: 0, width: 10, height: 20 })),
+    });
 
-    test("a text box embeds the faces its measured runs draw in, not its own font's", () => {
+    test("a text box embeds the slices its measured runs touch, in each run's own family and style", async () => {
         const text = richtext({ id: 't', html: '<p><em>x</em></p>', fontFamily: 'Inter' });
 
-        expect(files([text], new Map([['t', box(measured('"Source Serif 4", serif', 'italic'))]]))).toEqual([
-            'source-serif/SourceSerif4-Variable-Italic.woff2',
+        expect(await files([text], new Map([['t', box(run('"Source Serif 4", serif', 'x', 'italic'))]]))).toEqual([
+            'source-serif/SourceSerif4-Variable-Italic.latin.woff2',
+        ]);
+        expect(await files([text], new Map([['t', box(run('Inter, sans-serif', 'é ő'))]]))).toEqual([
+            'inter/Inter-Variable.latin-ext.woff2',
+            'inter/Inter-Variable.latin.woff2',
         ]);
     });
 
-    test("a label draws upright in its family, a chart in its spec's font", () => {
-        expect(
-            files([arrow({ id: 'a', text: 'go', fontFamily: 'JetBrains Mono' }), chart({ id: 'c' })], new Map()),
-        ).toEqual(['jetbrains-mono/JetBrainsMono-Variable.woff2', 'excalifont/Excalifont-Regular.woff2']);
+    test('a family without an italic slants its upright slices, which are embedded', async () => {
+        const text = richtext({ id: 't', html: '<p><em>x</em></p>', fontFamily: 'Excalifont' });
+
+        expect(await files([text], new Map([['t', box(run('Excalifont', 'x', 'italic'))]]))).toEqual([
+            'excalifont/Excalifont-Regular.all.woff2',
+        ]);
     });
 
-    test('a drawing without text embeds no face', () => {
-        expect(canvasImageFaces([shape({ id: 'r', type: 'rectangle' })], new Map())).toEqual([]);
+    test('an emoji or a Chinese character in a run embeds the fallback slice that draws it', async () => {
+        const text = richtext({ id: 't', html: '<p>x</p>', fontFamily: 'Inter' });
+        const picked = await canvasImageFaces([text], new Map([['t', box(run('Inter', 'a😀中', 'italic'))]]));
+
+        expect(picked.map((slice) => `${slice.family} ${slice.style}`)).toEqual([
+            'Inter italic',
+            'Eigen Emoji normal',
+            'Noto Sans SC normal',
+        ]);
+    });
+
+    test("a label draws upright in its family, a chart's labels in its spec's font", async () => {
+        expect(
+            await files([arrow({ id: 'a', text: 'go', fontFamily: 'JetBrains Mono' }), chart({ id: 'c' })], new Map()),
+        ).toEqual(['jetbrains-mono/JetBrainsMono-Variable.latin.woff2', 'excalifont/Excalifont-Regular.all.woff2']);
+    });
+
+    test('a drawing without text embeds no slice', async () => {
+        expect(await canvasImageFaces([shape({ id: 'r', type: 'rectangle' })], new Map())).toEqual([]);
     });
 });

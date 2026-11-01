@@ -194,13 +194,20 @@ test("a viewer's menu has the download row for the element right-clicked, and no
     expect(menuRows()).toEqual(['Download original image']);
 });
 
+// The image writer loads the slice table on demand, so the file is saved a few ticks after the pick.
+async function savedPast(spy: { mock: { calls: unknown[] } }, count: number): Promise<void> {
+    await act(async () => {
+        while (spy.mock.calls.length <= count) await Bun.sleep(1);
+    });
+}
+
 test('a chart alone downloads on white, named for its title', async () => {
     const saved = spyOn(download, 'downloadBlob').mockImplementation(() => {});
     try {
         await render(false);
         await rightClick('c');
         await pick('Download image');
-        await act(async () => {});
+        await savedPast(saved, 0);
         const [blob, name] = saved.mock.calls[0];
         expect(name).toBe('Light.svg');
         expect(await blob.text()).toContain('fill="#ffffff"');
@@ -216,7 +223,7 @@ test('a selection downloads on nothing, its text as SVG text in the faces it use
         fonts.takeFetched();
         await rightClick('t');
         await pick('Download image');
-        await act(async () => {});
+        await savedPast(saved, 0);
         expect(saved).toHaveBeenCalledTimes(1);
         const [blob, name] = saved.mock.calls[0];
         expect(name).toBe('Plan – selection.svg');
@@ -225,7 +232,7 @@ test('a selection downloads on nothing, its text as SVG text in the faces it use
         expect(svg).toContain('<tspan');
         expect(svg).toContain('>Hi there</tspan>');
         expect(svg).not.toContain('<foreignObject');
-        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.woff2']);
+        expect(fonts.takeFetched()).toEqual(['inter/Inter-Variable.latin.woff2']);
         expect(svg).toContain('font-family: "Inter"');
         expect(svg).toContain(`data:font/woff2;base64,${btoa(String.fromCharCode(...FONT_BYTES))}`);
     } finally {

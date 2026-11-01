@@ -1,5 +1,5 @@
-// A downloaded image embeds the faces its text draws in, which the browser fetches as the files fonts.css loads:
-// the registry names each by its path under assets/fonts/, and the server embeds the same entries
+// A downloaded image embeds the slices its text draws with, which the browser fetches as the files fonts.css loads:
+// the range data names each by its path under assets/fonts/, and the server embeds the same slices
 // (apps/api/src/test/export/fonts.test.ts), so no side keeps a font list of its own. fonts.css is generated from the
 // range data, one rule per slice.
 import { expect, test } from 'bun:test';

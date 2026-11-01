@@ -1,7 +1,7 @@
 // Every bundled face is cut into slices, each one file that draws a range of characters, as Google Fonts serves its
 // fonts. FONT_SLICES lists them, written by the vendoring script beside the fonts.css that loads them in the apps.
-// slicesFor picks the slices a text needs, so an export or a downloaded image embeds only those. It is a large table,
-// so only code that embeds fonts imports this module.
+// slicesFor picks the slices a text needs, so an export or a downloaded image embeds only those, each as the rule
+// fontFaceCss writes. It is a large table, so only code that embeds fonts imports this module, a browser on demand.
 
 import { FONT_SLICES } from './font-slice-data.gen';
 import { FALLBACK_FONTS } from './fonts';
@@ -16,6 +16,23 @@ export type FontSlice = {
     file: string;
     unicodeRange: string;
 };
+
+// The fallbacks any text may draw in: the emoji and CJK faces. The math face draws only a formula, so only a document
+// with one embeds it.
+export const TEXT_FALLBACK_FAMILIES = FALLBACK_FONTS.filter((font) => font.kind !== 'math').map((font) => font.family);
+export const MATH_FAMILIES = FALLBACK_FONTS.filter((font) => font.kind === 'math').map((font) => font.family);
+
+// One slice as the @font-face rule that embeds it, its bytes a data: URI.
+export function fontFaceCss(slice: FontSlice, dataUri: string): string {
+    return `@font-face {
+    font-family: "${slice.family}";
+    src: url("${dataUri}") format("woff2");
+    font-weight: ${slice.weight};
+    font-style: ${slice.style};
+    font-display: swap;
+    unicode-range: ${slice.unicodeRange};
+}`;
+}
 
 const KEYCAP = 0x20e3;
 const EMOJI_FAMILIES = new Set(FALLBACK_FONTS.filter((font) => font.kind === 'emoji').map((font) => font.family));

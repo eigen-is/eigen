@@ -41,6 +41,7 @@ import {
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { cpuClock } from '../cpu-time';
+import { embeddedSliceFiles } from '../fixtures/font-slices';
 import { buildGoldenSheets } from '../fixtures/heavy-sheets';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
 import { NO_MEDIA, NO_PIXELS } from '../setup';
@@ -114,6 +115,21 @@ describe('Sheets HTML export — fonts', () => {
 
     test.each(['screen', 'pdf'] as const)('the golden workbook in %s embeds Inter alone', (mode) => {
         expect(embedded(buildGoldenSheets(), mode)).toEqual(['Inter']);
+    });
+
+    test('the golden workbook embeds only the Inter slices its text touches', () => {
+        const html = sheetsHtmlDocument({
+            title: 'T',
+            sheets: buildGoldenSheets(),
+            mediaUrls: NO_MEDIA,
+            mediaPixels: NO_PIXELS,
+            mode: 'pdf',
+            lost: () => {},
+        });
+        expect(embeddedSliceFiles(html)).toEqual([
+            'inter/Inter-Variable.latin.woff2',
+            'inter/Inter-Variable-Italic.latin.woff2',
+        ]);
     });
 
     test('a cell in Source Serif 4, by name or by registry index, embeds it', () => {

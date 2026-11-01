@@ -36,6 +36,7 @@ import { openZip } from '../../lib/ooxml/zip';
 import { renderEigendocPreviewBody } from '../../lib/preview/eigendoc-render';
 import * as thumbnailTimeout from '../../lib/shared/thumbnail-timeout';
 import { sampleChartParts } from '../fixtures/chart-parts';
+import { embeddedSliceFiles, sliceFileOf } from '../fixtures/font-slices';
 import { corpusEquations, equation, seedBand, seedEigendoc } from '../fixtures/golden-documents';
 
 function seededDoc(json: JSONContent = { type: 'doc', content: [paragraph('Hello')] }): Y.Doc {
@@ -391,6 +392,47 @@ describe('doc export — fonts', () => {
         const serifChart = chart('Inter');
         for (const [key, value] of Object.entries(WORD_NORMAL)) serifChart.getMap(STYLE_ROOT).set(key, value);
         expect(await embedded(serifChart)).toEqual(['Inter', 'Source Serif 4']);
+    });
+
+    // Its Latin, upright and italic, as any doc draws ASCII; one emoji, Chinese and Korean slice each; and the math
+    // face where an equation draws as MathML. The PDF draws its equations as paths, so it embeds no math face.
+    const mixed = () =>
+        seededDoc({
+            type: 'doc',
+            content: [
+                {
+                    type: 'paragraph',
+                    content: [
+                        { type: 'text', text: 'Hi 😀 中 한 ' },
+                        equation(writeMathml([{ kind: 'identifier', text: 'x' }])),
+                    ],
+                },
+            ],
+        });
+    const LATIN = ['inter/Inter-Variable.latin.woff2', 'inter/Inter-Variable-Italic.latin.woff2'];
+    const FALLBACKS = [
+        sliceFileOf('Eigen Emoji', '😀'),
+        sliceFileOf('Noto Sans SC', '中'),
+        sliceFileOf('Noto Sans KR', '한'),
+    ];
+
+    test('emoji, Chinese, Korean and an equation embed exactly the slices they touch, and no whole face', async () => {
+        expect(embeddedSliceFiles(await exportStyle('html', mixed()))).toEqual([
+            ...LATIN,
+            ...FALLBACKS,
+            sliceFileOf('New Computer Modern Math', 'x'),
+        ]);
+        expect(embeddedSliceFiles(await exportStyle('pdf-html', mixed()))).toEqual([...LATIN, ...FALLBACKS]);
+    });
+
+    test.each(['html', 'pdf-html'] as const)('a Latin doc in %s embeds Latin slices alone', async (format) => {
+        expect(embeddedSliceFiles(await exportStyle(format))).toEqual(LATIN);
+    });
+
+    // Until the math rule names the math face, a download draws its equations in the reader's own math font.
+    test.failing("the download's math rule names the math face it embeds", async () => {
+        const css = await exportStyle('html', mixed());
+        expect(css.match(/(?:^|\})\s*math \{\s*font-family: "([^"]+)"/)?.[1]).toBe('New Computer Modern Math');
     });
 });
 

@@ -1,12 +1,13 @@
 // The serve-time inliner for vector SVGs. A stored SVG names each image by its media file, never by its bytes, so a
 // copied container resolves against its own media. An SVG drawn through <img> fetches nothing, so on the way out of
-// the preview, each name becomes a data: URI of the file's bytes, and the Eigen fonts its text uses are embedded too.
-// The screen preview cache calls it.
+// the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
+// embedded too. The screen preview cache calls it.
 
+import { TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/font-slices';
 import { EIGEN_FONTS } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
-import { fontFaceCssOf } from '../export/fonts';
+import { drawnCodePoints, slicesFaceCss } from '../export/fonts';
 import type { Mount } from '../mount';
 
 // The raw SVG is treated as HOSTILE bytes. The load-bearing safety rails, in order:
@@ -72,10 +73,13 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
     }
 }
 
-// The faces are data: URIs, so sanitizeExportHtml keeps them and the sandbox CSP allows them; they are static per
-// build, so a cached result never goes stale. Past the output budget the svg serves without them, its media kept.
+// The slices its text draws with, in the Eigen fonts it names and in the fallbacks for what those lack. They are data:
+// URIs, so sanitizeExportHtml keeps them and the sandbox CSP allows them; they are static per build, so a cached
+// result never goes stale. Past the output budget the svg serves without them, its media kept.
 function injectFontFaces(svg: string, budget: Budget): string {
-    const faceCss = fontFaceCssOf(usedEigenFonts(svg));
+    const used = usedEigenFonts(svg);
+    if (used.size === 0) return svg;
+    const faceCss = slicesFaceCss(drawnCodePoints(svg), [...used, ...TEXT_FALLBACK_FAMILIES]);
     if (faceCss === '') return svg;
     const defs = `<defs><style>${faceCss}</style></defs>`;
     budget.remaining -= Buffer.byteLength(defs);

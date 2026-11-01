@@ -108,9 +108,10 @@ const BASE_TD_STYLE = 'overflow:hidden;white-space:nowrap;padding:1px 2px';
 
 // A line of text in Inter is about 1.2 times its font size. With its padding and gridline, such a line that fits its
 // rows with a pixel to spare grows them by two pixels at most, as a thick border does. A character Inter lacks takes a
-// fallback font's line, which can be taller. Noto Sans CJK's is 1.45 times, so a plain 10 to 11.5 pt line grows a
-// default row by 2 to 5 pixels, and a sheet of such rows prints up to a quarter more pages than printedPages charged.
-// That stays bounded, because a larger font is clipped.
+// fallback font's line, which can be taller. A Chinese or Japanese character prints in Noto Sans SC, whose line is
+// 1.448 times its size ((usWinAscent + usWinDescent) / unitsPerEm), as is Noto Sans KR's. So a plain 10 to 11.5 pt
+// line grows a default row by 2 to 5 pixels, and a sheet of such rows prints up to a quarter more pages than
+// printedPages charged. That stays bounded, because a larger font is clipped.
 const LINE_HEIGHT = 1.2;
 
 // Where a cell's text sits in its rows, as the canvas places the text's ink: in the middle, or 2 px from the top or
