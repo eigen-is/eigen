@@ -828,18 +828,17 @@ describe('Sheets HTML export — cell styling', () => {
         expect(rule).toContain('background:#0000ff');
     });
 
-    test('a font name containing & or an apostrophe survives into the stylesheet intact', () => {
+    test('a font name containing & survives into the stylesheet intact', () => {
         // CSS text never decodes entities, so HTML-escaping the name here would ask
-        // WeasyPrint for a font called "Bell MT &amp; O'Neill".
+        // WeasyPrint for a font called "Bell MT &amp; Co".
         const out = renderSheetsHtml(
-            [makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: "Bell MT & O'Neill" } }])],
+            [makeSheet([{ r: 0, c: 0, v: { v: 'x', ff: 'Bell MT & Co' } }])],
             NO_MEDIA,
             'screen',
             NO_PIXELS,
         );
-        expect(out.css).toContain(`font-family:${getFontFamily('Bell MT & ONeill')}`);
+        expect(out.css).toContain(`font-family:${getFontFamily('Bell MT & Co')}`);
         expect(out.css).not.toContain('&amp;');
-        expect(out.css).not.toContain('&#39;');
     });
 
     test('rt as a positive angle produces a CSS rotate anchored at bottom-left', () => {
@@ -1056,6 +1055,20 @@ describe('Sheets HTML export — hostile values in CSS', () => {
         ]) {
             expect(html).not.toContain('position:fixed');
             expect(html).not.toContain('inset');
+        }
+    });
+
+    // A newline ends a CSS string, so a font name with one would write declarations of its own in a style attribute.
+    test('a font name that could leave its CSS string writes no font, in the export and the preview', () => {
+        for (const ff of ['Inter\n;position:fixed;inset:0', "Inter';position:fixed;inset:0;'"]) {
+            const sheet = makeSheet([{ r: 0, c: 0, v: { v: 'x', ff } }]);
+            for (const html of [
+                renderSheetsHtml([sheet], NO_MEDIA, 'screen', NO_PIXELS).css,
+                renderSheetsPreviewHtml([sheet], NO_MEDIA).html,
+            ]) {
+                expect(html).toContain('x');
+                expect(html).not.toContain('position:fixed');
+            }
         }
     });
 

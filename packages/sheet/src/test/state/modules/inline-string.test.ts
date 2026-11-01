@@ -227,6 +227,8 @@ describe('a stored run is checked before the editor writes it as CSS', () => {
         { ff: 'x;background:url(//evil)' },
         { ff: 'x\nbackground:url(//evil)' },
         { ff: 'expression(alert(1))' },
+        { ff: "x';background:url(//evil);'" },
+        { ff: 'x\\' },
     ];
 
     test('a color, size or font that is not a plain value falls back to the default', () => {

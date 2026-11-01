@@ -120,6 +120,13 @@ describe('state/modules/text — font sets', () => {
             `italic normal normal 12pt ${getFontFamily('Source Serif 4')}`,
         );
     });
+
+    // A peer writes `ff`. ctx.font ignores a font string it can't parse, so the cell would keep the last cell's font.
+    test('a font name that could leave its CSS string draws in the sheet default', () => {
+        for (const ff of ['Inter\n;position:fixed', "x';y", 'x;y', 'x\\']) {
+            expect(getFontSet({ ff })).toBe(getFontSet({}));
+        }
+    });
 });
 
 // A glyph's ascent and descent are measured from the baseline, so the same text measures differently

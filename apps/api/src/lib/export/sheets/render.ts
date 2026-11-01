@@ -607,10 +607,9 @@ function buildCellStyle(
 
     if (v) {
         const family = cellFontName(v.ff);
-        // The stack quotes the name, so a quote in it would end the name early; the stylesheet seam strips the rest.
         // Stylesheet text decodes no entities, so escapeHtml there would draw "Bell MT & Co" as "Bell MT &amp; Co".
         if (family) {
-            const stack = getFontFamily(family.replace(/["'\\]/g, ''));
+            const stack = getFontFamily(family);
             parts.push(`font-family:${forStylesheet ? stack : escapeHtml(stack)}`);
         }
         if (v.bl === 1) parts.push('font-weight:bold');

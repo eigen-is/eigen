@@ -18,6 +18,24 @@ describe('cellFontName', () => {
         expect(cellFontName('2')).toBe('2');
     });
 
+    // A peer writes `ff`, and the name ends up in a CSS declaration and in ctx.font.
+    test.each([
+        ['Inter;position:fixed'],
+        ['Inter\nposition:fixed'],
+        ['Inter\r'],
+        ['url(x)'],
+        ['Bell "MT"'],
+        ["O'Neill"],
+        ['Foo\\'],
+        ['Inter\u0000'],
+    ])('a name that could leave its CSS string, %p, is none', (ff) => {
+        expect(cellFontName(ff)).toBeUndefined();
+    });
+
+    test('a name with other punctuation is itself', () => {
+        expect(cellFontName('Bell MT & Co')).toBe('Bell MT & Co');
+    });
+
     test('no font is none', () => {
         expect(cellFontName(undefined)).toBeUndefined();
         expect(cellFontName('')).toBeUndefined();
