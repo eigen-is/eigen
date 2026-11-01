@@ -67,7 +67,12 @@ async function probeWeasyPrint(): Promise<WeasyPrintProbe> {
 const weasyPrint = (): Promise<WeasyPrintProbe> => (cachedProbe ??= probeWeasyPrint());
 
 export async function isWeasyPrintAvailable(): Promise<boolean> {
-    return (await weasyPrint()).python !== null;
+    return (await weasyPrintPython()) !== null;
+}
+
+// The interpreter renders run under, for a test that runs its own Python beside WeasyPrint.
+export async function weasyPrintPython(): Promise<string | null> {
+    return (await weasyPrint()).python;
 }
 
 // A cached interpreter can vanish, as a Homebrew upgrade removes the old Cellar path, so a spawn that finds none probes
