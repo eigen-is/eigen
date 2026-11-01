@@ -1,16 +1,13 @@
 // Cuts every bundled face into unicode-range slices, as Google Fonts serves its fonts, so a page or an export loads
-// only the slices its text draws. It writes the WOFF2 slices beside each face, the fonts.css the apps load and the
-// range data slicesFor reads. What no published range holds goes to a face's rest, cut into chunks about the size of
-// a published slice, so one rare character fetches a small file. Run it by hand when a font changes: it needs a Python
-// venv with fontTools and brotli, and downloads each fallback font from a pinned URL. The ranges come from a snapshot
-// of Google's CSS, which `ranges` refreshes.
-//
-//   bun scripts/fonts/build-font-slices.ts           cut the slices, write fonts.css and the range data
-//   bun scripts/fonts/build-font-slices.ts ranges    fetch Google's CSS again and rewrite the snapshot
+// only the slices its text draws. It writes the WOFF2 slices beside each face, the @font-face CSS the apps load and the
+// range data slicesFor reads. Run it by hand when a font changes, with a Python venv that has fontTools and brotli: it
+// downloads each fallback font from a pinned URL. The argument `ranges` refreshes its snapshot of Google's CSS instead.
 
 import * as fs from 'node:fs';
 import { availableParallelism, homedir, tmpdir } from 'node:os';
 import * as path from 'node:path';
+import type { FontSlice } from '../../packages/lib/src/constants/font-slices';
+import { fontFaceCss } from '../../packages/lib/src/constants/font-slices';
 import type { BundledFontFace, FallbackFont } from '../../packages/lib/src/constants/fonts';
 import { FALLBACK_FONTS, FONT_FACES } from '../../packages/lib/src/constants/fonts';
 import type { PublishedSubset, Slice } from './plan-slices';
@@ -120,6 +117,7 @@ type Snapshot = {
 
 // One face as the script cuts it: its input font, the slices planned for it and how to cut them.
 type Face = {
+    kind: FallbackFont['kind'] | 'text';
     family: string;
     style: 'normal' | 'italic';
     weight: string;
@@ -176,8 +174,12 @@ async function build(): Promise<void> {
     const fallbacks: Face[] = [];
     for (const fallback of FALLBACK_FONTS) {
         const face = await planFallback(fallback, snapshot, work, claimed);
-        if (fallback.kind !== 'math') for (const slice of face.slices) addClaims(claimed, slice.codePoints);
         fallbacks.push(face);
+        if (fallback.kind === 'math') continue;
+        // The keycap bases stay with the text faces too, so an emoji slice claims no ASCII.
+        for (const slice of face.slices) {
+            for (const codePoint of slice.codePoints) if (codePoint >= 0x80) claimed.add(codePoint);
+        }
     }
     const textFaces = await Promise.all(FONT_FACES.map((face) => planTextFace(face, snapshot, claimed)));
     const faces = [...textFaces, ...fallbacks];
@@ -186,16 +188,12 @@ async function build(): Promise<void> {
     await cutAll(faces, work);
     await chunkRests(faces, work);
     await writeLicenses();
-    fs.writeFileSync(CSS_OUT, fontsCss(faces));
-    fs.writeFileSync(DATA_OUT, sliceData(faces));
+    const slices = faces.flatMap((face) => face.slices.map((slice) => fontSlice(face, slice)));
+    fs.writeFileSync(CSS_OUT, fontsCss(slices));
+    fs.writeFileSync(DATA_OUT, sliceData(slices));
     await formatAsTheRepo(CSS_OUT);
     fs.rmSync(work, { recursive: true });
     report(faces);
-}
-
-// The keycap bases stay with the text faces too, so an emoji slice claims no ASCII.
-function addClaims(claimed: Set<number>, codePoints: ReadonlySet<number>): void {
-    for (const codePoint of codePoints) if (codePoint >= 0x80) claimed.add(codePoint);
 }
 
 async function planFallback(
@@ -218,6 +216,7 @@ async function planFallback(
         );
         const slices = closeSequences(published, sequences, coverage, cmap);
         return {
+            kind: fallback.kind,
             family: fallback.family,
             style: 'normal',
             weight: '400 700',
@@ -237,6 +236,7 @@ async function planFallback(
         const coverage = sc ? CJK_SC_COVERAGE : CJK_KR_COVERAGE;
         const slices = publishedSlices(subsetsOf(snapshot, fallback.family, 'normal'), cmap, coverage, claimed);
         return {
+            kind: fallback.kind,
             family: fallback.family,
             style: 'normal',
             weight: '100 900',
@@ -253,6 +253,7 @@ async function planFallback(
         // A formula's stretchy variants must sit in the face that lays it out, so the math face is one slice, whole.
         const font = await mathFont();
         return {
+            kind: fallback.kind,
             family: fallback.family,
             style: 'normal',
             weight: '400',
@@ -278,6 +279,7 @@ async function planTextFace(face: BundledFontFace, snapshot: Snapshot, claimed: 
     const slices = google ? publishedSlices(subsetsOf(snapshot, face.family, style), cmap, cmap, claimed) : [];
     const [folder, file] = face.file.split('/');
     return {
+        kind: 'text',
         family: face.family,
         style: face.style,
         weight: face.weight,
@@ -315,7 +317,7 @@ function clearSlices(face: Face): void {
 // The math face is converted whole, its glyphs and tables untouched, since its license asks that a changed font be
 // renamed. Every other slice is cut.
 async function cutAll(faces: Face[], work: string): Promise<void> {
-    const math = faces.find((face) => face.family === 'New Computer Modern Math');
+    const math = faces.find((face) => face.kind === 'math');
     if (math) await python('woff2', math.font, path.join(FONTS_DIR, sliceFile(math, math.slices[0])));
     const sliced = faces.filter((face) => face !== math);
     await cut(
@@ -410,31 +412,24 @@ async function writeLicenses(): Promise<void> {
     for (const [key, file] of copies) fs.copyFileSync(await source(key), path.join(FONTS_DIR, file));
 }
 
-function fontsCss(faces: Face[]): string {
-    const rules = faces.flatMap((face) =>
-        face.slices.map(
-            (slice) => `@font-face {
-    font-family: "${face.family}";
-    src: url("../assets/fonts/${sliceFile(face, slice)}") format("woff2");
-    font-weight: ${face.weight};
-    font-style: ${face.style};
-    font-display: swap;
-    unicode-range: ${formatRange(slice.codePoints)};
+// A slice as the slice table holds it.
+function fontSlice(face: Face, slice: Slice): FontSlice {
+    const { family, style, weight } = face;
+    return { family, style, weight, file: sliceFile(face, slice), unicodeRange: formatRange(slice.codePoints) };
 }
-`,
-        ),
-    );
+
+function fontsCss(slices: readonly FontSlice[]): string {
+    const rules = slices.map((slice) => fontFaceCss(slice, `../assets/fonts/${slice.file}`));
     return `/* Generated by scripts/fonts/build-font-slices.ts: do not edit. Each rule is one slice of a bundled face. */
 
-${rules.join('\n')}`;
+${rules.join('\n\n')}
+`;
 }
 
-function sliceData(faces: Face[]): string {
-    const rows = faces.flatMap((face) =>
-        face.slices.map(
-            (slice) =>
-                `    { family: '${face.family}', style: '${face.style}', weight: '${face.weight}', file: '${sliceFile(face, slice)}', unicodeRange: '${formatRange(slice.codePoints)}' },`,
-        ),
+function sliceData(slices: readonly FontSlice[]): string {
+    const rows = slices.map(
+        (slice) =>
+            `    { family: '${slice.family}', style: '${slice.style}', weight: '${slice.weight}', file: '${slice.file}', unicodeRange: '${slice.unicodeRange}' },`,
     );
     return `// Generated by scripts/fonts/build-font-slices.ts: do not edit. Each slice of a bundled face, as fonts.css loads it.
 
@@ -479,7 +474,7 @@ async function mathFont(): Promise<string> {
 // A pinned download, fetched once into the cache and checked against its SHA-256 on every run.
 async function source(key: keyof typeof SOURCES): Promise<string> {
     const pinned = SOURCES[key];
-    const file = cachedPath(pinned);
+    const file = path.join(CACHE, `${pinned.sha256.slice(0, 12)}-${decodeURIComponent(path.basename(pinned.url))}`);
     if (!fs.existsSync(file)) {
         const response = await fetch(pinned.url);
         if (!response.ok) throw new Error(`${pinned.url}: ${response.status}`);
@@ -487,10 +482,6 @@ async function source(key: keyof typeof SOURCES): Promise<string> {
     }
     if (sha256(file) !== pinned.sha256) throw new Error(`${file} does not match the SHA-256 pinned for ${pinned.url}`);
     return file;
-}
-
-function cachedPath(pinned: Source): string {
-    return path.join(CACHE, `${pinned.sha256.slice(0, 12)}-${decodeURIComponent(path.basename(pinned.url))}`);
 }
 
 // Biome wraps a long unicode-range its own way, so a generated file is formatted by it rather than by hand.

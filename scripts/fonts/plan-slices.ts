@@ -42,7 +42,8 @@ export const CJK_KR_COVERAGE = new Set([
     ...span(0xd7b0, 0xd7ff), // Hangul Jamo Extended-B
 ]);
 
-// Each published range ∩ the font's characters ∩ its kind's coverage, minus what an earlier family claimed.
+// Each published range, kept to the characters the font maps and its kind of font covers, minus what an earlier family
+// claimed.
 export function publishedSlices(
     subsets: readonly PublishedSubset[],
     cmap: ReadonlySet<number>,
@@ -69,7 +70,9 @@ export function withRest(
     claimed: ReadonlySet<number>,
 ): Slice[] {
     const sliced = new Set(slices.flatMap((slice) => [...slice.codePoints]));
-    const rest = [...cmap].filter((cp) => coverage.has(cp) && !claimed.has(cp) && !sliced.has(cp));
+    const rest = [...cmap].filter(
+        (codePoint) => coverage.has(codePoint) && !claimed.has(codePoint) && !sliced.has(codePoint),
+    );
     if (rest.length === 0) return slices;
     return [...slices, { label: slices.length === 0 ? 'all' : 'rest', codePoints: new Set(rest) }];
 }

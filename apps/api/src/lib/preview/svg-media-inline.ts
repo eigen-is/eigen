@@ -3,10 +3,9 @@
 // the preview, each name becomes a data: URI of the file's bytes, and the font slices its text draws with are
 // embedded too. The screen preview cache calls it.
 
-import { EIGEN_FONTS, TEXT_FALLBACK_FAMILIES } from '@workspace/lib/constants/fonts';
 import { EIGEN_MEDIA_SCHEME, eigenMediaHref, listEigenMediaRefs, stripEigenMediaRefs } from '@workspace/lib/vector';
 import { spliceAfterSvgOpenTag } from '@workspace/lib/xml';
-import { drawnCodePoints, slicesFaceCss } from '../export/fonts';
+import { drawnCodePoints, namedFamilies, slicesFaceCss } from '../export/fonts';
 import type { Mount } from '../mount';
 
 // The raw SVG is treated as HOSTILE bytes. The load-bearing safety rails, in order:
@@ -72,35 +71,20 @@ export async function inlineSvgMediaRefs(mount: Mount, parentId: string, svgByte
     }
 }
 
-// The slices its text draws with, in the Eigen fonts it names and in the fallbacks for what those lack. They are data:
-// URIs, so sanitizeExportHtml keeps them and the sandbox CSP allows them; they are static per build, so a cached
-// result never goes stale. Past the output budget the svg serves without them, its media kept.
+// The slices its text draws with, in the bundled families it names. A drawing names the emoji and CJK fallbacks in its
+// stacks, while an older or uploaded SVG that names Inter alone draws no slice of theirs. They are data: URIs, so
+// sanitizeExportHtml keeps them and the sandbox CSP allows them; they are static per build, so a cached result never
+// goes stale. Past the output budget the svg serves without them, its media kept.
 function injectFontFaces(svg: string, budget: Budget): string {
-    const used = usedEigenFonts(svg);
+    const used = namedFamilies(svg);
     if (used.size === 0) return svg;
-    const faceCss = slicesFaceCss(drawnCodePoints(svg), [...used, ...TEXT_FALLBACK_FAMILIES]);
+    // An SVG that names only a fallback, with none of that fallback's characters, needs no slice.
+    const faceCss = slicesFaceCss(drawnCodePoints(svg), used);
     if (faceCss === '') return svg;
     const defs = `<defs><style>${faceCss}</style></defs>`;
     budget.remaining -= Buffer.byteLength(defs);
     if (budget.remaining < 0) return svg;
     return spliceAfterSvgOpenTag(svg, defs);
-}
-
-// The EIGEN fonts the svg's text uses. Only font-family values are read, so prose never matches; each
-// holds a whole stack ("&apos;Excalifont&apos;, cursive", where an entity's `;` must not end an unquoted
-// value), and each token must equal a font name, or "Interstate" would pull in the Inter face.
-const FONT_FAMILY_RE = /font-family\s*[:=]\s*(?:"([^"]*)"|'([^']*)'|((?:&\w+;|[^;">])+))/gi;
-const FONT_NAMES = new Set(EIGEN_FONTS.map((font) => font.name));
-function usedEigenFonts(svg: string): Set<string> {
-    const used = new Set<string>();
-    for (const m of svg.matchAll(FONT_FAMILY_RE)) {
-        const value = m[1] ?? m[2] ?? m[3] ?? '';
-        for (const token of value.split(',')) {
-            const name = token.replace(/&apos;|&quot;|['"]/g, '').trim();
-            if (FONT_NAMES.has(name)) used.add(name);
-        }
-    }
-    return used;
 }
 
 // Serve the drawing with every ref stripped — images render blank, but the svg stays small and safe.

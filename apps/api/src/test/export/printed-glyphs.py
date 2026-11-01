@@ -72,10 +72,11 @@ def same_outline(printed, source):
         for (operator, points), (source_operator, source_points) in zip(printed, source))
 
 
+# A slice file also holds glyphs its unicode-range doesn't declare, such as the space. Such a glyph is compared to the
+# slice the rest of its program prints from.
 def printed_glyphs(request):
     dictionaries, streams = pdf_objects(base64.b64decode(request['pdf']))
-    sources = {}
-    glyphs = []
+    printed = []
     for dictionary in dictionaries.values():
         if b'/Subtype /Type0' not in dictionary:
             continue
@@ -84,7 +85,6 @@ def printed_glyphs(request):
         family = re.search(rb'/FontFamily \((.*?)\)', descriptor)[1].decode()
         program_number = reference(descriptor, b'FontFile[23]')
         program = TTFont(io.BytesIO(streams[program_number]))
-        printed_set, printed_order = program.getGlyphSet(), program.getGlyphOrder()
         cmap = streams[reference(dictionary, b'ToUnicode')]
         for cid, utf16 in re.findall(rb'<([0-9a-f]{4})> <([0-9a-f]*)>', cmap):
             cid, text = int(cid, 16), bytes.fromhex(utf16.decode()).decode('utf-16-be')
@@ -94,31 +94,39 @@ def printed_glyphs(request):
             slices = [
                 piece for piece in request['slices'] if piece['family'] == family and text and any(
                     start <= ord(text[0]) <= end for start, end in code_points(piece['unicodeRange']))]
-            glyph = {'family': family, 'program': program_number, 'text': text, 'slice': None}
-            glyphs.append(glyph)
-            # A character no font has prints .notdef, from an id past the font's glyphs.
-            if cid >= len(printed_order):
-                glyph['outline'] = 'notdef'
-                continue
-            if len(slices) != 1:
-                glyph['outline'] = 'no slice' if not slices else 'several slices'
-                continue
-            glyph['slice'] = slices[0]['file']
-            if slices[0]['file'] not in sources:
-                sources[slices[0]['file']] = TTFont(slices[0]['path'])
-            source = sources[slices[0]['file']]
-            axes = {axis.axisTag for axis in source['fvar'].axes} if 'fvar' in source else set()
-            printed = outline(printed_set, printed_order[cid])
-            source_outlines = [
-                outline(source.getGlyphSet(location={tag: value for tag, value in location.items() if tag in axes}),
-                        source.getGlyphOrder()[cid])
-                for location in request['locations']]
-            if any(same_outline(printed, source_outline) for source_outline in source_outlines):
-                glyph['outline'] = 'same'
-            elif not printed:
-                glyph['outline'] = 'blank'
-            else:
-                glyph['outline'] = 'other'
+            printed.append((family, program_number, program, cid, text, slices))
+    program_slices = {number: slices[0] for _, number, _, _, _, slices in printed if len(slices) == 1}
+    sources = {}
+    glyphs = []
+    for family, program_number, program, cid, text, slices in printed:
+        printed_order = program.getGlyphOrder()
+        glyph = {'family': family, 'program': program_number, 'text': text, 'slice': None}
+        glyphs.append(glyph)
+        # A character no font has prints .notdef, from an id past the font's glyphs.
+        if cid >= len(printed_order):
+            glyph['outline'] = 'notdef'
+            continue
+        if not slices and program_number in program_slices:
+            slices = [program_slices[program_number]]
+        if len(slices) != 1:
+            glyph['outline'] = 'no slice' if not slices else 'several slices'
+            continue
+        glyph['slice'] = slices[0]['file']
+        if slices[0]['file'] not in sources:
+            sources[slices[0]['file']] = TTFont(slices[0]['path'])
+        source = sources[slices[0]['file']]
+        axes = {axis.axisTag for axis in source['fvar'].axes} if 'fvar' in source else set()
+        printed_outline = outline(program.getGlyphSet(), printed_order[cid])
+        source_outlines = [
+            outline(source.getGlyphSet(location={tag: value for tag, value in location.items() if tag in axes}),
+                    source.getGlyphOrder()[cid])
+            for location in request['locations']]
+        if any(same_outline(printed_outline, source_outline) for source_outline in source_outlines):
+            glyph['outline'] = 'same'
+        elif not printed_outline:
+            glyph['outline'] = 'blank'
+        else:
+            glyph['outline'] = 'other'
     return glyphs
 
 

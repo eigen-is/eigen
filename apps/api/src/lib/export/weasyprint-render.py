@@ -1,10 +1,12 @@
 # Renders the HTML on stdin to a PDF on stdout, scaled by the zoom in the first argument, 1 without one. WeasyPrint's
 # own fetcher opens any URL the HTML names, from the API host, and an export embeds everything it needs as a data: URI,
 # so this one opens data: URIs and refuses the rest: http(s), file:, a path, any other scheme. It also teaches
-# WeasyPrint to tell the slices of one font apart, which it reads as one font. Needs WeasyPrint 68, the first with the
-# URLFetcher class.
+# WeasyPrint to tell the slices of one font apart, which it reads as one font, and prints every font's outlines, never
+# its colour layers, on every host. Needs WeasyPrint 68, the first with the URLFetcher class.
 import sys
 from hashlib import md5
+from itertools import count
+from xml.etree.ElementTree import SubElement
 
 import weasyprint
 
@@ -82,26 +84,39 @@ def band_margins(html, font_config):
 # fonts apart by their family, style and weight, but not by their file. So it embedded the first slice's file and drew
 # every slice's glyph ids with it, and Chinese, Korean or emoji printed as other characters. Here a font's key and the
 # tag of its embedded file also take a digest of the file. WeasyPrint draws a colour font only with a HarfBuzz newer
-# than the image's, and leaves it blank otherwise. The emoji face paints in the text colour anyway, so it prints its
-# outlines instead. WeasyPrint is pinned: one that moved these internals fails every PDF here, rather than print wrong
-# glyphs.
-def tell_font_slices_apart():
+# than the image's, and leaves it blank otherwise. The emoji face paints in the text colour anyway, so every font prints
+# its outlines instead. WeasyPrint is pinned. One that renamed these internals fails every PDF here, and one that
+# changed a signature fails with a traceback. One whose add_font stopped calling stream.get_pango_font_key would skip the
+# key silently and print wrong glyphs again, which the glyph test in CI catches.
+def patch_font_embedding():
     try:
         from weasyprint.pdf import fonts, stream
+        from weasyprint.text.ffi import ffi, harfbuzz
         from weasyprint.text.fonts import get_hb_object_data, get_pango_font_hb_face
 
         font_key, font_init = stream.get_pango_font_key, fonts.Font.__init__
     except (AttributeError, ImportError) as error:
         sys.exit(f'weasyprint-render.py: WeasyPrint moved its font internals ({type(error).__name__}: {error})')
 
+    # add_font asks for a key on every text box, and a face can be megabytes, so each face is digested once. The cache
+    # holds the face, so its address is not reused for another one while the render runs. The faces of a font
+    # collection share one file, so the key also takes the face's index.
+    faces = {}
+
     def key_by_file(pango_font):
         key, description, font_size = font_key(pango_font)
-        face = get_hb_object_data(get_pango_font_hb_face(pango_font))
-        return (key, md5(face, usedforsecurity=False).digest()), description, font_size
+        hb_face = get_pango_font_hb_face(pango_font)
+        address = int(ffi.cast('uintptr_t', hb_face))
+        if address not in faces:
+            digest = md5(get_hb_object_data(hb_face), usedforsecurity=False).digest()
+            faces[address] = hb_face, digest, harfbuzz.hb_face_get_index(hb_face)
+        _, digest, index = faces[address]
+        return (key, digest, index), description, font_size
 
     def init_by_file(font, pango_font, description, font_size):
         font_init(font, pango_font, description, font_size)
-        digest = md5(font.hash.encode() + font.file_content, usedforsecurity=False).digest()
+        file = font.file_content + font.index.to_bytes(4, 'big')
+        digest = md5(font.hash.encode() + file, usedforsecurity=False).digest()
         tag = ''.join(chr(65 + byte % 26) for byte in digest[:6])
         font.name, font.hash = b'/' + tag.encode() + font.name[len(font.hash) + 1:], tag
         font.colr = False
@@ -109,7 +124,33 @@ def tell_font_slices_apart():
     stream.get_pango_font_key, fonts.Font.__init__ = key_by_file, init_by_file
 
 
-tell_font_slices_apart()
+# Pango asks fontconfig for the best font of a description and then for all of them in order, and it skips the first of
+# that list as the best one it already has. The slices of one family tie on every score fontconfig sorts by. glibc's
+# sort keeps tied fonts in the order they came, so the best one stays first, but the sort of macOS and musl does not.
+# There Pango skipped a slice it never had, and its characters printed as .notdef. A distinct font version for each
+# slice file breaks the tie. Should WeasyPrint stop writing its font rules through tostring, this does nothing, and
+# glibc still prints right.
+def break_font_ties():
+    try:
+        from weasyprint.text import fonts
+
+        serialize = fonts.tostring
+    except (AttributeError, ImportError) as error:
+        sys.exit(f'weasyprint-render.py: WeasyPrint moved its font rules ({type(error).__name__}: {error})')
+    versions = count(1)
+
+    def with_font_version(root, **options):
+        for match in root.iter('match'):
+            if match.get('target') == 'scan':
+                edit = SubElement(match, 'edit', name='fontversion', mode='assign')
+                SubElement(edit, 'int').text = str(next(versions))
+        return serialize(root, **options)
+
+    fonts.tostring = with_font_version
+
+
+patch_font_embedding()
+break_font_ties()
 
 # A passed stylesheet is the user's, so the margins it grows are !important to win over the document's @page. The probe
 # and the render share one font configuration, so the doc's @font-face fonts load once.

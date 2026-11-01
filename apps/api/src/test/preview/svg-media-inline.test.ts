@@ -221,6 +221,16 @@ describe('inlineSvgMediaRefs font injection', () => {
         ]);
     });
 
+    // An older or uploaded SVG names Inter alone, so its Chinese draws in a system font, never in a slice it doesn't name.
+    test('a fallback the svg does not name embeds no slice', async () => {
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg"><text font-family="&apos;Inter&apos;, sans-serif">Hi 中</text></svg>`;
+        const out = (await inlineSvgMediaRefs(mount, folderId, Buffer.from(svg))).toString('utf8');
+        expect(embeddedSliceFiles(out)).toEqual([
+            'inter/Inter-Variable.latin.woff2',
+            'inter/Inter-Variable-Italic.latin.woff2',
+        ]);
+    });
+
     test('a family whose name merely contains an EIGEN name is not matched', async () => {
         // "Interstate" contains "Inter" — a substring test would wrongly inject the Inter face. Token
         // matching (comma-split, exact) rejects it, so the svg serves byte-identical.
