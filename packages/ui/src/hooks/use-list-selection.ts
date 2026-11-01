@@ -14,7 +14,7 @@ type UseListSelectionOptions<T> = {
 };
 
 export type UseListSelectionReturn<T> = {
-    selectedIds: Set<string>;
+    selectedIds: ReadonlySet<string>;
     isSelected: (id: string) => boolean;
     selectedItems: T[];
     selectedCount: number;
@@ -26,12 +26,11 @@ export type UseListSelectionReturn<T> = {
     setSelection: (ids: string[]) => void;
     clearSelection: () => void;
     handleItemClick: (id: string, e: React.MouseEvent) => void;
-    anchorId: string | null;
 };
 
 export function useListSelection<T>({ items, getId, openId }: UseListSelectionOptions<T>): UseListSelectionReturn<T> {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-    const [anchorId, setAnchorId] = useState<string | null>(null);
+    // The row a Shift-click range starts from. Only selectRange reads it and no render shows it, so a ref.
     const anchorRef = useRef<string | null>(null);
 
     // A selection the user built with Shift or Cmd stays when the detail closes.
@@ -43,38 +42,27 @@ export function useListSelection<T>({ items, getId, openId }: UseListSelectionOp
         setSelectedIds((prev) => (prev.size === 1 && prev.has(closedId) ? new Set() : prev));
     }, [openId]);
 
-    const setAnchor = useCallback((id: string | null) => {
+    const select = useCallback((id: string) => {
+        setSelectedIds(new Set([id]));
         anchorRef.current = id;
-        setAnchorId(id);
     }, []);
 
-    const select = useCallback(
-        (id: string) => {
-            setSelectedIds(new Set([id]));
-            setAnchor(id);
-        },
-        [setAnchor],
-    );
-
-    const toggle = useCallback(
-        (id: string) => {
-            setSelectedIds((prev) => {
-                const next = new Set(prev);
-                if (next.has(id)) next.delete(id);
-                else next.add(id);
-                return next;
-            });
-            setAnchor(id);
-        },
-        [setAnchor],
-    );
+    const toggle = useCallback((id: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+        anchorRef.current = id;
+    }, []);
 
     const selectRange = useCallback(
         (toId: string) => {
             const anchor = anchorRef.current;
             if (!anchor) {
                 setSelectedIds(new Set([toId]));
-                setAnchor(toId);
+                anchorRef.current = toId;
                 return;
             }
             const anchorIndex = items.findIndex((i) => getId(i) === anchor);
@@ -89,7 +77,7 @@ export function useListSelection<T>({ items, getId, openId }: UseListSelectionOp
             }
             setSelectedIds(ids);
         },
-        [items, getId, setAnchor],
+        [items, getId],
     );
 
     const selectAll = useCallback(() => {
@@ -103,8 +91,8 @@ export function useListSelection<T>({ items, getId, openId }: UseListSelectionOp
 
     const clearSelection = useCallback(() => {
         setSelectedIds(new Set());
-        setAnchor(null);
-    }, [setAnchor]);
+        anchorRef.current = null;
+    }, []);
 
     const handleItemClick = useCallback(
         (id: string, e: React.MouseEvent) => {
@@ -135,6 +123,5 @@ export function useListSelection<T>({ items, getId, openId }: UseListSelectionOp
         setSelection,
         clearSelection,
         handleItemClick,
-        anchorId,
     };
 }

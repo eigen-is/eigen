@@ -97,8 +97,8 @@ export function ElbowPinHandles({
             {route.slice(0, -1).map((a, i) => {
                 // Dots render on EVERY segment, ends included: dragging a first/last segment inserts an L-jog
                 // so the pinned segment turns interior (elbow-pins' handleSegmentMove) — the stored invariant
-                // "first/last can't be fixed" holds as an output. We keep OUR 40px short-segment gate (upstream
-                // gates elbow dots at ~5px; consistency with our shipped mid-segment gate beats matching it — D6.3).
+                // "first/last can't be fixed" holds as an output. A segment shorter than 40px on screen gets no
+                // dot. That is the gate a line's midpoint handles use, so the two kinds of handle behave alike.
                 const b = route[i + 1];
                 if (Math.hypot(b.x - a.x, b.y - a.y) * zoom < PIN_MIN_SEGMENT_SCREEN_PX) return null;
                 const index = i + 1;

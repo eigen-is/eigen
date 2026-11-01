@@ -25,7 +25,6 @@ function selectionOf(ids: string[]): UseListSelectionReturn<Row> {
         setSelection: () => {},
         clearSelection: () => {},
         handleItemClick: () => {},
-        anchorId: null,
     };
 }
 

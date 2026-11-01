@@ -124,7 +124,7 @@ Docker is only needed to test mail delivery, IMAP or the images: see [CONTRIBUTI
 
 ## Architecture
 
-Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data. Files are stored separately. No shared database means no way to accidentally access someone else's data. `./eigen backup` saves the whole server as one archive, which holds a backup of every user and team; [docs/BACKUP.md](docs/BACKUP.md) covers it and the backup of one user or team.
+Each user gets their own directory on the server. SQLite databases (per user) store metadata and structured data. Files are stored separately. With no shared database, code that serves one user works in that user's own files, and reaching another home takes a deliberate call through the relay. That makes a leak hard to write by accident, but a bug in a permission check can still expose data. `./eigen backup` saves the whole server as one archive, which holds a backup of every user and team; [docs/BACKUP.md](docs/BACKUP.md) covers it and the backup of one user or team.
 
 ```
 data/home/{userId}/
