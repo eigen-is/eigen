@@ -10,6 +10,9 @@
 #     the handover, typed on a terminal too; --no-backup with Eigen stopped; a refusal while eigen-api reads a
 #     .env.production replaced since it started, or cannot be asked; an interrupt in the backup wait, which stops and
 #     restarts nothing;
+#   - the restart notice: --in and its message, refused before anything runs when wrong; the notice after the pulls
+#     and the countdown before the backup, or before the stop of a rollback or restore; a TERM, a hangup and a failed
+#     backup each taking it back; a failed notice with and without a wait;
 #   - backup on the running API, refused in the same .env.production cases, and restart stopping eigen-api first;
 #   - stop, and a running server backup or its upload waited out before it;
 #   - restore: the stage and the swap and what each failure leaves, an archive uid 1000 cannot read, a restore that
@@ -47,8 +50,9 @@ trap 'rm -rf "$FIX"' EXIT
 # leaves one and fails, after 3 s with STUB_SWAP_SLOW=1; with STUB_SWAP_KEPT=<folder> it keeps that folder aside and
 # says so, as the CLI does. A run of bootstrap writes a Compose file into this folder, the starter keys into
 # .env.production when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on
-# stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE, and
-# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, and one that checksums $EIGEN_ENV_FILE
+# stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE,
+# compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and
+# exits STUB_NOTICE, and one that checksums $EIGEN_ENV_FILE
 # that of STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
 # update-check --level ends its line in \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
 # .env.production.
@@ -82,6 +86,11 @@ case $1 in
                 case " $* " in *" backup "*)
                     echo "archive=${STUB_ARCHIVE-server-pre-update-light-20260101-000000.tar}"
                     exit "${STUB_EXEC:-0}"
+                    ;;
+                esac
+                case " $* " in *" restart-notice --in "*)
+                    echo 'at=2026-01-01T00:10:00.000Z'
+                    exit "${STUB_NOTICE:-0}"
                     ;;
                 esac
                 ;;
@@ -201,6 +210,7 @@ PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # CALLS (what docker was asked). STUB_* pass through as set here. LAUNCH_TTY=1 gives a container shell a terminal, which
 # takes stderr into OUT. LAUNCH_TERM=<call> sends the launcher a TERM a second after docker is asked <call>, as Ctrl-C
 # would: bash starts a background job with INT ignored, which a shell cannot trap, and the launcher traps both alike.
+# LAUNCH_SIGNAL=HUP sends a hangup instead, as a lost SSH session would.
 # Every launch runs as such a job, its stdin /dev/null as on CI, so one that has not ended 120 s after its start is
 # killed, its container too, and exits 137, which fails the check and leaves the suite going. Without a terminal, the
 # container's shell writes the launcher's stdout and stderr into $FIX itself: docker run can lose what a short-lived
@@ -212,7 +222,8 @@ launch() {
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
-        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_MOUNTED; do
+        STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_NOTICE \
+        STUB_MOUNTED; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -247,7 +258,7 @@ launch() {
             [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.2; done
         if grep -qF -- "$LAUNCH_TERM" "$FIX/calls.log"; then
             sleep 1
-            kill -s TERM "$pid" 2>/dev/null || :
+            kill -s "${LAUNCH_SIGNAL:-TERM}" "$pid" 2>/dev/null || :
         fi
     fi
     while kill -0 "$pid" 2>/dev/null && [ "$(date +%s)" -lt "$deadline" ]; do sleep 0.2; done
@@ -308,13 +319,14 @@ steps() {
 }
 
 # update_steps: what of the last launch an update from 0.2.99 turns on, in order, on one line: the notes and the level
-# the new CLI gives, the backup on the running API, the bootstrap and configure runs with the image each ran in, the
-# stop and the start.
+# the new CLI gives, the restart notices and the backup on the running API, the bootstrap and configure runs with the
+# image each ran in, the stop and the start.
 update_steps() {
     printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
         -e 's/^run .* \([^ ]*\) update-check --from 0.2.99 --level$/level \1/p' \
         -e 's/^run .* \([^ ]*\) update-check --from 0.2.99$/notes \1/p' \
         -e 's/^compose .* exec -T -e TERM -e NO_COLOR eigen-api \/app\/docker\/api\/entrypoint.sh \(backup .*\)$/\1/p' \
+        -e 's/^compose .* exec -T -e TERM -e NO_COLOR eigen-api \/app\/docker\/api\/entrypoint.sh \(restart-notice .*\)$/\1/p' \
         -e 's/^run .* \([^ ]*\) bootstrap --force --out \/install$/bootstrap \1/p' \
         -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' | tr '\n' '|'
 }
@@ -369,6 +381,16 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: status, backup, restore, logs, update, rollback, restart and stop --help print their usage"
     else
         fail "$SHELL_NAME: no usage from --help of:$failed"
+    fi
+    failed=''
+    for command in update rollback restore; do
+        launch bare "$command" --help
+        if ! printf '%s\n' "$OUT" | grep -q '^  --in <time>  *Warn everyone first, then wait'; then failed="$failed $command"; fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: update, rollback and restore --help explain --in"
+    else
+        fail "$SHELL_NAME: no --in in the --help of:$failed"
     fi
     failed=''
     for command in setup reset-password; do
@@ -756,12 +778,12 @@ for SHELL_NAME in dash busybox host; do
     mkdir -p "$FIX/release/data"
     STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
     sequence=$(update_steps)
-    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|backup --level light --reason pre-update --wait|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 0 --reason update|backup --level light --reason pre-update --wait|restart-notice --in 0 --reason update|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
         [ "$(cat "$FIX/release/.eigen/last-update")" = server-pre-update-light-20260101-000000.tar ] &&
         printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER &&
         printf '%s\n' "$OUT" | grep -q '│  Saved before the update: backups/server-pre-update-light-20260101-000000.tar$' &&
         printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
-        ok "$SHELL_NAME: update backs up on the running API at the level the new CLI names, before it writes a file, and the new launcher records the archive for a rollback"
+        ok "$SHELL_NAME: update tells the open tabs, backs up on the running API at the level the new CLI names, before it writes a file, tells them again, and the new launcher records the archive for a rollback"
     else
         fail "$SHELL_NAME: update: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
@@ -773,6 +795,84 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update --full: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     rm "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+
+    # --in: the notice goes out after every pull, the wait counts down in the launcher, and the backup follows it.
+    STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --in 1s 'Back in five'
+    sequence=$(update_steps)
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 1 --reason update --message Back in five|backup --level light --reason pre-update --wait|restart-notice --in 0 --reason update --message Back in five|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        printf '%s\n' "$CALLS" | awk '/^pull /{ pulled = NR } / restart-notice --in 1 /{ told = NR } END { exit !(pulled && told > pulled) }' &&
+        printf '%s\n' "$OUT" | grep -q '◆  Eigen restarts for the update at 2026-01-01 00:10:00 UTC, in 1s. Ctrl+C cancels.$' &&
+        printf '%s\n' "$OUT" | grep -q '│  Back in five$' && printf '%s\n' "$OUT" | grep -q '◇  Waited until 2026-01-01 00:10:00 UTC$'; then
+        ok "$SHELL_NAME: update --in tells the open tabs after every pull, with the message, counts down, then backs up"
+    else
+        fail "$SHELL_NAME: update --in: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    # Ctrl+C or a lost SSH session in the wait takes the notice back, and nothing is backed up, stopped or written.
+    failed=''
+    for signal in TERM HUP; do
+        LAUNCH_TERM='restart-notice --in 600' LAUNCH_SIGNAL=$signal STUB_LATEST=0.3.1 STUB_REVISION=def5678 \
+            STUB_DIGEST=ddd launch release update --in 10m
+        code=130
+        if [ "$signal" = HUP ]; then code=129; fi
+        if [ "$CODE" != "$code" ] || ! printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' restart-notice --clear$' ||
+            printf '%s\n' "$CALLS" | grep -Eq ' backup | bootstrap | stop$| up -d' || [ -e "$FIX/release/.eigen/lock" ] ||
+            [ -e "$FIX/release/.eigen/bundle" ]; then
+            failed="$failed $signal (exit $CODE, calls $(printf '%s' "$CALLS" | tr '\n' '|'))"
+        fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: a TERM or a hangup in the --in wait takes the notice back and backs up, stops and writes nothing"
+    else
+        fail "$SHELL_NAME: an update cut off in its wait:$failed"
+    fi
+    LAUNCH_TERM='restart-notice --in 600' STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --in 10m
+    if printf '%s\n' "$ERR" | grep -q '■  The wait was cancelled. Eigen runs on as it was.$'; then
+        ok "$SHELL_NAME: an update cut off in its wait says Eigen runs on"
+    else
+        fail "$SHELL_NAME: an update cut off in its wait: '$ERR'"
+    fi
+    # A failed backup after the notice takes it back too.
+    STUB_EXEC=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    if [ "$CODE" = 1 ] && [ "$(update_steps)" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 0 --reason update|backup --level light --reason pre-update --wait|restart-notice --clear|' ]; then
+        ok "$SHELL_NAME: a failed backup takes the notice back"
+    else
+        fail "$SHELL_NAME: a failed backup after the notice: exit $CODE, sequence '$(update_steps)'"
+    fi
+    # A notice with a wait that does not reach the tabs stops the update; one for now that does not is only named.
+    STUB_NOTICE=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --in 1m
+    told_code=$CODE told_err=$ERR told_calls=$CALLS
+    STUB_NOTICE=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
+    if [ "$told_code" = 1 ] && printf '%s\n' "$told_err" | grep -q '■  Could not tell the open tabs; Eigen runs on as it was$' &&
+        ! printf '%s\n' "$told_calls" | grep -Eq ' backup | bootstrap ' && [ "$CODE" = 0 ] &&
+        [ "$(printf '%s\n' "$OUT" | grep -c '▲  Could not tell the open tabs that Eigen restarts now.$')" = 2 ] &&
+        printf '%s\n' "$CALLS" | grep -q ' backup --level light --reason pre-update --wait$'; then
+        ok "$SHELL_NAME: a notice with a wait that fails stops the update before the backup; a notice for now that fails does not"
+    else
+        fail "$SHELL_NAME: a failed notice: --in 1m exit $told_code, '$told_err'; without --in exit $CODE, '$OUT'"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
+    # A wrong --in or message is refused before anything runs.
+    failed=''
+    long=$(printf 'x%.0s' $(seq 201))
+    for args in 'update --in 10' 'update --in 61m' 'update --in 2h' 'update --in 99999s' 'update --in 10x' \
+        'update --in -5m' 'update --in' 'update --check --in 1m' "update --in 1m $long" 'rollback --in 10' \
+        'restore a --in 5'; do
+        # shellcheck disable=SC2086
+        launch release $args
+        if [ "$CODE" != 2 ] || [ -n "$OUT" ] || [ -n "$CALLS" ] || ! printf '%s\n' "$ERR" | grep -q '^Usage: ./eigen'; then
+            failed="$failed '$args' (exit $CODE, stdout '$OUT', stderr '$ERR')"
+        fi
+    done
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update --in 0
+    zero=$CODE
+    launch release update --in 09m --bogus
+    if [ -z "$failed" ] && [ "$zero" = 0 ] && [ "$CODE" = 2 ] && printf '%s\n' "$ERR" | grep -q '^Unknown argument "--bogus".$'; then
+        ok "$SHELL_NAME: --in takes 0 and a leading zero, and refuses a bare number, more than an hour, a stray unit, no time, --check and a long message, before anything runs"
+    else
+        fail "$SHELL_NAME: --in parsing:$failed; --in 0 exit $zero; --in 09m --bogus exit $CODE, '$ERR'"
+    fi
+    rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     failed=''
     for stub in STUB_RUNNING=0 STUB_EXEC=1 STUB_ARCHIVE=; do
         case $stub in
@@ -1259,6 +1359,36 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     fi
     rm "$FIX/release/.eigen/bundle"
     reset_release
+    # rollback --in waits after the stage, its question and the pull, right before the stop. Cut off in the wait, it
+    # unstages, takes the notice back and stops nothing.
+    notice_steps() {
+        printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* run --rm --no-deps .*$/stage/p' -e 's/^run .* restore --staged$/staged/p' \
+            -e 's/^run .* rm -rf data\/.restoring$/unstage/p' -e 's/^compose .* stop$/stop/p' \
+            -e 's/^compose .* exec .*\/entrypoint.sh \(restart-notice .*\)$/\1/p' | tr '\n' '|'
+    }
+    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    : >"$FIX/release/backups/server-pre-update-light-20260101-000000.tar"
+    STUB_CHECKED=$checked launch release rollback --in 1s --yes
+    sequence=$(notice_steps)
+    rm -f "$FIX/release/.eigen/bundle"
+    reset_release
+    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    LAUNCH_TERM='restart-notice --in 600' STUB_CHECKED=$checked launch release rollback --yes --in 10m
+    rm -f "$FIX/release/backups/server-pre-update-light-20260101-000000.tar" "$FIX/release/.eigen/last-update"
+    if [ "$sequence" = 'stage|staged|restart-notice --in 1 --reason rollback|stop|' ] && [ "$CODE" = 130 ] &&
+        [ "$(notice_steps)" = 'stage|staged|restart-notice --in 600 --reason rollback|unstage|restart-notice --clear|' ]; then
+        ok "$SHELL_NAME: rollback --in waits right before the stop, and cut off there it unstages and takes the notice back"
+    else
+        fail "$SHELL_NAME: rollback --in: '$sequence'; cut off: exit $CODE, '$(notice_steps)', '$ERR'"
+    fi
+    reset_release
+    launch local restore "$ARCHIVE" --yes --in 1s 'Back soon'
+    if [ "$CODE" = 0 ] && [ "$(notice_steps)" = 'stage|staged|restart-notice --in 1 --reason rollback --message Back soon|stop|' ] &&
+        printf '%s\n' "$OUT" | grep -q '◆  Eigen restarts for the restore at 2026-01-01 00:10:00 UTC, in 1s. Ctrl+C cancels.$'; then
+        ok "$SHELL_NAME: restore --in tells the open tabs, with the message, and waits right before the stop"
+    else
+        fail "$SHELL_NAME: restore --in: exit $CODE, '$(notice_steps)', '$OUT', '$ERR'"
+    fi
 
     # A backup runs on the running API and stops nothing.
     failed=''

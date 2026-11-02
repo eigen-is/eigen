@@ -1,9 +1,11 @@
 // getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
 // cache, and hands every later caller that same Home until it closes. Because every request passes
-// through here, this file also remembers when a home was last asked for, and keeps a home shut while
-// a restore replaces its folder or a deletion removes it.
+// through here, this file also remembers when a home was last asked for, keeps a home shut while a
+// restore replaces its folder or a deletion removes it, and hands a server-wide event, such as a
+// restart notice, to every loaded home.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
+import type { SSEvent } from '@workspace/lib/types/sse';
 import type { AsyncSingleton } from '../../utils/singleton';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { ApiError } from '../core';
@@ -27,12 +29,11 @@ const restoringHomes = new Set<string>();
 
 // Homes whose owner is being deleted, from the teardown until better-auth has deleted the owner's row.
 // The row and the members' sessions outlive the folder for that moment, and a request in it must not
-// build a new home over the deleted folder.
-// A deletion that fails after the folder is gone (the registry delete, authDeleteUserReferences or the better-auth
-// row delete throws) keeps the mark until a restart: the home answers 404 "Home is being deleted", a restore of it is
-// refused, and a retry of the delete clears it.
+// build a new home over the deleted folder. A deletion that fails after the folder is gone keeps the
+// mark until a retry of the delete or a restart. Until then the home answers 404 and a restore of it is refused.
 const deletingHomes = new Set<string>();
 
+// Whether the cache holds a home for the owner, built or still being built. Never opens one.
 export function atHome(ownerId: string): boolean {
     return homeFactories.has(ownerId);
 }
@@ -192,6 +193,12 @@ export async function evictHome(ownerId: string): Promise<void> {
         .get(ownerId)?.()
         .catch(() => undefined);
     await home?.close();
+}
+
+// A server-wide event, such as a restart notice, to the streams of every home in memory, a closing one's included. It
+// reads no home's data and opens none: a home that is not loaded has no stream to tell.
+export function broadcastToLoadedHomes(event: SSEvent): void {
+    for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
 }
 
 export async function shutdownAllHomes(): Promise<void> {

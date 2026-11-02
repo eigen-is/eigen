@@ -85,11 +85,17 @@ const SAMPLES: { [T in SSEventTypeName]: SSEvent & { type: T } } = {
     [SSEventType.LABEL_DELETED]: label(SSEventType.LABEL_DELETED),
     [SSEventType.BACKUP_JOB_UPDATED]: { type: SSEventType.BACKUP_JOB_UPDATED, jobId: 'job-1', ownerId: OWNER },
     [SSEventType.HOME_DATA_EPOCHS]: { type: SSEventType.HOME_DATA_EPOCHS, epochs: { [OWNER]: 'epoch-1' } },
+    [SSEventType.SERVER_RESTART_NOTICE]: {
+        type: SSEventType.SERVER_RESTART_NOTICE,
+        notice: { reason: 'update', msLeft: 600_000, message: null },
+    },
 };
 
-// An event acts when it refetches a query, or, for the epochs, when the tab records the epochs it heard.
+// An event acts when it refetches a query, or, for the epochs, when the tab records the epochs it heard. The restart
+// notice changes no query: its handler, the banner's store, comes with the banner.
 test('every event type reaches a handler that acts on it', () => {
     for (const event of Object.values(SAMPLES)) {
+        if (event.type === SSEventType.SERVER_RESTART_NOTICE) continue;
         window.sessionStorage.clear();
         const keys = invalidatedBy((queryClient) => handleSSEvent(event, queryClient, OWNER));
         const acted = keys.length > 0 || window.sessionStorage.length > 0;

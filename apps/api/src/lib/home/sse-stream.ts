@@ -1,10 +1,12 @@
 // The event stream of one user's own Home, which the SSE route hands to a signed-in tab. It passes on
 // every event the Home broadcasts. It also sends a keepalive when it opens and every 15 seconds, so a
 // proxy keeps the connection and the Home does not go idle under an open tab. With each keepalive it
-// announces the data epochs, and it follows the Home when an evicted one was built again.
+// announces the data epochs, and it follows the Home when an evicted one was built again. On open it
+// also sends the restart notice the server holds, or that it holds none.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { sse } from 'elysia';
+import { buildRestartNoticeEvent } from '../config/restart-notice';
 import { getHome } from './get-home';
 import type { Home } from './home';
 import { buildDataEpochsEvent } from './sse-events';
@@ -19,7 +21,7 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
     const userId = home.user.id;
     let currentHome = home;
     let streamController: ReadableStreamDefaultController<StreamItem> | null = null;
-    let keepalive: Timer | null = null;
+    let keepalive: Timer | undefined;
     let isClosed = false;
 
     const send = (item: StreamItem) => {
@@ -42,6 +44,8 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
             streamController = controller;
             currentHome.subscribeSSE(send);
             send(keepaliveItem());
+            // With none too, so a tab that reconnects to a restarted server drops the notice it held.
+            send(buildRestartNoticeEvent());
             announceDataEpochs();
 
             keepalive = setInterval(async () => {
@@ -67,7 +71,7 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
         },
         cancel: () => {
             isClosed = true;
-            if (keepalive) clearInterval(keepalive);
+            clearInterval(keepalive);
             currentHome.unsubscribeSSE(send);
         },
     });
