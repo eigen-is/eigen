@@ -12,7 +12,7 @@ A home's first stream also starts its mail folder watchers, so a change another 
 
 ## The keepalive keeps the stream on a live Home
 
-The stream sends a keepalive at once when it opens and every 15 s after. The first one stops a proxy such as Apache from timing out a stream that has had nothing to say yet. Each later one calls `getHome()`, which touches the Home so it does not idle out under an open tab. When the Home was evicted and rebuilt meanwhile, the stream moves its listener to the new one, or it would go silent while the tab still looks connected.
+The stream sends a keepalive at once when it opens and every 15 s after. The first one stops a proxy such as Apache from timing out a stream that has had nothing to say yet. Each later one calls `getHome()`, which touches the Home so it does not idle out under an open tab. When the Home was evicted and rebuilt meanwhile, the stream moves its listener to the new one, or it would go silent while the tab still looks connected. While the shutdown runs (`shutdownAllHomes`), `openHome` refuses every home with a 503, so the keepalive stops rather than build the home again over the databases the shutdown closes.
 
 The keepalive is a named event with no data, `event: keepalive`, written by Elysia's `sse` helper. A browser never dispatches a named event to `onmessage`, so `useSSE` never sees it and every message it gets is an `SSEvent`. `apps/api/src/test/server/sse.test.ts` pins the bytes.
 
@@ -63,6 +63,14 @@ A tab keeps its epochs in sessionStorage, so the next page it loads still holds 
 ## The owner and the team reload, a user with a share does not
 
 The owner reloads in every app, and so does every member of a restored team, because those are the homes a stream announces. A user who only has something shared from the home keeps their tabs. Their open documents of it reload through the collab socket ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
+
+## The restart notice goes to every open stream
+
+Before `./eigen update`, `rollback` or `restore` stops Eigen, the launcher tells the running API through the control socket, so every tab can warn its user to save first ([SELF-HOSTING.md § An update, rollback or restore warns the open tabs first](SELF-HOSTING.md#an-update-rollback-or-restore-warns-the-open-tabs-first)). The notice is in-memory state of the API process (`apps/api/src/lib/config/restart-notice.ts`): its reason (`update` or `rollback`, `RESTART_REASONS`), its time and the operator's message. A restart of the process drops it, which is right, since that is the restart it announced.
+
+`server:restart-notice` carries `msLeft`, counted when the event is sent, never a clock time, so a browser whose clock is off still counts down right. Every stream sends it when it opens, with `notice: null` when there is none, so a tab that reconnects to the restarted server drops the banner it held. The keepalive sends it only when it moves the stream to a rebuilt Home, because a notice given or taken back while the Home was closed reached no listener of the stream. A change goes out at once to every loaded home's listeners through `broadcastToLoadedHomes` (`apps/api/src/lib/home/get-home.ts`). That is no push across homes: it reads no home's data, opens no home, and a home without a loaded instance has no open stream to tell.
+
+A notice whose restart has not come five minutes after its time drops itself and tells the streams, for a launcher killed before it could take the notice back. The timer is fixed: a new notice starts it over, and nothing else holds it, such as a running backup. `apps/api/src/test/cli/control.test.ts` and `apps/api/src/test/server/sse.test.ts` pin the routes, the expiry and the bytes after the keepalive.
 
 ## A new domain adds four pieces
 

@@ -1,8 +1,9 @@
 // The events the server sends on a tab's event stream, shared by the API that builds them and the
 // handlers in the browser that read them. An event carries the ids a handler needs to know which queries
-// to refetch, and rarely data (a notification's display text, the home's data epochs). A new event type
+// to refetch, and rarely data, such as a notification's display text or the home's data epochs. A new event type
 // gets its name in SSEventType and its shape in the SSEvent union.
 
+import type { RESTART_REASONS } from '../validation/restart';
 import type { NotificationType } from './notification';
 
 export const SSEventType = {
@@ -55,6 +56,7 @@ export const SSEventType = {
     LABEL_DELETED: 'contacts:label-deleted',
     BACKUP_JOB_UPDATED: 'backup:job-updated',
     HOME_DATA_EPOCHS: 'home:data-epochs',
+    SERVER_RESTART_NOTICE: 'server:restart-notice',
 } as const;
 
 export type SSEventTypeName = (typeof SSEventType)[keyof typeof SSEventType];
@@ -70,7 +72,8 @@ export type SSEvent =
     | SSEventContactsChanged
     | SSEventLabel
     | SSEventBackup
-    | SSEventHomeDataEpochs;
+    | SSEventHomeDataEpochs
+    | SSEventRestartNotice;
 
 export type SSEventMail = {
     type: SSEventTypeName & `mail:${string}`;
@@ -93,7 +96,7 @@ export type SSEventCalendar = {
     ownerId: string;
 };
 
-// The one event that carries display text: it raises the toast, which has nothing to refetch.
+// It carries the toast's display text, because a toast has nothing to refetch.
 export type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
@@ -131,8 +134,19 @@ export type SSEventBackup = {
 };
 
 // Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of
-// their teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it holds changes.
+// their teams, keyed by owner id. Only a restore or an update changes one, so a tab reloads when an epoch it holds
+// changes.
 export type SSEventHomeDataEpochs = {
     type: typeof SSEventType.HOME_DATA_EPOCHS;
     epochs: Record<string, string>;
+};
+
+export type RestartReason = (typeof RESTART_REASONS)[number];
+
+// Sent when a stream opens and whenever ./eigen announces or takes back a restart, such as the one an update makes,
+// to every open stream on the server. A null notice means none. msLeft counts from the moment the event is sent, so a
+// browser whose clock is off still counts down right. The message is the operator's own line, or null.
+export type SSEventRestartNotice = {
+    type: typeof SSEventType.SERVER_RESTART_NOTICE;
+    notice: { reason: RestartReason; msLeft: number; message: string | null } | null;
 };

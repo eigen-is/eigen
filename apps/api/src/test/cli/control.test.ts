@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -12,6 +12,8 @@ import { buildServerArchiveName, getBackupsDir } from '../../lib/backup/paths';
 import type { ControlBackupJob } from '../../lib/backup/server-job';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { getDataRoot } from '../../lib/config/paths';
+import type { AnnouncedRestart } from '../../lib/config/restart-notice';
+import { buildRestartNoticeEvent, clearRestartNotice } from '../../lib/config/restart-notice';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
@@ -26,7 +28,7 @@ import {
 } from '../backup/backup-test-helpers';
 import * as cli from '../cli-test-helpers';
 import { CLEARED_S3, DUMMY_S3 } from '../fault-storage-helpers';
-import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
+import { collectSSE, createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
@@ -366,6 +368,169 @@ describe('eigen reset-password', () => {
         const { stderr, code } = await runCli(['reset-password']);
         expect(code).toBe(1);
         expect(stderr).toBe('■  Name the account.\n└  Run ./eigen reset-password <email>.\n');
+    });
+});
+
+describe('the restart notice on the control socket', () => {
+    const clear = () => controlRouter.handle(new Request('http://eigen/restart-notice', { method: 'DELETE' }));
+    const notice = () => buildRestartNoticeEvent().notice;
+
+    afterEach(() => {
+        jest.useRealTimers();
+        clearRestartNotice();
+    });
+
+    describe('POST /restart-notice', () => {
+        test('announces the restart to the open streams and answers when it comes', async () => {
+            const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
+            const before = Date.now();
+            const res = await post('/restart-notice', { inSeconds: 600, reason: 'update', message: 'Back in five' });
+            expect(res.status).toBe(200);
+            const { at }: AnnouncedRestart = await res.json();
+            alice.stop();
+            const atMs = Date.parse(at);
+            expect(atMs).toBeGreaterThanOrEqual(before + 600_000);
+            expect(atMs).toBeLessThanOrEqual(Date.now() + 600_000);
+            expect(alice.events).toContainEqual({
+                type: 'server:restart-notice',
+                notice: { reason: 'update', message: 'Back in five', msLeft: expect.any(Number) },
+            });
+            expect(notice()?.msLeft).toBeLessThanOrEqual(600_000);
+            expect(notice()?.msLeft).toBeGreaterThan(590_000);
+        });
+
+        test('replaces the notice there is, and a notice without a message has null', async () => {
+            await post('/restart-notice', { inSeconds: 600, reason: 'update', message: 'Back in five' });
+            await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
+            expect(notice()).toEqual({ reason: 'rollback', message: null, msLeft: 0 });
+        });
+
+        test('takes whole seconds up to an hour, the two reasons, and a short line of text without control characters', async () => {
+            for (const body of [
+                { inSeconds: -1, reason: 'update' },
+                { inSeconds: 3601, reason: 'update' },
+                { inSeconds: 1.5, reason: 'update' },
+                { inSeconds: 60, reason: 'restart' },
+                { inSeconds: 60, reason: 'update', message: '' },
+                { inSeconds: 60, reason: 'update', message: 'x'.repeat(201) },
+                { inSeconds: 60, reason: 'update', message: 'Back\nin five' },
+                { inSeconds: 60, reason: 'update', message: 'Back \x1b[31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back \x9b31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back\x85in five' },
+                { inSeconds: 60, reason: 'update', message: ' \u00a0 ' },
+            ]) {
+                expect({ body, status: (await post('/restart-notice', body)).status }).toEqual({ body, status: 422 });
+            }
+            expect(notice()).toBeNull();
+            expect(
+                (await post('/restart-notice', { inSeconds: 3600, reason: 'update', message: 'x'.repeat(200) })).status,
+            ).toBe(200);
+        });
+
+        test('a notice whose restart has not come five minutes after its time drops itself, and says so', async () => {
+            const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
+            jest.useFakeTimers();
+            await post('/restart-notice', { inSeconds: 60, reason: 'update' });
+            jest.advanceTimersByTime(60_000 + 5 * 60_000 - 1);
+            expect(notice()).not.toBeNull();
+            jest.advanceTimersByTime(1);
+            alice.stop();
+            expect(notice()).toBeNull();
+            expect(alice.events.at(-1)).toEqual({ type: 'server:restart-notice', notice: null });
+        });
+
+        test('a new notice starts the expiry over', async () => {
+            jest.useFakeTimers();
+            await post('/restart-notice', { inSeconds: 60, reason: 'update' });
+            jest.advanceTimersByTime(60_000 + 4 * 60_000);
+            await post('/restart-notice', { inSeconds: 0, reason: 'update' });
+            jest.advanceTimersByTime(2 * 60_000);
+            expect(notice()).not.toBeNull();
+            jest.advanceTimersByTime(3 * 60_000);
+            expect(notice()).toBeNull();
+        });
+    });
+
+    describe('DELETE /restart-notice', () => {
+        test('takes the notice back, tells the open streams, and answers the same when there is none', async () => {
+            const ctx = await getTestContext();
+            await post('/restart-notice', { inSeconds: 600, reason: 'update' });
+            const alice = await collectSSE(ctx.alice.user.id);
+            expect((await clear()).status).toBe(204);
+            expect((await clear()).status).toBe(204);
+            alice.stop();
+            expect(notice()).toBeNull();
+            expect(alice.events).toEqual([{ type: 'server:restart-notice', notice: null }]);
+        });
+
+        // The stream opens before the fake clock, so the ten minutes do not idle its Home out. The last notice shows
+        // the stream still heard the Home after them.
+        test('a cleared notice does not expire into a second event', async () => {
+            const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
+            jest.useFakeTimers();
+            await post('/restart-notice', { inSeconds: 60, reason: 'update' });
+            await clear();
+            jest.advanceTimersByTime(10 * 60_000);
+            await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
+            alice.stop();
+            expect(
+                alice.events.map((event) => ('notice' in event ? (event.notice?.reason ?? null) : event.type)),
+            ).toEqual(['update', null, 'rollback']);
+        });
+    });
+
+    describe('eigen restart-notice', () => {
+        test('announces a restart and prints when it comes, then --clear takes it back', async () => {
+            const { stdout, code } = await runCli(['restart-notice', '--in', '600', '--reason', 'rollback']);
+            expect(code).toBe(0);
+            expect(stdout).toMatch(/^at=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z\n$/);
+            expect(notice()).toMatchObject({ reason: 'rollback', message: null });
+            const cleared = await runCli(['restart-notice', '--clear']);
+            expect(cleared).toEqual({ stdout: '', stderr: '', code: 0 });
+            expect(notice()).toBeNull();
+        });
+
+        test('passes the message on with each control character a space', async () => {
+            const { code } = await runCli([
+                'restart-notice',
+                '--in',
+                '0',
+                '--reason',
+                'update',
+                '--message',
+                ' Back\tin\x1b[31m five\n',
+            ]);
+            expect(code).toBe(0);
+            expect(notice()?.message).toBe('Back in [31m five');
+        });
+
+        test('a wrong flag is a usage error that announces nothing', async () => {
+            for (const args of [
+                ['--reason', 'update'],
+                ['--in', '10m', '--reason', 'update'],
+                ['--in', '3601', '--reason', 'update'],
+                ['--in', '60'],
+                ['--in', '60', '--reason', 'restart'],
+                ['--in', '60', '--reason', 'update', '--message', 'x'.repeat(201)],
+                ['--in', '60', '--reason', 'update', '--clear'],
+            ]) {
+                const { stdout, stderr, code } = await runCli(['restart-notice', ...args]);
+                expect({ args, code, stdout }).toEqual({ args, code: 2, stdout: '' });
+                expect(stderr).toContain('Usage: restart-notice');
+            }
+            expect(notice()).toBeNull();
+        });
+
+        test('with Eigen down it says so', async () => {
+            const { stderr, code } = await runCli(['restart-notice', '--clear'], undefined, {
+                EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
+            });
+            expect(code).toBe(1);
+            expect(stderr).toContain('Eigen is not running');
+        });
     });
 });
 

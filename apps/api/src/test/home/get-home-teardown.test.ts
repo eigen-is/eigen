@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
-import { atHome, evictHome, getHome } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
+import { createSSEStream } from '../../lib/home/sse-stream';
 import { getTestContext } from '../setup';
 
 // getHome must not open a replacement Home on the same database files while the outgoing home is
@@ -93,5 +94,34 @@ describe('getHome teardown race', () => {
         const ownerId = 'abcdefghijklmnopqrstuvwxyz012345';
         await expect(getHome(ownerId)).rejects.toThrow('User not found');
         expect(atHome(ownerId)).toBe(false);
+    });
+
+    // The process ends once the shutdown is done, so a Home built during it would be killed half-open.
+    test("no Home opens while shutdownAllHomes runs, not even for an open stream's keepalive", async () => {
+        const userId = await createHomeUser('shutdown-gate@test.eigen.is');
+        const home = await getHome(userId);
+        const intervals = spyOn(globalThis, 'setInterval');
+        const reader = createSSEStream(home).getReader();
+        const keepalive = intervals.mock.calls.find(([, ms]) => ms === 15_000)?.[0];
+        intervals.mockRestore();
+        if (typeof keepalive !== 'function') throw new Error('no keepalive');
+        // Holds the shutdown open until the checks below are done.
+        const { promise: held, resolve: release } = Promise.withResolvers<void>();
+        const close = home.close.bind(home);
+        home.close = async () => {
+            await held;
+            await close();
+        };
+
+        const shutdown = shutdownAllHomes();
+        await expect(getHome(userId)).rejects.toMatchObject({ status: 503 });
+        const errors = spyOn(console, 'error');
+        await keepalive();
+        expect(errors).not.toHaveBeenCalled();
+        errors.mockRestore();
+        release();
+        await shutdown;
+        await reader.cancel();
+        expect(atHome(userId)).toBe(false);
     });
 });
