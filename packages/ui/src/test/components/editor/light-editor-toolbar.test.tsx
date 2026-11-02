@@ -1,7 +1,8 @@
 // The link field of the light editor's toolbar, inside a form such as the card form or Email collaborators. Enter in
 // the field sets the link and leaves the form alone. Escape closes the field, and inside a dialog only the field: Radix
-// hears Escape on the document before the field does.
-import { afterEach, expect, mock, test } from 'bun:test';
+// hears Escape on the document before the field does. Opening the field in the floating toolbar places the toolbar
+// again, and the focus does not scroll the dialog.
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -21,7 +22,7 @@ afterEach(async () => {
     onOpenChange.mockClear();
 });
 
-async function open({ inDialog = false } = {}) {
+async function open({ inDialog = false, toolbar = 'fixed' as 'fixed' | 'floating' } = {}) {
     const form = createElement(
         'form',
         {
@@ -31,7 +32,7 @@ async function open({ inDialog = false } = {}) {
                 onSubmit(event);
             },
         },
-        createElement(LightEditor, { content: '<p>Read this</p>', toolbar: 'fixed' }),
+        createElement(LightEditor, { content: '<p>Read this</p>', toolbar }),
     );
     ({ unmount } = await renderInDocument(
         inDialog
@@ -118,4 +119,27 @@ test('Escape in the editor inside a dialog still closes the dialog', async () =>
             ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
+});
+
+test('the floating toolbar places itself again for the link field, and the focus does not scroll the dialog', async () => {
+    await open({ inDialog: true, toolbar: 'floating' });
+    const focus = spyOn(HTMLInputElement.prototype, 'focus');
+    try {
+        // The menu shows a quarter second after the selection settles.
+        await act(async () => {
+            editor().chain().focus().selectAll().run();
+        });
+        await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+        // The menu as it was placed when it showed, moved off so a new placement shows.
+        const menu = document.querySelector('button[aria-label="Link"]')?.closest<HTMLElement>('[style*="position"]');
+        if (!menu) throw new Error('the floating toolbar did not show');
+        menu.style.left = '999px';
+
+        await openLinkField();
+        await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+        expect(menu.style.left).not.toBe('999px');
+        expect(focus.mock.calls).toEqual([[{ preventScroll: true }]]);
+    } finally {
+        focus.mockRestore();
+    }
 });
