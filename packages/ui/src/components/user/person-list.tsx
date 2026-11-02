@@ -7,7 +7,7 @@ import { useListDrag } from '@workspace/ui/hooks/use-list-drag';
 import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useRef } from 'react';
@@ -135,7 +135,10 @@ export function PersonList<T>({
                                         e.stopPropagation();
                                         openFromButton(e.currentTarget, item);
                                     }}
-                                    className="invisible flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground group-hover:visible pointer-coarse:visible hover:bg-accent"
+                                    className={cn(
+                                        HOVER_REVEAL_CLASS,
+                                        'flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent',
+                                    )}
                                 >
                                     <MoreVertical className="h-4 w-4" />
                                 </button>

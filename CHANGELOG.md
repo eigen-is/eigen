@@ -78,6 +78,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Share on another item** — going back or forward to another document with **Share** open shows that item's people, not the ones you were editing
 - **The keyboard in Share** — Tab reaches the lock under **General access** when you can change access, and a long list of people who have access, and Enter or Space works them. The same goes for an event's guest list, the people shown on a shared item in Drive and Chat, and **Location** in **Copy to**, **Save to Drive** and **New chat**
 - **Previews opened from a card in Stickies** — the preview takes the keyboard, so Space closes it and Tab stays in it, a long preview scrolls, and a click beside it closes only the preview
+- **Hover buttons from the keyboard** — Tab and screen readers reach the buttons a row shows under the pointer: the × on a person in **New chat**, a contact's ⋮, **Edit** and **Delete** on your chat messages, and a server backup's buttons in Admin
 - **Keys on a row's menu button** — in Drive, Mail and contact lists, Enter and Space on a row's ⋮ button open its menu, and an arrow key after the menu closes moves on from that row
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes

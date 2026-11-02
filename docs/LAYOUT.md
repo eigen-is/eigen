@@ -176,10 +176,12 @@ Reordering in place (a stickies column, the slides rail) uses `@dnd-kit`. Draggi
 
 ## Hover-revealed affordances rest visible on touch
 
-An action icon shown on row hover uses `group` with `invisible group-hover:visible`, and always adds the matching `pointer-coarse:` variant, set to what the mouse user sees on hover. A touch device has no hover, so without it the action is unreachable. `pointer-fine:group-hover:` is the opt-out for a hover that really is desktop-only. `scripts/check-standards.ts` gates it.
+An action shown on row hover, such as a row's remove button, sits in a `group` row and takes `HOVER_REVEAL_CLASS` from `@workspace/ui/lib/utils`, on the button or its wrapper. With a mouse it shows only while the pointer is over the row, and until then `pointer-events-none` lets a click through to what lies under it, as a hidden element would. It stays in the tab order and the accessibility tree, and `group-has-focus-visible:` shows it when Tab reaches it or another control in its row. Never hide it with `invisible` or `hidden`, which take it away from the keyboard and screen readers. Never reveal it on `focus-within:` or `group-focus-within:` either: a mouse click leaves the focus in the row, and the button would stay shown after the pointer left.
+
+A touch device has no hover, so a hover reveal always adds the matching `pointer-coarse:` variant, set to what the mouse user sees on hover, and the constant carries it. `pointer-fine:group-hover:` is the opt-out for a hover that really is desktop-only, such as the message actions in `ChatMessageList`, which a long press opens as a menu. `scripts/check-standards.ts` gates the touch variant.
 
 ```tsx
-<div className="invisible group-hover:visible pointer-coarse:visible ml-auto">
+<div className={cn(HOVER_REVEAL_CLASS, 'ml-auto')}>
     <TooltipButton icon={Edit} tooltipText="Edit" onClick={…} />
 </div>
 ```
