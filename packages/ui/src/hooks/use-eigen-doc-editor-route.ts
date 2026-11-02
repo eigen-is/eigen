@@ -1,5 +1,9 @@
+// The scaffold every Eigen document editor route shares, such as the doc, sheet or board route: it
+// loads the document's info, shows its name as the layout's document title, finds its media and chat
+// folders and owns the access dialog's state. Editors differ only in the JSX around it, so a route body
+// is a guard plus its own component. The editor's File menu hands the open document to the palette.
+
 import { useCollabDocumentInfo } from '@workspace/lib/collab';
-import { usePaletteDocSelection } from '@workspace/lib/command-palette';
 import type { CollabDocumentInfo } from '@workspace/lib/types/collab';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -21,11 +25,6 @@ type EigenDocEditorRoute = {
     setAccessDialogOpen: (open: boolean) => void;
 };
 
-// Shared scaffold for the EigenDoc editor routes (docs/slides/sheets/stickies/vector).
-// Each route loads the same collab document info, mirrors the doc name into the
-// document title, publishes the open doc as a palette selection, derives the media/chat
-// folder ids, and owns the access-dialog open state. Editors differ only in the JSX they
-// render around this — so the route bodies collapse to a guard plus their own component.
 export function useEigenDocEditorRoute(ownerId: string, mountId: string, pathId: string): EigenDocEditorRoute {
     const { data: docInfo, isError, error, refetch } = useCollabDocumentInfo(ownerId, mountId, pathId);
     const { setDocumentTitle } = useLayout();
@@ -36,10 +35,6 @@ export function useEigenDocEditorRoute(ownerId: string, mountId: string, pathId:
         setDocumentTitle(title);
         return () => setDocumentTitle('');
     }, [docInfo?.path?.name, setDocumentTitle]);
-
-    // Publish the open document as a 1-item palette selection so item-aware commands
-    // (Mail to…, Copy link, …) surface from anywhere. DrivePath already carries mountId.
-    usePaletteDocSelection(docInfo?.path);
 
     const openAccessDialog = useCallback(() => setAccessDialogOpen(true), []);
 

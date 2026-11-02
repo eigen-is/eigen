@@ -1,15 +1,14 @@
 // The last steps of a new file, such as an upload or a copy from another drive. They turn a temp
-// file into a file in the tree, tell open tabs and write the history row. A thumbnail is then made in
-// the background, by a helper that an overwrite of a file uses too.
+// file into a file in the tree under a free name, tell open tabs and write the history row. A
+// thumbnail is then made in the background, by a helper that an overwrite of a file uses too.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
-import { foldName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
-import { getUniqueFileName } from './naming';
+import { folderIn, withFreeName } from './naming';
 
 // The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
 // caller removes the temp file.
@@ -27,23 +26,9 @@ export async function finalizeUpload(
     },
 ): Promise<DrivePath> {
     // The store keeps names in NFC, so the name is compared with its siblings in that form too.
-    let safeName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
-    const originalName = safeName;
-
-    const existing = await mount.getChildByName(args.parentId, safeName);
-    if (existing) {
-        const siblings = await mount.listFolder(args.parentId);
-        const usedNames = new Set(siblings.map((s) => foldName(s.name)));
-        safeName = getUniqueFileName(safeName, usedNames);
-    }
-
-    const pathId = await mount.createFileFromTemp(
-        args.parentId,
-        safeName,
-        args.mimeType,
-        args.size,
-        args.hash,
-        args.tempId,
+    const originalName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
+    const pathId = await withFreeName(folderIn(mount, args.parentId), originalName, (name) =>
+        mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
     );
     const uploadedFile = originalName
         ? await mount.updatePath(pathId, { details: { originalName } })
@@ -64,8 +49,14 @@ export async function finalizeUpload(
         // bytes later through writeFileContent.
         await mount.cleanupTemp(args.tempId);
     } else {
-        regenerateThumbnailAsync(drive, mount, pathId, mount.getTempPath(args.tempId), args.mimeType, safeName, () =>
-            mount.cleanupTemp(args.tempId),
+        regenerateThumbnailAsync(
+            drive,
+            mount,
+            pathId,
+            mount.getTempPath(args.tempId),
+            args.mimeType,
+            uploadedFile.name,
+            () => mount.cleanupTemp(args.tempId),
         );
     }
 

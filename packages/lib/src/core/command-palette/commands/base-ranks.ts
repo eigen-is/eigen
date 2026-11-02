@@ -1,38 +1,16 @@
-// Base ranks for the static command catalog. Sort-only within a rendered section
-// (Actions or Selection); higher wins. The two sections render independently, so
-// a Selection rank never competes with an Actions rank — CREATE_EIGENDOC and
-// DRIVE_RENAME both being 12 is intentional and harmless.
+// The base ranks of the static command catalog, which order the Actions section; higher wins. They
+// only sort within that section. The Selection section is ordered by the rows a page published, so
+// none of these ranks competes with a selection row.
 //
-// Tuning guide
-//
-// Actions section (catalog commands shown alongside nav + view):
-//   CREATE_EIGENDOC (12) — "New doc", "New sheet", … Slightly above nav because
-//     creating is a deliberate verb; the topbar app switcher already covers casual
-//     "jump to" navigation, so creation should out-rank it in the empty state.
-//   NAV_APP          (10) — "Go to <App>". Mid-tier.
-//   CREATE_FOLDER     (8) — Below nav: folders are organizational, not the typical
-//     "what do I want to do".
-//   VIEW_UTILITY      (4) — Rarely-used preferences (theme toggle, …).
-//
-// Selection section (drive commands shown when a selection is published, ordered
-// open → destructive). Tier spacing leaves room for a future command to slot in
-// without re-numbering the chain. DRIVE_DOWNLOAD_AS sits below DRIVE_DELETE so the
-// per-format rows don't push the empty-query list's six out; typing "download" finds them.
+//   CREATE_EIGENDOC (12): "New doc", "New sheet" and the rest. Above nav, because creating is a
+//     deliberate verb, and the topbar's app switcher already covers a casual jump to an app.
+//   NAV_APP (10): "Go to <App>".
+//   CREATE_FOLDER (8): below nav, because a folder organizes rather than starts the work.
+//   VIEW_UTILITY (4): preferences people rarely change, such as the theme toggle.
+
 export const BASE_RANKS = {
     CREATE_EIGENDOC: 12,
     NAV_APP: 10,
     CREATE_FOLDER: 8,
     VIEW_UTILITY: 4,
-
-    DRIVE_OPEN: 18,
-    DRIVE_OPEN_NEW_TAB: 17,
-    DRIVE_QUICK_PREVIEW: 16,
-    DRIVE_MAIL_TO: 15,
-    DRIVE_COPY_LINK: 14,
-    DRIVE_DOWNLOAD: 13,
-    DRIVE_RENAME: 12,
-    DRIVE_SHARE: 11,
-    DRIVE_EMAIL_COLLABORATORS: 10,
-    DRIVE_DELETE: 9,
-    DRIVE_DOWNLOAD_AS: 8,
 } as const;

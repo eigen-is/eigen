@@ -6,7 +6,7 @@ import { bundledFont } from '@workspace/lib/constants/fonts';
 import { escapeHtml, LIGHT_EDITOR_HREF } from '@workspace/lib/html';
 import type { Textual } from '@workspace/lib/vector';
 import {
-    DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_TEXT_BOX_PROPS,
     MAX_HTML_BYTES,
     SLIDES_STYLE_DEFAULTS,
     snapSlideFontSize,
@@ -43,7 +43,7 @@ const DEFAULT_SIZE = 1800;
 // a:bodyPr's left and right inset where no body states one: 0.1 inch.
 const DEFAULT_SIDE_INSET = 91_440;
 // PowerPoint's single line spacing, as a CSS line height.
-const SINGLE_LINE_HEIGHT = DEFAULT_RICHTEXT_PROPS.lineHeight;
+const SINGLE_LINE_HEIGHT = DEFAULT_TEXT_BOX_PROPS.lineHeight;
 
 const BULLETS = new Map<string, 'ul' | 'ol' | undefined>([
     ['buNone', undefined],

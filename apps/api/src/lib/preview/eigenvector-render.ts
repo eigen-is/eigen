@@ -14,13 +14,12 @@ import { capPreviewElements } from './preview-scene';
 
 const EMPTY_PREVIEW_HEIGHT = 120;
 
-// The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The
-// reader is the trust boundary for every scalar field (XML-invalid characters stripped, colors
-// reduced to hex or 'transparent', coordinates clamped) but NOT for a rich-text box's `html`, which
-// it caps and cleans without filtering tags: each of those goes through the shared ref restriction
-// first, so a collaborator's `<img src=https://…>` or `background:url(https://…)` cannot beacon
-// every viewer. The assembled page then goes through DOMPurify as a whole, after the compositor has
-// added the media hrefs and `url(#…)` gradient refs of its own that must survive.
+// The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The reader is the trust
+// boundary for every scalar field: it strips XML-invalid characters, reduces colors to hex or 'transparent' and clamps
+// coordinates. It only caps and cleans the `html` of a text box or a shape, without filtering tags. So that html first
+// goes through the shared ref restriction, and a collaborator's `<img src=https://…>` or `background:url(https://…)`
+// cannot beacon every viewer. The assembled page then goes through DOMPurify as a whole, after the compositor has added
+// its own media hrefs and `url(#…)` gradient refs, which must survive.
 export function renderEigenvectorPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,
@@ -44,9 +43,9 @@ export function renderEigenvectorPreviewBody(
 function renderPreviewPage(page: CanvasPage): string {
     // Fit the whole page: scaled on width alone, a tall narrow drawing magnifies unboundedly.
     const scale = Math.min(CANVAS_PREVIEW_WIDTH / page.width, CANVAS_PREVIEW_HEIGHT / page.height);
-    // A page fitted by height composes narrower than CANVAS_PREVIEW_WIDTH, and drive-preview.tsx
-    // scales the body from exactly that intrinsic width. Widen the page in SCENE units and shift its
-    // origin by half the difference: the box comes out full width with the drawing centered in it.
+    // A page fitted by height comes out narrower than CANVAS_PREVIEW_WIDTH, while the drive preview scales the body
+    // from exactly that width. So the page widens in scene units and its origin moves by half the difference, and the
+    // box comes out full width with the drawing centered in it.
     const width = CANVAS_PREVIEW_WIDTH / scale;
     return renderFittedPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
 }

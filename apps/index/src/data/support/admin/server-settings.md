@@ -126,4 +126,4 @@ Click the toggle to change a setting. Click **Reset** to discard all unsaved cha
 
 ## Landing page
 
-Extra buttons on the public landing page, each with a title and a web address. Click **Add button** for a new one, and **Remove** (the trash icon) to take one away. See [Add your own buttons to the landing page](/support/admin/landing-page-buttons).
+Extra buttons on the public landing page, each with a title and a web address. Click **Add button** for a new one, and the bin icon at the end of a row to take it away. See [Add your own buttons to the landing page](/support/admin/landing-page-buttons).

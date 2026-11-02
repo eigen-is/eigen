@@ -2061,15 +2061,17 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     });
 
     // The restore picked the original folder, and the folder is deleted before the restore writes the row.
+    // Nothing awaits between the restore's name check and its row write, so the delete is a row delete
+    // inside that check.
     test('a restore answers 404', async () => {
         const folderId = await mount.createFolder(rootId, 'GoneBeforeRestore');
         const fileId = await mount.createFile(folderId, 'restored.txt', 'text/plain', 1, Buffer.from('r'));
         await mount.trashPath(fileId);
 
-        const getChildByName = mount.getChildByName.bind(mount);
-        const spy = spyOn(mount, 'getChildByName').mockImplementation(async (parentId, name) => {
-            if (parentId === folderId) await mount.deletePath(folderId);
-            return getChildByName(parentId, name);
+        const hasLiveChild = mount.hasLiveChild.bind(mount);
+        const spy = spyOn(mount, 'hasLiveChild').mockImplementation((parentId, name) => {
+            if (parentId === folderId) mount.db.delete(paths).where(eq(paths.id, folderId)).run();
+            return hasLiveChild(parentId, name);
         });
         let err: unknown;
         try {
@@ -2100,15 +2102,18 @@ describe('a write under a folder deleted meanwhile (local-key storage)', () => {
     });
 
     // The restore picked the original folder, and the folder goes to trash before the restore writes the row.
+    // As above, the trash is a row write inside the restore's name check.
     test('a restore into a folder trashed meanwhile answers 404', async () => {
         const folderId = await mount.createFolder(rootId, 'TrashedBeforeRestore');
         const fileId = await mount.createFile(folderId, 'restored-later.txt', 'text/plain', 1, Buffer.from('r'));
         await mount.trashPath(fileId);
 
-        const getChildByName = mount.getChildByName.bind(mount);
-        const spy = spyOn(mount, 'getChildByName').mockImplementation(async (parentId, name) => {
-            if (parentId === folderId) await mount.trashPath(folderId);
-            return getChildByName(parentId, name);
+        const hasLiveChild = mount.hasLiveChild.bind(mount);
+        const spy = spyOn(mount, 'hasLiveChild').mockImplementation((parentId, name) => {
+            if (parentId === folderId) {
+                mount.db.update(paths).set({ trashedAt: new Date() }).where(eq(paths.id, folderId)).run();
+            }
+            return hasLiveChild(parentId, name);
         });
         let err: unknown;
         try {

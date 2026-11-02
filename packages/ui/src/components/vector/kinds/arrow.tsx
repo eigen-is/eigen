@@ -19,10 +19,7 @@ import {
     MergedSelect,
     PropertyRow,
     PropertySection,
-    useHeldGesture,
 } from '@workspace/ui/components/properties-panel';
-import { useRef } from 'react';
-import { loadVectorFont, measureVectorText } from '../text-measure';
 import type { KindPanelSectionProps } from './index';
 
 // Derived from the canonical ARROW_SHAPES vocabulary so the row and the model never drift.
@@ -40,12 +37,8 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
 ];
 
 export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
-    const { hold, end: endGesture } = useHeldGesture();
-    const pendingFontWrites = useRef(0);
     // The panel mounts a kind's section only when every selected element is of that kind, so this only narrows.
     const arrows = elements.filter((el): el is VectorArrowElement => el.type === 'arrow');
-    // An elbow arrow's route lives in its unrotated local frame. So when every selected arrow is an elbow, the
-    // panel also pins its Angle input, through a check of its own.
     const allElbow = arrows.length > 0 && arrows.every((el) => el.elbow);
     // An empty label has no font to tune.
     const allLabeled = arrows.length > 0 && arrows.every((el) => el.text !== '');
@@ -66,60 +59,26 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
             if (next !== 'elbow' || el.type !== 'arrow') return base;
             const pts = parsePoints(el.points);
             const collapsed = pts.length >= 2 ? [pts[0], pts[pts.length - 1]] : pts;
-            // A bound end's fixedPoint was stored for the straight read; re-dock it for the elbow read so
-            // the endpoint sits on the outline, not inside the shape. followBindings re-glues after.
+            // A bound end's fixedPoint was stored for a straight arrow. It docks again for the elbow, so the end sits
+            // on the outline and not inside the shape. followBindings glues the arrow to its shapes after.
             const redocked = redockBindingsForElbow(el, scene);
             return { ...base, ...redocked, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) };
         });
     };
 
-    // A font family or size change measures each arrow's own label again and writes its `labelWidth` in the
-    // same transact as the font, so it is one undo step. The height follows from the line count. It measures
-    // once the slices of the label's text have loaded, or measureText reads the fallback's metrics.
-    //
-    // The Size field holds its own undo gesture only while it is focused. When the font has not loaded yet,
-    // the write lands after the blur has released that gesture, so each digit would be its own undo step.
-    // So the write takes the gesture back itself and keeps it until the last pending load has landed.
-    const applyFont = async (fields: (el: VectorArrowElement) => { fontSize?: number; fontFamily?: string }) => {
-        pendingFontWrites.current += 1;
-        try {
-            await Promise.all(
-                arrows.map((el) => {
-                    const patch = fields(el);
-                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily, el.text);
-                }),
-            );
-            hold();
-            onChangeEach((el) => {
-                if (el.type !== 'arrow') return {};
-                const patch = fields(el);
-                const size = patch.fontSize ?? el.fontSize;
-                const family = patch.fontFamily ?? el.fontFamily;
-                return { ...patch, labelWidth: measureVectorText(el.text, size, family).width };
-            });
-        } finally {
-            pendingFontWrites.current -= 1;
-            if (pendingFontWrites.current === 0) endGesture();
-        }
-    };
-
     return (
         <>
             {allLabeled && (
-                /* Only the font and size: the label is always centered, and its color comes from Stroke. */
+                /* Only the font and size: the label is always centered, and its color comes from Stroke. The canvas
+                    measures the label's width in the new font. */
                 <PropertySection title="Text">
-                    <FontRow
-                        value={fontFamily}
-                        onChange={(f) => {
-                            applyFont(() => ({ fontFamily: f })).catch(() => {});
-                        }}
-                    />
+                    <FontRow value={fontFamily} onChange={(f) => onChange({ fontFamily: f })} />
                     <FontSizeRow
                         sizes={arrows.map((el) => el.fontSize)}
                         slideWidth={slideWidth}
-                        onChange={(size) => {
-                            applyFont((el) => ({ fontSize: size(el.fontSize) })).catch(() => {});
-                        }}
+                        onChange={(size) =>
+                            onChangeEach((el) => (el.type === 'arrow' ? { fontSize: size(el.fontSize) } : {}))
+                        }
                     />
                 </PropertySection>
             )}

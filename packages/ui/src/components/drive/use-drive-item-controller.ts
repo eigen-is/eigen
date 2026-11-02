@@ -1,30 +1,33 @@
-import type { DrivePath } from '@workspace/lib/types';
-import type React from 'react';
-import type { RefObject } from 'react';
+// The behavior a Drive listing's rows share, whichever view draws them, such as DriveTable or DriveGrid:
+// selection, keyboard navigation, drag and drop onto folders and the row menu's open state. Keyboard
+// keys and drops reach the same Drive action runner the menu does.
+
+import { DELETE_HOTKEY } from '@workspace/lib/constants/hotkeys';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DragEvent, RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../hooks/use-list-drag';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { useSelectableContextMenu } from '../../hooks/use-selectable-context-menu';
+import type { DriveActionRunner } from './drive-action-runner';
 
 export type UseDriveItemControllerOptions = {
-    // Already sorted by the caller — the controller selects/navigates over them as-is.
+    // Already sorted by the caller: the controller selects and navigates over them as they are.
     items: DrivePath[];
     activeItemId?: string;
     // Grid width for keyboard navigation; DriveTable keeps the default single column.
     columns?: number;
     scrollToIndex?: (index: number, opts?: { align?: 'center' }) => void;
     containerRef: RefObject<HTMLElement | null>;
-    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    // Held by the caller, such as DriveList, so the selection survives a switch between list and grid.
     selection?: UseListSelectionReturn<DrivePath>;
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;
-    onMove?: (item: DrivePath, targetItemId: string) => void;
     onSelectionChange?: (items: DrivePath[]) => void;
-    // Same handler the context menu's trash entry calls — bound to Delete/Backspace here.
-    onDelete?: (items: DrivePath[]) => void;
-    allowDelete?: boolean;
+    // Absent in a picker, whose rows have no actions.
+    actions?: DriveActionRunner;
 };
 
 export function useDriveItemController({
@@ -36,10 +39,8 @@ export function useDriveItemController({
     selection: externalSelection,
     onItemClick,
     onQuickLook,
-    onMove,
     onSelectionChange,
-    onDelete,
-    allowDelete,
+    actions,
 }: UseDriveItemControllerOptions) {
     const handleItemSelect = useCallback(
         (id: string) => {
@@ -61,8 +62,8 @@ export function useDriveItemController({
     const internalSelection = useListSelection({ items, getId: (item) => item.id });
     const selection = externalSelection ?? internalSelection;
 
-    // A row picked through the URL (drive's `pid`) is a real selection, not just active-row
-    // styling — the palette's selection actions and the shift-range anchor read the selection set.
+    // A row picked through the URL, such as Drive's `pid`, is selected for real and not only drawn as
+    // active, because the palette's selection actions and the Shift range read the selection.
     useEffect(() => {
         if (activeItemId) selection.select(activeItemId);
     }, [activeItemId, selection.select]);
@@ -79,11 +80,15 @@ export function useDriveItemController({
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef,
         shouldNotify: () => !!activeItemId,
-        // A multi-selection wins over the cursored row, exactly as the context menu resolves it.
-        onDelete:
-            allowDelete && onDelete
-                ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
-                : undefined,
+        // Delete and Backspace run the row the menu marks with DELETE_HOTKEY. Like the menu, it acts on the
+        // whole selection when more than one row is selected.
+        onDelete: actions
+            ? (item) => {
+                  const items = selection.selectedCount > 1 ? selection.selectedItems : [item];
+                  const remove = actions.actionsFor(items).find(({ shortcut }) => shortcut === DELETE_HOTKEY);
+                  if (remove) actions.run(remove.id, items);
+              }
+            : undefined,
         selection,
         columns,
         scrollToIndex,
@@ -112,27 +117,24 @@ export function useDriveItemController({
         openFromButton: openContextMenuFromButton,
     } = useSelectableContextMenu({ selection, getId: (item) => item.id });
 
-    const isValidFolderDrop = (targetItem: DrivePath) => {
-        if (targetItem.type !== 'folder') return false;
-        return !drag.draggedItems.some((d) => d.id === targetItem.id);
-    };
+    // A view that can't move items, such as a read-only share or a picker, has no onMove and so no drop targets.
+    const isValidFolderDrop = (targetItem: DrivePath) =>
+        !!actions?.onMove && targetItem.type === 'folder' && !drag.draggedItems.some((d) => d.id === targetItem.id);
 
-    // Drop handlers for folder rows/tiles — spread onto the item root next to getDragProps.
+    // The drop handlers a folder row or tile spreads on its root, next to getDragProps.
     const getDropProps = (item: DrivePath) => ({
-        onDragOver: (e: React.DragEvent) => {
+        onDragOver: (e: DragEvent) => {
             e.preventDefault();
-            if (drag.isDragging && isValidFolderDrop(item)) {
-                e.dataTransfer.dropEffect = 'move';
-            }
+            if (drag.isDragging) e.dataTransfer.dropEffect = isValidFolderDrop(item) ? 'move' : 'none';
         },
         onDragEnter: () => {
             if (drag.isDragging) setDragOverItemId(item.id);
         },
-        onDrop: (e: React.DragEvent) => {
+        onDrop: (e: DragEvent) => {
             e.preventDefault();
             setDragOverItemId(null);
             if (isValidFolderDrop(item)) {
-                for (const d of drag.draggedItems) onMove?.(d, item.id);
+                for (const d of drag.draggedItems) actions?.onMove?.(d, item.id);
             }
         },
     });

@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
+import { bindingAnchor, bindingGap, boundEndpoint, shapeAnchorPoints } from '../../../vector/binding';
 import { elbowBindPoint } from '../../../vector/elbow-heading';
 import { solidFill } from '../../../vector/fill';
 import type { Point } from '../../../vector/geometry';
-import { bindingAnchor, bindingGap, boundEndpoint, rotatePoint, shapeAnchorPoints } from '../../../vector/geometry';
+import { rotatePoint } from '../../../vector/geometry';
 import { ELEMENT_KINDS } from '../../../vector/kinds';
 import { distanceToSegment, ellipseOutline, outlineContains } from '../../../vector/outline';
 import { serializePoints } from '../../../vector/points';

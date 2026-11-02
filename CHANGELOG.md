@@ -7,10 +7,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
+- **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
+- **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
+- **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
 - **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
 
 ### Changed
 
+- **Text boxes in Vector and Slides (breaking)** — a text box saved by an earlier version disappears when its drawing or deck opens. Text inside shapes stays
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
 - **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
@@ -21,6 +25,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
+- **Copying in Drive** — **Copy to…** and **Save to Drive…** say "1 item copied" (or "3 items copied") with an **Open folder** button. **Duplicate** stays quiet
+- **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Open**, **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
+- **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
+- **The File menu of a document** — a document shared with you offers **Remove shared item**, and **Share** is hidden when you can't share it
+- **Text boxes in PowerPoint files** — a text box aligned to the top downloads set to resize the shape to fit its text, and a rectangle set that way in a PowerPoint file comes in as a text box
 
 ### Fixed
 
@@ -29,9 +38,29 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
+- **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
+- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
+- **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
+- **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
+- **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
+- **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
+- **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
+- **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
+- **Copying items with the same name** — copying any number of items with the same name into one folder lands every one of them at once, each under its own name
+- **Several screenshots in one message** — a message with any number of pasted screenshots of the same name posts with all of them, each under its own name, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
+- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target. A copy to another drive moves the unfinished folder to that drive's Trash. When only some items copy, the message says why the others failed
+- **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
+- **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
+- **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
+- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
+- **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
+- **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
+- **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
+- **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
 - **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 
 ## [0.4.1] - 2026-10-28

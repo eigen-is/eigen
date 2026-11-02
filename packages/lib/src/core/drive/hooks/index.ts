@@ -5,6 +5,7 @@ export * from './trash';
 export * from './use-attachment-subjects';
 export * from './use-convert-document';
 export * from './use-drive-access';
+export * from './use-drive-actions';
 export * from './use-drive-view-preferences';
 export * from './use-export-document';
 export * from './use-file-history';

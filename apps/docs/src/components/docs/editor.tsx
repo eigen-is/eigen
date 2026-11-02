@@ -18,7 +18,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { useDocsTextWidth } from '@workspace/lib/docs';
-import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, BandRoot, PageSetup, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
     bandEdge,
@@ -88,6 +88,7 @@ import {
     updateCommentDecorations,
 } from './extensions/comment-mark';
 import type { EquationOptions } from './extensions/equation';
+import type { FigureFrameOptions } from './extensions/figure-frame';
 import { insertNote } from './extensions/footnote';
 import { TextBoxContext } from './extensions/text-box';
 import { FigurePropertiesPanel } from './figure-properties-panel';
@@ -111,7 +112,8 @@ import { TableOfContentsPropertiesPanel } from './table-of-contents-properties-p
 import { TablePropertiesPanel } from './table-properties-panel';
 import { TextBoxPropertiesPanel } from './text-box-properties-panel';
 
-// What a cell's or an equation's right-click menu is about: the editor it is in and the comment card under the pointer.
+// What a cell's, an equation's or an image's right-click menu is about: the editor it is in and the comment card under
+// the pointer.
 type NodeMenuItem = { editor: Editor; comment: CommentContextMenuItem | null };
 type TableMenuItem = NodeMenuItem & { cells: ReturnType<typeof selectCellCommands> & { cellBackground: string } };
 type EquationMenuItem = NodeMenuItem & { display: boolean };
@@ -288,17 +290,17 @@ const TiptapEditor = ({
     const setDocumentEl = useCallback((el: HTMLDivElement | null) => {
         documentRef.current = el;
         if (!el) return;
-        const ro = new ResizeObserver(() => {
+        const observer = new ResizeObserver(() => {
             // Only the scaled branch reads docHeight; the effect below seeds it on the way in.
             if (!needsScaleRef.current) return;
             const height = el.offsetHeight;
             if (height === 0) return;
             setDocHeight(height);
         });
-        ro.observe(el);
+        observer.observe(el);
         return () => {
             documentRef.current = null;
-            ro.disconnect();
+            observer.disconnect();
         };
     }, []);
 
@@ -312,6 +314,11 @@ const TiptapEditor = ({
         [isMobile, openComments],
     );
 
+    // The body's images, charts and text boxes open their card and the one figure menu.
+    const figureFrame: FigureFrameOptions = {
+        onOpenComment: handleCommentClick,
+        onContextMenu: (...args) => figureContextMenuRef.current(...args),
+    };
     // Every editor's equations open the one Equation panel and menu.
     const equation: Omit<EquationOptions, 'onOpenComment'> = {
         onEdit: isMobile ? undefined : () => editEquationRef.current(),
@@ -329,23 +336,12 @@ const TiptapEditor = ({
             provider,
             editable: canWrite,
             target: { undoManager, cardIds: () => new Set(Object.keys(cardsRef.current)) },
-            figure: {
-                onOpenComment: handleCommentClick,
-                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-            },
-            chart: {
-                onOpenComment: handleCommentClick,
-                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-                onEditData: () => setChartDataOpen(true),
-            },
+            figure: figureFrame,
+            chart: { ...figureFrame, onEditData: () => setChartDataOpen(true) },
             equation: { ...equation, onOpenComment: handleCommentClick },
             table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
-            textBox: {
-                onOpenComment: handleCommentClick,
-                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-                onOpen: (pos, at) => openBoxRef.current(pos, at),
-            },
+            textBox: { ...figureFrame, onOpen: (pos, at) => openBoxRef.current(pos, at) },
             tableOfContents: { ...tableOfContentsMenu, onJump: (pos) => jumpToHeadingRef.current(pos) },
             extensions: [
                 SearchHighlight,
@@ -396,27 +392,20 @@ const TiptapEditor = ({
         equation,
         table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
     });
-    // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
-    // on a desktop or a tablet, as a band is.
-    const noteEditor = useDocEditor({
+    // One live editor for each kind of story, kept as long as the doc is open. The footnote's holds whichever note is
+    // open, and the text box's draws in the box itself. A story opens for a writer on a desktop or a tablet, as a band
+    // does.
+    const storyEditorOptions = (story: StoryNode) => ({
         media,
         yDoc,
         provider: null,
         editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'footnote' },
+        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story },
         equation,
         tableOfContents: tableOfContentsMenu,
     });
-    // The open text box's live editor, which draws in the box itself.
-    const boxEditor = useDocEditor({
-        media,
-        yDoc,
-        provider: null,
-        editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'textBox' },
-        equation,
-        tableOfContents: tableOfContentsMenu,
-    });
+    const noteEditor = useDocEditor(storyEditorOptions('footnote'));
+    const boxEditor = useDocEditor(storyEditorOptions('textBox'));
     const storyEditors = useMemo(() => ({ footnote: noteEditor, textBox: boxEditor }), [noteEditor, boxEditor]);
     const story = useOpenStory(editor, storyEditors, bandsAllowed);
     leaveStoryRef.current = story.leave;
@@ -533,7 +522,7 @@ const TiptapEditor = ({
         initialChatName,
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
-    // Host-owned so the filter survives panel close/reopen.
+    // The page owns the filter, so it survives when the comments panel closes and opens again.
     const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
@@ -556,6 +545,8 @@ const TiptapEditor = ({
         figureContextMenu.handleContextMenu(event, { imagePath, chart, comment });
     };
     const menuChart = figureContextMenu.item?.chart;
+    // Only the body's images, charts and text boxes open this menu, and a comment anchors on each.
+    const figureComment = { editor, comment: figureContextMenu.item?.comment ?? null };
 
     // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being edited
     // or the open story's. A viewer, and a band not being edited, keep the browser's.
@@ -591,16 +582,13 @@ const TiptapEditor = ({
         tableOfContentsContextMenu.openAt(target, event.clientX, event.clientY);
     };
 
-    const removeCommentMarks = (cardId: string) => {
-        removeCommentAnchors(editor, cardId);
-    };
+    const removeCommentMarks = (cardId: string) => removeCommentAnchors(editor, cardId);
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!pendingMarkRange) return;
-            const range = pendingMarkRange;
-            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) =>
-                addCommentAnchor(editor, range, card.id),
+            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (created) =>
+                addCommentAnchor(editor, pendingMarkRange, created.id),
             );
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
@@ -611,7 +599,8 @@ const TiptapEditor = ({
         [editor, pendingMarkRange, createCard, assignComment],
     );
 
-    // Sync resolved IDs + colors into the ProseMirror decoration plugin
+    // A comment highlights its text in its card's color until it is resolved, so the body's decorations learn both
+    // whenever a card or a comment changes.
     useEffect(() => {
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
@@ -714,19 +703,18 @@ const TiptapEditor = ({
     // Plain object per render; usePaletteDocSearch stabilises it, so reveal sees the current cards.
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
+        // openCard opens the comments panel on a desktop only, as a tap on a phone comes from the pane. A search hit
+        // comes from the palette, so it opens the pane on a phone too.
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
-            setEditingBand(null);
             openComments();
-            // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
-            if (!isMobile) selectCommentAnchor(editor, cardId);
-            setOpenCardId(cardId);
+            openCard(cardId);
         },
     };
 
-    // A cell's or an equation's comment rows: the card's under the pointer, else Add comment where one anchors, which
-    // is in the body only. The card's Delete goes last, with the cell's or the equation's.
+    // A node's comment rows: the card's under the pointer, else Add comment where one anchors, which is in the body
+    // only. The card's Delete goes last, with the node's own.
     const commentRows = (item: NodeMenuItem, anchors: boolean) => (
         <CommentLifecycleMenuItems
             lifecycle={lifecycle}
@@ -796,9 +784,10 @@ const TiptapEditor = ({
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
                         onOpenChange={handleSearchOpenChange}
-                        // right-68 = panel width + the bar's own gutter.
+                        // Beside an open panel the find bar moves left by the panel's width and the bar's own gutter.
                         barClassName={cn('top-14', showSidebar && 'right-68')}
-                        // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
+                        // These don't focus the editor, so the focus stays in the bar and the user can keep replacing
+                        // after ⌘Z.
                         onUndo={() => editor.commands.undo()}
                         onRedo={() => editor.commands.redo()}
                     >
@@ -929,9 +918,9 @@ const TiptapEditor = ({
                                         data-document="true"
                                         data-pageless={pageless || undefined}
                                         className={cn(
-                                            // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            // Rows: the header band, the body, the notes, the footer band.
-                                            // isolate: the figures behind the text draw on the paper, in every scale.
+                                            // eigen-paper keeps the page light, in dark mode too. The rows are the
+                                            // header band, the body, the notes and the footer band. isolate makes
+                                            // the figures behind the text draw on the paper, at every scale.
                                             'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white',
                                             pageless
                                                 ? 'min-h-full'
@@ -1069,9 +1058,9 @@ const TiptapEditor = ({
 
             <CardFormDialog
                 open={addOpen}
-                onOpenChange={(o) => {
-                    setAddOpen(o);
-                    if (!o) setPendingMarkRange(null);
+                onOpenChange={(open) => {
+                    setAddOpen(open);
+                    if (!open) setPendingMarkRange(null);
                 }}
                 initialTitle={pendingMarkRange?.text ?? ''}
                 onSave={handleSaveNew}
@@ -1108,15 +1097,7 @@ const TiptapEditor = ({
                             </>
                         )
                     }
-                    collaborate={
-                        <CommentLifecycleMenuItems
-                            lifecycle={lifecycle}
-                            item={figureContextMenu.item?.comment ?? null}
-                            canWrite={canWrite}
-                            onAddComment={chatFolderId ? handleAddComment : undefined}
-                            part="rows"
-                        />
-                    }
+                    collaborate={commentRows(figureComment, true)}
                     destructive={
                         <>
                             {canWrite && (
@@ -1127,13 +1108,7 @@ const TiptapEditor = ({
                                     <Trash2 className="h-4 w-4" /> Delete
                                 </DropdownMenuItem>
                             )}
-                            <CommentLifecycleMenuItems
-                                lifecycle={lifecycle}
-                                item={figureContextMenu.item?.comment ?? null}
-                                canWrite={canWrite}
-                                onDelete={removeCommentMarks}
-                                part="delete"
-                            />
+                            {commentDelete(figureComment)}
                         </>
                     }
                 />

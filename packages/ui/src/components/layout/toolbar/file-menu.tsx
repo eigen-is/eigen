@@ -1,11 +1,13 @@
 // The File menu on the toolbar of an open Eigen document, such as a doc, a sheet or a board. It
 // creates, opens, renames, downloads, shares and trashes the document, and opens its version history.
-// It also hands those actions to the command palette, so the menu and the palette offer the same ones.
+// Its Drive rows, such as Rename and Move to trash, come from the Drive action catalog with Drive's
+// gates. It also hands the document and those rows to the command palette, so both offer the same ones.
 
 import { useNavigate } from '@tanstack/react-router';
-import { openDocument } from '@workspace/lib/api';
-import { useIsGuest } from '@workspace/lib/auth';
-import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
+import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/lib/api';
+import { copyToClipboard } from '@workspace/lib/clipboard';
+import { usePaletteSelection } from '@workspace/lib/command-palette';
+import { useDriveActionsFor } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -17,6 +19,7 @@ import {
     EXPORT_FORMAT_LABELS,
     exportFormatsFor,
 } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import {
     DropdownMenuItem,
@@ -26,9 +29,11 @@ import {
     DropdownMenuSubTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import type { LucideIcon } from 'lucide-react';
-import { Download, FileText, Folder, Mail, Pencil, Trash2, Upload, UserRoundPlus } from 'lucide-react';
+import { Download, FileText, Folder, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { DriveActionMenuItem } from '../../drive/drive-action-menu-item';
+import { browseCapabilities } from '../../drive/drive-capabilities';
 import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../../drive/drive-delete-item';
 import { DriveEmailCollaborators } from '../../drive/drive-email-collaborators';
@@ -87,20 +92,39 @@ export function FileMenu({
     const canExport = !!onExport && downloadFormats.length > 0;
     const canDownload = canExport || !!onDownloadSvg;
     const navigate = useNavigate();
-    const isGuest = useIsGuest();
-    // A guest may not mail people through the server, as a guest may not share.
-    const canEmail = canWrite && !isGuest;
+    // The document stands where Drive's folder browser stands on a folder: the viewer's write access
+    // to it gates the writes, and an item shared with the viewer is removed rather than trashed.
+    const actionsFor = useDriveActionsFor(browseCapabilities(canWrite));
 
-    // Mounted by every eigendoc toolbar, so one publish gives ⌘K the open doc's actions
-    // across all four apps. The doc is published as the selection upstream
-    // (useEigenDocEditorRoute); usePaletteSelectionActions stabilises these handlers.
-    usePaletteSelectionActions({
-        onShare: onAccessDialogOpen,
-        onExport: canExport && onExport ? (_, format) => onExport(format) : undefined,
-        onRename: canWrite ? () => setRenameOpen(true) : undefined,
-        onEmailCollaborators: canEmail ? () => setEmailOpen(true) : undefined,
-        onDelete: canWrite ? () => setDeleteOpen(true) : undefined,
+    // The Drive rows this menu can run, through the dialogs it owns. The menu draws Rename, Share, Email
+    // collaborators and the delete row; Copy link and Mail to go to the palette only, and so does
+    // Download as, which the menu draws as its own Download submenu.
+    const runs: Partial<Record<DriveActionId, (format?: ExportFormat) => void>> = {
+        rename: () => setRenameOpen(true),
+        'download-as':
+            onExport &&
+            ((format) => {
+                if (format) onExport(format);
+            }),
+        share: onAccessDialogOpen,
+        'email-collaborators': () => setEmailOpen(true),
+        'copy-link': () => copyToClipboard(getDriveShareUrl(path), 'Link copied to clipboard'),
+        'mail-to': () => openMailComposeWith({ attachments: [path] }),
+        trash: () => setDeleteOpen(true),
+        'remove-shared': () => setDeleteOpen(true),
+    };
+    const rows = actionsFor([path]).flatMap((action) => {
+        const run = runs[action.id];
+        return run ? [{ action, run }] : [];
     });
+    // Every document toolbar mounts one, so this publishes the open document in every editor app.
+    usePaletteSelection([path], rows);
+
+    const rowFor = (id: DriveActionId) => {
+        const row = rows.find(({ action }) => action.id === id);
+        return row && <DriveActionMenuItem action={row.action} count={1} onClick={() => row.run()} />;
+    };
+    const remove = rowFor('trash') ?? rowFor('remove-shared');
 
     return (
         <>
@@ -136,32 +160,20 @@ export function FileMenu({
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 )}
-                {canWrite && (
-                    <DropdownMenuItem onClick={() => setRenameOpen(true)}>
-                        <Pencil className="h-4 w-4" /> Rename
-                    </DropdownMenuItem>
-                )}
+                {rowFor('rename')}
 
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onAccessDialogOpen}>
-                    <UserRoundPlus className="h-4 w-4" /> Share
-                </DropdownMenuItem>
-                {canEmail && (
-                    <DropdownMenuItem onClick={() => setEmailOpen(true)}>
-                        <Mail className="h-4 w-4" /> Email collaborators
-                    </DropdownMenuItem>
-                )}
+                {rowFor('share')}
+                {rowFor('email-collaborators')}
 
                 <DropdownMenuSeparator />
                 {canWrite && <VersionHistoryMenu path={path} onRequestRestore={setPendingSnapshot} />}
                 {children}
 
-                {canWrite && (
+                {remove && (
                     <>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
-                            <Trash2 className="h-4 w-4" /> Move to trash
-                        </DropdownMenuItem>
+                        {remove}
                     </>
                 )}
             </AppBarMenu>
@@ -191,7 +203,7 @@ export function FileMenu({
                 open={deleteOpen}
                 onOpenChange={setDeleteOpen}
                 onAfterAction={(actionType) => {
-                    if (actionType === 'delete') navigate({ to: `/` });
+                    if (actionType === 'delete') navigate({ to: '/' });
                 }}
             />
             <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />

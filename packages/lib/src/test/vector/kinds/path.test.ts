@@ -1,8 +1,9 @@
 import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
+import { bindingAnchor, bindingGap, boundEndpoint, elementBounds } from '../../../vector/binding';
 import { serializeFill, solidFill } from '../../../vector/fill';
 import type { Point } from '../../../vector/geometry';
-import { bindingAnchor, bindingGap, boundEndpoint, elementBounds, rotatePoint } from '../../../vector/geometry';
+import { rotatePoint } from '../../../vector/geometry';
 import { capabilitiesOf, ELEMENT_FIELDS, ELEMENT_KINDS, isBindable, storedFields } from '../../../vector/kinds';
 import { MAX_PATH_BYTES, MAX_PATH_COMMANDS, parseNormalizedPath } from '../../../vector/kinds/read-fields';
 import type { OutlineShape } from '../../../vector/outline';

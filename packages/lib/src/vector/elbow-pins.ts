@@ -1,14 +1,15 @@
-// Editors for a pinned elbow arrow, one that has fixed segments. Its `points` hold the full routed
-// polyline, so each edit is point surgery on it: `moveSegment` slides a dragged segment, `renormalize`
-// merges collinear runs and reindexes pins, and unpinning re-routes only the freed gap.
-// Callers, such as geometry and the canvas tools, write the returned patch.
+// The edits of a pinned elbow arrow, one where the user has fixed some segments in place. Such an arrow stores its
+// whole routed line in `points`, so each edit changes those points directly, such as sliding a dragged segment or
+// moving an end after its shape. The code ports Excalidraw's elbow arrow editing. Each edit returns a patch, and
+// the caller writes it, such as the canvas tools or followBindings.
 
 import type { Point } from './geometry';
+import { BASE_PADDING, DEDUP_THRESHOLD, headingIsHorizontalVec } from './heading';
 import { parsePoints, serializePoints } from './points';
 import type { FixedSegment, VectorArrowElement } from './types';
 import { parseFixedSegments, serializeFixedSegments } from './types';
 
-// The geometry patch every editor returns — the fields a pinned-arrow write persists together.
+// The fields an edit of a pinned arrow changes. The caller writes them together.
 export type PinPatch = {
     points: string;
     x: number;
@@ -18,11 +19,10 @@ export type PinPatch = {
     fixedSegments: string;
 };
 
-// The routing context an end-segment jog needs, resolved at the call seam (elbow-route's
-// elbowRoutingContext) so elbow-pins stays pure. Excalidraw's handleSegmentMove/handleEndpointDrag read
-// `startHeading`/`endHeading` (the heading each endpoint leaves its shape by) plus `hoveredStartElement`/
-// `hoveredEndElement` (is that end bound). Each Heading is decomposed here into horizontal? + positive?
-// (RIGHT when horizontal, DOWN when vertical) — all the jog/pad math consumes.
+// What an edit at an end of the arrow needs to know: whether each end is bound, and which way it leaves. The
+// caller builds it with elbowRoutingContext, so this file reads no shapes. Excalidraw's handleSegmentMove and
+// handleEndpointDrag read the same facts from the start and end headings and the hovered elements. Each heading
+// is split into two flags: whether it is horizontal, and whether it points right or down.
 export type PinRoutingContext = {
     startBound: boolean;
     endBound: boolean;
@@ -32,8 +32,7 @@ export type PinRoutingContext = {
     endHeadingPositive: boolean;
 };
 
-// An all-unbound context (each heading points at the other endpoint): the default when no bound context is
-// threaded — an interior-segment drag never reads it, so only end-segment drags of unbound arrows care.
+// Both ends unbound, for a caller that passes no context. Only an edit at an end of the arrow reads it.
 const UNBOUND_PIN_CONTEXT: PinRoutingContext = {
     startBound: false,
     endBound: false,
@@ -43,12 +42,9 @@ const UNBOUND_PIN_CONTEXT: PinRoutingContext = {
     endHeadingPositive: false,
 };
 
-const DEDUP_THRESHOLD = 1;
-// Excalidraw's BASE_PADDING (elbowArrow.ts:111) — the room an inserted end connector leaves the shape by.
-const BASE_PADDING = 40;
-
-// A parsed pinned arrow: its polyline in GLOBAL scene coordinates plus the pins (global start/end) and the
-// synthetic-point markers. The editors work in global then re-origin through normalizeElbowUpdate.
+// A pinned arrow decoded into scene coordinates: its points, its pins, and the two flags that say an end carries
+// an extra jog point. The edits work in the scene, and normalizeElbowUpdate turns the result back into local
+// points.
 type Working = {
     points: Point[];
     segments: WorkingSegment[];
@@ -57,19 +53,13 @@ type Working = {
 };
 type WorkingSegment = { index: number; start: Point; end: Point };
 
-// --- small vector helpers (Excalidraw's @excalidraw/math, inlined) ---------------------
-
-function headingIsHorizontalVec(a: Point, b: Point): boolean {
-    // The dominant axis of a→b — Excalidraw's headingForPointIsHorizontal (|dy| < |dx|).
-    return Math.abs(a.y - b.y) < Math.abs(a.x - b.x);
-}
-
 function pointsEqual(a: Point, b: Point): boolean {
     return a.x === b.x && a.y === b.y;
 }
 
-// Excalidraw's validateElbowPoints: consecutive points differ on at most one axis within tolerance (an
-// orthogonal polyline). The gate that keeps a corrupt/foreign polyline from being trusted as pinned.
+// Whether each segment runs straight across or straight down, within `tolerance`, as Excalidraw's
+// validateElbowPoints. A line from a corrupt or foreign file must pass this before it is trusted as an elbow
+// route.
 export function validateElbowPoints(points: Point[], tolerance = DEDUP_THRESHOLD): boolean {
     for (let i = 1; i < points.length; i++) {
         const p = points[i];
@@ -79,24 +69,28 @@ export function validateElbowPoints(points: Point[], tolerance = DEDUP_THRESHOLD
     return true;
 }
 
-// --- parse / normalize -----------------------------------------------------------------
-
-// Decode an arrow into the global working form (points + pins in scene coordinates).
 function toWorking(arrow: VectorArrowElement): Working {
-    const local = parsePoints(arrow.points);
-    const points = local.map((p) => ({ x: arrow.x + p.x, y: arrow.y + p.y }));
+    const points = scenePoints(arrow);
     const parsed = parseFixedSegments(arrow.fixedSegments);
-    const segments = parsed.segments.map((s) => ({
-        index: s.index,
-        start: { x: arrow.x + s.start[0], y: arrow.y + s.start[1] },
-        end: { x: arrow.x + s.end[0], y: arrow.y + s.end[1] },
-    }));
+    const segments = parsed.segments.map((s) => sceneSegment(arrow, s));
     return { points, segments, startIsSpecial: parsed.startIsSpecial, endIsSpecial: parsed.endIsSpecial };
 }
 
-// Excalidraw's normalizeArrowElementUpdate: re-origin the global polyline so points[0] is local (0,0),
-// rebuild every pin's start/end from the normalized polyline at its index (so the copies match the
-// vertices), and serialize. `null`-equivalent (no pins) ⇒ '' so the arrow returns to derived mode.
+function scenePoints(arrow: VectorArrowElement): Point[] {
+    return parsePoints(arrow.points).map((p) => ({ x: arrow.x + p.x, y: arrow.y + p.y }));
+}
+
+function sceneSegment(arrow: VectorArrowElement, s: FixedSegment): WorkingSegment {
+    return {
+        index: s.index,
+        start: { x: arrow.x + s.start[0], y: arrow.y + s.start[1] },
+        end: { x: arrow.x + s.end[0], y: arrow.y + s.end[1] },
+    };
+}
+
+// Turns scene points back into a patch, as Excalidraw's normalizeArrowElementUpdate. The first point becomes the
+// local origin. Each pin's two points are copied again from the points at its index, so the copies can't drift.
+// With no pins left, fixedSegments serializes to '', and the arrow goes back to a derived route.
 function normalizeElbowUpdate(
     global: Point[],
     segments: { index: number }[],
@@ -116,14 +110,15 @@ function normalizeElbowUpdate(
         maxX = Math.max(maxX, p.x);
         maxY = Math.max(maxY, p.y);
     }
-    // Rebuild pin coords from the polyline at each index (the discipline that keeps start/end honest).
-    const rebuilt: FixedSegment[] = segments
+    const rebuilt = segments
         .filter((s) => s.index >= 1 && s.index < local.length)
-        .map((s) => ({
-            index: s.index,
-            start: [local[s.index - 1].x, local[s.index - 1].y] as [number, number],
-            end: [local[s.index].x, local[s.index].y] as [number, number],
-        }));
+        .map(
+            (s): FixedSegment => ({
+                index: s.index,
+                start: [local[s.index - 1].x, local[s.index - 1].y],
+                end: [local[s.index].x, local[s.index].y],
+            }),
+        );
     return {
         points: serializePoints(local),
         x: offsetX,
@@ -138,11 +133,9 @@ function normalizeElbowUpdate(
     };
 }
 
-// --- segment move (moveFixedSegment + handleSegmentMove) ----------------------------
-
-// Excalidraw's moveFixedSegment: upsert the pin at `index`, axis-locked — a horizontal segment keeps its
-// endpoints' x from the current polyline and takes the cursor's y, a vertical one mirrored. Returns the
-// full sorted pin list (LOCAL coords), the input to handleSegmentMove.
+// Adds or replaces the pin at `index`, as Excalidraw's moveFixedSegment. The segment moves only across its own
+// direction. A horizontal segment keeps its x values and takes the cursor's y, and a vertical one keeps its y
+// values and takes the cursor's x. It returns every pin in local coordinates, sorted by index.
 function moveFixedSegment(arrow: VectorArrowElement, index: number, cursorScene: Point): FixedSegment[] {
     const local = parsePoints(arrow.points);
     const parsed = parseFixedSegments(arrow.fixedSegments);
@@ -161,30 +154,24 @@ function moveFixedSegment(arrow: VectorArrowElement, index: number, cursorScene:
     return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
 
-// Excalidraw's handleSegmentMove: overwrite the dragged pin's two vertices, stretch each neighbor's far
-// endpoint along the neighbor's own axis (so no new corner appears on an interior drag), and weld any
-// adjacent pinned segment to the moved vertex. When the dragged segment is the FIRST or LAST one it inserts
-// an L-jog so the pinned segment becomes interior and the endpoint is preserved (unshift/push, +1/+2
-// reindex, plus a BASE_PADDING outer-vertex prelude when that end is bound) — the arrow's stored invariant
-// that first/last segments are never fixed holds as an output property. `movedIndex` is the pin the caller
-// just dragged; `ctx` carries the endpoint headings + bound flags the jog needs.
+// Rebuilds the points after a pin moved, as Excalidraw's handleSegmentMove. The dragged segment's two points take
+// the pin's new place. Each neighboring segment stretches along its own direction, so a drag in the middle adds no
+// corner. A pinned neighbor stays joined to the moved point. The first and last segments may never be pinned, so
+// a drag of one of them adds a corner at that end. The pinned segment is then no longer the first or last, and
+// the arrow's end stays where it was.
 function handleSegmentMove(
     arrow: VectorArrowElement,
     segments: FixedSegment[],
     movedIndex: number,
     ctx: PinRoutingContext,
 ): PinPatch {
-    const newPoints: Point[] = parsePoints(arrow.points).map((p) => ({ x: arrow.x + p.x, y: arrow.y + p.y }));
-    const nextSegments: WorkingSegment[] = segments.map((s) => ({
-        index: s.index,
-        start: { x: arrow.x + s.start[0], y: arrow.y + s.start[1] },
-        end: { x: arrow.x + s.end[0], y: arrow.y + s.end[1] },
-    }));
+    const newPoints = scenePoints(arrow);
+    const nextSegments = segments.map((s) => sceneSegment(arrow, s));
     const moved = nextSegments.find((s) => s.index === movedIndex);
     if (!moved) return normalizeElbowUpdate(newPoints, nextSegments, false, false);
 
-    // The ORIGINAL endpoints + last index, captured before any overwrite/jog — the jog re-inserts these
-    // endpoints verbatim (bound) and gates on the pristine point count.
+    // The ends and the point count from before the edit. A bound end puts its old point back unchanged, and the
+    // corners below test the old count.
     const lastIndex = newPoints.length - 1;
     const oldStart = { ...newPoints[0] };
     const oldEnd = { ...newPoints[lastIndex] };
@@ -192,19 +179,12 @@ function handleSegmentMove(
     const hasFirstPin = oldPins.some((s) => s.index === 1);
     const hasLastPin = oldPins.some((s) => s.index === lastIndex);
 
-    // BASE_PADDING prelude (elbowArrow.ts:497-558): before the surgery, push the pin's OUTER vertex away
-    // from a bound shape along its heading so the inserted connector has room to leave orthogonally. A short
-    // segment pads by half its length instead of the full 40.
+    // At a bound end, the pin's outer point first moves away from the shape along the end's heading, as in
+    // Excalidraw's handleSegmentMove. The new corner then has room to leave the shape at a right angle. A short
+    // segment moves by half its length instead of the full BASE_PADDING.
     const segmentLength = Math.hypot(moved.end.x - moved.start.x, moved.end.y - moved.start.y);
-    const segmentIsTooShort = segmentLength < BASE_PADDING + 5;
-    const pad = (positive: boolean): number =>
-        positive
-            ? segmentIsTooShort
-                ? segmentLength / 2
-                : BASE_PADDING
-            : segmentIsTooShort
-              ? -segmentLength / 2
-              : -BASE_PADDING;
+    const padding = segmentLength < BASE_PADDING + 5 ? segmentLength / 2 : BASE_PADDING;
+    const pad = (positive: boolean): number => (positive ? padding : -padding);
     if (!hasFirstPin && moved.index === 1 && ctx.startBound) {
         const p = pad(ctx.startHeadingPositive);
         moved.start = {
@@ -234,8 +214,8 @@ function handleSegmentMove(
             ? headingIsHorizontalVec(newPoints[endIdx + 1], newPoints[endIdx])
             : undefined;
 
-    // Slide the neighbor's far endpoint along the neighbor's own axis (dominant axis ⇒ move the OTHER
-    // coordinate: horizontal neighbor keeps y, so take start.y; vertical keeps x, so take start.x).
+    // Each neighbor's far point takes the moved point's coordinate across the neighbor's direction. A
+    // horizontal neighbor takes the new y, and a vertical one the new x, so the neighbor stays straight.
     if (prevSegmentIsHorizontal !== undefined) {
         if (prevSegmentIsHorizontal) newPoints[startIdx - 1].y = start.y;
         else newPoints[startIdx - 1].x = start.x;
@@ -247,7 +227,7 @@ function handleSegmentMove(
         else newPoints[endIdx + 1].x = end.x;
     }
 
-    // Weld a neighboring pinned segment to the moved vertex so adjacent pins stay welded (no notch).
+    // A pinned neighbor follows the moved point, so no notch opens between the two pins.
     const prevPinned = nextSegments.find((s) => s.index === startIdx);
     if (prevPinned) {
         if (headingIsHorizontalVec(prevPinned.start, prevPinned.end)) prevPinned.start.y = start.y;
@@ -261,10 +241,9 @@ function handleSegmentMove(
         nextPinned.start = { ...end };
     }
 
-    // First-segment jog (elbowArrow.ts:686-707): unshift an L-corner so the pinned segment turns interior;
-    // when the start is bound, also unshift the old endpoint back (preserved verbatim) and reindex every pin
-    // by +2, else +1. The corner shares the pin's outer coordinate on the heading axis and the endpoint's on
-    // the other (unbound uses the point-derived heading, bound the shape heading).
+    // A drag of the first segment adds a corner before it, so the pin is no longer the first segment. A bound
+    // start also puts its old point back in front. Every pin's index then grows by the number of points added.
+    // The corner lines up with the start's heading when the start is bound, and with the first segment otherwise.
     if (!hasFirstPin && startIdx === 0) {
         const startIsHorizontal = ctx.startBound
             ? ctx.startHeadingHorizontal
@@ -278,8 +257,8 @@ function handleSegmentMove(
         for (const s of nextSegments) s.index += shift;
     }
 
-    // Last-segment jog (elbowArrow.ts:709-733): symmetric push at the tail — no reindex, since appending
-    // doesn't shift existing indices. The tail jog always reads the (real, unbound-included) end heading.
+    // A drag of the last segment adds a corner after it in the same way. Points added at the end change no
+    // index. This corner turns along the end heading from the context, even when the end is unbound.
     if (!hasLastPin && endIdx === lastIndex) {
         const endIsHorizontal = ctx.endHeadingHorizontal;
         newPoints.push({
@@ -292,9 +271,9 @@ function handleSegmentMove(
     return normalizeElbowUpdate(newPoints, nextSegments, false, false);
 }
 
-// One gesture step: move the pin at `index` to the cursor and rebuild the polyline. The UI calls this
-// per pointermove on an already-pinned arrow; the patch it returns is what release commits (after
-// renormalization). `ctx` carries the routing context an end-segment jog needs (unbound default otherwise).
+// One step of a segment drag on an arrow that is already pinned. It moves the pin at `index` to the cursor and
+// rebuilds the points. The canvas calls it on every pointer move. On release it commits the last patch, after
+// renormalize.
 export function moveSegment(
     arrow: VectorArrowElement,
     index: number,
@@ -305,11 +284,9 @@ export function moveSegment(
     return handleSegmentMove(arrow, segments, index, ctx);
 }
 
-// --- first pin materializes the polyline --------------------------------------------
-
-// Freeze a derived route into `points` and pin the dragged segment in ONE step. `route` is the
-// arrow's current derived polyline (elbowRoute output, LOCAL). Returns the patch that flips the arrow into
-// stored-polyline mode with its first pin.
+// The first pin of an arrow. Until now the arrow's route was derived, so this stores `route`, the current derived
+// route in local coordinates, as its points. Then it pins the dragged segment. The patch turns the arrow into a
+// pinned one.
 export function materializeFirstPin(
     arrow: VectorArrowElement,
     route: Point[],
@@ -317,28 +294,25 @@ export function materializeFirstPin(
     cursorScene: Point,
     ctx: PinRoutingContext = UNBOUND_PIN_CONTEXT,
 ): PinPatch {
-    // The frozen arrow: points now the full route, still no pins — the base moveSegment mutates.
     const frozen: VectorArrowElement = { ...arrow, points: serializePoints(route), fixedSegments: '' };
     return moveSegment(frozen, index, cursorScene, ctx);
 }
 
-// --- renormalization on commit ------------------------------------------------------
-
-// Excalidraw's handleSegmentRenormalization: merge collinear neighbor segments (pin reindex −1), drop
-// sub-pixel segments (reindex −2), and drop any pin that ends up first/last. Run as the LAST step of every
-// sealed write of a pinned arrow. If no pin survives ⇒ '' (the caller returns to derived mode).
+// Tidies a pinned arrow, as Excalidraw's handleSegmentRenormalization. Two neighboring segments in the same
+// direction merge, a segment shorter than DEDUP_THRESHOLD goes, and a pin that ends up on the first or last
+// segment is dropped. Every committed write of a pinned arrow runs it last. With no pin left, fixedSegments
+// becomes '' and the arrow goes back to a derived route.
 export function renormalize(arrow: VectorArrowElement): PinPatch {
     const w = toWorking(arrow);
-    const points = w.points.map((p) => ({ ...p }));
-    const segments = w.segments.map((s) => ({ index: s.index, start: { ...s.start }, end: { ...s.end } }));
+    const { points, segments } = w;
 
-    // Pass 1: drop a point whose two adjacent segments are collinear (same heading), merging pins.
+    // First, drop each point between two segments that run the same direction.
     for (let i = points.length - 2; i >= 1; i--) {
         const currentHorizontal = headingIsHorizontalVec(points[i], points[i + 1]);
         const prevHorizontal = headingIsHorizontalVec(points[i - 1], points[i]);
         if (currentHorizontal !== prevHorizontal) continue;
-        // A pin exactly on this segment survives (its coord updates); a pin on the merged-away one is
-        // dropped; higher pins reindex −1.
+        // A pin on the later segment stays and now starts where the earlier one did. A pin on the earlier
+        // segment goes, and every pin above moves down one index.
         const here = segments.findIndex((s) => s.index === i + 1);
         const prevIdx = segments.findIndex((s) => s.index === i);
         if (here !== -1) segments[here].start = { ...points[i - 1] };
@@ -347,10 +321,9 @@ export function renormalize(arrow: VectorArrowElement): PinPatch {
         for (const s of segments) if (s.index > i) s.index -= 1;
     }
 
-    // Pass 2: drop interior segments shorter than the dedup threshold. Fidelity delta vs Excalidraw:
-    // upstream removes the short segment's TWO points in one step (pin reindex −2) and re-aligns the merged
-    // vertex; we drop one point per iteration (reindex −1). The loop converges on the same polyline, not the
-    // same intermediate step — acceptable because renormalize only runs as the sealed commit, never mid-frame.
+    // Then drop the segments shorter than DEDUP_THRESHOLD. Excalidraw removes both points of a short segment at
+    // once. This loop removes one point at a time. Both reach the same points in the end, and only the steps in
+    // between differ. That is fine, because renormalize runs only on a commit and never during a drag.
     for (let i = points.length - 2; i >= 1; i--) {
         if (Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y) >= DEDUP_THRESHOLD) continue;
         const onIt = segments.findIndex((s) => s.index === i);
@@ -359,15 +332,13 @@ export function renormalize(arrow: VectorArrowElement): PinPatch {
         for (const s of segments) if (s.index > i) s.index -= 1;
     }
 
-    // Drop pins that landed on the first or last segment (unfixable).
+    // The first and last segments can't be pinned.
     const kept = segments.filter((s) => s.index !== 1 && s.index !== points.length - 1);
     return normalizeElbowUpdate(points, kept, kept.length > 0 && w.startIsSpecial, kept.length > 0 && w.endIsSpecial);
 }
 
-// --- endpoint / bound-shape moves (handleEndpointDrag, else-branch) ------------------
-
-// The 2-point DERIVED patch — used when the last pin dissolves and the arrow returns to derived mode
-// (bbox-min origin, matching normalizeLinear at angle 0). fixedSegments back to ''.
+// The patch of an arrow that goes back to a derived route: just its two ends, placed as normalizeLinear places
+// them at angle 0.
 function derivedPatch(start: Point, end: Point): PinPatch {
     const minX = Math.min(start.x, end.x);
     const minY = Math.min(start.y, end.y);
@@ -384,12 +355,12 @@ function derivedPatch(start: Point, end: Point): PinPatch {
     };
 }
 
-// Move a pinned arrow's endpoint(s) (Excalidraw's handleEndpointDrag): the interior points — and every pin
-// — are kept VERBATIM; only the start pair and end pair are rebuilt so the connector re-drops orthogonally
-// onto the new endpoint. `null` keeps that endpoint at its current position. When the new bind heading is
-// PARALLEL to the second segment the connector needs an extra L-jog: two synthetic points are inserted and
-// startIsSpecial/endIsSpecial set so a later move knows to remove them again — repeated bound-shape moves
-// rebuild the front/tail fresh, so corners never accrete. Returns a full patch (run renormalize after).
+// Moves a pinned arrow's ends, as Excalidraw's handleEndpointDrag. The points in between and every pin stay as
+// they are. Only the first and last points and their neighbors are built again, so each end meets its segment at
+// a right angle. A `null` end stays where it is. A bound end whose heading runs the same direction as its
+// neighboring segment needs an extra corner. That end then gets two extra points, and startIsSpecial or
+// endIsSpecial records them. The next move removes them before it builds the end again, so repeated moves don't
+// pile up corners. Run renormalize on the result.
 export function moveEndpoints(
     arrow: VectorArrowElement,
     newStart: Point | null,
@@ -405,19 +376,18 @@ export function moveEndpoints(
     let endIsSpecial = w.endIsSpecial;
     const startGlobal = newStart ?? points[0];
     const endGlobal = newEnd ?? points[n - 1];
-    // The polyline with only the two endpoints replaced — the source both connector rebuilds read from.
+    // The old points with only the two ends replaced. Both ends below are built from these.
     const src: Point[] = points.map((p, i) => (i === 0 ? startGlobal : i === n - 1 ? endGlobal : p));
     const segments = w.segments.map((s) => ({ index: s.index }));
 
-    // Copy the interior window verbatim (skipping the start/end connectors, whose count depends on the
-    // current isSpecial flags), then rebuild the start front and end tail.
+    // Copy the points in between unchanged. How many points each end has to skip depends on its isSpecial flag.
     const offset = 2 + (startIsSpecial ? 1 : 0);
     const endOffset = 2 + (endIsSpecial ? 1 : 0);
     const newPoints: Point[] = [];
     while (newPoints.length + offset < src.length - endOffset) newPoints.push({ ...src[newPoints.length + offset] });
 
-    // Start front (elbowArrow.ts:750-812): project the second point onto the new start's axis, or — when
-    // bound and the heading is parallel to the second segment — insert the two-point BASE_PADDING jog.
+    // The second point moves in line with the new start. When the start is bound and its heading runs the same
+    // direction as the second segment, two points go in instead, one BASE_PADDING out from the shape.
     {
         const second = src[startIsSpecial ? 2 : 1];
         const third = src[startIsSpecial ? 3 : 2];
@@ -449,7 +419,7 @@ export function moveEndpoints(
         newPoints.unshift({ ...startGlobal });
     }
 
-    // End tail (elbowArrow.ts:816-870): symmetric push. A tail insert shifts no existing indices.
+    // The end is built the same way. Points added at the end change no index.
     {
         const secondToLast = src[src.length - (endIsSpecial ? 3 : 2)];
         const thirdToLast = src[src.length - (endIsSpecial ? 4 : 3)];
@@ -478,12 +448,10 @@ export function moveEndpoints(
     return normalizeElbowUpdate(newPoints, segments, startIsSpecial, endIsSpecial);
 }
 
-// --- unpin --------------------------------------------------------------------------
-
-// Remove the pin at `index`. Removing the LAST pin returns the arrow to derived mode (points collapse to
-// the two endpoints, fixedSegments ''); the derived route takes over — visually what Excalidraw's release
-// does with no neighbor pins. Removing a non-last pin drops the constraint and renormalizes, keeping the
-// polyline where it is (the gap-reroute of handleSegmentRelease is deferred with the multi-pin UI).
+// Removes the pin at `index`. When it was the only pin, the arrow goes back to a derived route, and the points
+// shrink to its two ends. That looks like what Excalidraw's handleSegmentRelease does when no other pin is near.
+// When other pins remain, the points stay where they are. Excalidraw routes the freed stretch again, and Eigen
+// doesn't do that yet.
 export function unpinSegment(arrow: VectorArrowElement, index: number): PinPatch {
     const w = toWorking(arrow);
     const remaining = w.segments.filter((s) => s.index !== index);
@@ -493,11 +461,13 @@ export function unpinSegment(arrow: VectorArrowElement, index: number): PinPatch
     const dropped: VectorArrowElement = {
         ...arrow,
         fixedSegments: serializeFixedSegments({
-            segments: remaining.map((s) => ({
-                index: s.index,
-                start: [s.start.x - arrow.x, s.start.y - arrow.y] as [number, number],
-                end: [s.end.x - arrow.x, s.end.y - arrow.y] as [number, number],
-            })),
+            segments: remaining.map(
+                (s): FixedSegment => ({
+                    index: s.index,
+                    start: [s.start.x - arrow.x, s.start.y - arrow.y],
+                    end: [s.end.x - arrow.x, s.end.y - arrow.y],
+                }),
+            ),
             startIsSpecial: w.startIsSpecial,
             endIsSpecial: w.endIsSpecial,
         }),

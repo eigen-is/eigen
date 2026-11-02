@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { ICS_MAX_BYTES } from '../constants/calendar';
 import { VCARD_MAX_BYTES } from '../constants/contact';
+import { QUICK_LOOK_HOTKEY } from '../constants/hotkeys';
 import { EML_MAX_BYTES } from '../constants/mail';
 import type { ConvertTarget } from '../types/drive';
 import { isConvertSource, isEmlFile, isFolderType, isIcsFile, isVCardFile } from '../types/drive';
@@ -35,6 +36,7 @@ const FILE_ACTIONS: readonly FileAction[] = [
         icon: Eye,
         group: 'open',
         applies: (_info, subject) => !subject.drive || !isFolderType(subject.drive.type),
+        shortcut: QUICK_LOOK_HOTKEY,
     },
     { id: 'download', label: 'Download', icon: Download, group: 'output', applies: (info) => !!info.downloadUrl },
     {

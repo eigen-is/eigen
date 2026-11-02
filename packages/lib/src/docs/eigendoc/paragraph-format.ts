@@ -1,12 +1,16 @@
+// A paragraph's format, as Word and Google Docs set it: its line spacing, the space before and after it, and its
+// indents, each with its bounds, its HTML attribute and its CSS. readParagraphFormat is the one reader of a stored
+// format, which callers such as the paragraph format extension and the docx reader and writer go through. That
+// extension, which loads an editor, lives apart among the doc's nodes, so a page that only draws a doc's Normal stays
+// light.
+
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';
 import type { EditorView } from '@tiptap/pm/view';
 import { DOCUMENT_LINE_RATIO } from '../../constants/fonts';
+import { readNumberIn } from '../../core/guards';
 import type { NormalStyle } from './normal-style';
 import { MAX_PAPER_MM, mmToPt } from './page';
-
-// A paragraph's format as values and readers, apart from its extension (nodes/paragraph-format.ts), so a page that
-// draws a doc's Normal loads no editor.
 
 // The textblocks that hold prose, which an alignment and a paragraph format apply to; a code block holds code.
 export const PROSE_TEXTBLOCKS = ['paragraph', 'title', 'subtitle', 'heading'];
@@ -74,13 +78,12 @@ export const FORMAT: Record<ParagraphFormatKey, { data: string; perUnit: number;
 export function readParagraphFormat(attrs: Record<string, unknown>, column = MAX_INDENT): Partial<ParagraphFormat> {
     const format: Partial<ParagraphFormat> = {};
     for (const key of PARAGRAPH_FORMAT_KEYS) {
-        const value = attrs[key];
-        if (typeof value !== 'number' || !Number.isFinite(value)) continue;
         const limits = PARAGRAPH_FORMAT_LIMITS[key];
         const max = INDENT_KEYS.includes(key) ? Math.min(limits.max, column) : limits.max;
-        const min = Math.max(limits.min, -max);
+        const value = readNumberIn(attrs[key], Math.max(limits.min, -max), max);
+        if (value === null) continue;
         const { perUnit } = FORMAT[key];
-        format[key] = Math.round(Math.min(max, Math.max(min, value)) * perUnit) / perUnit;
+        format[key] = Math.round(value * perUnit) / perUnit;
     }
     return format;
 }
@@ -88,24 +91,6 @@ export function readParagraphFormat(attrs: Record<string, unknown>, column = MAX
 // Lists, quotes and table cells own the spacing of the blocks they hold, as the docx reader and writer take it, so only
 // a textblock of the doc's own stores and draws a space before or after.
 export const ownsSpacing = (doc: Node, pos: number) => doc.resolve(pos).depth === 0;
-
-// What a block draws where it stores nothing: a paragraph the doc's Normal, a heading, the title and the subtitle their
-// own from eigen-prose.css, read off the page; in a container no space around it.
-function drawnFormat(block: Node, dom: globalThis.Node | null, spaced: boolean, normal: NormalStyle): ParagraphFormat {
-    const { lineSpacing, spaceBefore, spaceAfter } = normal;
-    const own = { ...DOCUMENT_PARAGRAPH_FORMAT, lineSpacing, spaceBefore, spaceAfter };
-    if (block.type.name !== 'paragraph' && dom instanceof HTMLElement) {
-        const style = getComputedStyle(dom);
-        const px = (value: string) => Number.parseFloat(value);
-        const drawn = {
-            lineSpacing: px(style.lineHeight) / px(style.fontSize) / DOCUMENT_LINE_RATIO,
-            spaceBefore: px(style.marginTop) * 0.75,
-            spaceAfter: px(style.marginBottom) * 0.75,
-        };
-        Object.assign(own, readParagraphFormat(drawn));
-    }
-    return { ...own, ...readParagraphFormat(block.attrs), ...(!spaced && { spaceBefore: 0, spaceAfter: 0 }) };
-}
 
 // The line spacing every prose textblock of a selection stores, or as a paragraph takes the doc's Normal's, none for a
 // mix or an unset heading, whether any takes a space before or after, and what its first one draws, as Google's menus
@@ -135,4 +120,22 @@ export function selectionParagraphFormat(
             ? drawnFormat(first.node, view ? view.nodeDOM(first.pos) : null, ownsSpacing(state.doc, first.pos), normal)
             : { ...DOCUMENT_PARAGRAPH_FORMAT },
     };
+}
+
+// What a block draws where it stores nothing: a paragraph the doc's Normal, a heading, the title and the subtitle their
+// own from eigen-prose.css, read off the page; in a container no space around it.
+function drawnFormat(block: Node, dom: globalThis.Node | null, spaced: boolean, normal: NormalStyle): ParagraphFormat {
+    const { lineSpacing, spaceBefore, spaceAfter } = normal;
+    const own = { ...DOCUMENT_PARAGRAPH_FORMAT, lineSpacing, spaceBefore, spaceAfter };
+    if (block.type.name !== 'paragraph' && dom instanceof HTMLElement) {
+        const style = getComputedStyle(dom);
+        const px = (value: string) => Number.parseFloat(value);
+        const drawn = {
+            lineSpacing: px(style.lineHeight) / px(style.fontSize) / DOCUMENT_LINE_RATIO,
+            spaceBefore: px(style.marginTop) * 0.75,
+            spaceAfter: px(style.marginBottom) * 0.75,
+        };
+        Object.assign(own, readParagraphFormat(drawn));
+    }
+    return { ...own, ...readParagraphFormat(block.attrs), ...(!spaced && { spaceBefore: 0, spaceAfter: 0 }) };
 }

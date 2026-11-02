@@ -5,11 +5,12 @@
 // does in Eigen.
 
 import type { JSONContent } from '@tiptap/core';
-import { CHART_DEFAULT_SIZE } from '@workspace/lib/charts';
 import { DOCUMENT_LINE_RATIO, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TextBoxAttrs } from '@workspace/lib/docs/eigendoc';
 import {
+    chartBox,
     flattenNestedStories,
+    heightAtWidth,
     isPositioned,
     ptToPx,
     readChartAttrs,
@@ -138,16 +139,18 @@ function largestRun(node: JSONContent): number {
 // drawing writer sizes them. A picture with no media to draw adds nothing, as the writer drops it.
 function figuresHeight(node: JSONContent, column: number, pkg: Package): number {
     if (node.type === 'chart') {
-        const { width, height } = readChartAttrs(node.attrs ?? {});
-        const natural = width ?? CHART_DEFAULT_SIZE.width;
-        return (Math.min(natural, column) * (height ?? CHART_DEFAULT_SIZE.height)) / natural;
+        const box = chartBox(readChartAttrs(node.attrs ?? {}));
+        return heightAtWidth(box, Math.min(box.width, column));
     }
     if (node.type === 'figure') {
         const attrs = readFigureAttrs(node.attrs ?? {});
         const media = pkg.images.media.get(figureMediaKey(attrs) ?? '');
         if (!media?.width || !media.height) return 0;
-        const ratio = attrs.height && attrs.width ? attrs.height / attrs.width : media.height / media.width;
-        return Math.min(attrs.width ?? media.width, column) * ratio;
+        const own =
+            attrs.width && attrs.height
+                ? { width: attrs.width, height: attrs.height }
+                : { width: media.width, height: media.height };
+        return heightAtWidth(own, Math.min(attrs.width ?? media.width, column));
     }
     return (node.content ?? []).reduce((sum, child) => sum + figuresHeight(child, column, pkg), 0);
 }

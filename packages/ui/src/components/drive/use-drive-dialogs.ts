@@ -1,16 +1,16 @@
+// The open state of every dialog a Drive view's actions open, such as rename, share or the copy and
+// move picker, with the items each one acts on. The Drive action runner opens them and renders them.
+
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 
 function useDialogState() {
     const [open, setOpen] = useState(false);
-    const openDialog = useCallback(() => setOpen(true), []);
-    const closeDialog = useCallback(() => setOpen(false), []);
-    return { open, setOpen, openDialog, closeDialog };
+    return { open, setOpen, openDialog: () => setOpen(true) };
 }
 
-// One dialog-open state per EigenDocType. Each entry is its own useState pair (hooks
-// rules); the helper just buckets them under a single key so consumers don't have to
-// name each kind.
+// One dialog-open state per EigenDocType. Each entry is its own useState pair (the rules of hooks), so
+// they are listed by hand under one key.
 function useEigenDocDialogs(): Record<EigenDocType, ReturnType<typeof useDialogState>> {
     return {
         doc: useDialogState(),
@@ -27,7 +27,7 @@ export function useDriveDialogs() {
     const create = useEigenDocDialogs();
 
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
+    const [deleteItems, setDeleteItems] = useState<readonly DrivePath[]>([]);
 
     const [renameOpen, setRenameOpen] = useState(false);
     const [renameItem, setRenameItem] = useState<DrivePath | null>(null);
@@ -42,63 +42,8 @@ export function useDriveDialogs() {
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
 
     const [copyMoveOpen, setCopyMoveOpen] = useState(false);
-    const [copyMoveItems, setCopyMoveItems] = useState<DrivePath[]>([]);
+    const [copyMoveItems, setCopyMoveItems] = useState<readonly DrivePath[]>([]);
     const [copyMoveMode, setCopyMoveMode] = useState<'move' | 'copy'>('copy');
-
-    const openDelete = useCallback((items: DrivePath | DrivePath[]) => {
-        setDeleteItems(Array.isArray(items) ? items : [items]);
-        setDeleteOpen(true);
-    }, []);
-    const closeDelete = useCallback(() => {
-        setDeleteOpen(false);
-        setDeleteItems([]);
-    }, []);
-
-    const openRename = useCallback((item: DrivePath) => {
-        setRenameItem(item);
-        setRenameOpen(true);
-    }, []);
-    const closeRename = useCallback(() => {
-        setRenameOpen(false);
-        setRenameItem(null);
-    }, []);
-
-    const openShare = useCallback((item: DrivePath) => {
-        setShareItem(item);
-        setShareOpen(true);
-    }, []);
-    const closeShare = useCallback(() => {
-        setShareOpen(false);
-        setShareItem(null);
-    }, []);
-
-    const openEmail = useCallback((item: DrivePath) => {
-        setEmailItem(item);
-        setEmailOpen(true);
-    }, []);
-    const closeEmail = useCallback(() => {
-        setEmailOpen(false);
-        setEmailItem(null);
-    }, []);
-
-    const openUpload = useCallback((files: File[] = []) => {
-        setUploadFiles(files);
-        setUploadOpen(true);
-    }, []);
-    const closeUpload = useCallback(() => {
-        setUploadOpen(false);
-        setUploadFiles([]);
-    }, []);
-
-    const openCopyMove = useCallback((items: DrivePath[], mode: 'move' | 'copy') => {
-        setCopyMoveItems(items);
-        setCopyMoveMode(mode);
-        setCopyMoveOpen(true);
-    }, []);
-    const closeCopyMove = useCallback(() => {
-        setCopyMoveOpen(false);
-        setCopyMoveItems([]);
-    }, []);
 
     return {
         createFolder,
@@ -107,44 +52,73 @@ export function useDriveDialogs() {
             open: deleteOpen,
             items: deleteItems,
             setOpen: setDeleteOpen,
-            openDialog: openDelete,
-            closeDialog: closeDelete,
+            openDialog: (items: readonly DrivePath[]) => {
+                setDeleteItems(items);
+                setDeleteOpen(true);
+            },
+            closeDialog: () => {
+                setDeleteOpen(false);
+                setDeleteItems([]);
+            },
         },
         rename: {
             open: renameOpen,
             item: renameItem,
             setOpen: setRenameOpen,
-            openDialog: openRename,
-            closeDialog: closeRename,
+            openDialog: (item: DrivePath) => {
+                setRenameItem(item);
+                setRenameOpen(true);
+            },
         },
         share: {
             open: shareOpen,
             item: shareItem,
             setOpen: setShareOpen,
-            openDialog: openShare,
-            closeDialog: closeShare,
+            openDialog: (item: DrivePath) => {
+                setShareItem(item);
+                setShareOpen(true);
+            },
         },
         email: {
             open: emailOpen,
             item: emailItem,
             setOpen: setEmailOpen,
-            openDialog: openEmail,
-            closeDialog: closeEmail,
+            openDialog: (item: DrivePath) => {
+                setEmailItem(item);
+                setEmailOpen(true);
+            },
+            closeDialog: () => {
+                setEmailOpen(false);
+                setEmailItem(null);
+            },
         },
         upload: {
             open: uploadOpen,
             files: uploadFiles,
             setOpen: setUploadOpen,
-            openDialog: openUpload,
-            closeDialog: closeUpload,
+            openDialog: (files: File[] = []) => {
+                setUploadFiles(files);
+                setUploadOpen(true);
+            },
+            closeDialog: () => {
+                setUploadOpen(false);
+                setUploadFiles([]);
+            },
         },
         copyMove: {
             open: copyMoveOpen,
             items: copyMoveItems,
             mode: copyMoveMode,
             setOpen: setCopyMoveOpen,
-            openDialog: openCopyMove,
-            closeDialog: closeCopyMove,
+            openDialog: (items: readonly DrivePath[], mode: 'move' | 'copy') => {
+                setCopyMoveItems(items);
+                setCopyMoveMode(mode);
+                setCopyMoveOpen(true);
+            },
+            closeDialog: () => {
+                setCopyMoveOpen(false);
+                setCopyMoveItems([]);
+            },
         },
     };
 }

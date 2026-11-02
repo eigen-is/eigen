@@ -6,7 +6,7 @@ import { serializePoints } from '../../../vector/points';
 import { elementToSvg } from '../../../vector/scene-to-svg';
 import type { FillStyle, VectorElement } from '../../../vector/types';
 import { FILL_STYLES } from '../../../vector/types';
-import { ellipse, linear, path, pie, richtext, shape } from '../element-factories';
+import { ellipse, linear, path, pie, shape, textBox } from '../element-factories';
 
 const FILL = '#ff0000';
 const STROKE = '#0000ff';
@@ -37,7 +37,7 @@ function elementsIn(style: FillStyle): { el: VectorElement; d: string | null }[]
         { el: ellipse({ id: 'e1', ...paint }), d: outlinePath(ellipseOutline(BOX, 0)) },
         { el: pie({ id: 'p1', ...paint, width: 60, height: 60, startAngle: 0, sweepAngle: 40 }), d: null },
         { el: path({ id: 'pa', ...paint, path: TRIANGLE, closed: true }), d: scaleNormalizedPath(TRIANGLE, 13, 13) },
-        { el: richtext({ id: 't1', corners: 'straight', ...paint }), d: outlinePath(rectOutline(BOX, 0, 0)) },
+        { el: textBox({ id: 't1', corners: 'straight', ...paint }), d: outlinePath(rectOutline(BOX, 0, 0)) },
         { el: linear({ id: 'l1', type: 'line', roundness: 'sharp', ...paint, points: loop }), d: null },
         { el: linear({ id: 'l2', type: 'line', roundness: 'round', ...paint, points: loop }), d: null },
         { el: linear({ id: 'f1', type: 'freedraw', ...paint, points: loop }), d: null },

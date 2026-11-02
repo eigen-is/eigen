@@ -180,9 +180,11 @@ describe('Convert to Slides', () => {
         expect(deck.frames.map((frame) => frame.name)).toEqual(['Welcome', '']);
         const [first, second] = deck.frames;
         const on = (frameId: string | undefined) => deck.elements.filter((el) => el.frameId === frameId);
-        expect(on(first?.id).map((el) => el.type)).toEqual(['richtext', 'rectangle']);
+        const kinds = (frameId: string | undefined) =>
+            on(frameId).map((el) => (el.type === 'rectangle' && el.autoFit ? 'text' : el.type));
+        expect(kinds(first?.id)).toEqual(['text', 'rectangle']);
         // The table's placeholder box, saying what was there, sits above the picture.
-        expect(on(second?.id).map((el) => el.type)).toEqual(['image', 'richtext']);
+        expect(kinds(second?.id)).toEqual(['image', 'text']);
 
         const [image] = on(second?.id);
         if (image?.type !== 'image') throw new Error('picture missing');

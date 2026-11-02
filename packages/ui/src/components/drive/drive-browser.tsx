@@ -1,3 +1,7 @@
+// A small Drive browser for picking a file or a folder: a mount list, a breadcrumb and a bare table
+// whose rows have no actions. Pickers and the location field draw it, for example the Copy to… picker,
+// and it reports the folder it is in and the rows the user picks.
+
 import {
     getDriveComparator,
     useBreadcrumb,
@@ -74,8 +78,8 @@ export function DriveBrowser({
     const createFolderOpen = controlledCreateFolderOpen ?? internalCreateFolderOpen;
     const setCreateFolderOpen = onCreateFolderOpenChange ?? setInternalCreateFolderOpen;
 
-    // Background "New folder" menu, opened by right-clicking the listing area (rows
-    // stop propagation, so their right-clicks surface the per-item menu instead).
+    // The "New folder" menu a right-click on the listing area opens. A right-click on a row opens nothing,
+    // since the rows stop it from reaching the listing.
     const newFolderMenu = useContextMenu<true>();
 
     const prevDefaultFolderId = useRef(defaultFolderId);
@@ -137,7 +141,7 @@ export function DriveBrowser({
         }
     }, [currentFolderId, rootFolder, activeMountId, onFolderChange]);
 
-    const currentPath = breadcrumbPaths[breadcrumbPaths.length - 1] ?? null;
+    const currentPath = breadcrumbPaths.at(-1) ?? null;
 
     const isPickable = useCallback((item: DrivePath) => canPick?.(item) ?? true, [canPick]);
 
@@ -175,19 +179,6 @@ export function DriveBrowser({
             }
         },
         [navigateToFolder, mode, isPickable, onSelect, onConfirm, selectedId],
-    );
-
-    const handleItemOpen = useCallback(
-        (item: DrivePath) => {
-            if (isFolderType(item.type)) {
-                navigateToFolder(item);
-            } else if (mode === 'file' && onConfirm) {
-                if (isPickable(item)) {
-                    onConfirm(item);
-                }
-            }
-        },
-        [navigateToFolder, mode, isPickable, onConfirm],
     );
 
     const handleBreadcrumbClick = (path: DrivePath) => {
@@ -245,7 +236,6 @@ export function DriveBrowser({
                 items={sortedContents}
                 activeItemId={selectedId ?? undefined}
                 onItemClick={handleItemClick}
-                onItemOpen={handleItemOpen}
                 isItemDisabled={isItemDisabled}
                 hideModified
                 hideOwner

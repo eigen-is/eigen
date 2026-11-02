@@ -13,7 +13,7 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session 
 mock.module('../../../components/drive/drive-location-field', () => ({ DriveLocationField: () => null }));
 
 const { act, createElement } = await import('react');
-const { AppError } = await import('@workspace/lib/api-error');
+const { AppError, onMutationError } = await import('@workspace/lib/api-error');
 const { DriveLocationPicker } = await import('../../../components/drive/drive-location-picker');
 
 let unmount = async () => {};
@@ -21,7 +21,10 @@ afterEach(() => unmount());
 
 async function createFailingWith(status: number) {
     const onOpenChange = mock((_open: boolean) => {});
-    const onConfirm = () => Promise.reject(new AppError({ error: { status, value: 'No' }, status }));
+    const failure = new AppError({ error: { status, value: 'No' }, status });
+    // A real mutation hook toasts the error before it rejects, which is what lets the picker keep it to itself.
+    onMutationError(failure);
+    const onConfirm = () => Promise.reject(failure);
     ({ unmount } = await renderInDocument(
         createElement(DriveLocationPicker, { open: true, onOpenChange, mode: 'create', onConfirm }),
     ));

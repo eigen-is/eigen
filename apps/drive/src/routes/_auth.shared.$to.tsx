@@ -1,20 +1,23 @@
+// Drive's Shared by me and Shared with me pages: one flat listing of the items the viewer shares or is
+// shared, laid out by DriveLayout. Items shared with the viewer belong to other people, so the page
+// offers nothing that writes there, and a delete leaves the share.
+
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import { DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths } from '@workspace/lib/drive';
-import type { DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath, DriveSearchParams } from '@workspace/lib/types/drive';
 import { EmptyState, LoadingState } from '@workspace/ui';
-import type { DriveCapabilities } from '@workspace/ui/components/drive/drive-capabilities';
 import { DRIVE_CAPABILITIES } from '@workspace/ui/components/drive/drive-capabilities';
 import { DriveLayout } from '@workspace/ui/components/drive/drive-layout';
 import { useDriveListRoute } from '@workspace/ui/components/drive/use-drive-list-route';
 
 export const Route = createFileRoute('/_auth/shared/$to')({
     component: DriveRoute,
-    validateSearch: (search: Record<string, unknown>) => {
+    validateSearch: (search: Record<string, unknown>): DriveSearchParams => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
         const mid = typeof search.mid === 'string' ? search.mid : undefined;
-        return { pid, uid, mid } as DriveSearchParams;
+        return { pid, uid, mid };
     },
 });
 
@@ -28,11 +31,12 @@ function DriveRoute() {
 
     const {
         data: folderContents = [],
-        isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError,
-    } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
+        isLoading,
+        error,
+    } = useSharedPaths(ownerId, to === 'by-me' ? 'by-me' : 'with-me');
 
-    // The with-me feed carries no per-row permission, so writes are by-me only; delete on with-me is "leave the share".
+    // The with-me feed says nothing about the viewer's access to each row, so only the by-me side writes.
+    // Delete stays on both sides: on the with-me side it leaves the share.
     const capabilities: DriveCapabilities = {
         ...DRIVE_CAPABILITIES.listing,
         canRename: to === 'by-me',
@@ -59,11 +63,11 @@ function DriveRoute() {
         navigate({ to: Route.fullPath, params: { to } });
     };
 
-    if (isFolderContentLoadingError) {
+    if (error) {
         return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
-    if (isFolderContentLoading) {
+    if (isLoading) {
         return <LoadingState />;
     }
 
@@ -73,9 +77,9 @@ function DriveRoute() {
             selectedPath={selectedPath}
             ownerId={uid || ownerId}
             mountId={mid || DEFAULT_MOUNT_ID}
-            folderContents={folderContents ?? []}
-            isLoading={isFolderContentLoading}
-            error={isFolderContentLoadingError}
+            folderContents={folderContents}
+            isLoading={isLoading}
+            error={error}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}

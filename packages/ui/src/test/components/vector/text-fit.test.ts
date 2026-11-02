@@ -1,9 +1,9 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import type { VectorRichTextElement } from '@workspace/lib/vector';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, richTextFitHeight, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
+import type { VectorElement, VectorRectangleElement } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, textBoxDefaults, textBoxFitHeight, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
 import type { FitHeight } from '../../../components/vector/text-fit';
-import { textBodyHeight, useRichTextAutoFit } from '../../../components/vector/text-fit';
+import { textBodyHeight, useTextBoxAutoFit } from '../../../components/vector/text-fit';
 
 // A DOM at module scope, the element-layer suite's recipe — the measure reads layout properties off
 // real nodes, and `instanceof HTMLElement` needs the constructor to be the global one.
@@ -16,17 +16,23 @@ g.window = window;
 g.navigator = window.navigator;
 g.IS_REACT_ACT_ENVIRONMENT = true;
 
-// The hook re-measures on its ResizeObserver; happy-dom has none, so the test fires the callback once
-// the offsets a browser would have laid out are on the node.
-let remeasure: (() => void) | null = null;
+// The hook re-measures on its ResizeObserver; happy-dom has none. A browser fires an observer only for a node it
+// observes whose box changed, so the test does the same with `reflow` once the new offsets are on the node.
+const observed = new Map<Element, () => void>();
 class FakeResizeObserver {
+    private readonly callback: () => void;
     public constructor(callback: () => void) {
-        remeasure = callback;
+        this.callback = callback;
     }
-    public observe() {}
-    public disconnect() {}
+    public observe(target: Element) {
+        observed.set(target, this.callback);
+    }
+    public disconnect() {
+        observed.clear();
+    }
 }
 g.ResizeObserver = FakeResizeObserver;
+const reflow = (target: Element) => observed.get(target)?.();
 
 afterAll(() => {
     g.document = undefined;
@@ -52,11 +58,11 @@ function body(lines: { top: number; height: number }[]): HTMLElement {
     return div;
 }
 
-const box = (over: Partial<VectorRichTextElement> = {}): VectorRichTextElement => ({
+const box = (over: Partial<VectorRectangleElement> = {}): VectorRectangleElement => ({
+    ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
     ...DEFAULT_ELEMENT_PROPS,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id: 't1',
-    type: 'richtext',
+    type: 'rectangle',
     strokeColor: 'transparent',
     x: 0,
     y: 0,
@@ -83,7 +89,7 @@ describe('textBodyHeight', () => {
     });
 
     test('counts the inset the first child is pushed down by only once', () => {
-        // The body's own padding offsets every child; it is chrome, added by richTextFitHeight.
+        // The body's own padding offsets every child; it is chrome, added by textBoxFitHeight.
         expect(
             textBodyHeight(
                 body([
@@ -109,25 +115,25 @@ describe('the fit a measured body drives', () => {
             ]),
         );
         expect(measured).not.toBeNull();
-        expect(measured === null ? null : richTextFitHeight(box({ height: 40 }), measured)).toBe(72);
+        expect(measured === null ? null : textBoxFitHeight(box({ height: 40 }), measured)).toBe(72);
     });
 
     test('deleting lines leaves the box as tall as the user has it', () => {
         const measured = textBodyHeight(body([{ top: 0, height: 24 }]));
-        expect(measured === null ? null : richTextFitHeight(box({ height: 72 }), measured)).toBeNull();
+        expect(measured === null ? null : textBoxFitHeight(box({ height: 72 }), measured)).toBeNull();
     });
 
     test('an unchanged body writes nothing', () => {
         const measured = textBodyHeight(body([{ top: 0, height: 24 }]));
-        expect(measured === null ? null : richTextFitHeight(box({ height: 24 }), measured)).toBeNull();
+        expect(measured === null ? null : textBoxFitHeight(box({ height: 24 }), measured)).toBeNull();
     });
 });
 
 // Only a layout effect picks the node the hook measures, so this mounts it for real. `backdrop` renders
 // the <svg> a painted box draws behind its text, which is the sibling the body must not be confused with.
-function Harness({ backdrop, onFit }: { backdrop: boolean; onFit: FitHeight }) {
+function Harness({ backdrop, onFit, el = box() }: { backdrop: boolean; onFit: FitHeight; el?: VectorElement }) {
     const host = useRef<HTMLDivElement>(null);
-    useRichTextAutoFit(host, box(), onFit, false);
+    useTextBoxAutoFit(host, el, onFit, false);
     return createElement(
         'div',
         { ref: host },
@@ -136,23 +142,41 @@ function Harness({ backdrop, onFit }: { backdrop: boolean; onFit: FitHeight }) {
     );
 }
 
-function fittedHeight(backdrop: boolean): number | undefined {
+function fittedHeight(backdrop: boolean, el?: VectorElement): number | undefined {
     const heights: number[] = [];
     const container = document.createElement('div');
     const root = createRoot(container);
-    act(() => root.render(createElement(Harness, { backdrop, onFit: (_id, height) => heights.push(height) })));
+    act(() => root.render(createElement(Harness, { backdrop, el, onFit: (_id, height) => heights.push(height) })));
     const line = container.querySelector('p');
     if (!line) throw new Error('the harness rendered no measurable body');
     Object.defineProperty(line, 'offsetTop', { value: 0 });
     Object.defineProperty(line, 'offsetHeight', { value: 120 });
-    act(() => remeasure?.());
+    act(() => reflow(line));
     act(() => root.unmount());
     return heights.at(-1);
 }
+
+// The body is pinned to the box (height:100%), so its own size never changes when its text re-wraps. A late font
+// slice re-wraps the lines inside it, and those are what must re-fit the box.
+describe('a reflow of the text', () => {
+    test('re-fits the box when a late font re-wraps its lines', () => {
+        expect(fittedHeight(false)).toBe(120);
+    });
+});
 
 describe('the body the hook measures', () => {
     test("is the host's last child, whether or not a backdrop precedes it", () => {
         expect(fittedHeight(true)).toBe(120);
         expect(fittedHeight(false)).toBe(120);
+    });
+});
+
+describe('which boxes fit their text', () => {
+    test('an autoFit rectangle grows to its text', () => {
+        expect(fittedHeight(true, box({ autoFit: true }))).toBe(120);
+    });
+
+    test('a plain rectangle keeps its size and lets its text spill', () => {
+        expect(fittedHeight(true, box({ autoFit: false }))).toBeUndefined();
     });
 });

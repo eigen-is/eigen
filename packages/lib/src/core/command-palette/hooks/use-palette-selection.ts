@@ -1,42 +1,42 @@
-import type { PaletteSelection } from '@workspace/lib/types/command-palette';
+// A page hands the command palette what is selected and the rows it can run on it, such as a Drive
+// listing's selected items with their menu's actions, or an open document with its File menu's. The
+// palette's Selection section is built from what is published here. Mounting publishes, unmounting
+// clears, and the last publisher wins.
+
+import type { PaletteSelectionAction, PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useCommandPalette } from './use-command-palette';
 
-// Apps publish their current selection (or null to clear). Mounting publishes;
-// unmounting (or value change to null) clears. Last writer wins, same as the preview
-// provider. The hook stabilises the published value so callers don't have to memoise
-// the wrapper themselves: identity only changes when the set of item ids changes —
-// which is the only thing the palette catalog actually cares about. Without this,
-// callers like `usePaletteSelection({ items })` would inadvertently trip the
-// publication-effect → context-update → re-render loop.
-export function usePaletteSelection(selection: PaletteSelection): void {
-    const { setSelection } = useCommandPalette();
+// Publishing updates the palette's context, which re-renders the publisher. A new identity on every
+// render would publish again and loop React into its update limit, and one row built from an unstable
+// prop is enough for that. So the hook stabilises what it publishes: the identity changes only when
+// the items' ids or names or the rows' ids and labels do, and each published run calls the latest one
+// through a ref.
+export function usePaletteSelection(items: readonly DrivePath[], actions: readonly PaletteSelectionAction[]): void {
+    const { setSelection, setSelectionActions } = useCommandPalette();
 
-    const idsKey = selection
-        ? `${selection.items.map((i) => i.id).join('|')}${selection.isCurrentDocument ? ':doc' : ''}`
-        : null;
+    const latest = useRef(actions);
+    latest.current = actions;
 
-    const stable = useMemo<PaletteSelection>(() => {
-        if (!selection) return null;
-        return { items: selection.items, isCurrentDocument: selection.isCurrentDocument };
-        // idsKey is the meaningful trigger; selection identity is intentionally not a dep —
-        // we re-wrap only when the set of ids (or the current-document flag) changes.
-    }, [idsKey]);
+    const itemsKey = items.map((item) => `${item.id}:${item.name}`).join('|');
+    const rowsKey = actions.map(({ action }) => `${action.id}:${action.label}`).join('|');
+
+    const published = useMemo(() => {
+        if (items.length === 0) return { selection: null, actions: null };
+        const stable: PaletteSelectionActions = actions.map(({ action }, index) => ({
+            action,
+            run: (format) => latest.current[index]?.run(format),
+        }));
+        return { selection: { items }, actions: stable };
+    }, [itemsKey, rowsKey]);
 
     useEffect(() => {
-        setSelection(stable);
-        return () => setSelection(null);
-    }, [stable, setSelection]);
-}
-
-// Convenience wrapper for the four eigendoc viewer routes: publishes the open document
-// as a single-item selection flagged `isCurrentDocument` (see PaletteSelection), saving
-// each viewer the useMemo + usePaletteSelection pair.
-export function usePaletteDocSelection(path: DrivePath | null | undefined): void {
-    const selection = useMemo<PaletteSelection>(
-        () => (path ? { items: [path], isCurrentDocument: true } : null),
-        [path],
-    );
-    usePaletteSelection(selection);
+        setSelection(published.selection);
+        setSelectionActions(published.actions);
+        return () => {
+            setSelection(null);
+            setSelectionActions(null);
+        };
+    }, [published, setSelection, setSelectionActions]);
 }

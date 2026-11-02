@@ -15,7 +15,6 @@ import {
     SPIKE_MAX_POINTS,
     swipeFrameDelta,
     touchAllowedInPenMode,
-    touchIgnoredDuringPen,
     useTouchGestures,
 } from '../../../../components/vector/tools/touch-gestures';
 
@@ -60,7 +59,7 @@ describe('isFreedrawSpike', () => {
 describe('touchAllowedInPenMode', () => {
     test('a finger still selects and types while a pen is in use', () => {
         expect(touchAllowedInPenMode('select')).toBe(true);
-        expect(touchAllowedInPenMode('richtext')).toBe(true);
+        expect(touchAllowedInPenMode('text')).toBe(true);
     });
 
     test('a finger is locked out of every draw/create tool in penMode', () => {
@@ -70,13 +69,24 @@ describe('touchAllowedInPenMode', () => {
     });
 });
 
-describe('touchIgnoredDuringPen', () => {
-    test('a live pen stroke ignores a second touch entirely — no abort, no pinch handoff', () => {
-        expect(touchIgnoredDuringPen(true)).toBe(true);
+describe('a live pen stroke', () => {
+    test('ignores a second touch entirely: no abort, no pinch handoff', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({
+            isPenDrawing: () => true,
+            abortActiveGesture: () => calls.push('abort'),
+        });
+        expect(gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 0, clientY: 0 }))).toBe(true);
+        expect(gestures.onPointerDown(touchEvent({ pointerId: 2, clientX: 40, clientY: 0 }))).toBe(true);
+        expect(calls).toEqual([]);
     });
 
-    test('a touch-originated stroke has no such lock — the second touch runs the discard/handoff', () => {
-        expect(touchIgnoredDuringPen(false)).toBe(false);
+    test('a stroke a finger started has no such lock: the second touch aborts it and pinches', () => {
+        const calls: string[] = [];
+        const gestures = renderTouchGestures({ abortActiveGesture: () => calls.push('abort') });
+        expect(gestures.onPointerDown(touchEvent({ pointerId: 1, clientX: 0, clientY: 0 }))).toBe(false);
+        expect(gestures.onPointerDown(touchEvent({ pointerId: 2, clientX: 40, clientY: 0 }))).toBe(true);
+        expect(calls).toEqual(['abort']);
     });
 });
 

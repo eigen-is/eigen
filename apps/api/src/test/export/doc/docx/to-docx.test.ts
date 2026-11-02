@@ -887,6 +887,24 @@ describe('docx writer — a doc no editor writes', () => {
         expect(child(aligned, 'pPr')).toBeUndefined();
         expect(child(child(marked, 'r'), 'rPr')).toBeUndefined();
     });
+
+    test('a heading level is held to the heading levels and rounded', async () => {
+        const levels = [2.6, 0.4, 0.5, 6.4, 6.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+        const body = await bodyOf(
+            doc(...levels.map((level) => ({ type: 'heading', attrs: { level }, content: [text('h')] }))),
+        );
+        const styles = xmlChildren(body, W, 'p').map((paragraph) => w(child(child(paragraph, 'pPr'), 'pStyle'), 'val'));
+        expect(styles).toEqual([
+            'Heading3',
+            'Heading1',
+            'Heading1',
+            'Heading6',
+            'Heading6',
+            'Heading1',
+            'Heading1',
+            'Heading1',
+        ]);
+    });
 });
 
 // One run's properties in document order, each with its fill, w:val or font when it has one.
@@ -1951,6 +1969,17 @@ describe('docx writer — tables', () => {
             ['9630', 'dxa'],
             ['0', 'nil'],
         ]);
+    });
+
+    test('a colwidth that is no positive finite number reads as unset', async () => {
+        const forged = [Number.NaN, Number.POSITIVE_INFINITY, -5, '300'];
+        const [read, unset] = await tablesIn(
+            doc(
+                table(tr(td({ colwidth: [100] }, p()), ...forged.map((width) => td({ colwidth: [width] }, p())))),
+                table(tr(td({ colwidth: [100] }, p()), ...forged.map(() => td({}, p())))),
+            ),
+        );
+        expect(gridOf(read)).toEqual(gridOf(unset));
     });
 
     test('known colwidths past the column keep their ratio, scaled to the column', async () => {

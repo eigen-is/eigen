@@ -86,7 +86,7 @@ export class Mount {
     public history!: FileHistory;
 
     // The open document databases by path id. A slot also queues the opens and closes of its path.
-    public documentDbs: Map<string, DocumentDbSlot> = new Map();
+    public readonly documentDbs = new Map<string, DocumentDbSlot>();
     // Set once by closeAllDatabases. From then on every document database open is refused.
     public closing = false;
 
@@ -105,7 +105,7 @@ export class Mount {
     public trashPurge?: Promise<void>;
     // Thumbnail jobs run in the background. closeAllDatabases waits for them, so no sharp worker or
     // row update outlives metadata.db.
-    public thumbnailJobs = new Set<Promise<void>>();
+    public readonly thumbnailJobs = new Set<Promise<void>>();
     // Aborted at teardown, so no close or Home shutdown waits on a download or an extraction read.
     public readonly downloads = new AbortController();
 
@@ -163,10 +163,6 @@ export class Mount {
         return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
 
-    private get trashDir(): string {
-        return path.join(this.dataDir, '.trash');
-    }
-
     public get isRemote(): boolean {
         return this.config.storageType === 's3';
     }
@@ -199,7 +195,7 @@ export class Mount {
         if (!passive) {
             const dirs = [this.thumbsDir, this.previewsDir];
             if (this.isRemote) dirs.push(this.stagingDir);
-            if (this.isPathBased) dirs.push(this.trashDir);
+            if (this.isPathBased) dirs.push(path.join(this.dataDir, '.trash'));
             for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
         }
 
@@ -337,10 +333,10 @@ export class Mount {
     }
 
     public async getActivePath(pathId: string): Promise<DrivePath> {
-        const path = await this.getPath(pathId);
-        if (!path) throw new ApiError(404, 'Path not found');
-        if (path.trashedAt) throw new ApiError(404, 'File is in trash');
-        return path;
+        const pathEntry = await this.getPath(pathId);
+        if (!pathEntry) throw new ApiError(404, 'Path not found');
+        if (pathEntry.trashedAt) throw new ApiError(404, 'File is in trash');
+        return pathEntry;
     }
 
     public async listFolder(parentId: string): Promise<DrivePath[]> {
@@ -359,18 +355,23 @@ export class Mount {
     }
 
     public async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
-        name = name.normalize('NFC');
-        const result = await this.db
-            .select()
-            .from(paths)
-            .where(
-                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
-            )
-            .get();
-        if (result) return this.toDrivePath(result);
+        const row = this.findLiveChild(parentId, name.normalize('NFC'));
+        return row ? this.toDrivePath(row) : null;
+    }
 
-        const folded = await this.findCaseFoldedChild(parentId, name);
-        return folded ? this.getPath(folded.id) : null;
+    // These two read synchronously, so withFreeName can check a name and reserve it with no await in
+    // between.
+    public hasLiveChild(parentId: string, name: string): boolean {
+        return this.findLiveChild(parentId, name.normalize('NFC')) !== null;
+    }
+
+    public liveChildNames(parentId: string): string[] {
+        return this.db
+            .select({ name: paths.name })
+            .from(paths)
+            .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+            .all()
+            .map((row) => row.name);
     }
 
     public async resolvePath(pathStr: string): Promise<DrivePath | null> {
@@ -501,21 +502,28 @@ export class Mount {
         };
     }
 
-    // SQLite's LOWER() folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII
-    // case pairs as one file, so on `local` those names must match too (foldName).
-    // It runs only for a non-ASCII name on `local`. Every other lookup keeps SQLite's fold, and the
-    // unique index stays the safety net for races. An ASCII name whose stored twin is not ASCII still
-    // passes, such as strasse beside straße. On `local` the disk check of a create, rename, move or
-    // restore catches those (trash.renameTarget).
-    private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
+    // The live child with this name, compared the way the unique index compares: SQLite's LOWER(),
+    // which folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII case pairs as one
+    // file, so on `local` a non-ASCII name is also compared folded (foldName). An ASCII name whose stored
+    // twin is not ASCII still passes, such as strasse beside straße. On `local` the disk check of a create,
+    // rename, move or restore catches those (trash.renameTarget).
+    private findLiveChild(parentId: string, name: string): typeof paths.$inferSelect | null {
+        const row = this.db
+            .select()
+            .from(paths)
+            .where(
+                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
+            )
+            .get();
+        if (row) return row;
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = foldName(name);
-        const siblings = await this.db
-            .select({ id: paths.id, name: paths.name })
+        const siblings = this.db
+            .select()
             .from(paths)
             .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
             .all();
-        return siblings.find((s) => foldName(s.name) === folded) ?? null;
+        return siblings.find((sibling) => foldName(sibling.name) === folded) ?? null;
     }
 
     // ---- Creating ----
@@ -532,7 +540,7 @@ export class Mount {
             this.assertLiveFolder(folderId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
-            await this.assertUniqueName(parentId, name);
+            this.assertUniqueName(parentId, name);
             if (this.isPathBased && this.storage.mkdir) {
                 const key = await this.resolveWriteKey(parentId, fileValue);
                 await this.claimCreateKey(parentId, key, folderId, name);
@@ -605,7 +613,7 @@ export class Mount {
             this.assertLiveFolder(fileId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
-            await this.assertUniqueName(parentId, name);
+            this.assertUniqueName(parentId, name);
             const storageKey = await this.resolveWriteKey(parentId, fileValue);
             await this.claimCreateKey(parentId, storageKey, fileId, name);
             // The bytes land before the row. After a crash, bytes no row owns do less harm than a row
@@ -645,23 +653,9 @@ export class Mount {
         return fileId;
     }
 
-    private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
-        const existing =
-            (await this.db
-                .select({ id: paths.id })
-                .from(paths)
-                .where(
-                    and(
-                        eq(paths.parentId, parentId),
-                        sql`LOWER(${paths.name}) = LOWER(${name})`,
-                        isNull(paths.trashedAt),
-                    ),
-                )
-                .get()) ?? (await this.findCaseFoldedChild(parentId, name));
-
-        if (existing && existing.id !== excludeId) {
-            throw nameTakenError(name);
-        }
+    private assertUniqueName(parentId: string, name: string, excludeId?: string): void {
+        const existing = this.findLiveChild(parentId, name);
+        if (existing && existing.id !== excludeId) throw nameTakenError(name);
     }
 
     // A create checks its folder before it writes any bytes. A folder that went to the trash while the
@@ -672,9 +666,9 @@ export class Mount {
         if (error) throw error;
     }
 
-    // assertUniqueName's SELECT leaves a race open: two creates can both pass it before either inserts.
-    // Off `local` no lock keeps a trash or a permanent delete of the folder out of a create either. So
-    // the folder is checked again in the transaction of the insert.
+    // Two creates can both pass assertUniqueName before either inserts. The unique index then refuses
+    // the second insert, and that becomes a 409. Off `local` no lock keeps a trash or a permanent delete
+    // of the folder away from a create, so the folder is checked again in the transaction of the insert.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
             this.db.transaction((tx) => {
@@ -790,7 +784,7 @@ export class Mount {
                     throw new ApiError(400, `"${targetName}" is a reserved name`);
                 }
                 if (targetParent) {
-                    await this.assertUniqueName(targetParent, targetName, pathId);
+                    this.assertUniqueName(targetParent, targetName, pathId);
                 }
 
                 const renameFn = this.storage.rename;
@@ -819,7 +813,7 @@ export class Mount {
                             const newName = path.posix.basename(newPath);
                             const rename = renameFn.bind(this.storage);
                             if (parentId) {
-                                await this.assertUniqueName(parentId, newName, pathId);
+                                this.assertUniqueName(parentId, newName, pathId);
                                 const occupant = await trash.renameTarget(this, parentId, newPath, oldPath);
                                 if (occupant === 'live') {
                                     throw new ApiError(409, `"${newName}" is taken on disk by another item`);
@@ -908,7 +902,6 @@ export class Mount {
     // transaction of its row write, and a restore also runs it to pick its folder. The target must not be in
     // the row's own subtree. No folder from the target up to the root may be in trash either: that answers
     // the 404 of a deleted folder, because the folder's permanent delete would take the row with it.
-    // `seen` stops the walk on a tree that already has a cycle.
     public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
         const seen = new Set<string>();
         let current = targetParentId;
@@ -1020,11 +1013,7 @@ export class Mount {
             return row ? row.file || pathId : null;
         }
         const rows = await this.db
-            .select({
-                id: paths.id,
-                file: paths.file,
-                parentId: paths.parentId,
-            })
+            .select({ id: paths.id, file: paths.file, parentId: paths.parentId })
             .from(paths)
             .where(sql`${paths.id} IN (${ancestorIds(pathId)})`)
             .all();
@@ -1057,10 +1046,7 @@ export class Mount {
     public async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
-        if (await this.storage.exists(storageKey)) {
-            return this.storage.read(storageKey);
-        }
-        return null;
+        return (await this.storage.exists(storageKey)) ? this.storage.read(storageKey) : null;
     }
 
     public async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
@@ -1275,10 +1261,7 @@ export class Mount {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
-        let resolve!: () => void;
-        const promise = new Promise<void>((r) => {
-            resolve = r;
-        });
+        const { promise, resolve } = Promise.withResolvers<void>();
         this.pathLocks.set(pathId, promise);
         try {
             return await fn();
@@ -1406,9 +1389,7 @@ export class Mount {
 
     public async getTotalSize(): Promise<number> {
         const result = await this.db
-            .select({
-                total: sql<number>`COALESCE(SUM(${paths.size}), 0)`,
-            })
+            .select({ total: sql<number>`COALESCE(SUM(${paths.size}), 0)` })
             .from(paths)
             .where(eq(paths.type, 'file'))
             .get();
@@ -1418,9 +1399,7 @@ export class Mount {
 
     public async getFileCount(): Promise<number> {
         const result = await this.db
-            .select({
-                count: sql<number>`COUNT(*)`,
-            })
+            .select({ count: sql<number>`COUNT(*)` })
             .from(paths)
             .where(eq(paths.type, 'file'))
             .get();
@@ -1479,14 +1458,8 @@ export class Mount {
             .all();
 
         let total = 0;
-        for (const c of children) {
-            if (c.type === 'file') {
-                total += c.size ?? 0;
-            } else if (c.size !== null) {
-                total += c.size;
-            } else {
-                total += this.computeFolderSizeInTx(tx, c.id);
-            }
+        for (const child of children) {
+            total += child.size ?? (child.type === 'file' ? 0 : this.computeFolderSizeInTx(tx, child.id));
         }
 
         tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();

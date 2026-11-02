@@ -9,7 +9,7 @@ import { renderInDocument } from '../../../render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { RichTextInPlaceEditor } = await import('../../../../components/vector/kinds/richtext');
+const { RichTextInPlaceEditor } = await import('../../../../components/vector/kinds/rich-text');
 
 const shape: VectorTextualElement = {
     ...DEFAULT_ELEMENT_PROPS,

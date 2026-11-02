@@ -2,7 +2,7 @@
 // box's and a shape's alike. happy-dom lays nothing out, so the test gives each character a box of its own.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { VectorElement } from '@workspace/lib/vector';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, textBoxDefaults, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -77,8 +77,8 @@ test('a shape whose list the user emptied is written as its drawing alone, with 
 test('an empty text box is measured like one with text, so it writes no foreignObject', async () => {
     const box: VectorElement = {
         ...shape(''),
-        ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
-        type: 'richtext',
+        ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
+        type: 'rectangle',
     };
     const svg = await download([box]);
     expect(svg).not.toContain('foreignObject');

@@ -99,8 +99,8 @@ import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 // lock. The history row says `uploaded`, or `edited` for a save from the inline editor.
 export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uploaded' | 'edited' };
 
-// The row as this write committed it under the file's lock, and its etag, so a write landing right
-// after can't show in either. The caller answers them, and its next save is checked against its own bytes.
+// The row and its etag as this write committed them, under the file's lock. A write that lands right
+// after can't show in either. The caller sends them back, so its next save is checked against its own bytes.
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
 export class Drive {
@@ -368,9 +368,9 @@ export class Drive {
         // bare `.eigendoc` file.
         const safeName = withEigenExtension(validateName(name), type);
         const pathId = await mount.createFolder(parentId, safeName, type);
-        // When the databases can't be set up, the new row goes again. Left behind, it would take the
-        // name and fail every open. Nobody has seen the row yet, so mount.deletePath removes it
-        // without the trash, sharing and SSE work that Drive.deletePath does.
+        // When the databases can't be set up, the new row is removed again. Left behind, it would take
+        // the name and fail every open. Nobody has seen the row yet, so mount.deletePath is enough. It
+        // skips the trash, sharing and SSE work that Drive.deletePath does.
         try {
             if (type === DRIVE_TYPE_CHAT) {
                 await ChatRoom.create(this, mountId, pathId);
@@ -424,25 +424,28 @@ export class Drive {
         }
 
         const streamed = await streamFilesToTemp(mount, request, maxSize);
+        // All files land at once, each under a free name of its own. A file that fails still has its temp
+        // file, so the catch removes it. A file that landed hands its temp file to its thumbnail job.
+        const settled = await Promise.allSettled(
+            streamed.map((file) =>
+                finalizeUpload(this, mount, {
+                    parentId,
+                    name: file.fileName,
+                    mimeType: file.mimeType,
+                    size: file.size,
+                    hash: file.hash,
+                    tempId: file.tempId,
+                    user,
+                }).catch(async (e: unknown) => {
+                    await mount.cleanupTemp(file.tempId);
+                    throw e;
+                }),
+            ),
+        );
         const uploaded: DrivePath[] = [];
-        for (const [index, result] of streamed.entries()) {
-            try {
-                uploaded.push(
-                    await finalizeUpload(this, mount, {
-                        parentId,
-                        name: result.fileName,
-                        mimeType: result.mimeType,
-                        size: result.size,
-                        hash: result.hash,
-                        tempId: result.tempId,
-                        user,
-                    }),
-                );
-            } catch (e) {
-                // The temp files of this file and of every file after it are still there.
-                await Promise.all(streamed.slice(index).map((r) => mount.cleanupTemp(r.tempId)));
-                throw e;
-            }
+        for (const result of settled) {
+            if (result.status === 'rejected') throw result.reason;
+            uploaded.push(result.value);
         }
 
         // Watchers hear about the batch once. The notification is tagged on the folder, so the
@@ -729,8 +732,9 @@ export class Drive {
         }
     }
 
-    // A folder's delete takes its separately trashed children with it, and a restore can win an item's
-    // lock. Both leave an item in the list that is no longer in trash, and the loop goes past it.
+    // The list can hold items that left the trash meanwhile. A folder's delete takes its separately
+    // trashed children with it, and a restore can win an item's lock. permanentlyDelete returns false
+    // for such an item, and the loop moves on.
     public async emptyTrash(mountId: string, user?: User): Promise<void> {
         const mount = this.getMount(mountId);
         for (const item of await mount.listTrash()) {
@@ -862,8 +866,8 @@ export class Drive {
         return this.membersFromCrumbs(await mount.getBreadcrumb(pathId));
     }
 
-    // Who to tell about a change to the path, such as its open tabs. An unshared path in a user's home has
-    // nobody but its owner, who hears the event first anyway, so it costs one breadcrumb read and no account
+    // The members to tell about a change to the path. The owner hears every event anyway. An unshared
+    // path in a user's home has nobody else, so the answer costs one breadcrumb read and no account
     // lookup. Most paths are unshared, and that halves what such an event costs.
     private async membersToTell(mountId: string, pathId: string): Promise<EffectiveMember[]> {
         const crumbs = await this.getMount(mountId).getBreadcrumb(pathId);
@@ -1045,9 +1049,9 @@ export class Drive {
     }
 
     // The comment index on the server holds who is assigned, so the history row is written here and
-    // not from a client event. Assigning someone writes a row. Unassigning stays silent, the same as
-    // resolving. The assignee gets a direct notification, so the watchers' copy skips them. Returns
-    // whether the assignee changed, so the route only notifies on a real change.
+    // not from a client event. Assigning someone writes a row, and unassigning writes none. The
+    // assignee gets a direct notification, so the watchers' copy skips them. Returns whether the
+    // assignee changed, so the route only notifies on a real change.
     public async assignComment(
         mountId: string,
         pathId: string,
@@ -1239,7 +1243,7 @@ export class Drive {
     }
 
     // Creates the database files of a new document, such as its data.db and comments.db. When one
-    // fails, the rows created so far go again, for the same reason Drive.create removes its row.
+    // fails, the rows created so far are removed again, for the same reason Drive.create removes its row.
     public async provisionManagedDbs(
         mountId: string,
         parentId: string,

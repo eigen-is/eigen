@@ -1,5 +1,6 @@
-// A text box's HTML as the paragraphs and runs of a DrawingML text body, laid out as canvas-text.css lays it out: its
-// lists, quotes, links and marks, and its sizes and spacing in the deck's points.
+// An element's HTML as the paragraphs and runs of a DrawingML text body, laid out as the canvas's text stylesheet lays
+// it out: its lists, quotes, links and marks, and its sizes and spacing in the deck's points. Its caller says whether
+// the body grows its shape to its text or leaves the shape its size.
 
 import { isElement } from '@workspace/lib/html';
 import type { TextAlign, VerticalAlign } from '@workspace/lib/vector';
@@ -51,6 +52,8 @@ type TextBox = {
     lineHeight: number;
     inset: number;
     wrap: boolean;
+    // Whether the body grows its shape to its text (a:spAutoFit). Otherwise the shape keeps its size and the text spills.
+    autoFit: boolean;
     opacity: number;
 };
 
@@ -102,14 +105,14 @@ export function paragraphsOf(html: string): Paragraph[] {
     return paragraphs.map((paragraph) => ({ ...paragraph, runs: trimmed(paragraph.runs) }));
 }
 
-// A length canvas-text.css states in the unit the writer reads it in; a shorthand's first value.
+// A length canvas-text.css states, in the unit the writer reads it in. A shorthand gives its first value.
 function canvasTextLength(selector: string, property: string, unit: 'em' | 'px'): number {
     const [length = ''] = canvasTextValue(selector, property).split(/\s+/);
     if (!length.endsWith(unit)) throw new Error(`canvas-text.css ${property} on ${selector} is not in ${unit}`);
     return Number(length.slice(0, -unit.length));
 }
 
-// canvas-text.css: a list level's indent, a quote's indent past its bar, and the opacity a quote draws at.
+// The canvas's text stylesheet gives a list level's indent, a quote's indent and bar, and the opacity a quote draws at.
 const LIST_INDENT_EM = canvasTextLength('.eigen-canvas-text ul', 'padding-left', 'em');
 // The marker's hang: a disc sits close to its text, a number right-aligned in the list's indent.
 const MARKER_EM = { bullet: 0.75, number: 1.5 };
@@ -117,8 +120,8 @@ const QUOTE_INDENT_EM = canvasTextLength('.eigen-canvas-text blockquote', 'paddi
 const QUOTE_BAR_PX = canvasTextLength('.eigen-canvas-text blockquote', 'border-left', 'px');
 const QUOTE_OPACITY = Number(canvasTextValue('.eigen-canvas-text blockquote', 'opacity'));
 const PARAGRAPH_GAP_EM = canvasTextLength('.eigen-canvas-text p + p', 'margin-top', 'em');
-// The schema's ceilings, ST_TextSpacingPoint's and ST_TextMargin's (MAX_SLIDE_EMU), which a tall line or a deep
-// nesting passes.
+// ST_TextSpacingPoint's ceiling, which a tall line passes. A deep nesting's margin stops at ST_TextMargin's,
+// MAX_SLIDE_EMU.
 const MAX_SPACING = 158_400;
 // ST_TextIndentLevelType's deepest level.
 const MAX_LEVEL = 8;
@@ -126,7 +129,8 @@ const MAX_LEVEL = 8;
 export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox): string {
     const em = (n: number) => toEmu(slide, n * box.fontSize);
     const inset = toEmu(slide, box.inset);
-    // An exact pitch, CSS's: what a consumer takes as a single line varies (LibreOffice draws 1.2em for every face).
+    // An exact pitch, as CSS sets it, because what a reader takes as a single line varies. LibreOffice, for
+    // example, draws 1.2 em for every face.
     const pitch = Math.min(MAX_SPACING, centipoints(slide, box.lineHeight * box.fontSize));
     const lineSpacing = `<a:lnSpc><a:spcPts val="${pitch}"/></a:lnSpc>`;
     const body = paragraphs.map((paragraph) => {
@@ -161,7 +165,8 @@ export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox)
         return `<a:p><a:pPr${attrs}>${lineSpacing}${spacing}${marker}</a:pPr>${runs.join('')}${end}</a:p>`;
     });
     const wrap = box.wrap ? 'square' : 'none';
-    return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHOR_BY_ALIGN[box.verticalAlign]}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
+    const fit = box.autoFit ? '<a:spAutoFit/>' : '<a:noAutofit/>';
+    return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHOR_BY_ALIGN[box.verticalAlign]}" rtlCol="0">${fit}</a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
 }
 
 // CSS drops the collapsed space at a block's start and end, then the block's last break, which starts no line.

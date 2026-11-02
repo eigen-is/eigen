@@ -3,6 +3,7 @@
 // The route and its keyboard shortcuts both call them, so a button and a key do the same thing.
 
 import { useNavigate } from '@tanstack/react-router';
+import { isRefusal } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
@@ -198,15 +199,23 @@ export function useMailActions() {
         return { needsConfirmation: false as const };
     };
 
-    // Permanent-delete fan-out: navigate on any success, and return the still-FAILED emails so the
-    // route can narrow the retained set and keep the promise-aware DeleteDialog open on exactly those
-    // (retry then re-hits only the failed ids, not the already-deleted ones). Each mutation reports its
-    // own failure via onMutationError.
-    const confirmDeleteEmails = async (pendingEmails: Email[]): Promise<Email[]> => {
-        if (pendingEmails.length === 0) return [];
+    // The permanent-delete DeleteDialog's action. It navigates on any success. On a failure, `keepFailed` narrows the
+    // dialog to the emails still there, so a retry asks only for those, and the first failure is rethrown. Its mutation
+    // already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
+    const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
-        return pendingEmails.filter((_, i) => results[i].status === 'rejected');
+        const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failures.length === 0) return;
+        // A refused email, such as one already gone, gets the same no again, so only the others stay for a retry. A
+        // refusal closes the dialog, so it is thrown only when no failure is worth another try.
+        keepFailed(
+            pendingEmails.filter((_, i) => {
+                const result = results[i];
+                return result.status === 'rejected' && !isRefusal(result.reason);
+            }),
+        );
+        throw (failures.find((f) => !isRefusal(f.reason)) ?? failures[0]).reason;
     };
 
     // Fan-out batch: build the success toast, Undo slot and navigation from the FULFILLED results only.

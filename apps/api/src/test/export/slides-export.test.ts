@@ -1,15 +1,14 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { VectorRichTextElement } from '@workspace/lib/vector';
+import type { VectorRectangleElement } from '@workspace/lib/vector';
 import {
-    baseDefaultsFor,
     DEFAULT_SCENE_META,
-    ELEMENT_KINDS,
     SLIDE_SIZES,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
     solidFill,
+    textBoxDefaults,
     writeElementInDoc,
     writeFrameInDoc,
 } from '@workspace/lib/vector';
@@ -61,7 +60,8 @@ describe('deck export — assembled HTML surface', () => {
 
             const box = new Y.Map();
             box.set('id', 'e1');
-            box.set('type', 'richtext');
+            box.set('type', 'rectangle');
+            box.set('autoFit', true);
             box.set('index', 'a0');
             box.set('frameId', 'f1');
             box.set('x', 0);
@@ -102,11 +102,10 @@ describe('deck export — assembled HTML surface', () => {
             { fileName: 'flat-deck' },
         );
 
-        const box: VectorRichTextElement = {
-            ...baseDefaultsFor('richtext', SLIDES_STYLE_DEFAULTS),
-            ...ELEMENT_KINDS.richtext.defaults(SLIDES_STYLE_DEFAULTS),
+        const box: VectorRectangleElement = {
+            ...textBoxDefaults(SLIDES_STYLE_DEFAULTS),
             id: 'flat-box',
-            type: 'richtext',
+            type: 'rectangle',
             index: 'a0',
             frameId: 'f1',
             x: 160,
@@ -185,7 +184,8 @@ describe('deck export — pptx', () => {
             writeElementInDoc(
                 collab.doc,
                 {
-                    type: 'richtext',
+                    type: 'rectangle',
+                    autoFit: true,
                     ...on,
                     html: '<p>Quarter <a href="javascript:alert(1)">bad</a> <a href="https://example.com/q">good</a></p>',
                 },
