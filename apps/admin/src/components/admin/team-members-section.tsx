@@ -53,21 +53,21 @@ export function TeamMembersSection({ teamId, organizationId }: TeamMembersSectio
             ) : (
                 <div className="divide-y">
                     {[...teamMembers]
-                        .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
-                        .map((tm) => (
-                            <div key={tm.userId} className="flex items-center gap-3 py-2">
+                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .map((member) => (
+                            <div key={member.userId} className="flex items-center gap-3 py-2">
                                 <UserItem
-                                    name={tm.name ?? 'Unknown'}
-                                    email={tm.email ?? ''}
-                                    userId={tm.userId}
+                                    name={member.name}
+                                    email={member.email}
+                                    userId={member.userId}
                                     className="flex-1 min-w-0"
                                 />
                                 {!isDefaultTeam && (
                                     <TooltipButton
                                         icon={X}
-                                        tooltipText="Remove from team"
+                                        tooltipText={`Remove ${member.name || member.email} from team`}
                                         className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-                                        onClick={() => removeMember.mutate({ teamId, userId: tm.userId })}
+                                        onClick={() => removeMember.mutate({ teamId, userId: member.userId })}
                                     />
                                 )}
                             </div>
