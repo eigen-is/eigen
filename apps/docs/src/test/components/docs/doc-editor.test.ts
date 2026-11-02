@@ -6,6 +6,7 @@ import type { JSONContent } from '@tiptap/core';
 import { getSchema } from '@tiptap/core';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { waitUntil } from '../../fixtures/wait-until';
 
 installHappyDom();
 
@@ -481,13 +482,6 @@ function render(child: ReturnType<typeof createElement>) {
 
 const logo = new File(['png'], 'logo.png', { type: 'image/png' });
 
-async function settleUpload(name: string) {
-    await act(async () => {
-        finishUpload(name);
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-}
-
 // A comment click's handler changes with the layout, and the body's editor is built anew with it.
 test('a body upload that settles after its editor was built anew swaps the name in the new editor', async () => {
     const doc = new Y.Doc();
@@ -519,8 +513,10 @@ test('a body upload that settles after its editor was built anew swaps the name 
 
     await act(async () => rebuild());
     expect(rendered.body?.editor).not.toBe(first);
-    await settleUpload('logo-1.png');
-    await upload;
+    await act(async () => {
+        finishUpload('logo-1.png');
+        await upload;
+    });
     expect(doc.getXmlFragment('default').toString()).toContain('mediaName="logo-1.png"');
 });
 
@@ -625,8 +621,11 @@ test('an image pasted into the open note settles in the note', async () => {
         );
     });
     expect(doc.getXmlFragment('default').toString()).toContain('mediaName="pending:');
-    await settleUpload('logo-2.png');
-    expect(doc.getXmlFragment('default').toString()).toContain('mediaName="logo-2.png"');
+    await act(async () => finishUpload('logo-2.png'));
+    await waitUntil(
+        () => doc.getXmlFragment('default').toString().includes('mediaName="logo-2.png"'),
+        'the uploaded name',
+    );
     const names: unknown[] = [];
     note.state.doc.descendants((node) => {
         if (node.type.name === 'figure') names.push(node.attrs.mediaName);
