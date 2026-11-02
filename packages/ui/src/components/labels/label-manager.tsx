@@ -1,3 +1,6 @@
+// The Labels section of a sidebar, such as Contacts': each label links to its filtered list and may take dropped
+// items, and the + and pencil buttons open LabelDialog to add, edit or delete one.
+
 import { useAddLabel, useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
 import { Pencil, Plus } from 'lucide-react';
@@ -33,18 +36,10 @@ export function LabelManager({
         setDialogOpen(true);
     };
 
-    const handleSubmit = async (data: { name: string; color: string }) => {
-        try {
-            if (selectedLabel) {
-                await updateLabel({ ...selectedLabel, name: data.name, color: data.color });
-            } else {
-                await addLabel({ name: data.name, color: data.color });
-            }
-            setDialogOpen(false);
-        } catch {
-            // Mutation's onError handles the toast; keep dialog open for retry
-        }
-    };
+    const handleSubmit = (data: { name: string; color: string }) =>
+        selectedLabel
+            ? updateLabel({ ...selectedLabel, name: data.name, color: data.color })
+            : addLabel({ name: data.name, color: data.color });
 
     const handleDeleteLabel = async () => {
         if (!selectedLabel) return;

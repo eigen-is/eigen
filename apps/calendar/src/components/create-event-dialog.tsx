@@ -11,17 +11,9 @@ import {
     viewerTimeZone,
 } from '@workspace/lib/calendar';
 import type { Attendee } from '@workspace/lib/types/calendar';
-import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { UsersRound } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
 import { buildEventTimes } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
@@ -35,136 +27,107 @@ type CreateEventDialogProps = {
 };
 
 export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCalendarId }: CreateEventDialogProps) {
+    return (
+        <FormDialog open={open} onOpenChange={onOpenChange} title="New event" size="md">
+            <CreateEventForm defaultDate={defaultDate} defaultCalendarId={defaultCalendarId} />
+        </FormDialog>
+    );
+}
+
+// Mounted with the dialog, so each opening starts empty at the next quarter hour.
+function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
     const { user } = useAuth();
     const ownerId = user?.id || '';
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
-
     const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
+    const [initial] = useState(() => {
+        const rounded = roundToNext15Minutes(new Date());
+        const start = defaultDate ? new Date(defaultDate) : rounded;
+        start.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
+        return { start, end: endAfter(start, 30) };
+    });
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
-    const [selectedCalKey, setSelectedCalKey] = useState('');
+    const [pickedCalKey, setPickedCalKey] = useState<string>();
     const [allDay, setAllDay] = useState(false);
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [startTime, setStartTime] = useState('09:00');
-    const [endTime, setEndTime] = useState('09:30');
+    const [startDate, setStartDate] = useState(toLocalDateString(initial.start));
+    const [endDate, setEndDate] = useState(initial.end.date);
+    const [startTime, setStartTime] = useState(toTimeString(initial.start));
+    const [endTime, setEndTime] = useState(initial.end.time);
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [attendees, setAttendees] = useState<Attendee[]>([]);
 
+    // Until the user picks one, the default calendar follows the list, which may still be loading.
+    const defaultCal = defaultCalendarId ? calendarOptions.find((c) => c.id === defaultCalendarId) : calendarOptions[0];
+    const selectedCalKey = pickedCalKey ?? (defaultCal ? `${defaultCal.ownerId}:${defaultCal.id}` : '');
     const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
     const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
 
-    useEffect(() => {
-        if (open) {
-            const now = new Date();
-            const rounded = roundToNext15Minutes(now);
-
-            const targetDate = defaultDate ? new Date(defaultDate) : rounded;
-            targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
-
-            const end = endAfter(targetDate, 30);
-
-            setTitle('');
-            setDescription('');
-            setLocation('');
-            const defaultCal = defaultCalendarId
-                ? calendarOptions.find((c) => c.id === defaultCalendarId)
-                : calendarOptions[0];
-            setSelectedCalKey(defaultCal ? `${defaultCal.ownerId}:${defaultCal.id}` : '');
-            setAllDay(false);
-            setStartDate(toLocalDateString(targetDate));
-            setEndDate(end.date);
-            setStartTime(toTimeString(targetDate));
-            setEndTime(end.time);
-            setRruleString(null);
-            setAttendees([]);
-        }
-    }, [open, defaultDate, defaultCalendarId, calendarOptions]);
-
-    const handleSubmit = async () => {
-        if (!title.trim() || !selectedCal) return;
-
-        const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
-
-        await createEvent.mutateAsync({
-            calendarId: selectedCal.id,
-            title: title.trim(),
-            startTime: start,
-            endTime: end,
-            allDay,
-            description: description.trim() || null,
-            location: location.trim() || null,
-            rrule: rruleString,
-            timezone: allDay ? null : viewerTimeZone(),
-            data: attendees.length > 0 ? { attendees } : undefined,
-        });
-        onOpenChange(false);
-    };
-
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="md">
-                <DialogHeader>
-                    <DialogTitle>New event</DialogTitle>
-                    <DialogDescription className="sr-only">
-                        Set the title, time, guests and details for the new event.
-                    </DialogDescription>
-                </DialogHeader>
-
-                <EventFormFields
-                    titlePlaceholder="Add title"
-                    locationPlaceholder="Add location"
-                    descriptionPlaceholder="Add description"
-                    title={title}
-                    setTitle={setTitle}
-                    allDay={allDay}
-                    setAllDay={setAllDay}
-                    startDate={startDate}
-                    setStartDate={setStartDate}
-                    endDate={endDate}
-                    setEndDate={setEndDate}
-                    startTime={startTime}
-                    setStartTime={setStartTime}
-                    endTime={endTime}
-                    setEndTime={setEndTime}
-                    location={location}
-                    setLocation={setLocation}
-                    description={description}
-                    setDescription={setDescription}
-                    rruleString={rruleString}
-                    setRruleString={setRruleString}
-                    selectedCalKey={selectedCalKey}
-                    setSelectedCalKey={setSelectedCalKey}
-                    calendarOptions={calendarOptions}
-                    recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
-                    timezone={viewerTimeZone()}
-                    allDayId="all-day"
-                    attendeesSection={
-                        <div className="flex items-start gap-3">
-                            <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
-                            <div className="flex-1">
-                                <AttendeeEditor
-                                    attendees={attendees}
-                                    onChange={setAttendees}
-                                    currentUserEmail={user?.email}
-                                />
-                            </div>
+        <FormDialogForm
+            canSubmit={title.trim() !== '' && !!selectedCal}
+            submitLabel="Save"
+            onSubmit={() => {
+                if (!selectedCal) return false;
+                const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
+                return createEvent.mutateAsync({
+                    calendarId: selectedCal.id,
+                    title: title.trim(),
+                    startTime: start,
+                    endTime: end,
+                    allDay,
+                    description: description.trim() || null,
+                    location: location.trim() || null,
+                    rrule: rruleString,
+                    timezone: allDay ? null : viewerTimeZone(),
+                    data: attendees.length > 0 ? { attendees } : undefined,
+                });
+            }}
+        >
+            <EventFormFields
+                titlePlaceholder="Add title"
+                locationPlaceholder="Add location"
+                descriptionPlaceholder="Add description"
+                title={title}
+                setTitle={setTitle}
+                allDay={allDay}
+                setAllDay={setAllDay}
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
+                startTime={startTime}
+                setStartTime={setStartTime}
+                endTime={endTime}
+                setEndTime={setEndTime}
+                location={location}
+                setLocation={setLocation}
+                description={description}
+                setDescription={setDescription}
+                rruleString={rruleString}
+                setRruleString={setRruleString}
+                selectedCalKey={selectedCalKey}
+                setSelectedCalKey={setPickedCalKey}
+                calendarOptions={calendarOptions}
+                recurrenceStartDate={new Date(`${startDate}T00:00:00`)}
+                timezone={viewerTimeZone()}
+                allDayId="all-day"
+                attendeesSection={
+                    <div className="flex items-start gap-3">
+                        <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0" />
+                        <div className="flex-1">
+                            <AttendeeEditor
+                                attendees={attendees}
+                                onChange={setAttendees}
+                                currentUserEmail={user?.email}
+                            />
                         </div>
-                    }
-                />
-
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={createEvent.isPending}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSubmit} disabled={createEvent.isPending || !title.trim()}>
-                        {createEvent.isPending ? 'Saving...' : 'Save'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                    </div>
+                }
+            />
+        </FormDialogForm>
     );
 }

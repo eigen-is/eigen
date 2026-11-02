@@ -142,6 +142,8 @@ export function TimeSelect({ value, onChange, referenceTime, minTime, disabled }
                         onBlur={commitInput}
                         onKeyDown={(e) => {
                             if (e.key === 'Enter') {
+                                // Enter sets the time, and in a form it would also submit it.
+                                e.preventDefault();
                                 commitInput();
                                 setOpen(false);
                             }

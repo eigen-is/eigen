@@ -1,17 +1,12 @@
+// The admin's dialog that gives a user a new password. A user's detail page opens it from its toolbar. It suggests a
+// random password the admin may edit, and its hook sets it on the server, which signs the user out everywhere.
+
 import { useResetUserPassword } from '@workspace/lib/admin';
 import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
-import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type ResetPasswordDialogProps = {
     open: boolean;
@@ -19,6 +14,48 @@ type ResetPasswordDialogProps = {
     userId: string;
     userName: string;
 };
+
+export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: ResetPasswordDialogProps) {
+    return (
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title={`Reset password for ${userName}`}
+            description="They are signed out everywhere. Share the new password with them securely."
+        >
+            <ResetPasswordForm userId={userId} />
+        </FormDialog>
+    );
+}
+
+// Mounted with the dialog, so each opening suggests a new password.
+function ResetPasswordForm({ userId }: { userId: string }) {
+    const [password, setPassword] = useState(generatePassword);
+    const resetPassword = useResetUserPassword();
+
+    return (
+        <FormDialogForm
+            canSubmit={password.length >= MIN_PASSWORD_LENGTH}
+            submitLabel="Reset password"
+            onSubmit={() => resetPassword.mutateAsync({ userId, password })}
+        >
+            <FieldGroup>
+                <Field>
+                    <FieldLabel htmlFor="new-password">New password</FieldLabel>
+                    <FieldContent>
+                        <Input
+                            id="new-password"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            minLength={MIN_PASSWORD_LENGTH}
+                            required
+                        />
+                    </FieldContent>
+                </Field>
+            </FieldGroup>
+        </FormDialogForm>
+    );
+}
 
 function generatePassword() {
     const chars = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -29,56 +66,4 @@ function generatePassword() {
         password += chars[byte % chars.length];
     }
     return password;
-}
-
-export function ResetPasswordDialog({ open, onOpenChange, userId, userName }: ResetPasswordDialogProps) {
-    const [password, setPassword] = useState(() => generatePassword());
-    const resetPassword = useResetUserPassword();
-
-    useEffect(() => {
-        if (open) setPassword(generatePassword());
-    }, [open]);
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (password.length < MIN_PASSWORD_LENGTH) return;
-        resetPassword.mutate({ userId, password }, { onSuccess: () => onOpenChange(false) });
-    };
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Reset password for {userName}</DialogTitle>
-                    <DialogDescription>
-                        They are signed out everywhere. Share the new password with them securely.
-                    </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="grid gap-4">
-                    <FieldGroup>
-                        <Field>
-                            <FieldLabel htmlFor="new-password">New password</FieldLabel>
-                            <FieldContent>
-                                <Input
-                                    id="new-password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    minLength={MIN_PASSWORD_LENGTH}
-                                    required
-                                />
-                            </FieldContent>
-                        </Field>
-                    </FieldGroup>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={resetPassword.isPending}>
-                            {resetPassword.isPending ? 'Resetting...' : 'Reset password'}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
-    );
 }

@@ -1,3 +1,7 @@
+// The guest list of the event dialogs: a field that adds a guest by address or from the contacts it suggests, and the
+// guests below it with their reply and a button that removes one. Inviting yourself is refused with a note. The
+// dialog owns the list and saves it with the event.
+
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
@@ -58,6 +62,7 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                                         {ATTENDEE_STATUS_LABEL[attendee.status]}
                                     </Badge>
                                     <Button
+                                        type="button"
                                         variant="ghost"
                                         size="icon"
                                         className="h-6 w-6 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"

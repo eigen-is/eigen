@@ -1,6 +1,6 @@
 // A form dialog submits on Enter as on its submit button, and only when the caller says the fields are valid. While a
 // submit runs, its buttons and every way to close it wait. It closes once the submit succeeds and stays open when it
-// fails, for another try.
+// fails or returns false, for another try. A dialog that is closing takes no second submit.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { installHappyDom } from '../happy-dom';
@@ -9,12 +9,17 @@ import { renderInDocument } from '../render-in-document';
 
 installHappyDom();
 
-const { act, createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
 
 let unmount = async () => {};
-afterEach(() => unmount());
+const realGetComputedStyle = globalThis.getComputedStyle;
+afterEach(async () => {
+    await unmount();
+    globalThis.getComputedStyle = realGetComputedStyle;
+});
 
 const onOpenChange = mock((_open: boolean) => {});
 
@@ -25,7 +30,7 @@ async function render({
     readOnly,
     description,
 }: {
-    onSubmit?: () => void | Promise<void>;
+    onSubmit?: () => unknown;
     canSubmit?: boolean;
     footerStart?: ReactNode;
     readOnly?: boolean;
@@ -122,12 +127,73 @@ test('a slow submit disables both buttons, keeps its label, and Escape waits for
 });
 
 test('a submit that fails keeps the dialog open for another try', async () => {
-    const onSubmit = mock(() => Promise.reject(new Error('offline')));
+    // A mutation hook toasts its failure before the dialog sees it.
+    const failure = new Error('offline');
+    onMutationError(failure);
+    const onSubmit = mock(() => Promise.reject(failure));
     await render({ onSubmit });
     await click('Save');
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(button('Save')?.disabled).toBe(false);
+});
+
+test('a submit that returns or resolves false keeps the dialog open, and the next one closes it', async () => {
+    let result: unknown = false;
+    const onSubmit = mock(() => result);
+    await render({ onSubmit });
+    await enter();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    result = Promise.resolve(false);
+    await enter();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    result = Promise.resolve('created');
+    await enter();
+    expect(onSubmit).toHaveBeenCalledTimes(3);
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a submit that returned false leaves Escape closing the dialog', async () => {
+    await render({ onSubmit: () => false });
+    await enter();
+    await pressEscape();
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a second Enter while the dialog animates out submits nothing', async () => {
+    // Radix keeps a closing dialog mounted while its animation runs. happy-dom computes no animation from a style
+    // sheet and never ends one, so the content reports a fade-out once it closes and stays.
+    globalThis.getComputedStyle = (element, pseudo) => {
+        const style = realGetComputedStyle(element, pseudo);
+        if (!(element instanceof HTMLElement) || element.dataset.slot !== 'dialog-content') return style;
+        return new Proxy(style, {
+            get: (target, key) =>
+                key === 'animationName'
+                    ? element.dataset.state === 'closed'
+                        ? 'fade-out'
+                        : 'fade-in'
+                    : Reflect.get(target, key),
+        });
+    };
+    const onSubmit = mock(() => {});
+    function Harness() {
+        const [open, setOpen] = useState(true);
+        return createElement(FormDialog, {
+            open,
+            onOpenChange: setOpen,
+            title: 'Rename',
+            children: createElement(FormDialogForm, {
+                onSubmit,
+                submitLabel: 'Save',
+                children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
+            }),
+        });
+    }
+    ({ unmount } = await renderInDocument(createElement(Harness)));
+    await enter();
+    expect(dialog()?.getAttribute('data-state')).toBe('closed');
+    await enter();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
 });
 
 test('the corner X is shown and closes the dialog', async () => {
@@ -146,6 +212,15 @@ test('footerStart sits first in the footer, pushed to the left', async () => {
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Delete', 'Cancel', 'Save']);
 });
 
+test('Enter in a field submits, not the footerStart button', async () => {
+    const onSubmit = mock(() => {});
+    const onDelete = mock(() => {});
+    await render({ onSubmit, footerStart: createElement('button', { type: 'button', onClick: onDelete }, 'Delete') });
+    await enter();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onDelete).not.toHaveBeenCalled();
+});
+
 test('readOnly shows only Close, and Enter submits nothing', async () => {
     const onSubmit = mock(() => {});
     await render({ onSubmit, readOnly: true });
@@ -156,10 +231,13 @@ test('readOnly shows only Close, and Enter submits nothing', async () => {
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
-test('a description is what a screen reader reads for the dialog, and without one it reads none', async () => {
+test('a description shows under the title and a screen reader reads it, and without one it reads none', async () => {
     await render({ description: 'Give the file a new name.' });
     const describedBy = dialog()?.getAttribute('aria-describedby');
-    expect(describedBy ? document.getElementById(describedBy)?.textContent : null).toBe('Give the file a new name.');
+    const description = describedBy ? document.getElementById(describedBy) : null;
+    expect(description?.textContent).toBe('Give the file a new name.');
+    expect(description?.closest('[data-slot="dialog-header"]')).not.toBeNull();
+    expect(description?.classList.contains('sr-only')).toBe(false);
     await unmount();
     await render();
     expect(dialog()?.hasAttribute('aria-describedby')).toBe(false);
