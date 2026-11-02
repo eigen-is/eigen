@@ -15,12 +15,9 @@ installHappyDom();
 
 // The Watch row reads the item's watch state from the server; nothing is watched here.
 const realDrive = await import('@workspace/lib/drive');
-const idle = { isPending: false, mutate: () => {} };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useIsPathWatched: () => ({ data: undefined }),
-    useWatchPath: () => idle,
-    useUnwatchPath: () => idle,
+    useWatchToggle: () => ({ direct: false, label: 'Watch', isPending: false, toggle: () => {} }),
 }));
 
 const { driveActionsFor } = await import('@workspace/lib/drive');

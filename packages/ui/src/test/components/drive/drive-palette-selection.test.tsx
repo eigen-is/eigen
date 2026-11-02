@@ -17,12 +17,9 @@ const realAuth = { ...(await import('@workspace/lib/auth')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
 // The Watch row reads the item's watch state from the server: here the item is watched directly.
 const realDrive = { ...(await import('@workspace/lib/drive')) };
-const idle = { isPending: false, mutate: () => {} };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useIsPathWatched: () => ({ data: { direct: true, viaAncestor: null } }),
-    useWatchPath: () => idle,
-    useUnwatchPath: () => idle,
+    useWatchToggle: () => ({ direct: true, label: 'Stop watching', isPending: false, toggle: () => {} }),
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);

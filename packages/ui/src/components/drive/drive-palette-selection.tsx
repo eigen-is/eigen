@@ -4,6 +4,7 @@
 // as Trash, hands over its own rows instead. DriveList mounts one beside its rows.
 
 import { usePaletteSelection } from '@workspace/lib/command-palette';
+import { useWatchToggle } from '@workspace/lib/drive';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath, ExportFormat } from '@workspace/lib/types/drive';
@@ -11,7 +12,6 @@ import { Bell } from 'lucide-react';
 import { useMemo } from 'react';
 import { MENU_SECTIONS } from '../context-menu/menu-sections';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
-import { useWatchToggle } from '../layout/toolbar/watch-toggle-button';
 import type { DriveActionRunner } from './drive-action-runner';
 
 type DrivePaletteSelectionProps = {
