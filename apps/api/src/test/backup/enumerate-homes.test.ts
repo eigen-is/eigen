@@ -1,12 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import { eq } from 'drizzle-orm';
 import { user as userScheme } from '../../../auth-schema';
 import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
-import { buildSafetyCopyName, buildServerFolderName } from '../../lib/backup/paths';
+import { buildRestoreStagingDir, buildSafetyCopyName, buildServerFolderName } from '../../lib/backup/paths';
 import { snapshotServer } from '../../lib/backup/snapshot-server';
 import { getDataRoot, getTeamHomePath, getUserHomePath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -21,7 +21,7 @@ describe('Backup enumerateHomes', () => {
     let guestId: string;
     let unbootedId: string;
     const orphan = `orphan${stamp}`;
-    let safetyCopies: string[];
+    let foldersBesideHomes: string[];
     let result: ReturnType<typeof enumerateHomes>;
 
     beforeAll(async () => {
@@ -43,11 +43,12 @@ describe('Backup enumerateHomes', () => {
         rmSync(getUserHomePath(unbootedId), { recursive: true, force: true });
 
         mkdirSync(join(getDataRoot(), 'home', orphan), { recursive: true });
-        safetyCopies = [
+        foldersBesideHomes = [
             buildSafetyCopyName(getUserHomePath(ownerId), 'pre-restore', '20260930-020304'),
             buildSafetyCopyName(getTeamHomePath(teamId), 'failed-restore', '20260930-020304'),
+            buildRestoreStagingDir(getUserHomePath(ownerId), `enumerate-${stamp}`),
         ];
-        for (const dir of safetyCopies) mkdirSync(dir, { recursive: true });
+        for (const dir of foldersBesideHomes) mkdirSync(dir, { recursive: true });
 
         const target = mkdtempSync(join(TEST_DATA_DIR, 'enumerate-'));
         await snapshotServer(target, at);
@@ -56,7 +57,7 @@ describe('Backup enumerateHomes', () => {
 
     afterAll(() => {
         rmSync(join(getDataRoot(), 'home', orphan), { recursive: true, force: true });
-        for (const dir of safetyCopies) rmSync(dir, { recursive: true, force: true });
+        for (const dir of foldersBesideHomes) rmSync(dir, { recursive: true, force: true });
     });
 
     test('lists a user and a team from the captured users3.db', () => {
@@ -79,8 +80,9 @@ describe('Backup enumerateHomes', () => {
         expect(result.homes.some((home) => home.ownerId === unbootedId)).toBe(false);
     });
 
-    test('lists a folder with no row as an orphan and leaves safety copies out', () => {
+    test('lists a folder with no row as an orphan and leaves safety copies and restores out', () => {
         expect(result.orphans).toContain(`home/${orphan}`);
+        expect(result.orphans.some((orphanPath) => basename(orphanPath).startsWith('.'))).toBe(false);
         expect(result.orphans.some((orphanPath) => orphanPath.includes('-restore-'))).toBe(false);
         expect(result.homes.some((home) => home.ownerId.includes('-restore-'))).toBe(false);
     });

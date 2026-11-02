@@ -4,7 +4,6 @@
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
-import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import { eq } from 'drizzle-orm';
@@ -15,7 +14,6 @@ import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
-import { errnoOf } from '../storage/deadline';
 import {
     HOME_DATABASES,
     listManagedDatabases,
@@ -266,18 +264,6 @@ export function containerDatabasesIn(homeDir: string, mountIds: readonly string[
 export function movePath(from: string, to: string): void {
     fs.mkdirSync(path.dirname(to), { recursive: true });
     fs.renameSync(from, to);
-}
-
-// A whole home from the backups folder into data/: on Docker the two are separate mounts, a rename between them
-// fails with EXDEV, and the copy that replaces it must not hold every other user's requests.
-export async function movePathAsync(from: string, to: string): Promise<void> {
-    await fsp.mkdir(path.dirname(to), { recursive: true });
-    await fsp.rename(from, to).catch(async (error: unknown) => {
-        if (errnoOf(error) !== 'EXDEV') throw error;
-        // A rename keeps every mtime, and Dovecot dates a Maildir message by its own.
-        await fsp.cp(from, to, { recursive: true, preserveTimestamps: true });
-        await fsp.rm(from, { recursive: true, force: true });
-    });
 }
 
 // A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is

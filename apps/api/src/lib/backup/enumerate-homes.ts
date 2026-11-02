@@ -14,7 +14,7 @@ import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { team, user } from '../../../auth-schema';
 import { getDataRoot, getTeamHomePath, getUserHomePath, PATHS, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
 import { isGuest } from '../user/guest';
-import { parseSafetyCopyName } from './paths';
+import { isRestoreStagingName, parseSafetyCopyName } from './paths';
 
 export type ServerHome = Pick<ServerArchiveManifest['homes'][number], 'ownerId' | 'kind' | 'name'>;
 
@@ -50,14 +50,20 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
     }
 }
 
-// The folders in `data/{dirName}` no row claims, as data-relative paths. A restore's safety copies
-// sit there too and are neither a home nor an orphan.
+// The folders in `data/{dirName}` no row claims, as data-relative paths. A restore's safety copies, and the folder it
+// unpacks into, sit there too and are neither a home nor an orphan.
 function listOrphans(dirName: string, claimed: Set<string>): string[] {
     const dir = path.join(getDataRoot(), dirName);
     if (!fs.existsSync(dir)) return [];
     return fs
         .readdirSync(dir, { withFileTypes: true })
-        .filter((entry) => entry.isDirectory() && !claimed.has(entry.name) && !parseSafetyCopyName(entry.name))
+        .filter(
+            (entry) =>
+                entry.isDirectory() &&
+                !claimed.has(entry.name) &&
+                !parseSafetyCopyName(entry.name) &&
+                !isRestoreStagingName(entry.name),
+        )
         .map((entry) => `${dirName}/${entry.name}`)
         .sort();
 }

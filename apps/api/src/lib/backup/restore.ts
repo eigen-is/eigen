@@ -1,7 +1,8 @@
-// Restores one home from a backup, or from a safety copy of an earlier restore. The backup is unpacked and judged
-// while the home still serves. Then the current home folder is moved aside as a new safety copy, the backup goes in
-// its place, and a failed restore puts both folders back. Once the home is in place and serves again, the owner's rows
-// outside the folder go in, such as their auth rows, shares and avatar. The backup routes call it.
+// Restores one home from a backup, or from a safety copy of an earlier restore. The backup is unpacked beside the
+// home, on the data disk, and judged and put in place there while the home still serves. Then two renames swap it in:
+// the current home folder goes aside as a new safety copy and the unpacked one takes its place. A failed restore puts
+// both folders back. Once the home serves again, the owner's rows outside the folder go in, such as their auth rows,
+// shares and avatar. The backup routes call it.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -10,15 +11,15 @@ import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
-import { getAvatarsDir } from '../config/paths';
+import { getAvatarsDir, getDataRoot } from '../config/paths';
 import { ApiError } from '../core';
 import { rotateHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
 import { addRegistryEntry } from '../share/registry';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
-import { extractArtifact, readUnpackedHome } from './archive';
-import { requireArtifact } from './artifacts';
+import { extractArtifact, readArtifactManifest, readUnpackedHome } from './archive';
+import { readSidecar, requireArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
 import { describeError } from './errors';
 import { resolveHomeDir } from './home-dir';
@@ -28,16 +29,16 @@ import {
     containerDatabasesIn,
     materializeMount,
     mountIdsIn,
-    movePathAsync,
     redateTrash,
 } from './materialize-mount';
 import {
     ARCHIVE_AVATAR_DIR,
     ARCHIVE_HOME_DIR,
     ARCHIVE_SHARES_FILE,
+    buildRestoreStagingDir,
     buildSafetyCopyName,
     freeSafetyCopyStamp,
-    getBackupStagingDir,
+    roomShortfall,
     wipeBackupStagingDir,
 } from './paths';
 import { writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
@@ -60,12 +61,18 @@ export async function restoreHome(
         ownerId,
         homeDir,
         jobId,
-        async () => {
-            // Unpack into this job's staging folder and judge the archive while the home still serves.
-            const unpackDir = path.join(getBackupStagingDir(jobId), 'restore');
+        async (stamp) => {
+            // Beside the home, so the swap is a rename on one disk.
+            const unpackDir = buildRestoreStagingDir(homeDir, jobId);
             // A retry of a job whose id was reused would otherwise extract over the last attempt's
             // tree, and stage 1 fails an archive on a file the manifest does not list.
             await fsp.rm(unpackDir, { recursive: true, force: true });
+            // Refused before a byte is written. The manifest counts every file, and the sidecar keeps a copy of it,
+            // so only an archive without one is read for it.
+            const { counts } =
+                (await readSidecar(artifactPath))?.manifest ?? (await readArtifactManifest(artifactPath));
+            const shortfall = roomShortfall(`Restoring ${artifactName}`, counts.bytes, getDataRoot(), 'data/');
+            if (shortfall) throw new ApiError(507, shortfall);
             onProgress?.('extract', 0, 1);
             await extractArtifact(artifactPath, unpackDir);
             onProgress?.('extract', 1, 1);
@@ -79,7 +86,7 @@ export async function restoreHome(
             const carried = manifest.mounts.filter((summary) => !summary.skipped);
             const unpackedHome = path.join(folder, ARCHIVE_HOME_DIR);
             await checkUnpackedHome(unpackedHome, carried);
-            // Here, so a failure refuses while the home still serves. materializeMount leaves every trash date alone.
+            // Before materializeMount, which leaves every trash date alone.
             redateRestoredTrash(
                 ownerId,
                 unpackedHome,
@@ -93,21 +100,16 @@ export async function restoreHome(
                 shares: readShares(folder),
                 avatars: await readAvatars(ownerId, folder),
             };
-
-            const install: InstallHome = async (stamp) => {
-                // The archive's `home/` is the home folder, one for one.
-                onProgress?.('home files', 0, 1);
-                await movePathAsync(unpackedHome, homeDir);
-                onProgress?.('home files', 1, 1);
-                for (const [index, summary] of carried.entries()) {
-                    materializeMount(homeDir, summary, stamp);
-                    onProgress?.('mounts', index + 1, carried.length);
-                }
-            };
+            for (const [index, summary] of carried.entries()) {
+                materializeMount(unpackedHome, summary, stamp);
+                onProgress?.('mounts', index + 1, carried.length);
+            }
+            // The archive's `home/` is the home folder, one for one.
+            const install: InstallHome = async () => fs.renameSync(unpackedHome, homeDir);
             return { install, judged };
         },
-        // A half-written extraction is not a home: it keeps a name of its own, which the admin pane
-        // lists with a delete and no restore.
+        // The new folder of a restore that failed after its swap is not trusted as a home: it keeps a name of its
+        // own, which the admin pane lists with a delete and no restore.
         (stamp) => buildSafetyCopyName(homeDir, 'failed-restore', stamp),
     );
     // Only once the home is in place, and nothing rolls the folder back for them. Each write inserts only what is
@@ -122,7 +124,7 @@ export async function restoreHome(
 // of its own and the chosen folder takes its place. No file is copied and none is deleted. A remote
 // mount needs no work either, because the copy still points at the objects it was restored away from:
 // materializeMount gives every restore fresh keys. A `.failed-restore-` copy is refused, because it is
-// the half-written folder of a restore that never finished, not a home.
+// the folder of a restore that never finished, not a home.
 export async function restoreSafetyCopy(
     ownerId: string,
     name: string,
@@ -220,7 +222,7 @@ type RestoredAvatar = { name: string; bytes: Uint8Array };
 
 // What a restore does once the home is out of everyone's hands and its folder is aside: put the new
 // folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
-type InstallHome = (stamp: string) => Promise<void>;
+type InstallHome = () => Promise<void>;
 
 // What judging a replacement hands on: the install, and what the restore writes once the home serves again.
 type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
@@ -233,26 +235,30 @@ async function replaceHomeFolder<Judged>(
     ownerId: string,
     homeDir: string,
     jobId: string,
-    prepare: () => Promise<PreparedHome<Judged>>,
+    prepare: (stamp: string) => Promise<PreparedHome<Judged>>,
     parkOnFailure: (stamp: string) => string,
 ): Promise<Judged> {
     try {
-        const { install, judged } = await prepare();
+        // Chosen before the home is judged, since an s3 mount's restored files take their fresh keys from it.
+        const stamp = freeSafetyCopyStamp(homeDir, new Date());
+        const { install, judged } = await prepare(stamp);
         // Throws when another restore or a deletion of this home holds it, before anything below runs.
         markHomeRestoring(ownerId);
         try {
-            await takeAndReplace(ownerId, homeDir, jobId, install, parkOnFailure);
+            await takeAndReplace(ownerId, homeDir, jobId, stamp, install, parkOnFailure);
         } finally {
             // Whatever happened is over, and a failed install put the home back itself.
             clearHomeRestoring(ownerId);
         }
         return judged;
     } finally {
-        // It may not throw over the failure that brought us here.
+        // Everything the job staged, beside the home and in the backups folder. It may not throw over the failure
+        // that brought us here.
         try {
+            await fsp.rm(buildRestoreStagingDir(homeDir, jobId), { recursive: true, force: true });
             await wipeBackupStagingDir(jobId);
         } catch (error) {
-            console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
+            console.error(`[backup] could not clear the staging folders of job ${jobId}:`, error);
         }
     }
 }
@@ -262,6 +268,7 @@ async function takeAndReplace(
     ownerId: string,
     homeDir: string,
     jobId: string,
+    stamp: string,
     install: InstallHome,
     parkOnFailure: (stamp: string) => string,
 ): Promise<void> {
@@ -270,11 +277,10 @@ async function takeAndReplace(
     await evictHome(ownerId);
 
     // There is no home folder to move aside on a restore after the user was deleted.
-    const stamp = freeSafetyCopyStamp(homeDir, new Date());
     const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
     const parked = parkOnFailure(stamp);
-    // Before the move: a process killed from here on leaves a home folder gone or half written, and which one
-    // only this note tells the next boot, with the name the folder at the home's path goes aside under.
+    // Before the move: a process killed from here on leaves the home's path empty or holding a folder the restore did
+    // not finish with. Only this note tells the next boot which, with the name that folder goes aside under.
     writeRestoringMarker(jobId, {
         ownerId,
         homeDir,
@@ -284,7 +290,7 @@ async function takeAndReplace(
     if (movedAside) fs.renameSync(homeDir, movedAside);
 
     try {
-        await install(stamp);
+        await install();
         // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
         // between the two costs an extra reload, never a stale tab over the new home.
         await rotateHomeDataEpoch(ownerId);

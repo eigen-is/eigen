@@ -1,8 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
+import * as nodeFs from 'node:fs';
 import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import * as fsp from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import {
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
@@ -17,7 +17,8 @@ import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/valida
 import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { packFolder } from '../../lib/backup/archive';
+import * as archiveModule from '../../lib/backup/archive';
+import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import * as materializeModule from '../../lib/backup/materialize-mount';
@@ -27,18 +28,21 @@ import {
     ARCHIVE_SHARES_FILE,
     buildArtifactName,
     buildHomeFolderName,
+    buildRestoreStagingDir,
     getBackupsDir,
+    isRestoreStagingName,
 } from '../../lib/backup/paths';
 import { readShares, restoreHome, restoreSafetyCopy, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
-import { getAvatarsDir } from '../../lib/config/paths';
+import { getAvatarsDir, getDataRoot } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
 import { ApiError } from '../../lib/core';
 import type { Home } from '../../lib/home';
+import * as dataEpochModule from '../../lib/home/data-epoch';
 import { getDataEpoch } from '../../lib/home/data-epoch';
-import { getHome } from '../../lib/home/get-home';
+import { getHome, loadedHome } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -170,6 +174,11 @@ function removeSafetyCopies(userId: string): void {
     }
 }
 
+// The folders a per-home restore unpacks into beside the homes. Its job removes its own however it ends.
+function restoreStagingFolders(): string[] {
+    return readdirSync(join(TEST_DATA_DIR, 'home')).filter(isRestoreStagingName);
+}
+
 // What a restore refused before it takes the home leaves as it was: the loaded home, every safety copy beside it, and
 // the data epoch its tabs reload on.
 async function untakenState(userId: string) {
@@ -182,6 +191,7 @@ async function expectNotTaken(userId: string, before: Awaited<ReturnType<typeof 
     expect(after.home).toBe(before.home);
     expect(after.copies).toEqual(before.copies);
     expect(after.epoch).toBe(before.epoch);
+    expect(restoreStagingFolders()).toEqual([]);
 }
 
 // Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
@@ -722,12 +732,28 @@ describe('Backup restoreHome', () => {
         rmSync(join(getBackupsDir(), doctored), { force: true });
     });
 
+    test('a mount that cannot be put in place refuses the restore before the home is taken', async () => {
+        const before = await untakenState(target.id);
+        const spy = spyOn(materializeModule, 'materializeMount').mockImplementation(() => {
+            throw new ApiError(500, 'failed by the test');
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, `restore-materialize-${Date.now()}`)).rejects.toThrow(
+                'failed by the test',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+
+        await expectNotTaken(target.id, before);
+    });
+
     test('a failure after the move-aside leaves .failed-restore and puts the original back', async () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const epoch = getDataEpoch(target.id);
         const failedBefore = safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length;
-        // After the home folder moved in, so a new folder is in place when it throws.
-        const spy = spyOn(materializeModule, 'materializeMount').mockImplementation(() => {
+        // After the new home folder moved in, so a new folder is in place when it throws.
+        const spy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
             throw new ApiError(500, 'failed by the test');
         });
         try {
@@ -743,6 +769,7 @@ describe('Backup restoreHome', () => {
 
         expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
+        expect(restoreStagingFolders()).toEqual([]);
         // The mark is cleared, so the home serves again — from the folder that was put back.
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
@@ -1547,27 +1574,9 @@ describe('Backup round trip of a home that stores files by name', () => {
         await expectRealShapeServed(shape);
     });
 
-    // The restore as it runs when the backups folder is another disk than data/: the home cannot rename into place.
-    async function restoreAcrossDisks(artifact: string, userId: string, jobId: string): Promise<void> {
-        const homeDir = join(TEST_DATA_DIR, 'home', userId);
-        const rename = fsp.rename;
-        let crossed = false;
-        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
-            if (to !== homeDir) return rename(from, to);
-            crossed = true;
-            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
-        });
-        try {
-            await restoreHome(artifact, userId, jobId);
-        } finally {
-            spy.mockRestore();
-        }
-        expect(crossed).toBe(true);
-    }
-
     // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
     // of the home at the restore in a client that sorts by received date.
-    test('a restore puts a Maildir message back with its mtime, private, through a rename and through a copy', async () => {
+    test('a restore puts a Maildir message back with its mtime, private', async () => {
         const { user } = await realShapeHome();
         await deliverMail(user.email, 'Received long ago');
         const maildir = join(TEST_DATA_DIR, 'home', user.id, MAILDIR_ROOT);
@@ -1586,16 +1595,6 @@ describe('Backup round trip of a home that stores files by name', () => {
 
         await restoreHome(artifact, user.id, `restore-mtime-${Date.now()}`);
         expect(restored()).toEqual({ mtime: received, mode: 0o600, folderMode: 0o700 });
-
-        await restoreAcrossDisks(artifact, user.id, `restore-mtime-copy-${Date.now()}`);
-        expect(restored()).toEqual({ mtime: received, mode: 0o600, folderMode: 0o700 });
-    });
-
-    test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
-        const shape = await realShapeHome();
-        const { user } = shape;
-        await restoreAcrossDisks(await backUp(user.id), user.id, `restore-cross-device-${Date.now()}`);
-        expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
     });
 });
 
@@ -1693,6 +1692,81 @@ describe('Backup restore of one home judges, then takes the home', () => {
             spy.mockRestore();
         }
 
+        await expectNotTaken(user.id, before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // The archive is unpacked on the data disk beside the home, so the home is offline only for the swap's two renames.
+    test('the mounts are put in place beside the home while it serves, and the swap is two renames', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 95_000));
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        const jobId = `restore-renames-${Date.now()}`;
+        const stagingDir = buildRestoreStagingDir(homeDir, jobId);
+        const unpackedHome = join(stagingDir, buildHomeFolderName(user.id), 'home');
+        const serving = await getHome(user.id);
+        const materialize = materializeModule.materializeMount;
+        const staged: { served: boolean; mode: number; homeDir: string }[] = [];
+        const materializeSpy = spyOn(materializeModule, 'materializeMount').mockImplementation(
+            (dir, summary, stamp) => {
+                staged.push({
+                    served: loadedHome(user.id) === serving,
+                    mode: statSync(stagingDir).mode & 0o777,
+                    homeDir: dir,
+                });
+                return materialize(dir, summary, stamp);
+            },
+        );
+        const rename = nodeFs.renameSync;
+        const renames: string[][] = [];
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (from === homeDir || to === homeDir) renames.push([String(from), String(to)]);
+            rename(from, to);
+        });
+        try {
+            await restoreHome(artifact, user.id, jobId);
+        } finally {
+            materializeSpy.mockRestore();
+            renameSpy.mockRestore();
+        }
+
+        expect(staged).not.toHaveLength(0);
+        for (const mount of staged) expect(mount).toEqual({ served: true, mode: 0o700, homeDir: unpackedHome });
+        // A folder no home lookup reads as a home, on the disk of the homes it sits beside.
+        expect(dirname(stagingDir)).toBe(dirname(homeDir));
+        expect(basename(stagingDir)).toStartWith('.');
+        const [aside] = safetyCopies(user.id, PRE_RESTORE_SUFFIX);
+        expect(renames).toEqual([
+            [homeDir, join(dirname(homeDir), aside)],
+            [unpackedHome, homeDir],
+        ]);
+        expect(existsSync(stagingDir)).toBe(false);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+
+    test('a restore data/ has no room to unpack is refused before anything is unpacked', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 97_000));
+        const manifest = await readArtifactManifest(join(getBackupsDir(), artifact));
+        const before = await untakenState(user.id);
+        let checked: { needed: number; dir: string } | undefined;
+        const roomSpy = spyOn(pathsModule, 'roomShortfall').mockImplementation((what, needed, dir, where) => {
+            checked = { needed, dir };
+            return `${what} has no room by the test; ${where} is full`;
+        });
+        const extractSpy = spyOn(archiveModule, 'extractArtifact');
+        let extracted = -1;
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-room-${Date.now()}`)).rejects.toMatchObject({
+                status: 507,
+            });
+            extracted = extractSpy.mock.calls.length;
+        } finally {
+            roomSpy.mockRestore();
+            extractSpy.mockRestore();
+        }
+
+        expect(checked).toEqual({ needed: manifest.counts.bytes, dir: getDataRoot() });
+        expect(extracted).toBe(0);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
