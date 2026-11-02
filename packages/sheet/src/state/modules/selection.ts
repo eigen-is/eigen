@@ -260,46 +260,46 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyState: Context['copyS
 
     // The painter takes what a copy would, so a row an active filter hides stays out.
     const lines = carriedLines(ctx, copySheetId, [sourceRange], true);
-    const copyh = lines.rows.length;
-    const copyc = lines.columns.length;
-    if (copyh === 0 || copyc === 0) return;
+    const height = lines.rows.length;
+    const width = lines.columns.length;
+    if (height === 0 || width === 0) return;
 
     if (!ctx.selections) return;
     const last = ctx.selections[ctx.selections.length - 1];
-    const minh = last.row[0];
-    let maxh = last.row[1]; // Apply range: first and last rows
-    const minc = last.column[0];
-    let maxc = last.column[1]; // Apply range: first and last columns
+    const top = last.row[0];
+    let bottom = last.row[1];
+    const left = last.column[0];
+    let right = last.column[1];
 
-    if (minh === maxh && minc === maxc) {
-        // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
-        if (hasPartMC(ctx, minh, minh + copyh - 1, minc, minc + copyc - 1)) {
+    if (top === bottom && left === right) {
+        // One selected cell takes the whole copied block, unless the block would land over part of a merge.
+        if (hasPartMC(ctx, top, top + height - 1, left, left + width - 1)) {
             return;
         }
 
-        maxh = minh + copyh - 1;
-        maxc = minc + copyc - 1;
+        bottom = top + height - 1;
+        right = left + width - 1;
     }
 
-    const timesH = Math.ceil((maxh - minh + 1) / copyh); // Number of row copy groups
-    const timesC = Math.ceil((maxc - minc + 1) / copyc); // Number of column copy groups
+    const tileRows = Math.ceil((bottom - top + 1) / height);
+    const tileColumns = Math.ceil((right - left + 1) / width);
 
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
     // The painter paints the grid there is and never grows it, so the last tiles stop at its edge too.
-    const lastRow = Math.min(maxh + 1, flowdata.length);
-    const lastColumn = Math.min(maxc + 1, flowdata[0].length);
+    const lastRow = Math.min(bottom + 1, flowdata.length);
+    const lastColumn = Math.min(right + 1, flowdata[0].length);
 
     const tiles: CarryTile[] = [];
-    for (let th = 0; th < timesH; th += 1) {
-        for (let tc = 0; tc < timesC; tc += 1) {
-            const row = minh + th * copyh;
-            const column = minc + tc * copyc;
+    for (let th = 0; th < tileRows; th += 1) {
+        for (let tc = 0; tc < tileColumns; tc += 1) {
+            const row = top + th * height;
+            const column = left + tc * width;
             tiles.push({
                 row,
                 column,
-                height: Math.min(copyh, lastRow - row),
-                width: Math.min(copyc, lastColumn - column),
+                height: Math.min(height, lastRow - row),
+                width: Math.min(width, lastColumn - column),
             });
         }
     }
@@ -334,7 +334,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyState: Context['copyS
                 }
             }
             if (cell.v != null && value.ct?.fa != null) {
-                // Update the value modified by the format painter
+                // The painted number format changes what the kept value shows.
                 cell.m = numberDisplay(cell.v, value.ct.fa);
             }
             return cell;
@@ -342,27 +342,25 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyState: Context['copyS
         { links: false },
     );
 
-    const currFile = ctx.sheets[sheetIndex];
+    const sheet = ctx.sheets[sheetIndex];
 
     const copyIndex = getSheetIndex(ctx, copySheetId);
     if (copyIndex == null) return;
-    const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(ctx.sheets[copyIndex].conditionalFormatRules);
-    if (isNil(ruleArr) || ruleArr.length === 0) return;
+    const sourceRules: ConditionalFormatRule[] | undefined = cloneDeep(ctx.sheets[copyIndex].conditionalFormatRules);
+    if (isNil(sourceRules) || sourceRules.length === 0) return;
 
-    const cdformat: ConditionalFormatRule[] = cloneDeep(currFile.conditionalFormatRules) ?? [];
-    const applyRangeBox: SingleRange = { row: [minh, maxh], column: [minc, maxc] };
+    const rules: ConditionalFormatRule[] = cloneDeep(sheet.conditionalFormatRules) ?? [];
+    const painted: SingleRange = { row: [top, bottom], column: [left, right] };
 
-    for (const rule of ruleArr) {
-        const overlaps = rule.cellrange.some(
-            (cr) => cfSplitRange(cr, sourceRange, applyRangeBox, 'operatePart').length > 0,
-        );
+    for (const rule of sourceRules) {
+        const overlaps = rule.cellrange.some((cr) => cfSplitRange(cr, sourceRange, painted, 'operatePart').length > 0);
         if (overlaps) {
             // Fresh per-rule box so a later mutation on one rule can't bleed into the others.
-            cdformat.push(withCfRanges(rule, [{ row: [...applyRangeBox.row], column: [...applyRangeBox.column] }]));
+            rules.push(withCfRanges(rule, [{ row: [...painted.row], column: [...painted.column] }]));
         }
     }
 
-    currFile.conditionalFormatRules = cdformat;
+    sheet.conditionalFormatRules = rules;
 }
 
 // shift + arrow key / ctrl + shift + arrow key functionality
@@ -1108,6 +1106,21 @@ export function copiedCellText(d: CellMatrix, r: number, c: number): string {
     return String(value ?? getCellValue(r, c, d) ?? '');
 }
 
+// The columns of each copied row the copy's table writes a td for. A merge writes one td, so the other cells it covers
+// have none, and a merge whose first row a filter left out is written as plain cells. A paste reads the same list to
+// tell the tab's own copy from another table.
+export function copiedTdColumns(d: CellMatrix, rows: readonly number[], columns: readonly number[]): number[][] {
+    const anchors = new Set<string>();
+    return rows.map((r) =>
+        columns.filter((c) => {
+            const mc = d[r]?.[c]?.mc;
+            if (mc?.rs != null) anchors.add(`${r}_${c}`);
+            else if (mc && anchors.has(`${mc.r}_${mc.c}`)) return false;
+            return true;
+        }),
+    );
+}
+
 // General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
 function copiedNumberText(cell: Cell): string | undefined {
     if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
@@ -1146,11 +1159,11 @@ export function rangeValueToClipboard(
     let colgroup = '';
     let body = '';
     const text: string[][] = [];
-    // The merges whose first cell the table holds. A merge whose first row a filter left out is written as plain cells.
-    const anchors = new Set<string>();
+    const tdColumns = copiedTdColumns(d, rows, columns);
 
     for (let i = 0; i < rows.length; i += 1) {
         const r = rows[i];
+        const tds = new Set(tdColumns[i]);
 
         body += '<tr>';
         const textRow: string[] = [];
@@ -1178,8 +1191,7 @@ export function rangeValueToClipboard(
                     const rs = carriedSpan(rows, i, rows.length - i, r, finiteOr(cell.mc.rs, 1));
                     const cs = carriedSpan(columns, j, columns.length - j, c, finiteOr(cell.mc.cs, 1));
                     span = `rowspan="${rs}" colspan="${cs}"`;
-                    anchors.add(`${r}_${c}`);
-                } else if (cell.mc && anchors.has(`${cell.mc.r}_${cell.mc.c}`)) {
+                } else if (!tds.has(c)) {
                     textRow.push('');
                     continue;
                 }

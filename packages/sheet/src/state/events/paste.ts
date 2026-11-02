@@ -22,64 +22,10 @@ import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } fro
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, copiedCellText, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, copiedCellText, copiedTdColumns, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
 import { getSheetIndex, isAllowEdit } from '../utils';
-
-// One side of a cut and paste: the sheet and the range the cells left or landed on.
-type CutPasteSide = { sheetId: string; range: SingleRange };
-
-// After a cut has landed: evaluate the moved formulas where they now live, queue the formulas that read either
-// range, and lay the grid out again when the paste grew it. The target is the sheet on screen.
-function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, grew: boolean) {
-    const d = getFlowdata(ctx);
-    if (!d) return;
-
-    // trigger linked cell data updates
-    const execF_rc: Record<string, number> = {};
-    ctx.formulaCache.execFunctionExist = [];
-    for (let r = source.range.row[0]; r <= source.range.row[1]; r += 1) {
-        for (let c = source.range.column[0]; c <= source.range.column[1]; c += 1) {
-            setFormulaCellInfo(ctx, { r, c, id: source.sheetId });
-            if (`${r}_${c}_${source.sheetId}` in execF_rc) {
-                continue;
-            }
-
-            execF_rc[`${r}_${c}_${source.sheetId}`] = 0;
-            ctx.formulaCache.execFunctionExist.push({ r, c, id: source.sheetId });
-        }
-    }
-
-    // A moved formula carries its old value; evaluate it where it now lives.
-    const resolver = createContextResolver(ctx);
-    for (let r = target.range.row[0]; r <= target.range.row[1]; r += 1) {
-        for (let c = target.range.column[0]; c <= target.range.column[1]; c += 1) {
-            const cell = d[r]?.[c];
-            if (cell?.f != null) {
-                [, cell.v] = execfunction(ctx, cell.f, r, c, target.sheetId, undefined, false, false, resolver);
-                cell.m = numberDisplay(cell.v, cell.ct?.fa);
-            }
-            setFormulaCellInfo(ctx, { r, c, id: target.sheetId });
-            if (`${r}_${c}_${target.sheetId}` in execF_rc) {
-                continue;
-            }
-
-            execF_rc[`${r}_${c}_${target.sheetId}`] = 0;
-            ctx.formulaCache.execFunctionExist.push({ r, c, id: target.sheetId });
-        }
-    }
-
-    if (grew) updateContextWithSheetData(ctx, d);
-
-    ctx.selections = [{ row: target.range.row, column: target.range.column }];
-
-    ctx.formulaCache.execFunctionExist.reverse();
-    execFunctionGroup(ctx, null, null, null, null, d);
-    ctx.formulaCache.execFunctionGlobalData = null;
-
-    storeSheetSelections(ctx);
-}
 
 // The HTML paste path's per-cell borders, keyed `${row}_${col}` relative to the pasted block.
 function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Record<string, CellBorderSides>) {
@@ -103,7 +49,7 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
         const minc = ctx.selections[0].column[0]; // first and last column of apply range
         const maxc = minc + copyc - 1;
 
-        // return with a warning if the apply range contains partially merged cells
+        // A paste never lands over part of a merge.
         if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
             return;
         }
@@ -264,37 +210,37 @@ function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
     // A cut moves every cell it took, a row a filter hides too, as Excel does.
     const lines = carriedLines(ctx, copySheetId, [sourceRange], false);
 
-    const copyh = lines.rows.length;
-    const copyc = lines.columns.length;
+    const height = lines.rows.length;
+    const width = lines.columns.length;
 
     const last = ctx.selections?.[ctx.selections.length - 1];
     if (!last || last.row_focus == null || last.column_focus == null) return;
 
-    const minh = last.row_focus;
-    const maxh = minh + copyh - 1; // first and last row of apply range
-    const minc = last.column_focus;
-    const maxc = minc + copyc - 1; // first and last column of apply range
+    const top = last.row_focus;
+    const bottom = top + height - 1;
+    const left = last.column_focus;
+    const right = left + width - 1;
 
     // A cut never lands over part of a merge.
-    if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
+    if (hasPartMC(ctx, top, bottom, left, right)) {
         return;
     }
 
     const sheet = getSheet(ctx);
     const d = getFlowdata(ctx);
     if (!d) return;
-    const addr = copyh + minh - d.length;
-    const addc = copyc + minc - d[0].length;
-    const grew = addr > 0 || addc > 0;
-    if (grew) expandRowsAndColumns(ctx, addr, addc);
+    const rowsToAdd = bottom + 1 - d.length;
+    const columnsToAdd = right + 1 - d[0].length;
+    const grew = rowsToAdd > 0 || columnsToAdd > 0;
+    if (grew) expandRowsAndColumns(ctx, rowsToAdd, columnsToAdd);
 
-    const tile = { row: minh, column: minc, height: copyh, width: copyc };
+    const tile = { row: top, column: left, height, width };
     carryCells(ctx, lines, [tile], ({ source }) => source, { cut: true });
 
-    last.row = [minh, maxh];
-    last.column = [minc, maxc];
+    last.row = [top, bottom];
+    last.column = [left, right];
 
-    const targetRange = { row: [minh, maxh], column: [minc, maxc] };
+    const targetRange = { row: [top, bottom], column: [left, right] };
     if (ctx.currentSheetId !== copySheetId) {
         // A rule over cut cells splits: the part over them moves to the target, the rest stays.
         const sourceRules = cloneDeep(copySheet.conditionalFormatRules) ?? [];
@@ -322,12 +268,32 @@ function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
         );
     }
 
-    postPasteCut(
-        ctx,
-        { sheetId: copySheetId, range: sourceRange },
-        { sheetId: ctx.currentSheetId, range: targetRange },
-        grew,
-    );
+    // The formulas that read either range recompute, each queued once. A moved formula carries its old value, so it is
+    // evaluated where it now lives.
+    const resolver = createContextResolver(ctx);
+    const queued = new Map<string, { r: number; c: number; id: string }>();
+    const queue = (id: string, { row, column }: SingleRange, evaluate: boolean) => {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            for (let c = column[0]; c <= column[1]; c += 1) {
+                const cell = evaluate ? d[r]?.[c] : undefined;
+                if (cell?.f != null) {
+                    [, cell.v] = execfunction(ctx, cell.f, r, c, id, undefined, false, false, resolver);
+                    cell.m = numberDisplay(cell.v, cell.ct?.fa);
+                }
+                setFormulaCellInfo(ctx, { r, c, id });
+                if (!queued.has(`${r}_${c}_${id}`)) queued.set(`${r}_${c}_${id}`, { r, c, id });
+            }
+        }
+    };
+    queue(copySheetId, sourceRange, false);
+    queue(ctx.currentSheetId, targetRange, true);
+
+    if (grew) updateContextWithSheetData(ctx, d);
+    ctx.selections = [{ row: targetRange.row, column: targetRange.column }];
+    ctx.formulaCache.execFunctionExist = [...queued.values()].reverse();
+    execFunctionGroup(ctx, null, null, null, null, d);
+    ctx.formulaCache.execFunctionGlobalData = null;
+    storeSheetSelections(ctx);
 }
 
 function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) {
@@ -487,19 +453,7 @@ function isOwnCopyTable(ctx: Context, html: string, copyState: NonNullable<Conte
     const { rows, columns } = carriedLines(ctx, copyState.dataSheetId, copyState.copyRange, !ctx.pasteIsCut);
     if (table.length !== rows.length) return false;
 
-    // The columns of each row that have a td. A merge writes one td, so the cells it covers have none. A merge whose
-    // first row a filter left out has a td for each of its cells.
-    const anchors = new Set<string>();
-    const written = rows.map((r) => {
-        const tdColumns: number[] = [];
-        for (const c of columns) {
-            const mc = d[r]?.[c]?.mc;
-            if (mc?.rs != null) anchors.add(`${r}_${c}`);
-            else if (mc && anchors.has(`${mc.r}_${mc.c}`)) continue;
-            tdColumns.push(c);
-        }
-        return tdColumns;
-    });
+    const written = copiedTdColumns(d, rows, columns);
     if (written.some((tdColumns, i) => tdColumns.length !== table[i].length)) return false;
 
     return rows.every((r, i) => written[i].every((c, j) => table[i][j] === escapeHtml(copiedCellText(d, r, c)).trim()));
