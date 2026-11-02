@@ -1148,6 +1148,17 @@ describe('text boxes as boxes', () => {
         expect(boxes.map((box) => box.attrs?.['layout'])).toEqual(['wrap-left', 'wrap-right']);
     });
 
+    // Word writes mso-position-horizontal:absolute for a box placed by its margin, which names no side.
+    test('a VML box at an absolute horizontal position wraps on the side its center is on', async () => {
+        const at = (left: string) =>
+            vmlBox(
+                PLACED.replace('margin-left:30pt', `margin-left:${left};mso-position-horizontal:absolute`),
+                '<w10:wrap type="square"/>',
+            );
+        const boxes = await vmlBoxesOf(at('0pt'), at('350pt'));
+        expect(boxes.map((box) => box.attrs?.['layout'])).toEqual(['wrap-left', 'wrap-right']);
+    });
+
     test("a VML box grows by its textbox's mso-fit-shape-to-text and aligns its text by v-text-anchor", async () => {
         const boxes = await vmlBoxesOf(
             vmlBox(`${PLACED};v-text-anchor:middle`, '', ' style="mso-fit-shape-to-text:t"'),
