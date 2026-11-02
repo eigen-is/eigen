@@ -1651,7 +1651,9 @@ for (const [what, archive] of [
                 liveS3Mount(dir, {});
                 const result = await stage(dir, basename(archive()));
                 expect(result.code).toBe(0);
-                expect(result.stdout).toContain('1 pending upload');
+                expect(result.stdout).toContain(
+                    '1 pending upload(s) in the archive are not replayed: data/ here already uploaded them',
+                );
                 const staged = stagedS3Mount(dir);
                 expect(existsSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName))).toBe(false);
                 expect(existsSync(join(staged, PATHS.DRIVE.DATA_DIR))).toBe(false);

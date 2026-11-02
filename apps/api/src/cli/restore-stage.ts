@@ -163,7 +163,7 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
         console.log(
             glyphLine(
                 'warn',
-                `${staged.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
+                `${staged.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded them`,
             ),
         );
     }

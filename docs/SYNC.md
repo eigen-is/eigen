@@ -46,7 +46,7 @@ Comments and tests name these by number ("invariant 7").
 
 `pending_uploads` lives in `metadata.db`, so a restart or a Home reopen resumes every un-acked upload. `reconcile` re-enqueues each row whose staged copy exists and drops, with a log line, each row whose copy is gone. It deletes staged files no row names, which a crash between staging and the row insert leaves behind.
 
-A row stores the staged copy's basename, resolved against the mount's current `staging/` folder, and passes an absolute legacy value through. So moving the data folder to another host, a per-home restore or a changed bind mount keeps every pending row. A whole-server restore (`./eigen restore`) replays the archive's pending uploads unless the live mount already uploaded, replaced or canceled them ([BACKUP.md](BACKUP.md#an-s3-mount-keeps-its-bucket-as-it-is)).
+A row stores the staged copy's basename, resolved against the mount's current `staging/` folder, and passes an absolute legacy value through. So moving the data folder to another host, a per-home restore or a changed bind mount keeps every pending row. A whole-server restore (`./eigen restore`) replays the archive's pending uploads, except those the live mount uploaded since ([BACKUP.md](BACKUP.md#an-s3-mount-keeps-its-bucket-as-it-is)).
 
 A Home that idles out during an outage keeps its queued bytes on local disk until it is next opened. That is the same durability as the temp files: losing the host disk in that window loses them.
 
