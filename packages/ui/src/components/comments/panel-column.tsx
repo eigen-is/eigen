@@ -1,3 +1,10 @@
+// A document's comments or activity pane, one component for every viewport: a Column whose toolbar carries the
+// title, the filter and the close button, so the panels below stay plain bodies. Column gives the back arrow on
+// mobile and the fixed-width sibling on desktop. Mount it outside any <ColumnLayout mobileColumn="…">: a Column
+// whose id doesn't match hides itself, so a host that wraps this one silently gets no pane at all.
+
+import { useAuth } from '@workspace/lib/auth';
+import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import type { useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { ActiveComments, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
@@ -18,11 +25,6 @@ import { CommentPanel } from './comment-panel';
 // Activity-only hosts (stickies) never render the comments body.
 const NO_ACTIVE_COMMENTS: ActiveComments = { ids: new Set(), anchorTexts: new Map() };
 
-// The comments/activity pane, one component for every viewport: a Column whose toolbar carries the
-// title, the filter and the close affordance, so the panels below stay pure bodies. Column itself
-// gives the back arrow on mobile and the fixed-width sibling on desktop.
-// Mount it OUTSIDE any <ColumnLayout mobileColumn="…"> — a Column whose id doesn't match self-hides,
-// so a host that wraps this one gets no pane at all, silently.
 type PanelColumnProps = {
     activePanel: DocumentPanel;
     onClose: () => void;
@@ -55,6 +57,8 @@ export function PanelColumn({
     onAddComment,
 }: PanelColumnProps) {
     const { isMobile } = useLayout();
+    const { user } = useAuth();
+    const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
     const showComments = activePanel === 'comments';
 
     return (
@@ -90,6 +94,7 @@ export function PanelColumn({
                     entries={entries}
                     activeCardIds={activeComments.ids}
                     anchorTexts={activeComments.anchorTexts}
+                    unreadChatNames={unreadChatNames}
                     currentUserEmail={currentUserEmail}
                     filter={filter}
                     className="w-full border-l-0"

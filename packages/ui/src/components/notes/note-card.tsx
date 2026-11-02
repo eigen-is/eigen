@@ -1,6 +1,7 @@
 // A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
-// description, how far its checklist is done, and a footer with replies, attachments and the assignee.
-// Clicking it is the caller's to handle, usually by opening NoteCardDialog.
+// description, how far its checklist is done, a footer with replies, attachments and the assignee, and a dot
+// while its thread holds an unread notification. Clicking it is the caller's to handle, usually by opening
+// NoteCardDialog.
 
 import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
 import { countTaskItems } from '@workspace/lib/html';
@@ -10,6 +11,7 @@ import type { HTMLAttributes } from 'react';
 import { Card, CardContent } from '../card';
 import { MemberAvatar } from '../comments/member-avatar';
 import { Progress } from '../progress';
+import { UnreadDot } from '../unread-dot';
 
 type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     title: string;
@@ -17,6 +19,7 @@ type NoteCardProps = Omit<HTMLAttributes<HTMLDivElement>, 'title' | 'color'> & {
     color?: string | null;
     resolved?: boolean;
     replyCount?: number;
+    unread?: boolean;
     coverThumbnailUrl?: string;
     attachmentCount?: number;
     assigneeEmail?: string | null;
@@ -29,6 +32,7 @@ export function NoteCard({
     color,
     resolved,
     replyCount,
+    unread,
     coverThumbnailUrl,
     attachmentCount,
     assigneeEmail,
@@ -71,6 +75,7 @@ export function NoteCard({
             {...rest}
         >
             <CardContent className="p-3 text-sm relative">
+                {unread && <UnreadDot />}
                 {coverThumbnailUrl && (
                     <img
                         src={coverThumbnailUrl}
