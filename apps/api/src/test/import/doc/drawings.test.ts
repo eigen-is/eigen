@@ -603,6 +603,50 @@ describe('size', () => {
             [null, null],
         ]);
     });
+
+    describe('in a group', () => {
+        const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+        const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+        // Word writes useLocalDpi in the blip's own a:extLst, as an a:ext before the picture's a:xfrm.
+        const LOCAL_DPI =
+            '<a:extLst><a:ext uri="{28A0092B-C50C-407E-A947-70E740481C1C}"><a14:useLocalDpi xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" val="0"/></a:ext></a:extLst>';
+        const pic = (cx: number, cy: number) =>
+            `<pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4">${LOCAL_DPI}</a:blip></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></pic:spPr></pic:pic>`;
+        const box = (cx: number, cy: number) =>
+            `<wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Beside it</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>`;
+        const group = (cx: number, cy: number, shapes: string) =>
+            `<w:r><w:drawing><wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9" name="Group 9"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}">${shapes}</wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const sizesOf = async (body: string) =>
+            nodesOfType((await importDocxBody(body)).json, 'figure').map((node) => [
+                node.attrs?.['width'],
+                node.attrs?.['height'],
+            ]);
+
+        test("a picture beside a text box keeps its own size, not the group's", async () => {
+            expect(
+                await sizesOf(paragraph(group(6000000, 571500, `${pic(381000, 381000)}${box(5000000, 381000)}`))),
+            ).toEqual([[40, 40]]);
+        });
+
+        test('each of two pictures keeps its own size', async () => {
+            expect(
+                await sizesOf(paragraph(group(1143000, 381000, `${pic(381000, 381000)}${pic(762000, 190500)}`))),
+            ).toEqual([
+                [40, 40],
+                [80, 20],
+            ]);
+        });
+
+        // govuk-Shigellosis_interim_enhanced_surveil.docx: a 153 by 104 px logo grouped with a 484 px title box, the
+        // group 630 by 92 px.
+        test("the GOV.UK form's logo keeps its shape beside its title", async () => {
+            const [[width, height] = []] = await sizesOf(
+                paragraph(group(6000751, 878205, `${pic(1454376, 992778)}${box(4612074, 863566)}`)),
+            );
+            expect([width, height]).toEqual([153, 104]);
+            expect(Number(width) / Number(height)).toBeCloseTo(1.46, 1);
+        });
+    });
 });
 
 // VML's office attributes are read by their namespace, whatever prefix binds it.

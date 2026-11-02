@@ -67,6 +67,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const figures: JSONContent[] = [];
+        const lone = loneGraphic(frame);
         for (const picture of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg, raster] = blipEmbeds(blip);
@@ -83,7 +84,11 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 if (svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
                 continue;
             }
-            const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
+            // A picture alone in its drawing is drawn at the drawing's extent. One in a group or a canvas has its own,
+            // in its spPr: the blip's extLst holds an a:ext too, before it.
+            const spPr = xmlChild(picture, PIC_NS, 'spPr');
+            const xfrm = spPr && xmlChild(spPr, A_NS, 'xfrm');
+            const ext = picture === lone ? extent : xfrm && xmlChild(xfrm, A_NS, 'ext');
             const { cx, cy } = extentOf(ext);
             const size = cx ? pictureSize(cx / EMU_PER_PX, cy ? cy / EMU_PER_PX : null, room) : NO_SIZE;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, ...size, ...layout } });
