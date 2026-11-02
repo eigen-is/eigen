@@ -9,7 +9,7 @@ import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import type { SheetExtent } from './dependency-index';
-import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
+import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
@@ -71,13 +71,13 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks), and
+// `maxDependencySlots` bounds what the formulas' ranges cost the dependency index (dependencySlots), and
 // `maxCellsRead` what their evaluation reads (each range read, cut to its sheet, costs its cells): past either the
 // recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
 // both for an untrusted workbook; without them there is no bound.
 export function recalcSheets(
     sheets: readonly Sheet[],
-    { maxDependencyBlocks = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
+    { maxDependencySlots = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
@@ -97,7 +97,7 @@ export function recalcSheets(
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
-    let blocks = 0;
+    let slots = 0;
     const calcChainBySheet = new Map<string, CalcChainEntry[]>();
     for (const w of working) {
         const chain: CalcChainEntry[] = [];
@@ -129,8 +129,8 @@ export function recalcSheets(
                     color: 'w',
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
-                blocks += dependencyBlocks(indexed, extentOf);
-                if (blocks > maxDependencyBlocks) throw new RangeError('Formula ranges past the dependency budget');
+                slots += dependencySlots(indexed, extentOf);
+                if (slots > maxDependencySlots) throw new RangeError('Formula ranges past the dependency budget');
                 depIndex.set(key, indexed, extentOf);
             }
         }

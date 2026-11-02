@@ -414,8 +414,8 @@ describe('engine/recalc — recalcSheets', () => {
         const rows = Array.from({ length: 129 }, (): (Cell | null)[] => [null, null, null, null]);
         rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
         const sheets = [sheet('s1', 'Sheet1', rows)];
-        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+        expect(() => recalcSheets(sheets, { maxDependencySlots: 2 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencySlots: 3 })[0].data![0][1]?.v).toBe(1);
     });
 
     test('a range down every row of its sheet costs the budget one per column', () => {
@@ -423,8 +423,8 @@ describe('engine/recalc — recalcSheets', () => {
         const data = Array.from({ length: 6_400 }, (): (Cell | null)[] => [num(1), null]);
         const report = Array.from({ length: 10 }, (): (Cell | null)[] => [formula('=SUM(Data!A:A)')]);
         const sheets = [sheet('d', 'Data', data), sheet('r', 'Report', report)];
-        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 9 })).toThrow(RangeError);
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 10 })[1].data?.[9][0]?.v).toBe(6_400);
+        expect(() => recalcSheets(sheets, { maxDependencySlots: 9 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencySlots: 10 })[1].data?.[9][0]?.v).toBe(6_400);
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {
@@ -454,7 +454,7 @@ describe('engine/recalc — recalcSheets', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=SUM(B1:XFD1048576)'), num(5), formula('=B1+1')]], { row: 1, column: 3 }),
         ];
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 1 })[0].data![0][0]?.v).toBe(11);
+        expect(recalcSheets(sheets, { maxDependencySlots: 1 })[0].data![0][0]?.v).toBe(11);
     });
 
     test('output carries a populated calcChain for formula cells', () => {

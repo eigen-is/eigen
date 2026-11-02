@@ -52,7 +52,7 @@ export function cellsOf(
 
 // The slots set lists a formula's ranges in, a single cell costing none: what recalc charges an untrusted workbook's
 // formulas before the index holds them.
-export function dependencyBlocks(deps: readonly FormulaDependency[], extentOf: ExtentOf): number {
+export function dependencySlots(deps: readonly FormulaDependency[], extentOf: ExtentOf): number {
     let slots = 0;
     for (const dep of deps) {
         const cells = cellsOf(dep);
@@ -161,7 +161,7 @@ export class DependencyIndex {
 
         const pointKeys = this.points.get(sheetId)?.get(packed);
         const nearby = [
-            this.buckets.blocks.get(sheetId)?.get(blockOf(r, c)),
+            this.buckets.blocks.get(sheetId)?.get(Math.floor(r / ROW_BLOCK) * BLOCK_PACK + Math.floor(c / COL_BLOCK)),
             this.buckets.columns.get(sheetId)?.get(c),
             this.buckets.rows.get(sheetId)?.get(r),
         ];
@@ -224,8 +224,4 @@ function forEachSlot(entry: RangeEntry, layout: Layout, fn: (slot: number) => vo
             }
         }
     }
-}
-
-function blockOf(r: number, c: number): number {
-    return Math.floor(r / ROW_BLOCK) * BLOCK_PACK + Math.floor(c / COL_BLOCK);
 }

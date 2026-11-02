@@ -1,5 +1,5 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import { dependencyBlocks } from '../../../engine/dependency-index';
+import { dependencySlots } from '../../../engine/dependency-index';
 import { extractDependencies } from '../../../engine/recalc';
 import type { Cell, FormulaDependency } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -151,7 +151,7 @@ describe('setFormulaCellInfo — lookups into whole columns', () => {
 
         const [[, deps, extentOf]] = set.mock.calls;
         expect(extentOf('d')).toEqual({ rows: 6_400, columns: 2 });
-        expect(dependencyBlocks(deps, extentOf)).toBe(2);
+        expect(dependencySlots(deps, extentOf)).toBe(2);
         expect(ctx.formulaCache.dependencyIndex.dependentsOf('d', 6_399, 0)).toEqual(['r0c1ir']);
     });
 });

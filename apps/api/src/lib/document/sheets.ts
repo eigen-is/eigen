@@ -32,10 +32,10 @@ import type * as Y from 'yjs';
 // What the server's recalc lets an untrusted workbook's formulas cost. Past either bound the recalc fails like any
 // other, and the sheets keep the values they hold.
 export const SERVER_RECALC_BUDGET = {
-    // Counted in the slots the dependency index lists each range in (dependencyBlocks), the range cut to its sheet: a
+    // Counted in the slots the dependency index lists each range in (dependencySlots), the range cut to its sheet: a
     // 64 × 16 block it meets, or a column when it runs down every row of its sheet. No workbook of the 1,062-file
     // corpus needs more than 68.8 million (3.3 s), and this is four times that.
-    maxDependencyBlocks: 280_000_000,
+    maxDependencySlots: 280_000_000,
     // The cells the evaluation of its ranges reads. The most a corpus workbook reads that recalcs in under 10 s is
     // 30 million (9.9 s), just under this. 2,000 COUNTIFs over A1:Z1048576 fail at it in 17 s, well inside an export's
     // deadline.
