@@ -13,6 +13,7 @@ const { ColumnHeader } = await import('../../../components/SheetOverlay/ColumnHe
 const { defaultContext, defaultSettings } = await import('../../../state');
 type GlobalCache = import('../../../state').GlobalCache;
 type Context = import('../../../state').Context;
+type SheetConfig = import('../../../state').SheetConfig;
 
 const globalCache: GlobalCache = {
     undoList: [],
@@ -38,12 +39,11 @@ afterEach(async () => {
     document.body.innerHTML = '';
 });
 
-function contextWith(config: Context['config']): Context {
+function contextWith(config: SheetConfig): Context {
     return {
         ...defaultContext(refs),
         sheets: [{ id: 'id_1', name: 'sheet', order: 0, config, data: [[null, null]] }],
         currentSheetId: 'id_1',
-        config,
         visibledatacolumn: [100, 200],
         visibledatarow: [20],
     };
