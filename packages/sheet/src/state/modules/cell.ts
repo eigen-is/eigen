@@ -5,8 +5,15 @@
 // move or the format painter.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { cellFontName, columnIndexToLabel, compareValidationIds, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import type { BorderSide, MergeCell, SheetValidation } from '@workspace/lib/sheets';
+import {
+    cellFontName,
+    coalescedRanges,
+    columnIndexToLabel,
+    compareValidationIds,
+    rangesOverlap,
+    SHEET_DEFAULT_FONT_SIZE,
+} from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
@@ -1040,7 +1047,7 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
 // ranges comes along, hidden ones too, as in Excel. With leaveFiltered, the rows an active filter hides stay out,
 // because Excel copies only what a filter shows. Ranges side by side share their rows, and ranges above each
 // other share their columns.
-export type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
+type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
 
 export function carriedLines(
     ctx: Context,
@@ -1097,15 +1104,18 @@ export function carryCells(
     // A spread would overflow the stack on a whole column, so the bounds are folded.
     const lowest = (line: number, next: number) => Math.min(line, next);
     const highest = (line: number, next: number) => Math.max(line, next);
-    const borders = getBorderInfoCompute(ctx, lines.sheetId, [
-        rows.reduce(lowest),
-        rows.reduce(highest),
-        columns.reduce(lowest),
-        columns.reduce(highest),
-    ]);
-    // A rule lands over the rules before it, so they go in the lookup's order, and where two overlap the landed cell
-    // takes the rule its source cell shows.
-    const rules = Object.entries(cloneDeep(from.dataValidations) ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
+    const [top, bottom] = [rows.reduce(lowest), rows.reduce(highest)];
+    const [left, right] = [columns.reduce(lowest), columns.reduce(highest)];
+    const block = { row: [top, bottom], column: [left, right] };
+    const borders = getBorderInfoCompute(ctx, lines.sheetId, [top, bottom, left, right]);
+    // Only the rules over the carried block land. A rule lands over the rules before it, so they go in the lookup's
+    // order, and where two overlap the landed cell takes the rule its source cell shows.
+    const rules: [string, SheetValidation][] = [];
+    for (const [id, { ranges, rule }] of Object.entries(from.dataValidations ?? {})) {
+        const near = ranges.filter((range) => rangesOverlap(range, block));
+        if (near.length > 0) rules.push([id, cloneDeep({ ranges: near, rule })]);
+    }
+    rules.sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
     if (cut) {
@@ -1118,21 +1128,20 @@ export function carryCells(
                 delete from.hyperlink?.[`${r}_${c}`];
             }
         }
-        clearValidations(from, {
-            row: [rows.reduce(lowest), rows.reduce(highest)],
-            column: [columns.reduce(lowest), columns.reduce(highest)],
-        });
+        clearValidations(from, block);
     }
 
+    // A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first, so a block
+    // pasted down a column clears the rules once.
+    const landing = tiles.map(({ row, column, height, width }) => ({
+        row: [row, row + height - 1],
+        column: [column, column + width - 1],
+    }));
+    for (const area of coalescedRanges(landing)) clearValidations(to, area);
     const cfg = (to.config ??= {});
     const merge = (cfg.merge ??= {});
     const borderInfo = (cfg.borderInfo ??= {});
     for (const tile of tiles) {
-        // A source cell without a rule takes the destination's away, as Excel does.
-        clearValidations(to, {
-            row: [tile.row, tile.row + tile.height - 1],
-            column: [tile.column, tile.column + tile.width - 1],
-        });
         // Where each merge's first cell landed, keyed by where it was, for the merge's other cells to point at.
         const anchors: Record<string, [number, number]> = {};
         for (let i = 0; i < tile.height; i += 1) {
