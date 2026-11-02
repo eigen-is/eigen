@@ -131,6 +131,8 @@ The copy route (`POST /drive/:ownerId/:mountId/path/:pathId/copy`) dedups the de
 
 The copy route and WebDAV COPY send nothing while a deep tree copies, so both lift the server's 200 s `idleTimeout` for their request (`server.timeout(request, 0)`). Otherwise the client would see an empty reply and retry into a duplicate tree.
 
+The client copies a batch with one route call per item (`copyEach` in `packages/lib/src/core/drive/hooks/writes.ts`). When only part of it copies, `useCopyPaths` and `useCopyToFolder` throw `PartialCopyError` with the copies that landed and the sources that failed, and a dialog retries only the failed ones. The route gives each copy a free name, so a source sent again would land a second time. When nothing copies, the hooks throw the first server error instead, so the toast says why.
+
 A move never crosses mounts. It would change the row's owner, mount and id, and that breaks shares, links and history.
 
 ## Slow operations log in production too

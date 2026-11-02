@@ -6,9 +6,10 @@ import { useIsGuest } from '@workspace/lib/auth';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { downloadDriveFile } from '@workspace/lib/download';
 import {
-    useCopyPath,
+    PartialCopyError,
+    useCopyPaths,
+    useCopyToFolder,
     useDeletePaths,
-    useDuplicatePath,
     useIsEffectiveOwnerOf,
     useMovePath,
 } from '@workspace/lib/drive';
@@ -51,8 +52,8 @@ export function useDriveLayoutDialogs({
 }: UseDriveLayoutDialogsOptions) {
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
-    const copyPath = useCopyPath();
-    const duplicatePath = useDuplicatePath();
+    const { mutateAsync: copyToFolder } = useCopyToFolder();
+    const { mutate: copyPaths } = useCopyPaths();
     const deletePathsMutation = useDeletePaths();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
@@ -116,9 +117,23 @@ export function useDriveLayoutDialogs({
 
     const handleDuplicate = useCallback(
         (items: DrivePath[]) => {
-            if (items.length) duplicatePath.mutate({ items });
+            // A root has no folder to hold its copy.
+            const copies = items.flatMap((source) =>
+                source.parentId
+                    ? [
+                          {
+                              source,
+                              targetOwnerId: source.ownerId,
+                              targetMountId: source.mountId,
+                              targetParentId: source.parentId,
+                              name: `Copy of ${source.name}`,
+                          },
+                      ]
+                    : [],
+            );
+            if (copies.length) copyPaths(copies);
         },
-        [duplicatePath],
+        [copyPaths],
     );
 
     const handlePickDestination = useCallback(
@@ -133,15 +148,27 @@ export function useDriveLayoutDialogs({
                     items.map((item) => movePath.mutateAsync({ pathId: item.id, targetParentId: location.folderId })),
                 );
             } else {
-                await copyPath.mutateAsync({
+                await copyToFolder({
                     items,
                     targetOwnerId: location.ownerId,
                     targetMountId: location.mountId,
                     targetParentId: location.folderId,
+                }).catch((error) => {
+                    // The picker stays open, and a retry sends only the failures, or what copied would land twice.
+                    if (error instanceof PartialCopyError) dialogs.copyMove.openDialog(error.failed, 'copy');
+                    throw error;
                 });
             }
         },
-        [dialogs.copyMove.items, dialogs.copyMove.mode, ownerId, mountId, movePath, copyPath],
+        [
+            dialogs.copyMove.items,
+            dialogs.copyMove.mode,
+            dialogs.copyMove.openDialog,
+            ownerId,
+            mountId,
+            movePath,
+            copyToFolder,
+        ],
     );
 
     const handleDownloadPath = useCallback((path: DrivePath) => {
