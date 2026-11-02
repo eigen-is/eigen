@@ -20,6 +20,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import * as materializeModule from '../../lib/backup/materialize-mount';
 import * as pathsModule from '../../lib/backup/paths';
 import {
     ARCHIVE_AVATAR_DIR,
@@ -160,6 +161,20 @@ async function openEventStream(userId: string) {
 
 function safetyCopies(userId: string, suffix: string): string[] {
     return readdirSync(join(TEST_DATA_DIR, 'home')).filter((name) => name.startsWith(`${userId}${suffix}`));
+}
+
+// What a restore refused before it takes the home leaves as it was: the loaded home, every safety copy beside it, and
+// the data epoch its tabs reload on.
+async function untakenState(userId: string) {
+    return { home: await getHome(userId), copies: safetyCopies(userId, '.'), epoch: getDataEpoch(userId) };
+}
+
+// Never evicted, nothing moved aside or parked, no tab told to reload.
+async function expectNotTaken(userId: string, before: Awaited<ReturnType<typeof untakenState>>): Promise<void> {
+    const after = await untakenState(userId);
+    expect(after.home).toBe(before.home);
+    expect(after.copies).toEqual(before.copies);
+    expect(after.epoch).toBe(before.epoch);
 }
 
 // Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
@@ -687,22 +702,39 @@ describe('Backup restoreHome', () => {
         rmSync(staging, { recursive: true, force: true });
     });
 
-    test('a failure after the move-aside leaves .failed-restore and puts the original back', async () => {
-        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
-        // A mount the manifest promises but the archive has no metadata.db for: verify passes (it
-        // reads entries, and the manifest itself is not hashed), materialization cannot.
+    test('a mount the archive promises and carries no metadata.db for is refused before the home is taken', async () => {
+        // Verify passes it: it reads entries, and the manifest itself is not hashed.
         const doctored = await backup(target.id, new Date(Date.now() + 60_000), (manifest) => {
             manifest.mounts.push({ id: 'ghost-mount', storageType: 'local', files: 0, bytes: 0 });
         });
-
-        const epoch = getDataEpoch(target.id);
+        const before = await untakenState(target.id);
 
         await expect(restoreHome(doctored, target.id, `restore-ghost-${Date.now()}`)).rejects.toThrow(/ghost-mount/);
+
+        await expectNotTaken(target.id, before);
+        rmSync(join(getBackupsDir(), doctored), { force: true });
+    });
+
+    test('a failure after the move-aside leaves .failed-restore and puts the original back', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const epoch = getDataEpoch(target.id);
+        const failedBefore = safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length;
+        // The last step of the install, so the whole new folder is in place when it throws.
+        const spy = spyOn(materializeModule, 'redateTrash').mockImplementation(() => {
+            throw new ApiError(500, 'failed by the test');
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, `restore-rollback-${Date.now()}`)).rejects.toThrow(
+                'failed by the test',
+            );
+        } finally {
+            spy.mockRestore();
+        }
 
         // The home as it was is back, so a tab that held it has nothing to reload for.
         expect(getDataEpoch(target.id)).toBe(epoch);
 
-        expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
+        expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
         // The mark is cleared, so the home serves again — from the folder that was put back.
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
@@ -737,27 +769,49 @@ describe('Backup restore refuses an archive this server cannot open', () => {
         );
     });
 
-    test('a database from a newer server is refused and the home is put back', async () => {
-        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
-        const failedBefore = safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length;
+    test('a database from a newer server is refused before the home is taken', async () => {
+        const names = await rootNames(user.sessionToken, user.id, mountId, rootId);
         // quick_check would pass this file; ManagedDatabase's forward-version guard would not, and it
         // fails the WHOLE home on the next load — long after the job said the restore was done.
         const artifact = await backup(user.id, new Date(), (manifest, folder) =>
             stampSchemaVersion(manifest, folder, 'home/eigen.mail/mail.db', 999),
         );
+        const before = await untakenState(user.id);
 
         await expect(restoreHome(artifact, user.id, `restore-newer-${Date.now()}`)).rejects.toThrow(
             /newer than this server/,
         );
 
-        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
-        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+        await expectNotTaken(user.id, before);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(names);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
-    test('an s3 mount archived before pending_uploads carried its kind is refused', async () => {
-        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
-        const failedBefore = safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length;
+    test("a document's database from a newer server is refused before the home is taken", async () => {
+        const doc = await drivePost(user.sessionToken, user.id, mountId, `folder/${rootId}/create/doc`, {
+            fileName: 'Newer Doc',
+        });
+        // Opened once, so its data.db is on disk for the backup to carry.
+        expect((await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/file/${doc.id}`)).status).toBe(
+            200,
+        );
+        const artifact = await backup(user.id, new Date(Date.now() + 30_000), async (manifest, folder) => {
+            const entry = manifest.entries.find((e) => e.path.includes('Newer Doc') && e.path.endsWith('/data.db'));
+            if (!entry) throw new Error('the archive carries no data.db for Newer Doc');
+            await stampSchemaVersion(manifest, folder, entry.path, 999);
+        });
+        const before = await untakenState(user.id);
+
+        await expect(restoreHome(artifact, user.id, `restore-newer-doc-${Date.now()}`)).rejects.toThrow(
+            /at collab schema v999, newer than this server/,
+        );
+
+        await expectNotTaken(user.id, before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    test('an s3 mount archived before pending_uploads carried its kind is refused before the home is taken', async () => {
+        const names = await rootNames(user.sessionToken, user.id, mountId, rootId);
         // A restore writes the pending rows of a REMOTE mount itself, naming the isDatabase column;
         // on an older metadata.db that column does not exist, and taking its DEFAULT would let the
         // queue drop every restored plain file as corrupt. A local mount gets no such rows, so the
@@ -781,13 +835,14 @@ describe('Backup restore refuses an archive this server cannot open', () => {
             const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest, folder) =>
                 stampSchemaVersion(manifest, folder, `home/mounts/${S3_MOUNT_ID}/metadata.db`, 7),
             );
+            const before = await untakenState(user.id);
 
             await expect(restoreHome(artifact, user.id, `restore-older-${Date.now()}`)).rejects.toThrow(
                 /too old to restore/,
             );
 
-            expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
-            expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
+            await expectNotTaken(user.id, before);
+            expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(names);
             rmSync(join(getBackupsDir(), artifact), { force: true });
         } finally {
             unregisterFaultMount(home.drive, S3_MOUNT_ID);
@@ -1516,18 +1571,9 @@ describe('Backup restore of one home judges, then takes the home', () => {
         }
     }
 
-    // Never evicted, nothing moved aside or parked, no tab told to reload.
-    async function expectUntouched(home: Home, epoch: string): Promise<void> {
-        expect(await getHome(user.id)).toBe(home);
-        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
-        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
-        expect(getDataEpoch(user.id)).toBe(epoch);
-    }
-
     test('the home serves while the archive is unpacked and verified', async () => {
         const artifact = await backup(user.id, new Date());
-        const home = await getHome(user.id);
-        const epoch = getDataEpoch(user.id);
+        const before = await untakenState(user.id);
         const verify = verifyModule.verifyFolder;
         let served: number | undefined;
         const spy = spyOn(verifyModule, 'verifyFolder').mockImplementation(async (dir, onProgress) => {
@@ -1544,7 +1590,7 @@ describe('Backup restore of one home judges, then takes the home', () => {
             spy.mockRestore();
         }
         expect(served).toBe(200);
-        await expectUntouched(home, epoch);
+        await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
@@ -1552,14 +1598,13 @@ describe('Backup restore of one home judges, then takes the home', () => {
         const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest) => {
             manifest.appVersion = '999.0.0';
         });
-        const home = await getHome(user.id);
-        const epoch = getDataEpoch(user.id);
+        const before = await untakenState(user.id);
 
         await expect(restoreHome(artifact, user.id, `restore-newer-app-${Date.now()}`)).rejects.toThrow(
             `${artifact} was made by Eigen 999.0.0`,
         );
 
-        await expectUntouched(home, epoch);
+        await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 

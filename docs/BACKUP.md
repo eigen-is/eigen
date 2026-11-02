@@ -135,12 +135,12 @@ The verdict goes into the sidecar, which the admin pane's list reads. The manife
 
 A per-home restore starts on **Restore**, which asks first, naming the home. Then:
 
-1. While the home still serves, the home archive is extracted into staging and judged: a member that is not a whole home, one made by a newer Eigen, a failed verify, a `shares.json` that does not read and an `auth.json` that is not this user's (`authRowsToRestore` in `auth-rows.ts`, with the email check) each end the job with nothing touched. A share row that does not read must stop the restore before any identity row goes in.
+1. While the home still serves, the home archive is extracted into staging and judged: a member that is not a whole home, one made by a newer Eigen, a failed verify, a database this server cannot open or a mount it cannot put back (`checkUnpackedHome` in `materialize-mount.ts`), a `shares.json` that does not read and an `auth.json` that is not this user's (`authRowsToRestore` in `auth-rows.ts`, with the email check) each end the job with nothing touched. A share row that does not read must stop the restore before any identity row goes in.
 2. The home is marked as restoring (`markHomeRestoring` in `apps/api/src/lib/home/get-home.ts`), which refuses a second restore or a deletion of the home. From here every request to it answers 503.
 3. The home's collab sockets are closed, then the home is evicted.
 4. The home folder is renamed aside as `<id>.pre-restore-<date>-<time>`. A deleted user has none.
 5. The archive's home folder is installed. A `local` mount's files go in as they are, a `local-key` mount's under their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the upload queue drains them with its retry and backoff. Every restored row gets a fresh key, so no bucket object is overwritten.
-6. Every restored database gets `quick_check` and a schema check against this server, and the trash starts over ([The trash starts over after every restore](#the-trash-starts-over-after-every-restore)).
+6. The trash starts over ([The trash starts over after every restore](#the-trash-starts-over-after-every-restore)).
 7. Only then do identity rows go into `users3.db`, because nothing takes a row back. A missing user is inserted from the archive; a present one is left alone, and the restore is refused when the email no longer matches. Missing share rows are inserted, and the avatar only when the server has none. The folder is whole now, so the home's data epoch rotates.
 8. The mark clears and the home is opened, so a remote mount's queue starts draining at once. The first load runs migrations and reseeds the byte counters.
 
@@ -201,7 +201,7 @@ A marker lost to a torn write, or one missing a field, does nothing, and the hom
 
 ## A restore refuses databases from a newer server
 
-Every restored database is checked against the schema this build supports, and one from a newer server is refused with both versions named. Without it the archive would pass `quick_check` and then fail the home on its next load. The check reads only the files on this disk, so the documents of an `s3` mount, which go to the bucket, would pass it unread. So both restores also refuse an archive whose manifest names a newer Eigen than this one (`isNewerBuild` in `apps/api/src/lib/config/release.ts`), the per-home one before it takes the home. So restore onto a server at least as new as the one that wrote the archive.
+Every restored database gets `quick_check` and is checked against the schema this build supports, and one from a newer server is refused with both versions named. Without it the archive would pass `quick_check` and then fail the home on its next load. The per-home restore checks the unpacked archive before it takes the home, where an `s3` mount's documents are still files at their archive paths. The stage checks what it put in place, so the documents of an `s3` mount that stays on its bucket pass it unread. So both restores also refuse an archive whose manifest names a newer Eigen than this one (`isNewerBuild` in `apps/api/src/lib/config/release.ts`), the per-home one before it takes the home. So restore onto a server at least as new as the one that wrote the archive.
 
 ## The whole-server backup runs inside the API
 

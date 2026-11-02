@@ -1,6 +1,6 @@
-// A home folder's mounts put back from an archive, their trash started over, and the check of what landed, which a
-// rollback also runs on the data in place. The restores use it, such as ./eigen restore, whose stage runs beside a
-// live API. So nothing imported here opens a file on load.
+// A home folder's mounts put back from an archive, their trash started over, and the checks of an archive before it
+// goes in and of what landed, which a rollback also runs on the data in place. The restores use it, such as
+// ./eigen restore, whose stage runs beside a live API. So nothing imported here opens a file on load.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -36,24 +36,11 @@ export function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
+    const metadataPath = requireMaterializable(homeDir, summary);
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
-    const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
-    if (!fs.existsSync(metadataPath)) {
-        throw new ApiError(400, `The archive promises mount ${summary.id} but carries no metadata.db for it`);
-    }
     const isPathBased = summary.storageType === 'local';
     const isRemote = summary.storageType === 's3';
-    // The pending rows written below need the `isDatabase` column: without it every restored file would later be
-    // dropped as a corrupt staged copy.
-    const metadataVersion = schemaVersionOf(metadataPath);
-    if (isRemote && metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
-        throw new ApiError(
-            400,
-            `Mount ${summary.id} was archived at metadata schema v${metadataVersion}, too old to restore ` +
-                `(v${PENDING_UPLOAD_KIND_VERSION} or newer needed)`,
-        );
-    }
 
     const db = new Database(metadataPath);
     try {
@@ -130,6 +117,32 @@ export function materializeMount(
     } finally {
         db.close();
     }
+}
+
+// Refuses a home folder still in the archive's layout that materializeMount could not put back or this server could
+// not open. A per-home restore runs it on the unpacked archive while the home still serves, so a refusal costs nobody
+// a page. In that layout every document database of a mount is at its archive path, an s3 mount's included.
+export function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mounts']): void {
+    const containerDatabases: VersionedDatabase[] = [];
+    for (const summary of mounts) {
+        const dataDir = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.DATA_DIR);
+        const db = openToCheck(requireMaterializable(homeDir, summary));
+        try {
+            for (const entry of listManagedDatabases(readMountPathRows(db))) {
+                containerDatabases.push({
+                    filePath: inMountData(dataDir, summary.id, entry.path),
+                    config: entry.config,
+                });
+            }
+        } finally {
+            db.close();
+        }
+    }
+    checkRestoredDatabases(
+        homeDir,
+        mounts.map((summary) => summary.id),
+        containerDatabases,
+    );
 }
 
 // What landed has to be a database this server can still open: SQLite's own verdict on the bytes,
@@ -267,6 +280,26 @@ export function openToCheck(filePath: string): Database {
     const db = new Database(filePath, { readwrite: true, create: false });
     db.run('PRAGMA busy_timeout = 5000;');
     return db;
+}
+
+// The metadata.db of a mount the archive promises, refused when materializeMount could not restore from it.
+function requireMaterializable(homeDir: string, summary: BackupManifest['mounts'][number]): string {
+    const metadataPath = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.METADATA_DB);
+    if (!fs.existsSync(metadataPath)) {
+        throw new ApiError(400, `The archive promises mount ${summary.id} but carries no metadata.db for it`);
+    }
+    if (summary.storageType !== 's3') return metadataPath;
+    // The pending rows materializeMount writes need the `isDatabase` column: without it every restored file would
+    // later be dropped as a corrupt staged copy.
+    const metadataVersion = schemaVersionOf(metadataPath);
+    if (metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
+        throw new ApiError(
+            400,
+            `Mount ${summary.id} was archived at metadata schema v${metadataVersion}, too old to restore ` +
+                `(v${PENDING_UPLOAD_KIND_VERSION} or newer needed)`,
+        );
+    }
+    return metadataPath;
 }
 
 // A database with no stamp, or one that does not open, reads as 0, which ManagedDatabase takes as "never migrated".

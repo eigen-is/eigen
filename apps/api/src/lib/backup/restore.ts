@@ -23,9 +23,9 @@ import { extractArtifact, readUnpackedHome } from './archive';
 import { requireArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
 import { resolveHomeDir } from './home-dir';
-import type { VersionedDatabase } from './materialize-mount';
 import {
     checkRestoredDatabases,
+    checkUnpackedHome,
     containerDatabasesIn,
     materializeMount,
     mountIdsIn,
@@ -74,7 +74,8 @@ export async function restoreHome(
             // A member of a whole-server archive that left out what only a restore of that archive puts back.
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
-            // The database check after the install misses the documents of an s3 mount, which go to the bucket.
+            // The rule of the whole-server stage, whose database check never reads the documents of an s3 mount
+            // that stays on its bucket.
             const { version } = getPublicConfig();
             if (isNewerBuild(manifest.appVersion, version)) {
                 throw new ApiError(
@@ -84,6 +85,10 @@ export async function restoreHome(
                 );
             }
             requireVerified(await verifyFolder(folder, onProgress), artifactName);
+            // A mount the backup skipped carries nothing. It stays disabled in the restored settings.json, and
+            // snapshotHome left its folder out.
+            const carried = manifest.mounts.filter((summary) => !summary.skipped);
+            checkUnpackedHome(path.join(folder, ARCHIVE_HOME_DIR), carried);
             // Read before the first write, since nothing takes an auth row back: a shares.json that does not read
             // would otherwise leave a deleted user signed in to an empty home.
             const shares = readShares(folder);
@@ -95,20 +100,17 @@ export async function restoreHome(
                 onProgress?.('home files', 0, 1);
                 await movePathAsync(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
                 onProgress?.('home files', 1, 1);
-                // A mount the backup skipped carries nothing. It stays disabled in the restored
-                // settings.json, and snapshotHome left its folder out.
-                const carried = manifest.mounts.filter((summary) => !summary.skipped);
-                const containerDatabases: VersionedDatabase[] = [];
                 for (const [index, summary] of carried.entries()) {
-                    containerDatabases.push(...materializeMount(homeDir, summary, stamp));
+                    materializeMount(homeDir, summary, stamp);
                     onProgress?.('mounts', index + 1, carried.length);
                 }
-
-                // Before the identity write: a failure from here on only puts the folders back, and nothing takes a
+                // Before the identity write: a failure up to here only puts the folders back, and nothing takes a
                 // users3.db row back.
-                const mountIds = carried.map((summary) => summary.id);
-                checkRestoredDatabases(homeDir, mountIds, containerDatabases);
-                redateTrash(homeDir, mountIds, Math.floor(Date.now() / 1000));
+                redateTrash(
+                    homeDir,
+                    carried.map((summary) => summary.id),
+                    Math.floor(Date.now() / 1000),
+                );
 
                 // The rows that live outside the home folder (users only).
                 restoreAuthRows(ownerId, manifest, folder);
