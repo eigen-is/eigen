@@ -1,3 +1,6 @@
+// The row of formatting buttons above or over a LightEditor: bold, italic, lists, quote and a link. The link button
+// opens a small URL field, and Enter there sets the link without submitting a form the editor sits in.
+
 import type { Editor } from '@tiptap/react';
 import { Bold, Italic, Link, List, ListChecks, ListOrdered, Quote } from 'lucide-react';
 import { useCallback, useState } from 'react';
@@ -102,7 +105,10 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     onKeyDown={(e) => {
-                        if (e.key === 'Enter') setLink();
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            setLink();
+                        }
                         if (e.key === 'Escape') setShowLinkInput(false);
                     }}
                     autoFocus
