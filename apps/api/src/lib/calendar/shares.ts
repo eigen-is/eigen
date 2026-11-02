@@ -103,10 +103,11 @@ export function receiveShare(
     }
 
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
+    const actor = actorDisplayName(actorName, actorEmail);
     calendar.home.notify({
         type: 'calendar-share',
         actorEmail,
-        title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
+        title: actor ? `${actor} shared a calendar` : 'Calendar shared with you',
         body: calendarName,
         tag: `calendar-share:${calendarId}:${ownerUserId}`,
     });
@@ -124,10 +125,11 @@ export function removeShare(
 
     calendar.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, existing.id)).run();
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UNSHARED, ownerUserId));
+    const actor = actorDisplayName(actorName, actorEmail);
     calendar.home.notify({
         type: 'calendar-unshare',
         actorEmail,
-        title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
+        title: actor ? `${actor} removed your access` : 'Access removed',
         body: existing.calendarName,
     });
 }

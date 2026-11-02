@@ -218,10 +218,11 @@ export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvi
 function notifyInvitationReceived(calendar: Calendar, payload: ReceiveInvitationPayload): void {
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
     const organizer = payload.data?.organizer;
+    const actor = actorDisplayName(organizer?.name, organizer?.email);
     calendar.home.notify({
         type: 'calendar-invite',
         actorEmail: organizer?.email,
-        title: `${actorDisplayName(organizer?.name, organizer?.email)} invited you`,
+        title: actor ? `${actor} invited you` : 'New invitation',
         body: payload.title,
         tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
         details: { startTime: payload.startTime.getTime() },
@@ -320,10 +321,11 @@ function notifyInvitationUpdated(
 ): void {
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
     const organizer = linked.data?.organizer;
+    const actor = actorDisplayName(organizer?.name, organizer?.email);
     calendar.home.notify({
         type: 'calendar-invite-updated',
         actorEmail: organizer?.email,
-        title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
+        title: actor ? `${actor} updated an invitation` : 'Invitation updated',
         body: title,
         tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
         details: { startTime: startTime.getTime() },
@@ -586,10 +588,11 @@ function notifyInvitationCancelled(
     orgEventId: string,
 ): void {
     const organizer = linked.data?.organizer;
+    const actor = actorDisplayName(organizer?.name, organizer?.email);
     calendar.home.notify({
         type: 'calendar-invite-cancelled',
         actorEmail: organizer?.email,
-        title: `${actorDisplayName(organizer?.name, organizer?.email)} canceled an invitation`,
+        title: actor ? `${actor} canceled an invitation` : 'Invitation canceled',
         body: linked.title,
         tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
     });

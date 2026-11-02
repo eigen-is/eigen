@@ -818,6 +818,20 @@ describe('Calendar', () => {
             expect(shared?.body).toBe('Shared Cal');
         });
 
+        test('a share notice with no actor names nobody', async () => {
+            const bobHome = await getHome(ctx.bob.user.id);
+            const calendarId = crypto.randomUUID();
+            const persist = spyOn(bobHome.notifications, 'persist');
+            try {
+                await bobHome.calendar.receiveShare(ctx.alice.user.id, calendarId, 'Actorless Cal', 'read');
+                await bobHome.calendar.removeShare(ctx.alice.user.id, calendarId);
+                const notices = persist.mock.calls.map((call) => call[0]).filter((n) => n.body === 'Actorless Cal');
+                expect(notices.map((n) => n.title)).toEqual(['Calendar shared with you', 'Access removed']);
+            } finally {
+                persist.mockRestore();
+            }
+        });
+
         test('Bob can read events from shared calendar', async () => {
             const res = await authedRequest(
                 ctx.bob.user.sessionToken,
