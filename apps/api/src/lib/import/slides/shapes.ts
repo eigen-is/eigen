@@ -34,6 +34,7 @@ import {
     drawingLines,
     isSideways,
     lineWidthEmu,
+    percent,
     strokeStyleOf,
 } from '../../ooxml/drawingml';
 import {
@@ -396,10 +397,21 @@ function readPicture(
         ...box,
         ...strokeOf(lines, walk, lost),
         mediaName,
-        objectFit: 'fill',
+        objectFit: objectFitOf(blipFill),
         // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.
         corners: chain.find((link) => link.geometry !== undefined)?.geometry === 'roundRect' ? 'curved' : 'straight',
     });
+}
+
+// The pptx export contains a picture by cropping past it evenly on one axis, as a negative crop. The reader keeps a
+// picture's bytes unparsed, so it can't check the crop against the picture's aspect, and reads any such centered crop
+// as contain. A crop that is unreadable, cuts into the picture, or sits on both axes stretches the picture as before.
+function objectFitOf(blipFill: XmlElement | undefined): 'contain' | 'fill' {
+    const rect = blipFill && childOf(blipFill, A_NS, 'srcRect');
+    if (!rect) return 'fill';
+    const [l, t, r, b] = ['l', 't', 'r', 'b'].map((side) => percent(xmlAttr(rect, '', side)) ?? 0);
+    const centered = (one: number, other: number) => one === other && one < 0;
+    return (centered(l, r) && t === 0 && b === 0) || (centered(t, b) && l === 0 && r === 0) ? 'contain' : 'fill';
 }
 
 // A chart the reader draws becomes a chart, and a SmartArt graphic the shapes of the drawing PowerPoint cached of it.

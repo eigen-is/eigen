@@ -1130,6 +1130,32 @@ describe('pictures', () => {
         expect(deck.warnings).toEqual([]);
     });
 
+    // Without decoding the picture the reader can't check its aspect, so any centered crop past it on one axis is contain.
+    test('a crop past the picture evenly on one axis is contain, in the whole box', () => {
+        const fitOf = (srcRect: string) => {
+            const deck = deckOf({
+                slides: [
+                    {
+                        shapes: pic({ xfrm: box(10, 20, 30, 40), embed: 'rId2', srcRect }),
+                        rels: rel('rId2', 'image', '../media/a.png'),
+                    },
+                ],
+                files,
+            });
+            const [image] = deck.slides[0].elements;
+            expectBox(image, 10, 20, 30, 40);
+            return image.objectFit;
+        };
+        expect(fitOf(' l="-150000" r="-150000"')).toBe('contain');
+        expect(fitOf(' t="-12.5%" b="-12.5%" l="0" r="0"')).toBe('contain');
+        expect(fitOf('')).toBe('fill');
+        expect(fitOf(' l="-10000" r="-20000"')).toBe('fill');
+        expect(fitOf(' l="-10000" r="-10000" t="-5000" b="-5000"')).toBe('fill');
+        expect(fitOf(' l="25000" r="25000"')).toBe('fill');
+        expect(fitOf(' t="-1e400" b="-1e400"')).toBe('fill');
+        expect(fitOf(' t="NaN" b="NaN"')).toBe('fill');
+    });
+
     test('a picture cropped to a rounded rectangle has curved corners', () => {
         const deck = deckOf({
             slides: [

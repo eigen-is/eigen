@@ -126,7 +126,15 @@ function roundTrip(elements = ELEMENTS, name = '') {
     for (const [i, element] of elements.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
-    const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
+    const media = [
+        {
+            name: 'pic.png',
+            contentType: 'image/png',
+            data: toTransferableBuffer(PIXEL_PNG.slice()),
+            width: 1,
+            height: 1,
+        },
+    ];
     const bytes = writePptx(scene, { title: 'Round trip.eigenslides', media, lost: () => {} });
     return { sent: scene.elements, deck: readPptx(bytes, { deck: scene.meta, maxMediaBytes: 1024 * 1024 }) };
 }
@@ -666,6 +674,37 @@ describe('a bordered picture exported and read back', () => {
         expect(read('1e300')?.strokeWidth).toBe(automatic);
         expect(read('99999999')?.strokeWidth).toBe(automatic);
         expect(read('12700')?.strokeWidth).not.toBe(automatic);
+    });
+});
+
+// A contained picture is one picture in its own box, its fill rectangle pulled in to fit, so it reads back as one.
+describe('a contained picture exported and read back', () => {
+    test('is one picture in its box, contained, with its border', () => {
+        const contained: NewVectorElement = {
+            type: 'image',
+            x: 100,
+            y: 100,
+            width: 320,
+            height: 180,
+            angle: 0,
+            mediaName: 'pic.png',
+            objectFit: 'contain',
+        };
+        const sent: NewVectorElement[] = [
+            contained,
+            { ...contained, x: 600, strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'solid' },
+        ];
+        const back = roundTrip(sent).deck.slides[0].elements;
+        expect(back.map((found) => [found.type, found.objectFit, found.strokeColor])).toEqual([
+            ['image', 'contain', 'transparent'],
+            ['image', 'contain', '#c0504d'],
+        ]);
+        for (const [i, found] of back.entries()) {
+            expectPx(found.x, Number(sent[i].x));
+            expectPx(found.y, 100);
+            expectPx(found.width, 320);
+            expectPx(found.height, 180);
+        }
     });
 });
 
