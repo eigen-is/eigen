@@ -9,7 +9,7 @@ import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPE_INFO, withEigenExtension } from '@workspace/lib/types/drive';
 import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import { toast } from 'sonner';
-import { AppError, onMutationError } from '../../api-error';
+import { AppError, getErrorMessage, onMutationError } from '../../api-error';
 import { useAuth } from '../../auth';
 import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
 import {
@@ -139,15 +139,19 @@ export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID,
     });
 }
 
-// Thrown by the copy hooks when only part of a batch copied: carries the copies that landed and the sources
-// that didn't, so a caller can keep the copies and narrow a retry to the failures. A source sent again
-// would land a second time, under a free name.
+// Thrown by the copy hooks when only part of a batch copied. It carries the copies that landed and the
+// sources that didn't, so a caller can keep the copies and narrow a retry to the failures. A source sent
+// again would land a second time, under a free name. Its message ends with the first failure's reason.
 export class PartialCopyError extends Error {
     public constructor(
         public readonly copied: DrivePath[],
         public readonly failed: DrivePath[],
+        firstFailure: unknown,
     ) {
-        super(`Failed to copy ${failed.length} of ${copied.length + failed.length} items`);
+        super(
+            `Failed to copy ${failed.length} of ${copied.length + failed.length} items: ${getErrorMessage(firstFailure)}`,
+            { cause: firstFailure },
+        );
         this.name = 'PartialCopyError';
     }
 }
@@ -223,7 +227,7 @@ async function copyEach(queryClient: QueryClient, copies: readonly DriveCopy[]):
     // When nothing copied, the server's own error says best what went wrong. A retry sends everything again.
     if (copied.length === 0) throw rejected.reason;
     const failed = copies.filter((_, i) => results[i].status === 'rejected').map((copy) => copy.source);
-    throw new PartialCopyError(copied, failed);
+    throw new PartialCopyError(copied, failed, rejected.reason);
 }
 
 export function useRenamePath(

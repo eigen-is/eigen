@@ -1,5 +1,5 @@
-// A batch copy keeps what copied when part of it fails, and says which sources failed, so a retry sends only
-// those and nothing lands twice. Copy to… and Save to Drive also say how many items copied.
+// A batch copy keeps what copied when part of it fails, and says which sources failed and why, so a retry sends
+// only those and nothing lands twice. Copy to… and Save to Drive also say how many items copied.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '../../../../types/drive';
 import { renderHook } from '../../../render-hook';
@@ -89,7 +89,7 @@ describe('useCopyPaths', () => {
         if (!(error instanceof PartialCopyError)) return;
         expect(error.copied.map((p) => p.id)).toEqual(['copy-of-good']);
         expect(error.failed).toEqual([BAD]);
-        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items']);
+        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
     });
 
     test('the copies that landed refresh their folder and the mime listings', async () => {
@@ -141,6 +141,6 @@ describe('useCopyToFolder', () => {
         const { PartialCopyError } = await import('../../../../core/drive/hooks/writes');
         const { error } = await copy('folder', [GOOD, BAD]);
         expect(error).toBeInstanceOf(PartialCopyError);
-        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items']);
+        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
     });
 });
