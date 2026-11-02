@@ -49,7 +49,7 @@ export function DataMenu() {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showFormDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
         </>
     );
 }
