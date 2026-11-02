@@ -127,11 +127,13 @@ describe('Backup boot', () => {
         // A sidecar whose archive is gone still names every file of the home.
         const orphanSidecar = sidecarPath(join(dir, buildArtifactName('bootmodesBBBBBBBBBBBBBBBBBBBBBBB', at)));
         const serverSidecar = serverSidecarPath(join(dir, buildServerArchiveName('manual', 'full', at)));
+        // The sidecar of a Light archive, whose name no longer parses, names every home just the same.
+        const lightSidecar = join(dir, 'server-pre-update-light-20261001-120000.tar.json');
         // A symlink named as an archive, to a file outside the backups folder that is not the server's to close.
         const elsewhere = join(TEST_DATA_DIR, 'backups-modes-elsewhere');
         const linked = join(dir, buildArtifactName('bootmodesCCCCCCCCCCCCCCCCCCCCCCC', at));
         mkdirSync(dir, { recursive: true });
-        for (const file of [archive, sidecarPath(archive), orphanSidecar, serverSidecar, elsewhere]) {
+        for (const file of [archive, sidecarPath(archive), orphanSidecar, serverSidecar, lightSidecar, elsewhere]) {
             writeFileSync(file, '{}');
             chmodSync(file, 0o644);
         }
@@ -141,8 +143,8 @@ describe('Backup boot', () => {
         try {
             await recoverBackupsAfterRestart();
             const modeOf = (file: string) => statSync(file).mode & 0o777;
-            expect([archive, sidecarPath(archive), orphanSidecar, serverSidecar].map(modeOf)).toEqual([
-                0o600, 0o600, 0o600, 0o600,
+            expect([archive, sidecarPath(archive), orphanSidecar, serverSidecar, lightSidecar].map(modeOf)).toEqual([
+                0o600, 0o600, 0o600, 0o600, 0o600,
             ]);
             expect(modeOf(elsewhere)).toBe(0o644);
         } finally {
