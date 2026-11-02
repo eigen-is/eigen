@@ -690,7 +690,6 @@ export function cancelPaintModel(ctx: Context) {
         dataSheetId: '',
         copyRange: [{ row: [0], column: [0] }],
         RowlChange: false,
-        HasMC: false,
     };
 
     ctx.formatPainterOn = false;
@@ -900,71 +899,20 @@ export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, val
 export function handleFormatPainter(ctx: Context) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
-    if (ctx.selections == null || ctx.selections.length === 0) {
-        return;
-    }
-    if (ctx.selections.length > 1) {
-        return;
-    }
-
-    // *Added a check for whether the selection contains partial merged cells; if so, block the next step of format painter
-    // TODO Could also be changed to: when a partial merge is detected, delete the mc value of range cells after format painter pastes the format
-
-    let has_PartMC = false;
-
-    const r1 = ctx.selections[0].row[0];
-    const r2 = ctx.selections[0].row[1];
-
-    const c1 = ctx.selections[0].column[0];
-    const c2 = ctx.selections[0].column[1];
-
-    has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
-
-    if (has_PartMC) {
+    // The painter takes one range, and never one that cuts through a merge.
+    const selection = ctx.selections?.length === 1 ? ctx.selections[0] : undefined;
+    if (!selection || hasPartMC(ctx, selection.row[0], selection.row[1], selection.column[0], selection.column[1])) {
         return;
     }
 
     cancelPaintModel(ctx);
 
-    ctx.formulaRangeSelections = [
-        {
-            row: ctx.selections[0].row,
-            column: ctx.selections[0].column,
-        },
-    ];
-
-    let RowlChange = false;
-    let HasMC = false;
-
-    const cfg = getSheetConfig(ctx);
-    for (let r = ctx.selections[0].row[0]; r <= ctx.selections[0].row[1]; r += 1) {
-        if (cfg?.rowhidden?.[r] != null) {
-            continue;
-        }
-
-        if (cfg?.rowlen != null && r in cfg.rowlen) {
-            RowlChange = true;
-        }
-
-        for (let c = ctx.selections[0].column[0]; c <= ctx.selections[0].column[1]; c += 1) {
-            const flowdata = getFlowdata(ctx);
-            if (!flowdata) return;
-            const cell = flowdata[r][c];
-            if (cell != null && cell.mc != null && cell.mc.rs != null) {
-                HasMC = true;
-            }
-        }
-    }
+    ctx.formulaRangeSelections = [{ row: selection.row, column: selection.column }];
     ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
-        copyRange: [
-            {
-                row: ctx.selections[0].row,
-                column: ctx.selections[0].column,
-            },
-        ],
-        RowlChange,
-        HasMC,
+        copyRange: [{ row: selection.row, column: selection.column }],
+        // Only a cut reads it, and a cut takes a copy state of its own.
+        RowlChange: false,
     };
 
     ctx.formatPainterOn = true;

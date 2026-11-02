@@ -1,7 +1,8 @@
 // Reads and writes of single cells in the open sheet, such as a cell's value, its display text and the
 // CSS the editor box shows it in. updateCell commits the cell editor or the formula bar into the matrix:
 // it runs the formula engine, data validation and the row's auto height. Range helpers that read cells,
-// such as getRangeByTxt, live here too.
+// such as getRangeByTxt, live here too, and carryCells, which lands a block of cells for a copy, a cut, a
+// move or the format painter.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
@@ -23,8 +24,9 @@ import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Range, RangeOrWholeAxis, Selection } from '../types';
+import type { Range, RangeOrWholeAxis, Selection, SingleRange } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
+import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
@@ -1035,6 +1037,138 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
         data.push(row);
     }
     return data;
+}
+
+// The rows and columns a copy, cut, move or the format painter carries, in order. Every row and column of the
+// ranges comes along, hidden ones too, as in Excel. With leaveFiltered, the rows an active filter hides stay out,
+// because Excel copies only what a filter shows. Ranges side by side share their rows, and ranges above each
+// other share their columns.
+export type CarriedLines = { sheetId: string; rows: number[]; columns: number[] };
+
+export function carriedLines(
+    ctx: Context,
+    sheetId: string,
+    ranges: readonly SingleRange[],
+    leaveFiltered: boolean,
+): CarriedLines {
+    const sheet = getSheet(ctx, { id: sheetId });
+    // A filter entry lists the rows it hides. A row the user has shown again since is not hidden any more.
+    const filtered = new Set<number>();
+    const rowhidden = sheet.config?.rowhidden ?? {};
+    for (const entry of leaveFiltered ? Object.values(sheet.filter ?? {}) : []) {
+        for (const r of Object.keys(entry.rowhidden ?? {})) {
+            if (r in rowhidden) filtered.add(Number(r));
+        }
+    }
+    const rows = new Set<number>();
+    const columns = new Set<number>();
+    for (const { row, column } of ranges) {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            if (!filtered.has(r)) rows.add(r);
+        }
+        for (let c = column[0]; c <= column[1]; c += 1) columns.add(c);
+    }
+    return { sheetId, rows: [...rows], columns: [...columns] };
+}
+
+// One place a carried block lands: its top-left cell, and how many of its rows and columns land there. The
+// format painter cuts its last tiles short at the edge of the selection.
+export type CarryTile = { row: number; column: number; height: number; width: number };
+
+// Lands the carried block on the current sheet once per tile: every cell with its border, validation rule, link
+// and merge. land decides what of a source cell lands, given a copy of it and the cell it replaces, so a copy can
+// move a formula and the format painter can keep the destination's value. The source is read before anything is
+// written, so a tile over the source reads the cells as they were. A cut then clears the source.
+export function carryCells(
+    ctx: Context,
+    lines: CarriedLines,
+    tiles: readonly CarryTile[],
+    land: (source: Cell | null, replaced: Cell | null, r: number, c: number, sr: number, sc: number) => Cell | null,
+    { cut = false, links = true }: { cut?: boolean; links?: boolean } = {},
+) {
+    const { rows, columns } = lines;
+    const from = getSheet(ctx, { id: lines.sheetId });
+    const to = getSheet(ctx);
+    const source = from.data;
+    const d = to.data;
+    if (!source || !d || rows.length === 0 || columns.length === 0) return;
+
+    const cells = rows.map((r) => columns.map((c) => cloneDeep(source[r]?.[c] ?? null)));
+    // A spread would overflow the stack on a whole column, so the bounds are folded.
+    const lowest = (line: number, next: number) => Math.min(line, next);
+    const highest = (line: number, next: number) => Math.max(line, next);
+    const borders = getBorderInfoCompute(ctx, lines.sheetId, [
+        rows.reduce(lowest),
+        rows.reduce(highest),
+        columns.reduce(lowest),
+        columns.reduce(highest),
+    ]);
+    const rules = cloneDeep(from.dataVerification) ?? {};
+    const linkMap = cloneDeep(from.hyperlink) ?? {};
+
+    if (cut) {
+        for (const r of rows) {
+            for (const c of columns) {
+                const mc = source[r][c]?.mc;
+                if (mc?.rs != null) delete from.config?.merge?.[`${mc.r}_${mc.c}`];
+                source[r][c] = null;
+                delete from.config?.borderInfo?.[`${r}_${c}`];
+                delete from.dataVerification?.[`${r}_${c}`];
+                delete from.hyperlink?.[`${r}_${c}`];
+            }
+        }
+    }
+
+    const cfg = (to.config ??= {});
+    const merge = (cfg.merge ??= {});
+    const borderInfo = (cfg.borderInfo ??= {});
+    for (const tile of tiles) {
+        // Where each merge's first cell landed, keyed by where it was, for the merge's other cells to point at.
+        const anchors: Record<string, [number, number]> = {};
+        for (let i = 0; i < tile.height; i += 1) {
+            const r = tile.row + i;
+            const sr = rows[i];
+            for (let j = 0; j < tile.width; j += 1) {
+                const c = tile.column + j;
+                const sc = columns[j];
+                const sourceKey = `${sr}_${sc}`;
+                carrySides(borderInfo, r, c, borders[sourceKey]);
+                if (rules[sourceKey]) (to.dataVerification ??= {})[`${r}_${c}`] = cloneDeep(rules[sourceKey]);
+                if (links && linkMap[sourceKey]) (to.hyperlink ??= {})[`${r}_${c}`] = cloneDeep(linkMap[sourceKey]);
+
+                const replaced = d[r][c];
+                if (replaced?.mc) {
+                    if (replaced.mc.rs != null) delete merge[`${replaced.mc.r}_${replaced.mc.c}`];
+                    delete replaced.mc;
+                }
+                let cell = land(cloneDeep(cells[i][j]), replaced, r, c, sr, sc);
+                const sourceMc = cells[i][j]?.mc;
+                if (cell?.mc && sourceMc) {
+                    if (cell.mc.rs != null) {
+                        const rs = carriedSpan(rows, i, tile.height - i, sr, cell.mc.rs);
+                        const cs = carriedSpan(columns, j, tile.width - j, sc, cell.mc.cs ?? 1);
+                        cell.mc = { r, c, rs, cs };
+                        merge[`${r}_${c}`] = { r, c, rs, cs };
+                        anchors[`${sourceMc.r}_${sourceMc.c}`] = [r, c];
+                    } else {
+                        // A merge whose first cell a filter left out lands as plain cells.
+                        const anchor = anchors[`${sourceMc.r}_${sourceMc.c}`];
+                        if (anchor) cell = { mc: { r: anchor[0], c: anchor[1] } };
+                        else delete cell.mc;
+                    }
+                }
+                d[r][c] = cell;
+            }
+        }
+    }
+}
+
+// How many carried lines from index i fall inside a merge's span, so a merge closes up where a filtered copy left
+// rows out, and stops at the edge of its tile.
+function carriedSpan(lines: readonly number[], i: number, limit: number, start: number, span: number) {
+    let n = 0;
+    while (n < limit && lines[i + n] >= start && lines[i + n] < start + span) n += 1;
+    return n;
 }
 
 export function setEditingCell(ctx: Context, row_index: number, col_index: number) {

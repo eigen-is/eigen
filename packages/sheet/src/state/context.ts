@@ -142,7 +142,6 @@ export type Context = {
         dataSheetId: string;
         copyRange: { row: number[]; column: number[] }[];
         RowlChange: boolean;
-        HasMC: boolean;
     }; // copy/paste
     pasteIsCut: boolean;
 

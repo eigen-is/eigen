@@ -5,22 +5,22 @@
 
 import { cellsToTsv } from '@workspace/lib/clipboard';
 import { escapeHtml } from '@workspace/lib/html';
-import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
+import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { borderSidesToCss, mergedBorderSides } from '@workspace/lib/sheets';
 import { cloneDeep, isEmpty, isNil, isNumber } from 'es-toolkit/compat';
 import { format } from 'numfmt';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
-import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
-import { carrySides, getBorderInfoCompute } from './border';
+import type { CarryTile } from './cell';
 import {
+    carriedLines,
+    carryCells,
     getCellValue,
     getDataBySelectionNoCopy,
-    getdatabyselection,
     getStyleByCell,
     mergeBorder,
     mergeMoveMain,
@@ -246,34 +246,29 @@ export function selectTitlesRange(map: Record<string, number>) {
     return rangeArr;
 }
 
+// The cell fields the format painter replaces with the source's, as distinct from the value it leaves.
+const PAINTED_FORMATS = ['bg', 'fc', 'ct', 'ht', 'vt', 'bl', 'it', 'cl', 'un', 'fs', 'ff', 'tb'] as const;
+
 export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyState']) {
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex == null) return;
 
     if (!copyRange) return;
-    // Copy range
-    const copyHasMC = copyRange.HasMC;
-    const copySheetIndex = copyRange.dataSheetId;
+    const copySheetId = copyRange.dataSheetId;
+    const sourceRange = copyRange.copyRange[0];
 
-    const c_r1 = copyRange.copyRange[0].row[0];
-    const c_r2 = copyRange.copyRange[0].row[1];
-    const c_c1 = copyRange.copyRange[0].column[0];
-    const c_c2 = copyRange.copyRange[0].column[1];
+    // The painter takes what a copy would, so a row an active filter hides stays out.
+    const lines = carriedLines(ctx, copySheetId, [sourceRange], true);
+    const copyh = lines.rows.length;
+    const copyc = lines.columns.length;
+    if (copyh === 0 || copyc === 0) return;
 
-    const copyData = cloneDeep(getdatabyselection(ctx, { row: [c_r1, c_r2], column: [c_c1, c_c2] }, copySheetIndex));
-
-    // Apply range
     if (!ctx.selections) return;
-    // Selected region
     const last = ctx.selections[ctx.selections.length - 1];
-    // Selected region output
     const minh = last.row[0];
     let maxh = last.row[1]; // Apply range: first and last rows
     const minc = last.column[0];
     let maxc = last.column[1]; // Apply range: first and last columns
-
-    const copyh = copyData.length;
-    const copyc = copyData[0].length;
 
     if (minh === maxh && minc === maxc) {
         // Apply range is a single cell; automatically expand to the copy range size (if the expanded range partially overlaps a merged cell, show a warning)
@@ -288,173 +283,75 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
     const timesH = Math.ceil((maxh - minh + 1) / copyh); // Number of row copy groups
     const timesC = Math.ceil((maxc - minc + 1) / copyc); // Number of column copy groups
 
-    const flowdata = getFlowdata(ctx); // fetch data
+    const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
-    const cellMaxLength = flowdata[0].length;
-    const rowMaxLength = flowdata.length;
+    // The painter paints the grid there is and never grows it, so the last tiles stop at its edge too.
+    const lastRow = Math.min(maxh + 1, flowdata.length);
+    const lastColumn = Math.min(maxc + 1, flowdata[0].length);
 
-    // Seeded only once the paste is certain — a syncable write above the bail-outs would
-    // ship a no-op op to peers and take the user's next undo.
-    const cfg = (ctx.sheets[sheetIndex].config ??= {});
-    cfg.merge ??= {};
-    cfg.borderInfo ??= {};
-
-    const borderInfoCompute = getBorderInfoCompute(ctx, copySheetIndex, [c_r1, c_r2, c_c1, c_c2]);
-    const c_dataVerification = cloneDeep(getSheet(ctx, { id: copySheetIndex }).dataVerification) || {};
-    let dataVerification: Record<string, DataVerificationRule> | undefined;
-
-    let mth = 0;
-    let mtc = 0;
-    let maxcellCahe = 0;
-    let maxrowCache = 0;
-    for (let th = 1; th <= timesH; th += 1) {
-        for (let tc = 1; tc <= timesC; tc += 1) {
-            mth = minh + (th - 1) * copyh;
-            mtc = minc + (tc - 1) * copyc;
-
-            maxrowCache = Math.min(minh + th * copyh, rowMaxLength);
-            if (maxrowCache > maxh + 1) {
-                maxrowCache = maxh + 1;
-            }
-
-            maxcellCahe = Math.min(minc + tc * copyc, cellMaxLength);
-            if (maxcellCahe > maxc + 1) {
-                maxcellCahe = maxc + 1;
-            }
-
-            // Track newly emitted merge anchors keyed by the source `${r}_${c}` so a
-            // copied non-anchor cell ({ mc: { r, c } } without rs/cs) can rewrite its
-            // anchor reference to the cloned anchor's coordinates in the apply range.
-            const offsetMC: Record<string, [number, number]> = {};
-            for (let h = mth; h < maxrowCache; h += 1) {
-                if (h == null) return;
-                if (flowdata[h] == null) return;
-                const x: (Cell | null)[] = flowdata[h];
-
-                for (let c = mtc; c < maxcellCahe; c += 1) {
-                    carrySides(cfg.borderInfo, h, c, borderInfoCompute[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]);
-
-                    // Data validation copy
-                    if (c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`]) {
-                        dataVerification ??= cloneDeep(ctx.sheets[sheetIndex].dataVerification) ?? {};
-
-                        dataVerification[`${h}_${c}`] = c_dataVerification[`${c_r1 + h - mth}_${c_c1 + c - mtc}`];
-                    }
-
-                    let cell = x[c];
-                    if (cell?.mc) {
-                        if (cell.mc.rs) {
-                            delete cfg.merge[`${cell.mc.r}_${cell.mc.c}`];
-                        }
-                        delete cell.mc;
-                    }
-
-                    const value: Cell | null = copyData[h - mth]?.[c - mtc] ?? null;
-
-                    if (cell != null) {
-                        if (cell.ct?.t === 'inlineStr' && value) {
-                            delete value.ct;
-                        } else {
-                            const format = [
-                                'bg',
-                                'fc',
-                                'ct',
-                                'ht',
-                                'vt',
-                                'bl',
-                                'it',
-                                'cl',
-                                'un',
-                                'fs',
-                                'ff',
-                                'tb',
-                            ] as const;
-                            for (const item of format) {
-                                Reflect.deleteProperty(cell, item);
-                            }
-                        }
-                    } else {
-                        // Legacy: when flowdata had a raw scalar at [h][c], the original
-                        // code wrapped it as `{v: scalar}`. Under the canonical CellMatrix
-                        // type the cell is `null` here, so a fresh empty cell suffices.
-                        cell = {};
-                        x[c] = cell;
-                    }
-
-                    if (value != null) {
-                        delete value.v;
-                        delete value.m;
-                        delete value.f;
-
-                        if (value.ct?.t === 'inlineStr') {
-                            delete value.ct;
-                        }
-
-                        Object.assign(cell, cloneDeep(value));
-                        if (cell.ct?.t === 'inlineStr' && cell.ct.s) {
-                            for (const item of cell.ct.s) {
-                                Object.assign(item, value);
-                            }
-                        }
-
-                        if (copyHasMC && cell.mc) {
-                            const mc = cell.mc;
-                            if (mc.rs != null) {
-                                // Anchor cell of a merge — rewrite to new row/col and
-                                // clamp rs/cs against the paste-area bounds.
-                                mc.r = h;
-                                if (mc.rs + h >= maxrowCache) {
-                                    mc.rs = maxrowCache - h;
-                                }
-
-                                mc.c = c;
-                                if (mc.cs != null && mc.cs + c >= maxcellCahe) {
-                                    mc.cs = maxcellCahe - c;
-                                }
-
-                                cfg.merge[`${mc.r}_${mc.c}`] = {
-                                    r: mc.r,
-                                    c: mc.c,
-                                    rs: mc.rs,
-                                    cs: mc.cs ?? 1,
-                                };
-
-                                if (value.mc) {
-                                    offsetMC[`${value.mc.r}_${value.mc.c}`] = [mc.r, mc.c];
-                                }
-                            } else if (value.mc) {
-                                const anchor = offsetMC[`${value.mc.r}_${value.mc.c}`];
-                                cell = { mc: { r: anchor[0], c: anchor[1] } };
-                                x[c] = cell;
-                            }
-                        }
-
-                        if (cell.v != null && value.ct?.fa != null) {
-                            // Update the value modified by the format painter
-                            cell.m = numberDisplay(cell.v, value.ct.fa);
-                        }
-                    }
-                }
-                flowdata[h] = x;
-            }
+    const tiles: CarryTile[] = [];
+    for (let th = 0; th < timesH; th += 1) {
+        for (let tc = 0; tc < timesC; tc += 1) {
+            const row = minh + th * copyh;
+            const column = minc + tc * copyc;
+            tiles.push({
+                row,
+                column,
+                height: Math.min(copyh, lastRow - row),
+                width: Math.min(copyc, lastColumn - column),
+            });
         }
     }
 
-    const currFile = ctx.sheets[sheetIndex];
-    currFile.dataVerification = dataVerification;
+    carryCells(
+        ctx,
+        lines,
+        tiles,
+        (value, replaced) => {
+            // The destination keeps its value and takes the source's formats.
+            const cell = replaced ?? {};
+            if (cell.ct?.t === 'inlineStr' && value) {
+                delete value.ct;
+            } else {
+                for (const item of PAINTED_FORMATS) Reflect.deleteProperty(cell, item);
+            }
+            if (value == null) return cell;
 
-    const copyIndex = getSheetIndex(ctx, copySheetIndex);
+            delete value.v;
+            delete value.m;
+            delete value.f;
+            if (value.ct?.t === 'inlineStr') {
+                delete value.ct;
+            }
+
+            Object.assign(cell, value);
+            if (cell.ct?.t === 'inlineStr' && cell.ct.s) {
+                for (const item of cell.ct.s) {
+                    Object.assign(item, value);
+                }
+            }
+            if (cell.v != null && value.ct?.fa != null) {
+                // Update the value modified by the format painter
+                cell.m = numberDisplay(cell.v, value.ct.fa);
+            }
+            return cell;
+        },
+        { links: false },
+    );
+
+    const currFile = ctx.sheets[sheetIndex];
+
+    const copyIndex = getSheetIndex(ctx, copySheetId);
     if (copyIndex == null) return;
     const ruleArr: ConditionalFormatRule[] | undefined = cloneDeep(ctx.sheets[copyIndex].conditionalFormatRules);
     if (isNil(ruleArr) || ruleArr.length === 0) return;
 
     const cdformat: ConditionalFormatRule[] = cloneDeep(currFile.conditionalFormatRules) ?? [];
-    const copyRangeBox: SingleRange = { row: [c_r1, c_r2], column: [c_c1, c_c2] };
     const applyRangeBox: SingleRange = { row: [minh, maxh], column: [minc, maxc] };
 
     for (const rule of ruleArr) {
         const overlaps = rule.cellrange.some(
-            (cr) => cfSplitRange(cr, copyRangeBox, applyRangeBox, 'operatePart').length > 0,
+            (cr) => cfSplitRange(cr, sourceRange, applyRangeBox, 'operatePart').length > 0,
         );
         if (overlaps) {
             // Fresh per-rule box so a later mutation on one rule can't bleed into the others.
@@ -1214,37 +1111,15 @@ export function rangeValueToClipboard(
     if (idx == null) return null;
     const sheet = ctx.sheets[idx];
 
-    const rowIndexArr: number[] = [];
-    const colIndexArr: number[] = [];
-    // Set-based dedupe: includes() per cell turns large copies quadratic.
-    const rowIndexSet = new Set<number>();
-    const colIndexSet = new Set<number>();
     const rect: [number, number, number, number] = [Infinity, -Infinity, Infinity, -Infinity];
-
     for (const range of ranges ?? []) {
-        const r1 = range.row[0];
-        const r2 = range.row[1];
-        const c1 = range.column[0];
-        const c2 = range.column[1];
-        rect[0] = Math.min(rect[0], r1);
-        rect[1] = Math.max(rect[1], r2);
-        rect[2] = Math.min(rect[2], c1);
-        rect[3] = Math.max(rect[3], c2);
-
-        for (let copyR = r1; copyR <= r2; copyR += 1) {
-            if (!rowIndexSet.has(copyR)) {
-                rowIndexSet.add(copyR);
-                rowIndexArr.push(copyR);
-            }
-
-            for (let copyC = c1; copyC <= c2; copyC += 1) {
-                if (!colIndexSet.has(copyC)) {
-                    colIndexSet.add(copyC);
-                    colIndexArr.push(copyC);
-                }
-            }
-        }
+        rect[0] = Math.min(rect[0], range.row[0]);
+        rect[1] = Math.max(rect[1], range.row[1]);
+        rect[2] = Math.min(rect[2], range.column[0]);
+        rect[3] = Math.max(rect[3], range.column[1]);
     }
+    // The clipboard holds the cells a paste in this tab would land, hidden ones too.
+    const { rows: rowIndexArr, columns: colIndexArr } = carriedLines(ctx, sheetId, ranges ?? [], true);
 
     // A td spans its merge, so the perimeter is read off the master.
     const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
@@ -1343,40 +1218,17 @@ export function rangeValueToClipboard(
 }
 
 export function copy(ctx: Context) {
-    const flowdata = getFlowdata(ctx);
     const cfg = getSheetConfig(ctx);
 
     ctx.formulaRangeSelections = [];
     // Copy range
     const copyRange = [];
     let RowlChange = false;
-    let HasMC = false;
 
     for (const range of ctx.selections ?? []) {
-        const r1 = range.row[0];
-        const r2 = range.row[1];
-        const c1 = range.column[0];
-        const c2 = range.column[1];
-
-        for (let copyR = r1; copyR <= r2; copyR += 1) {
-            if (!isNil(cfg?.rowhidden) && !isNil(cfg.rowhidden[copyR])) {
-                continue;
-            }
-
-            if (!isNil(cfg?.rowlen) && copyR in cfg.rowlen) {
+        for (let r = range.row[0]; r <= range.row[1]; r += 1) {
+            if (cfg?.rowhidden?.[r] == null && cfg?.rowlen != null && r in cfg.rowlen) {
                 RowlChange = true;
-            }
-
-            for (let copyC = c1; copyC <= c2; copyC += 1) {
-                if (!isNil(cfg?.colhidden) && !isNil(cfg.colhidden[copyC])) {
-                    continue;
-                }
-
-                const cell = flowdata?.[copyR]?.[copyC];
-
-                if (!isNil(cell?.mc?.rs)) {
-                    HasMC = true;
-                }
             }
         }
 
@@ -1392,7 +1244,6 @@ export function copy(ctx: Context) {
         dataSheetId: ctx.currentSheetId,
         copyRange,
         RowlChange,
-        HasMC,
     };
 
     const cpdata = rangeValueToClipboard(ctx, ctx.currentSheetId, ctx.selections);
