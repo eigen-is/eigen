@@ -112,22 +112,25 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
             </p>
         );
 
-    // The picker leaves the grid usable to pick on, so rangeDialog.show keeps the cell editor out of the way. Every
-    // way it closes, Escape included, opens this dialog again and clears the flag: left set, it would park the cell
-    // editor off-screen for good. Its OK opens this dialog in its place, which drops the picker's onClose unrun.
+    // The picker leaves the grid usable to pick on, so rangeDialog.show keeps the cell editor out of the way. However
+    // the picker leaves the slot, the flag clears: left set, it would park the cell editor off-screen for good. Its OK
+    // opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
     const pickRange = (field: 'rangeTxt' | 'value1') => {
-        const reopen = (picked?: string) => {
-            setContext((ctx) => {
-                ctx.rangeDialog.show = false;
-            });
+        const reopen = (picked?: string) =>
             showDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
-        };
         setContext((ctx) => {
             ctx.rangeDialog.show = true;
         });
         showNonModalDialog(
             <CellRangeDialog value={draft[field]} variant="validation" onConfirm={reopen} onCancel={hideDialog} />,
-            { onClose: () => reopen() },
+            {
+                onClose: (reason) => {
+                    setContext((ctx) => {
+                        ctx.rangeDialog.show = false;
+                    });
+                    if (reason === 'closed') reopen();
+                },
+            },
         );
     };
 

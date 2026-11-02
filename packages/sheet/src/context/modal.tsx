@@ -15,12 +15,14 @@ type NonModalOptions = {
     width?: number;
     // The point on screen where the shell's top-left corner opens, kept on screen. Centered when absent.
     anchor?: ViewportPoint;
-    // Runs once on every way the picker closes, such as Cancel or Escape, so a caller that holds state for the open
-    // picker, like the grid-select flag, resets it in one place. Opening another dialog in the slot drops it unrun.
-    // Data verification's picker commits the picked range and opens its own dialog again, and a late onClose would
-    // run the teardown a second time over the dialog it just opened.
-    onClose?: () => void;
+    // Runs once when the picker leaves the slot, so a caller that holds state for the open picker, such as the flag
+    // that keeps the cell editor out of the way, resets it in one place. The reason says how it left: 'closed' by
+    // Cancel or Escape, or 'replaced' by another dialog, such as a notice or the dialog the picker's OK opens again.
+    // Only a close may open a dialog, because on 'replaced' the slot already holds the next one.
+    onClose?: (reason: CloseReason) => void;
 };
+
+type CloseReason = 'replaced' | 'closed';
 
 const DEFAULT_WIDTH = 500;
 
@@ -89,20 +91,22 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
 
     // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it has to see the opening that
     // holds the slot right now.
-    const openingRef = useRef<{ id: number; onClose?: () => void } | null>(null);
+    const openingRef = useRef<{ id: number; onClose?: NonModalOptions['onClose'] } | null>(null);
 
     const open = useCallback((content: React.ReactNode, nonModal?: NonModalOptions) => {
+        const replaced = openingRef.current;
         lastId.current += 1;
         const id = lastId.current;
         openingRef.current = { id, onClose: nonModal?.onClose };
         setState({ id, content, nonModal });
+        replaced?.onClose?.('replaced');
     }, []);
     const showModal = useCallback((content: React.ReactNode) => open(content), [open]);
     const hideModal = useCallback(() => {
         const opening = openingRef.current;
         openingRef.current = null;
         setState(null);
-        opening?.onClose?.();
+        opening?.onClose?.('closed');
     }, []);
 
     const refocusGrid = useCellEditorRefocus();

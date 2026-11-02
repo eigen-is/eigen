@@ -158,6 +158,15 @@ test('Cancel in the range picker brings the dialog back with its draft too', asy
     expect(dialog.context().rangeDialog.show).toBe(false);
 });
 
+test("a notice that takes the range picker's place lets the cell editor back", async () => {
+    const dialog = await openDialog(B3);
+    await pickWith('Select cell range');
+    expect(dialog.context().rangeDialog.show).toBe(true);
+    await dialog.show((d) => d.showDialog('A notice', 'ok'));
+    expect(dialog.context().rangeDialog.show).toBe(false);
+    expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
+});
+
 test("the list's grid button picks the options' source and keeps the range", async () => {
     const dialog = await openDialog(B3);
     await dialog.type('Cell range', 'B2:B3');

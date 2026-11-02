@@ -81,10 +81,13 @@ export async function renderSheetDialog(
 ) {
     const harness: Harness = { context: workbookContextFactory(params), refs: workbookRefs(), grid };
     await renderInDocument(createElement(Workbook, { harness }));
-    await act(async () => {
-        if (!harness.dialogs) throw new Error('the host did not render');
-        open(harness.dialogs);
-    });
+    // Opens a dialog in the slot the way the app does, such as a notice over the one open.
+    const show = (open: (dialogs: Dialogs) => void) =>
+        act(async () => {
+            if (!harness.dialogs) throw new Error('the host did not render');
+            open(harness.dialogs);
+        });
+    await show(open);
 
     const button = (label: string) =>
         [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
@@ -104,6 +107,7 @@ export async function renderSheetDialog(
 
     return {
         context: () => harness.context,
+        show,
         // The text in the in-cell editor, where Insert function writes its pick.
         editorText: () => cellInput.current?.textContent,
         setEditorText: (text: string) => {

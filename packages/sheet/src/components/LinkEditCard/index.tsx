@@ -136,8 +136,8 @@ export function LinkEditCard({
                 {
                     width: RANGE_PICKER_WIDTH,
                     anchor: rangePickerAnchor(),
-                    // Every close route, Escape included: leaving the flag set hides the link
-                    // card for good — showLinkCard early-returns on it.
+                    // However the picker leaves the slot, Escape or another dialog included: left set, the flag
+                    // hides the link card for good, because showLinkCard returns early on it.
                     onClose: () => setRangeModalVisible(false),
                 },
             );
