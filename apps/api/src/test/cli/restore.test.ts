@@ -6,6 +6,7 @@ import {
     copyFileSync,
     cpSync,
     existsSync,
+    linkSync,
     mkdirSync,
     mkdtempSync,
     readdirSync,
@@ -879,7 +880,7 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file, link or huge file',
+        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file, link, hard link, huge file or thousand files',
         async () => {
             const crafted = await craft(fullArchive, {
                 drop: (name) => name.startsWith('certs/'),
@@ -891,13 +892,27 @@ describe('restore --stage and --swap', () => {
                         writeFileSync(join(certs, 'key.pem'), 'run me');
                         chmodSync(join(certs, 'key.pem'), 0o4755);
                     },
-                    'is setuid',
+                    'data/certs/key.pem is setuid',
                 ],
-                [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'is a link'],
+                [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'data/certs/key.pem is a link'],
+                // A hard link shows the owner and mode of the file it shares, such as a root-only key, and root
+                // would copy that file's bytes under the mode of the one it replaces.
+                [
+                    (certs: string) =>
+                        linkSync(join(dirname(dirname(certs)), '.env.production'), join(certs, 'key.pem')),
+                    'data/certs/key.pem is a hard link',
+                ],
                 // Root reads a file whole, so a planted huge one could run the swap out of memory.
                 [
                     (certs: string) => writeFileSync(join(certs, 'key.pem'), Buffer.alloc(1024 * 1024 + 1)),
-                    'is bigger than a key or a certificate',
+                    'data/certs/key.pem is bigger than a key or a certificate',
+                ],
+                // Planted entries by the thousand could keep root busy for minutes.
+                [
+                    (certs: string) => {
+                        for (let i = 0; i < 1000; i++) writeFileSync(join(certs, `planted-${i}`), '');
+                    },
+                    'is past the 1000 entries root copies',
                 ],
             ] as const) {
                 const dir = install();
@@ -907,7 +922,7 @@ describe('restore --stage and --swap', () => {
                 expect((await stage(dir, crafted)).code).toBe(0);
                 const result = await swap(dir);
                 expect(result.code).toBe(1);
-                expect(result.stderr).toContain(`data/certs/key.pem ${said}`);
+                expect(result.stderr).toContain(said);
                 expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
                 expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
                 expect(asideDirs(dir)).toEqual([]);
