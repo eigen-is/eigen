@@ -17,6 +17,7 @@ export {
     quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
+    sheetFinder,
     sheetNameKey,
     sheetRefName,
     toLabel,

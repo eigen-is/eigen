@@ -14,8 +14,10 @@ import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
+import type { WalkContext } from './formula-utils';
 import { formulaOperators, iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
+import { sheetFinder } from './parser/helper/cell';
 import type {
     CalcChainEntry,
     EvaluationResult,
@@ -26,14 +28,6 @@ import type {
 
 // A sheet's dense `data`, by id, which the pass reads and writes.
 type WorkingSheet = { id: string; name: string; data: CellMatrix };
-
-// What extractDependencies reads: the pass's working sheets, or the editor's.
-type WalkContext = {
-    sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[];
-    // Resolved references, as the editor's formulaCache keeps them: by the reference's text for one into another
-    // sheet, by `${text}_${sheetId}` for one into the formula's own.
-    cellTextToIndexList: Record<string, FormulaDependency>;
-};
 
 // A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
 // recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
@@ -98,7 +92,7 @@ export function recalcSheets(
         working.push(w);
     }
 
-    const walk: WalkContext = { sheets: working, cellTextToIndexList: {} };
+    const walk: WalkContext = { sheets: working, findSheet: sheetFinder(working), cellTextToIndexList: {} };
     const extents = new Map<string, SheetExtent>();
     for (const w of working) extents.set(w.id, { rows: w.data.length, columns: matrixWidth(w.data) });
     const extentOf = (sheetId: string) => extents.get(sheetId);
@@ -244,7 +238,7 @@ export function extractDependencies(
         // resolveCellRange checks a reference that names a sheet with its own pattern, which also reads a quoted name
         // on both ends of a range, as in 'My Data'!A1:'My Data'!B2.
         if (reference.length < 2 || (!reference.includes('!') && !iscelldata(reference))) continue;
-        const range = resolveCellRange(walk.sheets, walk.cellTextToIndexList, reference, sheetId, data);
+        const range = resolveCellRange(walk, reference, sheetId, data);
         if (range != null) dependencies.push(range);
     }
     return dependencies;

@@ -6,6 +6,7 @@
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
+import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
 import { functionStrChange } from '../../engine/formula-shift';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
@@ -36,7 +37,12 @@ type RowColMove = {
     to: (index: number) => number | null;
     // Where an index the op left was before it, or null for a row or column the op inserts.
     from: (index: number) => number | null;
-    formula: (text: string, sheetName: string, onTargetSheet: boolean, sheets: readonly Sheet[]) => string;
+    formula: (
+        text: string,
+        sheetName: string,
+        onTargetSheet: boolean,
+        findSheet: (name: string) => Sheet | undefined,
+    ) => string;
     merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
     keyed: (map: Record<string, number>) => Record<string, number>;
     cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
@@ -60,8 +66,8 @@ function insertMove(op: InsertRowColOp): RowColMove {
         type,
         to: (i) => (i < at ? i : i + count),
         from: (i) => (i < at ? i : i < at + count ? null : i - count),
-        formula: (text, name, onTargetSheet, sheets) =>
-            functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, sheets),
+        formula: (text, name, onTargetSheet, findSheet) =>
+            functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
         keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
         cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
@@ -78,8 +84,8 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
         type,
         to: (i) => (i < start ? i : i > end ? i - count : null),
         from: (i) => (i < start ? i : i + count),
-        formula: (text, name, onTargetSheet, sheets) =>
-            functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, sheets),
+        formula: (text, name, onTargetSheet, findSheet) =>
+            functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
         keyed: (map) => shiftKeyedMapForDelete(map, start, end),
         cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
@@ -132,12 +138,14 @@ class Shifter {
     private readonly move: RowColMove;
     private readonly name: string;
     private readonly sheets: Sheet[];
+    private readonly findSheet: (name: string) => Sheet | undefined;
 
     public constructor(move: RowColMove, name: string, sheets: Sheet[]) {
         this.id = move.id;
         this.move = move;
         this.name = name;
         this.sheets = sheets;
+        this.findSheet = sheetFinder(sheets);
     }
 
     public entry(entry: History): History | null {
@@ -410,7 +418,7 @@ class Shifter {
 
     private formula(f: string, onTargetSheet: boolean): string {
         const text = f.startsWith('=') ? f.slice(1) : f;
-        const shifted = `=${this.move.formula(text, this.name, onTargetSheet, this.sheets)}`;
+        const shifted = `=${this.move.formula(text, this.name, onTargetSheet, this.findSheet)}`;
         return shifted === f ? f : shifted;
     }
 

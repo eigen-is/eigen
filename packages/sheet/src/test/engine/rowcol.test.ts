@@ -285,6 +285,29 @@ describe('applySheetsInsertRowCol/Delete — a merge above the op stays as it wa
 });
 
 describe('applySheetsInsertRowCol/Delete — cross-sheet formula refs', () => {
+    // Each ref names a sheet no sheet holds, among many sheets of names as long, so a name read against each sheet in
+    // turn made the insert take seconds.
+    test('a row insert past formulas of many refs to a missing sheet, among many sheets, takes a moment', () => {
+        const name = (base: string) => base.padEnd(31, '_');
+        const f = `=${Array.from({ length: 800 }, () => `${name('Nosuch')}!A1`).join('+')}`;
+        const sheets = Array.from({ length: 1000 }, (_, i) => makeSheet(`s${i}`, name(`Sheet_${i}`), [[null]]));
+        sheets[1] = makeSheet(
+            's1',
+            name('Sheet_1'),
+            Array.from({ length: 20 }, () => [{ ...cell(0), f }]),
+        );
+        const started = performance.now();
+        const result = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's0',
+        });
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(result[1].data?.[0][0]?.f).toBe(f);
+    });
+
     test('row insert in Sheet1 shifts =Sheet1!A1 in Sheet2 to =Sheet1!A2', () => {
         const s1: Sheet = { id: 's1', name: 'Sheet1', order: 0, data: [[cell('x')]], config: {} };
         const s2: Sheet = {

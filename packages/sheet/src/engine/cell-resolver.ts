@@ -1,7 +1,7 @@
 // A CellResolver over a plain list of sheets, such as the replayed sheets recalcSheets computes on the server. The
 // formula engine reads cells and finds sheets by name through it. The editor has its own resolver over its context.
 
-import { sheetNameKey } from './parser/helper/cell';
+import { sheetFinder } from './parser/helper/cell';
 import type { CalcChainEntry, CellMatrix, CellResolver, SheetInfo } from './types';
 
 export type { CellResolver } from './types';
@@ -18,22 +18,16 @@ export type SheetData = {
 // read is what makes a large workbook crawl.
 export function createArrayResolver(sheets: SheetData[]): CellResolver {
     const byId = new Map<string, SheetData>();
-    const byName = new Map<string, SheetData>();
-    const byNameKey = new Map<string, SheetData>();
-    for (const sheet of sheets) {
-        // The first wins, because an imported doc can carry two sheets under one name.
-        if (!byId.has(sheet.id)) byId.set(sheet.id, sheet);
-        if (!byName.has(sheet.name)) byName.set(sheet.name, sheet);
-        if (!byNameKey.has(sheetNameKey(sheet.name))) byNameKey.set(sheetNameKey(sheet.name), sheet);
-    }
+    // The first wins, because an imported doc can carry two sheets under one id, as under one name.
+    for (const sheet of sheets) if (!byId.has(sheet.id)) byId.set(sheet.id, sheet);
+    const findSheet = sheetFinder(sheets);
 
     return {
         getCell(sheetId, row, col) {
             return byId.get(sheetId)?.data?.[row]?.[col] ?? null;
         },
         getSheetIdByName(name) {
-            // As findSheetByName reads a name: its exact spelling first, so Data and data each read their own sheet.
-            return (byName.get(name) ?? byNameKey.get(sheetNameKey(name)))?.id ?? null;
+            return findSheet(name)?.id ?? null;
         },
         getSheetData(sheetId) {
             return byId.get(sheetId)?.data ?? null;

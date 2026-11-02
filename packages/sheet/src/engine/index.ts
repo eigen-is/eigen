@@ -7,6 +7,7 @@ export {
     rowIndexToLabel,
     SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
+    sheetFinder,
     sheetNameKey,
     toA1,
     unquoteSheetName,

@@ -14,6 +14,7 @@ import {
     REFERENCE_ROW_COUNT,
 } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { sheetFinder } from './a1-notation';
 import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
@@ -296,6 +297,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     op: 'add' | 'del',
 ): S[] {
     const targetName = sheets[targetIndex].name;
+    const findSheet = sheetFinder(sheets);
     return sheets.map((sheet, sheetIndex) => {
         const shift = (txt: string) =>
             functionStrChange(
@@ -307,7 +309,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 count,
                 targetName,
                 sheetIndex === targetIndex,
-                sheets,
+                findSheet,
             );
 
         let newSheet = sheet;

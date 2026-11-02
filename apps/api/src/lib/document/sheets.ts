@@ -18,12 +18,12 @@ import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import {
     copySheetName,
     createDefaultSheets,
-    findSheetByName,
     iscelldata,
     mapChartRefs,
     recalcSheets,
     renameSheetRefs,
     replaySheetsOps,
+    sheetFinder,
     sheetNameKey,
     sheetsNeedRecalc,
     withMaterializedData,
@@ -143,7 +143,8 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         return { id: crypto.randomUUID(), name };
     });
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
-    const rename = (txt: string) => renameSheetRefs(txt, imported, renames);
+    const findImported = sheetFinder(imported);
+    const rename = (txt: string) => renameSheetRefs(txt, findImported, renames);
 
     const added = imported.map((sheet, i): Op => {
         const { id, name } = fresh[i];
@@ -164,7 +165,7 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         }
         for (const link of Object.values(sheet.hyperlink ?? {})) {
             if (link.linkType === 'sheet') {
-                const target = findSheetByName(imported, link.linkAddress);
+                const target = findImported(link.linkAddress);
                 link.linkAddress = (target && renames.get(target.name)) ?? link.linkAddress;
             } else if (link.linkType === 'cellrange') {
                 link.linkAddress = rename(link.linkAddress);

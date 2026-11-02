@@ -4,6 +4,7 @@
 // walk the server's recalc uses too, and an undo or redo replays its patches.
 
 import { current, isDraft } from 'immer';
+import { findSheetByName } from '../../engine/a1-notation';
 import type { DependencyIndex, SheetExtent } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { matrixWidth } from '../../engine/formula-utils';
@@ -230,7 +231,11 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     // The server's recalc finds the cells a formula reads with this same walk. The editor keeps its cache of resolved
     // references from one edit to the next.
     const formulaDependency = extractDependencies(
-        { sheets: ctx.sheets, cellTextToIndexList: ctx.formulaCache.cellTextToIndexList },
+        {
+            sheets: ctx.sheets,
+            findSheet: (name) => findSheetByName(ctx.sheets, name),
+            cellTextToIndexList: ctx.formulaCache.cellTextToIndexList,
+        },
         formula,
         formulaCell.id,
         cellData ?? getFlowdata(ctx, formulaCell.id),
