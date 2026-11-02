@@ -10,7 +10,7 @@ import {
     readFigureFrameAttrs,
     readParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
-import type { Border, RunFace } from '../../../document/looks';
+import type { RunFace, WordBorder } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
     CODE_BLOCK_LOOK,
@@ -64,7 +64,7 @@ export type ParagraphProps = {
     keepNext?: true;
     keepLines?: true;
     numPr?: NumberingRef;
-    pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
+    pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], WordBorder>>;
     shading?: string;
     // A right tab, at its position in twips and with its leader, which a table of contents entry ends its page number on.
     rightTab?: RightTab;
@@ -122,7 +122,7 @@ export function pPrXml(props: ParagraphProps): string {
 
 export function bordersXml<Side extends string>(
     sides: readonly Side[],
-    borders: Partial<Record<Side, Border>>,
+    borders: Partial<Record<Side, WordBorder>>,
 ): string {
     return sides
         .map((side) => {

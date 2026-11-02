@@ -34,7 +34,7 @@ export function halfPoints(pt: number): number {
 }
 
 // sz in eighths of a point, space in points.
-export type Border = { sz: number; space: number; color: string };
+export type WordBorder = { sz: number; space: number; color: string };
 
 export function proseColor(selector: string, property: string): string {
     const value = proseValue(selector, property);
@@ -74,7 +74,7 @@ export function proseTwips(selector: string, property: string): number {
 }
 
 // A solid border shorthand, its width in eighths of a point.
-export function proseBorder(selector: string, property: string): Omit<Border, 'space'> {
+export function proseBorder(selector: string, property: string): Omit<WordBorder, 'space'> {
     const value = proseValue(selector, property);
     const [width = '', style, color = ''] = value.trim().split(/\s+/);
     if (style !== 'solid') throw new Error(`eigen-prose.css border ${value} on ${selector} has no docx spelling`);
