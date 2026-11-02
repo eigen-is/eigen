@@ -21,7 +21,8 @@ export {
     unquoteSheetName,
 } from './parser/helper/cell';
 
-// Excel's limit on a sheet name's length and the characters it refuses in one; it refuses a quote at either end too.
+// Excel's limit on a sheet name's length, and the characters it refuses in one. It also refuses a quote at either end.
+// These are the one rule for a sheet name: a tab rename refuses a name that breaks it, and the xlsx writer repairs one.
 export const MAX_SHEET_NAME_LENGTH = 31;
 export const SHEET_NAME_FORBIDDEN = /[\\/?*[\]:]/g;
 
