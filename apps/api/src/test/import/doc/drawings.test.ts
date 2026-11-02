@@ -1053,6 +1053,20 @@ describe('text boxes as boxes', () => {
         expect(boxes[0]?.attrs).toMatchObject({ paddingX: null, paddingY: null });
     });
 
+    // Word writes a theme color with its slot after it. A named color, such as black, has no reader yet, so it reads as
+    // none, slot or not.
+    test("a VML box reads a color past Word's theme slot", async () => {
+        const colored = (fill: string, stroke: string) =>
+            vmlBox(PLACED)
+                .replace('fillcolor="#ffeeaa"', `fillcolor="${fill}"`)
+                .replace('strokecolor="#0000ff"', `strokecolor="${stroke}"`);
+        const boxes = await vmlBoxesOf(colored('#4f81bd [3204]', '#1f497d [3215]'), colored('#4f81bd', 'black [3213]'));
+        expect(boxes.map((box) => [box.attrs?.['fill'], box.attrs?.['outline']])).toEqual([
+            ['#4f81bd', '2px solid #1f497d'],
+            ['#4f81bd', null],
+        ]);
+    });
+
     // As VML reads a length with no unit: px in the CSS style, as a browser reads one, and EMU in an attribute.
     test('a VML box reads a unitless style length as px, and a unitless inset or stroke weight as EMU', async () => {
         const unitless = PLACED.replace('margin-left:30pt', 'margin-left:40')

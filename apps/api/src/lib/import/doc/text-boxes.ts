@@ -150,13 +150,13 @@ export function readVmlTextBox(
     const filled = xmlAttr(shape, '', 'filled') !== 'f' && xmlAttr(shape, '', 'filled') !== 'false';
     const stroked = xmlAttr(shape, '', 'stroked') !== 'f' && xmlAttr(shape, '', 'stroked') !== 'false';
     const weight = vmlPx(xmlAttr(shape, '', 'strokeweight') ?? '0.75pt', 'emu') ?? 1;
-    const strokeColor = readHexColor(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
+    const strokeColor = vmlColor(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
     const inset = (xmlAttr(textbox, '', 'inset') ?? '').split(',').map((length) => vmlPx(length, 'emu'));
     const [insetLeft, insetTop, insetRight, insetBottom] = inset;
     const look: BoxLook = {
         width: width === null ? null : Math.min(room, width),
         height: [css, vmlStyle(textbox)].some((style) => style.get('mso-fit-shape-to-text') === 't') ? null : height,
-        fill: filled ? readHexColor(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
+        fill: filled ? vmlColor(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
                 ? borderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
@@ -167,6 +167,13 @@ export function readVmlTextBox(
         rounded: shape.local === 'roundrect',
     };
     return textBoxNode(reader, items, look, layout, false);
+}
+
+// A VML color as #rrggbb. Word writes a theme color with its slot after it, as in `#4f81bd [3204]`, which goes. A named
+// color, such as black, reads as none.
+function vmlColor(value: string): string | null {
+    const [, color] = /^(\S*)(?:\s+\[\d+\])?$/.exec(value.trim()) ?? [];
+    return readHexColor(color);
 }
 
 // The box's paragraphs, read as a note's: a list's, a heading's or a table's become paragraphs and a nested box or note
