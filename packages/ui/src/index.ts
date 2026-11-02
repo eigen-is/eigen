@@ -17,6 +17,7 @@ export * from './components/copy-input';
 export * from './components/count-badge';
 export * from './components/delete/delete-dialog';
 export * from './components/file-drop-overlay';
+export * from './components/form-dialog';
 export * from './components/hint-pill';
 export * from './components/info-block';
 export * from './components/layout/app';

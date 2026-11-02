@@ -78,7 +78,7 @@ async function open(
     editor.commands.setContent(content);
     editor.commands.setTextSelection({ from, to });
     ({ unmount } = await renderInDocument(
-        createElement(dialog, { editor, normal, open: true, onOpenChange: () => {} }),
+        createElement(dialog, { editor, normal, open: true, onOpenChange: () => {}, onCloseAutoFocus: () => {} }),
     ));
 }
 
