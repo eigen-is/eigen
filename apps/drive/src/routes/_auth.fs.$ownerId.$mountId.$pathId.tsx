@@ -164,14 +164,13 @@ function DriveRoute() {
                 pid={pid}
                 unreadPathIds={unreadChatIds}
             />
-            {shareTargetPath && (
-                <DriveAccessDialog
-                    open={shareDialogOpen}
-                    onOpenChange={handleShareDialogClose}
-                    path={shareTargetPath}
-                    prefillEmail={shareEmail}
-                />
-            )}
+            {/* Mounted with no path too, so Email collaborators, opened from Share, outlives the closed Share. */}
+            <DriveAccessDialog
+                open={shareDialogOpen}
+                onOpenChange={handleShareDialogClose}
+                path={shareTargetPath}
+                prefillEmail={shareEmail}
+            />
         </>
     );
 }
