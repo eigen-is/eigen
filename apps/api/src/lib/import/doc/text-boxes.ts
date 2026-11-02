@@ -260,7 +260,7 @@ function insets(bodyPr: XmlElement | undefined): Pick<BoxLook, 'paddingX' | 'pad
 
 // A pair of insets as one padding: none where both are unset or the mean is Word's own. Each side is halved before
 // the two are added, so two lengths near the largest number never add up past it.
-export function meanPadding(a: number | null, b: number | null, word: number): number | null {
+function meanPadding(a: number | null, b: number | null, word: number): number | null {
     if (a === null && b === null) return null;
     const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, (a ?? b ?? 0) / 2 + (b ?? a ?? 0) / 2));
     return Math.abs(mean - word) < 0.01 ? null : mean;
