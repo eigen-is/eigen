@@ -687,30 +687,6 @@ prepare_data() {
     }
 }
 
-# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on.
-pull_pinned() {
-    refs=''
-    for name in $IMAGES; do
-        ref=$(answer "$(image_key "$name")" "$1")
-        if [ -z "$ref" ]; then
-            die "The archive pins no $name image." "Restore an archive made by ./eigen backup on a release install."
-        fi
-        refs="$refs $ref"
-    done
-    version=$(answer EIGEN_VERSION "$1")
-    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
-        pull_refs $refs
-}
-
-# need_readable <archive>: the stage reads it as uid 1000, and a copy root made is often 0600. Docker Desktop shows a
-# bind-mounted file as the container user's.
-need_readable() {
-    if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
-    if ! ls -lnL "$1" | awk '{ bit = $3 == 1000 ? 2 : $4 == 1000 ? 5 : 8; exit substr($1, bit, 1) != "r" }'; then
-        die "Eigen runs as uid 1000, which cannot read $1." "Give it the file: sudo chown 1000:1000 $1"
-    fi
-}
-
 # where_archive <archive>: how the CLI reaches it, as STAGE_ARG in the API's container and CLI_ARG on this folder. A
 # bare name is one in backups/, which both see; any other file is mounted read-only as /restore/<name>.
 where_archive() {
@@ -737,6 +713,38 @@ where_archive() {
     fi
 }
 
+# need_readable <archive>: the stage reads it as uid 1000, and a copy root made is often 0600. Docker Desktop shows a
+# bind-mounted file as the container user's.
+need_readable() {
+    if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
+    if ! ls -lnL "$1" | awk '{ bit = $3 == 1000 ? 2 : $4 == 1000 ? 5 : 8; exit substr($1, bit, 1) != "r" }'; then
+        die "Eigen runs as uid 1000, which cannot read $1." "Give it the file: sudo chown 1000:1000 $1"
+    fi
+}
+
+# put_back: the archive where_archive found, staged, swapped in and started on the images it pins.
+put_back() {
+    before=$(image api)
+    kept=$(kept_aside)
+    # Docker would create a missing data/ as root for its bind mount, which the stage, uid 1000, cannot write.
+    if [ ! -d data ]; then
+        step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
+    fi
+    stage_archive
+    # It also refuses a staged tree the swap cannot rename in, while Eigen still runs.
+    pins=$(cli_as 0 restore --staged </dev/null)
+    if [ "$MODE" = release ]; then
+        pin=$(answer EIGEN_API_IMAGE "$pins")
+        if [ -n "$pin" ] && [ "$pin" != "$before" ]; then pull_pinned "$pins"; fi
+    fi
+    # After the question and the pull, so the wait is the last thing before the stop.
+    warn_restart rollback
+    swap_archive
+    after_swap "$before"
+    AT_EXIT=''
+    restart
+}
+
 # stage_archive: while Eigen runs, the API's user unpacks and checks the archive into data/.restoring, on the data/
 # the API sees, and asks unless $yes. A no ends the command; a refusal stops nothing.
 stage_archive() {
@@ -760,6 +768,21 @@ stage_archive() {
             ;;
         *) exit "$staged" ;;
     esac
+}
+
+# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on.
+pull_pinned() {
+    refs=''
+    for name in $IMAGES; do
+        ref=$(answer "$(image_key "$name")" "$1")
+        if [ -z "$ref" ]; then
+            die "The archive pins no $name image." "Restore an archive made by ./eigen backup on a release install."
+        fi
+        refs="$refs $ref"
+    done
+    version=$(answer EIGEN_VERSION "$1")
+    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
+        pull_refs $refs
 }
 
 # swap_archive: stops Eigen and swaps the staged tree in. A swap refused before its marker starts Eigen on the data it
@@ -802,29 +825,6 @@ after_swap() {
 
 # What restores kept aside in the install folder, as the swap names it, a name a line.
 kept_aside() { ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null || :; }
-
-# put_back: the archive where_archive found, staged, swapped in and started on the images it pins.
-put_back() {
-    before=$(image api)
-    kept=$(kept_aside)
-    # Docker would create a missing data/ as root for its bind mount, which the stage, uid 1000, cannot write.
-    if [ ! -d data ]; then
-        step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
-    fi
-    stage_archive
-    # It also refuses a staged tree the swap cannot rename in, while Eigen still runs.
-    pins=$(cli_as 0 restore --staged </dev/null)
-    if [ "$MODE" = release ]; then
-        pin=$(answer EIGEN_API_IMAGE "$pins")
-        if [ -n "$pin" ] && [ "$pin" != "$before" ]; then pull_pinned "$pins"; fi
-    fi
-    # After the question and the pull, so the wait is the last thing before the stop.
-    warn_restart rollback
-    swap_archive
-    after_swap "$before"
-    AT_EXIT=''
-    restart
-}
 
 # The last line of a restore: what its swap kept aside, if anything, is the operator's to delete.
 check_kept() {
