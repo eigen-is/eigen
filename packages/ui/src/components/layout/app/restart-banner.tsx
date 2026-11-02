@@ -11,6 +11,16 @@ import { useEffect, useState } from 'react';
 
 const MINUTE_MS = 60_000;
 const SECOND_MS = 1000;
+const UPDATE_WORDS = {
+    soon: 'Eigen restarts for an update',
+    due: 'Eigen is about to restart for an update',
+    warning: "Send or save what you're writing.",
+};
+const ROLLBACK_WORDS = {
+    soon: 'Eigen goes back to an earlier version',
+    due: 'Eigen is about to go back to an earlier version',
+    warning: "What you change from now on won't be in it.",
+};
 
 export function RestartBanner() {
     const { notice, streamDown } = useRestartNotice();
@@ -80,29 +90,16 @@ function RestartText({
 
 // The sentence in three parts, so the ticking `when` can sit apart from the words that only change with the state.
 function restartParts({ reason }: HeldRestartNotice, msLeft: number, streamDown: boolean) {
+    const { soon, due, warning } = reason === 'update' ? UPDATE_WORDS : ROLLBACK_WORDS;
     if (msLeft > 0) {
         const seconds = Math.ceil(msLeft / SECOND_MS);
         const when =
             msLeft > MINUTE_MS
                 ? `in ${Math.ceil(msLeft / MINUTE_MS)} minutes`
                 : `in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
-        return reason === 'update'
-            ? {
-                  lead: 'Eigen restarts for an update',
-                  when,
-                  tail: ". Send or save what you're writing. This page reloads by itself afterwards.",
-              }
-            : {
-                  lead: 'Eigen goes back to an earlier version',
-                  when,
-                  tail: ". What you change from now on won't be in it. This page reloads by itself afterwards.",
-              };
+        return { lead: soon, when, tail: `. ${warning} This page reloads by itself afterwards.` };
     }
     // A stream that dropped once the time had come is the restart itself, not a crash.
-    const text = streamDown
-        ? "Eigen is updating. This page reloads when it's back."
-        : reason === 'update'
-          ? "Eigen is about to restart for an update. Send or save what you're writing."
-          : "Eigen is about to go back to an earlier version. What you change from now on won't be in it.";
+    const text = streamDown ? "Eigen is updating. This page reloads when it's back." : `${due}. ${warning}`;
     return { lead: text, when: null, tail: '' };
 }
