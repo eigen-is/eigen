@@ -110,6 +110,8 @@ export class Drive {
     private readonly home: Home;
     private readonly owner: User;
     private readonly mounts = new Map<string, Mount>();
+    // Every addMount still running, including the close of a mount it built for a closing home.
+    private readonly addingMounts = new Set<Promise<void>>();
     private defaultMountId: string = DEFAULT_MOUNT_ID;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private readonly documents: CollabRegistry;
@@ -137,6 +139,11 @@ export class Drive {
     }
 
     public async destruct(): Promise<void> {
+        // A mount that is still starting is not in this.mounts yet. Its addMount sees the home closing
+        // and closes the mount itself. The home closes the mount's metadata.db after destruct returns,
+        // so destruct waits for that addMount first.
+        await Promise.allSettled(this.addingMounts);
+
         // An open collab document may still write to its database while it closes, so the documents
         // close before the mount databases do. A document that is still loading would keep
         // destructAll waiting on its download, so every mount stops its downloads first.
@@ -157,8 +164,14 @@ export class Drive {
     // ---- Mounts ----
 
     // The home's close only closes the mounts this Drive holds. So a closing home gets no new mount,
-    // and a mount that finishes starting after the close began is closed here instead of added.
-    public async addMount(config: MountConfig): Promise<void> {
+    // and a mount that finishes starting after the close began is closed by startMount instead of added.
+    public addMount(config: MountConfig): Promise<void> {
+        const adding = this.startMount(config).finally(() => this.addingMounts.delete(adding));
+        this.addingMounts.add(adding);
+        return adding;
+    }
+
+    private async startMount(config: MountConfig): Promise<void> {
         if (!this.home.closing) {
             // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
             const mount = new Mount(
