@@ -1,7 +1,7 @@
-// The Email collaborators dialog: a message about one Drive file to everyone it is shared with, with a link to the file
-// that the server adds. Drive's Share dialog and an editor's File menu open it, for example. The subject starts as the
-// file's name and the message as the user's first signature. Send waits until the message says more than that
-// signature, and while the subject or the message is too long.
+// The Email collaborators dialog: a message about one Drive file to everyone it is shared with. The server adds a link
+// to the file. Drive's Share dialog and an editor's File menu open it, for example. The subject starts as the file's
+// name, and the message starts as the user's first signature. Send stays disabled until the message says more than the
+// signature. It is also disabled while the subject or the message is too long. Only a click on Send sends the email.
 
 import { useEmailCollaborators } from '@workspace/lib/drive';
 import { useSpaceSettings } from '@workspace/lib/space';
@@ -26,17 +26,23 @@ const SUBJECT_LIMIT = 200;
 export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmailCollaboratorsProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title="Email collaborators" size="sm">
-            <EmailCollaboratorsForm path={path} />
+            <EmailCollaboratorsBody path={path} />
         </FormDialog>
     );
 }
 
+// The editor takes its content only when it mounts, so the form waits for the settings that hold the signature.
+function EmailCollaboratorsBody({ path }: { path: DrivePath }) {
+    const { data: spaceSettings, isLoading } = useSpaceSettings();
+    if (isLoading) return null;
+    return <EmailCollaboratorsForm path={path} signature={spaceSettings?.email?.signatures?.[0]?.html ?? ''} />;
+}
+
 // Mounted with the dialog, so each opening starts from the file's name and the signature.
-function EmailCollaboratorsForm({ path }: { path: DrivePath }) {
+function EmailCollaboratorsForm({ path, signature }: { path: DrivePath; signature: string }) {
     const defaultSubject = stripEigenExtension(path.name);
-    const { data: spaceSettings } = useSpaceSettings();
     const [subject, setSubject] = useState(defaultSubject);
-    const [message, setMessage] = useState(spaceSettings?.email?.signatures?.[0]?.html ?? '');
+    const [message, setMessage] = useState(signature);
     const [messageText, setMessageText] = useState('');
     // The editor's own text of the seeded signature, so a message that is only the signature can't be sent.
     const [seedText, setSeedText] = useState('');
@@ -68,6 +74,10 @@ function EmailCollaboratorsForm({ path }: { path: DrivePath }) {
                         id="email-subject"
                         value={subject}
                         onChange={(e) => setSubject(e.target.value)}
+                        // An email can't be taken back, so Enter in the subject doesn't send it.
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.preventDefault();
+                        }}
                         maxLength={SUBJECT_LIMIT}
                     />
                 </div>

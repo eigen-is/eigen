@@ -9,14 +9,15 @@ import { parseOwnerId } from '@workspace/lib/types';
 import { ICS_MIME } from '@workspace/lib/types/drive';
 import type { FileImportSource } from '@workspace/lib/types/file-subject';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { useFileDownload } from '../../download';
 import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../transfer';
 import { invalidateEventList } from './keys';
 import { useCreateCalendar, useDeleteCalendar } from './use-calendar';
 
-// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is refused.
+// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is
+// refused.
 export function isTransferableCalendarHome(ownerId: string, viewerId: string): boolean {
     return ownerId === viewerId || parseOwnerId(ownerId).type === 'team';
 }
@@ -63,7 +64,8 @@ export function useImportCalendarFromDevice() {
     });
 }
 
-// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts them.
+// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts
+// them.
 export function useImportCalendar() {
     const queryClient = useQueryClient();
 
@@ -92,15 +94,14 @@ type ImportCalendarTarget =
     | { kind: 'existing'; ownerId: string; calendarId: string }
     | { kind: 'new'; name: string; color: string };
 
-// A new calendar that took no events is deleted again. A failed attempt's calendar is remembered so a retry reuses it,
-// for as long as the caller stays mounted, so a dialog that mounts the hook with each opening starts fresh.
+// A new calendar is made in the viewer's own home and the file imported into it. When the import fails or takes no
+// events, the calendar is deleted again at once, so a retry with another name or target starts clean.
 export function useImportToCalendar(ownerId: string): {
     importToCalendar: (source: FileImportSource, target: ImportCalendarTarget) => Promise<void>;
 } {
     const createCalendar = useCreateCalendar(ownerId);
     const deleteCalendar = useDeleteCalendar(ownerId);
     const importCalendar = useImportCalendar();
-    const createdCalendarId = useRef<string | null>(null);
 
     const importToCalendar = useCallback(
         async (source: FileImportSource, target: ImportCalendarTarget) => {
@@ -108,16 +109,13 @@ export function useImportToCalendar(ownerId: string): {
                 await importCalendar.mutateAsync({ ...source, ownerId: target.ownerId, calendarId: target.calendarId });
                 return;
             }
-            if (!createdCalendarId.current) {
-                const created = await createCalendar.mutateAsync({ name: target.name, color: target.color });
-                createdCalendarId.current = created.id;
-            }
-            const calendarId = createdCalendarId.current;
-            const result = await importCalendar.mutateAsync({ ...source, ownerId, calendarId });
-            if (result.imported === 0) {
-                await deleteCalendar.mutateAsync(calendarId);
-                createdCalendarId.current = null;
-            }
+            const { id: calendarId } = await createCalendar.mutateAsync({ name: target.name, color: target.color });
+            const result = await importCalendar.mutateAsync({ ...source, ownerId, calendarId }).catch(async (error) => {
+                // The delete's hook toasts its own failure, and the caller must still see why the import failed.
+                await deleteCalendar.mutateAsync(calendarId).catch(() => {});
+                throw error;
+            });
+            if (result.imported === 0) await deleteCalendar.mutateAsync(calendarId);
         },
         [createCalendar, deleteCalendar, importCalendar, ownerId],
     );

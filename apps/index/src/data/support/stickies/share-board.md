@@ -6,7 +6,7 @@ category: Sharing
 tags: [stickies, sharing, permissions, collaboration]
 related: [stickies/get-started, getting-started/how-sharing-works]
 order: 70
-updated: 2026-06-08
+updated: 2026-11-02
 ---
 
 A Stickies board is private to you until you share it. You can share with specific people, with a whole team, or with anyone who has the link, and choose whether they can view or also make changes.
@@ -35,7 +35,7 @@ If you belong to a team, click **Share with team** at the bottom of the dialog a
 
 Under **General access**, a board starts as **Restricted**. Only the people you have added can open it.
 
-To share more widely, click the lock icon to switch it to **Unrestricted**, then choose **Can edit** or **Can view**. Click **Save**, then use the link icon in the **Share** dialog to copy the link.
+To share more widely, click the lock icon to switch it to **Unrestricted**, then choose **Can edit** or **Can view**. To copy the link, click the link icon next to **People with access**. Then click **Save**, which closes the dialog.
 
 <div class="eigen-callout">
 

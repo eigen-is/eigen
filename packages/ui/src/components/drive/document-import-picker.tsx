@@ -52,8 +52,9 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
 
     const runImport = async (from: ImportSource, mode: ImportMode) => {
         const options = { mode, afterFrameId };
-        if ('file' in from) await importMutation.mutateAsync({ pathId: path.id, file: from.file, options });
-        else
+        if ('file' in from) {
+            await importMutation.mutateAsync({ pathId: path.id, file: from.file, options });
+        } else {
             await importFromDriveMutation.mutateAsync({
                 pathId: path.id,
                 sourceOwnerId: from.drive.ownerId,
@@ -61,6 +62,7 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
                 sourcePathId: from.drive.id,
                 options,
             });
+        }
     };
 
     return (

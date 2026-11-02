@@ -89,7 +89,7 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
 }
 
 function buildAttendeeSummary(attendees: readonly Attendee[]): string {
-    const counts: Record<string, number> = {};
+    const counts: Partial<Record<Attendee['status'], number>> = {};
     for (const a of attendees) {
         counts[a.status] = (counts[a.status] ?? 0) + 1;
     }

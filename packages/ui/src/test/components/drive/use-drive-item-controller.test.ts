@@ -77,8 +77,12 @@ function render(actions: DriveActionRunner) {
 test('Delete and Backspace run the row that shows the delete key, even after another destructive row', () => {
     for (const key of ['Delete', 'Backspace']) {
         const { actions, ran } = runner([destructive('rename'), { ...destructive('trash'), shortcut: DELETE_HOTKEY }]);
+        // The key is pressed on the list itself, which the hook checks before it acts.
+        const list = document.createElement('div');
         render(actions).handleKeyDown({
             key,
+            target: list,
+            currentTarget: list,
             preventDefault: () => {},
             stopPropagation: () => {},
         } as unknown as KeyboardEvent<HTMLElement>);

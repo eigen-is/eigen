@@ -1,6 +1,7 @@
 // Email collaborators: a subject seeded with the file's name, a message seeded with the user's signature, and a copy to
-// self. Send waits until the message says more than the signature, and while the subject or the message is too long.
-// Enter in the subject sends, Enter in the message starts a new paragraph. A send closes the dialog, and a failed one
+// self. The signature is there even when the settings arrive after the dialog opened. Send waits until the message
+// says more than the signature, and while the subject or the message is too long. Only a click on Send sends: Enter in
+// the subject does nothing, and Enter in the message starts a new paragraph. A send closes the dialog, and a failed one
 // stays open with what was typed.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
@@ -19,16 +20,20 @@ const realDrive = { ...(await import('@workspace/lib/drive')) };
 const realSpace = { ...(await import('@workspace/lib/space')) };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useEmailCollaborators: () => ({
-        mutateAsync: sendEmail,
-        mutate: (variables: EmailVariables, options?: { onSuccess?: () => void }) =>
-            sendEmail(variables).then(options?.onSuccess, () => {}),
-        isPending: false,
-    }),
+    useEmailCollaborators: () => ({ mutateAsync: sendEmail }),
 }));
+// The settings start loaded, as they are once any app has read them. A test may hold them back until it calls
+// settingsArrive, as on a first open right after sign-in.
+const SETTINGS = { email: { signatures: [{ html: '<p>Reinder</p>' }] } };
+let settingsLoaded = true;
+let settingsArrive = () => {};
 mock.module('@workspace/lib/space', () => ({
     ...realSpace,
-    useSpaceSettings: () => ({ data: { email: { signatures: [{ html: '<p>Reinder</p>' }] } } }),
+    useSpaceSettings: () => {
+        const [loaded, setLoaded] = useState(settingsLoaded);
+        settingsArrive = () => setLoaded(true);
+        return loaded ? { data: SETTINGS, isLoading: false } : { data: undefined, isLoading: true };
+    },
 }));
 afterAll(() => {
     mock.module('@workspace/lib/drive', () => realDrive);
@@ -52,6 +57,7 @@ beforeEach(() => {
     sendEmail.mockReset();
     sendEmail.mockImplementation(async () => {});
     onOpenChange.mockClear();
+    settingsLoaded = true;
 });
 
 function Harness() {
@@ -142,13 +148,25 @@ test('an emptied subject sends as the file name', async () => {
     expect(sendEmail.mock.calls[0]?.[0].subject).toBe('Notes');
 });
 
-test('Enter in the subject sends', async () => {
+test('a first open before the settings arrive still starts the message with the signature', async () => {
+    settingsLoaded = false;
+    await open();
+    await act(async () => settingsArrive());
+    await settle();
+    expect(messageEditor().getText()).toBe('Reinder');
+    await typeMessage('Hi. ');
+    await act(async () => button('Send')?.click());
+    await settle();
+    expect(sendEmail.mock.calls[0]?.[0].message).toBe('<p>Hi. Reinder</p>');
+});
+
+test('Enter in the subject sends nothing, and the dialog stays open', async () => {
     await open();
     await typeMessage('Hi. ');
     await act(async () => pressEnter(subjectField()));
     await settle();
-    expect(sendEmail).toHaveBeenCalledTimes(1);
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
+    expect(sendEmail).not.toHaveBeenCalled();
+    expect(onOpenChange).not.toHaveBeenCalled();
 });
 
 test('Enter in the message starts a new paragraph and sends nothing', async () => {

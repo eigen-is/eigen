@@ -1,11 +1,16 @@
+// The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
+// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it and ⌘A selects every row. The
+// list spreads the returned handleKeyDown on its focusable container, and the hook keeps the focus on that container
+// while nothing else holds it.
+
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { UseListSelectionReturn } from './use-list-selection';
 
-// Lifted-cursor mode, both props or neither: the parent owns the cursor — mail tracks it by
-// email id so it survives sort/new-mail changes and shares it with the shortcuts layer. The
-// hook navigates from cursorIndex, reports moves to onCursorChange, and skips its own activeId
-// sync (the owner decides how an opened row moves the cursor).
+// Both props or neither. With both, the parent owns the cursor. Mail does this: it tracks the cursor by email id, so
+// the cursor survives a new sort or new mail, and its shortcuts read the same cursor. The hook then moves from
+// cursorIndex, reports each move to onCursorChange, and leaves activeId alone, since the parent decides where the
+// cursor goes when a row opens.
 type LiftedCursorOptions =
     | { cursorIndex: number; onCursorChange: (index: number) => void }
     | { cursorIndex?: undefined; onCursorChange?: undefined };
@@ -14,8 +19,8 @@ type UseKeyboardListNavigationOptions<T> = {
     items: T[];
     activeId?: string;
     getId: (item: T) => string;
-    // For lists where the selection key differs from the routing key (admin members
-    // route by membership id but select/drag by userId). Defaults to getId.
+    // For a list whose selection key is not its routing key, such as admin members, which route by membership id but
+    // select and drag by user id. Defaults to getId.
     getSelectionId?: (item: T) => string;
     onSelect: (id: string) => void;
     onQuickLook?: (id: string) => void;
@@ -26,9 +31,9 @@ type UseKeyboardListNavigationOptions<T> = {
     selection?: UseListSelectionReturn<T>;
     columns?: number;
     scrollToIndex?: (index: number) => void;
-    // Off while another surface owns typing (mail's inline composer): the list then neither
-    // grabs focus on mount nor reclaims it from <body>, so arrows can't start switching
-    // conversations under a half-written reply. Default on.
+    // Off while another part of the page owns typing, such as mail's inline composer. The list then neither takes the
+    // focus on mount nor takes it back from <body>, so the arrows can't switch conversations under a half-written
+    // reply. On by default.
     reclaimFocus?: boolean;
 } & LiftedCursorOptions;
 
@@ -72,12 +77,11 @@ export function useKeyboardListNavigation<T>({
         }
     }, [lifted, activeId, items]);
 
-    // The list owns the keyboard model, so it takes focus on mount — and takes it back whenever
-    // focus falls to <body>. Clicking non-focusable chrome (the detail panel, a toolbar) or
-    // restoring the page from the back/forward cache leaves nothing focused, and every shortcut
-    // here would stay dead until the user clicked a row again. While reclaimFocus is off the
-    // whole effect stands down; flipping it back on re-arms the grab timer, which also covers
-    // closing a composer that held focus — unmounting a focused subtree fires NO focusout.
+    // The list owns the keyboard, so it takes the focus on mount, and takes it back whenever the focus falls to <body>.
+    // A click on something that can't take focus, such as the detail panel or a toolbar, leaves nothing focused, and
+    // so does a page restored from the back/forward cache. Every key here would then do nothing until the user
+    // clicked a row again. Turning reclaimFocus back on starts the timer again. That also covers a closed composer
+    // that held the focus, because a focused element that unmounts fires no focusout.
     useEffect(() => {
         if (!reclaimFocus) return;
         const focusList = () => containerRef.current?.focus({ preventScroll: true });
@@ -108,8 +112,8 @@ export function useKeyboardListNavigation<T>({
         }
         const container = containerRef.current;
         if (!container) return;
-        const item = container.querySelectorAll(itemSelector)[index] as HTMLElement | undefined;
-        if (!item) return;
+        const item = container.querySelectorAll(itemSelector)[index];
+        if (!(item instanceof HTMLElement)) return;
         const itemTop = item.offsetTop;
         const itemBottom = itemTop + item.offsetHeight;
         if (itemTop < container.scrollTop) {
@@ -133,6 +137,9 @@ export function useKeyboardListNavigation<T>({
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+        // React bubbles a key through its own tree, so a dialog that a row's menu portals to the body would reach the
+        // list too: Enter in its field would open the row. Only a key pressed inside the list's own DOM is the list's.
+        if (!(e.target instanceof Node) || !e.currentTarget.contains(e.target)) return;
         if (items.length === 0) return;
 
         if (selection && (e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey)) {
@@ -158,8 +165,8 @@ export function useKeyboardListNavigation<T>({
             setSelectedIndex(next);
         };
 
-        // ⌘A on a list nobody clicked yet selects every row with the cursor still at -1, so Space,
-        // Enter and Delete fall back to the topmost selected row; a Delete adopter expands it to the batch.
+        // ⌘A on a list nobody clicked yet selects every row while the cursor is still at -1. Space, Enter and Delete
+        // then act on the topmost selected row, and a list's onDelete may widen that to the whole selection.
         const targetIndex = () =>
             selectedIndex >= 0 && selectedIndex < items.length
                 ? selectedIndex
@@ -167,7 +174,7 @@ export function useKeyboardListNavigation<T>({
 
         switch (e.key) {
             case 'ArrowDown':
-                // From no selection, Down enters at the first item — not columns-1 in a grid.
+                // With no row under the cursor, Down starts at the first row, also in a grid.
                 moveTo((prev) => (prev < 0 ? 0 : Math.min(prev + columns, items.length - 1)));
                 break;
 
@@ -221,27 +228,23 @@ export function useKeyboardListNavigation<T>({
             case 'PageUp':
             case 'Home':
                 e.preventDefault();
-                if (items.length > 0) {
-                    setSelectedIndex(0);
-                    if (selection) selection.select(getSelectionId(items[0]));
-                    notify(items[0], 0);
-                    scrollToRow(0);
-                }
+                jumpTo(0);
                 break;
 
             case 'PageDown':
             case 'End':
                 e.preventDefault();
-                if (items.length > 0) {
-                    const lastIndex = items.length - 1;
-                    setSelectedIndex(lastIndex);
-                    if (selection) selection.select(getSelectionId(items[lastIndex]));
-                    notify(items[lastIndex], lastIndex);
-                    scrollToRow(lastIndex);
-                }
+                jumpTo(items.length - 1);
                 break;
         }
     };
 
-    return { selectedIndex, setSelectedIndex, handleKeyDown };
+    const jumpTo = (index: number) => {
+        setSelectedIndex(index);
+        selection?.select(getSelectionId(items[index]));
+        notify(items[index], index);
+        scrollToRow(index);
+    };
+
+    return { selectedIndex, handleKeyDown };
 }

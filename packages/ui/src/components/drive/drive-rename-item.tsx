@@ -5,7 +5,7 @@
 import { useRenamePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isFolderType } from '@workspace/lib/types/drive';
-import { DriveCreateItemDialog } from './drive-create-folder-item';
+import { DriveItemNameDialog } from './drive-item-name-dialog';
 
 export type DriveRenameItemProps = {
     path: DrivePath;
@@ -34,15 +34,15 @@ export function DriveRenameItem({ path, open, onOpenChange, onAfterAction }: Dri
     };
 
     return (
-        <DriveCreateItemDialog
+        <DriveItemNameDialog
             open={open}
             onOpenChange={onOpenChange}
-            onCreateItem={handleRename}
+            onSave={handleRename}
             type={isFolder ? 'Folder' : 'File'}
             path={path}
             title={`Rename ${baseName}`}
             defaultValue={baseName}
-            confirmLabel="Rename"
+            submitLabel="Rename"
         />
     );
 }

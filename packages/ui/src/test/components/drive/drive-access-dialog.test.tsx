@@ -109,6 +109,20 @@ async function open() {
     ({ unmount } = await renderInDocument(createElement(Harness)));
 }
 
+// The dialog as Drive's folder page hosts it: the page takes the item out of its URL when Share closes, so the path
+// goes back to null.
+function PageHarness() {
+    const [path, setPath] = useState<DrivePath | null>(notes);
+    return createElement(DriveAccessDialog, {
+        path,
+        open: path !== null,
+        onOpenChange: (next: boolean) => {
+            onOpenChange(next);
+            if (!next) setPath(null);
+        },
+    });
+}
+
 const dialog = () => document.querySelector('[role="dialog"]');
 // The footer's buttons, apart from the corner X, which a screen reader calls Close too.
 const footerButtons = () => [
@@ -250,6 +264,19 @@ test('a save that fails stays open with the edits kept, and Cancel waits while a
         expect.objectContaining({ add: [{ id: 'dan@example.com', read: true, write: true }], remove: [] }),
     ]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('the envelope closes Share and opens Email collaborators, also where the host drops the path', async () => {
+    for (const host of [Harness, PageHarness]) {
+        ({ unmount } = await renderInDocument(createElement(host)));
+        await click(dialog()?.querySelector('button[aria-label="Email collaborators"]'));
+        await settle();
+        expect(onOpenChange.mock.calls).toEqual([[false]]);
+        const titles = [...document.querySelectorAll('[role="dialog"] h2')].map((h) => h.textContent);
+        expect([host.name, ...titles]).toEqual([host.name, 'Email collaborators']);
+        await unmount();
+        onOpenChange.mockClear();
+    }
 });
 
 test('the owner shares with a team from the footer menu', async () => {
