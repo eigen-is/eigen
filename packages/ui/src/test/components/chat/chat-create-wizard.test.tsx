@@ -78,8 +78,9 @@ test('each picked person has a remove button named after them, and it removes on
 test('a picked team has a remove button named after the team, and it goes back to picking people', async () => {
     await openWizard([DESIGN_TEAM]);
     const teamChat = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Team chat');
+    if (!teamChat) throw new Error('the wizard drew no Team chat button');
     await act(async () => {
-        teamChat?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+        teamChat.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     });
     await clickRow('Design');
 
