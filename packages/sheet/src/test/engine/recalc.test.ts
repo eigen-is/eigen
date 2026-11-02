@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
+import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
@@ -419,7 +419,7 @@ describe('engine/recalc — recalcSheets', () => {
         const report = Array.from({ length: 10 }, (): (Cell | null)[] => [formula('=SUM(Data!A:A)')]);
         const sheets = [sheet('d', 'Data', data), sheet('r', 'Report', report)];
         expect(() => recalcSheets(sheets, { maxDependencyBlocks: 9 })).toThrow(RangeError);
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 10 })[1].data![9][0]?.v).toBe(6_400);
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 10 })[1].data?.[9][0]?.v).toBe(6_400);
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {
@@ -503,5 +503,20 @@ describe('engine/recalc — sheetsNeedRecalc', () => {
         const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
         const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]), idless]);
         expect(sheetsNeedRecalc(out)).toBe(false);
+    });
+});
+
+describe('engine/recalc — extractDependencies', () => {
+    // Each quoted sheet name is glued to the reference after it as the formula is split, never by moving the rest of
+    // the parts, so a crafted file can't make the walk quadratic.
+    test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
+        const g = { sheets: [{ id: 's2', name: 'My Data', data: [[num(1)]] }], cellTextToIndexList: {} };
+        const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
+        expect(f.length).toBeGreaterThan(2_000_000);
+        const start = performance.now();
+        const deps = extractDependencies(g, f, 's1', null);
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(deps).toHaveLength(160_000);
+        expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
 });

@@ -241,58 +241,46 @@ function tokenize(formula: string): string[] {
     let singleQuoteStart = -1;
     let doubleQuoteStart = -1;
     const tokens: string[] = [];
-    // The index in tokens of each single-quoted sheet name.
-    const sheetNameTokens: number[] = [];
+    // A single-quoted sheet name waits here for the token after it, its `!A1`.
+    let sheetName: string | null = null;
+    const push = (parts: string[]) => {
+        if (sheetName != null) {
+            parts[0] = sheetName + parts[0];
+            sheetName = null;
+        }
+        for (const part of parts) tokens.push(part);
+    };
     for (let j = 0; j < formula.length; j += 1) {
         const char = formula.charAt(j);
         if (char === "'" && doubleQuoteStart === -1) {
             if (singleQuoteStart === -1) {
-                if (tokenStart !== j) {
-                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
-                }
+                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
                 singleQuoteStart = j;
                 tokenStart = j;
-            } else {
+            } else if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
                 // Two quotes in a row are an escaped quote inside the name.
-                if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
-                    j += 1;
-                } else {
-                    tokenStart = j + 1;
-                    tokens.push(formula.substring(singleQuoteStart, tokenStart));
-                    sheetNameTokens.push(tokens.length - 1);
-                    singleQuoteStart = -1;
-                }
+                j += 1;
+            } else {
+                tokenStart = j + 1;
+                sheetName = formula.substring(singleQuoteStart, tokenStart);
+                singleQuoteStart = -1;
             }
         } else if (char === '"' && singleQuoteStart === -1) {
             if (doubleQuoteStart === -1) {
-                if (tokenStart !== j) {
-                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
-                }
+                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
                 doubleQuoteStart = j;
                 tokenStart = j;
+            } else if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
+                j += 1;
             } else {
-                if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
-                    j += 1;
-                } else {
-                    tokenStart = j + 1;
-                    tokens.push(formula.substring(doubleQuoteStart, tokenStart));
-                    doubleQuoteStart = -1;
-                }
+                tokenStart = j + 1;
+                push([formula.substring(doubleQuoteStart, tokenStart)]);
+                doubleQuoteStart = -1;
             }
         }
     }
-    if (tokenStart !== formula.length) {
-        tokens.push(...formula.substring(tokenStart).split(OPERATORS));
-    }
-    // Glue each sheet name to the token after it, its `!A1`. Back to front, so the splices don't move the indexes
-    // still to come.
-    for (let k = sheetNameTokens.length - 1; k >= 0; k -= 1) {
-        const index = sheetNameTokens[k];
-        if (index !== tokens.length - 1) {
-            tokens[index] += tokens[index + 1];
-            tokens.splice(index + 1, 1);
-        }
-    }
+    if (tokenStart !== formula.length) push(formula.substring(tokenStart).split(OPERATORS));
+    if (sheetName != null) tokens.push(sheetName);
     return tokens;
 }
 
