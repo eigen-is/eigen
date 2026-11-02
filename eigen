@@ -13,7 +13,7 @@ REGISTRY=ghcr.io/eigen-is/eigen
 IMAGES='api frontend postfix dovecot unbound'
 # The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
 DECLINED=3
-# SWAP_MARKER in apps/api/src/cli/restore.ts, and data/ + RESTORING_DIR in apps/api/src/lib/backup/restore-server.ts.
+# SWAP_MARKER in apps/api/src/cli/restore-swap.ts, and data/ + RESTORING_DIR in apps/api/src/lib/backup/restore-server.ts.
 SWAP_MARKER=.eigen/restore-swap
 UNSTAGE='cli_as 0 rm -rf data/.restoring'
 LOG=.eigen/last-step.log
