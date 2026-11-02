@@ -109,3 +109,14 @@ test('the countdown moves on by the minute, then by the second', async () => {
     await tick(1000);
     expect(container.textContent).toContain('Eigen is about to restart for an update.');
 });
+
+test('the banner is a status region whose ticking time is hidden from the announcement', async () => {
+    await show({ notice: update(600_000), streamDown: false });
+    const region = container.querySelector('[role="status"]');
+    expect(region).not.toBeNull();
+    const spoken = region?.cloneNode(true) as HTMLElement;
+    spoken.querySelectorAll('[aria-hidden="true"]').forEach((hidden) => void hidden.remove());
+    expect(region?.textContent).toContain('in 10 minutes');
+    expect(spoken.textContent).not.toContain('minutes');
+    expect(spoken.textContent).toContain('Eigen restarts for an update');
+});

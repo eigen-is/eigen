@@ -2,6 +2,8 @@
 // save in time. It reads like the broadcast `shutdown` sends to every terminal: the time the message came, what is
 // about to happen and when, then the operator's own line as plain text. AppShell renders it at the foot of every
 // page. It shows nothing while the tab holds no notice, which is always so on a page without the event stream.
+// The strip is a status region, so a screen reader speaks it when it appears or its wording changes. The ticking
+// time is hidden from it, or it would be read out again every second in the last minute.
 
 import { dateFormatter, formatDayMonth } from '@workspace/lib/date';
 import { useRestartNotice } from '@workspace/lib/sse';
@@ -31,11 +33,11 @@ function RestartBroadcast({ notice, streamDown }: { notice: HeldRestartNotice; s
     }, [msLeft]);
 
     return (
-        <div className="shrink-0 border-t border-warning/40 bg-warning/10 app-gutter-x py-1.5 text-xs">
+        <div role="status" className="shrink-0 border-t border-warning/40 bg-warning/10 app-gutter-x py-1.5 text-xs">
             <p className="font-mono text-muted-foreground">
                 Broadcast message from Eigen ({broadcastTime(notice.heardAt)}):
             </p>
-            <p>{restartText(notice, msLeft, streamDown)}</p>
+            <RestartText notice={notice} msLeft={msLeft} streamDown={streamDown} />
             {notice.message && <p>“{notice.message}”</p>}
         </div>
     );
@@ -49,7 +51,27 @@ function broadcastTime(heardAt: number): string {
     return `${weekday} ${formatDayMonth(date)}, ${time}`;
 }
 
-function restartText({ reason }: HeldRestartNotice, msLeft: number, streamDown: boolean): string {
+function RestartText({
+    notice,
+    msLeft,
+    streamDown,
+}: {
+    notice: HeldRestartNotice;
+    msLeft: number;
+    streamDown: boolean;
+}) {
+    const { lead, when, tail } = restartParts(notice, msLeft, streamDown);
+    return (
+        <p>
+            {lead}
+            {when && <span aria-hidden="true"> {when}</span>}
+            {tail}
+        </p>
+    );
+}
+
+// The sentence in three parts, so the ticking `when` can sit apart from the words that only change with the state.
+function restartParts({ reason }: HeldRestartNotice, msLeft: number, streamDown: boolean) {
     if (msLeft > 0) {
         const seconds = Math.ceil(msLeft / SECOND_MS);
         const when =
@@ -57,12 +79,22 @@ function restartText({ reason }: HeldRestartNotice, msLeft: number, streamDown: 
                 ? `in ${Math.ceil(msLeft / MINUTE_MS)} minutes`
                 : `in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
         return reason === 'update'
-            ? `Eigen restarts for an update ${when}. Send or save what you're writing. This page reloads by itself afterwards.`
-            : `Eigen goes back to an earlier version ${when}. What you change from now on won't be in it. This page reloads by itself afterwards.`;
+            ? {
+                  lead: 'Eigen restarts for an update',
+                  when,
+                  tail: ". Send or save what you're writing. This page reloads by itself afterwards.",
+              }
+            : {
+                  lead: 'Eigen goes back to an earlier version',
+                  when,
+                  tail: ". What you change from now on won't be in it. This page reloads by itself afterwards.",
+              };
     }
     // A stream that dropped once the time had come is the restart itself, not a crash.
-    if (streamDown) return "Eigen is updating. This page reloads when it's back.";
-    return reason === 'update'
-        ? "Eigen is about to restart for an update. Send or save what you're writing."
-        : "Eigen is about to go back to an earlier version. What you change from now on won't be in it.";
+    const text = streamDown
+        ? "Eigen is updating. This page reloads when it's back."
+        : reason === 'update'
+          ? "Eigen is about to restart for an update. Send or save what you're writing."
+          : "Eigen is about to go back to an earlier version. What you change from now on won't be in it.";
+    return { lead: text, when: null, tail: '' };
 }
