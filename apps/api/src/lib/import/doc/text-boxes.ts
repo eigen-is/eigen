@@ -16,7 +16,6 @@ import {
     readTextBoxSide,
     TEXT_BOX_INSET,
 } from '@workspace/lib/docs/eigendoc';
-import { readNumberIn } from '@workspace/lib/guards';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import {
@@ -252,10 +251,10 @@ function insets(bodyPr: XmlElement | undefined): Pick<BoxLook, 'paddingX' | 'pad
     };
 }
 
-// A pair of insets as one padding: none where both are unset, where the mean is no finite number, or where it is Word's
-// own. Two lengths near the largest number add up past it, so a crafted pair can have an infinite mean.
-function meanPadding(a: number | null, b: number | null, word: number): number | null {
+// A pair of insets as one padding: none where both are unset or the mean is Word's own. Each side is halved before
+// the two are added, so two lengths near the largest number never add up past it.
+export function meanPadding(a: number | null, b: number | null, word: number): number | null {
     if (a === null && b === null) return null;
-    const mean = readNumberIn(((a ?? b ?? 0) + (b ?? a ?? 0)) / 2, 0, MAX_TEXT_BOX_PADDING);
-    return mean === null || Math.abs(mean - word) < 0.01 ? null : mean;
+    const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, (a ?? b ?? 0) / 2 + (b ?? a ?? 0) / 2));
+    return Math.abs(mean - word) < 0.01 ? null : mean;
 }

@@ -1,9 +1,10 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
-import { TEXT_BOX_DEFAULT_WIDTH } from '@workspace/lib/docs/eigendoc';
+import { MAX_TEXT_BOX_PADDING, TEXT_BOX_DEFAULT_WIDTH, TEXT_BOX_INSET } from '@workspace/lib/docs/eigendoc';
 import { CAPTION_LOOK, LIST_LEVEL } from '../../../lib/document/looks';
 import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
+import { meanPadding } from '../../../lib/import/doc/text-boxes';
 import { MAX_MEDIA_PARTS, PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
 import { C_NS } from '../../../lib/ooxml/ooxml';
 import * as ooxmlChart from '../../../lib/ooxml/ooxml-chart';
@@ -1066,6 +1067,17 @@ describe('text boxes as boxes', () => {
         expect(boxes).toHaveLength(2);
         expect(lines(json)).toContain('Figure 1');
         expect(nodesOfType(json, 'heading')).toHaveLength(1);
+    });
+});
+
+// A box's two insets of a side as one padding. No file reaches lengths this large, so the function is called alone.
+describe('meanPadding', () => {
+    test('two insets near the largest number are the largest padding, not one whose sum overflowed', () => {
+        expect(meanPadding(1.7e308, 1.7e308, TEXT_BOX_INSET.x)).toBe(MAX_TEXT_BOX_PADDING);
+    });
+
+    test('two insets near the most negative number are a padding of 0, as two small negative ones are', () => {
+        expect([meanPadding(-1e308, -1e308, TEXT_BOX_INSET.x), meanPadding(-5, -5, TEXT_BOX_INSET.x)]).toEqual([0, 0]);
     });
 });
 
