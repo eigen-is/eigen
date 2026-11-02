@@ -3,6 +3,7 @@
 // for casts and `!` one allowance per file, so a new one can't hide behind a removal elsewhere. Every run lowers an
 // allowance to a count that fell, so a cleanup needs no second step. `--verbose` prints each file's counts.
 
+import { dialogFooterHits } from './dialog-footer';
 import { sentenceCaseHits } from './sentence-case';
 import { stripNoise } from './strip-noise';
 import type { ExportsMaps, Primitive, SourceFile } from './unused-primitives';
@@ -59,6 +60,10 @@ const unusedByFile = new Map<string, Primitive[]>();
 function unusedIn(path: string, isType: boolean): number {
     return (unusedByFile.get(path) ?? []).filter((primitive) => primitive.isType === isType).length;
 }
+
+// CODE-STANDARDS § Standards Gates: a dialog footer outside FormDialog is an allow-listed exception. The files are found
+// once, from every source file, like the unused primitives, and a stale list entry counts against its own path.
+const footersOutside = new Set<string>();
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
 // The home-independent surfaces that deliberately carry no `:ownerId` (docs/ARCHITECTURE.md § Pitfalls):
@@ -163,6 +168,8 @@ type Metric = {
     // Ratcheted per file: a file without an allowance is allowed none.
     perFile?: true;
     count: (file: SourceFile) => number;
+    // What the author does about a hit, printed under the failure.
+    fix?: string;
 };
 
 function countMatches(source: string, pattern: RegExp): number {
@@ -295,6 +302,13 @@ const METRICS: Metric[] = [
         count: (file) => (file.path.endsWith('.tsx') ? handDrawnMenuChecks(file) : 0),
     },
     {
+        id: 'dialog-footers',
+        label: 'Dialog footers outside FormDialog',
+        hardZero: true,
+        count: ({ path }) => (footersOutside.has(path) ? 1 : 0),
+        fix: 'A dialog with fields and Cancel/submit is a FormDialog with a FormDialogForm, from @workspace/ui. One that is not a form (information only, several actions, a picker, a grid) goes on OWN_DIALOG_FOOTER in scripts/dialog-footer.ts with the reason. A listed file that no longer uses DialogFooter, or is gone, leaves the list.',
+    },
+    {
         id: 'sentence-case',
         label: 'Capitalized words in UI labels',
         hardZero: true,
@@ -348,6 +362,9 @@ for (const primitive of primitives.unused) {
     unusedByFile.set(primitive.file, [...(unusedByFile.get(primitive.file) ?? []), primitive]);
 }
 
+const footers = dialogFooterHits(sources);
+for (const path of footers.outside) footersOutside.add(path);
+
 const counts = new Map<string, number>(METRICS.map((metric) => [metric.id, 0]));
 const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [metric.id, new Map()]));
 
@@ -360,6 +377,10 @@ for (const file of sources) {
         counts.set(metric.id, (counts.get(metric.id) ?? 0) + hits);
         breakdown.get(metric.id)?.set(path, hits);
     }
+}
+for (const path of footers.stale) {
+    counts.set('dialog-footers', (counts.get('dialog-footers') ?? 0) + 1);
+    breakdown.get('dialog-footers')?.set(path, 1);
 }
 
 type Allowance = number | Record<string, number>;
@@ -468,6 +489,7 @@ for (const metric of failed) {
     for (const [path, hits] of [...(breakdown.get(metric.id) ?? [])].sort((a, b) => b[1] - a[1]).slice(0, 10)) {
         console.error(`      ${String(hits).padStart(4)}  ${path}`);
     }
+    if (metric.fix) console.error(`      ${metric.fix}`);
 }
 console.error('\nSee docs/CODE-STANDARDS.md § Standards gates. Run with --verbose for the full breakdown.');
 process.exit(1);
