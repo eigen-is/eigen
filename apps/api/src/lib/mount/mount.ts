@@ -86,7 +86,7 @@ export class Mount {
     public history!: FileHistory;
 
     // The open document databases by path id. A slot also queues the opens and closes of its path.
-    public documentDbs: Map<string, DocumentDbSlot> = new Map();
+    public readonly documentDbs = new Map<string, DocumentDbSlot>();
     // Set once by closeAllDatabases. From then on every document database open is refused.
     public closing = false;
 
@@ -105,7 +105,7 @@ export class Mount {
     public trashPurge?: Promise<void>;
     // Thumbnail jobs run in the background. closeAllDatabases waits for them, so no sharp worker or
     // row update outlives metadata.db.
-    public thumbnailJobs = new Set<Promise<void>>();
+    public readonly thumbnailJobs = new Set<Promise<void>>();
     // Aborted at teardown, so no close or Home shutdown waits on a download or an extraction read.
     public readonly downloads = new AbortController();
 
@@ -163,10 +163,6 @@ export class Mount {
         return path.join(this.baseDir, PATHS.DRIVE.STAGING_DIR);
     }
 
-    private get trashDir(): string {
-        return path.join(this.dataDir, '.trash');
-    }
-
     public get isRemote(): boolean {
         return this.config.storageType === 's3';
     }
@@ -199,7 +195,7 @@ export class Mount {
         if (!passive) {
             const dirs = [this.thumbsDir, this.previewsDir];
             if (this.isRemote) dirs.push(this.stagingDir);
-            if (this.isPathBased) dirs.push(this.trashDir);
+            if (this.isPathBased) dirs.push(path.join(this.dataDir, '.trash'));
             for (const dir of dirs) fs.mkdirSync(dir, { recursive: true });
         }
 
@@ -337,10 +333,10 @@ export class Mount {
     }
 
     public async getActivePath(pathId: string): Promise<DrivePath> {
-        const path = await this.getPath(pathId);
-        if (!path) throw new ApiError(404, 'Path not found');
-        if (path.trashedAt) throw new ApiError(404, 'File is in trash');
-        return path;
+        const pathEntry = await this.getPath(pathId);
+        if (!pathEntry) throw new ApiError(404, 'Path not found');
+        if (pathEntry.trashedAt) throw new ApiError(404, 'File is in trash');
+        return pathEntry;
     }
 
     public async listFolder(parentId: string): Promise<DrivePath[]> {
@@ -670,9 +666,9 @@ export class Mount {
         if (error) throw error;
     }
 
-    // assertUniqueName's SELECT leaves a race open: two creates can both pass it before either inserts.
-    // Off `local` no lock keeps a trash or a permanent delete of the folder out of a create either. So
-    // the folder is checked again in the transaction of the insert.
+    // Two creates can both pass assertUniqueName before either inserts. The unique index then refuses
+    // the second insert, and that becomes a 409. Off `local` no lock keeps a trash or a permanent delete
+    // of the folder away from a create, so the folder is checked again in the transaction of the insert.
     private async insertPathRow(values: typeof paths.$inferInsert): Promise<void> {
         try {
             this.db.transaction((tx) => {
@@ -906,7 +902,6 @@ export class Mount {
     // transaction of its row write, and a restore also runs it to pick its folder. The target must not be in
     // the row's own subtree. No folder from the target up to the root may be in trash either: that answers
     // the 404 of a deleted folder, because the folder's permanent delete would take the row with it.
-    // `seen` stops the walk on a tree that already has a cycle.
     public targetFolderErrorInTx(tx: Tx, pathId: string, targetParentId: string | null): ApiError | null {
         const seen = new Set<string>();
         let current = targetParentId;
@@ -1018,11 +1013,7 @@ export class Mount {
             return row ? row.file || pathId : null;
         }
         const rows = await this.db
-            .select({
-                id: paths.id,
-                file: paths.file,
-                parentId: paths.parentId,
-            })
+            .select({ id: paths.id, file: paths.file, parentId: paths.parentId })
             .from(paths)
             .where(sql`${paths.id} IN (${ancestorIds(pathId)})`)
             .all();
@@ -1055,10 +1046,7 @@ export class Mount {
     public async readKey(storageKey: string): Promise<StorageFile | null> {
         const staged = this.pendingStagedCopy(storageKey);
         if (staged) return Bun.file(staged);
-        if (await this.storage.exists(storageKey)) {
-            return this.storage.read(storageKey);
-        }
-        return null;
+        return (await this.storage.exists(storageKey)) ? this.storage.read(storageKey) : null;
     }
 
     public async readRange(pathId: string, start: number, end: number): Promise<StorageFile | null> {
@@ -1273,10 +1261,7 @@ export class Mount {
         while (this.pathLocks.has(pathId)) {
             await this.pathLocks.get(pathId);
         }
-        let resolve!: () => void;
-        const promise = new Promise<void>((r) => {
-            resolve = r;
-        });
+        const { promise, resolve } = Promise.withResolvers<void>();
         this.pathLocks.set(pathId, promise);
         try {
             return await fn();
@@ -1404,9 +1389,7 @@ export class Mount {
 
     public async getTotalSize(): Promise<number> {
         const result = await this.db
-            .select({
-                total: sql<number>`COALESCE(SUM(${paths.size}), 0)`,
-            })
+            .select({ total: sql<number>`COALESCE(SUM(${paths.size}), 0)` })
             .from(paths)
             .where(eq(paths.type, 'file'))
             .get();
@@ -1416,9 +1399,7 @@ export class Mount {
 
     public async getFileCount(): Promise<number> {
         const result = await this.db
-            .select({
-                count: sql<number>`COUNT(*)`,
-            })
+            .select({ count: sql<number>`COUNT(*)` })
             .from(paths)
             .where(eq(paths.type, 'file'))
             .get();
@@ -1477,14 +1458,8 @@ export class Mount {
             .all();
 
         let total = 0;
-        for (const c of children) {
-            if (c.type === 'file') {
-                total += c.size ?? 0;
-            } else if (c.size !== null) {
-                total += c.size;
-            } else {
-                total += this.computeFolderSizeInTx(tx, c.id);
-            }
+        for (const child of children) {
+            total += child.size ?? (child.type === 'file' ? 0 : this.computeFolderSizeInTx(tx, child.id));
         }
 
         tx.update(paths).set({ size: total }).where(eq(paths.id, folderId)).run();
