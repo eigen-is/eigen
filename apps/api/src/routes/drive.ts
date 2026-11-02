@@ -24,7 +24,7 @@ import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
 import { copyPathAcross, copySize } from '../lib/drive/copy-across';
-import { getUniqueFileName } from '../lib/drive/naming';
+import { FREE_NAME_ATTEMPTS, getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -58,10 +58,6 @@ import {
 // One cap for every free-text share note, such as a mail to the collaborators or an access request. So no
 // oversized note is stored or mailed.
 const MAX_SHARE_MESSAGE_LENGTH = 12000;
-
-// How often a copy picks a new free name after another create took the one it picked. Each parallel
-// copy of one name into one folder can cost the others one attempt.
-const COPY_NAME_ATTEMPTS = 5;
 
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
@@ -237,7 +233,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                         user,
                     );
                 } catch (e) {
-                    if (attempt === COPY_NAME_ATTEMPTS || !isNameTakenError(e, finalName)) throw e;
+                    if (attempt === FREE_NAME_ATTEMPTS || !isNameTakenError(e, finalName)) throw e;
                 }
             }
         },

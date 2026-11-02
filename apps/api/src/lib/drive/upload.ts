@@ -1,15 +1,16 @@
 // The last steps of a new file, such as an upload or a copy from another drive. They turn a temp
-// file into a file in the tree, tell open tabs and write the history row. A thumbnail is then made in
-// the background, by a helper that an overwrite of a file uses too.
+// file into a file in the tree under a free name, tell open tabs and write the history row. A
+// thumbnail is then made in the background, by a helper that an overwrite of a file uses too.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
+import { isNameTakenError } from '../mount/helpers';
 import { foldName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
-import { getUniqueFileName } from './naming';
+import { FREE_NAME_ATTEMPTS, getUniqueFileName } from './naming';
 
 // The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
 // caller removes the temp file.
@@ -27,23 +28,9 @@ export async function finalizeUpload(
     },
 ): Promise<DrivePath> {
     // The store keeps names in NFC, so the name is compared with its siblings in that form too.
-    let safeName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
-    const originalName = safeName;
-
-    const existing = await mount.getChildByName(args.parentId, safeName);
-    if (existing) {
-        const siblings = await mount.listFolder(args.parentId);
-        const usedNames = new Set(siblings.map((s) => foldName(s.name)));
-        safeName = getUniqueFileName(safeName, usedNames);
-    }
-
-    const pathId = await mount.createFileFromTemp(
-        args.parentId,
-        safeName,
-        args.mimeType,
-        args.size,
-        args.hash,
-        args.tempId,
+    const originalName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
+    const { pathId, name: safeName } = await createUnderFreeName(mount, args.parentId, originalName, (name) =>
+        mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
     );
     const uploadedFile = originalName
         ? await mount.updatePath(pathId, { details: { originalName } })
@@ -70,6 +57,29 @@ export async function finalizeUpload(
     }
 
     return uploadedFile;
+}
+
+// Two uploads of one name into one folder at once, such as two pasted screenshots, both read the name as
+// free, and the one that creates second gets a 409. That one reads the folder again and picks the next free
+// name, as the copy route does. The temp file is only read by a create, so a lost one can try again.
+async function createUnderFreeName(
+    mount: Mount,
+    parentId: string,
+    desired: string,
+    create: (name: string) => Promise<string>,
+): Promise<{ pathId: string; name: string }> {
+    for (let attempt = 1; ; attempt++) {
+        let name = desired;
+        if (await mount.getChildByName(parentId, desired)) {
+            const siblings = await mount.listFolder(parentId);
+            name = getUniqueFileName(desired, new Set(siblings.map((s) => foldName(s.name))));
+        }
+        try {
+            return { pathId: await create(name), name };
+        } catch (e) {
+            if (attempt === FREE_NAME_ATTEMPTS || !isNameTakenError(e, name)) throw e;
+        }
+    }
 }
 
 export function regenerateThumbnailAsync(

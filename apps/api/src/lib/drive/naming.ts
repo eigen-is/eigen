@@ -1,7 +1,13 @@
 // Picks a free name beside existing ones by adding a number, such as `photo (2).jpg`, for an upload, a
-// copy or a restore that would collide with a sibling.
+// copy or a restore that would collide with a sibling. It also caps how often a create picks again when a
+// create running at the same time took the name first.
 
 import { foldName, MAX_NAME_BYTES } from '../mount/names';
+
+// How often a create picks a new free name after another create took the one it picked, such as two
+// uploads or two copies of one name into one folder at once. Each racing create can cost the others one
+// attempt.
+export const FREE_NAME_ATTEMPTS = 5;
 
 // The used names come folded with foldName, the fold of a case-insensitive disk. So the name picked here
 // is one the mount takes.
