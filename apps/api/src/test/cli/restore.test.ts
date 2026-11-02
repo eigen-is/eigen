@@ -1309,8 +1309,9 @@ describe('restore --stage and --swap', () => {
                 expect(asideDirs(live)).toEqual([]);
                 expect(delayed.code).toBe(0);
                 expect(waited).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
-                // A refusal leaves the staged restore usable: once the remote API stops, the same install swaps.
+                // A refusal leaves the staged restore usable: once the remote API is gone, the same install swaps.
                 clearInterval(remote);
+                rmSync(join(live, 'data/server', DATA_LEASE_FILE));
                 expect((await swap(live)).code).toBe(0);
             } finally {
                 clearInterval(remote);
