@@ -239,7 +239,7 @@ REQUEST takes the [locked decision](#every-inbound-request-takes-one-locked-deci
 
 `Calendar.importEvents` (`transfer.ts`) takes a whole `.ics`, which must be UTF-8 (RFC 5545 §3.1). The event cap counts every VEVENT, not every master, because one master can hold 37,000 overrides inside `ICS_MAX_BYTES`. It is counted on the text before ical.js builds a tree, and again on what the parser returned. A file may spread one UID over several VCALENDAR objects, so VEVENTs are grouped by UID first.
 
-Each series is written as its own resource through `putResource`, the path a CalDAV PUT takes ([CALDAV.md](CALDAV.md#a-put-is-judged-inside-the-write-lock)), under a fresh `<uuid>.ics`. UID uniqueness is Home-wide for an import, and a UID any calendar already holds counts as `skipped`. That makes a failed import retryable: a retry skips what landed and finishes the file. A written-bytes cap stops the run with a 413, because a VTIMEZONE the file defines once is copied into every series that names it.
+Each series is written as its own resource through `putResource`, the path a CalDAV PUT takes ([CALDAV.md](CALDAV.md#a-put-is-judged-inside-the-write-lock)), under a fresh `<uuid>.ics`. UID uniqueness is Home-wide for an import, and a UID any calendar of the Home already holds counts as `skipped`. The reason is scheduling: an inbound REQUEST (`decideInboundRequest`, `invitations.ts`) and a REPLY (`imip.ts`) find their event by UID across the whole Home and bind to the first master they meet. With two imported copies, row order decides which one is adopted or answered, and the other goes stale. A device's CalDAV PUT is checked against its own calendar alone, because a device sees one collection and RFC 4791 lets each calendar hold the same UID. The skip also makes a failed import retryable: a retry skips what landed and finishes the file. A written-bytes cap stops the run with a 413, because a VTIMEZONE the file defines once is copied into every series that names it.
 
 **An import takes the scheduling out.** Every guest `ATTENDEE` is dropped, and the `ORGANIZER` becomes an inert `X-EIGEN-IMPORTED-ORGANIZER`. Otherwise the first edit would mail addresses the file's author chose, and a forged iMIP REPLY could match the event by UID. The imported organizer can still claim the event by sending a real invitation ([Adopt](#every-inbound-request-takes-one-locked-decision)).
 
@@ -247,7 +247,7 @@ Each series is written as its own resource through `putResource`, the path a Cal
 
 The file routes reach only the caller's own home and team homes, because only the home relay crosses into another user's Home. So a calendar another user shared is no target ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)). An export takes `read` and an import `write`, and `free-busy` is no read here.
 
-The "Import to Calendar" file action opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/`). It offers the viewer's own calendars, the team calendars they may write in, or a new one. `useImportToCalendar` deletes a new calendar again when it took no events, and a retry reuses the one it made.
+The "Import to Calendar" file action opens `ImportToCalendarPicker` (`packages/ui/src/components/calendar/`). It offers the viewer's own calendars, the team calendars they may write in, or a new one. `useImportToCalendar` deletes a new calendar again when it took no events. When that delete fails, the next try deletes it first, unless the user picks it from the list.
 
 ## Export splices the stored lines
 
