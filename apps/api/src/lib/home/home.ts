@@ -5,11 +5,13 @@
 // decides which parts it has.
 
 import * as path from 'node:path';
+import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
+import { PATHS } from '../config/paths';
 import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
@@ -17,6 +19,7 @@ import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../
 import { ApiError, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
+import { createDefaultMountConfig, createMountConfig, DEFAULT_MOUNT_ID, readMountTotalSize } from '../mount/helpers';
 import type { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
 
@@ -28,7 +31,8 @@ export class Home {
     public readonly fs: LocalFilesystem;
     public settings!: JsonStore<HomeSettings>;
 
-    // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined.
+    // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined,
+    // and its getter answers 404.
     protected _drive?: Drive;
     protected _contacts?: Contacts;
     protected _mail?: Mail;
@@ -56,27 +60,32 @@ export class Home {
 
     public get drive(): Drive {
         this.touch();
-        return this._drive!;
+        if (!this._drive) throw new ApiError(404, 'Drive not available');
+        return this._drive;
     }
 
     public get contacts(): Contacts {
         this.touch();
-        return this._contacts!;
+        if (!this._contacts) throw new ApiError(404, 'Contacts not available');
+        return this._contacts;
     }
 
     public get mail(): Mail {
         this.touch();
-        return this._mail!;
+        if (!this._mail) throw new ApiError(404, 'Mail not available');
+        return this._mail;
     }
 
     public get calendar(): Calendar {
         this.touch();
-        return this._calendar!;
+        if (!this._calendar) throw new ApiError(404, 'Calendar not available');
+        return this._calendar;
     }
 
     public get notifications(): NotificationCenter {
         this.touch();
-        return this._notifications!;
+        if (!this._notifications) throw new ApiError(404, 'Notifications not available');
+        return this._notifications;
     }
 
     public get hasCalendar(): boolean {
@@ -87,22 +96,22 @@ export class Home {
         return this._closing;
     }
 
-    public init(autoCreateDefaultMount = false): Promise<this> {
-        return (this.initPromise ??= this.runInit(autoCreateDefaultMount));
+    public init(): Promise<this> {
+        return (this.initPromise ??= this.runInit());
     }
 
-    private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
+    private async runInit(): Promise<this> {
         try {
             // A crash between writing a settings file's staged copy and its rename leaves the copy behind.
             await this.fs
                 .sweepAtomicTemps('.', STALE_TEMP_MAX_AGE_MS)
                 .catch((err) => console.error(`[Home] Sweeping staged files failed for ${this.user.id}:`, err));
-            await time('Home.init.settings', () => this.settings.load());
+            await time('Home.init.settings', () => this.loadSettings());
 
             // allSettled waits for every part. Promise.all would return at the first failure while
             // the other parts are still opening databases and starting timers, and those would leak.
             const results = await Promise.allSettled([
-                time('Home.init.drive', async () => this._drive?.init(autoCreateDefaultMount)),
+                time('Home.init.drive', async () => this._drive?.init()),
                 time('Home.init.contacts', async () => this._contacts?.init()),
                 time('Home.init.mail', async () => this._mail?.init()),
                 time('Home.init.calendar', async () => this._calendar?.init()),
@@ -118,6 +127,11 @@ export class Home {
             await this.close();
             throw err;
         }
+    }
+
+    // A kind of home may fill in missing settings here, before its parts read them.
+    protected async loadSettings(): Promise<void> {
+        await this.settings.load();
     }
 
     // Runs once, however often it is called: closing the same database files twice is unsafe.
@@ -215,6 +229,12 @@ export class Home {
         }
     }
 
+    // A team home has no notification center, so a notice to it is dropped.
+    public notify(input: NotificationPersistInput): void {
+        this.touch();
+        this._notifications?.persist(input);
+    }
+
     // Uses the fields, not the getters: a getter may refuse a part that is switched off, but its
     // files still take up space.
     public async dataSize(): Promise<number> {
@@ -229,12 +249,27 @@ export class Home {
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
         // A home without a drive has nothing to size.
         if (!this._drive) return homeSize();
-
-        const [dataUsed, driveUsed] = await Promise.all([this.dataSize(), this._drive.size('default')]);
-        const quotas = await resolveUserQuotas(this._drive.getMountConfig('default'), teamIds);
-
-        return homeSize(dataUsed, driveUsed, quotas);
+        return userHomeSize(this.homeDir, this.settings.get(), await this.dataSize(), teamIds);
     }
+}
+
+// Sizes the default drive from its files and the saved settings, not from the live mount. So it
+// answers the same for an open home, a closed one, and one whose default mount is switched off.
+export async function userHomeSize(
+    homeDir: string,
+    settings: HomeSettings,
+    dataUsed: number,
+    teamIds: string[],
+): Promise<HomeSizeResponse> {
+    const driveUsed = readMountTotalSize(
+        path.join(homeDir, PATHS.DRIVE.ROOT, DEFAULT_MOUNT_ID, PATHS.DRIVE.METADATA_DB),
+    );
+    const mountSettings = settings.mounts?.[DEFAULT_MOUNT_ID];
+    const quotas = await resolveUserQuotas(
+        mountSettings ? createMountConfig(DEFAULT_MOUNT_ID, mountSettings) : createDefaultMountConfig(),
+        teamIds,
+    );
+    return homeSize(dataUsed, driveUsed, quotas);
 }
 
 export function homeSize(

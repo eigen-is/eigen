@@ -1,3 +1,8 @@
+// The comment index of one document: a comments.db in the document's folder, with a row per comment
+// thread. A row holds what the comments panel shows, such as the status, the assignee and the message
+// count, and the newest text of the thread for comment search. For example, a chat room updates it
+// after each post, and the comment routes list, search and resolve its threads.
+
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -10,52 +15,35 @@ import type { DriveLike } from '../drive/get-drive';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
 
-// Newest-first tail per thread that comment search indexes (~8 KB). Older text past the cap
-// falls off and stops being searchable — the stated phase-2 limitation. chat.ts's recompute
-// caps against it.
+// Comment search indexes only the newest 8192 characters of each thread. Older text can't be found.
 export const RECENT_TEXT_CAP = 8192;
 const COMMENT_SEARCH_LIMIT = 8;
 
 export class CommentIndex {
-    private db: BunSQLiteDatabase<typeof commentSchema>;
+    private readonly db: BunSQLiteDatabase<typeof commentSchema>;
 
     public constructor(db: BunSQLiteDatabase<typeof commentSchema>) {
         this.db = db;
     }
 
-    public async ensureComment(
-        chatName: string,
-        seed?: { createdBy?: string | null; createdAt?: Date },
-    ): Promise<void> {
-        const values: typeof commentSchema.comments.$inferInsert = {
-            chatName,
-            createdAt: seed?.createdAt ?? new Date(),
-            createdBy: seed?.createdBy ?? null,
-        };
-
+    public async ensureComment(chatName: string, seed?: { createdBy?: string | null }): Promise<void> {
         await this.db
             .insert(commentSchema.comments)
-            .values(values)
+            .values({ chatName, createdBy: seed?.createdBy ?? null })
             .onConflictDoUpdate({
                 target: commentSchema.comments.chatName,
-                // COALESCE: only fill createdBy when currently NULL; never overwrite a real value.
+                // A row that has a creator keeps it. Only a missing creator is filled in.
                 set: {
                     createdBy: sql`COALESCE(${commentSchema.comments.createdBy}, EXCLUDED.createdBy)`,
                 },
             });
     }
 
-    public async updateActivity(
-        chatName: string,
-        authorEmail: string,
-        snippet: string,
-        incrementCount = true,
-    ): Promise<void> {
+    public async updateActivity(chatName: string, authorEmail: string, incrementCount = true): Promise<void> {
         await this.db
             .update(commentSchema.comments)
             .set({
                 lastAuthorEmail: authorEmail,
-                lastMessageSnippet: snippet.slice(0, 100),
                 lastActivityAt: new Date(),
                 ...(incrementCount && { messageCount: sql`messageCount + 1` }),
             })
@@ -115,7 +103,8 @@ export class CommentIndex {
         return this.db.select().from(commentSchema.comments).where(eq(commentSchema.comments.chatName, chatName)).get();
     }
 
-    // The panel's fields only: recentText (~8 KB a thread) is for search, createdBy for no client.
+    // The list holds only what the comments panel shows. The search text can be RECENT_TEXT_CAP
+    // characters a thread, and no client reads the creator.
     public async list(): Promise<CommentEntry[]> {
         const { comments } = commentSchema;
         const { recentText: _text, createdBy: _by, ...columns } = getTableColumns(comments);
@@ -126,9 +115,9 @@ export class CommentIndex {
         const match = sanitizeFtsQuery(query);
         if (!match) return [];
 
-        // Pass 1: rank via FTS5; pull each thread's chatName + a highlighted excerpt of the matched
-        // recentText. snippet() reads the column back through the external-content table.
-        const ranked = this.db.all(sql`
+        // FTS5 ranks the threads and cuts an excerpt around each match. The FTS table keeps no copy of
+        // the text, so snippet() reads it back from the comments table.
+        const ranked = this.db.all<{ chatName: string; snippet: string }>(sql`
             SELECT c.chatName AS chatName,
                    snippet(comments_fts, 0, '', '', '…', 10) AS snippet
             FROM comments_fts
@@ -136,10 +125,10 @@ export class CommentIndex {
             WHERE comments_fts MATCH ${match}
             ORDER BY bm25(comments_fts)
             LIMIT ${COMMENT_SEARCH_LIMIT}
-        `) as { chatName: string; snippet: string }[];
+        `);
         if (ranked.length === 0) return [];
 
-        // Pass 2: hydrate the ranked threads for context (who last spoke), order-preserving.
+        // The matched rows add who spoke last. The result keeps the ranked order.
         const names = ranked.map((r) => r.chatName);
         const rows = await this.db
             .select()
@@ -149,7 +138,7 @@ export class CommentIndex {
         const byName = new Map(rows.map((r) => [r.chatName, r]));
 
         return ranked.map((r) => ({
-            // id is the thread's chatName; the FE reveal resolves chatName → cardId client-side.
+            // The client finds the comment card for this chatName to reveal it.
             id: r.chatName,
             label: r.snippet,
             context: byName.get(r.chatName)?.lastAuthorEmail ?? undefined,
@@ -164,17 +153,17 @@ export async function openCommentIndex(drive: DriveLike, containerPath: DrivePat
     return new CommentIndex(managed.db);
 }
 
-// Convenience: resolves path + opens index. When called with a SharedDrive, getPath enforces
-// read permission; raw Drive callers (own-drive paths) skip the check intentionally.
+// Opens the index of the document at pathId. Through a SharedDrive, getPath checks that the caller
+// may read the document. A plain Drive belongs to the caller, so nothing is checked.
 export async function getCommentIndex(drive: DriveLike, mountId: string, pathId: string): Promise<CommentIndex> {
     const path = await drive.getPath(mountId, pathId);
     if (!path) throw new ApiError(404, 'Container not found');
     return openCommentIndex(drive, path);
 }
 
-// Reject an unknown chatName before ensureComment: it may heal a REAL legacy thread missing its
-// index row, but must never mint a row (+ 'assigned' event + dead-link notification) for a phantom
-// name. Chats live at <container>/chat/<chatName>; require a real .eigenchat there.
+// Callers run this before ensureComment. ensureComment may add the missing row of an older thread
+// that is real. A made-up chatName must never get a row, because the row would bring a history event
+// and a notification that links nowhere. A comment thread is a chat in the document's chat folder.
 export async function assertCommentChatExists(
     drive: DriveLike,
     mountId: string,

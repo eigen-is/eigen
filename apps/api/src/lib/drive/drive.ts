@@ -50,7 +50,7 @@ import type { Home } from '../home';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { createDefaultMountConfig, createMountConfig, Mount } from '../mount';
+import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
@@ -110,7 +110,7 @@ export class Drive {
     private readonly home: Home;
     private readonly owner: User;
     private readonly mounts = new Map<string, Mount>();
-    private defaultMountId = 'default';
+    private defaultMountId: string = DEFAULT_MOUNT_ID;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private readonly documents: CollabRegistry;
     // The last change queued for each key, such as the ACL of one path or the settings of one mount.
@@ -122,7 +122,7 @@ export class Drive {
         this.documents = new CollabRegistry(this.owner.id);
     }
 
-    public async init(autoCreateDefaultMount = false): Promise<void> {
+    public async init(): Promise<void> {
         for (const [id, settings] of Object.entries(this.home.settings.get().mounts ?? {})) {
             if (!settings.enabled) continue;
             // One broken mount must not take the rest of the drive down with it.
@@ -131,10 +131,6 @@ export class Drive {
             } catch (e) {
                 console.error(`[Drive] Failed to init mount '${id}':`, e instanceof Error ? e.message : e);
             }
-        }
-
-        if (this.mounts.size === 0 && autoCreateDefaultMount) {
-            await this.addMount(createDefaultMountConfig());
         }
 
         this.sharedDb = await getSharedDatabase(this.home);

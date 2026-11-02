@@ -38,6 +38,7 @@
     "./apps": "./src/core/apps.ts",
     "./content-line": "./src/core/content-line.ts",
     "./date": "./src/core/date.ts",
+    "./deep-merge": "./src/core/deep-merge.ts",
     "./download": "./src/core/download.ts",
     "./eigendoc-icons": "./src/core/eigendoc-icons.ts",
     "./file-actions": "./src/core/file-actions.ts",

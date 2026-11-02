@@ -1,13 +1,14 @@
+// The drive lists that span homes, such as a file search, the documents of one type, or the Watched
+// view. Each starts from the caller's own drive and adds the drive of every team they belong to. The
+// owners come from the caller's own memberships, so a request can never point it at another home.
+// Membership is the only check by design, because a team member may read the whole team drive.
+
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { pullDriveSearch, pullMimeContents } from '../home/home-relay';
 import type { User } from '../user';
 import { getMemberships } from '../user';
 import { getDrive, getSharedDrive } from './get-drive';
-
-// Cross-home fan-out for the drive aggregate endpoints. Each entry resolves its own owners from
-// `user`, so it can never be pointed at a foreign home — membership is the only gate by design
-// (team membership grants read of the whole mount; see home-relay's pull* helpers).
 
 // Dedupe by path.id, later lists winning (personal-first callers put personal at the head so
 // authoritative team copies overwrite shared_paths mirrors).

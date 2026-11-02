@@ -38,7 +38,7 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
         },
         {
             // Comment-thread body search (in-document search phase 2). Additive + regenerable:
-            // recentText holds the newest ~8 KB of each thread (recomputed from the thread's own
+            // recentText holds the newest 8192 characters of each thread (recomputed from the thread's own
             // messages on every comment write — ChatRoom.updateCommentIndex), and comments_fts
             // external-content FTS5 indexes it. The AFTER UPDATE trigger is gated on recentText so
             // the frequent status/activity/count writes don't churn the FTS shadow. Backfill seeds
