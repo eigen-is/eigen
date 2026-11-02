@@ -21,6 +21,7 @@ import { getSheetIndex } from '../utils';
 import { getCellValue, getRangeByTxt } from './cell';
 import { createContextResolver } from './formula-cache';
 import { checkProtectionFormatCells } from './protection';
+import { isRealNum } from './validation';
 
 const KNOWN_CONDITION_NAMES = [
     'greaterThan',
@@ -103,7 +104,9 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
             }
         } else {
             const v = rules.rulesValue;
-            if (Number.isNaN(v) || v === '') {
+            // Equal to and Text contains also compare text, so only an empty value is refused.
+            const isText = conditionName === 'equal' || conditionName === 'textContains';
+            if (isText ? v === '' : !isRealNum(v)) {
                 ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
                 return;
             }
@@ -133,7 +136,7 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
                 return;
             }
         } else if (rangeArr1.length === 0) {
-            if (Number.isNaN(v1) || v1 === '') {
+            if (!isRealNum(v1)) {
                 ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
                 return;
             }
@@ -159,7 +162,7 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
                 return;
             }
         } else if (rangeArr2.length === 0) {
-            if (Number.isNaN(v2) || v2 === '') {
+            if (!isRealNum(v2)) {
                 ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
                 return;
             }

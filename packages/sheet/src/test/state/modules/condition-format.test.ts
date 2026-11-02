@@ -274,4 +274,27 @@ describe('state/condition-format — setConditionRules', () => {
         expect(savedRules(ctx)).toEqual([]);
         expect(ctx.warnDialog).toBe('The condition value can only be a number or a single cell');
     });
+
+    it('refuses text where a number rule needs a number', () => {
+        const typed: Partial<ConditionRulesProps>[] = [
+            { rulesType: 'greaterThan', rulesValue: 'abc' },
+            { rulesType: 'lessThan', rulesValue: ' ' },
+            { rulesType: 'between', betweenValue: { value1: 'abc', value2: '3' } },
+            { rulesType: 'between', betweenValue: { value1: '1', value2: 'abc' } },
+        ];
+        for (const draft of typed) {
+            const ctx = ctxForRule();
+            setConditionRules(ctx, ruleDraft('', draft));
+            expect(savedRules(ctx)).toEqual([]);
+            expect(ctx.warnDialog).toBe('The condition value can only be a number or a single cell');
+        }
+    });
+
+    it('takes text as the value of Equal to and Text contains', () => {
+        for (const rulesType of ['equal', 'textContains']) {
+            const ctx = ctxForRule();
+            setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'abc' }));
+            expect(savedRules(ctx).map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([['abc']]);
+        }
+    });
 });
