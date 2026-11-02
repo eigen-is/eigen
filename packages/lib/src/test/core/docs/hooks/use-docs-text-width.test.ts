@@ -65,6 +65,7 @@ describe('docsTextWidth', () => {
 describe('useDocsTextWidth', () => {
     test('reads the stored choice and writes a new one to the settings, cached for the next open', async () => {
         window.localStorage.clear();
+        saved.length = 0;
         stored = { docsView: { textWidth: 'medium' } };
         const queryClient = client(stored);
         const first = await renderHook(() => useDocsTextWidth(), queryClient);
