@@ -5,7 +5,8 @@
 
 import {
     isPendingMediaName,
-    useCopyToMediaFolder,
+    PartialCopyError,
+    useCopyPaths,
     useMediaResolver,
     useUploadFile,
     useZombieMediaSweep,
@@ -311,7 +312,7 @@ export function CanvasEditor({
     // Cross-mount paste re-uploads a copied image's blob into OUR media/ folder; mutateAsync is stable.
     const uploadFile = useUploadFile(ownerId, mountId);
     // Toolbar "Add image" drive picks copy into media/ first (the slides idiom); mutateAsync is stable.
-    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, mountId);
+    const { mutateAsync: copyPaths } = useCopyPaths();
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
@@ -867,7 +868,14 @@ export function CanvasEditor({
     const insertDrivePaths = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId) return;
-            const results = await copyToMediaFolder({ paths, mediaFolderId }).catch(() => null);
+            const results = await copyPaths(
+                paths.map((source) => ({
+                    source,
+                    targetOwnerId: ownerId,
+                    targetMountId: mountId,
+                    targetParentId: mediaFolderId,
+                })),
+            ).catch((error) => (error instanceof PartialCopyError ? error.copied : null));
             if (!results?.length) return;
             const measured = await Promise.all(
                 results.map(async (result) => ({
@@ -887,7 +895,9 @@ export function CanvasEditor({
         },
         [
             mediaFolderId,
-            copyToMediaFolder,
+            copyPaths,
+            ownerId,
+            mountId,
             resolveMediaUrlByPath,
             viewportCenterScene,
             imagePlacements,

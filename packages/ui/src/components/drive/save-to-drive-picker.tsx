@@ -1,10 +1,14 @@
+// One "where does this go" dialog for every surface that puts a file into Drive, such as an attachment
+// menu or a file preview, with the browser download as the escape hatch. A Drive item is copied on the
+// server, and a mail part is written from the stored message.
+
 import { triggerDownload } from '@workspace/lib/download';
-import { useCopyFiles } from '@workspace/lib/drive';
+import { PartialCopyError, useCopyToFolder } from '@workspace/lib/drive';
 import { subjectInfo } from '@workspace/lib/file-subject';
 import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useOptionalPreview } from '../preview-provider/preview-context';
 import { DriveLocationPicker } from './drive-location-picker';
 
@@ -19,14 +23,17 @@ type SaveToDrivePickerProps = {
     confirmLabel?: string;
 };
 
-// One "where does this go" dialog for every surface that puts a file into Drive, with the browser download
-// as the escape hatch. A Drive subject is copied server-side; a mail part is written from the stored message.
 export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, confirmLabel }: SaveToDrivePickerProps) {
     const preview = useOptionalPreview();
     // Siblings come from one surface, so a batch is all Drive items or all mail parts: the first picks the branch.
     const source = subjects[0]?.drive;
     const mail = subjects[0]?.mail;
-    const copyFiles = useCopyFiles(source?.ownerId ?? '', source?.mountId);
+    const { mutateAsync: copyToFolder } = useCopyToFolder();
+    // After a partial failure a retry sends only the files that failed, or the ones that copied would land twice.
+    const [failed, setFailed] = useState<DrivePath[] | null>(null);
+    useEffect(() => {
+        if (!open) setFailed(null);
+    }, [open]);
     const saveMailAttachments = useSaveMailAttachmentsToDrive();
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
     useEffect(
@@ -73,9 +80,12 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
                           indexes: subjects.flatMap((subject) => (subject.mail ? [subject.mail.index] : [])),
                           ...target,
                       })
-                    : await copyFiles.mutateAsync({
-                          pathIds: subjects.flatMap((subject) => (subject.drive ? [subject.drive.id] : [])),
+                    : await copyToFolder({
+                          items: failed ?? subjects.flatMap((subject) => (subject.drive ? [subject.drive] : [])),
                           ...target,
+                      }).catch((error) => {
+                          if (error instanceof PartialCopyError) setFailed(error.failed);
+                          throw error;
                       });
                 onSaved?.(saved);
             }}

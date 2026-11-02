@@ -9,7 +9,7 @@ import { commentIndicatorColor } from '@workspace/lib/constants/comment-indicato
 import {
     isPendingMediaName,
     MediaResolverProvider,
-    useCopyToMediaFolder,
+    useCopyPaths,
     useMediaResolver,
     useUploadFile,
     useZombieMediaSweep,
@@ -117,7 +117,7 @@ function SheetEditorInner({
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
-    const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
+    const { mutateAsync: copyPaths } = useCopyPaths();
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
         useMediaResolver();
@@ -277,15 +277,22 @@ function SheetEditorInner({
     const handleImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
-            const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            const result = await copyPaths([
+                {
+                    source: paths[0],
+                    targetOwnerId: ownerId,
+                    targetMountId: path.mountId,
+                    targetParentId: mediaFolderId,
+                },
+            ]).catch(() => null);
             if (!result?.[0]) return;
-            // Measure via the copy result's own path — by NAME the lookup would miss the media
-            // listing captured before the copy and size the image from the default box.
+            // Measure through the copy's own path. A lookup by name reads the media listing from before
+            // the copy, misses the new file, and would size the image from the default box.
             const intrinsic = await readImageSizeFromUrl(resolveMediaUrlByPath(result[0]));
             const { width, height } = fitToPane(intrinsic);
             workbookRef.current?.insertImage(result[0].name, width, height);
         },
-        [mediaFolderId, copyToMediaFolder, resolveMediaUrlByPath, fitToPane],
+        [mediaFolderId, copyPaths, ownerId, path.mountId, resolveMediaUrlByPath, fitToPane],
     );
 
     const handleSaveNew = useCallback(

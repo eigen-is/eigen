@@ -1,3 +1,7 @@
+// Everything a chat room view needs, in one hook: the messages in order, the members, the attachments
+// waiting to be sent, and the send handler, which also runs slash commands such as /help or /invite.
+// A chat file and a comment thread on a document both render through it.
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ChatAttachment, ChatMessage, RoomMember } from '../../../types/chat';
 import { isAttachmentReference } from '../../../types/chat';
@@ -7,8 +11,9 @@ import { toAttachmentReference } from '../../../types/drive-reference';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
 import {
+    PartialCopyError,
     useCheckPermissions,
-    useCopyToMediaFolder,
+    useCopyPaths,
     useEffectiveMembers,
     useFolderContent,
     usePathInfo,
@@ -21,8 +26,8 @@ import { useAutoMarkChatRead } from './use-chat-unread';
 
 let localIdCounter = 0;
 
-// `containerPathId` is set for a comment thread: the document it comments on, which is what its
-// notifications are tagged with (core/notification/tags.ts) — a standalone chat is tagged with itself.
+// `containerPathId` is set for a comment thread. It is the document the thread comments on, and the
+// thread's notifications are tagged with it. A standalone chat is tagged with itself.
 export function useChatRoom(ownerId: string, mountId: string, chatId: string, containerPathId?: string) {
     const { user } = useAuth();
 
@@ -35,7 +40,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     const isLoading = messagesQuery.isLoading;
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
-    const copyToMediaFolder = useCopyToMediaFolder(ownerId, mountId);
+    const { mutateAsync: copyPaths } = useCopyPaths();
     const { data: chatPath } = usePathInfo(ownerId, mountId, chatId);
     const inviteToChat = useInviteToChat(ownerId, mountId, chatId);
     const deleteMessage = useDeleteMessage(ownerId, mountId, chatId);
@@ -119,15 +124,20 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
             }
 
             if (filesToCopy.length > 0) {
-                const copied = await copyToMediaFolder
-                    .mutateAsync({ paths: filesToCopy, mediaFolderId: mediaFolder.id })
-                    .catch(() => [] as DrivePath[]);
+                const copied = await copyPaths(
+                    filesToCopy.map((source) => ({
+                        source,
+                        targetOwnerId: ownerId,
+                        targetMountId: mountId,
+                        targetParentId: mediaFolder.id,
+                    })),
+                ).catch((error) => (error instanceof PartialCopyError ? error.copied : []));
                 if (copied.length > 0) {
                     setPendingDriveAttachments((prev) => [...prev, ...copied.map((p) => p.name)]);
                 }
             }
         },
-        [mediaFolder, copyToMediaFolder],
+        [mediaFolder, copyPaths, ownerId, mountId],
     );
 
     const removeDriveAttachment = useCallback((attachment: ChatAttachment) => {
@@ -155,8 +165,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
                 const uploaded = await Promise.all(
                     files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
                 );
-                const uploadedNames = uploaded.filter(Boolean).map((u) => u.name);
-                attachments = [...(attachments ?? []), ...uploadedNames];
+                attachments = [...(attachments ?? []), ...uploaded.map((u) => u.name)];
             }
 
             if (isUnknownCommand(rawContent)) {
@@ -223,9 +232,9 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
             chatPath,
             mediaFolder,
             pendingDriveAttachments,
-            uploadFile,
-            postMessage,
-            inviteToChat,
+            uploadFile.mutateAsync,
+            postMessage.mutateAsync,
+            inviteToChat.mutateAsync,
             addLocalMessage,
             findLastWhisperFrom,
             user?.email,
@@ -233,21 +242,19 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     );
 
     const allMessages = useMemo(() => {
-        return [...messages, ...localMessages].sort(
-            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-        );
+        return [...messages, ...localMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
     }, [messages, localMessages]);
 
     const mediaFolderId = mediaFolder?.id ?? null;
 
     const handleDeleteMessage = useCallback(
         (messageId: string) => deleteMessage.mutateAsync(messageId),
-        [deleteMessage],
+        [deleteMessage.mutateAsync],
     );
 
     const handleEditMessage = useCallback(
         (messageId: string, content: string) => editMessage.mutateAsync({ messageId, content }),
-        [editMessage],
+        [editMessage.mutateAsync],
     );
 
     return {

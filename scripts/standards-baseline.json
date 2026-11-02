@@ -36,7 +36,6 @@
     "apps/stickies/src/components/stickies/hooks/use-drag-and-drop.ts": 3,
     "apps/stickies/src/components/stickies/sortable-note-card.tsx": 1,
     "packages/lib/src/core/calendar/hooks/use-calendar.ts": 2,
-    "packages/lib/src/core/chat/hooks/use-chat-room.ts": 1,
     "packages/lib/src/core/chat/hooks/use-chat.ts": 3,
     "packages/lib/src/core/drive/hooks/writes.ts": 1,
     "packages/lib/src/core/html-dom.ts": 1,

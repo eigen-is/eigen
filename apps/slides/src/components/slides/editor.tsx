@@ -3,7 +3,7 @@
 // slide rail, the phone's slide strip, present mode, page setup and the slide background panel.
 
 import { useAuth } from '@workspace/lib/auth';
-import { MediaResolverProvider, useCopyToMediaFolder, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
+import { MediaResolverProvider, useCopyPaths, useMediaResolver, useUploadFile } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement } from '@workspace/lib/vector';
 import {
@@ -99,7 +99,7 @@ function SlideEditorInner({
     const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, frameId);
     const { resolveMediaUrl } = useMediaResolver();
     const uploadFile = useUploadFile(ownerId, path.mountId);
-    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
+    const { mutateAsync: copyPaths } = useCopyPaths();
 
     const { addFrame, deleteFrame, duplicateFrame, updateFrame, updateFrames } = doc;
 
@@ -296,7 +296,14 @@ function SlideEditorInner({
     const pickBackgroundImage = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0 || !frame) return;
-            const copied = await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            const copied = await copyPaths([
+                {
+                    source: paths[0],
+                    targetOwnerId: ownerId,
+                    targetMountId: path.mountId,
+                    targetParentId: mediaFolderId,
+                },
+            ]).catch(() => null);
             const name = copied?.[0]?.name;
             if (name) {
                 updateFrame(frame.id, {
@@ -304,7 +311,7 @@ function SlideEditorInner({
                 });
             }
         },
-        [mediaFolderId, frame, copyToMediaFolder, updateFrame],
+        [mediaFolderId, frame, copyPaths, ownerId, path.mountId, updateFrame],
     );
 
     // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays

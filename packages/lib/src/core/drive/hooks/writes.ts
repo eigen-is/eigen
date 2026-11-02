@@ -1,3 +1,8 @@
+// The hooks that change Drive, such as create, upload, copy, move, rename and delete. Each one sends its
+// request per item and then calls the invalidators for the listings the change makes stale. When only part
+// of a batch goes through, the hook throws an error that says which items did, so a dialog can retry the rest.
+
+import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { driveApi, getDriveAppUrl, getDriveFileUploadUrl } from '@workspace/lib/api';
 import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
@@ -7,7 +12,6 @@ import { toast } from 'sonner';
 import { AppError, onMutationError } from '../../api-error';
 import { useAuth } from '../../auth';
 import { CREATE_TIMEOUT_MS, createWithReconcile, fetchListingOnce } from '../reconcile-create';
-import { partitionCopyResults } from './copy-media-partition';
 import {
     invalidateAclSharedOrUnshared,
     invalidateItemCreated,
@@ -17,7 +21,7 @@ import {
 } from './keys';
 import { folderContentQueryConfig } from './reads';
 
-// CREATE FOLDER — owner/mount come per call so one instance serves any target drive.
+// Owner and mount come with each call, so one instance can create a folder in any drive.
 export function useCreateFolder() {
     const queryClient = useQueryClient();
     return useMutation({
@@ -42,7 +46,6 @@ export function useCreateFolder() {
     });
 }
 
-// UPLOAD FILE(S)
 export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
@@ -70,9 +73,9 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     });
 }
 
-// Thrown by useDeletePaths when a batch trash partially fails: carries the paths that were trashed and
-// the ones that weren't, so the caller can run its after-delete side effects for the successes and narrow
-// a retry to just the failures (re-sending already-trashed ids 404s).
+// Thrown by useDeletePaths when only part of a batch went to the trash: carries the paths that did and the
+// ones that didn't, so a caller can run its after-delete steps for the paths that went and retry only the
+// rest. A path sent again after it is in the trash answers 404.
 export class PartialDeleteError extends Error {
     public constructor(
         public readonly succeeded: DrivePath[],
@@ -83,8 +86,8 @@ export class PartialDeleteError extends Error {
     }
 }
 
-// DELETE MULTIPLE PATHS — derives owner/mount from each path so mixed-owner selections
-// (aggregate filter views list other owners' items) each hit their own home.
+// Each path names its own owner and mount, so a selection from several drives reaches each home. An
+// aggregate filter view, for example, lists other owners' items.
 export function useDeletePaths() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -136,47 +139,59 @@ export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID,
     });
 }
 
-export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+// Thrown by the copy hooks when only part of a batch copied: carries the copies that landed and the sources
+// that didn't, so a caller can keep the copies and narrow a retry to the failures. A source sent again
+// would land a second time, under a free name.
+export class PartialCopyError extends Error {
+    public constructor(
+        public readonly copied: DrivePath[],
+        public readonly failed: DrivePath[],
+    ) {
+        super(`Failed to copy ${failed.length} of ${copied.length + failed.length} items`);
+        this.name = 'PartialCopyError';
+    }
+}
+
+type DriveCopy = {
+    source: DrivePath;
+    targetOwnerId: string;
+    targetMountId: string;
+    targetParentId: string;
+    name?: string;
+};
+
+// Each copy names its own target folder, so one batch can fill several folders, as Duplicate does.
+export function useCopyPaths() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({
-            pathIds,
-            targetOwnerId,
-            targetMountId,
-            targetParentId,
+        mutationFn: (copies: readonly DriveCopy[]) => copyEach(queryClient, copies),
+        onError: onMutationError,
+    });
+}
+
+// Every item goes into one folder, and the toast offers to open it.
+export function useCopyToFolder() {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({
+            items,
+            ...target
         }: {
-            pathIds: string[];
+            items: readonly DrivePath[];
             targetOwnerId: string;
             targetMountId: string;
             targetParentId: string;
-        }) => {
-            const results: DrivePath[] = [];
-            for (const pathId of pathIds) {
-                const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).copy.post({
-                    targetOwnerId,
-                    targetMountId,
-                    targetParentId,
-                });
-                if (response.error) throw new AppError(response);
-                results.push(response.data);
-            }
-            return results;
-        },
-        onSuccess: (_data, variables) => {
-            invalidateItemCreated(
+        }) =>
+            copyEach(
                 queryClient,
-                variables.targetOwnerId,
-                variables.targetMountId,
-                variables.targetParentId,
-            );
-            const count = variables.pathIds.length;
-            toast.success(count === 1 ? 'File saved to Drive' : `${count} files saved to Drive`, {
+                items.map((source) => ({ source, ...target })),
+            ),
+        onSuccess: (copied, { targetOwnerId, targetMountId, targetParentId }) => {
+            toast.success(copied.length === 1 ? '1 item copied' : `${copied.length} items copied`, {
                 action: {
                     label: 'Open folder',
                     onClick: () => {
-                        window.location.href = getDriveAppUrl(
-                            `fs/${variables.targetOwnerId}/${variables.targetMountId}/${variables.targetParentId}`,
-                        );
+                        window.location.href = getDriveAppUrl(`fs/${targetOwnerId}/${targetMountId}/${targetParentId}`);
                     },
                 },
             });
@@ -185,113 +200,30 @@ export function useCopyFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
     });
 }
 
-export function useCopyToMediaFolder(ownerId: string, mountId: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({ paths, mediaFolderId }: { paths: DrivePath[]; mediaFolderId: string }) => {
-            const results = await Promise.allSettled(
-                paths.map(async (path) => {
-                    const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
-                        .path({ pathId: path.id })
-                        .copy.post({
-                            targetOwnerId: ownerId,
-                            targetMountId: mountId,
-                            targetParentId: mediaFolderId,
-                        });
-                    if (response.error) throw new AppError(response);
-                    return response.data;
-                }),
-            );
-            const { copied, failedCount } = partitionCopyResults(results);
-            if (copied.length > 0) {
-                invalidateItemCreated(queryClient, ownerId, mountId, mediaFolderId);
-            }
-            // Total failure throws so onMutationError toasts and card-attachments' Save-abort stays intact;
-            // a partial failure keeps the successes and only warns about the ones that dropped.
-            if (failedCount > 0 && copied.length === 0) throw new Error('Failed to copy files');
-            if (failedCount > 0) {
-                toast.error(`${failedCount} file${failedCount === 1 ? '' : 's'} could not be copied`);
-            }
-            return copied;
-        },
-        onError: onMutationError,
-    });
-}
-
-export function useCopyPath() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({
-            items,
-            targetOwnerId,
-            targetMountId,
-            targetParentId,
-        }: {
-            items: DrivePath[];
-            targetOwnerId: string;
-            targetMountId: string;
-            targetParentId: string;
-        }) => {
-            const results = await Promise.allSettled(
-                items.map(async (item) => {
-                    const response = await driveApi({ ownerId: item.ownerId })({ mountId: item.mountId })
-                        .path({ pathId: item.id })
-                        .copy.post({ targetOwnerId, targetMountId, targetParentId });
-                    if (response.error) throw new AppError(response);
-                    return response.data;
-                }),
-            );
-            const { copied, failedCount } = partitionCopyResults(results);
-            if (copied.length > 0) {
-                invalidateItemCreated(queryClient, targetOwnerId, targetMountId, targetParentId);
-            }
-            if (failedCount > 0) {
-                throw new Error(
-                    failedCount === results.length
-                        ? 'Failed to copy items'
-                        : `Failed to copy ${failedCount} of ${results.length} items`,
-                );
-            }
-            return copied;
-        },
-        onError: onMutationError,
-    });
-}
-
-export function useDuplicatePath() {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({ items }: { items: DrivePath[] }) => {
-            const results = await Promise.allSettled(
-                items.map(async (item) => {
-                    if (!item.parentId) throw new Error('Cannot duplicate a root item');
-                    const response = await driveApi({ ownerId: item.ownerId })({ mountId: item.mountId })
-                        .path({ pathId: item.id })
-                        .copy.post({
-                            targetOwnerId: item.ownerId,
-                            targetMountId: item.mountId,
-                            targetParentId: item.parentId,
-                            name: `Copy of ${item.name}`,
-                        });
-                    if (response.error) throw new AppError(response);
-                    return response.data;
-                }),
-            );
-            const { copied, failedCount } = partitionCopyResults(results);
-            for (const item of copied) {
-                invalidateItemCreated(queryClient, item.ownerId, item.mountId, item.parentId);
-            }
-            if (failedCount > 0) {
-                throw new Error(
-                    failedCount === results.length
-                        ? 'Failed to duplicate items'
-                        : `Failed to duplicate ${failedCount} of ${results.length} items`,
-                );
-            }
-            return copied;
-        },
-        onError: onMutationError,
-    });
+async function copyEach(queryClient: QueryClient, copies: readonly DriveCopy[]): Promise<DrivePath[]> {
+    const results = await Promise.allSettled(
+        copies.map(async ({ source, ...body }) => {
+            const response = await driveApi({ ownerId: source.ownerId })({ mountId: source.mountId })
+                .path({ pathId: source.id })
+                .copy.post(body);
+            if (response.error) throw new AppError(response);
+            return response.data;
+        }),
+    );
+    const copied = results
+        .filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled')
+        .map((r) => r.value);
+    // One refresh per folder that got copies, however many landed in it.
+    const targets = new Map(copied.map((path) => [`${path.ownerId}/${path.mountId}/${path.parentId}`, path]));
+    for (const path of targets.values()) {
+        invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
+    }
+    const rejected = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+    if (!rejected) return copied;
+    // When nothing copied, the server's own error says best what went wrong. A retry sends everything again.
+    if (copied.length === 0) throw rejected.reason;
+    const failed = copies.filter((_, i) => results[i].status === 'rejected').map((copy) => copy.source);
+    throw new PartialCopyError(copied, failed);
 }
 
 export function useRenamePath(
@@ -313,8 +245,8 @@ export function useRenamePath(
     });
 }
 
-// CREATE EIGEN DOCUMENT — the create waits CREATE_TIMEOUT_MS, then reconciles against the parent
-// listing rather than reporting a failure for an item slow storage did land. See reconcile-create.ts.
+// The create waits CREATE_TIMEOUT_MS. Then it reads the parent listing, so an item that slow storage did
+// store is not reported as a failure.
 export function useCreateDriveItem(type: EigenDocType) {
     const queryClient = useQueryClient();
     return useMutation({
