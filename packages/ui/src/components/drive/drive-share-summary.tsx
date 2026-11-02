@@ -40,7 +40,7 @@ export function DriveShareSummary({
                             <Unlock className="h-3 w-3 text-primary" />
                         </span>
                     </TooltipTrigger>
-                    <TooltipContent>Any authenticated user with the link</TooltipContent>
+                    <TooltipContent>Anyone signed in with the link</TooltipContent>
                 </Tooltip>
             )}
             {allEntries.slice(0, avatarCount).map((access, index) => (

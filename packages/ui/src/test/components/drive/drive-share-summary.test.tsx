@@ -95,3 +95,14 @@ test('a summary that shows nothing is no button, so Tab does not stop on an empt
     const { container } = await renderSummary({ onClick: () => {}, showIconOnHover: false });
     expect(container.querySelector('button')).toBeNull();
 });
+
+test('the lock on a shared link says who the link lets in, as the Share dialog does', async () => {
+    const { container } = await renderSummary({ visibility: 'public-read' });
+    // The lock comes before the people.
+    const lock = container.querySelector('[data-slot="tooltip-trigger"]');
+    await act(async () => {
+        lock?.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerType: 'mouse' }));
+        await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('Anyone signed in with the link');
+});
