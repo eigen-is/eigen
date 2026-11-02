@@ -1,8 +1,8 @@
 // What a restart does about the backup work the last process left behind, before the API listens. A per-home restore
-// killed before its job ended leaves the folder it staged beside the home, whose notes say whether to finish or undo
-// it, and then the folder goes. The staging folders in backups/ are wiped, the archives and their records closed to
-// other users, and a server backup left running is marked failed. The restore writes and removes its notes through
-// here. This module loads the API's jobs and settings, so the stage of ./eigen restore must not import it.
+// killed before its job ended leaves notes beside the home that say whether to finish or undo it; a home they cannot
+// put back stays shut until a later boot does. The staging folders in backups/ are wiped, the archives closed to other
+// users, and a server backup left running is marked failed. The restore writes and removes its notes through here.
+// This module loads the API's jobs and settings, so the stage of ./eigen restore must not import it.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_OWNER_ID, parseBackupArtifactName, parseServerArchiveName } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
+import { markHomeRestoring } from '../home/get-home';
 import { ARCHIVE_MODE } from './archive';
 import { describeError } from './errors';
 import {
@@ -40,11 +41,11 @@ type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: strin
 // open a half-written folder as if it were the home. Then the staging folders in backups/ are cleared, because a
 // backup or verify cut off by a restart leaves a half-written folder that nothing resumes. An older build left
 // archives and records readable, and they are closed. Last, a server backup killed mid-run left its record running,
-// and it becomes a failed attempt.
+// and it becomes a failed attempt. An older build's notes that could not be acted on sit in the staging folders, so
+// those wait for the next boot too.
 export async function recoverBackupsAfterRestart(): Promise<void> {
     recoverInterruptedRestores();
-    recoverOlderBuildRestores();
-    wipeBackupStaging();
+    if (recoverOlderBuildRestores()) wipeBackupStaging();
     closeArchives();
     await recoverInterruptedServerBackups().catch((error) =>
         console.error('[backup] recovering server records:', error),
@@ -82,7 +83,7 @@ export function recoverInterruptedRestores(): void {
         for (const name of fs.readdirSync(homesDir)) {
             if (!isRestoreStagingName(name)) continue;
             const restoreDir = path.join(homesDir, name);
-            recoverRestore(restoreDir, (marker) => homeBesideNotes(homesDir, marker));
+            if (!recoverRestore(restoreDir, (marker) => homeBesideNotes(homesDir, marker))) continue;
             dropRestoringMarker(restoreDir);
             fs.rmSync(restoreDir, { recursive: true, force: true });
         }
@@ -109,16 +110,19 @@ function dropRestoringMarker(restoreDir: string): void {
 // Builds up to 0.4.1 kept the notes in backups/.staging. That is another mount than the homes on Docker, so a boot
 // that ran without the backups folder could leave them to a later boot, which acted on them stale. They are still
 // read, so an upgrade right after a killed restore recovers it. Drop this in the release after the one that ships
-// the notes beside the home: by then no install holds an old note.
-function recoverOlderBuildRestores(): void {
+// the notes beside the home: by then no install holds an old note. Returns false when a home's notes stay for the
+// next boot.
+function recoverOlderBuildRestores(): boolean {
     const stagingRoot = getStagingRoot();
-    if (!fs.existsSync(stagingRoot)) return;
+    if (!fs.existsSync(stagingRoot)) return true;
+    let recovered = true;
     for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
         const notesDir = path.join(stagingRoot, entry.name);
-        recoverRestore(notesDir, homeInDataRoot);
-        dropRestoringMarker(notesDir);
+        if (recoverRestore(notesDir, homeInDataRoot)) dropRestoringMarker(notesDir);
+        else recovered = false;
     }
+    return recovered;
 }
 
 // An older build's notes are in the backups folder, apart from the homes, so the path they name must be the owner's
@@ -157,13 +161,40 @@ function closeArchives(): void {
 // will ever put it back. This does, and logs it as an error. A completion note beside the marker
 // tells a restore that finished from one that did not. A safety copy with no marker is not evidence
 // of anything: nothing deletes them automatically, so a deleted user leaves one behind. `homeOf` says which home
-// folder the marker may act on, or refuses it.
-function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): void {
+// folder the marker may act on, or refuses it. Returns false when a move failed, such as a rename with EACCES or
+// EBUSY: that is logged and the notes stay for the next boot, because a throw here would stop the server from
+// starting, again on every boot. The home stays shut until then: a request would open it out of place, or make a
+// new home folder at its empty path.
+function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): boolean {
     const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
     const homeDir = marker && homeOf(marker);
-    if (!marker || !homeDir || !namesCopiesOf(marker, path.basename(homeDir))) return;
+    if (!marker || !homeDir || !namesCopiesOf(marker, path.basename(homeDir))) return true;
     // The install finished. Whatever the job did after that cannot leave the home folder out of place.
-    if (isRestoreComplete(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return;
+    if (isRestoreComplete(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return true;
+    try {
+        putHomeBack(marker, homeDir);
+        return true;
+    } catch (error) {
+        keepHomeShut(marker.ownerId);
+        console.error(
+            `[backup] could not finish the interrupted restore of ${marker.ownerId}'s home ${homeDir}: ${describeError(error)}. The account answers 503, and its notes stay in ${notesDir} for the next boot: run ./eigen stop, then ./eigen restart`,
+        );
+        return false;
+    }
+}
+
+// The mark a restore holds while it moves the home. It throws on a home marked already, such as by another of its
+// notes, and a throw here would stop the server from starting.
+function keepHomeShut(ownerId: string): void {
+    try {
+        markHomeRestoring(ownerId);
+    } catch {
+        // The home is shut already, by a restore's mark or a deletion's.
+    }
+}
+
+// The moves that undo an interrupted install of the home at `homeDir`, as its marker describes it.
+function putHomeBack(marker: RestoringMarker, homeDir: string): void {
     const aside = marker.preRestoreName && path.join(path.dirname(homeDir), marker.preRestoreName);
     // The home never went aside, or the restore's own rollback already put it back. Either way the folder in place
     // is the home, and this must not move it.
