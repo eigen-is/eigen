@@ -1,5 +1,7 @@
 // The S3 configuration fields, a button that tests the connection, and a panel that shows whether the bucket
-// keeps old versions of files and cleans them up. Forms such as the storage and backup settings use it.
+// keeps old versions of files and cleans them up. Where Eigen may change the bucket, the panel opens a dialog that
+// turns versioning on and sets how many days old versions are kept. Forms such as the storage and backup settings
+// and the mount dialog use it.
 
 import {
     S3_ABORT_INCOMPLETE_UPLOAD_DAYS,
@@ -18,7 +20,7 @@ import { Alert, AlertDescription } from '../alert';
 import { EigenLoader } from '../braket/eigen-loader';
 import { Button } from '../button';
 import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton } from '../code-block';
-import { ConfirmDialog } from '../confirm-dialog';
+import { FormDialog, FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
 import { Label } from '../label';
 
@@ -45,7 +47,7 @@ export function S3ConfigCard({
     const [result, setResult] = useState<S3CheckResult | null>(null);
     const [harden, setHarden] = useState<S3HardenResult | null>(null);
     const [checking, setChecking] = useState(false);
-    const [confirming, setConfirming] = useState(false);
+    const [retentionOpen, setRetentionOpen] = useState(false);
     const [days, setDays] = useState(S3_NONCURRENT_DAYS_DEFAULT);
 
     const valid = isS3ConfigValid(value, secretSaved);
@@ -77,10 +79,9 @@ export function S3ConfigCard({
         }
     };
 
-    // What the bucket says right now. Both fields are optional — a check that never got as far as the
-    // bucket settings leaves them out, which reads the same as unreadable — and a harden result
-    // carries the re-read state, so it wins per field: it can measure one half and say nothing about
-    // the other.
+    // What the bucket says right now. A check that never got as far as the bucket settings leaves both fields out,
+    // which reads the same as unreadable. A harden result carries the state read back after the change, so it wins.
+    // It wins per field, because it can measure one half and say nothing about the other.
     const versioning = harden?.versioning ?? result?.versioning ?? 'unknown';
     const lifecycle = harden?.lifecycle ?? result?.lifecycle ?? 'unknown';
     // Opened from the all-green state, the dialog is a retention change and not the first pass.
@@ -185,46 +186,26 @@ export function S3ConfigCard({
                     lifecycle={lifecycle}
                     harden={harden}
                     days={days}
-                    onEnable={() => setConfirming(true)}
+                    onEnable={() => setRetentionOpen(true)}
                 />
             )}
 
             {onHarden && (
-                <ConfirmDialog
-                    open={confirming}
-                    onOpenChange={setConfirming}
+                <FormDialog
+                    open={retentionOpen}
+                    onOpenChange={setRetentionOpen}
                     title={changingRetention ? 'Change retention' : 'Make this bucket safe for Eigen'}
-                    description={
-                        <span className="block space-y-2">
-                            {!changingRetention && (
-                                <span className="block">
-                                    Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning
-                                    applies to the whole bucket.
-                                </span>
-                            )}
-                            <span className="flex items-center gap-2">
-                                Expire old versions after
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    max={S3_NONCURRENT_DAYS_MAX}
-                                    step={1}
-                                    className="h-8 w-20"
-                                    value={days}
-                                    onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
-                                />
-                                days
-                            </span>
-                            <span className="block">
-                                Eigen re-uploads whole files on every save, so an often-edited document makes a lot of
-                                versions. More days means more to recover from, and more storage used.
-                            </span>
-                        </span>
-                    }
-                    // A refused request comes back as an ok:false result, so there is nothing to catch here.
-                    onConfirm={async () => setHarden(await onHarden(value, days))}
-                    confirmText={changingRetention ? 'Update' : 'Enable'}
-                />
+                >
+                    <RetentionForm
+                        initialDays={days}
+                        changingRetention={changingRetention}
+                        onSubmit={async (nextDays) => {
+                            // A refused request comes back as an ok:false result, so there is nothing to catch here.
+                            setHarden(await onHarden(value, nextDays));
+                            setDays(nextDays);
+                        }}
+                    />
+                </FormDialog>
             )}
         </div>
     );
@@ -246,8 +227,8 @@ function BucketSafetyPanel({
     onEnable: () => void;
 }) {
     const lifecycleDays = typeof lifecycle === 'object' ? lifecycle.noncurrentDays : null;
-    // A key that can't read bucket settings can't write them either, and a foreign lifecycle config is
-    // never rewritten — so the button only shows where a PUT can actually change something.
+    // A key that can't read the bucket settings can't write them either, and Eigen never rewrites a lifecycle
+    // config it didn't write. So the button only shows where a PUT can change something.
     const canApply = versioning !== 'unknown' && (versioning !== 'enabled' || lifecycle === 'none');
     const showManualSteps =
         versioning === 'unknown' || lifecycle === 'foreign' || lifecycle === 'unknown' || !!harden?.reason;
@@ -276,7 +257,7 @@ function BucketSafetyPanel({
                 {lifecycle === 'none' && 'Old-version cleanup: no rule. Old versions grow forever.'}
                 {lifecycle === 'foreign' && 'Old-version cleanup: another lifecycle rule is in place.'}
                 {lifecycle === 'unknown' && 'Old-version cleanup: cannot be read with this access key.'}
-                {/* All green, so there is no button — this link is the only way back to the days input. */}
+                {/* All green, so there is no button. This link is the only way back to the days field. */}
                 {versioning === 'enabled' && lifecycleDays !== null && (
                     <button type="button" className="underline hover:text-foreground" onClick={onEnable}>
                         Change
@@ -293,8 +274,8 @@ function BucketSafetyPanel({
     );
 }
 
-// What the button would have done, as aws CLI commands — for the buckets Eigen may not change from
-// here, and as a reference once everything is already set.
+// What the button would have done, as aws CLI commands. They are for the buckets Eigen may not change from here,
+// and a reference once everything is set.
 function ManualSteps({
     config,
     days,
@@ -345,11 +326,6 @@ function ManualSteps({
     );
 }
 
-// The rule takes whole days, and the route's schema rejects anything else — keep the input in range.
-function clampDays(value: number): number {
-    return Math.min(S3_NONCURRENT_DAYS_MAX, Math.max(1, Math.round(value) || 1));
-}
-
 function SafetyLine({ ok, children }: { ok: boolean; children: ReactNode }) {
     return (
         <div className={cn('text-sm flex items-center gap-1.5', ok ? 'text-success' : 'text-warning')}>
@@ -389,4 +365,50 @@ function manualSnippet(config: S3Config, days: number, include: { versioning: bo
         );
     }
     return lines.join('\n');
+}
+
+// Mounted with the dialog, so each opening starts from the card's days, and Cancel leaves them as they were.
+function RetentionForm({
+    initialDays,
+    changingRetention,
+    onSubmit,
+}: {
+    initialDays: number;
+    changingRetention: boolean;
+    onSubmit: (days: number) => Promise<void>;
+}) {
+    const [days, setDays] = useState(initialDays);
+
+    return (
+        <FormDialogForm submitLabel={changingRetention ? 'Update' : 'Enable'} onSubmit={() => onSubmit(days)}>
+            {!changingRetention && (
+                <p className="text-sm text-muted-foreground">
+                    Turns on bucket versioning, so overwrites and deletes can be recovered. Versioning applies to the
+                    whole bucket.
+                </p>
+            )}
+            <Label className="font-normal">
+                Expire old versions after
+                <Input
+                    type="number"
+                    min={1}
+                    max={S3_NONCURRENT_DAYS_MAX}
+                    step={1}
+                    className="h-8 w-20"
+                    value={days}
+                    onChange={(e) => setDays(clampDays(e.target.valueAsNumber))}
+                />
+                days
+            </Label>
+            <p className="text-sm text-muted-foreground">
+                Eigen re-uploads whole files on every save, so an often-edited document makes a lot of versions. More
+                days means more to recover from, and more storage used.
+            </p>
+        </FormDialogForm>
+    );
+}
+
+// The rule takes whole days, and the route's schema refuses anything else, so the field stays in range.
+function clampDays(value: number): number {
+    return Math.min(S3_NONCURRENT_DAYS_MAX, Math.max(1, Math.round(value) || 1));
 }

@@ -24,7 +24,13 @@ type UpdateInput = { mountId: string; enabled?: boolean; maxSizeMB?: number; nam
 const addMount = { mutateAsync: mock(async (_input: AddInput) => {}) };
 const updateMount = { mutateAsync: mock(async (_input: UpdateInput) => {}) };
 const checkS3 = { mutateAsync: mock(async (_config: S3Config): Promise<S3CheckResult> => ({ ok: true, message: '' })) };
-const hardenS3 = { mutateAsync: mock(async () => ({})) };
+const hardenS3 = {
+    mutateAsync: mock(async (_input: S3Config & { noncurrentDays: number }) => ({
+        ok: true,
+        message: 'Bucket is safe',
+        applied: { versioning: true, lifecycle: true },
+    })),
+};
 const mounts = {
     data: {
         files: { name: 'Shared', storageType: 'local', maxSizeMB: 500, enabled: true },
@@ -86,7 +92,9 @@ beforeEach(() => {
     addMount.mutateAsync.mockImplementation(async () => {});
     updateMount.mutateAsync.mockReset();
     updateMount.mutateAsync.mockImplementation(async () => {});
-    checkS3.mutateAsync.mockClear();
+    checkS3.mutateAsync.mockReset();
+    checkS3.mutateAsync.mockImplementation(async () => ({ ok: true, message: '' }));
+    hardenS3.mutateAsync.mockClear();
     writeText.mockClear();
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     serverSettings = {};
@@ -220,6 +228,32 @@ test('Enter in an S3 field submits the mount, and never clicks Copy or another b
     expect(addMount.mutateAsync.mock.calls).toEqual([
         [{ name: 'Media', storageType: 's3', maxSizeMB: 1000, s3Config: bucket }],
     ]);
+});
+
+test('Enter in the bucket safety dialog hardens the bucket and leaves the mount dialog open and unsaved', async () => {
+    serverSettings = { data: s3Defaults };
+    checkS3.mutateAsync.mockImplementation(async () => ({
+        ok: true,
+        message: 'Connected',
+        versioning: 'disabled',
+        lifecycle: 'none',
+    }));
+    await openAdd();
+    await type(nameField(), 'Media');
+    await click(button('Test connection'));
+    await settle();
+    await click(button('Enable safe defaults'));
+    const safety = [...document.querySelectorAll('[role="dialog"]')].find(
+        (d) => d.querySelector('h2')?.textContent === 'Make this bucket safe for Eigen',
+    );
+    const days = safety?.querySelector('input[type="number"]');
+    if (!(days instanceof HTMLInputElement)) throw new Error('the safety dialog has no days field');
+    await enter(days);
+    await settle();
+    expect(hardenS3.mutateAsync.mock.calls).toEqual([[{ ...bucket, noncurrentDays: 30 }]]);
+    expect(addMount.mutateAsync).not.toHaveBeenCalled();
+    expect(title()).toBe('Add mount');
+    expect(nameField().value).toBe('Media');
 });
 
 test('a save the server refuses keeps the dialog open with what was typed, and no unhandled rejection', async () => {
