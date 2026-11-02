@@ -15,10 +15,11 @@ const consoleError = spyOn(console, 'error');
 afterEach(() => consoleError.mockClear());
 
 const cell = (v: string | number) => ({ v, m: String(v) });
+const A1_B3 = { row: [0, 2], column: [0, 1], row_focus: 0, column_focus: 0 };
 
 // A1:B3 selected, with a header row whose two columns share a name.
 const openWithHeaders = () =>
-    renderSheetDialog((d) => d.showDialog(createElement(CustomSort)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomSort, { selection: A1_B3 })), {
         sheets: [
             {
                 name: 'sheet',
@@ -32,12 +33,12 @@ const openWithHeaders = () =>
                 ],
             },
         ],
-        selections: [{ row: [0, 2], column: [0, 1], row_focus: 0, column_focus: 0 }],
+        selections: [A1_B3],
     });
 
 // A1:B3 selected, rows of a letter and a number.
 const openCustomSort = () =>
-    renderSheetDialog((d) => d.showDialog(createElement(CustomSort)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomSort, { selection: A1_B3 })), {
         sheets: [
             {
                 name: 'sheet',
@@ -51,7 +52,7 @@ const openCustomSort = () =>
                 ],
             },
         ],
-        selections: [{ row: [0, 2], column: [0, 1], row_focus: 0, column_focus: 0 }],
+        selections: [A1_B3],
     });
 
 const columnA = (context: import('../../../state').Context) => context.sheets[0]?.data?.map((row) => row[0]?.v);
