@@ -32,15 +32,14 @@ const safe: S3CheckResult = {
 };
 
 const onCheck = mock(async (_config: S3Config) => unsafe);
-const onHarden = mock(
-    async (_config: S3Config, noncurrentDays: number): Promise<S3HardenResult> => ({
-        ok: true,
-        message: 'Bucket is safe',
-        versioning: 'enabled',
-        lifecycle: { noncurrentDays },
-        applied: { versioning: true, lifecycle: true },
-    }),
-);
+const hardened = async (_config: S3Config, noncurrentDays: number): Promise<S3HardenResult> => ({
+    ok: true,
+    message: 'Bucket is safe',
+    versioning: 'enabled',
+    lifecycle: { noncurrentDays },
+    applied: { versioning: true, lifecycle: true },
+});
+const onHarden = mock(hardened);
 const outerSubmit = mock(() => {});
 
 let unmount = async () => {};
@@ -48,7 +47,8 @@ afterEach(() => unmount());
 beforeEach(() => {
     onCheck.mockReset();
     onCheck.mockImplementation(async () => unsafe);
-    onHarden.mockClear();
+    onHarden.mockReset();
+    onHarden.mockImplementation(hardened);
     outerSubmit.mockClear();
 });
 
