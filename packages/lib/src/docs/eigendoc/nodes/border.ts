@@ -19,7 +19,7 @@ export function fitBorderPx(px: number): number {
     return Number(Math.min(Math.max(px, MIN_BORDER_PX), MAX_BORDER_PX).toFixed(2));
 }
 
-const BORDER = /^(\d{1,3}(?:\.\d{1,2})?)px (solid|dashed|dotted|double) (#[0-9a-f]{6})$/;
+const BORDER = /^(\d{1,3}(?:\.\d{1,2})?)px ([a-z]+) (#[0-9a-f]{6})$/;
 
 export function readBorder(value: unknown): Border | null {
     const text = typeof value === 'string' ? value.toLowerCase() : '';
