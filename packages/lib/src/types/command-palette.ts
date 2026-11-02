@@ -11,6 +11,8 @@ import type {
     DocSearchSession,
 } from './doc-search';
 import type { DrivePath, EigenDocType, ExportFormat } from './drive';
+import type { DriveActionGroup } from './drive-actions';
+import type { FileActionGroup } from './file-subject';
 import type { EmailSummary } from './mail';
 import type { HelpSearchDoc } from './search';
 
@@ -33,9 +35,16 @@ type ResultGroup =
 export type PaletteSelection = { items: readonly DrivePath[] } | null;
 
 // One row a page offers for its selection, already bound to those items: the menu row it draws, whose
-// label and icon the palette shows, and the run that performs it. Download as names its format.
+// label and icon the palette shows, and the run that performs it. The row's menu group orders the
+// palette's rows as the menu orders them. Download as names its format.
 export type PaletteSelectionAction = {
-    action: { id: string; label: string; pluralLabel?: string; icon: LucideIcon };
+    action: {
+        id: string;
+        label: string;
+        pluralLabel?: string;
+        icon: LucideIcon;
+        group: DriveActionGroup | FileActionGroup;
+    };
     run: (format?: ExportFormat) => void;
 };
 

@@ -1,3 +1,7 @@
+// The dialog that confirms a Drive delete of one item or a set. It says what the server will do: leave a
+// direct share, trash an item in someone else's drive into its owner's trash, or move the viewer's own items
+// to their trash. The Drive action runner and an open document's File menu open it when a delete asks first.
+
 import { PartialDeleteError, useDeletePaths, useIsEffectiveOwnerOf, useIsSharedWithMe } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -5,7 +9,7 @@ import { DeleteDialog } from '@workspace/ui/components/delete/delete-dialog';
 import { useEffect, useState } from 'react';
 
 export type DriveDeleteItemProps = {
-    paths: DrivePath[];
+    paths: readonly DrivePath[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
@@ -15,9 +19,9 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     const deletePathsMutation = useDeletePaths();
     const isSharedWithMe = useIsSharedWithMe();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
-    // After a partial failure, retry only the paths that failed — re-trashing already-trashed ids 404s.
-    // Cleared when the dialog closes so a fresh selection starts from the full list.
-    const [failed, setFailed] = useState<DrivePath[] | null>(null);
+    // After a partial failure a retry sends only the items that failed, since trashing an item twice fails.
+    // Closing the dialog clears them, so the next selection starts from its full list.
+    const [failed, setFailed] = useState<readonly DrivePath[] | null>(null);
     useEffect(() => {
         if (!open) setFailed(null);
     }, [open]);
@@ -25,22 +29,23 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     const targets = failed ?? paths;
     const first = targets[0] ?? null;
     const isSingle = targets.length === 1;
-    // The server leaves a direct share instead of trashing it, and trashes a path in someone
-    // else's drive into their trash; the copy says which.
+    // The server leaves a direct share instead of trashing it, and an item in someone else's drive goes to
+    // their trash. The dialog's text says which.
     const leaving = targets.filter(isSharedWithMe).length;
     const foreign = targets.some((path) => !isEffectiveOwnerOf(path.ownerId));
 
     const handleDelete = async () => {
         if (targets.length === 0) return;
         try {
-            const succeeded = await deletePathsMutation.mutateAsync(targets);
+            const succeeded = await deletePathsMutation.mutateAsync([...targets]);
             for (const path of succeeded) onAfterAction?.('delete', path);
         } catch (error) {
             if (error instanceof PartialDeleteError) {
                 for (const path of error.succeeded) onAfterAction?.('delete', path);
                 setFailed(error.failed);
             }
-            throw error; // keep the dialog open for retry on the still-failed items
+            // The dialog stays open, so the user can retry the items that failed.
+            throw error;
         }
     };
 

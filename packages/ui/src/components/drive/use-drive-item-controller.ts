@@ -20,7 +20,7 @@ export type UseDriveItemControllerOptions = {
     columns?: number;
     scrollToIndex?: (index: number, opts?: { align?: 'center' }) => void;
     containerRef: RefObject<HTMLElement | null>;
-    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    // Held by the caller, such as DriveList, so the selection survives a switch between list and grid.
     selection?: UseListSelectionReturn<DrivePath>;
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;

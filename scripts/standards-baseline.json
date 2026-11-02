@@ -75,7 +75,6 @@
     "packages/ui/src/components/comments/comment-filter-button.tsx": 1,
     "packages/ui/src/components/contacts/contact-autosuggest.tsx": 1,
     "packages/ui/src/components/dialog.tsx": 1,
-    "packages/ui/src/components/drive/drive-list.tsx": 1,
     "packages/ui/src/components/drive/drive-preview.tsx": 1,
     "packages/ui/src/components/drive/eigendoc-config.ts": 1,
     "packages/ui/src/components/drive/eigendoc-shared-view.tsx": 1,

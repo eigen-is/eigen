@@ -4,10 +4,9 @@
 // gates. It also hands the document and those rows to the command palette, so both offer the same ones.
 
 import { useNavigate } from '@tanstack/react-router';
-import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/lib/api';
-import { copyToClipboard } from '@workspace/lib/clipboard';
+import { openDocument, openMailComposeWith } from '@workspace/lib/api';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { useDriveActionsFor } from '@workspace/lib/drive';
+import { copyDriveLink, useDriveActionsFor } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -32,6 +31,7 @@ import type { LucideIcon } from 'lucide-react';
 import { Download, FileText, Folder, Upload } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
+import { DriveActionMenuItem } from '../../drive/drive-action-menu-item';
 import { browseCapabilities } from '../../drive/drive-capabilities';
 import { DriveCreateEigenDoc } from '../../drive/drive-create-eigendoc';
 import { DriveDeleteItem } from '../../drive/drive-delete-item';
@@ -107,7 +107,7 @@ export function FileMenu({
             }),
         share: onAccessDialogOpen,
         'email-collaborators': () => setEmailOpen(true),
-        'copy-link': () => copyToClipboard(getDriveShareUrl(path), 'Link copied to clipboard'),
+        'copy-link': () => copyDriveLink(path),
         'mail-to': () => openMailComposeWith({ attachments: [path] }),
         trash: () => setDeleteOpen(true),
         'remove-shared': () => setDeleteOpen(true),
@@ -121,16 +121,7 @@ export function FileMenu({
 
     const rowFor = (id: DriveActionId) => {
         const row = rows.find(({ action }) => action.id === id);
-        return (
-            row && (
-                <DropdownMenuItem
-                    variant={row.action.group === 'destructive' ? 'destructive' : 'default'}
-                    onClick={() => row.run()}
-                >
-                    <row.action.icon className="h-4 w-4" /> {row.action.label}
-                </DropdownMenuItem>
-            )
-        );
+        return row && <DriveActionMenuItem action={row.action} count={1} onClick={() => row.run()} />;
     };
     const remove = rowFor('trash') ?? rowFor('remove-shared');
 

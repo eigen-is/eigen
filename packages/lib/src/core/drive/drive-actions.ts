@@ -17,9 +17,11 @@ import {
     Trash2,
     UserRoundPlus,
 } from 'lucide-react';
+import type { DrivePath } from '../../types/drive';
 import { exportFormatsFor, isOpenable } from '../../types/drive';
 import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
-import { getDriveItemUrl } from '../api';
+import { getDriveItemUrl, getDriveShareUrl } from '../api';
+import { copyToClipboard } from '../clipboard/clipboard';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;
 
@@ -128,4 +130,14 @@ export const DRIVE_ACTIONS: readonly DriveAction[] = [
 export function driveActionsFor(subject: DriveActionSubject): DriveAction[] {
     if (subject.items.length === 0) return [];
     return DRIVE_ACTIONS.filter((action) => action.applies(subject));
+}
+
+// Copy link needs no dialog, so every host that offers it runs this.
+export function copyDriveLink(item: DrivePath): Promise<void> {
+    return copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
+}
+
+// A row's label for the items it acts on: a multi-selection reads the plural label, its {n} the count.
+export function labelFor({ label, pluralLabel }: Pick<DriveAction, 'label' | 'pluralLabel'>, count: number): string {
+    return count > 1 && pluralLabel ? pluralLabel.replace('{n}', String(count)) : label;
 }

@@ -1,11 +1,12 @@
 // The one order every context and ⋮ menu draws its rows in, and the order the command palette lists a Drive
 // selection's rows in. A host passes each row to the group it belongs to; the order lives here, so no menu can drift.
 
+import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { ReactNode } from 'react';
 import { Fragment } from 'react';
 import { DropdownMenuSeparator } from '../dropdown-menu';
 
-export const MENU_SECTIONS = [
+const MENU_SECTIONS = [
     'open',
     'clipboard',
     'create',
@@ -28,4 +29,9 @@ export function MenuSections(props: MenuSectionsProps) {
             {props[section]}
         </Fragment>
     ));
+}
+
+// Rows that each name their group, sorted group by group into the menu's order. Rows of one group keep their order.
+export function inMenuOrder(rows: readonly PaletteSelectionAction[]): PaletteSelectionAction[] {
+    return MENU_SECTIONS.flatMap((section) => rows.filter(({ action }) => action.group === section));
 }

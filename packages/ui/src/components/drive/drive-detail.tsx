@@ -3,7 +3,6 @@
 // draws it beside the list.
 
 import { formatDateTime } from '@workspace/lib/date';
-import { subjectFromPath } from '@workspace/lib/file-subject';
 import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, stripEigenExtension } from '@workspace/lib/types/drive';
@@ -13,10 +12,8 @@ import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';
 import { KebabTrigger } from '@workspace/ui/components/layout/toolbar';
 import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch-toggle-button';
-import { Download, UserRoundPlus, X } from 'lucide-react';
+import { X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo } from 'react';
-import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { useLayout } from '../layout/app/layout-context';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveAccessList } from './drive-access-list';
@@ -25,6 +22,7 @@ import { DriveItemMenuItems } from './drive-item-menu';
 import { DrivePreview } from './drive-preview';
 import { getFilePresentation } from './file-presentation';
 import { RecentActivity } from './recent-activity';
+import { useDriveFileActionRunner } from './use-drive-file-action-runner';
 
 type DriveDetailToolbarProps = {
     onClose: () => void;
@@ -48,19 +46,12 @@ type DriveDetailProps = {
 };
 
 export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
-    const canWrite = actions.capabilities.canWrite;
-    const subject = useMemo(() => (path ? subjectFromPath(path, canWrite) : null), [path, canWrite]);
-    const siblingSubjects = useMemo(
-        () => siblings.map((sibling) => subjectFromPath(sibling, canWrite)),
-        [siblings, canWrite],
-    );
-    const runner = useFileActionRunner(subject, siblingSubjects);
+    const runner = useDriveFileActionRunner(path, siblings, actions.capabilities.canWrite);
 
     if (!path) return null;
 
-    // A Drive action's handler, when the view offers it for this item.
-    const driveAction = (id: DriveActionId) =>
-        actions.actionsFor([path]).some((action) => action.id === id) ? () => actions.run(id, [path]) : undefined;
+    // The buttons draw the rows the view offers for this item, with the rows' own labels and icons.
+    const driveAction = (id: DriveActionId) => actions.actionsFor([path]).find((action) => action.id === id);
     const fileAction = (id: FileActionId) => runner.actions.find((action) => action.id === id);
     const open = driveAction('open');
     const share = driveAction('share');
@@ -69,7 +60,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
 
     // A document opens in its own app; anything the registry previews opens in the quick look.
     const onHeroClick = () => {
-        if (isDocumentType(path.type)) open?.();
+        if (isDocumentType(path.type)) actions.run('open', [path]);
         else if (quickLook) runner.run(quickLook);
     };
 
@@ -82,23 +73,28 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                     {open && (
                         <Button
                             size="sm"
-                            onClick={open}
+                            onClick={() => actions.run(open.id, [path])}
                             className="flex-1 h-8 bg-app text-white hover:bg-app hover:opacity-90"
                         >
-                            Open
+                            {open.label}
                         </Button>
                     )}
                     <div className="flex items-center gap-2 ml-auto">
                         {download && (
                             <TooltipButton
                                 variant="outline"
-                                icon={Download}
-                                tooltipText="Download"
+                                icon={download.icon}
+                                tooltipText={download.label}
                                 onClick={() => runner.run(download)}
                             />
                         )}
                         {share && (
-                            <TooltipButton variant="outline" icon={UserRoundPlus} tooltipText="Share" onClick={share} />
+                            <TooltipButton
+                                variant="outline"
+                                icon={share.icon}
+                                tooltipText={share.label}
+                                onClick={() => actions.run(share.id, [path])}
+                            />
                         )}
                         <WatchToggleButton ownerId={path.ownerId} mountId={path.mountId} pathId={path.id} />
                         <DropdownMenu>
@@ -111,7 +107,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                 </div>
                 <DetailsSection path={path} />
                 <h3 className="eigen-section-label mt-6 mb-2">Shared with</h3>
-                <DriveAccessList path={path} onShareClick={share} />
+                <DriveAccessList path={path} onShareClick={share && (() => actions.run(share.id, [path]))} />
                 <RecentActivity path={path} />
             </div>
             {runner.dialogs}
