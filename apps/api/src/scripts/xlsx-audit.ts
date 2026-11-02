@@ -31,6 +31,7 @@ import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/export-image';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
+import { withoutOverlaps } from '../lib/export/sheets/xlsx/rules';
 import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
@@ -1017,10 +1018,12 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
     return differences;
 }
 
-// A sheet's validation rules keyed by the ranges they cover, as an import numbers the rules afresh.
+// A sheet's validation rules keyed by the ranges they cover, as an import numbers the rules afresh. Where rules
+// overlap, the highest id wins a cell, and the writer cuts that cell out of the others. So each rule is keyed by the
+// cells it decides.
 function rulesByRanges(validations: Sheet['dataValidations']): Record<string, DataVerificationRule> {
     return Object.fromEntries(
-        Object.values(validations ?? {}).map(({ ranges, rule }) => [
+        Object.values(withoutOverlaps(validations ?? {}, () => {})).map(({ ranges, rule }) => [
             ranges
                 .map((range) => rangeToA1(range))
                 .sort()
