@@ -32,15 +32,13 @@ export async function receiveSharedPathChange(
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_UNSHARED, path));
         // A user who leaves a share did it themselves, so they get no notice.
         if (actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
-            if (home.hasNotifications) {
-                home.notifications.persist({
-                    type: 'unshare',
-                    actorEmail,
-                    title: actorDisplay ? `${actorDisplay} removed your access` : 'Access removed',
-                    body: displayName,
-                    details: { pathType: path.type },
-                });
-            }
+            home.notify({
+                type: 'unshare',
+                actorEmail,
+                title: actorDisplay ? `${actorDisplay} removed your access` : 'Access removed',
+                body: displayName,
+                details: { pathType: path.type },
+            });
         }
     } else if (sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
         sharedDb
@@ -81,16 +79,14 @@ export async function receiveSharedPathChange(
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_SHARED, path));
         const info = getEigenDocInfoByType(path.type);
         const noun = info?.noun ?? info?.label.toLowerCase() ?? (isFolderType(path.type) ? 'folder' : 'file');
-        if (home.hasNotifications) {
-            home.notifications.persist({
-                type: 'share',
-                actorEmail,
-                title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
-                body: displayName,
-                tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
-                details: { pathType: path.type },
-            });
-        }
+        home.notify({
+            type: 'share',
+            actorEmail,
+            title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
+            body: displayName,
+            tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
+            details: { pathType: path.type },
+        });
     }
 }
 

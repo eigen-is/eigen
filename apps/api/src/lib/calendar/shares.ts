@@ -103,15 +103,13 @@ export function receiveShare(
     }
 
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
-    if (calendar.home.hasNotifications) {
-        calendar.home.notifications.persist({
-            type: 'calendar-share',
-            actorEmail,
-            title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
-            body: calendarName,
-            tag: `calendar-share:${calendarId}:${ownerUserId}`,
-        });
-    }
+    calendar.home.notify({
+        type: 'calendar-share',
+        actorEmail,
+        title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
+        body: calendarName,
+        tag: `calendar-share:${calendarId}:${ownerUserId}`,
+    });
 }
 
 export function removeShare(
@@ -126,14 +124,12 @@ export function removeShare(
 
     calendar.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, existing.id)).run();
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UNSHARED, ownerUserId));
-    if (calendar.home.hasNotifications) {
-        calendar.home.notifications.persist({
-            type: 'calendar-unshare',
-            actorEmail,
-            title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
-            body: existing.calendarName,
-        });
-    }
+    calendar.home.notify({
+        type: 'calendar-unshare',
+        actorEmail,
+        title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
+        body: existing.calendarName,
+    });
 }
 
 // The silent half of receiveShare: reconciliation brings an entry in line without notifying the user again.

@@ -205,13 +205,16 @@ describe('Home parts', () => {
         }
     });
 
-    test('hasNotifications is true for user and guest homes, false for team homes', async () => {
+    test('notify reaches user and guest homes, and a team home drops it', async () => {
         const user = await getHome(ctx.alice.user.id);
         const guest = await getHome((await createTestGuest('Parts Guest')).id);
         const team = await getHome(teamOwnerId(await createTeam(ctx, orgId, 'Parts Team Two')));
 
-        expect(user.hasNotifications).toBe(true);
-        expect(guest.hasNotifications).toBe(true);
-        expect(team.hasNotifications).toBe(false);
+        user.notify({ type: 'share', title: 'Notify user' });
+        guest.notify({ type: 'share', title: 'Notify guest' });
+        expect(() => team.notify({ type: 'share', title: 'Notify team' })).not.toThrow();
+
+        expect(user.notifications.list().map((n) => n.title)).toContain('Notify user');
+        expect(guest.notifications.list().map((n) => n.title)).toContain('Notify guest');
     });
 });

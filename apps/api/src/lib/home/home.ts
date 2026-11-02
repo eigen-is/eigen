@@ -5,6 +5,7 @@
 // decides which parts it has.
 
 import * as path from 'node:path';
+import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { createAsyncSingleton } from '../../utils/singleton';
@@ -87,10 +88,6 @@ export class Home {
 
     public get hasCalendar(): boolean {
         return !!this._calendar;
-    }
-
-    public get hasNotifications(): boolean {
-        return !!this._notifications;
     }
 
     public get closing(): boolean {
@@ -225,6 +222,12 @@ export class Home {
         for (const listener of this.sseListeners) {
             listener(event);
         }
+    }
+
+    // A team home has no notification center, so a notice to it is dropped.
+    public notify(input: NotificationPersistInput): void {
+        this.touch();
+        this._notifications?.persist(input);
     }
 
     // Uses the fields, not the getters: a getter may refuse a part that is switched off, but its

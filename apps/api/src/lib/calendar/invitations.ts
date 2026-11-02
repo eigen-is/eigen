@@ -218,16 +218,14 @@ export async function receiveInvitation(calendar: Calendar, payload: ReceiveInvi
 function notifyInvitationReceived(calendar: Calendar, payload: ReceiveInvitationPayload): void {
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, payload.organizerUserId));
     const organizer = payload.data?.organizer;
-    if (calendar.home.hasNotifications) {
-        calendar.home.notifications.persist({
-            type: 'calendar-invite',
-            actorEmail: organizer?.email,
-            title: `${actorDisplayName(organizer?.name, organizer?.email)} invited you`,
-            body: payload.title,
-            tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
-            details: { startTime: payload.startTime.getTime() },
-        });
-    }
+    calendar.home.notify({
+        type: 'calendar-invite',
+        actorEmail: organizer?.email,
+        title: `${actorDisplayName(organizer?.name, organizer?.email)} invited you`,
+        body: payload.title,
+        tag: `calendar-invite:${payload.organizerEventId}:${payload.startTime.getTime()}`,
+        details: { startTime: payload.startTime.getTime() },
+    });
 }
 
 export async function receiveInvitationUpdate(
@@ -322,16 +320,14 @@ function notifyInvitationUpdated(
 ): void {
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, orgUserId));
     const organizer = linked.data?.organizer;
-    if (calendar.home.hasNotifications) {
-        calendar.home.notifications.persist({
-            type: 'calendar-invite-updated',
-            actorEmail: organizer?.email,
-            title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
-            body: title,
-            tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
-            details: { startTime: startTime.getTime() },
-        });
-    }
+    calendar.home.notify({
+        type: 'calendar-invite-updated',
+        actorEmail: organizer?.email,
+        title: `${actorDisplayName(organizer?.name, organizer?.email)} updated an invitation`,
+        body: title,
+        tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
+        details: { startTime: startTime.getTime() },
+    });
 }
 
 // Caller holds the write lock.
@@ -590,15 +586,13 @@ function notifyInvitationCancelled(
     orgEventId: string,
 ): void {
     const organizer = linked.data?.organizer;
-    if (calendar.home.hasNotifications) {
-        calendar.home.notifications.persist({
-            type: 'calendar-invite-cancelled',
-            actorEmail: organizer?.email,
-            title: `${actorDisplayName(organizer?.name, organizer?.email)} canceled an invitation`,
-            body: linked.title,
-            tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
-        });
-    }
+    calendar.home.notify({
+        type: 'calendar-invite-cancelled',
+        actorEmail: organizer?.email,
+        title: `${actorDisplayName(organizer?.name, organizer?.email)} canceled an invitation`,
+        body: linked.title,
+        tag: `calendar-invite:${orgEventId}:${startTime.getTime()}`,
+    });
 }
 
 export async function removeInvitation(calendar: Calendar, orgEventId: string, orgUserId: string): Promise<void> {
