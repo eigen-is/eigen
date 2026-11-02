@@ -462,15 +462,20 @@ describe('the restart notice on the control socket', () => {
             expect(alice.events).toEqual([{ type: 'server:restart-notice', notice: null }]);
         });
 
+        // The stream opens before the fake clock, so the ten minutes do not idle its Home out. The last notice shows
+        // the stream still heard the Home after them.
         test('a cleared notice does not expire into a second event', async () => {
             const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
             jest.useFakeTimers();
             await post('/restart-notice', { inSeconds: 60, reason: 'update' });
             await clear();
-            const alice = await collectSSE(ctx.alice.user.id);
             jest.advanceTimersByTime(10 * 60_000);
+            await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
             alice.stop();
-            expect(alice.events).toEqual([]);
+            expect(
+                alice.events.map((event) => ('notice' in event ? (event.notice?.reason ?? null) : event.type)),
+            ).toEqual(['update', null, 'rollback']);
         });
     });
 
