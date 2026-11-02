@@ -10,6 +10,7 @@ import { renderInDocument } from '../render-in-document';
 installHappyDom();
 
 const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
 
@@ -126,7 +127,10 @@ test('a slow submit disables both buttons, keeps its label, and Escape waits for
 });
 
 test('a submit that fails keeps the dialog open for another try', async () => {
-    const onSubmit = mock(() => Promise.reject(new Error('offline')));
+    // A mutation hook toasts its failure before the dialog sees it.
+    const failure = new Error('offline');
+    onMutationError(failure);
+    const onSubmit = mock(() => Promise.reject(failure));
     await render({ onSubmit });
     await click('Save');
     expect(onSubmit).toHaveBeenCalledTimes(1);

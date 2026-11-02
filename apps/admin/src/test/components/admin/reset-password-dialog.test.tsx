@@ -19,6 +19,14 @@ afterAll(() => {
 });
 
 const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { ResetPasswordDialog } = await import('../../../components/admin/reset-password-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -95,7 +103,7 @@ test('a password shorter than the minimum is not sent', async () => {
 
 test('a reset the server refuses keeps the dialog open', async () => {
     mutateAsync.mockImplementation(async () => {
-        throw new Error('offline');
+        throw toasted('offline');
     });
     await open();
     await act(async () => resetButton()?.click());

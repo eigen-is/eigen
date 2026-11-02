@@ -31,6 +31,14 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { CreateTeamDialog } = await import('../../../components/admin/create-team-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -85,7 +93,7 @@ test('Create waits for a name with more than spaces', async () => {
 
 test('a create the server refuses keeps the dialog open, with no unhandled rejection', async () => {
     createTeam.mutateAsync.mockImplementation(async () => {
-        throw new Error('Team name taken');
+        throw toasted('Team name taken');
     });
     await openAndType('Design');
     await act(async () => createButton()?.click());

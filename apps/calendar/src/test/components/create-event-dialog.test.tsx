@@ -65,6 +65,14 @@ afterAll(() => {
 });
 
 const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { CreateEventDialog } = await import('../../components/create-event-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -178,7 +186,7 @@ test('Save waits for a title with more than spaces, and keeps its label', async 
 
 test('a save the server refuses keeps the dialog open, with no unhandled rejection', async () => {
     createEvent.mutateAsync.mockImplementation(async () => {
-        throw new Error('Calendar is read-only');
+        throw toasted('Calendar is read-only');
     });
     await open();
     await type(titleField(), 'Dentist');

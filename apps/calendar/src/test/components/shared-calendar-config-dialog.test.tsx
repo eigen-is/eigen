@@ -63,6 +63,14 @@ afterAll(() => {
 });
 
 const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { SharedCalendarConfigDialog } = await import('../../components/shared-calendar-config-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -130,7 +138,7 @@ test("Save keeps the user's own color", async () => {
 
 test('a save the server refuses keeps the dialog open, with no unhandled rejection', async () => {
     updateShared.mutateAsync.mockImplementation(async () => {
-        throw new Error('offline');
+        throw toasted('offline');
     });
     await open(shared({}));
     await click(button(settings(), 'Save'));

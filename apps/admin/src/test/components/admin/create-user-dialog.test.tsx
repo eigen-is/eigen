@@ -31,6 +31,14 @@ afterAll(() => {
 });
 
 const { act, createElement } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { CreateUserDialog } = await import('../../../components/admin/create-user-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -84,7 +92,7 @@ test('Create waits for a password of the minimum length', async () => {
 
 test('a create the server refuses keeps the dialog open, with no unhandled rejection', async () => {
     createUser.mutateAsync.mockImplementation(async () => {
-        throw new Error('User already exists');
+        throw toasted('User already exists');
     });
     await fillAndSubmit({ name: 'Ada Lovelace', username: 'ada', password: 'correct horse' });
     await new Promise((resolve) => setTimeout(resolve, 0));

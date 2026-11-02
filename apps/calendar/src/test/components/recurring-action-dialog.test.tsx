@@ -8,6 +8,14 @@ import type { RecurringAction } from '../../components/recurring-action-dialog';
 installHappyDom();
 
 const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { RecurringActionDialog } = await import('../../components/recurring-action-dialog');
 
 const onConfirm = mock(async (_action: RecurringAction) => {});
@@ -72,7 +80,7 @@ test('Cancel closes without confirming', async () => {
 
 test('a confirm that fails keeps the dialog open', async () => {
     onConfirm.mockImplementation(async () => {
-        throw new Error('offline');
+        throw toasted('offline');
     });
     await open();
     await act(async () => button('OK')?.click());

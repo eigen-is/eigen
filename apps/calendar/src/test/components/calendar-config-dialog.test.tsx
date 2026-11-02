@@ -72,6 +72,14 @@ afterAll(() => {
 });
 
 const { act, createElement, useState } = await import('react');
+const { onMutationError } = await import('@workspace/lib/api-error');
+
+// A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
+const toasted = (message: string) => {
+    const failure = new Error(message);
+    onMutationError(failure);
+    return failure;
+};
 const { CalendarConfigDialog } = await import('../../components/calendar-config-dialog');
 
 const onOpenChange = mock((_open: boolean) => {});
@@ -169,7 +177,7 @@ test('Edit calendar starts from the calendar and saves its name, color and share
 
 test('a save the server refuses keeps the dialog open, with no unhandled rejection', async () => {
     updateCalendar.mutateAsync.mockImplementation(async () => {
-        throw new Error('offline');
+        throw toasted('offline');
     });
     await open(calendar({}));
     await click(button(dialogTitled('Edit calendar'), 'Save'));
