@@ -94,25 +94,11 @@ export class FormulaCache {
     // The reference picker's state and the caches only the editor keeps. The engine holds what the server shares.
     public func_selectedrange?: Selection;
 
-    public data_parm_index: number;
-
     public cellTextToIndexList: Record<string, FormulaDependency>;
 
     public rangechangeindex?: number;
 
     public selectingRangeIndex: number;
-
-    public rangeResizeObj?: unknown;
-
-    public rangeResize?: unknown;
-
-    public rangeResizeIndex?: number;
-
-    public rangeResizexy?: unknown;
-
-    public rangeResizeWinH?: unknown;
-
-    public rangeResizeWinW?: unknown;
 
     public rangeResizeTo?: HTMLDivElement[];
 
@@ -141,7 +127,6 @@ export class FormulaCache {
     public engine: FormulaEngine;
 
     public constructor() {
-        this.data_parm_index = 0;
         this.selectingRangeIndex = -1;
         this.functionlistMap = {};
         this.cellTextToIndexList = {};
