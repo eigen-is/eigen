@@ -174,8 +174,6 @@ Verified, user-visible, bounded.
 
 - [ ] **A failed upload's image comes back from a whole-sheet undo entry** ([SHEETS.md](SHEETS.md#a-pending-uploads-name-is-swapped-on-every-sheet-and-in-the-undo-stack)): `replaceMediaNameInHistory` (`state/modules/image.ts`) swaps a settled upload's name into every undo entry, but `removeImageByMediaName` leaves a failed upload's image in the stacks, so undoing such a delete or insert brings back an image drawn as missing. Drop an image whose upload failed from whole-sheet and whole-`images` patch values. **S**
 
-- [ ] **A menu bar between about 449 and 500 px wide may scroll again**: the Sheets menu bar (`components/MenuBar/index.tsx`) narrows its padding only under `@max-md` (448 px), so a bar just wider may not fit six full-padded menus. Move the breakpoint to the measured width, or step the padding down twice. **XS**
-
 ### Decided, not defects
 
 - **The cell-range picker stays put when the grid scrolls.** It is a portaled `position: fixed` dialog placed once at its cell, so scrolling moves the grid underneath it. Reinder confirmed this is the wanted behavior: a card that scrolls with the grid can ride off-screen entirely. Do not "fix" this into a scroll-tracking popup without asking.

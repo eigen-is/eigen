@@ -1,6 +1,6 @@
-// Quick-format controls mirrored from the docs toolbar, driving the same handlers as the Format menu:
-// an extra surface, not a replacement. The menu bar's 1fr·auto·1fr grid centers it on the bar. The
-// bar's 1360px container query hides it, as read-only does, below the width where it still sits centered.
+// The workbook bar's format icon row, mirrored from the docs toolbar: font, size, bold and italic, the colors and the
+// alignment. It drives the same handlers as the Format menu, and is an extra surface, not a replacement: every icon
+// it folds away on a narrow bar is a row of that menu. A viewer gets no row.
 
 import { nextFontSize } from '@workspace/lib/constants/fonts';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
@@ -10,7 +10,7 @@ import { AlignCenter, AlignLeft, AlignRight, Baseline, Bold, Highlighter, Italic
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
-import type { RunStyle } from '../../state';
+import type { Context, RunStyle } from '../../state';
 import {
     handleBold,
     handleFont,
@@ -32,32 +32,31 @@ export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
 
     if (!context.allowEdit) return null;
 
-    // `ht` is stored as '1'/'0'/'2' by the align handler but as a number on
-    // defaults/imports — coerce before comparing.
     const textColor = caret?.fc ?? cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
-    const align = cell?.ht == null ? undefined : Number(cell.ht); // 0 = center, 1 = left, 2 = right
+    // The align handler stores `ht` as '1', '0' or '2', a default or an import as a number: 0 is center, 1 left and
+    // 2 right.
+    const align = cell?.ht == null ? undefined : Number(cell.ht);
     const { ff: fontName, fs: fontSize, bl, it } = caret ?? runStyleOf(cell);
-    const bold = bl === 1;
-    const italic = it === 1;
-    const setFontSize = (size: number) => {
+    // Every handler formats through the cell input, which holds the open editor's selection.
+    const format = (apply: (ctx: Context, input: HTMLDivElement) => void) => {
         setContext((ctx) => {
             const input = refs.cellInput.current;
-            if (input) handleTextSize(ctx, input, size, refs.canvas.current?.getContext('2d') ?? undefined);
+            if (input) apply(ctx, input);
         });
     };
+    const setFontSize = (size: number) =>
+        format((ctx, input) => handleTextSize(ctx, input, size, refs.canvas.current?.getContext('2d') ?? undefined));
 
+    // The row folds from its right end as the bar narrows, as Docs' does, so its order is its priority order. Each
+    // breakpoint is where a part fits beside the menus, the font picker on its widest font. The breakpoints read the
+    // width of the bar, which is a size container.
     return (
-        <div className="hidden @[1360px]:flex items-center gap-0.5">
+        <div className="hidden @[1000px]:flex items-center gap-0.5" role="toolbar" aria-label="Formatting">
             <FontPicker
                 value={fontName}
                 onCloseAutoFocus={refocusCellEditor}
-                onChange={(name) => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleFont(ctx, input, name);
-                    });
-                }}
+                onChange={(name) => format((ctx, input) => handleFont(ctx, input, name))}
             />
 
             <ToolbarSeparator />
@@ -80,100 +79,69 @@ export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
             <TooltipButton
                 icon={Bold}
                 tooltipText="Bold"
-                active={bold}
+                active={bl === 1}
                 preventFocusLoss
-                onClick={() => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleBold(ctx, input);
-                    });
-                }}
+                onClick={() => format(handleBold)}
             />
             <TooltipButton
                 icon={Italic}
                 tooltipText="Italic"
-                active={italic}
+                active={it === 1}
                 preventFocusLoss
-                onClick={() => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleItalic(ctx, input);
-                    });
-                }}
+                onClick={() => format(handleItalic)}
             />
 
-            <ToolbarSeparator />
+            <div className="hidden @[1080px]:flex items-center gap-0.5">
+                <ToolbarSeparator />
 
-            <ColorPickerButton
-                icon={Baseline}
-                tooltipText="Text color"
-                value={textColor}
-                resetLabel="Default"
-                showSwatch
-                popoverClassName="sheet-mousedown-cancel"
-                onCloseAutoFocus={refocusCellEditor}
-                onChange={(color) => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleTextColor(ctx, input, color);
-                    });
-                }}
-            />
+                <ColorPickerButton
+                    icon={Baseline}
+                    tooltipText="Text color"
+                    value={textColor}
+                    resetLabel="Default"
+                    showSwatch
+                    popoverClassName="sheet-mousedown-cancel"
+                    onCloseAutoFocus={refocusCellEditor}
+                    onChange={(color) => format((ctx, input) => handleTextColor(ctx, input, color))}
+                />
 
-            <ColorPickerButton
-                icon={Highlighter}
-                tooltipText="Fill color"
-                value={fillColor}
-                resetLabel="Default"
-                showSwatch
-                popoverClassName="sheet-mousedown-cancel"
-                onCloseAutoFocus={refocusCellEditor}
-                onChange={(color) => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleTextBackground(ctx, input, color);
-                    });
-                }}
-            />
+                <ColorPickerButton
+                    icon={Highlighter}
+                    tooltipText="Fill color"
+                    value={fillColor}
+                    resetLabel="Default"
+                    showSwatch
+                    popoverClassName="sheet-mousedown-cancel"
+                    onCloseAutoFocus={refocusCellEditor}
+                    onChange={(color) => format((ctx, input) => handleTextBackground(ctx, input, color))}
+                />
+            </div>
 
-            <ToolbarSeparator />
+            <div className="hidden @[1190px]:flex items-center gap-0.5">
+                <ToolbarSeparator />
 
-            <TooltipButton
-                icon={AlignLeft}
-                tooltipText="Align left"
-                active={align === 1}
-                preventFocusLoss
-                onClick={() => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleHorizontalAlign(ctx, input, 'left');
-                    });
-                }}
-            />
-            <TooltipButton
-                icon={AlignCenter}
-                tooltipText="Align center"
-                active={align === 0}
-                preventFocusLoss
-                onClick={() => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleHorizontalAlign(ctx, input, 'center');
-                    });
-                }}
-            />
-            <TooltipButton
-                icon={AlignRight}
-                tooltipText="Align right"
-                active={align === 2}
-                preventFocusLoss
-                onClick={() => {
-                    setContext((ctx) => {
-                        const input = refs.cellInput.current;
-                        if (input) handleHorizontalAlign(ctx, input, 'right');
-                    });
-                }}
-            />
+                <TooltipButton
+                    icon={AlignLeft}
+                    tooltipText="Align left"
+                    active={align === 1}
+                    preventFocusLoss
+                    onClick={() => format((ctx, input) => handleHorizontalAlign(ctx, input, 'left'))}
+                />
+                <TooltipButton
+                    icon={AlignCenter}
+                    tooltipText="Align center"
+                    active={align === 0}
+                    preventFocusLoss
+                    onClick={() => format((ctx, input) => handleHorizontalAlign(ctx, input, 'center'))}
+                />
+                <TooltipButton
+                    icon={AlignRight}
+                    tooltipText="Align right"
+                    active={align === 2}
+                    preventFocusLoss
+                    onClick={() => format((ctx, input) => handleHorizontalAlign(ctx, input, 'right'))}
+                />
+            </div>
         </div>
     );
 }
