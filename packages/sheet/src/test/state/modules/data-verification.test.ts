@@ -268,6 +268,37 @@ describe('the rule over a cell', () => {
         expect(validationAt(numbered, 1, 0)).toEqual(TICK_BOX);
     });
 
+    // A cell checked every rule's ranges in view: 100 rules of 100 cells each took about 50 ms a frame.
+    test("the painter's lookup costs a frame little however many rules are in view", () => {
+        const validations = Object.fromEntries(
+            Array.from({ length: 100 }, (_, k) => [
+                `r${k}`,
+                {
+                    ranges: Array.from({ length: 100 }, (_, i) => {
+                        const [r, c] = [(i * 7 + k) % 61, (k + i) % 26];
+                        return { row: [r, r], column: [c, c] };
+                    }),
+                    rule: k % 2 === 0 ? LIST_RULE : TICK_BOX,
+                },
+            ]),
+        );
+        const window = { row: [0, 60], column: [0, 25] };
+        const started = performance.now();
+        for (let frame = 0; frame < 10; frame += 1) {
+            const lookup = validationLookup(validations, window);
+            for (let r = 0; r <= 60; r += 1) for (let c = 0; c <= 25; c += 1) lookup(r, c);
+        }
+        expect(performance.now() - started).toBeLessThan(200);
+        const lookup = validationLookup(validations, window);
+        for (const [r, c] of [
+            [0, 0],
+            [7, 1],
+            [60, 25],
+        ]) {
+            expect(lookup(r, c)).toEqual(validationAt(validations, r, c));
+        }
+    });
+
     test("the painter's lookup answers as the full lookup does, inside its window and outside it", () => {
         const validations = {
             a: { ranges: [{ row: [0, 9], column: [2, 2] }], rule: LIST_RULE },

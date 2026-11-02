@@ -10,7 +10,7 @@ import type { DataVerificationRule, Sheet, SheetValidation, SingleRange } from '
 // The rule over one cell, with its id. Two peers putting rules on one cell at once can leave the cell in two rules,
 // and an xlsx file can hold overlapping ones. The highest id then wins on every tab (compareValidationIds).
 export function validationEntryAt(
-    validations: Sheet['dataValidations'],
+    validations: Readonly<Sheet['dataValidations']>,
     r: number,
     c: number,
 ): [string, SheetValidation] | undefined {
@@ -23,27 +23,38 @@ export function validationEntryAt(
     return found;
 }
 
-export function validationAt(validations: Sheet['dataValidations'], r: number, c: number) {
+export function validationAt(validations: Readonly<Sheet['dataValidations']>, r: number, c: number) {
     return validationEntryAt(validations, r, c)?.[1].rule;
 }
 
-// The painter's lookup for one paint. The rules are cut down once to the ranges inside the window it paints, so a
-// cell checks only those, however many rules the sheet has elsewhere. A cell outside the window, which the text
-// overflow can ask about, is looked up in full.
+// The painter's lookup for one paint. The rules over the window it paints are laid out once into a grid of its cells,
+// lowest id first, so the highest id wins a cell two rules cover, and a cell costs one read however many rules the
+// sheet has. A cell outside the window, which the text overflow can ask about, is looked up in full once.
 export function validationLookup(
-    validations: Sheet['dataValidations'],
+    validations: Readonly<Sheet['dataValidations']>,
     window: SingleRange,
 ): (r: number, c: number) => DataVerificationRule | undefined {
-    const inView: [string, SheetValidation][] = [];
-    for (const [id, { ranges, rule }] of Object.entries(validations ?? {})) {
-        const near = ranges.filter((range) => rangesOverlap(range, window));
-        if (near.length > 0) inView.push([id, { ranges: near, rule }]);
+    const [top, bottom] = window.row;
+    const [left, right] = window.column;
+    const width = right - left + 1;
+    const inView: (DataVerificationRule | undefined)[] = [];
+    const entries = Object.entries(validations ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
+    for (const [, { ranges, rule }] of entries) {
+        for (const { row, column } of ranges) {
+            for (let r = Math.max(row[0], top); r <= Math.min(row[1], bottom); r += 1) {
+                const from = (r - top) * width - left;
+                for (let c = Math.max(column[0], left); c <= Math.min(column[1], right); c += 1)
+                    inView[from + c] = rule;
+            }
+        }
     }
-    inView.sort(([a], [b]) => compareValidationIds(b, a));
-    return (r, c) =>
-        covers(window, r, c)
-            ? inView.find(([, { ranges }]) => ranges.some((range) => covers(range, r, c)))?.[1].rule
-            : validationAt(validations, r, c);
+    const outside = new Map<string, DataVerificationRule | undefined>();
+    return (r, c) => {
+        if (covers(window, r, c)) return inView[(r - top) * width + c - left];
+        const key = `${r}_${c}`;
+        if (!outside.has(key)) outside.set(key, validationAt(validations, r, c));
+        return outside.get(key);
+    };
 }
 
 // Takes an area out of every rule on the sheet, and drops a rule left with no cell. A changed rule is written whole
