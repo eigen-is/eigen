@@ -463,7 +463,7 @@ export function validationRange(ctx: Context, txt: string): SingleRange | undefi
 // reconsider the selection, so a header click is bounded to the used extent
 // (clipToUsedExtent) — past it a tick box marks nothing — while a range the user
 // dragged out can still lay a checklist over empty cells. Data -> Data
-// verification keeps the dialog.
+// validation keeps the dialog.
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;

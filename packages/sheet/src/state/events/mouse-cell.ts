@@ -158,7 +158,7 @@ export function handleCellAreaMouseDown(
 
     showLinkCard(ctx, row_index, col_index, false, true);
 
-    // The cell's text area, the space both data-verification affordances are
+    // The cell's text area, the space both data-validation affordances are
     // laid out in — the same box, from the same builder, the canvas painter
     // hands their geometry.
     const textBox = cellTextBox(col_pre, row_pre, col, row);

@@ -11,7 +11,6 @@ import {
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
-import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
     addSheet,
@@ -35,8 +34,7 @@ const AUTO_SUM_FUNCTIONS = [
 
 export function InsertMenu() {
     const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
-    const { showDialog } = useDialog();
+    const { showDialog, showNotice } = useDialog();
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
@@ -60,7 +58,7 @@ export function InsertMenu() {
         setContext(
             (draftCtx) => {
                 const error = tryInsertRowCol(draftCtx, insertRowColOp);
-                if (error) showAlert(error, 'ok');
+                if (error) showNotice(error);
             },
             { insertRowColOp },
         );
@@ -118,7 +116,7 @@ export function InsertMenu() {
                 onClick={() =>
                     setContext((draftCtx) => {
                         const refusal = insertChartFromSelection(draftCtx, crypto.randomUUID());
-                        if (refusal) showAlert(CHART_RANGE_REFUSALS[refusal], 'ok');
+                        if (refusal) showNotice(CHART_RANGE_REFUSALS[refusal]);
                     })
                 }
             >

@@ -176,11 +176,6 @@ export type LinkCardProps = {
     originAddress: string;
     position: { cellLeft: number; cellBottom: number };
     isEditing: boolean;
-    selectingCellRange?: boolean;
-};
-
-export type RangeDialogProps = {
-    show: boolean;
 };
 
 // The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it

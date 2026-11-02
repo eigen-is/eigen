@@ -5,7 +5,7 @@
 
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { useCellEditorRefocus } from '../hooks/useCellEditorRefocus';
 import type { ViewportPoint } from '../state';
 
@@ -15,12 +15,14 @@ type NonModalOptions = {
     width?: number;
     // The point on screen where the shell's top-left corner opens, kept on screen. Centered when absent.
     anchor?: ViewportPoint;
-    // Runs once on every way the picker closes, such as Cancel or Escape, so a caller that holds state for the open
-    // picker, like the grid-select flag, resets it in one place. Opening another dialog in the slot drops it unrun.
-    // Data verification's picker commits the picked range and opens its own dialog again, and a late onClose would
-    // run the teardown a second time over the dialog it just opened.
-    onClose?: () => void;
+    // Runs once when the picker leaves the slot, so a caller that holds state for the open picker, such as the flag
+    // that keeps the cell editor out of the way, resets it in one place. The reason says how it left: 'closed' by
+    // Cancel or Escape, or 'replaced' by another dialog, such as a notice or the dialog the picker's OK opens again.
+    // Only a close may open a dialog, because on 'replaced' the slot already holds the next one.
+    onClose?: (reason: CloseReason) => void;
 };
+
+type CloseReason = 'replaced' | 'closed';
 
 const DEFAULT_WIDTH = 500;
 
@@ -82,27 +84,26 @@ const ModalContext = React.createContext<ModalContextType>({
 
 function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [state, setState] = useState<ModalState | null>(null);
-    const [placement, setPlacement] = useState<ViewportPoint | null>(null);
-    const contentRef = useRef<HTMLDivElement>(null);
     const lastId = useRef(0);
-    const anchor = state?.nonModal?.anchor;
 
     // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it has to see the opening that
     // holds the slot right now.
-    const openingRef = useRef<{ id: number; onClose?: () => void } | null>(null);
+    const openingRef = useRef<{ id: number; onClose?: NonModalOptions['onClose'] } | null>(null);
 
     const open = useCallback((content: React.ReactNode, nonModal?: NonModalOptions) => {
+        const replaced = openingRef.current;
         lastId.current += 1;
         const id = lastId.current;
         openingRef.current = { id, onClose: nonModal?.onClose };
         setState({ id, content, nonModal });
+        replaced?.onClose?.('replaced');
     }, []);
     const showModal = useCallback((content: React.ReactNode) => open(content), [open]);
     const hideModal = useCallback(() => {
         const opening = openingRef.current;
         openingRef.current = null;
         setState(null);
-        opening?.onClose?.();
+        opening?.onClose?.('closed');
     }, []);
 
     const refocusGrid = useCellEditorRefocus();
@@ -120,63 +121,78 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
         [hideModal, openId, refocusGrid],
     );
 
-    // useLayoutEffect, not useEffect: the clamp needs the picker's rendered height, so it
-    // renders once at the raw anchor and is corrected before the browser paints either frame.
-    useLayoutEffect(() => {
-        const el = contentRef.current;
-        if (!anchor || !el) {
-            setPlacement(null);
-            return;
-        }
-        setPlacement(
-            clampToViewport(
-                anchor,
-                { width: el.offsetWidth, height: el.offsetHeight },
-                { width: window.innerWidth, height: window.innerHeight },
-            ),
-        );
-    }, [anchor]);
-
     const providerValue = useMemo(() => ({ showModal, showNonModal: open, hideModal }), [hideModal, open, showModal]);
-    const position = anchor && (placement ?? anchor);
 
     return (
         <ModalContext.Provider value={providerValue}>
             {children}
-            {state && !state.nonModal ? (
-                // Keyed by the opening, so each one mounts its fields fresh, even the same dialog opened twice.
-                <div key={state.id} className="contents" {...STOP_MOUSE_EVENTS}>
-                    <DialogPropsContext.Provider value={dialogProps}>{state.content}</DialogPropsContext.Provider>
-                </div>
-            ) : (
-                <Dialog
-                    open={state !== null}
-                    modal={false}
-                    onOpenChange={(o) => {
-                        if (!o) hideModal();
-                    }}
-                >
-                    <DialogContent
-                        ref={contentRef}
-                        aria-describedby={undefined}
-                        showCloseButton={false}
-                        // A press on the grid, and the focus that moves there with it, picks a range. Neither may
-                        // close the picker.
-                        onInteractOutside={(e) => e.preventDefault()}
-                        // An anchored picker drops DialogContent's centering translate. The left and top below
-                        // place it instead.
-                        className={cn(position && 'translate-x-0 translate-y-0')}
-                        style={{
-                            width: state?.nonModal?.width ?? DEFAULT_WIDTH,
-                            ...(position && { left: position.left, top: position.top }),
-                        }}
-                        {...STOP_MOUSE_EVENTS}
-                    >
-                        {state?.content}
-                    </DialogContent>
-                </Dialog>
-            )}
+            {state &&
+                // Keyed by the opening, so each one mounts its fields fresh, even the same dialog opened twice. The
+                // slot unmounts a closed dialog at once, so no empty shell lingers while it would fade out.
+                (state.nonModal ? (
+                    <NonModalShell key={state.id} options={state.nonModal} onClose={hideModal}>
+                        {state.content}
+                    </NonModalShell>
+                ) : (
+                    <div key={state.id} className="contents" {...STOP_MOUSE_EVENTS}>
+                        <DialogPropsContext.Provider value={dialogProps}>{state.content}</DialogPropsContext.Provider>
+                    </div>
+                ))}
         </ModalContext.Provider>
+    );
+}
+
+function NonModalShell({
+    options: { width = DEFAULT_WIDTH, anchor },
+    onClose,
+    children,
+}: {
+    options: NonModalOptions;
+    onClose: () => void;
+    children: React.ReactNode;
+}) {
+    const [placement, setPlacement] = useState<ViewportPoint>();
+    // A ref callback, not an effect: Radix portals the content a render after the shell mounts, and the clamp needs
+    // its rendered size. Setting the placement as it attaches corrects it before the browser paints.
+    const measure = useCallback(
+        (el: HTMLDivElement | null) => {
+            if (!el || !anchor) return;
+            setPlacement(
+                clampToViewport(
+                    anchor,
+                    { width: el.offsetWidth, height: el.offsetHeight },
+                    { width: window.innerWidth, height: window.innerHeight },
+                ),
+            );
+        },
+        [anchor],
+    );
+    const position = anchor && (placement ?? anchor);
+
+    return (
+        <Dialog
+            open
+            modal={false}
+            onOpenChange={(o) => {
+                if (!o) onClose();
+            }}
+        >
+            <DialogContent
+                ref={measure}
+                aria-describedby={undefined}
+                showCloseButton={false}
+                // A press on the grid, and the focus that moves there with it, picks a range. Neither may close the
+                // picker.
+                onInteractOutside={(e) => e.preventDefault()}
+                // An anchored picker drops DialogContent's centering translate. The left and top below place it
+                // instead.
+                className={cn(position && 'translate-x-0 translate-y-0')}
+                style={{ width, ...(position && { left: position.left, top: position.top }) }}
+                {...STOP_MOUSE_EVENTS}
+            >
+                {children}
+            </DialogContent>
+        </Dialog>
     );
 }
 

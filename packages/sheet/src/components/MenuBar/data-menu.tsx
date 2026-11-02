@@ -1,4 +1,4 @@
-// The menu bar's Data menu: sorting the selection, a filter, data verification and splitting text into columns. Each
+// The menu bar's Data menu: sorting the selection, a filter, data validation and splitting text into columns. Each
 // item runs its action on the workbook or opens its dialog.
 
 import {
@@ -15,7 +15,7 @@ import { useDialog } from '../../hooks/useDialog';
 import type { Context } from '../../state';
 import { clearFilter, createFilter, sortSelection } from '../../state';
 import { CustomSort } from '../CustomSort';
-import { DataVerification } from '../DataVerification';
+import { DataValidation } from '../DataValidation';
 import { SplitColumn } from '../SplitColumn';
 
 export function DataMenu() {
@@ -25,18 +25,22 @@ export function DataMenu() {
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
     const filterActive = size(context.filterRange) > 0;
+    // A sort works on one selected range.
+    const selection = context.selections?.length === 1 ? context.selections[0] : undefined;
 
     return (
         <>
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger>Sort range</DropdownMenuSubTrigger>
+                <DropdownMenuSubTrigger disabled={!selection}>Sort range</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
                     <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, true))}>Ascending</DropdownMenuItem>
                     <DropdownMenuItem onClick={dispatch((ctx) => sortSelection(ctx, false))}>
                         Descending
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showDialog(<CustomSort />)}>Custom sort</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => selection && showDialog(<CustomSort selection={selection} />)}>
+                        Custom sort
+                    </DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
@@ -48,7 +52,7 @@ export function DataMenu() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<DataValidation />)}>Data validation</DropdownMenuItem>
             <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
         </>
     );

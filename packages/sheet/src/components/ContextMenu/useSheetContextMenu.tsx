@@ -29,7 +29,7 @@ import type React from 'react';
 import { useCallback, useContext } from 'react';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
-import { useAlert } from '../../hooks/useAlert';
+import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
 import { useDialog } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
@@ -58,7 +58,7 @@ type RowColType = 'row' | 'column';
 // The shared Cut, Copy, Paste rows on the grid's own clipboard handlers.
 function ClipboardItems() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     return (
         <ClipboardMenuItems
             onCut={() =>
@@ -69,7 +69,7 @@ function ClipboardItems() {
             }
             onCopy={() => {
                 if ((context.selections?.length ?? 0) > 1) {
-                    showAlert(MSG_MULTI, 'ok');
+                    showNotice(MSG_MULTI);
                     return;
                 }
                 setContext((d) => {
@@ -97,7 +97,7 @@ function InsertItem({
     label: string;
 }) {
     const { getContext, setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     const insert = () => {
         const context = getContext();
         const sel = context.selections?.[0];
@@ -113,7 +113,7 @@ function InsertItem({
         setContext(
             (d) => {
                 const error = tryInsertRowCol(d, op);
-                if (error) showAlert(error, 'ok');
+                if (error) showNotice(error);
             },
             { insertRowColOp: op },
         );
@@ -128,7 +128,7 @@ function InsertItem({
 
 function DeleteItem({ type, label }: { type: RowColType; label: string }) {
     const { getContext, setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     const remove = () => {
         const context = getContext();
         const sel = context.selections?.[0];
@@ -138,11 +138,11 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
         setContext(
             (d) => {
                 if ((d.selections?.length ?? 0) > 1) {
-                    showAlert(MSG_MULTI, 'ok');
+                    showNotice(MSG_MULTI);
                     return;
                 }
                 const error = tryDeleteRowCol(d, op);
-                if (error) showAlert(error, 'ok');
+                if (error) showNotice(error);
             },
             { deleteRowColOp: op },
         );
@@ -157,13 +157,13 @@ function DeleteItem({ type, label }: { type: RowColType; label: string }) {
 
 function ClearItem({ label }: { label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     return (
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
                     const error = clearSelectedContents(d);
-                    if (error) showAlert(error, 'ok');
+                    if (error) showNotice(error);
                 })
             }
         >
@@ -175,12 +175,12 @@ function ClearItem({ label }: { label: string }) {
 
 function HideItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     return (
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
-                    if (hideSelectedRowCol(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
+                    if (hideSelectedRowCol(d, type) === 'noMulti') showNotice(MSG_MULTI);
                 })
             }
         >
@@ -192,12 +192,12 @@ function HideItem({ type, label }: { type: RowColType; label: string }) {
 
 function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
     const { setContext } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     return (
         <DropdownMenuItem
             onClick={() =>
                 setContext((d) => {
-                    if (showSelectedRowCol(d, type) === 'noMulti') showAlert(MSG_MULTI, 'ok');
+                    if (showSelectedRowCol(d, type) === 'noMulti') showNotice(MSG_MULTI);
                 })
             }
         >
@@ -418,6 +418,7 @@ const STATE_AREA = { cell: 'cell', row: 'rowHeader', column: 'columnHeader' } as
 export function useSheetContextMenu(area: SheetMenuArea) {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const contextMenu = useContextMenu<boolean>();
+    const refocusCellEditor = useCellEditorRefocus();
     const { allowEdit } = context;
     const openMenu = contextMenu.handleContextMenu;
     const openMenuAt = contextMenu.openAt;
@@ -455,15 +456,7 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         onContextMenu,
         openAtPoint,
         anchor: (
-            <ContextMenuAnchor
-                contextMenu={contextMenu}
-                // The focus goes back to the sheet's cell input, not to what had it before the menu opened. Undo
-                // and the other grid shortcuts read their keys on the Workbook container around that input.
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    refs.cellInput.current?.focus();
-                }}
-            >
+            <ContextMenuAnchor contextMenu={contextMenu} onCloseAutoFocus={refocusCellEditor}>
                 {area === 'cell' && <CellMenu />}
                 {area === 'row' && <RowMenu />}
                 {area === 'column' && <ColumnMenu />}

@@ -1,6 +1,7 @@
 // The sheet's modal host. A dialog in it draws its own FormDialog, renders as the only dialog, closes through its own
 // opening, and keeps its mouse events from the handlers above the host. A close from an opening the slot no longer
-// holds does nothing, so a submit that opens a confirm leaves the confirm open. However a dialog closes, the focus goes
+// holds does nothing, so a submit that opens a confirm leaves the confirm open. The range picker's onClose runs once,
+// whether it closes or another dialog takes its place, and says which. However a dialog closes, the focus goes
 // back to the grid's keyboard target, unless another dialog took the slot. The range picker opens at a viewport
 // point the caller computed, so the host clamps it on screen: a picker larger than the viewport pins to the top-left
 // margin instead of being pushed off the opposite edge.
@@ -100,7 +101,7 @@ describe('a FormDialog in the host', () => {
     test('a submit that opens another dialog leaves that one open', async () => {
         const { dialogs } = await renderHost();
         await act(async () =>
-            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showDialog('Replace it?', 'yesno') })),
+            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showNotice('Replace it?', 'yesno') })),
         );
         await click(button('Save'));
         expect(title()).toBe('Notice');
@@ -121,15 +122,53 @@ describe('a FormDialog in the host', () => {
     });
 });
 
-test('a dialog that leaves the grid usable runs its onClose once, however often it is hidden', async () => {
-    const { host } = await renderHost();
-    const onClose = mock(() => {});
-    await act(async () => host.showNonModal('Pick a range', { onClose }));
-    await act(async () => {
-        host.hideModal();
-        host.hideModal();
+describe("the range picker's onClose", () => {
+    test('runs once when the picker closes, however often it is hidden', async () => {
+        const { host } = await renderHost();
+        const onClose = mock((_reason: string) => {});
+        await act(async () => host.showNonModal('Pick a range', { onClose }));
+        await act(async () => {
+            host.hideModal();
+            host.hideModal();
+        });
+        expect(onClose.mock.calls).toEqual([['closed']]);
     });
-    expect(onClose).toHaveBeenCalledTimes(1);
+
+    test('runs once when another dialog takes the slot, and not again when that one closes', async () => {
+        const { host } = await renderHost();
+        const onClose = mock((_reason: string) => {});
+        await act(async () => host.showNonModal('Pick a range', { onClose }));
+        await act(async () => host.showModal('A notice'));
+        expect(onClose.mock.calls).toEqual([['replaced']]);
+        await act(async () => host.hideModal());
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("the range picker's shell", () => {
+    // The app's stylesheet fades a closing dialog out, and Radix keeps it in the document until the fade ends.
+    test('leaves no empty shell on screen while the picker fades out', async () => {
+        const fade = document.createElement('style');
+        fade.textContent = '[role="dialog"][data-state="closed"] { animation-name: fade-out; }';
+        document.head.append(fade);
+        try {
+            const { host } = await renderHost();
+            await act(async () => host.showNonModal('Pick a range', {}));
+            await act(async () => host.hideModal());
+            expect(openDialogs()).toHaveLength(0);
+        } finally {
+            fade.remove();
+        }
+    });
+
+    test('keeps a picker anchored past the viewport edge on screen', async () => {
+        const { host } = await renderHost();
+        await act(async () => host.showNonModal('Pick a range', { anchor: { left: 5000, top: 5000 } }));
+        const [picker] = openDialogs();
+        if (!(picker instanceof HTMLElement)) throw new Error('no picker');
+        expect(picker.style.left).toBe(`${window.innerWidth - VIEWPORT_MARGIN}px`);
+        expect(picker.style.top).toBe(`${window.innerHeight - VIEWPORT_MARGIN}px`);
+    });
 });
 
 // Radix hands the focus on a moment after a dialog unmounts.
@@ -169,7 +208,7 @@ describe('the focus after a dialog closes', () => {
 
     test('stays in the confirm a submit opened', async () => {
         const dialog = await renderSheetDialog((d) =>
-            d.showDialog(createElement(Rename, { onSubmit: () => d.showDialog('Replace it?', 'yesno') })),
+            d.showDialog(createElement(Rename, { onSubmit: () => d.showNotice('Replace it?', 'yesno') })),
         );
         await dialog.click('Save');
         await focusSettled();

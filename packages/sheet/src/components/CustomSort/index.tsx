@@ -10,11 +10,14 @@ import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
+import { toA1 } from '../../engine/a1-notation';
 import { cellDisplay } from '../../engine/format';
 import { useDialogProps } from '../../hooks/useDialog';
-import { getFlowdata, sortSelection } from '../../state';
+import type { Selection } from '../../state';
+import { clipToUsedExtent, getFlowdata, sortSelection } from '../../state';
 
-export function CustomSort() {
+// `selection` is the one range selected as the dialog opened, which the sort sorts.
+export function CustomSort({ selection }: { selection: Selection }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
     const [hasHeaderRow, setHasHeaderRow] = useState(false);
@@ -22,10 +25,13 @@ export function CustomSort() {
     const [sortColumn, setSortColumn] = useState('0');
     const [ascending, setAscending] = useState(true);
 
+    // A whole-row selection spans every column of the sheet. Only the ones up to the last that holds data are worth
+    // sorting by, and the rest would be thousands of empty choices.
+    const [range] = clipToUsedExtent(context, [selection]);
     const {
-        row: [rowStart, rowEnd],
+        row: [rowStart],
         column: [columnStart, columnEnd],
-    } = context.selections![0];
+    } = range;
 
     const data = getFlowdata(context);
     const columns: { offset: number; label: string }[] = [];
@@ -49,8 +55,7 @@ export function CustomSort() {
                 }
             >
                 <p className="text-sm">
-                    Sort range from {`${columnIndexToLabel(columnStart)}${rowStart + 1}`} to{' '}
-                    {`${columnIndexToLabel(columnEnd)}${rowEnd + 1}`}
+                    Sort range from {toA1(range.row[0], columnStart)} to {toA1(range.row[1], columnEnd)}
                 </p>
 
                 <div className="space-y-2.5">

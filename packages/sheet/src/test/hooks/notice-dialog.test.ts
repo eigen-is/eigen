@@ -1,5 +1,6 @@
 // A notice, such as a refused edit, or a yes or no, such as a sheet delete. It announces its message as the dialog's
-// description, closes itself on OK after running onOk, and closes on Cancel or its corner X without running it.
+// description, closes itself on OK after running onOk, and closes on Cancel or its corner X without running it. A
+// notice with no type has OK alone.
 
 import { expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -12,7 +13,7 @@ const { renderSheetDialog } = await import('../components/sheet-dialog');
 const MESSAGE = 'There is already data here, do you want to replace it?';
 
 test('a notice announces its message, and OK closes it', async () => {
-    const dialog = await renderSheetDialog((d) => d.showDialog(MESSAGE, 'ok'));
+    const dialog = await renderSheetDialog((d) => d.showNotice(MESSAGE));
     const [notice] = dialog.dialogs();
     expect(dialog.title()).toBe('Notice');
     const describedBy = notice?.getAttribute('aria-describedby');
@@ -24,7 +25,7 @@ test('a notice announces its message, and OK closes it', async () => {
 
 test('a yes or no runs onOk on OK and closes', async () => {
     const onOk = mock(() => {});
-    const dialog = await renderSheetDialog((d) => d.showDialog(MESSAGE, 'yesno', onOk));
+    const dialog = await renderSheetDialog((d) => d.showNotice(MESSAGE, 'yesno', onOk));
     await dialog.click('OK');
     expect(onOk).toHaveBeenCalledTimes(1);
     expect(dialog.dialogs()).toHaveLength(0);
@@ -32,11 +33,11 @@ test('a yes or no runs onOk on OK and closes', async () => {
 
 test('Cancel and the corner X close a yes or no without running onOk', async () => {
     const onOk = mock(() => {});
-    const dialog = await renderSheetDialog((d) => d.showDialog(MESSAGE, 'yesno', onOk));
+    const dialog = await renderSheetDialog((d) => d.showNotice(MESSAGE, 'yesno', onOk));
     await dialog.click('Cancel');
     expect(dialog.dialogs()).toHaveLength(0);
 
-    const again = await renderSheetDialog((d) => d.showDialog(MESSAGE, 'yesno', onOk));
+    const again = await renderSheetDialog((d) => d.showNotice(MESSAGE, 'yesno', onOk));
     await act(async () => document.querySelector<HTMLElement>('[data-slot="dialog-close"]')?.click());
     expect(again.dialogs()).toHaveLength(0);
     expect(onOk).not.toHaveBeenCalled();

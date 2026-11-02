@@ -1,5 +1,5 @@
 // Mounts a sheet dialog the way the app opens one: under the workbook's context and the modal host, opened through
-// useDialog by the test's `open`. A dialog the grid draws itself, such as the link editor, goes in `grid` instead.
+// useDialog by the test's `open`. A part the grid draws itself, such as the link card, goes in `grid`, beside it.
 // Import it after installHappyDom. The test reads the workbook back after a submit, and finds the dialog, its fields
 // and its buttons in the document.
 
@@ -38,7 +38,13 @@ type Dialogs = ReturnType<typeof useDialog>;
 
 // What the test reads back: the workbook as the last write left it, and the opener the host handed out. `grid` draws
 // what the workbook draws under the host from its context.
-type Harness = { context: Context; refs: RefValues; dialogs?: Dialogs; grid?: (context: Context) => ReactNode };
+type Harness = {
+    context: Context;
+    refs: RefValues;
+    dialogs?: Dialogs;
+    setContext?: (recipe: (ctx: Context) => void) => void;
+    grid?: (context: Context) => ReactNode;
+};
 
 function Opener({ harness }: { harness: Harness }) {
     harness.dialogs = useDialog();
@@ -47,13 +53,14 @@ function Opener({ harness }: { harness: Harness }) {
 
 function Workbook({ harness }: { harness: Harness }) {
     const [rendered, setRendered] = useState(harness.context);
+    harness.setContext = (recipe: (ctx: Context) => void) => {
+        harness.context = produce(harness.context, recipe);
+        setRendered(harness.context);
+    };
     const value = {
         context: rendered,
         getContext: () => harness.context,
-        setContext: (recipe: (ctx: Context) => void) => {
-            harness.context = produce(harness.context, recipe);
-            setRendered(harness.context);
-        },
+        setContext: harness.setContext,
         settings: defaultSettings,
         refs: harness.refs,
         handleUndo: () => {},
@@ -81,10 +88,13 @@ export async function renderSheetDialog(
 ) {
     const harness: Harness = { context: workbookContextFactory(params), refs: workbookRefs(), grid };
     await renderInDocument(createElement(Workbook, { harness }));
-    await act(async () => {
-        if (!harness.dialogs) throw new Error('the host did not render');
-        open(harness.dialogs);
-    });
+    // Opens a dialog in the slot the way the app does, such as a notice over the one open.
+    const show = (open: (dialogs: Dialogs) => void) =>
+        act(async () => {
+            if (!harness.dialogs) throw new Error('the host did not render');
+            open(harness.dialogs);
+        });
+    await show(open);
 
     const button = (label: string) =>
         [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
@@ -101,9 +111,17 @@ export async function renderSheetDialog(
     };
 
     const { cellInput } = harness.refs;
+    const setContext = (recipe: (ctx: Context) => void) =>
+        act(async () => {
+            if (!harness.setContext) throw new Error('the workbook did not render');
+            harness.setContext(recipe);
+        });
 
     return {
         context: () => harness.context,
+        // A write to the workbook from outside the dialog, such as a switch to another sheet.
+        setContext,
+        show,
         // The text in the in-cell editor, where Insert function writes its pick.
         editorText: () => cellInput.current?.textContent,
         setEditorText: (text: string) => {

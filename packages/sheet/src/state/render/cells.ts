@@ -27,7 +27,7 @@ import { BORDER_FIX, HALF_PIXEL } from './geometry';
 import { overflowColIn } from './overflow';
 import type { RenderPass } from './types';
 
-// Data-verification tick box. Hardcoded light like the cell backgrounds —
+// Data-validation tick box. Hardcoded light like the cell backgrounds —
 // the workbook surface is pinned light via `.eigen-paper` (RENDERING.md
 // § Theming) — and gray rather than black, the way Google draws the box.
 const CHECKBOX_STROKE = '#5f6368';
