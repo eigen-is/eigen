@@ -15,7 +15,7 @@ export function useDriveActionsFor(capabilities: DriveCapabilities): (items: rea
     const isGuest = useIsGuest();
     const mailEnabled = useMailEnabled();
     return (items) =>
-        driveActionsFor({ items, capabilities, sharedWithMe: items.every(isSharedWithMe) }).filter(
+        driveActionsFor({ items, capabilities, isSharedWithMe }).filter(
             (action) => !(isGuest && action.guestDenied) && (mailEnabled || !action.mailOnly),
         );
 }

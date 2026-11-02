@@ -45,7 +45,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
 - **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
-- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, which then failed
+- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
 - **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
 
 ## [0.4.1] - 2026-10-28

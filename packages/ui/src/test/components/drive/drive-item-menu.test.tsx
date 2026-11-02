@@ -35,7 +35,8 @@ async function openMenu(items: DrivePath[], capabilities: DriveCapabilities, sha
     const ran: DriveActionId[] = [];
     const actions = {
         capabilities,
-        actionsFor: (targets: readonly DrivePath[]) => driveActionsFor({ items: targets, capabilities, sharedWithMe }),
+        actionsFor: (targets: readonly DrivePath[]) =>
+            driveActionsFor({ items: targets, capabilities, isSharedWithMe: () => sharedWithMe }),
         run: (id: DriveActionId) => ran.push(id),
         onCreateEigenDoc: {},
         dialogs: null,

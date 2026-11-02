@@ -52,7 +52,10 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         group: 'create',
         // A copy lands beside its source, so a root has no folder to land in. An item shared with the
         // viewer sits in its owner's folder, where the server refuses the copy.
-        applies: (s) => s.capabilities.canWrite && !s.sharedWithMe && s.items.every((item) => item.parentId !== null),
+        applies: (s) =>
+            s.capabilities.canWrite &&
+            s.items.every((item) => item.parentId !== null) &&
+            !s.items.some(s.isSharedWithMe),
     },
     {
         id: 'move-to',
@@ -112,7 +115,7 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         pluralLabel: 'Move {n} items to trash',
         icon: Trash2,
         group: 'destructive',
-        applies: (s) => s.capabilities.canDelete && !s.sharedWithMe,
+        applies: (s) => s.capabilities.canDelete && !s.items.every(s.isSharedWithMe),
         shortcut: DELETE_HOTKEY,
     },
     {
@@ -122,7 +125,7 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         icon: Trash2,
         group: 'destructive',
         // The server leaves a direct share instead of trashing it, so the row says so.
-        applies: (s) => s.capabilities.canDelete && s.sharedWithMe,
+        applies: (s) => s.capabilities.canDelete && s.items.every(s.isSharedWithMe),
         shortcut: DELETE_HOTKEY,
     },
 ];

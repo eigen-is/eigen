@@ -53,7 +53,9 @@ const root = path({ name: 'My Drive', type: 'folder', mimeType: 'folder', parent
 const sharedDoc = path({ ...doc, acl: [{ id: 'friend@example.com', read: true, write: false }] });
 
 function idsFor(subject: Partial<DriveActionSubject> & { items: DrivePath[] }): DriveActionId[] {
-    return driveActionsFor({ capabilities: browse, sharedWithMe: false, ...subject }).map((action) => action.id);
+    return driveActionsFor({ capabilities: browse, isSharedWithMe: () => false, ...subject }).map(
+        (action) => action.id,
+    );
 }
 
 describe('driveActionsFor on one item', () => {
@@ -111,19 +113,21 @@ describe('driveActionsFor on one item', () => {
     });
 
     test('an item shared with the viewer is removed, never trashed', () => {
-        const ids = idsFor({ items: [sharedDoc], sharedWithMe: true });
+        const ids = idsFor({ items: [sharedDoc], isSharedWithMe: () => true });
         expect(ids).toContain('remove-shared');
         expect(ids).not.toContain('trash');
     });
 
     test('an item shared with the viewer is not duplicated, as its copy would land in the owner’s folder', () => {
-        expect(idsFor({ items: [sharedDoc], sharedWithMe: true })).not.toContain('duplicate');
+        expect(idsFor({ items: [sharedDoc], isSharedWithMe: () => true })).not.toContain('duplicate');
     });
 
     test('no delete without canDelete', () => {
         const caps = { ...browse, canDelete: false };
         expect(idsFor({ items: [doc], capabilities: caps })).not.toContain('trash');
-        expect(idsFor({ items: [sharedDoc], capabilities: caps, sharedWithMe: true })).not.toContain('remove-shared');
+        expect(idsFor({ items: [sharedDoc], capabilities: caps, isSharedWithMe: () => true })).not.toContain(
+            'remove-shared',
+        );
     });
 
     test('rename follows canRename, share follows canShare', () => {
@@ -142,7 +146,18 @@ describe('driveActionsFor on a multi-selection', () => {
     });
 
     test('a set shared with the viewer is removed', () => {
-        expect(idsFor({ items, sharedWithMe: true })).toEqual(['move-to', 'copy-to', 'mail-to', 'remove-shared']);
+        expect(idsFor({ items, isSharedWithMe: () => true })).toEqual([
+            'move-to',
+            'copy-to',
+            'mail-to',
+            'remove-shared',
+        ]);
+    });
+
+    // A copy of the shared item would land in its owner's folder, and the trash row still fits the own item.
+    test('a set with one item shared with the viewer is trashed but not duplicated', () => {
+        const ids = idsFor({ items: [doc, sharedDoc], isSharedWithMe: (item) => item === sharedDoc });
+        expect(ids).toEqual(['move-to', 'copy-to', 'mail-to', 'trash']);
     });
 
     test('a set with a root in it is not duplicated', () => {
@@ -154,7 +169,7 @@ describe('driveActionsFor on a multi-selection', () => {
     });
 
     test('every row a set gets has a plural label with its count', () => {
-        for (const action of driveActionsFor({ items, capabilities: browse, sharedWithMe: false })) {
+        for (const action of driveActionsFor({ items, capabilities: browse, isSharedWithMe: () => false })) {
             expect(action.pluralLabel).toContain('{n}');
         }
     });
@@ -165,7 +180,8 @@ test('no items offer no rows', () => {
 });
 
 // A shared document in a browse view offers every row, the delete row aside, which turns on the share.
-const everyRow = (sharedWithMe: boolean) => driveActionsFor({ items: [sharedDoc], capabilities: browse, sharedWithMe });
+const everyRow = (sharedWithMe: boolean) =>
+    driveActionsFor({ items: [sharedDoc], capabilities: browse, isSharedWithMe: () => sharedWithMe });
 
 test('the guest and mail flags sit on the rows whose routes need them', () => {
     const flagged = (flag: 'guestDenied' | 'mailOnly') =>
