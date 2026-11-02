@@ -15,6 +15,7 @@ import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
+import { errnoOf } from '../storage/deadline';
 import type { MountPathRow } from './archive-layout';
 import {
     HOME_DATABASES,
