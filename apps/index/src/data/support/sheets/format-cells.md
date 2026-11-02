@@ -5,12 +5,14 @@ type: how-to
 tags: [sheets, formatting, cells, numbers, alignment, borders]
 related: [sheets/conditional-formatting]
 order: 60
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Sheets lets you change how cells look without changing the values inside them. You can apply text styles, number formats, colors, borders, and alignment from the **Format** menu in the toolbar.
 
 All formatting requires edit access to the spreadsheet. The quick-format buttons in the center of the toolbar are hidden when the spreadsheet is read-only.
+
+As the toolbar gets narrower, for example when a side panel is open, the quick-format buttons fold away from the right: alignment first, then the colors, then the rest. Everything they do stays in the **Format** menu.
 
 ## Text style
 
@@ -76,14 +78,14 @@ Number formatting controls how a value is displayed. The stored value does not c
 1. Select the cells.
 2. Open **Format → Fill color** and pick a color from the picker.
 
-You can also use the fill color button (the highlighter icon) in the quick-format bar in the center of the toolbar.
+On a wide enough toolbar, you can also use the fill color button (the highlighter icon) in the quick-format bar in the center of the toolbar.
 
 ### Text color
 
 1. Select the cells.
 2. Open **Format → Text → Font color** and pick a color.
 
-The text color button (a letter icon with a color stripe beneath it) is also in the quick-format bar.
+On a wide enough toolbar, the text color button (a letter icon with a color stripe beneath it) is also in the quick-format bar.
 
 ## Alignment
 
@@ -92,7 +94,7 @@ The text color button (a letter icon with a color stripe beneath it) is also in 
 1. Select the cells.
 2. Open **Format → Alignment** and choose **Left**, **Center**, or **Right**.
 
-The three alignment buttons in the quick-format bar in the center of the toolbar do the same thing.
+On a wide enough toolbar, the three alignment buttons in the quick-format bar in the center of the toolbar do the same thing.
 
 ### Vertical alignment
 
