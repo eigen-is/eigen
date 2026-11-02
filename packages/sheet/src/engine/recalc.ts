@@ -243,13 +243,14 @@ export function extractDependencies(
 }
 
 // What a formula splits at: its operators, commas and brackets, and the name of a function it calls, so the LOG10 of
-// LOG10(A1) reads as no cell. A `:` that joins a reference to a function call, as in A1:INDEX(…) or INDEX(…):B3, is
-// one too, or A1 would read as a range up to a column named INDEX.
+// LOG10(A1) reads as no cell. A name is tried only where a word starts. Tried at every letter, a long run of letters
+// with no bracket after it would be read once per letter. A `:` that joins a reference to a function call, as in
+// A1:INDEX(…) or INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
 const OPERATORS = new RegExp(
     [
         ...[...formulaOperators].map(escapeRegExp),
         '[,()]',
-        '[A-Za-z_][\\w.]*(?=\\s*\\()',
+        '(?<![\\w.])[A-Za-z_][\\w.]*(?=\\s*\\()',
         ':(?=[A-Za-z_][\\w.]*\\()',
         '(?<=\\)):',
     ].join('|'),

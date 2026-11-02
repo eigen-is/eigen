@@ -558,4 +558,26 @@ describe('engine/recalc — extractDependencies', () => {
         expect(deps).toHaveLength(160_000);
         expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
+
+    // A function's name is matched only where a word starts, so a long run of letters with no bracket after it is
+    // read once, not once per letter.
+    test('walks a 1 MB run of letters in well under a second', () => {
+        const g = { sheets: [{ id: 's1', name: 'Sheet1', data: [[num(1)]] }], cellTextToIndexList: {} };
+        const start = performance.now();
+        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
+        expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    test("a function's name reads as no cell, after an operator or a colon", () => {
+        const data = [[num(1), num(2)]];
+        const g = { sheets: [{ id: 's1', name: 'Sheet1', data }], cellTextToIndexList: {} };
+        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1', data)).toEqual([
+            { row: [0, 0], column: [0, 0], sheetId: 's1' },
+            { row: [1, 1], column: [1, 1], sheetId: 's1' },
+        ]);
+        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1', data)).toEqual([
+            { row: [0, 0], column: [0, 0], sheetId: 's1' },
+            { row: [0, 0], column: [1, 1], sheetId: 's1' },
+        ]);
+    });
 });
