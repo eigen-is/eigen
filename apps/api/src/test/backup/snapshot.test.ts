@@ -135,8 +135,12 @@ describe('Backup snapshotHome', () => {
         const conn = { send() {}, readyState: 1 } as unknown as Parameters<typeof collab.handleMessage>[0];
         collab.handleMessage(conn, syncUpdateMessage(edit), true);
 
-        const liveDb = await home.drive.openDatabase(defaultMountId, COLLAB_DB_CONFIG, collab.dataDbPathId!);
-        liveUpdateCount = liveDb.db.select().from(docUpdates).all().length;
+        liveUpdateCount = await home.drive.withDatabase(
+            defaultMountId,
+            COLLAB_DB_CONFIG,
+            collab.dataDbPathId!,
+            async (liveDb) => liveDb.db.select().from(docUpdates).all().length,
+        );
 
         // Two version snapshots of the doc container.
         for (const _ of [0, 1]) {

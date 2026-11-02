@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
-import { getCommentIndex } from '../../lib/chat/comment-index';
+import { withCommentIndex } from '../../lib/chat/comment-index';
 import { getHome } from '../../lib/home';
 import {
     assertJson,
@@ -61,8 +61,7 @@ describe('Comment lifecycle via chat-create', () => {
     // The list leaves createdBy out, so the seed is read from comments.db itself.
     async function createdByOf(chatName: string): Promise<string | null | undefined> {
         const home = await getHome(ctx.alice.user.id);
-        const index = await getCommentIndex(home.drive, mountId, docId);
-        return (await index.get(chatName))?.createdBy;
+        return withCommentIndex(home.drive, mountId, docId, async (index) => (await index.get(chatName))?.createdBy);
     }
 
     test('chat created under container/chat/ → comments.db row with createdBy', async () => {

@@ -244,8 +244,9 @@ describe('Comment assignee', () => {
 
         const home = await getHome(ctx.alice.user.id);
         const commentsDb = await home.drive.getChildByName(mountId, docId, 'comments.db');
-        const managed = await home.drive.openDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
-        await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
+        await home.drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (managed) => {
+            await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
+        });
         expect((await listComments()).some((r) => r.chatName === healName)).toBe(false);
 
         const res = await patchAssignee(
@@ -274,8 +275,9 @@ describe('Comment assignee', () => {
 
         const home = await getHome(ctx.alice.user.id);
         const commentsDb = await home.drive.getChildByName(mountId, docId, 'comments.db');
-        const managed = await home.drive.openDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
-        await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
+        await home.drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (managed) => {
+            await managed.db.delete(commentSchema.comments).where(eq(commentSchema.comments.chatName, healName));
+        });
 
         const res = await authedRequest(
             ctx.alice.user.sessionToken,

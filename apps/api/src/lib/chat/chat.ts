@@ -21,7 +21,7 @@ import type { User } from '../user';
 import { getUserByEmail } from '../user';
 import { formatEmoteForViewer, parseCommand, searchableMessageText } from './commands';
 import type { CommentIndex } from './comment-index';
-import { openCommentIndex, RECENT_TEXT_CAP } from './comment-index';
+import { RECENT_TEXT_CAP, withCommentIndex } from './comment-index';
 import { CHAT_ROOM_DB_CONFIG } from './db-config';
 import { extractMentionedEmails } from './mentions';
 import * as schema from './schema';
@@ -458,9 +458,10 @@ export class ChatRoom {
     ): Promise<void> {
         if (!this.containerPath) return;
         try {
-            const index = await openCommentIndex(this.drive, this.containerPath);
-            await fn(index);
-            await index.setRecentText(this.path.name, recentText);
+            await withCommentIndex(this.drive, this.containerPath.mountId, this.containerPath.id, async (index) => {
+                await fn(index);
+                await index.setRecentText(this.path.name, recentText);
+            });
 
             // Nobody waits for it, the same as for the message event.
             broadcastCommentIndexUpdated(

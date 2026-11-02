@@ -5,7 +5,6 @@
 
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
-import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_CHAT } from '@workspace/lib/types/drive';
 import { eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
@@ -146,19 +145,22 @@ export class CommentIndex {
     }
 }
 
-export async function openCommentIndex(drive: DriveLike, containerPath: DrivePath): Promise<CommentIndex> {
-    const dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
-    if (!dbPath) throw new ApiError(404, 'comments.db not found');
-    const managed = await drive.openDatabase(containerPath.mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id);
-    return new CommentIndex(managed.db);
-}
-
-// Opens the index of the document at pathId. Through a SharedDrive, getPath checks that the caller
-// may read the document. A plain Drive belongs to the caller, so nothing is checked.
-export async function getCommentIndex(drive: DriveLike, mountId: string, pathId: string): Promise<CommentIndex> {
+// Runs fn on the index of the document at pathId, with its comments.db open for just that long.
+// Through a SharedDrive, getPath checks that the caller may read the document. A plain Drive belongs
+// to the caller, so nothing is checked.
+export async function withCommentIndex<T>(
+    drive: DriveLike,
+    mountId: string,
+    pathId: string,
+    fn: (index: CommentIndex) => Promise<T>,
+): Promise<T> {
     const path = await drive.getPath(mountId, pathId);
     if (!path) throw new ApiError(404, 'Container not found');
-    return openCommentIndex(drive, path);
+    const dbPath = await drive.getChildByName(mountId, pathId, 'comments.db');
+    if (!dbPath) throw new ApiError(404, 'comments.db not found');
+    return drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id, (managed) =>
+        fn(new CommentIndex(managed.db)),
+    );
 }
 
 // Callers run this before ensureComment. ensureComment may add the missing row of an older thread

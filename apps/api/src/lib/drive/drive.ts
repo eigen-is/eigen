@@ -41,7 +41,7 @@ import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { ChatRoom } from '../chat';
-import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
+import { assertCommentChatExists, withCommentIndex } from '../chat/comment-index';
 import { CollabDocument } from '../collab/collab-document';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
@@ -416,8 +416,9 @@ export class Drive {
         if (!container) return;
         const chatPath = await this.getPath(mountId, chatPathId);
         if (!chatPath) return;
-        const index = await openCommentIndex(this, container);
-        await index.ensureComment(chatPath.name, { createdBy });
+        await withCommentIndex(this, mountId, container.id, (index) =>
+            index.ensureComment(chatPath.name, { createdBy }),
+        );
     }
 
     public async uploadFiles(
@@ -1071,17 +1072,19 @@ export class Drive {
         title?: string,
     ): Promise<boolean> {
         await assertCommentChatExists(this, mountId, pathId, chatName);
-        const index = await getCommentIndex(this, mountId, pathId);
-        // Cards from before the comment index have a chat but no row yet.
-        await index.ensureComment(chatName);
-        const current = await index.get(chatName);
-        const changed = (current?.assignee ?? null) !== assignee;
-        // The client sends the card title, which may have changed in the same edit. So the title is
-        // saved even when the assignee stays the same.
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        if (card) await index.setTitle(chatName, card);
+        const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
+            // Cards from before the comment index have a chat but no row yet.
+            await index.ensureComment(chatName);
+            const current = await index.get(chatName);
+            // The client sends the card title, which may have changed in the same edit. So the title is
+            // saved even when the assignee stays the same.
+            if (card) await index.setTitle(chatName, card);
+            const assigneeChanged = (current?.assignee ?? null) !== assignee;
+            if (assigneeChanged) await index.assign(chatName, assignee);
+            return assigneeChanged;
+        });
         if (!changed) return false;
-        await index.assign(chatName, assignee);
         if (assignee) {
             await this.recordFileEvent(
                 mountId,
@@ -1104,17 +1107,15 @@ export class Drive {
     ): Promise<void> {
         // An unknown chat is a 404, so no history row is written for a comment that doesn't exist.
         await assertCommentChatExists(this, mountId, pathId, chatName);
-        const index = await getCommentIndex(this, mountId, pathId);
-        await index.ensureComment(chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        if (card) await index.setTitle(chatName, card);
-        if (status === 'resolved') {
-            await index.resolve(chatName, user.email);
-            await this.recordFileEvent(mountId, pathId, user, { eventType: 'resolved', details: { card, chatName } });
-        } else {
-            await index.reopen(chatName);
-            await this.recordFileEvent(mountId, pathId, user, { eventType: 'reopened', details: { card, chatName } });
-        }
+        await withCommentIndex(this, mountId, pathId, async (index) => {
+            await index.ensureComment(chatName);
+            if (card) await index.setTitle(chatName, card);
+            if (status === 'resolved') await index.resolve(chatName, user.email);
+            else await index.reopen(chatName);
+        });
+        const eventType = status === 'resolved' ? 'resolved' : 'reopened';
+        await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
     }
 
     // ---- Collab documents and versions ----
@@ -1243,14 +1244,6 @@ export class Drive {
     }
 
     // ---- Document databases ----
-
-    public async openDatabase<S extends SchemaType>(
-        mountId: string,
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return this.getMount(mountId).openDatabase(config, pathId);
-    }
 
     // Runs fn with the database open, such as a chat room's data.db for one request. It closes after
     // a quiet minute.

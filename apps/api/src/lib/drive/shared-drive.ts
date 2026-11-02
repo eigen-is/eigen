@@ -512,12 +512,13 @@ export class SharedDrive {
 
     // A document's databases, such as its comments.db, hold what the document holds. So opening one
     // needs read access.
-    public async openDatabase<S extends SchemaType>(
+    public async withDatabase<S extends SchemaType, T>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
-    ): Promise<ManagedDatabase<S>> {
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
         await this.requireRead(mountId, pathId);
-        return this.drive.openDatabase(mountId, config, pathId);
+        return this.drive.withDatabase(mountId, config, pathId, fn);
     }
 }

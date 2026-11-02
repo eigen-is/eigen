@@ -108,10 +108,13 @@ export class CollabDocument {
         // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.
         if (!dataDbPath) throw new ApiError(503, `${this.path.name} has no data.db yet`);
 
-        // comments.db opens now, so the editor's first comments request finds it ready. Nothing waits for
-        // it, because that request reports any real problem itself.
+        // comments.db opens now, so the editor's first comments request finds it ready. It closes after a
+        // quiet minute like any reader's. Nothing waits for it, because that request reports any real
+        // problem itself.
         if (commentsDbPath) {
-            this.drive.openDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id).catch(() => {});
+            this.drive
+                .withDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id, async () => {})
+                .catch(() => {});
         }
 
         const dataDb = await this.drive.holdDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);

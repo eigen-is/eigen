@@ -3792,7 +3792,7 @@ describe('Drive', () => {
         });
     });
 
-    describe('Regression: SharedDrive.openDatabase enforces read permission (audit 17)', () => {
+    describe('Regression: SharedDrive.withDatabase enforces read permission (audit 17)', () => {
         test('a non-owner without read is rejected opening a container managed DB; a shared reader succeeds', async () => {
             // A doc container provisions data.db + comments.db synchronously on create.
             const doc = await drivePost(
@@ -3812,16 +3812,15 @@ describe('Drive', () => {
 
             // Bob holds no share on the doc. Opening its managed DB by pathId must be refused —
             // pre-fix the wrapper delegated with no ACL check, an arbitrary-DB-open hole on the seam.
-            await expect(bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id)).rejects.toThrow(
-                'No read permission',
-            );
+            const open = () =>
+                bobShared.withDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (db) => db);
+            await expect(open()).rejects.toThrow('No read permission');
 
             // Granting read on the container (comments.db inherits it) lets the same open through.
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
                 add: [{ id: BOB_EMAIL, read: true, write: false }],
             });
-            const managed = await bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
-            expect(managed.db).toBeDefined();
+            expect((await open()).db).toBeDefined();
         });
     });
 
