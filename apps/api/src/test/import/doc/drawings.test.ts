@@ -750,6 +750,13 @@ describe('text boxes', () => {
             ).toEqual(['bulletList[listItem[OnetextBox[Boxed]] | listItem[Two]]', 'blockquote[SaidtextBox[Inside]]']);
         });
 
+        // The item's indent comes off a box's offset, which still reads no further than the largest paper.
+        test('a box in front of the text, far off the paper, stores an offset in range', async () => {
+            const far = `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml" style="position:absolute;margin-left:-99999px;margin-top:0;width:100px;height:50px;mso-position-horizontal-relative:text;mso-position-vertical-relative:text"><v:textbox>${box('Far', '000000')}</v:textbox></v:rect></w:pict></w:r>`;
+            const { json } = await importDocxBody(item(`${text('One')}${far}`), { numbering: NUMBERING });
+            expect(nodesOfType(json, 'textBox').map((node) => node.attrs?.['offsetX'])).toEqual([-LARGEST_PAPER]);
+        });
+
         test('a table and a list in it are its paragraphs', async () => {
             const table = `<w:tbl><w:tr><w:tc><w:p>${text('Cell')}</w:p></w:tc></w:tr></w:tbl>`;
             const inner = `<w:txbxContent>${table}${item(text('Boxed'), 6)}</w:txbxContent>`;
