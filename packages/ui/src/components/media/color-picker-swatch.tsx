@@ -19,6 +19,7 @@ export function ColorPickerSwatch({ value, onChange }: ColorPickerSwatchProps) {
             <PopoverTrigger asChild>
                 <button
                     type="button"
+                    aria-label="Color"
                     className="h-9 w-9 rounded-md border border-input shrink-0"
                     style={{ backgroundColor: value }}
                 />
