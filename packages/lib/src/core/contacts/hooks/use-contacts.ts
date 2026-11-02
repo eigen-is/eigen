@@ -1,3 +1,7 @@
+// The contact hooks: the list, the user's own card, and adding, updating, deleting and the avatar upload. A write that
+// meets a 412 because the card changed elsewhere reloads the list and says so in its own toast. The Contacts app calls
+// them, and so do other readers of the address book, such as the contact suggestions and the profile editor.
+
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { contactsApi, getContactsAvatarUploadUrl } from '@workspace/lib/api';
@@ -5,11 +9,11 @@ import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { CreateContactInput, UpdateContactInput } from '@workspace/lib/types/contact';
 import { toast } from 'sonner';
-import { AppError, onMutationError } from '../../api-error';
+import { AppError, markToasted, onMutationError } from '../../api-error';
 import { contactKeys, invalidateContactList } from './keys';
 
-// A write echoes the etag its form loaded; a 412 means the card changed elsewhere first. Reload the list so
-// the form shows current state, tell the user, and swallow it. All handling stays in the hook (NOTIFICATIONS.md).
+// A write echoes the etag its form loaded, and a 412 means the card changed elsewhere first. The hook reloads the list
+// so the form shows the current card, and tells the user.
 const STALE_WRITE_TOAST = 'This contact changed elsewhere. It has been reloaded — please redo your edit.';
 
 // The edit form re-seeds after one, since the toast tells the user the card was reloaded.
@@ -17,21 +21,20 @@ export function isStaleWrite(error: unknown): boolean {
     return error instanceof AppError && error.status === 412;
 }
 
-// Both the update and delete onError paths recover a 412 the same way — reload, toast, and swallow. Shared so
-// the two callbacks can't drift; returns true when it handled the 412 so the caller skips onMutationError.
+// The update and the delete recover a 412 the same way. It returns true when it handled one, so the caller skips
+// onMutationError. The error counts as toasted, so a dialog that awaits the write doesn't log it again.
 function handleStaleWrite(queryClient: QueryClient, ownerId: string, error: unknown): boolean {
-    if (isStaleWrite(error)) {
-        invalidateContactList(queryClient, ownerId);
-        toast.error(STALE_WRITE_TOAST);
-        return true;
-    }
-    return false;
+    if (!isStaleWrite(error)) return false;
+    invalidateContactList(queryClient, ownerId);
+    markToasted(error);
+    toast.error(STALE_WRITE_TOAST);
+    return true;
 }
 
 export function useContacts() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
 
     return useQuery({
         queryKey: contactKeys.lists(ownerId),
@@ -48,7 +51,7 @@ export function useContacts() {
 export function useAddContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
 
     return useMutation({
         mutationFn: async (newContact: CreateContactInput) => {
@@ -64,7 +67,7 @@ export function useAddContact() {
 export function useUpdateContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
 
     return useMutation({
         mutationFn: async ({ id, ...data }: UpdateContactInput & { id: string }) => {
@@ -83,7 +86,7 @@ export function useUpdateContact() {
 export function useDeleteContact() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
 
     return useMutation({
         mutationFn: async ({ id, etag }: { id: string; etag: string }) => {
@@ -102,7 +105,7 @@ export function useDeleteContact() {
 export function useMeContact() {
     const { user } = useAuth();
     const isGuest = useIsGuest();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
 
     return useQuery({
         queryKey: contactKeys.me(ownerId),
@@ -132,7 +135,7 @@ async function uploadContactAvatarRequest(ownerId: string, file: File): Promise<
 
 export function useUploadContactAvatar() {
     const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
 
     return useMutation({
         mutationFn: (file: File) => uploadContactAvatarRequest(ownerId, file),

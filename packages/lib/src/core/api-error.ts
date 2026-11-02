@@ -1,6 +1,7 @@
 // How a failed request reaches the user: AppError reads a readable message and the status from what Eden or a fetch
 // hands back, getErrorMessage turns it into the toast's text, and onMutationError is the onError every mutation hook
-// passes to show it. isRefusal tells a dialog whether another try could go through.
+// passes to show it. wasToasted tells a caller that also sees the rejection that a toast already showed it, and
+// isRefusal tells a dialog whether another try could go through.
 
 import { toast } from 'sonner';
 import { isRecord } from './guards';
@@ -72,12 +73,17 @@ export function getErrorMessage(error: unknown): string {
     return String(error);
 }
 
-// Errors onMutationError has already shown a toast for, so a caller that also sees the rejection
-// (CardForm) can swallow exactly those and let anything else surface.
+// Errors a toast has already been shown for, so a caller that also sees the rejection, such as CardForm, can swallow
+// exactly those and let anything else surface.
 const toastedErrors = new WeakSet<object>();
 
-export function onMutationError(error: unknown): void {
+// For a hook that shows its own toast for an error instead of onMutationError's.
+export function markToasted(error: unknown): void {
     if (error !== null && typeof error === 'object') toastedErrors.add(error);
+}
+
+export function onMutationError(error: unknown): void {
+    markToasted(error);
     toast.error(getErrorMessage(error));
 }
 

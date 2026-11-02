@@ -113,9 +113,12 @@ export function placeAnchors(blocks: JSONContent[], normal: NormalStyle): JSONCo
             for (const { attrs } of anchored) {
                 if (!attrs) continue;
                 const { offsetX, offsetY } = readFigureFrameAttrs(attrs);
-                attrs['offsetX'] = wholePx((offsetX ?? 0) - anchorIndentPx(indent, node));
+                const x = (offsetX ?? 0) - anchorIndentPx(indent, node);
                 const y = offsetY == null ? 0 : offsetY + anchorPaddingPx(node, contained, normal);
-                attrs['offsetY'] = readFigureFrameAttrs({ offsetY: wholePx(y) }).offsetY;
+                // The indent and the padding can move an offset past the largest paper, so it is held to it again.
+                const placed = readFigureFrameAttrs({ offsetX: wholePx(x), offsetY: wholePx(y) });
+                attrs['offsetX'] = placed.offsetX;
+                attrs['offsetY'] = placed.offsetY;
             }
             node.content = [...anchored, ...(node.content ?? []).filter((child) => !anchored.includes(child))];
             return;

@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2069 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2084 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (187)
+## Components (190)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -46,6 +46,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ErrorState` | `@workspace/ui` | packages/ui/src/components/layout/app/error-state.tsx |
 | `FileDropOverlay` | `@workspace/ui` | packages/ui/src/components/file-drop-overlay.tsx |
 | `FileMenu` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/file-menu.tsx |
+| `FormDialog` | `@workspace/ui` | packages/ui/src/components/form-dialog.tsx |
+| `FormDialogForm` | `@workspace/ui` | packages/ui/src/components/form-dialog.tsx |
 | `HintPill` | `@workspace/ui` | packages/ui/src/components/hint-pill.tsx |
 | `InfoBlock` | `@workspace/ui` | packages/ui/src/components/info-block.tsx |
 | `KebabTrigger` | `@workspace/ui` | packages/ui/src/components/layout/toolbar/kebab-trigger.tsx |
@@ -157,6 +159,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerMenuItem` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-menu-item.tsx |
+| `ColorPickerSwatch` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-swatch.tsx |
 | `FontPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-picker.tsx |
 | `FontSizeStepper` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-size-stepper.tsx |
 | `ImagePlaceholder` | `@workspace/ui/components/media` | packages/ui/src/components/media/image-placeholder.tsx |
@@ -546,7 +549,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (435)
+## Types (438)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -574,10 +577,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FontSlice` | `@workspace/lib/constants/font-slices` | packages/lib/src/constants/font-slices.ts |
 | `BandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `BandRoot` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
+| `Border` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
+| `BorderStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `Caps` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/caps.ts |
-| `CellBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `CellBorderAttribute` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
-| `CellBorderStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `CellSide` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `ChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `Equation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
@@ -961,10 +964,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
+| `LabelFormValues` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-dialog.tsx |
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
 | `ColorPickerButtonProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerMenuItemProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-menu-item.tsx |
 | `ColorPickerProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
+| `ColorPickerSwatchProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-swatch.tsx |
 | `MountFormValues` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
 | `BeginGesture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `CoupledSize` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/use-coupled-size.ts |
@@ -983,10 +988,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CanvasHandle` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
+| `DialogAction` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1119)
+## Utilities & constants (1128)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1069,6 +1075,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `waitlistApi` | `@workspace/lib/api` | packages/lib/src/core/api.ts |
 | `getErrorMessage` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `isRefusal` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
+| `markToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `onMutationError` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `retryWhenTransformBusy` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
 | `wasToasted` | `@workspace/lib/api-error` | packages/lib/src/core/api-error.ts |
@@ -1309,6 +1316,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `readHexColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `REDO_ALT_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `REDO_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1370,10 +1378,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `bandEdge` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `bandHasContent` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
 | `BLOCK_ONLY_FIGURE_PARENTS` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
+| `BORDER_STYLES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
+| `borderValue` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `canInsertTableOfContents` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-of-contents.ts |
 | `CELL_BORDER_SIDES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
-| `CELL_BORDER_STYLES` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
-| `cellBorderValue` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `chartBox` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `chartSvg` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `cmText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `columnFit` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
@@ -1386,6 +1395,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `figureLayoutStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `figurePlacement` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/figure-frame.ts |
 | `FIRST_PAGE_BAND` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/bands.ts |
+| `fitBorderPx` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `flattenNestedStories` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/stories.ts |
 | `FOOTNOTE_PARAGRAPH` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
 | `FOOTNOTE_SELECTOR` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/footnote.ts |
@@ -1405,11 +1415,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `listTypeOfStyle` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/ordered-list.ts |
 | `matchPaperSize` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mathAsText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation-paste.ts |
-| `MAX_CELL_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `MAX_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MAX_HEADING_LEVEL` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `MAX_PAPER_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `MAX_PAPER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_TEXT_BOX_PADDING` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
-| `MIN_CELL_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `MIN_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |
 | `MIN_TEXT_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `mmToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
@@ -1439,8 +1450,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ptToTwips` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pxToMm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pxToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
-| `readCellBackground` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
-| `readCellBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
+| `readBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `readChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `readCm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readEquation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |
@@ -1509,6 +1519,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `bytesToBase64` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `formatFileSize` | `@workspace/lib/format` | packages/lib/src/core/format.ts |
 | `isRecord` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
+| `readIntIn` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
+| `readNumberIn` | `@workspace/lib/guards` | packages/lib/src/core/guards.ts |
 | `handleHomeSSEvent` | `@workspace/lib/home` | packages/lib/src/core/home/sse-handlers.ts |
 | `countTaskItems` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
 | `escapeHtml` | `@workspace/lib/html` | packages/lib/src/core/html.ts |
@@ -2108,4 +2120,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `menuRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `openSubmenu` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `renderOpenMenu` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
+| `pressEnter` | `@workspace/ui/test/press-enter` | packages/ui/src/test/press-enter.ts |
+| `loadReact` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
 | `renderInDocument` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |
+| `unmountAllRoots` | `@workspace/ui/test/render-in-document` | packages/ui/src/test/render-in-document.ts |

@@ -32,12 +32,11 @@ const roleBadgeVariant: Record<string, 'default' | 'secondary' | 'outline'> = {
 type AdminUsersToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    organizationId?: string;
     // A guest account comes from its own code sign-in, so the guests page has nothing to create.
     guests?: boolean;
 };
 
-export function AdminUsersToolbar({ searchQuery, onSearchChange, organizationId, guests }: AdminUsersToolbarProps) {
+export function AdminUsersToolbar({ searchQuery, onSearchChange, guests }: AdminUsersToolbarProps) {
     const [showCreateDialog, setShowCreateDialog] = useState(false);
     return (
         <div className="flex items-center justify-between w-full gap-2">
@@ -56,11 +55,7 @@ export function AdminUsersToolbar({ searchQuery, onSearchChange, organizationId,
                         className="shrink-0"
                         onClick={() => setShowCreateDialog(true)}
                     />
-                    <CreateUserDialog
-                        open={showCreateDialog}
-                        onOpenChange={setShowCreateDialog}
-                        organizationId={organizationId}
-                    />
+                    <CreateUserDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} />
                 </>
             )}
         </div>

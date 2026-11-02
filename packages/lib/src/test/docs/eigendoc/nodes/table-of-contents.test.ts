@@ -238,9 +238,15 @@ describe('readTocLevels', () => {
         [0, 1],
         [7, 6],
         [2.6, 3],
+        [0.4, 1],
+        [0.5, 1],
+        [6.4, 6],
+        [6.5, 6],
         ['x', 3],
         [null, 3],
         [Number.NaN, 3],
+        [Number.POSITIVE_INFINITY, 3],
+        [Number.NEGATIVE_INFINITY, 3],
     ])('reads %p as %p', (value, levels) => {
         expect(readTocLevels(value)).toBe(levels);
     });

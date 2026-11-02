@@ -5,7 +5,7 @@ type: how-to
 tags: [calendar, events, recurring, attendees]
 related: [calendar/get-started, calendar/invite-people, calendar/recurring-events]
 order: 30
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 You can create an event from the sidebar or by clicking any day in the calendar, then fill in the date, time, guests, and other details. This article covers creating an event, editing it, and deleting it.
@@ -27,7 +27,7 @@ The **New event** form opens as a dialog. Fill in the fields you need:
 6. Type a room name or address into **Add location** if you want one.
 7. Type any notes into **Add description**.
 8. If you have more than one calendar, a calendar picker appears at the bottom. Choose which calendar the event belongs to. The picker also lists calendars that other people and teams have shared with you, when your access lets you edit them, so you can create the event straight into a shared calendar.
-9. Click **Save**.
+9. Click **Save**, or press Enter in the title field. **Save** stays grayed out until the event has a title and a calendar.
 
 ## Edit an event
 

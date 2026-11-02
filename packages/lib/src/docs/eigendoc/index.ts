@@ -10,9 +10,11 @@ export {
 } from './bands';
 export { getDocExtensions } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, MAX_HEADING_LEVEL } from './heading';
+export type { Border, BorderStyle } from './nodes/border';
+export { BORDER_STYLES, borderValue, fitBorderPx, MAX_BORDER_PX, MIN_BORDER_PX, readBorder } from './nodes/border';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
-export { ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
+export { ChartNode, chartBox, chartSvg, readChartAttrs } from './nodes/chart';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export { EquationNode, equationMath, parseMathml, readEquation } from './nodes/equation';
 export type { Equation } from './nodes/equation-paste';
@@ -62,16 +64,8 @@ export {
     STORY_NODES,
     storyDepth,
 } from './nodes/stories';
-export type { CellBorder, CellBorderAttribute, CellBorderStyle, CellSide } from './nodes/table-cell';
-export {
-    CELL_BORDER_SIDES,
-    CELL_BORDER_STYLES,
-    cellBorderValue,
-    MAX_CELL_BORDER_PX,
-    MIN_CELL_BORDER_PX,
-    readCellBackground,
-    readCellBorder,
-} from './nodes/table-cell';
+export type { CellBorderAttribute, CellSide } from './nodes/table-cell';
+export { CELL_BORDER_SIDES } from './nodes/table-cell';
 export type { TocAttrs, TocLevelStyle, TocPreset } from './nodes/table-of-contents';
 export {
     canInsertTableOfContents,
@@ -112,6 +106,7 @@ export {
     cmText,
     DEFAULT_PAGE_SETUP,
     MAX_PAPER_MM,
+    MAX_PAPER_PX,
     MIN_TEXT_MM,
     matchPaperSize,
     mmToPt,

@@ -19,8 +19,16 @@ import {
 import type { Box } from '@workspace/lib/vector';
 import type React from 'react';
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useBorderBoxHeight } from '../hooks/use-border-box-height';
 import type { FigureFrameOptions, FigureSize } from './figure-frame';
-import { FigureFrame, figureFramePlugins, figureMaxWidth, setFigureLayout, useFigureResize } from './figure-frame';
+import {
+    FigureFrame,
+    figureFramePlugins,
+    figureMaxWidth,
+    RERENDER_ON_DECORATIONS,
+    setFigureLayout,
+    useFigureResize,
+} from './figure-frame';
 import { behindFigureAt } from './positioned-figure';
 import { StaticStory } from './static-story';
 import type { StoryAnchor } from './story';
@@ -62,12 +70,10 @@ function TextBoxView(props: NodeViewProps) {
     const attrs = useMemo(() => readTextBoxAttrs(node.attrs), [node.attrs]);
     const open = story.anchor && drawsStory(editor, story.anchor, node) ? story.editor : null;
     const isEditable = editor.isEditable;
-    const boxRef = useRef<HTMLSpanElement>(null);
+    const [boxElement, setBoxElement] = useState<HTMLSpanElement | null>(null);
     // The box's drawn height, its text's or its minimum, which a grip starts from. A gesture that leaves it as it was
     // keeps the height as stored, so dragging the width of an auto box keeps it auto.
-    const [drawnHeight, setDrawnHeight] = useState(0);
     const drawn = useRef(0);
-    drawn.current = drawnHeight;
 
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, attrs.layout), [editor, attrs.layout]);
     const stored = useCallback(
@@ -76,29 +82,20 @@ function TextBoxView(props: NodeViewProps) {
     );
     const resize = useFigureResize({ editor, getPos, node, getMaxWidth, fit: fitTextBox, stored });
     const preview = resize.preview?.size;
-    const dragging = preview !== undefined;
 
     // The look as every surface draws it, a grip's preview size in its place. The node changes with every keystroke in
     // the open box, and its attributes only with an edit of the look.
     useLayoutEffect(() => {
-        const element = boxRef.current;
-        if (!element) return;
-        for (const name of element.getAttributeNames()) element.removeAttribute(name);
+        if (!boxElement) return;
+        for (const name of boxElement.getAttributeNames()) boxElement.removeAttribute(name);
         const look = preview ? { ...attrs, ...preview } : attrs;
-        for (const [name, value] of Object.entries(textBoxHTMLAttributes(look))) element.setAttribute(name, value);
-    }, [attrs, preview]);
+        for (const [name, value] of Object.entries(textBoxHTMLAttributes(look))) boxElement.setAttribute(name, value);
+    }, [boxElement, attrs, preview]);
 
-    // The height as drawn, which its text and its look change. The border box's: the box draws at a fixed width with its
-    // padding and line inside it, so a thicker line or more padding changes that box alone. A grip's drag keeps the one
-    // it pressed at: its preview draws the box at the size it asks, and that height read back would be the gesture's own.
-    useLayoutEffect(() => {
-        const element = boxRef.current;
-        if (!element || dragging) return;
-        setDrawnHeight(element.offsetHeight);
-        const observer = new ResizeObserver(() => setDrawnHeight(element.offsetHeight));
-        observer.observe(element, { box: 'border-box' });
-        return () => observer.disconnect();
-    }, [dragging]);
+    // Measured after the look above is written, so it reads the box as it now draws. A grip's drag keeps the height it
+    // pressed at: its preview draws the box at the size it asks, and that height read back would be the gesture's own.
+    const drawnHeight = useBorderBoxHeight(boxElement, preview !== undefined) ?? 0;
+    drawn.current = drawnHeight;
 
     // A delete and an insert of the node, such as a re-anchor, mounts the open editor in a new view, and the browser
     // drops the focus of the one it took away. Nothing else has taken it, so it goes back.
@@ -122,15 +119,12 @@ function TextBoxView(props: NodeViewProps) {
         <FigureFrame
             {...props}
             box={box}
-            shift={resize.preview?.shift}
+            resize={resize}
             resizeMode="free"
-            onTransform={resize.onTransform}
-            onCommit={resize.onCommit}
-            onGestureEnd={resize.onGestureEnd}
             label="Resize text box"
-            dragSurface={{ onInsidePress: open || !isEditable ? null : openAt, text: boxRef }}
+            dragSurface={{ onInsidePress: open || !isEditable ? null : openAt, text: boxElement }}
         >
-            <span ref={boxRef}>
+            <span ref={setBoxElement}>
                 {open ? (
                     <EditorContent editor={open} className="contents" data-story-editor="" />
                 ) : (
@@ -259,17 +253,10 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
     },
 
     addNodeView() {
-        // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.
-        const options = {
-            update: ({ updateProps }: { updateProps: () => void }) => {
-                updateProps();
-                return true;
-            },
-        };
         return (props: NodeViewRendererProps) => {
             if (!('contentComponent' in props.editor && props.editor.contentComponent))
-                return ReactNodeViewRenderer(TextBoxView, options)(props);
-            const view = new TextBoxNodeView(TextBoxView, props, options);
+                return ReactNodeViewRenderer(TextBoxView, RERENDER_ON_DECORATIONS)(props);
+            const view = new TextBoxNodeView(TextBoxView, props, RERENDER_ON_DECORATIONS);
             // ReactNodeView made a content element for a node with content and put it in the view's DOM, where the
             // frame's geometry, such as the box a figure is measured by, would take it for the box.
             view.contentDOMElement?.remove();

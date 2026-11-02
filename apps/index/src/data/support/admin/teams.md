@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, teams, members]
 related: [admin/manage-members, admin/team-membership]
 order: 30
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Teams let you group members together so you can share files, folders, and calendars with everyone in the group at once. You manage teams from the [Admin app](/admin/teams).
@@ -15,8 +15,8 @@ Teams let you group members together so you can share files, folders, and calend
 1. Open the [Admin app](/admin/teams).
 2. The **Teams** page lists every team in your organization. From another Admin page, click **Teams** in the sidebar to get there.
 3. Click the **+** button (**Create team**) next to the search bar at the top of the list.
-4. In the **Create team** dialog, type a name for the team.
-5. Click **Create**.
+4. In the **Create team** dialog, type a name for the team in **Team name**.
+5. Click **Create**, or press Enter. **Create** stays grayed out until the team has a name.
 
 The new team appears in the list. Click it to open its detail panel on the right. To go back to the full list, click **Close** (the **X**) in the toolbar above the detail panel.
 

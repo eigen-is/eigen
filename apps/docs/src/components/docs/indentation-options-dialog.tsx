@@ -1,3 +1,7 @@
+// Google Docs' Format › Align and indent › Indentation options: the left and right indent and a first line or hanging
+// indent, in centimeters, for the paragraphs the selection spans. The toolbar opens it, and Apply writes only what
+// changed.
+
 import type { Editor } from '@tiptap/react';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import {
@@ -8,8 +12,7 @@ import {
     readParagraphFormat,
     selectionParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -20,6 +23,7 @@ type IndentationOptionsDialogProps = {
     normal: NormalStyle;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
 };
 
 const SPECIAL_INDENTS = [
@@ -34,39 +38,29 @@ type SpecialIndent = (typeof SPECIAL_INDENTS)[number]['value'];
 const cm = (pt: number) => cmText(ptToMm(pt), 2);
 const pt = (text: string) => mmToPt(readCm(text));
 
-// Google Docs' Format › Align and indent › Indentation options, on the paragraphs the selection spans.
-export function IndentationOptionsDialog({ editor, normal, open, onOpenChange }: IndentationOptionsDialogProps) {
+export function IndentationOptionsDialog({
+    editor,
+    normal,
+    open,
+    onOpenChange,
+    onCloseAutoFocus,
+}: IndentationOptionsDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="sm"
-                showCloseButton={false}
-                aria-describedby={undefined}
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    editor.commands.focus();
-                }}
-            >
-                <DialogHeader>
-                    <DialogTitle>Indentation options</DialogTitle>
-                </DialogHeader>
-                <IndentationOptionsForm editor={editor} normal={normal} onDone={() => onOpenChange(false)} />
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Indentation options"
+            size="sm"
+            onCloseAutoFocus={onCloseAutoFocus}
+        >
+            <IndentationOptionsForm editor={editor} normal={normal} />
+        </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening starts from the selection's first paragraph. As in Google and Word, Left is
 // where the body lines stand, and a first line or hanging indent moves the first line right or left of it.
-function IndentationOptionsForm({
-    editor,
-    normal,
-    onDone,
-}: {
-    editor: Editor;
-    normal: NormalStyle;
-    onDone: () => void;
-}) {
+function IndentationOptionsForm({ editor, normal }: { editor: Editor; normal: NormalStyle }) {
     const [initial] = useState(() => {
         const { indentLeft, indentRight, indentFirstLine } = selectionParagraphFormat(
             editor.state,
@@ -97,11 +91,10 @@ function IndentationOptionsForm({
     });
 
     return (
-        <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (!valid) return;
+        <FormDialogForm
+            canSubmit={valid}
+            submitLabel="Apply"
+            onSubmit={() => {
                 // Only what changed, no indent as none.
                 const format: Partial<Record<keyof typeof initial.format, number | null>> = {};
                 for (const key of ['indentLeft', 'indentRight', 'indentFirstLine'] as const) {
@@ -109,7 +102,6 @@ function IndentationOptionsForm({
                     if (value !== initial.format[key]) format[key] = value === 0 ? null : value;
                 }
                 editor.chain().focus().setParagraphFormat(format).run();
-                onDone();
             }}
         >
             <FieldSet className="gap-3">
@@ -169,14 +161,6 @@ function IndentationOptionsForm({
                 </Field>
             </FieldSet>
             {!valid && <FieldError>Indents must be 0 cm or more.</FieldError>}
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onDone}>
-                    Cancel
-                </Button>
-                <Button type="submit" disabled={!valid}>
-                    Apply
-                </Button>
-            </DialogFooter>
-        </form>
+        </FormDialogForm>
     );
 }

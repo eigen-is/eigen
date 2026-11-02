@@ -4,15 +4,15 @@
 // widths. The paragraph reader calls it for each table it meets.
 
 import type { JSONContent } from '@tiptap/core';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import type { CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
 import {
+    borderValue,
     CELL_BORDER_SIDES,
-    cellBorderValue,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     mmToPx,
     PROSE_TEXTBLOCKS,
-    readCellBackground,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
@@ -42,7 +42,7 @@ export const MAX_MERGED_ROWS = 2000;
 export const MAX_TABLE_DEPTH = 8;
 
 // A side in Eigen's own look is the side a cell draws without one, so the writer's tables read back with none stored.
-const EIGEN_SIDE = cellBorderValue({
+const EIGEN_SIDE = borderValue({
     width: CELL_BORDER.sz / BORDER_EIGHTHS_PER_PX,
     style: 'solid',
     color: markColor(CELL_BORDER.color),
@@ -93,7 +93,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             tableBorders[at] ??
             tableLook?.borders[at] ??
             'none';
-        const value = cellBorderValue(border);
+        const value = borderValue(border);
         return value === EIGEN_SIDE ? undefined : value;
     };
     // The fill a cell draws: its own, else its table style's first row's, else the table's.
@@ -197,7 +197,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             // A header's gray is the header's own look.
             const backgroundColor =
                 isFill(fill) && !(type === 'tableHeader' && fill === HEADER_CELL_LOOK.fill)
-                    ? readCellBackground(`#${fill}`)
+                    ? readHexColor(`#${fill}`)
                     : null;
             const outer = {
                 top: rowIndex === 0,

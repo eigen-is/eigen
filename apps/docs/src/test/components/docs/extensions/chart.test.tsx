@@ -11,7 +11,9 @@ const { Editor, EditorContent } = await import('@tiptap/react');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { Chart } = await import('../../../../components/docs/extensions/chart');
 const { PositionedFigures } = await import('../../../../components/docs/extensions/positioned-figure');
-const { commentAnchorText, nodeCommentCardId } = await import('../../../../components/docs/extensions/comment-mark');
+const { CommentMark, commentAnchorText, nodeCommentCardId, updateCommentDecorations } = await import(
+    '../../../../components/docs/extensions/comment-mark'
+);
 const { sampleChartParts } = await import('../../../fixtures/chart-parts');
 
 let unmount = async () => {};
@@ -27,6 +29,7 @@ async function mount({ attrs = {}, editable = true }: { attrs?: object; editable
         editable,
         extensions: [
             ...getDocExtensions({ exclude: ['chart', 'comment'] }),
+            CommentMark,
             Chart.configure({ onEditData: () => edits.push(editor.state.selection.from) }),
             PositionedFigures,
         ],
@@ -150,4 +153,12 @@ test('a chart holds its comment card as an attribute, and a comment on it alone 
     expect(nodeCommentCardId(node)).toBe('card-1');
     expect(commentAnchorText(editor.state.doc, 2, 3)).toBe('Chart');
     expect(box.querySelector('button[aria-label="Open comment"]')).not.toBeNull();
+});
+
+// The card's color reaches the view as a decoration alone, with the node unchanged.
+test("a commented chart's mark takes its card's color when the color arrives", async () => {
+    const { editor, box } = await mount({ attrs: { commentCardId: 'card-1' } });
+    await act(async () => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']])));
+    const mark = box.querySelector<HTMLElement>('button[aria-label="Open comment"] span');
+    expect(mark?.style.borderTop).toContain('#123456');
 });
