@@ -29,9 +29,7 @@ env:
 jobs:
   # Only main and a v* tag publish, whatever started the run. The launcher reads the version from the image label, the
   # API from package.json: on a tag they must agree. The gate finds a breaking change only under the tag's own section
-  # of CHANGELOG.md: one still under [Unreleased] would publish as a release that breaks nothing. A tag whose release
-  # migrates a container's database since the previous release tag needs a (full backup) line in CHANGELOG.md. So does
-  # a push to main that migrates one since the release it runs on, under [Unreleased], which the main channel reads.
+  # of CHANGELOG.md: one still under [Unreleased] would publish as a release that breaks nothing.
   meta:
     runs-on: ubuntu-26.04
     timeout-minutes: 10
@@ -43,10 +41,7 @@ jobs:
       built-at: ${{ steps.meta.outputs.built-at }}
       bun-version: ${{ steps.meta.outputs.bun-version }}
     steps:
-      # Every tag, for the previous release's db-config.ts files.
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
 
       - id: meta
         run: |
@@ -80,17 +75,6 @@ jobs:
             echo "built-at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "bun-version=$(cat .bun-version)"
           } >>"$GITHUB_OUTPUT"
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version-file: .bun-version
-
-      - run: bun install --frozen-lockfile
-
-      - run: bun apps/api/src/scripts/check-container-db-marker.ts "$VERSION" ${CHANNEL:+--main}
-        env:
-          VERSION: ${{ steps.meta.outputs.version }}
-          CHANNEL: ${{ steps.meta.outputs.channel }}
 
   # Each platform builds on a runner of its own architecture, without QEMU.
   publish:

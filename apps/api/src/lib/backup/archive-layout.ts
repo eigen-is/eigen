@@ -33,16 +33,8 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
 // files are Eigen's own.
 export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
 
-// The home's mail, which a Light archive leaves where it is.
+// The home's mail, by its path from the home root.
 export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
-
-// The folders a Light archive leaves where they are, by their path from the home root: the Maildir, and every folder
-// inside a mount (its files, thumbnails and staging), so of a mount only its metadata.db goes.
-const LIGHT_SKIPPED = new RegExp(`^(?:${MAILDIR_ROOT}|${PATHS.DRIVE.ROOT}/[^/]+/[^/]+)$`);
-
-export function isLightSkipped(rel: string): boolean {
-    return LIGHT_SKIPPED.test(rel);
-}
 
 // The columns every reader of an archived paths table wants, spelled once: readMountPathRows derives
 // its SELECT list from their names, and the row type it hands back is this object's keys.
@@ -57,7 +49,7 @@ const MOUNT_PATH_COLUMNS = {
     hash: paths.hash,
 };
 
-type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
+export type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
 
 // The databases a mount owns inside an archive: a container's data.db/comments.db and the versions/
 // snapshots of one, each with the container type behind it.
@@ -80,9 +72,8 @@ const CONTAINER_DATA_DB = 'data.db';
 const CONTAINER_COMMENTS_DB = 'comments.db';
 const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
-// Every schema a container's databases carry, which a Light backup leaves out. A release that migrates one is marked
-// (full backup) in the changelog, and the release check on a version tag holds it to that.
-export const CONTAINER_DB_CONFIGS = {
+// Every schema a container's databases carry.
+const CONTAINER_DB_CONFIGS = {
     collab: COLLAB_DB_CONFIG,
     chat: CHAT_ROOM_DB_CONFIG,
     comments: COMMENT_INDEX_DB_CONFIG,
@@ -101,7 +92,7 @@ export function readMountPathRows(db: Database): MountPathRow[] {
 // Deriving it from metadata.db instead of the mount's own keys is what makes the archive
 // storage-independent: local-key and s3 mounts store flat keys, and restore re-derives whichever
 // shape the target mount needs.
-export function rowArchivePath(row: MountPathRow, byId: Map<string, MountPathRow>): string {
+export function rowArchivePath(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): string {
     const segment = (r: MountPathRow) => (r.trashedFrom ? trashStorageKey(r.id, r.name) : r.name);
     const segments = [segment(row)];
     for (const parent of ancestors(row, byId)) {
@@ -120,7 +111,7 @@ export function flatStorageKey(row: Pick<MountPathRow, 'id' | 'file'>): string {
 
 // Mirrors Mount.findStorageKey, resolved from the tree already held rather than one recursive-CTE
 // query per file. Restore puts every file back at the key the restored mount looks for it under.
-export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>, isPathBased: boolean): string {
+export function storageKeyOf(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>, isPathBased: boolean): string {
     if (!isPathBased) return flatStorageKey(row);
     const segments = row.file ? [row.file] : [];
     for (const parent of ancestors(row, byId)) {
@@ -133,7 +124,7 @@ export function storageKeyOf(row: MountPathRow, byId: Map<string, MountPathRow>,
 // The databases the mount itself manages: a container's data.db/comments.db, and the versions/
 // snapshots of one. Returns the container to lock while copying, or null for anything else: a
 // user's own upload that happens to be SQLite must round-trip byte-identical.
-export function managedDbContainer(row: MountPathRow, byId: Map<string, MountPathRow>): MountPathRow | null {
+export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): MountPathRow | null {
     const parent = row.parentId ? byId.get(row.parentId) : undefined;
     if (!parent) return null;
     if (parent.name === VERSIONS_FOLDER_NAME) {
@@ -143,9 +134,35 @@ export function managedDbContainer(row: MountPathRow, byId: Map<string, MountPat
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
 }
 
+// The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
+// an archive, with what is inside them, and verify refuses an archive with one.
+export function unreachableRows(rows: readonly MountPathRow[]): { orphaned: MountPathRow[]; unusable: MountPathRow[] } {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const orphaned: MountPathRow[] = [];
+    const unusable: MountPathRow[] = [];
+    for (const row of rows) {
+        if (unusableParts(row).length > 0) unusable.push(row);
+        else if (brokenChain(row, byId) !== null) orphaned.push(row);
+    }
+    return { orphaned, unusable };
+}
+
+// An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
+// archive whole, and so does a tree that does not end at the root.
+export function checkArchivedPathRows(rows: readonly MountPathRow[]): string[] {
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const failures: string[] = [];
+    for (const row of rows) {
+        failures.push(...unusableParts(row));
+        const broken = brokenChain(row, byId);
+        if (broken) failures.push(`path row ${row.id} ${broken}`);
+    }
+    return failures;
+}
+
 // Where a row's parent chain ends when it does not end at a root row: at a parent the table does not hold, or in a
 // cycle, where `ancestors` stops in silence. Null for a row that reaches the root.
-function brokenChain(row: MountPathRow, byId: Map<string, MountPathRow>): string | null {
+function brokenChain(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): string | null {
     let top = row;
     for (const parent of ancestors(row, byId)) top = parent;
     if (top.parentId === null) return null;
@@ -169,36 +186,10 @@ function unusableParts(row: MountPathRow): string[] {
     return failures;
 }
 
-// The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
-// an archive, with what is inside them, and verify refuses an archive with one.
-export function unreachableRows(rows: MountPathRow[]): { orphaned: MountPathRow[]; unusable: MountPathRow[] } {
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const orphaned: MountPathRow[] = [];
-    const unusable: MountPathRow[] = [];
-    for (const row of rows) {
-        if (unusableParts(row).length > 0) unusable.push(row);
-        else if (brokenChain(row, byId) !== null) orphaned.push(row);
-    }
-    return { orphaned, unusable };
-}
-
-// An archived paths table arrived inside a file an admin uploaded, so a row no path can be built for refuses the
-// archive whole, and so does a tree that does not end at the root.
-export function checkArchivedPathRows(rows: MountPathRow[]): string[] {
-    const byId = new Map(rows.map((row) => [row.id, row]));
-    const failures: string[] = [];
-    for (const row of rows) {
-        failures.push(...unusableParts(row));
-        const broken = brokenChain(row, byId);
-        if (broken) failures.push(`path row ${row.id} ${broken}`);
-    }
-    return failures;
-}
-
 // The same rule, read back from an archived metadata.db: which of a mount's archived files are
 // Eigen's own databases. Verify needs it to know what it may open: a user's own SQLite upload is
 // stored byte-identical, journal header and all, and opening it is not verify's business.
-export function listManagedDatabases(rows: MountPathRow[]): ManagedArchiveDatabase[] {
+export function listManagedDatabases(rows: readonly MountPathRow[]): ManagedArchiveDatabase[] {
     const byId = new Map(rows.map((row) => [row.id, row]));
     const found: ManagedArchiveDatabase[] = [];
     for (const row of rows) {
@@ -228,7 +219,7 @@ function configOf(name: string, containerType: DrivePathType): DatabaseConfig<Sc
 
 // Ancestors of `row`, nearest first. Guarded against a corrupt parentId cycle, which would
 // otherwise spin forever on a table the backup does not get to trust.
-function* ancestors(row: MountPathRow, byId: Map<string, MountPathRow>): Generator<MountPathRow> {
+function* ancestors(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): Generator<MountPathRow> {
     const seen = new Set<string>([row.id]);
     let current = row.parentId ? byId.get(row.parentId) : undefined;
     while (current && !seen.has(current.id)) {

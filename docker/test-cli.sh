@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
-# commands against it: status, the control socket, the setup link, reset-password, full and light backups on the running
-# API and restores of them with their refusals and an interrupt, stop, and what status, backup and reset-password say
-# with Eigen stopped. The main install is edge,mail as uid 1001 in a folder whose name has capitals and a space; a
-# second one is edge only, as root.
+# commands against it: status, the control socket, the setup link, reset-password, full backups on the running API and
+# restores of them with their refusals and an interrupt, stop, and what status, backup and reset-password say
+# with Eigen stopped, and that another user of the host lists no backups/ and reads no backup's record. The main
+# install is edge,mail as uid 1001 in a folder whose name has capitals and a space; a second one is edge only, as root.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -17,9 +17,22 @@ OLD_PASSWORD="probe-old-$$"
 NEW_PASSWORD="probe-new-$$"
 OPERATOR=1001:1001
 
-# check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install.
+# A user of the host who is neither the API's, nor root, nor the operator, nor in the operator's group.
+STRANGER=1002:1002
+HOST_OS=$(docker info --format '{{.OperatingSystem}}')
+
+# as_user <uid:gid> <command…>: the command as that user, in a container that sees the scratch folder. Through sh, as
+# the image's entrypoint hands a first word that is a docker command to docker.
+as_user() {
+    local user="$1"
+    shift
+    docker run --rm --user "$user" -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c '"$@"' sh "$@"
+}
+
+# check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install. backups/ is the
+# API's and the operator's group's, with setgid, or as setup made it on Docker Desktop, where ./eigen leaves it.
 check_install() {
-    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts data_stat backups_stat
+    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts data_stat backups_stat want
     probe "/eigen/health" "$base/eigen/health" 200 "OK"
     probe "/ (landing)" "$base/" 200
     probe "/admin/" "$base/admin/" 200 '"/admin/assets/'
@@ -38,10 +51,20 @@ check_install() {
     check_env "$operator" 'after setup'
     data_stat=$(owner_mode "$INSTALL/data")
     backups_stat=$(owner_mode "$INSTALL/backups")
-    case "$data_stat $backups_stat" in
-        "1000:1000 "*" 1000:1000 "*) ok "data/ and backups/ are 1000:1000" ;;
-        *) fail "data/ is '$data_stat' and backups/ is '$backups_stat', expected 1000:1000" ;;
+    want="1000:${operator#*:} 2750"
+    if [ "$HOST_OS" = 'Docker Desktop' ]; then want="1000:1000 ${backups_stat##* }"; fi
+    case "$data_stat" in
+        "1000:1000 "*) ok "data/ is 1000:1000" ;;
+        *) fail "data/ is '$data_stat', expected 1000:1000" ;;
     esac
+    if [ "$backups_stat" = "$want" ]; then ok "backups/ is $want"; else fail "backups/ is '$backups_stat', expected '$want'"; fi
+    if [ "$HOST_OS" = 'Docker Desktop' ]; then
+        skip "another user of the host lists backups/: Docker Desktop shows every file as the container user's"
+    elif as_user "$STRANGER" ls "$INSTALL" >/dev/null && ! as_user "$STRANGER" ls "$INSTALL/backups" >/dev/null 2>&1; then
+        ok "another user of the host reaches the install folder and cannot list backups/"
+    else
+        fail "uid ${STRANGER%%:*} lists backups/, or cannot reach the install folder"
+    fi
     mounts=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" |
         xargs docker inspect --format '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' || true)
     if printf '%s\n' "$mounts" | grep -q 'docker.sock'; then
@@ -51,8 +74,12 @@ check_install() {
     fi
 }
 
-# The distinct owners under data/.
-data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '; }
+# The distinct owners under data/, seen from a fresh box, as owner_mode sees them: a box that kept the folder mounted
+# sees a file another uid wrote without a chown as root's on Docker Desktop.
+data_owners() {
+    scratch_box
+    scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '
+}
 
 # tab <kept> <edit>: collab_tab on $COLLAB_DOC through Caddy.
 tab() { collab_tab caddy wss://localhost "$COLLAB_DOC" "$@"; }
@@ -280,11 +307,21 @@ case $ARCHIVE in
     server-manual-full-*.tar) ok "it is a manual Full archive" ;;
     *) fail "the archive is named '$ARCHIVE'" ;;
 esac
-eigen backup --light --s3
-if [ "$CODE" = 2 ] && says 'A light backup holds no files, so it takes no --s3.'; then
-    ok "backup --light --s3 is refused with its usage (exit 2)"
+# The record names every home, so like the archive it is the API's user's alone: ./eigen asks the API what runs.
+if [ "$HOST_OS" = 'Docker Desktop' ]; then
+    skip "who reads the record of $ARCHIVE: Docker Desktop shows every file as the container user's"
+elif as_user "$OPERATOR" ls "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1 &&
+    ! as_user "$OPERATOR" cat "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1 &&
+    ! as_user "$STRANGER" cat "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1; then
+    ok "the operator lists the record of $ARCHIVE and reads it no more than another user of the host"
 else
-    fail "backup --light --s3: exit $CODE"
+    fail "the record of $ARCHIVE: $(owner_mode "$INSTALL/backups/$ARCHIVE.json"), the operator cannot list it or someone reads it"
+fi
+eigen backup --light
+if [ "$CODE" = 2 ] && says 'Unknown argument "--light".'; then
+    ok "backup --light, a level that is gone, is refused with its usage (exit 2)"
+else
+    fail "backup --light: exit $CODE"
 fi
 eigen status
 if says "Backup  *$ARCHIVE, "; then
@@ -314,7 +351,8 @@ else
     fail "restore answered no: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen restore --help
-if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <archive> \[--yes\] \[--s3-from-archive\]' && ! says '--stage'; then
+if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <archive> \[--in <time> \[message\]\] \[--yes\] \[--s3-from-archive\]' &&
+    ! says '--stage'; then
     ok "restore --help prints its usage, without the stage and swap the launcher runs"
 else
     fail "restore --help: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
@@ -445,42 +483,21 @@ fi
 scratch_run sh -c 'rm "$1"*' sh "$INSTALL/backups/$BIG"
 
 ##############################################################################
-header "./eigen backup --light, and a light restore"
+header "./eigen restore refuses a Light backup"
 ##############################################################################
-eigen backup --light
-show
-LIGHT=$(saved_archive)
-case "$CODE $LIGHT" in
-    "0 server-manual-light-"*.tar) ok "./eigen backup --light saved backups/$LIGHT" ;;
-    *) fail "./eigen backup --light: exit $CODE, '$LIGHT'" ;;
-esac
-full_size=$(scratch_run stat -c %s "$INSTALL/backups/$ARCHIVE")
-light_size=$(scratch_run stat -c %s "$INSTALL/backups/$LIGHT")
-log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v f="$full_size" 'BEGIN { printf "%.1f%%", 100 * l / f }') of the full one"
-
-# What is on disk is the files, what the listing shows is the drive's database.
-files() {
-    { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
-        grep -v -e '-wal$' -e '-shm$' || true
-}
-before=$(files)
-api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light backup"}' >/dev/null
+# A launcher of 0.4.1 or before could make one. It is refused by its name, before anything is read or stopped.
+LIGHT=server-manual-light-20260101-000000.tar
+scratch_run cp -p "$INSTALL/backups/$ARCHIVE" "$INSTALL/backups/$LIGHT"
 aside=$(aside_count)
 eigen restore "$LIGHT" --yes
 show
-listing=$(api GET "$FOLDER/$root_id")
-if [ "$CODE" = 0 ] && stack_up && ! printf '%s' "$listing" | grep -q '"Made after the light backup"'; then
-    ok "a light restore puts the databases back: the document made since is out of the drive"
+if [ "$CODE" = 1 ] && says "$LIGHT is a Light backup, which this version of Eigen no longer restores." && stack_up &&
+    [ "$(aside_count)" = "$aside" ]; then
+    ok "./eigen restore refuses a Light backup by its name, and Eigen runs on with nothing kept aside"
 else
-    fail "the light restore: exit $CODE, listing $listing"
+    fail "./eigen restore of a Light backup: exit $CODE, kept aside $(aside_count), was $aside"
 fi
-# Names hold spaces, so they compare line by line.
-lost=$(printf '%s\n' "$before" | grep -vxF -e "$(files)" || true)
-if [ -z "$lost" ] && [ "$(aside_count)" = $((aside + 1)) ]; then
-    ok "and leaves the files on disk as they are, with what it replaced kept aside"
-else
-    fail "files after the light restore: lost '$lost'; kept aside $(aside_count), was $aside"
-fi
+scratch_run rm "$INSTALL/backups/$LIGHT"
 
 ##############################################################################
 header "./eigen stop, and with Eigen stopped"
@@ -488,10 +505,12 @@ header "./eigen stop, and with Eigen stopped"
 eigen stop
 show
 running=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT")
-if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ]; then
-    ok "./eigen stop stops every container of the project"
+# The API of this build answers status --running, so the stop does not go on blind.
+if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ] &&
+    ! says 'did not say whether a server backup runs'; then
+    ok "./eigen stop asks the API whether a server backup runs, and stops every container of the project"
 else
-    fail "./eigen stop: exit $CODE, still running: $running"
+    fail "./eigen stop: exit $CODE, still running: $running, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen status
 show
@@ -500,7 +519,7 @@ if [ "$CODE" = 1 ] && says '■  Eigen is not running.' && says '└  Run ./eige
 else
     fail "status with Eigen stopped: exit $CODE"
 fi
-if says '■  eigen-api  *exited' && says "Backup  *$LIGHT, Light, "; then
+if says '■  eigen-api  *exited' && says "Backup  *$ARCHIVE, Full, "; then
     ok "status still lists the services, and the newest backup from what backups/ holds"
 else
     fail "status does not list eigen-api as exited, or the newest backup"

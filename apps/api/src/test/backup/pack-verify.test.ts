@@ -21,17 +21,19 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import {
     copyArchiveMember,
+    countPackedFolders,
     createServerArchiveWriter,
+    declaredUnpackBytes,
     extractArtifact,
     hashArchiveMembers,
     packFolder,
     readArchiveMember,
     readArtifactManifest,
-    readSidecar,
     readUnpackedHome,
-    writeSidecar,
+    serializeManifest,
+    unpackBound,
 } from '../../lib/backup/archive';
-import { listArtifacts } from '../../lib/backup/artifacts';
+import { listArtifacts, readSidecar, writeSidecar } from '../../lib/backup/artifacts';
 import {
     ARCHIVE_MANIFEST_FILE,
     buildArtifactName,
@@ -54,6 +56,7 @@ import { getHome } from '../../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
+    countLoopTurns,
     createTeam,
     createTestUser,
     drivePost,
@@ -62,6 +65,7 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
+import { unpackWhole } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -103,6 +107,20 @@ async function sha256Of(filePath: string): Promise<string> {
     const hasher = new Bun.CryptoHasher('sha256');
     hasher.update(new Uint8Array(await Bun.file(filePath).arrayBuffer()));
     return hasher.digest('hex');
+}
+
+// Every header of a plain tar, pax headers included, read off the bytes rather than through the reader under test.
+function tarHeaderModes(tar: Uint8Array): { name: string; typeflag: string; mode: number }[] {
+    const headers: { name: string; typeflag: string; mode: number }[] = [];
+    let at = 0;
+    while (at + 512 <= tar.length && tar.subarray(at, at + 512).some((byte) => byte !== 0)) {
+        const field = (offset: number, length: number) =>
+            new TextDecoder().decode(tar.subarray(at + offset, at + offset + length)).split('\0')[0];
+        const size = Number.parseInt(field(124, 12), 8);
+        headers.push({ name: field(0, 100), typeflag: field(156, 1), mode: Number.parseInt(field(100, 8), 8) });
+        at += 512 + Math.ceil(size / 512) * 512;
+    }
+    return headers;
 }
 
 // Stage 3 samples the ten largest data.db files plus ten more; padding a doctored one past every
@@ -236,7 +254,7 @@ describe('Backup pack and verify', () => {
 
     async function extractFresh(prefix: string): Promise<string> {
         const dir = mkdtempSync(join(TEST_DATA_DIR, prefix));
-        await extractArtifact(artifact, dir);
+        await unpackWhole(artifact, dir);
         return dir;
     }
 
@@ -251,6 +269,29 @@ describe('Backup pack and verify', () => {
             expect(record.failures).toEqual([]);
             expect(record.status).toBe('verified');
             expect(record.checkedAt).toBeTruthy();
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        "a home archive's entries and a fresh extract of it are for the API's user alone",
+        async () => {
+            const headers = tarHeaderModes(Bun.zstdDecompressSync(await Bun.file(artifact).bytes()));
+            expect(headers.some((header) => header.typeflag === 'x')).toBe(true);
+            expect(headers.some((header) => header.name === `${folderName}/${EMPTY_DIR}/`)).toBe(true);
+            const privateMode = (typeflag: string) => (typeflag === '5' ? 0o700 : 0o600);
+            expect(headers.filter((header) => header.mode !== privateMode(header.typeflag))).toEqual([]);
+
+            const root = join(await extractFresh('extract-modes-'), folderName);
+            const modes = ['', ...new Bun.Glob('**/*').scanSync({ cwd: root, onlyFiles: false, dot: true })].map(
+                (rel) => {
+                    const stat = fs.statSync(join(root, rel));
+                    return { rel, mode: stat.mode & 0o7777, expected: stat.isDirectory() ? 0o700 : 0o600 };
+                },
+            );
+            expect(modes.some(({ rel }) => rel === EMPTY_DIR)).toBe(true);
+            expect(modes.some(({ rel }) => rel === docDataDb)).toBe(true);
+            expect(modes.filter(({ mode, expected }) => mode !== expected)).toEqual([]);
         },
         PACK_TIMEOUT_MS,
     );
@@ -479,7 +520,11 @@ describe('Backup pack and verify', () => {
         mkdirSync(join(dir, 'home-x', mailbox), { recursive: true });
         writeFileSync(join(dir, 'home-x', mailbox, '1.eml'), 'mail');
         await packFolder(join(dir, 'home-x'), join(dir, 'x.tar.zst'));
-        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'));
+        // A bare folder, with no manifest to bound its unpack by.
+        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'), {
+            maxBytes: Number.POSITIVE_INFINITY,
+            chargeFolders: true,
+        });
         expect(readFileSync(join(dir, 'out/home-x', mailbox, '1.eml'), 'utf8')).toBe('mail');
         rmSync(dir, { recursive: true, force: true });
     });
@@ -762,7 +807,7 @@ describe('Whole-server archive', () => {
                 const name = basename(member.name);
                 expect(parseBackupArtifactName(name)).toEqual({ ownerId: home.ownerId, at });
                 const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'member-extract-'));
-                await extractArtifact(member, unpackDir);
+                await unpackWhole(member, unpackDir);
                 const { folder, manifest: inner } = readUnpackedHome(unpackDir, home.ownerId, name);
                 expect(inner.ownerId).toBe(home.ownerId);
                 const record = await verifyFolder(folder);
@@ -777,7 +822,7 @@ describe('Whole-server archive', () => {
         async () => {
             const members = await hashArchiveMembers(archivePath);
             const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'server-extract-'));
-            await extractArtifact(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
+            await unpackWhole(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
             const folder = join(unpackDir, buildServerFolderName(at));
             expect(existsSync(join(folder, 'server', SERVER_DATABASES.users))).toBe(true);
             const record = await verifyFolder(folder);
@@ -1004,5 +1049,144 @@ describe('Archive writer and reader', () => {
         }
         const record = (await readServerArchive(archivePath)).verify;
         expect(record.status).toBe('failed');
+    });
+});
+
+// What an unpack is allowed to write is what the manifest declares, counted the way the unpack counts it: the bytes of
+// every entry, the manifest's own, and an allowance for every file and every folder it counts, which take the disk's
+// blocks with no bytes of their own.
+describe('The unpack bound', () => {
+    const FILES = 2000;
+    let dir: string;
+
+    beforeAll(() => {
+        dir = mkdtempSync(join(TEST_DATA_DIR, 'unpack-bound-'));
+    });
+
+    // A home of many empty files, so its manifest outweighs them, and `emptyFolders` empty folders. `counted` is how
+    // many of those its manifest counts, and with null it counts no folders, as an older build's did.
+    async function packHome(
+        name: string,
+        { emptyFolders, counted = emptyFolders }: { emptyFolders: number; counted?: number | null },
+    ): Promise<{ artifact: string; manifest: BackupManifest }> {
+        const folder = join(dir, name, buildHomeFolderName('unpackbound'));
+        const entries = Array.from({ length: FILES }, (_, index) => ({
+            path: `home/notes/${index % 10}/note-${index}.txt`,
+            bytes: 0,
+            sha256: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+        }));
+        for (const entry of entries) {
+            mkdirSync(join(folder, entry.path, '..'), { recursive: true });
+            writeFileSync(join(folder, entry.path), '');
+        }
+        const makeEmptyFolders = (from: number, to: number) => {
+            for (let index = from; index < to; index++)
+                mkdirSync(join(folder, 'home', 'empty', `${index}`), { recursive: true });
+        };
+        makeEmptyFolders(0, counted ?? 0);
+        const dirs = countPackedFolders(folder);
+        makeEmptyFolders(counted ?? 0, emptyFolders);
+        const manifest: BackupManifest = {
+            formatVersion: 1,
+            kind: 'user',
+            ownerId: 'unpackbound',
+            name: 'Unpack bound',
+            createdAt: new Date().toISOString(),
+            appVersion: 'test',
+            server: { domain: 'test.eigen.is', orgId: 'org' },
+            counts: { databases: 0, files: FILES, bytes: 0, ...(counted !== null && { dirs }) },
+            level: 'full-s3',
+            mounts: [],
+            entries,
+        };
+        writeFileSync(join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
+        const artifact = join(dir, `${name}.tar.zst`);
+        await packFolder(folder, artifact);
+        return { artifact, manifest };
+    }
+
+    const exactly = (maxBytes: number) => ({ maxBytes, chargeFolders: true });
+
+    test(
+        'an archive that holds what its manifest lists unpacks within it, the manifest itself and every folder counted',
+        async () => {
+            const { artifact, manifest } = await packHome('exact', { emptyFolders: 50 });
+            // The manifest alone weighs more than the files it lists.
+            expect(Buffer.byteLength(serializeManifest(manifest))).toBeGreaterThan(100 * FILES);
+            await extractArtifact(artifact, join(dir, 'exact-out'), exactly(declaredUnpackBytes(manifest)));
+            await expect(
+                extractArtifact(artifact, join(dir, 'exact-short'), exactly(declaredUnpackBytes(manifest) - 1)),
+            ).rejects.toThrow(/more than its manifest declares/);
+            expect(existsSync(join(dir, 'exact-short'))).toBe(false);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        'an archive with more folders than its manifest counts is refused, though they hold no bytes',
+        async () => {
+            const { artifact, manifest } = await packHome('folders', { emptyFolders: 50, counted: 10 });
+            expect(unpackBound(manifest).chargeFolders).toBe(true);
+            await expect(
+                extractArtifact(artifact, join(dir, 'folders-out'), exactly(declaredUnpackBytes(manifest))),
+            ).rejects.toThrow(/more than its manifest declares/);
+            expect(existsSync(join(dir, 'folders-out'))).toBe(false);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    // An older build counted no folders. Its archive's unpack charges none, as before folders counted at all.
+    test(
+        'an archive whose manifest counts no folders unpacks without charging them',
+        async () => {
+            const { artifact, manifest } = await packHome('uncounted', { emptyFolders: 50, counted: null });
+            const { chargeFolders } = unpackBound(manifest);
+            expect(chargeFolders).toBe(false);
+            await extractArtifact(artifact, join(dir, 'uncounted-out'), {
+                maxBytes: declaredUnpackBytes(manifest),
+                chargeFolders,
+            });
+            expect(existsSync(join(dir, 'uncounted-out', buildHomeFolderName('unpackbound'), 'home/empty/49'))).toBe(
+                true,
+            );
+        },
+        PACK_TIMEOUT_MS,
+    );
+});
+
+// A home can hold tens of thousands of databases, and each quick_check blocks the thread. A restore verifies in the API,
+// so other requests run between every few databases.
+describe('verifyFolder', () => {
+    test('lets other work run while it checks the databases', async () => {
+        const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-yield-'));
+        const manifest: BackupManifest = {
+            formatVersion: 1,
+            kind: 'user',
+            ownerId: 'verifyyieldAAAAAAAAAAAAAAAAAAAAA',
+            name: 'yield',
+            createdAt: new Date().toISOString(),
+            appVersion: 'test',
+            server: { domain: 'test', orgId: 'test' },
+            counts: { databases: 0, files: 0, bytes: 0 },
+            mounts: [],
+            entries: [],
+        };
+        writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest));
+        for (let index = 0; index < 120; index++) {
+            mkdirSync(join(folder, 'home', 'mounts', `m${index}`), { recursive: true });
+            new Database(join(folder, 'home', 'mounts', `m${index}`, 'metadata.db')).close();
+        }
+        const turns = countLoopTurns();
+        const turnsAt: number[] = [];
+        try {
+            await verifyFolder(folder, (step) => {
+                if (step === 'verify databases') turnsAt.push(turns.read());
+            });
+        } finally {
+            turns.stop();
+            rmSync(folder, { recursive: true, force: true });
+        }
+        expect(turnsAt).toHaveLength(120);
+        expect(turnsAt.at(-1)).toBeGreaterThan(turnsAt[0]);
     });
 });

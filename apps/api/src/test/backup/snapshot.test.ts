@@ -710,18 +710,15 @@ describe('Backup artifact names', () => {
 });
 
 describe('Backup treeBytes', () => {
-    test('a folder renamed away between its listing and its walk counts nothing', async () => {
+    test('counts the files of every folder, and a folder that is gone counts nothing', async () => {
         const root = mkdtempSync(join(TEST_DATA_DIR, 'tree-bytes-'));
         try {
-            for (const dir of ['kept', 'gone']) {
+            for (const dir of ['kept', 'kept/inner']) {
                 mkdirSync(join(root, dir));
                 writeFileSync(join(root, dir, 'file'), 'four');
             }
-            const bytes = await treeBytes(root, (rel) => {
-                if (rel === 'gone') rmSync(join(root, rel), { recursive: true });
-                return false;
-            });
-            expect(bytes).toBe(4);
+            expect(await treeBytes(root)).toBe(8);
+            expect(await treeBytes(join(root, 'gone'))).toBe(0);
         } finally {
             rmSync(root, { recursive: true, force: true });
         }

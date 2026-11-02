@@ -1,16 +1,20 @@
 // Holds the signed-in tab's one event stream from its user's own Home, and hands every event to
 // handleSSEvent, which refreshes the queries the event names. The app's provider stack mounts it once.
-// It reconnects with a growing delay after the stream closes on an HTTP error.
+// It reconnects with a growing delay after the stream closes on an HTTP error, and tells the restart
+// notice's store whether the stream is down.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@workspace/lib/auth';
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { useEffect } from 'react';
 import { getSSEEventsUrl } from '../../api';
+import { readRestartNotice, setStreamDown } from '../restart-notice';
 import { handleSSEvent } from '../sse-handlers';
 
 const FIRST_RETRY_DELAY_MS = 1000;
 const MAX_RETRY_DELAY_MS = 30_000;
+// A server that announced its restart comes back within minutes, so the tab looks for it more often.
+const MAX_RETRY_DELAY_MS_AFTER_NOTICE = 5000;
 
 export function useSSE(): void {
     const { isAuthenticated, user } = useAuth();
@@ -34,6 +38,7 @@ export function useSSE(): void {
 
             source.onopen = () => {
                 retryDelay = FIRST_RETRY_DELAY_MS;
+                setStreamDown(false);
             };
 
             source.onmessage = (message) => {
@@ -47,12 +52,14 @@ export function useSSE(): void {
 
             source.onerror = () => {
                 if (stopped) return;
+                setStreamDown(true);
                 // EventSource reconnects by itself after a network error, but not after an HTTP error such as a 502.
                 if (source.readyState === EventSource.CLOSED) {
                     source.close();
                     const jitter = retryDelay * 0.2 * Math.random();
                     retryTimer = setTimeout(connect, retryDelay + jitter);
-                    retryDelay = Math.min(retryDelay * 2, MAX_RETRY_DELAY_MS);
+                    const maxDelay = readRestartNotice().notice ? MAX_RETRY_DELAY_MS_AFTER_NOTICE : MAX_RETRY_DELAY_MS;
+                    retryDelay = Math.min(retryDelay * 2, maxDelay);
                 }
             };
         };

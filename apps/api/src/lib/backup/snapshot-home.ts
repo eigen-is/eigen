@@ -1,13 +1,12 @@
 // Takes the snapshot of one home that goes into a backup: its files, each database in one committed state, the
-// share rows and the auth rows of its owner. The level decides what it takes, and a Light backup leaves out every
-// file body. captureBytes says beforehand how much a capture stages at most, for the room check. Every backup of a
-// home captures it through snapshotHome, such as a per-home backup or a home inside a server backup.
+// share rows and the auth rows of its owner. The level decides whether it takes an s3 mount's objects. captureBytes
+// says beforehand how much a capture stages at most, for the room check. Every backup of a home captures it through
+// snapshotHome, such as a per-home backup or a home inside a server backup.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupEntry, BackupLevel, BackupManifest, BackupProgress } from '@workspace/lib/types/backup';
-import type { MountConfig } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { BACKUP_FORMAT_VERSION } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
@@ -21,7 +20,8 @@ import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
-import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
+import { serializeManifest } from './archive';
+import { HOME_DATABASE_PATHS, HOME_DATABASES, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-rows';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { readHomeMounts } from './enumerate-homes';
@@ -47,10 +47,9 @@ import {
 } from './snapshot-mount';
 
 // What a capture of the home at `level` stages at most, read off its folder without opening the home. The
-// server backup's room check sizes every home with it before it starts. Full is every local byte. Light
-// walks no Maildir and of each mount only its metadata.db. Full + S3 adds each s3 mount's objects.
+// server backup's room check sizes every home with it before it starts. Full is every local byte. Full + S3 adds
+// each s3 mount's objects.
 export async function captureBytes(homeDir: string, level: BackupLevel): Promise<number> {
-    if (level === 'light') return treeBytes(homeDir, isLightSkipped);
     const local = await treeBytes(homeDir);
     if (level === 'full') return local;
     const s3Bytes = Object.entries(readHomeMounts(homeDir) ?? {})
@@ -108,54 +107,50 @@ export async function snapshotHome(
     const warnings: string[] = [];
 
     // One mount: its metadata.db, what the level takes of its files, and its summary. Full leaves an s3 mount's
-    // objects to its bucket's versioning and takes its staged uploads; Light reads no storage, so it gets no Mount.
-    const archiveMount = async (config: MountConfig, mount?: Mount): Promise<void> => {
-        const stagedOnly = level === 'full' && mount?.isRemote === true;
-        const metadataOnly = !mount || stagedOnly;
+    // objects to its bucket's versioning and takes its staged uploads.
+    const archiveMount = async (mount: Mount): Promise<void> => {
+        const stagedOnly = level === 'full' && mount.isRemote;
         if (stagedOnly) await flushOpenDocumentDbs(mount);
-        const relMetadata = metadataPathOf(config.id);
+        const relMetadata = metadataPathOf(mount.id);
         await stageDatabase(MOUNT_DB_CONFIG, relMetadata);
         // Before the walk, which reads its rows from the copy, so nothing below meets a row it cannot place. Kept
         // apart until the mount is whole: a disabled mount that fails later is skipped, warnings and all.
-        const mountWarnings = pruneUnreachableRows(config.id, stagedPath(relMetadata));
-        const mountEntries: BackupEntry[] = [];
-        if (mount) {
-            const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
-            const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
-            const data = stagedOnly
-                ? await snapshotMountStaging(mount, stagedPath(relMetadata), path.join(folder, relFiles), relFiles)
-                : await snapshotMountData(
-                      mount,
-                      stagedPath(relMetadata),
-                      path.join(folder, relFiles),
-                      relFiles,
-                      onProgress,
-                  );
-            const thumbs = await snapshotMountThumbs(
-                mount.thumbsDir,
-                path.join(folder, relThumbs),
-                relThumbs,
-                data.pathIds,
-            );
-            mountEntries.push(...data.entries, ...thumbs);
-            if (data.warning) mountWarnings.push(data.warning);
-            databases += data.databases;
-        }
+        const mountWarnings = pruneUnreachableRows(mount.id, stagedPath(relMetadata));
+        const relFiles = archiveMountPath(mount.id, stagedOnly ? PATHS.DRIVE.STAGING_DIR : PATHS.DRIVE.DATA_DIR);
+        const relThumbs = archiveMountPath(mount.id, PATHS.DRIVE.THUMBS_DIR);
+        const data = stagedOnly
+            ? await snapshotMountStaging(mount, stagedPath(relMetadata), path.join(folder, relFiles), relFiles)
+            : await snapshotMountData(
+                  mount,
+                  stagedPath(relMetadata),
+                  path.join(folder, relFiles),
+                  relFiles,
+                  onProgress,
+              );
+        const thumbs = await snapshotMountThumbs(
+            mount.thumbsDir,
+            path.join(folder, relThumbs),
+            relThumbs,
+            data.pathIds,
+        );
+        const mountEntries: BackupEntry[] = [...data.entries, ...thumbs];
+        if (data.warning) mountWarnings.push(data.warning);
+        databases += data.databases;
         await recordDatabase(relMetadata);
         entries.push(...mountEntries);
         warnings.push(...mountWarnings);
         mountSummaries.push({
-            id: config.id,
-            storageType: config.storageType,
+            id: mount.id,
+            storageType: mount.config.storageType,
             files: mountEntries.length,
             bytes: mountEntries.reduce((sum, entry) => sum + entry.bytes, 0),
-            ...(metadataOnly && { contents: 'metadata' }),
+            ...(stagedOnly && { contents: 'metadata' }),
         });
     };
 
     const total = mounts.length + unserved.length;
     for (const [index, mount] of mounts.entries()) {
-        await archiveMount(mount.config, level === 'light' ? undefined : mount);
+        await archiveMount(mount);
         onProgress?.('mounts', index + 1, total);
     }
 
@@ -172,13 +167,9 @@ export async function snapshotHome(
         try {
             // Through the same Mount as a served one, so the capture rules are spelled once; passive, since nothing
             // serves it, so nothing is created, purged or uploaded.
-            if (level === 'light') {
-                await archiveMount(config);
-            } else {
-                mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
-                await mount.init({ passive: true });
-                await archiveMount(config, mount);
-            }
+            mount = new Mount(ownerId, home.homeDir, config, home.getLocalDatabase.bind(home));
+            await mount.init({ passive: true });
+            await archiveMount(mount);
         } catch (error) {
             // An enabled mount that cannot open fails the backup, which would miss files the home serves. One turned
             // off is often unreachable for that reason: it is skipped with the reason.
@@ -197,7 +188,7 @@ export async function snapshotHome(
     }
 
     // The home outside its mounts and its databases.
-    const tree = listFileTree(home.homeDir, (rel) => isSkippedHomeDir(rel, level));
+    const tree = listFileTree(home.homeDir, isSkippedHomeDir);
     // A home database missing from HOME_DATABASES would be dropped from every archive in silence.
     const unlisted = tree.databases.find((rel) => !HOME_DATABASE_PATHS.has(rel));
     if (unlisted) throw new Error(`snapshotHome: unlisted home database ${unlisted} — add it to HOME_DATABASES`);
@@ -259,13 +250,13 @@ export async function snapshotHome(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: countEntries(entries, databases),
+        counts: countEntries(entries, databases, folder),
         level,
         mounts: mountSummaries,
         entries,
         ...(warnings.length > 0 && { warnings }),
     };
-    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
+    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
     onProgress?.('done', 1, 1);
     return manifest;
 }
@@ -273,10 +264,8 @@ export async function snapshotHome(
 // The folders the walk of the home leaves out. `mounts/` is walked from its paths tables instead, by
 // snapshotMountData. A mailbox's `tmp/` delivery spool holds only half-written deliveries. Both are matched on the
 // path from the home root, never on the folder name, because a deeper folder called `mounts` is somebody's own.
-function isSkippedHomeDir(rel: string, level: BackupLevel): boolean {
+function isSkippedHomeDir(rel: string): boolean {
     if (rel === PATHS.DRIVE.ROOT) return true;
-    // A whole-server restore of a Light archive keeps what it leaves out in place.
-    if (level === 'light' && isLightSkipped(rel)) return true;
     return path.basename(rel) === PATHS.MAIL.TMP && rel.startsWith(`${MAILDIR_ROOT}/`);
 }
 

@@ -1,6 +1,6 @@
 // Hands one event from the stream to every domain's handler, such as the drive's or the mail's. Each
-// handler picks the events of its own domain and invalidates the queries they name. useSSE calls this
-// for every event the stream sends.
+// handler picks the events of its own domain and invalidates the queries they name, or, for a restart
+// notice, keeps it for the banner. useSSE calls this for every event the stream sends.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { handleAdminSSEvent } from '@workspace/lib/admin';
@@ -12,6 +12,7 @@ import { handleHomeSSEvent } from '@workspace/lib/home';
 import { handleMailSSEvent } from '@workspace/lib/mail';
 import { handleNotificationSSEvent } from '@workspace/lib/notification';
 import type { SSEvent } from '@workspace/lib/types/sse';
+import { handleRestartNoticeSSEvent } from './restart-notice';
 
 export function handleSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): void {
     handleDriveSSEvent(event, queryClient, userId);
@@ -22,4 +23,5 @@ export function handleSSEvent(event: SSEvent, queryClient: QueryClient, userId: 
     handleNotificationSSEvent(event, queryClient, userId);
     handleAdminSSEvent(event, queryClient);
     handleHomeSSEvent(event);
+    handleRestartNoticeSSEvent(event);
 }

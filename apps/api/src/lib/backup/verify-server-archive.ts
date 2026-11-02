@@ -4,7 +4,7 @@
 
 import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { parseServerArchiveManifest } from '@workspace/lib/validation';
-import type { ArchiveMember, ArchiveMemberAt } from './archive';
+import type { ArchiveMemberLocation, HashedArchiveMember } from './archive';
 import { hashArchiveMembers, listArchiveMembers, readArchiveMember } from './archive';
 import { describeError } from './errors';
 import { ARCHIVE_MANIFEST_FILE } from './paths';
@@ -15,7 +15,7 @@ import { entryMismatch } from './verify';
 // got through before it failed.
 type ReadServerArchive = {
     verify: BackupVerifyRecord;
-    members: ArchiveMember[];
+    members: HashedArchiveMember[];
     manifest: ServerArchiveManifest | null;
 };
 
@@ -26,10 +26,10 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
     const checkedAt = new Date();
     const failed = (
         failures: string[],
-        members: ArchiveMember[] = [],
+        members: HashedArchiveMember[] = [],
         manifest: ServerArchiveManifest | null = null,
     ): ReadServerArchive => ({ verify: { status: 'failed', checkedAt, failures }, members, manifest });
-    let members: ArchiveMember[];
+    let members: HashedArchiveMember[];
     try {
         members = await hashArchiveMembers(archivePath);
     } catch (error) {
@@ -40,7 +40,7 @@ export async function readServerArchive(archivePath: string): Promise<ReadServer
     if (typeof manifest === 'string') return failed([manifest], members);
 
     // A reader takes one of two same-named members and the manifest cannot say which, so their bytes do not matter.
-    const present = new Map<string, ArchiveMember>();
+    const present = new Map<string, HashedArchiveMember>();
     const duplicates = new Set<string>();
     for (const member of members.slice(0, -1)) {
         if (present.has(member.name)) duplicates.add(member.name);
@@ -73,7 +73,7 @@ export async function readServerArchiveMember(
     archivePath: string,
     name: string,
 ): Promise<{ bytes: Uint8Array | null } | { failure: string }> {
-    let members: ArchiveMemberAt[];
+    let members: ArchiveMemberLocation[];
     try {
         members = await listArchiveMembers(archivePath);
     } catch (error) {
@@ -100,7 +100,7 @@ export async function readServerArchiveMember(
 }
 
 // The manifest a whole-server archive closes with, or why it has none.
-async function readClosingManifest(members: ArchiveMemberAt[]): Promise<ServerArchiveManifest | string> {
+async function readClosingManifest(members: ArchiveMemberLocation[]): Promise<ServerArchiveManifest | string> {
     const last = members.at(-1);
     if (last?.name !== ARCHIVE_MANIFEST_FILE) return `${ARCHIVE_MANIFEST_FILE} is not the last member`;
     let text: string;

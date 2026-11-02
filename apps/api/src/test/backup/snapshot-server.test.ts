@@ -9,7 +9,7 @@ import { appendInstallFiles, snapshotServer } from '../../lib/backup/snapshot-se
 import { verifyFolder } from '../../lib/backup/verify';
 import {
     getAvatarsDir,
-    getOrgDataPath,
+    getOrgHomePath,
     getServerDataPath,
     SERVER_DATABASES,
     SERVER_FILES,
@@ -38,9 +38,9 @@ describe('Backup snapshotServer', () => {
         // Opens waitlist.db, so all three databases are on disk.
         await listWaitlist();
         for (const name of STRAY_FILES) writeFileSync(getServerDataPath(name), 'stray');
-        mkdirSync(getOrgDataPath(orgId), { recursive: true });
-        writeFileSync(join(getOrgDataPath(orgId), ORG_PROBE), 'org file');
-        writeFileSync(join(getOrgDataPath(orgId), ORG_JOURNAL), 'journal');
+        mkdirSync(getOrgHomePath(orgId), { recursive: true });
+        writeFileSync(join(getOrgHomePath(orgId), ORG_PROBE), 'org file');
+        writeFileSync(join(getOrgHomePath(orgId), ORG_JOURNAL), 'journal');
         writeFileSync(join(getAvatarsDir(), AVATAR_PROBE), 'avatar');
 
         const target = mkdtempSync(join(TEST_DATA_DIR, 'server-snapshot-'));
@@ -50,8 +50,8 @@ describe('Backup snapshotServer', () => {
 
     afterAll(() => {
         for (const name of STRAY_FILES) rmSync(getServerDataPath(name), { force: true });
-        rmSync(join(getOrgDataPath(orgId), ORG_PROBE), { force: true });
-        rmSync(join(getOrgDataPath(orgId), ORG_JOURNAL), { force: true });
+        rmSync(join(getOrgHomePath(orgId), ORG_PROBE), { force: true });
+        rmSync(join(getOrgHomePath(orgId), ORG_JOURNAL), { force: true });
         rmSync(join(getAvatarsDir(), AVATAR_PROBE), { force: true });
     });
 
@@ -84,7 +84,7 @@ describe('Backup snapshotServer', () => {
     });
 
     test('refuses a database in the org folder: an org home holds none, and a file copy of a live one is torn', async () => {
-        const stray = join(getOrgDataPath(orgId), 'stray.db');
+        const stray = join(getOrgHomePath(orgId), 'stray.db');
         writeFileSync(stray, 'not a database copy');
         try {
             const target = mkdtempSync(join(TEST_DATA_DIR, 'server-org-db-'));

@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2097 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2111 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -242,7 +242,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (299)
+## Hooks (300)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -484,6 +484,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useTheme` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-theme.ts |
 | `useUpdateSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
+| `useRestartNotice` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-restart-notice.ts |
 | `useSSE` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-sse.ts |
 | `useAddTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useRemoveTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
@@ -546,7 +547,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (442)
+## Types (447)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -710,6 +711,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FileEventRecord` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FreeBusyBlock` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `HeldRestartNotice` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `HelpSearchDoc` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -741,6 +743,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `RestartNoticeState` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `RestartReason` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
@@ -768,6 +772,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventMail` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventNotificationChanged` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventNotificationCreated` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `SSEventRestartNotice` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventTypeName` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `TeamSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `UpdateCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -783,6 +788,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Fill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `FillPaint` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `BackupArtifact` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupAuthRows` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupEntry` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupJob` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupLevel` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
@@ -993,7 +999,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1140)
+## Utilities & constants (1148)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1701,6 +1707,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `RESTART_REASONS` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `sharedChainHead` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -1716,6 +1723,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `BACKUP_JOB_STATES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_KINDS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BACKUP_LEVELS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BACKUP_REASONS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `CHART_AXIS_KINDS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -1728,41 +1737,46 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isStackingChartType` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `LEGEND_POSITIONS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `toAttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
-| `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_ARTIFACT_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `BACKUP_FORMAT_VERSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `BACKUP_HOME_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `BACKUP_LEVELS` | `@workspace/lib/validation` | packages/lib/src/types/backup.ts |
-| `BACKUP_OWNER_ID` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `BACKUP_REASONS` | `@workspace/lib/validation` | packages/lib/src/types/backup.ts |
-| `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `BACKUP_HOME_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `BACKUP_OWNER_ID` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `BACKUP_STAMP_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `buildBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `canUploadServerArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `CONTROL_CHARS` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `EMAIL_FIND_REGEX` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
-| `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `isStringList` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
+| `LIGHT_SERVER_ARCHIVE` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
+| `MAX_RESTART_MESSAGE_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
+| `MAX_RESTART_WAIT_SECONDS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `MIN_PASSWORD_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `NO_CONTROL_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/text.ts |
 | `ON_DEMAND_BACKUP_REASONS` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `parseBackupArtifactName` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupArtifactName` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `parseBackupAuthRows` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseBackupManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseBackupShares` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseBackupSidecar` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `parseBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `parseHomeMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseJson` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `parseServerArchiveManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `parseServerArchiveName` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `parseServerArchiveNames` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseServerArchiveName` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `parseServerArchiveNames` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `parseServerArchiveSidecar` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `parseStringRecord` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseStringRecord` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
+| `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `RESTART_MESSAGE_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
+| `RESTART_NOTICE_EXPIRY_MS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
-| `SERVER_ARCHIVE_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
-| `SERVER_ARCHIVE_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `SERVER_ARCHIVE_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
+| `SERVER_ARCHIVE_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `validateACLEntries` | `@workspace/lib/validation` | packages/lib/src/validation/acl.ts |
 | `validateCommand` | `@workspace/lib/validation` | packages/lib/src/validation/command.ts |
 | `validateEmailAddress` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |

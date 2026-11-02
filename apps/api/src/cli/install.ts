@@ -1,5 +1,5 @@
 // The facts about an install folder that every CLI command shares: where the repo root is, the names of
-// .env.production, data/ and backups/, this build's version and channel, and the exit code of a question answered no. It also
+// .env.production, data/ and backups/, this build's version and channel, and the exit codes the launcher reads. It also
 // gives the files the CLI writes as root to the operator who owns the install.
 
 import { chownSync, statSync } from 'node:fs';
@@ -14,6 +14,9 @@ export const BACKUPS = 'backups';
 export const VERSION = pkg.version;
 // The exit code of a question the operator said no to, which the launcher ends as a plain exit; DECLINED in ./eigen.
 export const DECLINED = 3;
+// The exit code of restore --check-data when a database here fails its check or is newer than this build, which a
+// rollback answers by putting the update's backup back; CANNOT_OPEN in ./eigen. Any other failure exits 1.
+export const CANNOT_OPEN = 4;
 export const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-[\w.-]+)?$/;
 
 // The channel this image was built for, such as main, which an install that runs it follows. A release image has

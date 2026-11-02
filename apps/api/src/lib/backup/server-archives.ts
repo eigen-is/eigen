@@ -16,14 +16,16 @@ import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { alertOwner } from '../user/alert-owner';
-import { writeRecord } from './archive';
-import { listBackupJobs, runningJobOn } from './jobs';
+import { writeRecord } from './artifacts';
+import type { ServerJobKind } from './jobs';
+import { isServerJob, listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
 import type { RetentionCandidate } from './retention';
 import { pruneServerArchives } from './retention';
 
 const INTERRUPTED = 'interrupted by a restart';
 
+// For the API's user alone, like the archive: it names every home the archive holds.
 export function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
     return writeRecord(serverSidecarPath(archivePath), sidecar);
 }
@@ -80,21 +82,23 @@ export type ServerBackupStatus = {
     scheduledNotUploaded: ArchiveLine | null;
     // The newest scheduled archive or the newest archive, when it was backed up with warnings; `error` names the homes.
     warned: ArchiveLine | null;
-    newestGoodFullAt: string | null;
+    newestGoodAt: string | null;
+    // The server backup and the uploads that run now, from the job list: what ./eigen waits for before a stop.
+    running: { kind: ServerJobKind; archive: string }[];
 };
 
 export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     const archives = await listServerArchives();
     const [newest] = archives;
     const scheduled = archives.find((archive) => archive.reason === 'scheduled');
-    const goodFull = archives.find((archive) => archive.level !== 'light' && isGood(archive.record));
+    const good = archives.find((archive) => isGood(archive.record));
     const warned = [scheduled, newest].find((archive) => archive?.record?.state === 'done' && !isGood(archive.record));
     const { schedule, upload } = getServerSettings().backups;
+    const jobs = listBackupJobs();
     const notUploaded =
         scheduled &&
         (scheduled.record?.upload?.state === 'failed' ||
-            (!scheduled.record?.upload &&
-                canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs: listBackupJobs() })));
+            (!scheduled.record?.upload && canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs })));
     return {
         scheduleEnabled: schedule.enabled,
         newest: newest
@@ -111,7 +115,10 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
                       .join(', '),
               )
             : null,
-        newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
+        newestGoodAt: good?.createdAt.toISOString() ?? null,
+        running: jobs.flatMap(({ kind, state, artifact }) =>
+            state === 'running' && isServerJob(kind) && artifact ? [{ kind, archive: artifact }] : [],
+        ),
     };
 }
 

@@ -39,7 +39,7 @@ export function listFileTree(root: string, skipDir: (rel: string) => boolean = (
 // What a capture of the tree stages, at most: its files and databases as they sit on disk. The room check before a
 // server backup sizes every home with it while the server runs, so a file or folder gone since its listing counts
 // nothing. A folder's files are statted together, its subfolders walked one at a time to keep few handles open.
-export async function treeBytes(root: string, skipDir: (rel: string) => boolean = () => false): Promise<number> {
+export async function treeBytes(root: string): Promise<number> {
     const walk = async (relDir: string): Promise<number> => {
         const entries = await fsp
             .readdir(path.join(root, relDir), { withFileTypes: true })
@@ -56,7 +56,7 @@ export async function treeBytes(root: string, skipDir: (rel: string) => boolean 
         );
         let bytes = sizes.reduce((sum, size) => sum + size, 0);
         for (const entry of entries) {
-            if (entry.isDirectory() && !skipDir(rel(entry.name))) bytes += await walk(rel(entry.name));
+            if (entry.isDirectory()) bytes += await walk(rel(entry.name));
         }
         return bytes;
     };

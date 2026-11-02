@@ -36,9 +36,9 @@ Keep every fact a reader can act on: a menu path, a shortcut, a limit, a loss. C
 
 Merge bullets a reader would see as one change, such as two fixes to the same path bar. A Word, Excel or PowerPoint round trip keeps its own bullet, as in 0.4.0.
 
-## Markers `./eigen update` reads
+## The marker `./eigen update` reads
 
-`apps/api/src/cli/update-check.ts` matches substrings: a line containing `(breaking)` makes the update ask first, and one containing `(full backup)` makes it take a full backup. Put them in a label on purpose (`**Backups (breaking)**`), never in running text, where they would fire by accident. A commit that changes how a document's own database stores data, a container database migration, marks its `[Unreleased]` bullet with `(full backup)`, since `./eigen update` on the main channel reads `[Unreleased]` too and takes a Full backup before such an update.
+`apps/api/src/cli/update-check.ts` matches a substring: a line containing `(breaking)` makes the update ask first. Put it in a label on purpose (`**Backups (breaking)**`), never in running text, where it would fire by accident. A migration needs no mark: every update makes a Full backup first.
 
 ## The intro is the GitHub release
 

@@ -126,10 +126,10 @@ describe('useStartServerBackup', () => {
         const { latest, unmount } = await renderHook(() => useStartServerBackup(), queryClient);
 
         await act(async () => {
-            await latest.mutateAsync('light');
+            await latest.mutateAsync('full');
         });
 
-        expect(startCalls).toEqual([{ level: 'light' }]);
+        expect(startCalls).toEqual([{ level: 'full' }]);
         expect(invalidated).toEqual([[...serverBackupKeys.archives()], [...backupKeys.jobs(SERVER_OWNER)]]);
         await unmount();
     });

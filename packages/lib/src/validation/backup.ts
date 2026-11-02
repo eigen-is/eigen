@@ -1,5 +1,10 @@
+// The checks a backup's own files pass before anything trusts them: the manifest inside a home or server archive, the
+// record kept beside an archive, and the account, share and mount files a home archive holds. Each returns null for a
+// file this build did not write, and the caller decides whether that fails a verify or refuses a request.
+
 import { isStorageType } from '../constants/mount';
 import type {
+    BackupAuthRows,
     BackupEntry,
     BackupJob,
     BackupLevel,
@@ -21,58 +26,11 @@ import {
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';
+import { BACKUP_OWNER_ID } from './backup-names';
+import { isStringList, isStringRecord, parseJson } from './json';
 
-export { BACKUP_LEVELS, BACKUP_REASONS };
-
-// One grammar for the names in the backups folder, so the pane, the upload route and the artifact
-// list can never disagree about what an artifact is called.
-export const BACKUP_ARTIFACT_EXTENSION = '.tar.zst';
-
-export const BACKUP_HOME_PREFIX = 'home-';
-
-// An owner id ends up in an artifact name and in a home folder a route resolves, so `/`, `..` and
-// control characters are out of both by construction. A mount id becomes a path segment the same way.
-const BACKUP_OWNER_ID_CHARS = '[A-Za-z0-9_-]+';
-export const BACKUP_OWNER_ID = new RegExp(`^${BACKUP_OWNER_ID_CHARS}$`);
-
+// A mount id becomes a path segment, as an owner id does, so it keeps to the same characters.
 const BACKUP_MOUNT_ID = BACKUP_OWNER_ID;
-
-// Artifact names and the safety copies a restore leaves beside a home folder read the same stamp.
-export const BACKUP_STAMP_PATTERN = String.raw`(?<year>\d{4})(?<month>\d{2})(?<day>\d{2})-(?<hours>\d{2})(?<minutes>\d{2})(?<seconds>\d{2})`;
-
-export function parseBackupStamp(groups: Record<string, string | undefined>): Date | null {
-    const at = new Date(
-        `${groups['year']}-${groups['month']}-${groups['day']}T${groups['hours']}:${groups['minutes']}:${groups['seconds']}Z`,
-    );
-    return Number.isNaN(at.getTime()) ? null : at;
-}
-
-function pad(value: number): string {
-    return String(value).padStart(2, '0');
-}
-
-// The home folder a restore moved aside (the state before it) and the incomplete folder a failed
-// restore left behind; ./eigen restore keeps data/ aside under the first too. Nothing deletes either automatically.
-export const PRE_RESTORE_SUFFIX = '.pre-restore-';
-export const FAILED_RESTORE_SUFFIX = '.failed-restore-';
-
-// UTC, so parseBackupStamp reads back the moment it was written.
-export function buildBackupStamp(at: Date): string {
-    return `${at.getUTCFullYear()}${pad(at.getUTCMonth() + 1)}${pad(at.getUTCDate())}-${pad(at.getUTCHours())}${pad(at.getUTCMinutes())}${pad(at.getUTCSeconds())}`;
-}
-
-// Owner ids contain dashes, so the stamp is matched from the end and the owner id is what is left.
-const ARTIFACT_EXTENSION_PATTERN = BACKUP_ARTIFACT_EXTENSION.replaceAll('.', String.raw`\.`);
-const ARTIFACT_NAME = new RegExp(
-    `^${BACKUP_HOME_PREFIX}(?<ownerId>${BACKUP_OWNER_ID_CHARS})-${BACKUP_STAMP_PATTERN}${ARTIFACT_EXTENSION_PATTERN}$`,
-);
-
-export function parseBackupArtifactName(name: string): { ownerId: string; at: Date } | null {
-    const groups = ARTIFACT_NAME.exec(name)?.groups;
-    if (!groups?.['ownerId']) return null;
-    const at = parseBackupStamp(groups);
-    return at ? { ownerId: groups['ownerId'], at } : null;
-}
 
 // The only manifest version this build writes and reads.
 export const BACKUP_FORMAT_VERSION = 1;
@@ -82,46 +40,6 @@ export const ON_DEMAND_BACKUP_REASONS = ['manual', 'pre-update'] as const satisf
     BackupReason,
     'scheduled'
 >[];
-
-// A whole-server archive: `server-{reason}-{level}-{stamp}.tar`, uncompressed because its members
-// already are. Reason and level are in the name, so retention and the schedule read no archive.
-export const SERVER_ARCHIVE_PREFIX = 'server-';
-export const SERVER_ARCHIVE_EXTENSION = '.tar';
-
-const SERVER_ARCHIVE_EXTENSION_PATTERN = SERVER_ARCHIVE_EXTENSION.replaceAll('.', String.raw`\.`);
-const SERVER_ARCHIVE_NAME = new RegExp(
-    `^${SERVER_ARCHIVE_PREFIX}(?<reason>${BACKUP_REASONS.join('|')})-(?<level>${BACKUP_LEVELS.join('|')})-${BACKUP_STAMP_PATTERN}${SERVER_ARCHIVE_EXTENSION_PATTERN}$`,
-);
-
-export function parseServerArchiveName(name: string): { reason: BackupReason; level: BackupLevel; at: Date } | null {
-    const groups = SERVER_ARCHIVE_NAME.exec(name)?.groups;
-    const reason = BACKUP_REASONS.find((candidate) => candidate === groups?.['reason']);
-    const level = BACKUP_LEVELS.find((candidate) => candidate === groups?.['level']);
-    if (!groups || !reason || !level) return null;
-    const at = parseBackupStamp(groups);
-    return at ? { reason, level, at } : null;
-}
-
-// The server archives among `names`, read, newest first. Any other name is left out.
-export function parseServerArchiveNames(
-    names: Iterable<string>,
-): (Pick<ServerArchive, 'name' | 'reason' | 'level'> & { at: Date })[] {
-    return [...names]
-        .flatMap((name) => {
-            const parsed = parseServerArchiveName(name);
-            return parsed ? [{ name, ...parsed }] : [];
-        })
-        .sort((a, b) => b.at.getTime() - a.at.getTime());
-}
-
-// Undefined for text that is not JSON, which every check below refuses.
-function parseJson(text: string): unknown {
-    try {
-        return JSON.parse(text);
-    } catch {
-        return undefined;
-    }
-}
 
 function isKind(value: unknown): value is BackupManifest['kind'] {
     return BACKUP_KINDS.some((kind) => kind === value);
@@ -166,10 +84,6 @@ function isMountSummary(value: unknown): value is BackupManifest['mounts'][numbe
     );
 }
 
-function isStringList(value: unknown): value is string[] {
-    return Array.isArray(value) && value.every((item) => typeof item === 'string');
-}
-
 function isServer(value: unknown): value is BackupManifest['server'] {
     return (
         typeof value === 'object' &&
@@ -190,7 +104,8 @@ function isCounts(value: unknown): value is BackupManifest['counts'] {
         'files' in value &&
         typeof value.files === 'number' &&
         'bytes' in value &&
-        typeof value.bytes === 'number'
+        typeof value.bytes === 'number' &&
+        (!('dirs' in value) || typeof value.dirs === 'number')
     );
 }
 
@@ -243,21 +158,6 @@ function isServerArchiveHome(value: unknown): value is ServerArchiveManifest['ho
         (!('skipped' in value) || typeof value.skipped === 'string') &&
         (!('warnings' in value) || isStringList(value.warnings))
     );
-}
-
-function isStringRecord(value: unknown): value is Record<string, string> {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        !Array.isArray(value) &&
-        Object.values(value).every((item) => typeof item === 'string')
-    );
-}
-
-// A JSON object of strings, as the data-epoch maps are kept on the server and in a tab; null for anything else.
-export function parseStringRecord(text: string): Record<string, string> | null {
-    const value = parseJson(text);
-    return isStringRecord(value) ? value : null;
 }
 
 function isServerArchiveManifest(value: unknown): value is ServerArchiveManifest {
@@ -322,13 +222,9 @@ export function parseBackupManifest(text: string): BackupManifest | null {
     return isManifest(value) ? value : null;
 }
 
-// Why an archive cannot restore a home on its own, or null when it can. A Light member of a
-// whole-server archive holds no files and no mail; a mount marked metadata-only keeps its bodies in
-// its bucket (an s3 mount at Full). Phrased to follow the archive's name.
-export function incompleteReason(manifest: Pick<BackupManifest, 'level' | 'mounts'>): string | null {
-    if (manifest.level === 'light') {
-        return 'is a light backup: it holds no files and no mail, so it cannot restore an account on its own';
-    }
+// Why an archive cannot restore a home on its own, or null when it can: a mount marked metadata-only keeps its bodies
+// in its bucket (an s3 mount at Full). Phrased to follow the archive's name.
+export function incompleteReason(manifest: Pick<BackupManifest, 'mounts'>): string | null {
     const metadataOnly = manifest.mounts.filter((summary) => summary.contents === 'metadata');
     if (metadataOnly.length === 0) return null;
     const ids = metadataOnly.map((summary) => summary.id).join(', ');
@@ -428,10 +324,10 @@ export function canUploadServerArchive(
 
 // `auth.json`: one array of rows per users3.db table. The columns are better-auth's and change with
 // its version, so the check stops at "rows of a table" and Drizzle judges the columns on insert.
-export function parseBackupAuthRows(text: string): Record<string, Record<string, unknown>[]> | null {
+export function parseBackupAuthRows(text: string): BackupAuthRows | null {
     const value = parseJson(text);
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-    const rows: Record<string, Record<string, unknown>[]> = {};
+    const rows: BackupAuthRows = {};
     for (const [key, table] of Object.entries(value)) {
         if (!Array.isArray(table)) return null;
         for (const row of table) {

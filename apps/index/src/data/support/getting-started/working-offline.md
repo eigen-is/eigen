@@ -1,12 +1,12 @@
 ---
 title: "Editing when your connection drops"
-description: "What the red wifi icon means, where your edits go while you are offline, and why Eigen warns you before you leave the page."
+description: "What the red wifi icon means, where your edits go while you are offline, why Eigen warns you before you leave the page, and what to do when it is about to restart."
 type: troubleshooting
 category: Basics
 tags: [offline, sync, editing, troubleshooting, getting-started]
 related: [getting-started/your-first-steps, drive/file-versions]
 order: 7
-updated: 2026-10-29
+updated: 2026-11-02
 ---
 
 Documents, spreadsheets, presentations, drawings, and boards save themselves as you type, which means they need the server. This page explains what you see when the connection to it goes away for a moment, and what happens to the work you did meanwhile.
@@ -53,8 +53,16 @@ If the document was already open, it stays on screen and shows as offline. Reloa
 
 **What to do:** restore a saved version. In a file you can edit, the versions are listed under the message: click one, then **Restore**, and the page reloads onto it. If there is no version to go back to, ask whoever runs your Eigen to restore a backup.
 
+## A banner says Eigen restarts
+
+**What it means:** whoever runs your Eigen is about to update it, or to take it back to an earlier version. A banner at the foot of the page says what happens and when, and counts down. Below it may be a line from them, such as when Eigen is back.
+
+**What to do:** send or save what you're writing before the time is up. Documents save themselves, but a comment you have not sent is lost when the page reloads. When Eigen goes back to an earlier version, what you change after the warning is not in that version, so wait with new work until it is back.
+
+While Eigen restarts, the banner says "Eigen is updating. This page reloads when it's back." Keep the tab open: it reloads by itself once Eigen is back.
+
 ## The page reloads by itself
 
 **What it means:** Eigen was updated, or someone restored this account from a backup, while you had the page open. The page in your tab belongs to what has been replaced, so Eigen reloads it rather than sending the old copy back.
 
-**What to do:** nothing. The page comes back on the new version or the restored document. Anything you typed in the seconds before the reload, or while Eigen was down, is not kept.
+**What to do:** nothing. The page comes back on the new version or the restored document. Before an update, the banner above warns you first. Anything you typed in the seconds before the reload, or while Eigen was down, is not kept.

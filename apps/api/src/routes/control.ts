@@ -1,18 +1,27 @@
-// The CLI's online commands, such as ./eigen status, setup, reset-password and backup, reach the running API over a
-// Unix socket that `docker compose exec` opens as the API's user, never over the web. controlRouter is a thin router
-// over the server's own functions, and startControlSocket opens the socket at boot with mode 0600.
+// The CLI's online commands, such as ./eigen status, setup, backup and the restart notice an update gives the open
+// tabs, reach the running API over a Unix socket that `docker compose exec` opens as the API's user, never over the
+// web. controlRouter is a thin router over the server's own functions, and startControlSocket opens the socket at boot
+// with mode 0600.
 
 import * as fs from 'node:fs';
-import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
+import { RESTART_REASONS } from '@workspace/lib/types/sse';
+import {
+    MAX_RESTART_MESSAGE_LENGTH,
+    MAX_RESTART_WAIT_SECONDS,
+    ON_DEMAND_BACKUP_REASONS,
+    RESTART_MESSAGE_PATTERN,
+} from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getBackupJob, isServerJob } from '../lib/backup/jobs';
 import type { ControlBackupJob } from '../lib/backup/server-job';
 import { startServerBackup, toControlJob } from '../lib/backup/server-job';
 import { getControlSocketPath } from '../lib/config/paths';
+import type { AnnouncedRestart } from '../lib/config/restart-notice';
+import { announceRestart, clearRestartNotice } from '../lib/config/restart-notice';
 import type { ControlStatus } from '../lib/config/server-status';
 import { getServerStatus } from '../lib/config/server-status';
-import { ApiError } from '../lib/core';
-import { handleApiError } from '../lib/core/errors';
+import { ApiError, handleApiError } from '../lib/core';
 import type { SetupLink } from '../lib/setup/setup-token';
 import { createSetupLink } from '../lib/setup/setup-token';
 import type { ResetPasswordResult } from '../lib/user/reset-password';
@@ -47,6 +56,23 @@ export const controlRouter = new Elysia({ name: 'control' })
         const job = getBackupJob(params.id);
         if (!job || !isServerJob(job.kind)) throw new ApiError(404, 'Job not found');
         return toControlJob(job);
+    })
+    .post(
+        '/restart-notice',
+        ({ body }): AnnouncedRestart => announceRestart(body.inSeconds, body.reason, body.message ?? null),
+        {
+            body: t.Object({
+                inSeconds: t.Integer({ minimum: 0, maximum: MAX_RESTART_WAIT_SECONDS }),
+                reason: t.UnionEnum(RESTART_REASONS),
+                message: t.Optional(
+                    t.String({ maxLength: MAX_RESTART_MESSAGE_LENGTH, pattern: RESTART_MESSAGE_PATTERN }),
+                ),
+            }),
+        },
+    )
+    .delete('/restart-notice', ({ set }): void => {
+        clearRestartNotice();
+        set.status = 204;
     });
 
 // A killed process leaves its socket, which fails the bind. /run/eigen is 0700: nobody reaches it before the chmod.

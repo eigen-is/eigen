@@ -24,6 +24,7 @@ import {
     rowArchivePath,
 } from './archive-layout';
 import { describeError } from './errors';
+import { DATABASES_PER_YIELD } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
@@ -234,6 +235,8 @@ export async function verifyFolder(dir: string, onProgress?: BackupProgress): Pr
         },
     );
     for (const [index, database] of databases.entries()) {
+        // Each check blocks the thread, and a restore runs this in the API.
+        if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
         if (fs.existsSync(database.abs)) {
             try {
                 const db = new Database(database.abs, { readonly: true });
