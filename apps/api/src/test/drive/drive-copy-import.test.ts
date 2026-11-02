@@ -1,11 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
-import { copyPathAcross } from '../../lib/drive/copy-across';
+import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { copyPathAcross, copySize } from '../../lib/drive/copy-across';
 import { getHome } from '../../lib/home';
 import { getUserById } from '../../lib/user';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
+    createTestUser,
     driveGet,
     drivePost,
     driveUpload,
@@ -209,6 +213,83 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 expect(copy).rejects.toThrow();
                 await copy.catch(() => {});
                 expect(await contents(target)).toEqual([]);
+            });
+        });
+
+        // The per-file upload cap is for one file. A folder or a document is bounded by the free space.
+        describe('the size limit of a folder copy', () => {
+            let user: TestUser;
+            let rootId: string;
+            let folder: DrivePath;
+
+            // A new home takes the server's default drive size, so this user's drive holds 100 MB.
+            beforeAll(async () => {
+                const before = getServerSettings().quotas.defaultMountMaxSizeMB;
+                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 100 } });
+                try {
+                    user = await createTestUser(
+                        `copy-size-${crypto.randomUUID()}@test.eigen.is`,
+                        'testpassword123',
+                        'Copy',
+                    );
+                    await getHome(user.id);
+                } finally {
+                    await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
+                }
+                rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
+                folder = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${rootId}`, {
+                    folderName: 'two-files',
+                });
+                for (const name of ['a.bin', 'b.bin']) {
+                    const bytes = new Uint8Array(20 * 1024 * 1024);
+                    await driveUpload(user.sessionToken, user.id, mountId, folder.id, new File([bytes], name));
+                }
+            });
+
+            function copyFolder(): Promise<Response> {
+                return copyFile(user.sessionToken, user.id, mountId, folder.id, {
+                    targetOwnerId: user.id,
+                    targetMountId: mountId,
+                    targetParentId: rootId,
+                });
+            }
+
+            test('a folder larger than the upload cap copies', async () => {
+                const copied = await assertJson<DrivePath>(await copyFolder());
+                expect(copied.size).toBe(40 * 1024 * 1024);
+            });
+
+            test('a folder larger than the free space is refused', async () => {
+                // The folder and its first copy use 80 MB, so 20 MB is free.
+                expect((await copyFolder()).status).toBe(507);
+            });
+
+            test('a document is sized without its version history, which the copy leaves behind', async () => {
+                const doc = await drivePost<DrivePath>(
+                    user.sessionToken,
+                    user.id,
+                    mountId,
+                    `folder/${rootId}/create/doc`,
+                    {
+                        fileName: 'sized',
+                    },
+                );
+                const saved = await authedRequest(
+                    user.sessionToken,
+                    `/drive/${user.id}/${mountId}/file/${doc.id}/versions/save`,
+                    {
+                        method: 'POST',
+                    },
+                );
+                expect(saved.status).toBe(200);
+                const drive = (await getHome(user.id)).drive;
+                const versions = findOrFail(
+                    await drive.getFolderContents(mountId, doc.id),
+                    (child) => child.name === VERSIONS_FOLDER_NAME,
+                );
+                expect(versions.size).toBeGreaterThan(0);
+                const sized = await driveGet(user.sessionToken, user.id, mountId, `file/${doc.id}`);
+                expect(await copySize(drive, sized)).toBe(sized.size - versions.size);
             });
         });
 

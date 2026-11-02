@@ -2,7 +2,7 @@
 // sides offer. Each file is downloaded and uploaded again, and each folder or Eigen document is created
 // again with its type, without the document's version history. A document's insides refer to each other
 // by name, not by path id, so the byte copy is a valid document. The copy route calls it for every copy
-// that leaves its mount.
+// that leaves its mount, and sizes every copy with copySize first.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
@@ -75,4 +75,17 @@ async function copyFileAcross(
     const file = await source.downloadFile(src.mountId, src.id);
     if (!file) throw storageGone();
     return target.createFileFromData(destMountId, destParentId, name, src.mimeType, file, user);
+}
+
+// The bytes a copy of src writes, in one mount or across. That is its size without the version history
+// of each document inside, which every copy leaves behind.
+export async function copySize(drive: DriveLike, src: DrivePath): Promise<number> {
+    if (!isContainerType(src.type)) return src.size;
+    const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
+    let size = 0;
+    for (const child of await drive.getFolderContents(src.mountId, src.id)) {
+        if (isEigenDoc && isVersionsFolder(child)) continue;
+        size += await copySize(drive, child);
+    }
+    return size;
 }

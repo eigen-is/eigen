@@ -4,14 +4,14 @@
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
-import { EXPORT_SUMMARY_HEADER, isConvertTarget } from '@workspace/lib/types/drive';
+import { EXPORT_SUMMARY_HEADER, isContainerType, isConvertTarget } from '@workspace/lib/types/drive';
 import type { FileEvent, PathWatchStatus } from '@workspace/lib/types/file-history';
 import type { EmlPreview, IcsPreview, TextPreviewResult, VCardPreview } from '@workspace/lib/types/preview';
 import { MAX_EMAIL_LENGTH } from '@workspace/lib/validation';
 import type { ElysiaCustomStatusResponse } from 'elysia';
 import { Elysia, t } from 'elysia';
 import { requireNonGuest, requireSelf } from '../lib/auth/access';
-import { getUploadMaxSize } from '../lib/config/enforcement';
+import { enforceMountQuota, getUploadMaxSize } from '../lib/config/enforcement';
 import { ApiError } from '../lib/core';
 import {
     answerPreview,
@@ -23,7 +23,7 @@ import {
 import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
-import { copyPathAcross } from '../lib/drive/copy-across';
+import { copyPathAcross, copySize } from '../lib/drive/copy-across';
 import { getUniqueFileName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
@@ -196,8 +196,13 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const src = await sourceDrive.getPath(params.mountId, params.pathId);
             if (!src) throw new ApiError(404, 'Source not found');
 
-            const maxSize = await getUploadMaxSize(body.targetOwnerId, body.targetMountId);
-            if (src.size > maxSize) throw new ApiError(413, 'Source file too large');
+            // The per-file upload cap bounds a single file. A folder or a document only has to fit in the
+            // free space.
+            if (isContainerType(src.type)) {
+                await enforceMountQuota(body.targetOwnerId, body.targetMountId, await copySize(sourceDrive, src));
+            } else if (src.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
+                throw new ApiError(413, 'Source file too large');
+            }
 
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
