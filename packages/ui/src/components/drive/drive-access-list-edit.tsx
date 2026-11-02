@@ -1,24 +1,25 @@
 // The editable half of the Share dialog: add people or a team, change or remove each one's access, set the link's
-// general access and, for the owner, whether editors may share. Save sends only what changed, so a dialog opened a
-// while ago can't undo what another sharer added since. The host does the save and decides what a finished one does.
+// general access and, for the owner, whether editors may share. It is the dialog's form, and mounts with it, so each
+// opening starts from the item as it is. Save sends only what changed, so a dialog opened a while ago can't undo what
+// another sharer added since.
 
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { useDriveAccess, useIsEffectiveOwner } from '@workspace/lib/drive';
+import { useDriveAccess, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
-import type { DirectAccessItem, DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
+import type { DirectAccessItem, DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { DialogFooter } from '@workspace/ui/components/dialog';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import { FormDialogForm } from '@workspace/ui/components/form-dialog';
 import {
     Select,
     SelectContent,
@@ -28,9 +29,8 @@ import {
     SelectValue,
 } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
-import { cn } from '@workspace/ui/lib/utils';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -38,22 +38,12 @@ import { UserItem } from '../user/user-item';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
-    onSave: (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => Promise<void>;
-    onCancel?: () => void;
     onEmailClick?: () => void;
-    className?: string;
     prefillEmail?: string;
 };
 
-export function DriveAccessListEdit({
-    path,
-    onSave,
-    onCancel,
-    onEmailClick,
-    className,
-    prefillEmail,
-}: DriveAccessListEditProps) {
-    const [pendingChanges, setPendingChanges] = useState(false);
+export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveAccessListEditProps) {
+    const [hasChanges, setHasChanges] = useState(false);
     const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>();
 
     const { baseDirectList, directList, inheritedList } = useDriveAccess(path, directListOverride);
@@ -65,18 +55,13 @@ export function DriveAccessListEdit({
 
     const isEffectiveOwner = useIsEffectiveOwner(path.ownerId);
     const { user } = useAuth();
+    const updateACL = useUpdateACL(path.ownerId, path.mountId, user?.id);
 
     const excludeEmails = useMemo(() => {
         const emails = [...directList, ...inheritedList].map((item) => item.id);
         if (user?.email) emails.push(user.email);
         return emails;
     }, [directList, inheritedList, user?.email]);
-
-    useEffect(() => {
-        setDirectListOverride(undefined);
-        setVisibility(path.visibility ?? 'private');
-        setSharingRestricted(path.sharingRestricted ?? false);
-    }, [path]);
 
     // Rejecting a duplicate returns false so the raw text stays in the field for the user to edit.
     const contactInput = useContactInput((contact) => {
@@ -85,7 +70,7 @@ export function DriveAccessListEdit({
             ...(prevList || baseDirectList),
             { id: contact.email, read: true, write: true, owner: false },
         ]);
-        setPendingChanges(true);
+        setHasChanges(true);
         return true;
     });
 
@@ -95,58 +80,44 @@ export function DriveAccessListEdit({
         }
     }, [prefillEmail, contactInput.setValue]);
 
-    const handleAddTeam = useCallback(
-        (teamId: string) => {
-            const id = teamOwnerId(teamId);
-            if (directList.some((item) => item.id === id)) return;
-            setDirectListOverride((prev) => [
-                ...(prev || baseDirectList),
-                {
-                    id,
-                    read: true,
-                    write: true,
-                    owner: false,
-                },
-            ]);
-            setPendingChanges(true);
-        },
-        [directList],
-    );
+    const handleAddTeam = (teamId: string) => {
+        const id = teamOwnerId(teamId);
+        if (directList.some((item) => item.id === id)) return;
+        setDirectListOverride((prev) => [...(prev || baseDirectList), { id, read: true, write: true, owner: false }]);
+        setHasChanges(true);
+    };
 
-    const handlePermissionChange = useCallback(
-        (id: string, permission: string) => {
-            setDirectListOverride((prev) =>
-                (prev || baseDirectList).map((item) => {
-                    if (item.id === id) {
-                        if (permission === 'remove') {
-                            return { ...item, read: false, write: false };
-                        } else if (permission === 'editor') {
-                            return { ...item, read: true, write: true };
-                        } else if (permission === 'viewer') {
-                            return { ...item, read: true, write: false };
-                        }
+    const handlePermissionChange = (id: string, permission: string) => {
+        setDirectListOverride((prev) =>
+            (prev || baseDirectList).map((item) => {
+                if (item.id === id) {
+                    if (permission === 'remove') {
+                        return { ...item, read: false, write: false };
+                    } else if (permission === 'editor') {
+                        return { ...item, read: true, write: true };
+                    } else if (permission === 'viewer') {
+                        return { ...item, read: true, write: false };
                     }
-                    return item;
-                }),
-            );
-            setPendingChanges(true);
-        },
-        [baseDirectList],
-    );
+                }
+                return item;
+            }),
+        );
+        setHasChanges(true);
+    };
 
-    const handleVisibilityChange = useCallback((newVisibility: DriveVisibility) => {
+    const handleVisibilityChange = (newVisibility: DriveVisibility) => {
         setVisibility(newVisibility);
-        setPendingChanges(true);
-    }, []);
+        setHasChanges(true);
+    };
 
-    const handleSharingRestrictedChange = useCallback((checked: boolean | 'indeterminate') => {
+    const handleSharingRestrictedChange = (checked: boolean | 'indeterminate') => {
         setSharingRestricted(!checked);
-        setPendingChanges(true);
-    }, []);
+        setHasChanges(true);
+    };
 
-    const handleSave = useCallback(async () => {
-        // Send only what changed — the server merges onto the current ACL, so a stale
-        // dialog can't revert entries another sharer added while it was open.
+    // The server merges what it gets onto the current ACL, so a dialog opened a while ago can't revert an entry
+    // another sharer added since.
+    const handleSave = async () => {
         const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
         const add: DriveACL[] = [];
         const remove: string[] = [];
@@ -159,30 +130,65 @@ export function DriveAccessListEdit({
                     add.push({ id: item.id, read: item.read, write: item.write });
                 }
             } else if (prev) {
-                // Marked "remove" in the UI (read and write both cleared)
+                // Remove in the picker clears both read and write.
                 remove.push(item.id);
             }
         }
 
-        await onSave({ add, remove }, visibility, isEffectiveOwner ? sharingRestricted : undefined);
-    }, [baseDirectList, directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
+        await updateACL.mutateAsync({
+            path,
+            add,
+            remove,
+            visibility,
+            sharingRestricted: isEffectiveOwner ? sharingRestricted : undefined,
+        });
+    };
 
     return (
-        <div className={cn('flex flex-col min-h-0', className)}>
-            <div className="shrink-0">
-                <ContactAddRow
-                    id="new-contact"
-                    value={contactInput.value}
-                    onChange={contactInput.handleChange}
-                    onSubmit={contactInput.submit}
-                    excludeEmails={excludeEmails}
-                    className="mt-2"
-                />
-            </div>
+        <FormDialogForm
+            submitLabel="Save"
+            canSubmit={hasChanges}
+            onSubmit={handleSave}
+            footerStart={
+                myTeams &&
+                myTeams.length > 0 && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="gap-2">
+                                <Users className="h-4 w-4" />
+                                Share with team
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            {myTeams.map((team) => (
+                                <DropdownMenuItem
+                                    key={team.id}
+                                    onClick={() => handleAddTeam(team.id)}
+                                    disabled={directList.some((i) => i.id === teamOwnerId(team.id))}
+                                >
+                                    <Users className="h-4 w-4" />
+                                    {team.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )
+            }
+        >
+            {/* Enter here adds the person typed, and never submits. */}
+            <ContactAddRow
+                id="new-contact"
+                value={contactInput.value}
+                onChange={contactInput.handleChange}
+                onSubmit={contactInput.submit}
+                excludeEmails={excludeEmails}
+                className="mt-2"
+            />
 
-            <Separator className="my-4 shrink-0" />
+            <Separator />
 
-            <div className="app-gutter-bleed space-y-2 overflow-y-auto min-h-0">
+            {/* A long list scrolls on its own, so General access and the footer stay in view. */}
+            <div className="app-gutter-bleed space-y-2 overflow-y-auto max-h-[40vh]">
                 <div className="flex items-center justify-between rounded-md bg-muted/50 px-2 py-1.5">
                     <h4 className="text-base font-medium">People with access</h4>
                     <div className="flex items-center gap-0.5">
@@ -206,10 +212,10 @@ export function DriveAccessListEdit({
                         {onEmailClick && (
                             <TooltipButton
                                 icon={Mail}
-                                tooltipText={pendingChanges ? 'Save changes first' : 'Email collaborators'}
+                                tooltipText={hasChanges ? 'Save changes first' : 'Email collaborators'}
                                 variant="ghost"
                                 className="h-7 w-7"
-                                disabled={pendingChanges}
+                                disabled={hasChanges}
                                 onClick={onEmailClick}
                             />
                         )}
@@ -256,9 +262,9 @@ export function DriveAccessListEdit({
                 ))}
             </div>
 
-            <Separator className="my-4 shrink-0" />
+            <Separator />
 
-            <div className="shrink-0">
+            <div>
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
@@ -313,40 +319,7 @@ export function DriveAccessListEdit({
                 )}
             </div>
 
-            <Separator className="my-4 shrink-0" />
-
-            <DialogFooter className="shrink-0">
-                {myTeams && myTeams.length > 0 && (
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="mr-auto gap-2">
-                                <Users className="h-4 w-4" />
-                                Share with team
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start">
-                            {myTeams.map((team) => (
-                                <DropdownMenuItem
-                                    key={team.id}
-                                    onClick={() => handleAddTeam(team.id)}
-                                    disabled={directList.some((i) => i.id === teamOwnerId(team.id))}
-                                >
-                                    <Users className="h-4 w-4" />
-                                    {team.name}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                )}
-                {onCancel && (
-                    <Button variant="outline" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                )}
-                <Button onClick={handleSave} disabled={!pendingChanges}>
-                    {pendingChanges ? 'Save' : 'Done'}
-                </Button>
-            </DialogFooter>
-        </div>
+            <Separator />
+        </FormDialogForm>
     );
 }
