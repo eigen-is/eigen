@@ -145,10 +145,20 @@ export function DataVerification() {
 
     // On open, the draft takes the focus cell's rule, or a new list, over the selection. A column or row header's
     // selection is named B:B or 2:2, so the rule covers the whole column or row. Back from the range picker, the draft
-    // keeps what the user had and takes the range or the list source they picked.
+    // keeps all the user had and takes only the range or the list source they picked.
     // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — initializes the data-verification dialog from current selection + rangeDialog
     useEffect(() => {
         setContext((ctx) => {
+            const picked = ctx.rangeDialog.type;
+            ctx.rangeDialog.type = '';
+            if (picked === 'rangeTxt') {
+                ctx.validationDraft.rangeTxt = ctx.rangeDialog.rangeTxt;
+                return;
+            }
+            if (picked === 'dropDown') {
+                ctx.validationDraft.value1 = ctx.rangeDialog.rangeTxt;
+                return;
+            }
             const last = ctx.selections?.at(-1);
             if (!last || last.row_focus == null || last.column_focus == null) return;
             const named: RangeOrWholeAxis =
@@ -157,18 +167,9 @@ export function DataVerification() {
                     : last.row_select && !last.column_select
                       ? { row: last.row, column: [null, null] }
                       : last;
-            let rangeTxt = getRangetxt(context, context.currentSheetId, named, context.currentSheetId);
+            const rangeTxt = getRangetxt(context, context.currentSheetId, named, context.currentSheetId);
             const item = validationAt(getSheet(ctx).dataValidations, last.row_focus, last.column_focus);
-            let value1 = item?.value1 ?? '';
-            const draft = ctx.validationDraft;
-            if (ctx.rangeDialog.type === 'dropDown' && draft.rangeTxt) {
-                rangeTxt = draft.rangeTxt;
-                value1 = ctx.rangeDialog.rangeTxt;
-            } else if (ctx.rangeDialog.type === 'rangeTxt' && draft.value1) {
-                value1 = draft.value1;
-                rangeTxt = ctx.rangeDialog.rangeTxt;
-            }
-            ctx.rangeDialog.type = '';
+            const value1 = item?.value1 ?? '';
 
             if (item) {
                 ctx.validationDraft = {
