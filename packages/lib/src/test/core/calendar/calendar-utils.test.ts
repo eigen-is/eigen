@@ -46,8 +46,9 @@ describe('getEventsForDay', () => {
     beforeAll(() => {
         process.env.TZ = 'Europe/Amsterdam';
     });
+    // bun test runs in UTC with TZ unset, and neither deleting TZ nor assigning undefined brings UTC back.
     afterAll(() => {
-        process.env.TZ = originalTz;
+        process.env.TZ = originalTz ?? 'UTC';
     });
 
     // Weekly Sunday 23:30 Europe/Amsterdam, as expanded by the API (real UTC instants).
@@ -147,7 +148,7 @@ describe('formatEventWhen', () => {
                 `${start.getHours()}:${String(start.getMinutes()).padStart(2, '0')}`,
             );
         } finally {
-            process.env.TZ = originalTz;
+            process.env.TZ = originalTz ?? 'UTC';
         }
     });
 

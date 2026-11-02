@@ -37,7 +37,7 @@ Both parts matter. Without the preload, a test file that imports `../lib` before
 
 ## `bun test` runs in UTC
 
-`bun test` sets `TZ=UTC`, so a bug that only shows at local midnight passes; formulajs, for one, builds its dates at local midnight. Run the date and sheet-engine suites once under `TZ=Europe/Amsterdam`, or set `process.env.TZ` in the test itself.
+`bun test` sets `TZ=UTC`, so a bug that only shows at local midnight passes; formulajs, for one, builds its dates at local midnight. Run the date and sheet-engine suites once under `TZ=Europe/Amsterdam`, or set `process.env.TZ` in the test itself. Such a test puts back `originalTz ?? 'UTC'`. `bun test` runs in UTC with `TZ` unset, and neither way of putting back "unset" gets UTC back: deleting `TZ` switches to the machine's own zone, and assigning `undefined` keeps the zone the test set. Every later file in the process then runs in that zone, isolated or not, since `--isolate` gives a file fresh globals but not a fresh `process.env`.
 
 ## Each API test file boots its own server
 
