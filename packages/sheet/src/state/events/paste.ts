@@ -251,14 +251,11 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
     }
 }
 
-function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
+    if (!isAllowEdit(ctx) || !copyState) return;
 
-    if (!copyRange) return;
-
-    const copySheetId = copyRange.dataSheetId;
-    const sourceRange = copyRange.copyRange[0];
+    const copySheetId = copyState.dataSheetId;
+    const sourceRange = copyState.copyRange[0];
 
     // A sheet without data has nothing to cut.
     const copySheet = getSheet(ctx, { id: copySheetId });
@@ -277,7 +274,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const minc = last.column_focus;
     const maxc = minc + copyc - 1; // first and last column of apply range
 
-    // warn if the apply range contains partially merged cells
+    // A cut never lands over part of a merge.
     if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
         return;
     }
@@ -285,14 +282,10 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const sheet = getSheet(ctx);
     const d = getFlowdata(ctx);
     if (!d) return;
-    const rowMaxLength = d.length;
-    const cellMaxLength = d[0].length;
-
-    const addr = copyh + minh - rowMaxLength;
-    const addc = copyc + minc - cellMaxLength;
-    if (addr > 0 || addc > 0) {
-        expandRowsAndColumns(sheet, addr, addc);
-    }
+    const addr = copyh + minh - d.length;
+    const addc = copyc + minc - d[0].length;
+    const grew = addr > 0 || addc > 0;
+    if (grew) expandRowsAndColumns(sheet, addr, addc);
 
     const tile = { row: minh, column: minc, height: copyh, width: copyc };
     carryCells(ctx, lines, [tile], ({ source }) => source, { cut: true });
@@ -332,22 +325,22 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         ctx,
         { sheetId: copySheetId, range: sourceRange },
         { sheetId: ctx.currentSheetId, range: targetRange },
-        addr > 0 || addc > 0,
+        grew,
     );
 }
 
-function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) {
+function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    if (!copyRange) return;
+    if (!copyState) return;
 
     // Live resolver, hoisted: one per paste instead of one snapshot per pasted
     // formula, and each evaluation sees the cells pasted before it.
     const resolver = createContextResolver(ctx);
 
-    const copySheetId = copyRange.dataSheetId;
-    const lines = carriedLines(ctx, copySheetId, copyRange.copyRange, true);
+    const copySheetId = copyState.dataSheetId;
+    const lines = carriedLines(ctx, copySheetId, copyState.copyRange, true);
     const copyh = lines.rows.length;
     const copyc = lines.columns.length;
     // A filter can hide every row of the copy.
@@ -399,7 +392,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     }
 
     // A copy of several ranges pastes the values of its formulas, not the formulas.
-    const several = copyRange.copyRange.length > 1;
+    const several = copyState.copyRange.length > 1;
     carryCells(ctx, lines, tiles, ({ source: cell, r, c, sr, sc }) => {
         if (cell?.f == null) return cell;
         if (several) {
