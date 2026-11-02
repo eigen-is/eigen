@@ -446,6 +446,31 @@ describe('round trip', () => {
         ).toEqual([['dataValidations', false, 4]]);
     });
 
+    test('a prompt cut to the length Excel holds is listed when the cut is counted', () => {
+        const prompt = (hintValue: string): Sheet[] => [
+            {
+                name: 'S',
+                dataValidations: {
+                    v: {
+                        ranges: [{ row: [0, 9], column: [0, 0] }],
+                        rule: { type: 'number', type2: 'equal', value1: '1', value2: '', hintShow: true, hintValue },
+                    },
+                },
+            },
+        ];
+        const classify = (warnings: Map<string, number>, b: string) =>
+            classifyDifferences({
+                warnings,
+                a: prompt('p'.repeat(300)),
+                b: prompt(b),
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        const counted = new Map([['validation-prompts-cut', 1]]);
+        expect(classify(counted, 'p'.repeat(255))).toEqual([['validation prompts cut', true, 1]]);
+        expect(classify(new Map(), 'p'.repeat(255))).toEqual([['dataValidations', false, 1]]);
+        expect(classify(counted, 'p'.repeat(254))).toEqual([['dataValidations', false, 1]]);
+    });
+
     test("a picture over the same box whose media changed its type or its pixels differs, whatever it's named", () => {
         const image = (mediaName: string): Sheet[] => [
             { name: 'S', images: { i: { id: 'i', index: 'a0', x: 0, y: 0, width: 10, height: 10, mediaName } } },
