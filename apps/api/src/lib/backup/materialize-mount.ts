@@ -177,19 +177,23 @@ export async function checkRestoredDatabases(
     containerDatabases: readonly VersionedDatabase[],
     { verified = false }: { verified?: boolean } = {},
 ): Promise<void> {
-    const targets: VersionedDatabase[] = HOME_DATABASES.map(([config, relPath]) => ({
-        filePath: path.join(homeDir, relPath),
-        config,
-    }));
-    for (const mountId of mountIds) {
-        const mountDir = requireMountDir(homeDir, mountId);
-        targets.push({ filePath: path.join(mountDir, PATHS.DRIVE.METADATA_DB), config: MOUNT_DB_CONFIG });
-    }
+    const targets = homeDatabasesIn(homeDir, mountIds);
     // The caller names the container databases, because only it knows where they are. A per-home restore passes
     // every one at its path in the unpacked archive, an s3 mount's included. The server stage passes none for an s3
     // mount, whose copies are staged for the bucket, and refuses an archive of a newer Eigen outright instead.
     targets.push(...containerDatabases);
     await checkDatabases(targets, { verified });
+}
+
+// The databases of a home folder other than its container databases: the home's own, and each mount's metadata.db.
+export function homeDatabasesIn(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
+    return [
+        ...HOME_DATABASES.map(([config, relPath]) => ({ filePath: path.join(homeDir, relPath), config })),
+        ...mountIds.map((mountId) => ({
+            filePath: path.join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB),
+            config: MOUNT_DB_CONFIG,
+        })),
+    ];
 }
 
 // The same verdict on any databases, such as the server's own. One that is not there is skipped. A home can hold tens

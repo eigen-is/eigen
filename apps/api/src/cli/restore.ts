@@ -7,27 +7,20 @@
 import { chmodSync, existsSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { parseArgs } from 'node:util';
-import { HOME_DATABASES } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
-import type { VersionedDatabase } from '../lib/backup/materialize-mount';
 import {
     checkDatabases,
     containerDatabasesIn,
+    homeDatabasesIn,
     mountIdsIn,
     quickCheck,
     UnopenableDatabaseError,
 } from '../lib/backup/materialize-mount';
-import {
-    isRestoreStagingName,
-    parseSafetyCopyName,
-    requireMountDir,
-    SERVER_ARCHIVE_ENV_MEMBER,
-} from '../lib/backup/paths';
+import { isRestoreStagingName, parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
 import { RESTORING_DIR } from '../lib/backup/restore-server';
 import { readServerArchiveMember } from '../lib/backup/verify-server-archive';
-import { HOMES_DIRS, PATHS, SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
+import { HOMES_DIRS, SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { API_IMAGE_KEY } from '../lib/config/release';
-import { MOUNT_DB_CONFIG } from '../lib/mount/db-config';
 import { SHARE_REGISTRY_DB_CONFIG } from '../lib/share/db-config';
 import { WAITLIST_DB_CONFIG } from '../lib/waitlist/db-config';
 import { readEnvFile } from './env-file';
@@ -167,7 +160,7 @@ async function checkData(flags: RestoreFlags): Promise<void> {
             console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
             const mountIds = mountIdsIn(homeDir);
             // Each mount's metadata.db first, because the container databases are found by reading it.
-            await checkDatabases(homeDatabases(homeDir, mountIds).filter(changed));
+            await checkDatabases(homeDatabasesIn(homeDir, mountIds).filter(changed));
             await checkDatabases(containerDatabasesIn(homeDir, mountIds).filter(changed));
         }
     } catch (error) {
@@ -206,15 +199,4 @@ function checkPages(filePath: string): void {
     if (!existsSync(filePath)) return;
     const verdict = quickCheck(filePath);
     if (verdict !== 'ok') throw new UnopenableDatabaseError(500, `${filePath} is damaged: ${verdict}`);
-}
-
-// The databases checkRestoredDatabases checks first in a home: its own, and each mount's metadata.db.
-function homeDatabases(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
-    return [
-        ...HOME_DATABASES.map(([config, relPath]) => ({ filePath: join(homeDir, relPath), config })),
-        ...mountIds.map((mountId) => ({
-            filePath: join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB),
-            config: MOUNT_DB_CONFIG,
-        })),
-    ];
 }
