@@ -1,6 +1,7 @@
 // The home archives in the backups folder: what the admin pane lists, how a name becomes a path, where an uploaded
 // archive lands, and what a delete takes with it. It also reads and writes the sidecar beside each archive, the
-// manifest and verify result the list shows. The backup routes and jobs call it, and so does a restore.
+// manifest and verify result the list shows. The backup routes and jobs call it, and so does a restore. The record
+// beside any archive, such as a server archive's, is written through writeRecord.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -10,7 +11,7 @@ import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName, parseBackupSidecar 
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
 import { ARCHIVE_MODE, readArtifactManifest } from './archive';
-import { backupsDirPath, getBackupTempPath, sidecarPath, writeRecord } from './paths';
+import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
 // page load would decompress the whole thing. An artifact with no sidecar (one copied in by hand)
@@ -145,7 +146,20 @@ export async function writeSidecar(
     verify: BackupVerifyRecord,
 ): Promise<void> {
     // Private like the archive: it names every file of the home, and ./eigen never reads it.
-    await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
+    await writeRecord(sidecarPath(artifactPath), { manifest, verify });
+}
+
+// Writes the JSON record beside an archive, with the archive's own mode. It is written in the staging folder and
+// renamed into place, so a reader never sees half of one.
+export async function writeRecord(target: string, value: unknown): Promise<void> {
+    const tempPath = getBackupTempPath('.json');
+    try {
+        await fsp.writeFile(tempPath, JSON.stringify(value, null, 2), { mode: ARCHIVE_MODE });
+    } catch (error) {
+        fs.rmSync(tempPath, { force: true });
+        throw error;
+    }
+    fs.renameSync(tempPath, target);
 }
 
 // What an artifact declares it holds, from the copy of its manifest in the sidecar. Only an artifact without one is

@@ -4,6 +4,7 @@
 
 import { isStorageType } from '../constants/mount';
 import type {
+    BackupAuthRows,
     BackupEntry,
     BackupJob,
     BackupLevel,
@@ -323,10 +324,10 @@ export function canUploadServerArchive(
 
 // `auth.json`: one array of rows per users3.db table. The columns are better-auth's and change with
 // its version, so the check stops at "rows of a table" and Drizzle judges the columns on insert.
-export function parseBackupAuthRows(text: string): Record<string, Record<string, unknown>[]> | null {
+export function parseBackupAuthRows(text: string): BackupAuthRows | null {
     const value = parseJson(text);
     if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-    const rows: Record<string, Record<string, unknown>[]> = {};
+    const rows: BackupAuthRows = {};
     for (const [key, table] of Object.entries(value)) {
         if (!Array.isArray(table)) return null;
         for (const row of table) {

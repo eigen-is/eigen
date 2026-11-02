@@ -51,6 +51,10 @@ export type BackupManifest = {
     warnings?: string[];
 };
 
+// A user's archived auth.json: the users3.db rows of each table, keyed the way the file spells the table. The
+// columns are better-auth's, so a row is only an object here.
+export type BackupAuthRows = Record<string, Record<string, unknown>[]>;
+
 // One row of a user's archived shares.json, a share-registry row of someone they shared with. A restore keys it off
 // the owner it restores, so only the target is kept.
 export type BackupShare = { targetIdentifier: string };

@@ -5,7 +5,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupAuthRows, BackupManifest } from '@workspace/lib/types/backup';
 import { parseBackupAuthRows } from '@workspace/lib/validation';
 import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
@@ -19,9 +19,6 @@ import { ARCHIVE_AUTH_FILE } from './paths';
 // (`user` gets a role, `member` a single membership), and a typo would read as a table nobody
 // archived.
 type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
-
-// The rows of an auth.json that parsed, keyed the way the file spells them.
-type AuthArchiveRows = Record<string, Record<string, unknown>[]>;
 
 // A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
 // its rows to that user, and for a membership the parent row it would be an orphan without.
@@ -72,7 +69,7 @@ export function readAuthRows(userId: string): Record<string, unknown[]> {
 }
 
 // Inserts the rows authRowsToRestore judged, for a user the server no longer has.
-export function restoreAuthRows(ownerId: string, archive: AuthArchiveRows): void {
+export function restoreAuthRows(ownerId: string, archive: BackupAuthRows): void {
     const db = getAuthDrizzleDb();
     const orgId = getPublicConfig().orgId;
     const drop = (table: string, reason: string): void => {
@@ -132,7 +129,7 @@ export function restoreAuthRows(ownerId: string, archive: AuthArchiveRows): void
 // and a user who is still here keeps every row they have, since a restore puts a home's data back and never rewrites
 // who somebody is. It throws for an archive that is not this user's, so a restore calls it while it judges the archive,
 // before it takes the home.
-export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): AuthArchiveRows | null {
+export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): BackupAuthRows | null {
     const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
     if (!fs.existsSync(authPath)) return null;
 
