@@ -77,6 +77,17 @@ describe('parseBackupManifest', () => {
         expect(parseBackupManifest(JSON.stringify(homeManifest))).toEqual(homeManifest);
     });
 
+    test("reads a home's folder count, and a manifest written before it", () => {
+        const counted = { ...homeManifest, counts: { ...homeManifest.counts, dirs: 3 } };
+        expect(parseBackupManifest(JSON.stringify(counted))).toEqual(counted);
+        expect(parseBackupManifest(JSON.stringify(homeManifest))?.counts.dirs).toBeUndefined();
+    });
+
+    test('refuses a folder count that is not a number', () => {
+        const counts = { ...homeManifest.counts, dirs: '3' };
+        expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
+    });
+
     test('refuses warnings that are not a list of strings', () => {
         for (const warnings of ['a.png', [3], [null], {}]) {
             expect(parseBackupManifest(JSON.stringify({ ...homeManifest, warnings }))).toBeNull();

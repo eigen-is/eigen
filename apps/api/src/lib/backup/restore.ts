@@ -64,11 +64,11 @@ export async function restoreHome(
             const unpackDir = buildRestoreStagingDir(homeDir, jobId);
             // Refused before a byte is written. The unpack stops at the same bound, so an archive that holds more than
             // it declares takes no more of the disk the homes share than the room check found free.
-            const unpackBytes = unpackBound(await readDeclaredManifest(artifactPath));
-            const shortfall = roomShortfall(`Restoring ${artifactName}`, unpackBytes, getDataRoot(), 'data/');
+            const bound = unpackBound(await readDeclaredManifest(artifactPath));
+            const shortfall = roomShortfall(`Restoring ${artifactName}`, bound.maxBytes, getDataRoot(), 'data/');
             if (shortfall) throw new ApiError(507, shortfall);
             onProgress?.('extract', 0, 1);
-            await extractArtifact(artifactPath, unpackDir, unpackBytes);
+            await extractArtifact(artifactPath, unpackDir, bound);
             onProgress?.('extract', 1, 1);
             const { folder, manifest } = readUnpackedHome(unpackDir, ownerId, artifactName);
             // A member of a whole-server archive that left out what only a restore of that archive puts back.

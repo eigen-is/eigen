@@ -260,7 +260,7 @@ export async function snapshotHome(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: countEntries(entries, databases),
+        counts: countEntries(entries, databases, folder),
         level,
         mounts: mountSummaries,
         entries,

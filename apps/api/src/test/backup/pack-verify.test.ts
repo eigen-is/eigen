@@ -21,9 +21,9 @@ import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
 import {
     copyArchiveMember,
+    countPackedFolders,
     createServerArchiveWriter,
     declaredUnpackBytes,
-    ENTRY_ALLOWANCE_BYTES,
     extractArtifact,
     hashArchiveMembers,
     packFolder,
@@ -1047,8 +1047,8 @@ describe('Archive writer and reader', () => {
 });
 
 // What an unpack is allowed to write is what the manifest declares, counted the way the unpack counts it: the bytes of
-// every entry, the manifest's own, and an allowance for every file and folder, which take the disk's blocks with no
-// bytes of their own.
+// every entry, the manifest's own, and an allowance for every file and every folder it counts, which take the disk's
+// blocks with no bytes of their own.
 describe('The unpack bound', () => {
     const FILES = 2000;
     let dir: string;
@@ -1057,8 +1057,12 @@ describe('The unpack bound', () => {
         dir = mkdtempSync(join(TEST_DATA_DIR, 'unpack-bound-'));
     });
 
-    // A home of many empty files, so its manifest outweighs them. `emptyFolders` adds folders the manifest cannot list.
-    async function packHome(name: string, emptyFolders = 0): Promise<{ artifact: string; manifest: BackupManifest }> {
+    // A home of many empty files, so its manifest outweighs them, and `emptyFolders` empty folders. `counted` is how
+    // many of those its manifest counts, and with null it counts no folders, as an older build's did.
+    async function packHome(
+        name: string,
+        { emptyFolders, counted = emptyFolders }: { emptyFolders: number; counted?: number | null },
+    ): Promise<{ artifact: string; manifest: BackupManifest }> {
         const folder = join(dir, name, buildHomeFolderName('unpackbound'));
         const entries = Array.from({ length: FILES }, (_, index) => ({
             path: `home/notes/${index % 10}/note-${index}.txt`,
@@ -1069,8 +1073,13 @@ describe('The unpack bound', () => {
             mkdirSync(join(folder, entry.path, '..'), { recursive: true });
             writeFileSync(join(folder, entry.path), '');
         }
-        for (let index = 0; index < emptyFolders; index++)
-            mkdirSync(join(folder, 'home', 'empty', `${index}`), { recursive: true });
+        const makeEmptyFolders = (from: number, to: number) => {
+            for (let index = from; index < to; index++)
+                mkdirSync(join(folder, 'home', 'empty', `${index}`), { recursive: true });
+        };
+        makeEmptyFolders(0, counted ?? 0);
+        const dirs = countPackedFolders(folder);
+        makeEmptyFolders(counted ?? 0, emptyFolders);
         const manifest: BackupManifest = {
             formatVersion: 1,
             kind: 'user',
@@ -1079,7 +1088,7 @@ describe('The unpack bound', () => {
             createdAt: new Date().toISOString(),
             appVersion: 'test',
             server: { domain: 'test.eigen.is', orgId: 'org' },
-            counts: { databases: 0, files: FILES, bytes: 0 },
+            counts: { databases: 0, files: FILES, bytes: 0, ...(counted !== null && { dirs }) },
             level: 'full-s3',
             mounts: [],
             entries,
@@ -1090,15 +1099,17 @@ describe('The unpack bound', () => {
         return { artifact, manifest };
     }
 
+    const exactly = (maxBytes: number) => ({ maxBytes, chargeFolders: true });
+
     test(
         'an archive that holds what its manifest lists unpacks within it, the manifest itself and every folder counted',
         async () => {
-            const { artifact, manifest } = await packHome('exact');
+            const { artifact, manifest } = await packHome('exact', { emptyFolders: 50 });
             // The manifest alone weighs more than the files it lists.
             expect(Buffer.byteLength(serializeManifest(manifest))).toBeGreaterThan(100 * FILES);
-            await extractArtifact(artifact, join(dir, 'exact-out'), declaredUnpackBytes(manifest));
+            await extractArtifact(artifact, join(dir, 'exact-out'), exactly(declaredUnpackBytes(manifest)));
             await expect(
-                extractArtifact(artifact, join(dir, 'exact-short'), declaredUnpackBytes(manifest) - 1),
+                extractArtifact(artifact, join(dir, 'exact-short'), exactly(declaredUnpackBytes(manifest) - 1)),
             ).rejects.toThrow(/more than its manifest declares/);
             expect(existsSync(join(dir, 'exact-short'))).toBe(false);
         },
@@ -1106,15 +1117,32 @@ describe('The unpack bound', () => {
     );
 
     test(
-        'folders the manifest does not list count against the bound though they hold no bytes',
+        'an archive with more folders than its manifest counts is refused, though they hold no bytes',
         async () => {
-            const { artifact, manifest } = await packHome('folders', 50);
+            const { artifact, manifest } = await packHome('folders', { emptyFolders: 50, counted: 10 });
+            expect(unpackBound(manifest).chargeFolders).toBe(true);
             await expect(
-                extractArtifact(artifact, join(dir, 'folders-out'), declaredUnpackBytes(manifest)),
+                extractArtifact(artifact, join(dir, 'folders-out'), exactly(declaredUnpackBytes(manifest))),
             ).rejects.toThrow(/more than its manifest declares/);
-            // A restore allows a few of them, such as a Maildir's empty `new/`, through its slack and reserve.
-            await extractArtifact(artifact, join(dir, 'folders-room'), unpackBound(manifest));
-            expect(unpackBound(manifest)).toBeGreaterThan(declaredUnpackBytes(manifest) + 50 * ENTRY_ALLOWANCE_BYTES);
+            expect(existsSync(join(dir, 'folders-out'))).toBe(false);
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    // An older build counted no folders. Its archive's unpack charges none, as before folders counted at all.
+    test(
+        'an archive whose manifest counts no folders unpacks without charging them',
+        async () => {
+            const { artifact, manifest } = await packHome('uncounted', { emptyFolders: 50, counted: null });
+            const { chargeFolders } = unpackBound(manifest);
+            expect(chargeFolders).toBe(false);
+            await extractArtifact(artifact, join(dir, 'uncounted-out'), {
+                maxBytes: declaredUnpackBytes(manifest),
+                chargeFolders,
+            });
+            expect(existsSync(join(dir, 'uncounted-out', buildHomeFolderName('unpackbound'), 'home/empty/49'))).toBe(
+                true,
+            );
         },
         PACK_TIMEOUT_MS,
     );

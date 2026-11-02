@@ -97,7 +97,7 @@ export async function snapshotServer(
         createdAt: new Date().toISOString(),
         appVersion: config.version,
         server: { domain: config.domain, orgId: config.orgId },
-        counts: countEntries(entries, databases),
+        counts: countEntries(entries, databases, folder),
         mounts: [],
         entries,
     };

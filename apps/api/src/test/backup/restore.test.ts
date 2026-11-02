@@ -29,7 +29,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import * as archiveModule from '../../lib/backup/archive';
 import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
-import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { runArtifactVerify, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import * as materializeModule from '../../lib/backup/materialize-mount';
 import * as pathsModule from '../../lib/backup/paths';
 import {
@@ -93,6 +93,8 @@ const CHATS_FOLDER = 'chats';
 // folders exist only in the paths table. The harness's default mount is local-key (setup uses
 // 'local-id'), so both key shapes are restored here.
 const LOCAL_MOUNT_ID = 'restore-local';
+// A home of tens of thousands of folders is made, backed up, verified and restored in one test.
+const EMPTY_FOLDERS_TIMEOUT_MS = 120_000;
 
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
 // `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
@@ -1587,6 +1589,31 @@ describe('Backup round trip of a home that stores files by name', () => {
         await expectRealShapeServed(shape);
     });
 
+    // A mailbox has an empty `new/` and `tmp/` and a drive has empty folders, which the pack keeps as entries and the
+    // unpack charges each. Thousands of them pass what the slack and the reserve allow, so the manifest counts them.
+    test(
+        'a home of many empty folders backs up, verifies and restores within its own bound',
+        async () => {
+            const { user } = await realShapeHome();
+            const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+            const folders = 20_000;
+            for (let index = 0; index < folders; index++) {
+                nodeFs.mkdirSync(join(homeDir, 'empty-folders', `${index % 100}`, `${index}`), { recursive: true });
+            }
+            const artifact = await backUp(user.id);
+            const verified = await waitForJob(
+                startBackupJob('verify', user.id, undefined, (started, onProgress) =>
+                    runArtifactVerify(artifact, started, onProgress),
+                ).id,
+            );
+            expect(verified.error).toBeUndefined();
+
+            await restoreHome(artifact, user.id, `restore-empty-folders-${Date.now()}`);
+            expect(existsSync(join(homeDir, 'empty-folders', '99', `${folders - 1}`))).toBe(true);
+        },
+        EMPTY_FOLDERS_TIMEOUT_MS,
+    );
+
     // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
     // of the home at the restore in a client that sorts by received date.
     test('a restore puts a Maildir message back with its mtime, private', async () => {
@@ -1779,13 +1806,28 @@ describe('Backup restore of one home judges, then takes the home', () => {
         }
 
         // The bound the unpack stops at, which counts the manifest and an allowance for every entry beside the bytes.
-        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest), dir: getDataRoot() });
+        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest).maxBytes, dir: getDataRoot() });
         const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
-        const perEntry = archiveModule.ENTRY_ALLOWANCE_BYTES * manifest.entries.length;
-        expect(checked?.needed).toBeGreaterThan(manifest.counts.bytes + manifestBytes + perEntry);
+        const entries = manifest.entries.length + (manifest.counts.dirs ?? 0);
+        expect(manifest.counts.dirs).toBeGreaterThan(0);
+        expect(checked?.needed).toBeGreaterThan(
+            manifest.counts.bytes + manifestBytes + archiveModule.ENTRY_ALLOWANCE_BYTES * entries,
+        );
         expect(extracted).toBe(0);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // An older build's manifest counts no folders, and its unpack charges none, so its archive restores as it did.
+    test('an archive whose manifest counts no folders restores', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 96_000), (manifest) => {
+            delete manifest.counts.dirs;
+        });
+        expect((await readArtifactManifest(join(getBackupsDir(), artifact))).counts.dirs).toBeUndefined();
+        await restoreHome(artifact, user.id, `restore-uncounted-${Date.now()}`);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toContain('kept.txt');
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
     });
 
     test('an archive whose files pass the bytes it declares is refused mid-unpack, and leaves nothing behind', async () => {
