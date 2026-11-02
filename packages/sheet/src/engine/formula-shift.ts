@@ -8,6 +8,75 @@ import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
+// Shifts every ref in a formula by rowOffset rows and colOffset columns, as a copy or a fill does. The text comes back
+// without its leading `=`.
+export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
+    return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
+}
+
+// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
+// imported tab whose name the workbook holds. A leading `=` is kept.
+export function renameSheetRefs(txt: string, renames: ReadonlyMap<string, string>): string {
+    if (renames.size === 0 || !txt.includes('!')) return txt;
+    const renamed = walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!');
+        const name = sheetEnd > 0 ? renames.get(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+        return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
+    });
+    return txt.startsWith('=') ? `=${renamed}` : renamed;
+}
+
+// Replaces each defined name in a formula with the text `resolve` gives for it, as an xlsx import does, since the
+// engine has no names. `resolve` gets every leaf that is no ref, such as a name or a number, as written, and the sheet
+// a `Sheet1!Name` qualifies it with, unquoted. It returns nothing for a leaf that stays. A function of the same name
+// is still called. A formula without a name comes back as written, and a leading `=` is kept.
+export function inlineNames(
+    txt: string,
+    resolve: (name: string, sheet: string | undefined) => string | undefined,
+): string {
+    let inlined = false;
+    const name = (token: string) => {
+        const sheetEnd = token.lastIndexOf('!');
+        const text = resolve(
+            token.slice(sheetEnd + 1),
+            sheetEnd > 0 ? unquoteSheetName(token.slice(0, sheetEnd)) : undefined,
+        );
+        if (text === undefined) return token;
+        inlined = true;
+        return text;
+    };
+    // The walker reads a name such as RhoCO2 as a cell. Its column is past Excel's last, so Excel reads it as a name.
+    const ref = (token: string) => {
+        const range = /[$:]/.test(token) ? null : parseA1Range(token);
+        return range && !a1RangeRef(range) ? name(token) : token;
+    };
+    const walked = walkFormulaRefs(txt, ref, name);
+    if (!inlined) return txt;
+    return txt.startsWith('=') ? `=${walked}` : walked;
+}
+
+// Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
+// alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
+// `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
+// whether the formula lives on it. Only refs to that sheet move.
+export function functionStrChange(
+    txt: string,
+    type: 'add' | 'del',
+    rc: 'row' | 'col',
+    orient: 'lefttop' | 'rightbottom' | null,
+    stindex: number,
+    step: number,
+    targetSheet: string,
+    onTargetSheet: boolean,
+): string {
+    if (!txt) {
+        return '';
+    }
+    return walkFormulaRefs(txt, (ref) =>
+        shiftRefForRowCol(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
+    );
+}
+
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
 export function detectAbsolute(txt: string): [boolean, boolean] {
     const row = txt.replace(/[^0-9]/g, '');
@@ -18,39 +87,11 @@ export function detectAbsolute(txt: string): [boolean, boolean] {
     ];
 }
 
-// Same rules as the compiled formula's offset, so pasted text and a conditional format agree.
-function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
-    const sheetEnd = txt.lastIndexOf('!') + 1;
-    const prefix = txt.slice(0, sheetEnd);
-    const [startTxt, endTxt] = txt.slice(sheetEnd).split(':');
-    // walkFormulaRefs only hands over tokens `iscelldata` accepts, which extractLabel parses.
-    const start = extractLabel(startTxt);
-    if (!start) return txt;
-    const [startRow, startColumn] = start;
-
-    if (endTxt == null) {
-        const row = offsetCoordinate(startRow, rowOffset, 'row');
-        const column = offsetCoordinate(startColumn, colOffset, 'column');
-        return row == null || column == null ? error['r'] : prefix + toLabel(row, column);
-    }
-
-    const end = extractLabel(endTxt);
-    if (!end) return txt;
-    const [endRow, endColumn] = end;
-    const range = offsetRange([startRow, startColumn], [endRow, endColumn], rowOffset, colOffset);
-    if (range == null) return error['r'];
-    const [[rowStart, colStart], [rowEnd, colEnd]] = range;
-    return `${prefix + toLabel(rowStart, colStart)}:${toLabel(rowEnd, colEnd)}`;
-}
-
 // The character walker every rewrite here shares. It drops one leading `=`, then reads the text as refs and the
 // structure around them: brackets, strings, commas, `&` and the operators, a two-character one or a leading minus
 // included. It walks into each part between them. Each leaf that `iscelldata` reads as a ref goes to `onRef`, which
 // returns its replacement. Any other leaf, such as a name or a number, goes to `onName`, which keeps it by default. A
 // function's name is no leaf, and neither is a string.
-//
-// `isFunctionRange` looks similar, but it compiles the formula into nested `functions.*` calls, so it is a different
-// machine and not built on this walker.
 //
 // A `-` is a sign, glued to the number after it, when the nearest character before it that is no space is `(`, `,`,
 // another operator, or the start of the part. The scan reads the character just before the `-` first and then walks
@@ -188,7 +229,7 @@ function refOf(token: string, onRef: (ref: string) => string, onName: (token: st
     const prefix = token.slice(0, sheetEnd);
     if (!chained.every((leg) => iscelldata(leg))) return token;
     const moved = chained.map((leg) => onRef(prefix + leg));
-    if (moved.includes(error['r'])) return error['r'];
+    if (moved.includes(error.r)) return error.r;
     return [moved[0], ...moved.slice(1).map((leg) => leg.slice(prefix.length))].join(':');
 }
 
@@ -208,73 +249,29 @@ function splitUnquoted(text: string, separator: string): string[] {
     return parts;
 }
 
-// Shifts every cell-data ref in a formula by (rowOffset, colOffset), both axes at once.
-// A leading `=` is stripped before processing; the returned text never carries one.
-export function functionCopy(txt: string, rowOffset: number, colOffset: number): string {
-    return walkFormulaRefs(txt, (ref) => shiftRef(ref, rowOffset, colOffset));
-}
+// Same rules as the compiled formula's offset, so pasted text and a conditional format agree.
+function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
+    const sheetEnd = txt.lastIndexOf('!') + 1;
+    const prefix = txt.slice(0, sheetEnd);
+    const [startTxt, endTxt] = txt.slice(sheetEnd).split(':');
+    // walkFormulaRefs only hands over tokens `iscelldata` accepts, which extractLabel parses.
+    const start = extractLabel(startTxt);
+    if (!start) return txt;
+    const [startRow, startColumn] = start;
 
-// Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
-// imported tab whose name the workbook holds. A leading `=` is kept.
-export function renameSheetRefs(txt: string, renames: ReadonlyMap<string, string>): string {
-    if (renames.size === 0 || !txt.includes('!')) return txt;
-    const renamed = walkFormulaRefs(txt, (ref) => {
-        const sheetEnd = ref.lastIndexOf('!');
-        const name = sheetEnd > 0 ? renames.get(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
-        return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
-    });
-    return txt.startsWith('=') ? `=${renamed}` : renamed;
-}
-
-// Replaces each defined name in a formula with the text `resolve` gives for it, as an xlsx import does, since the
-// engine has no names. `resolve` gets every leaf that is no ref, such as a name or a number, as written, and the sheet
-// a `Sheet1!Name` qualifies it with, unquoted. It returns nothing for a leaf that stays. A function of the same name
-// is still called. A formula without a name comes back as written, and a leading `=` is kept.
-export function inlineNames(
-    txt: string,
-    resolve: (name: string, sheet: string | undefined) => string | undefined,
-): string {
-    let inlined = false;
-    const name = (token: string) => {
-        const sheetEnd = token.lastIndexOf('!');
-        const text = resolve(
-            token.slice(sheetEnd + 1),
-            sheetEnd > 0 ? unquoteSheetName(token.slice(0, sheetEnd)) : undefined,
-        );
-        if (text === undefined) return token;
-        inlined = true;
-        return text;
-    };
-    // The walker reads a name such as RhoCO2 as a cell. Its column is past Excel's last, so Excel reads it as a name.
-    const ref = (token: string) => {
-        const range = /[$:]/.test(token) ? null : parseA1Range(token);
-        return range && !a1RangeRef(range) ? name(token) : token;
-    };
-    const walked = walkFormulaRefs(txt, ref, name);
-    if (!inlined) return txt;
-    return txt.startsWith('=') ? `=${walked}` : walked;
-}
-
-// Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
-// alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
-// `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
-// whether the formula lives on it. Only refs to that sheet move.
-export function functionStrChange(
-    txt: string,
-    type: 'add' | 'del',
-    rc: 'row' | 'col',
-    orient: 'lefttop' | 'rightbottom' | null,
-    stindex: number,
-    step: number,
-    targetSheet: string,
-    onTargetSheet: boolean,
-): string {
-    if (!txt) {
-        return '';
+    if (endTxt == null) {
+        const row = offsetCoordinate(startRow, rowOffset, 'row');
+        const column = offsetCoordinate(startColumn, colOffset, 'column');
+        return row == null || column == null ? error.r : prefix + toLabel(row, column);
     }
-    return walkFormulaRefs(txt, (ref) =>
-        shiftRefForRowCol(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
-    );
+
+    const end = extractLabel(endTxt);
+    if (!end) return txt;
+    const [endRow, endColumn] = end;
+    const range = offsetRange([startRow, startColumn], [endRow, endColumn], rowOffset, colOffset);
+    if (range == null) return error.r;
+    const [[rowStart, colStart], [rowEnd, colEnd]] = range;
+    return `${prefix + toLabel(rowStart, colStart)}:${toLabel(rowEnd, colEnd)}`;
 }
 
 // Moves one cell or range ref for functionStrChange.
@@ -334,11 +331,11 @@ function shiftRefForRowCol(
         };
         if (rc === 'row' && !rowsMissing) {
             const rows = afterDelete(r1, r2);
-            if (rows == null) return error['r'];
+            if (rows == null) return error.r;
             [r1, r2] = rows;
         } else if (rc === 'col' && !colsMissing) {
             const columns = afterDelete(c1, c2);
-            if (columns == null) return error['r'];
+            if (columns == null) return error.r;
             [c1, c2] = columns;
         }
         return formatRange();
