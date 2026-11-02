@@ -82,3 +82,32 @@ test('a preset row replaces the pattern, and the keyboard can pick it', async ()
     await dialog.click('Apply');
     expect(format(dialog.context())).toBe('yyyy-MM-dd');
 });
+
+test('the insert menu lists the tokens by group, and a pick adds the token with its first variant', async () => {
+    const dialog = await openDateTimeFormats();
+    await act(async () =>
+        document
+            .querySelector('[aria-label="Insert token"]')
+            ?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 })),
+    );
+    const items = [...document.querySelectorAll('[role="menuitem"]')];
+    expect(items.map((item) => item.textContent)).toEqual([
+        'Day',
+        'Month',
+        'Year',
+        'Hour',
+        'Minute',
+        'Second',
+        'Millisecond',
+        'a.m./p.m.',
+        'Elapsed hours',
+        'Elapsed minutes',
+        'Elapsed seconds',
+        'Separator text',
+    ]);
+    await act(async () =>
+        items.find((item) => item.textContent === 'Hour')?.dispatchEvent(new MouseEvent('click', { bubbles: true })),
+    );
+    await dialog.click('Apply');
+    expect(format(dialog.context())).toBe('dd/MM/yyyyHH');
+});
