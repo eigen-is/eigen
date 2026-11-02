@@ -3,7 +3,7 @@
 import { afterEach, expect, test } from 'bun:test';
 import { formatForDisplay, parseHotkey } from '@tanstack/react-hotkeys';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { openSubmenu } from '@workspace/ui/test/menu-rows';
+import { clickRow, openSubmenu } from '@workspace/ui/test/menu-rows';
 
 installHappyDom();
 
@@ -162,4 +162,22 @@ test('Enter or Space on a focused bar menu leaves the cell editor closed', async
         });
         expect(editorLayer()).toBe('-1');
     }
+});
+
+// Google Sheets hands the focus back to the grid after a menu command, so the next key acts on the selection. Radix
+// would leave it on the menu's trigger, whose keys the grid leaves to the bar.
+test('after a menu command the grid has the focus, and its keys act on the selection', async () => {
+    const { container, input, a1 } = await mount();
+    const insert = [...container.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]')].find(
+        (button) => button.textContent === 'Insert',
+    );
+    if (!insert) throw new Error('no Insert menu');
+    insert.focus();
+    await openMenu(container, 'Insert');
+    await openSubmenu('Row');
+    await clickRow('Insert 1 row above');
+    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
+    expect(document.activeElement === input).toBe(true);
+    await press(input, 'Mod+B');
+    expect(a1()?.bl).toBe(1);
 });
