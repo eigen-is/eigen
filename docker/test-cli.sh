@@ -351,7 +351,8 @@ else
     fail "restore answered no: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen restore --help
-if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <archive> \[--yes\] \[--s3-from-archive\]' && ! says '--stage'; then
+if [ "$CODE" = 0 ] && says '^Usage: ./eigen restore <archive> \[--in <time> \[message\]\] \[--yes\] \[--s3-from-archive\]' &&
+    ! says '--stage'; then
     ok "restore --help prints its usage, without the stage and swap the launcher runs"
 else
     fail "restore --help: exit $CODE, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
