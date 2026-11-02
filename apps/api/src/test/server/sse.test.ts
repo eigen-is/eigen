@@ -305,8 +305,8 @@ describe('SSE', () => {
             const home = await newHome('ends');
             const hold = home.hold.bind(home);
             let released = false;
-            spyOn(home, 'hold').mockImplementation((onClose) => {
-                const release = hold(onClose);
+            spyOn(home, 'hold').mockImplementation((onClosing) => {
+                const release = hold(onClosing);
                 return (idleMs) => {
                     released = true;
                     release(idleMs);
@@ -317,19 +317,21 @@ describe('SSE', () => {
             const keepalive = intervals.mock.results[intervals.mock.calls.findIndex(([, ms]) => ms === 15_000)]?.value;
             intervals.mockRestore();
             const cleared = spyOn(globalThis, 'clearInterval');
-
-            await evictHome(home.user.id);
-            // Bounded, so a stream that never ends fails the test instead of hanging it.
-            const ended = Promise.race([
-                (async () => {
-                    while (!(await reader.read()).done) {}
-                    return true;
-                })(),
-                Bun.sleep(2000).then(() => false),
-            ]);
-            expect(await ended).toBe(true);
-            expect(cleared).toHaveBeenCalledWith(keepalive);
-            cleared.mockRestore();
+            try {
+                await evictHome(home.user.id);
+                // Bounded, so a stream that never ends fails the test instead of hanging it.
+                const ended = Promise.race([
+                    (async () => {
+                        while (!(await reader.read()).done) {}
+                        return true;
+                    })(),
+                    Bun.sleep(2000).then(() => false),
+                ]);
+                expect(await ended).toBe(true);
+                expect(cleared).toHaveBeenCalledWith(keepalive);
+            } finally {
+                cleared.mockRestore();
+            }
             expect(released).toBe(true);
         });
 

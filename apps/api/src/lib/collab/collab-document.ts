@@ -6,7 +6,6 @@
 // its snapshot.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
-import { COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON } from '@workspace/lib/constants/collab';
 import { isRecord } from '@workspace/lib/guards';
 import { readSheetsBase, writeSheetsSnapshot } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -162,10 +161,8 @@ export class CollabDocument {
                 .touchUpdatedAt(this.path.mountId, this.path.id, new Date(this.untouchedUpdateAt))
                 .catch(() => {});
         }
-        // The retry close, so each tab reconnects to the document that opens next. A tab whose home a restore
-        // replaced then names a stale epoch and reloads.
         for (const conn of this.connections.keys()) {
-            conn.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
+            conn.close();
         }
         this.connections.clear();
         this.provider.destroy();

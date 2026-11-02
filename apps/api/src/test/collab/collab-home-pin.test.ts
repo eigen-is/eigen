@@ -5,7 +5,7 @@ import * as decoding from 'lib0/decoding';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { waitFor } from '../fault-storage-helpers';
 import type { TestUser } from '../setup';
-import { createTestUser, driveGet, drivePost, getTestContext } from '../setup';
+import { createTestUser, driveDelete, driveGet, drivePost, getTestContext } from '../setup';
 
 // An open collab socket holds the Home of the document's owner, so the Home never goes idle under an editor. A Home
 // that closes anyway, such as for a restore or a deletion, closes the socket with the retry close, and the tab
@@ -16,17 +16,21 @@ const USER_IDLE_MS = 5 * 60_000;
 let ctx: Awaited<ReturnType<typeof getTestContext>>;
 let user: TestUser;
 let url: string;
+let socketBase: string;
+let rootId: string;
 
 beforeAll(async () => {
     ctx = await getTestContext();
     user = await createTestUser('collab-home-hold@test.eigen.is', 'testpassword123', 'Home Hold');
     const mountId = 'default';
     const root = await driveGet<DrivePath>(user.sessionToken, user.id, mountId, 'root');
+    rootId = root.id;
     const doc = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}/create/doc`, {
         fileName: 'Home hold probe',
     });
     const port = ctx.app.listen(0).server?.port;
-    url = `ws://localhost:${port}/ws/collab/${user.id}/${mountId}/${doc.id}`;
+    socketBase = `ws://localhost:${port}/ws/collab/${user.id}/${mountId}`;
+    url = `${socketBase}/${doc.id}`;
 });
 
 afterEach(() => {
@@ -38,8 +42,8 @@ afterAll(() => {
 });
 
 // `synced` turns true on the server's sync step 1, which the route sends once the open is done.
-function openSocket(sessionToken = user.sessionToken) {
-    const ws = new WebSocket(url, {
+function openSocket(sessionToken = user.sessionToken, socketUrl = url) {
+    const ws = new WebSocket(socketUrl, {
         headers: { cookie: `better-auth.session_token=${sessionToken}` },
     } as unknown as string[]);
     ws.binaryType = 'arraybuffer';
@@ -98,26 +102,32 @@ describe('a collab socket holds its Home', () => {
         await home.close();
     });
 
-    // The route closes the socket itself here, after it took the hold, and its close handler still lets go.
-    test('a socket refused for access lets go of the Home it held', async () => {
+    // A user who may not read the document never holds its owner's Home.
+    test('a socket refused for access does not hold the Home', async () => {
         const home = await getHome(user.id);
-        const hold = home.hold.bind(home);
-        let released = false;
-        const holds = spyOn(home, 'hold').mockImplementation((onClose) => {
-            const release = hold(onClose);
-            return (idleMs) => {
-                released = true;
-                release(idleMs);
-            };
-        });
+        const holds = spyOn(home, 'hold');
         try {
             const socket = openSocket(ctx.bob.user.sessionToken);
             expect(await socket.closed).toEqual({ code: 1008, reason: 'Access denied' });
-            expect(holds).toHaveBeenCalledTimes(1);
-            await waitFor(() => released, 10_000);
+            expect(holds).not.toHaveBeenCalled();
         } finally {
             holds.mockRestore();
         }
+    });
+
+    // Only a Home close sends 1013. A document that closes alone, such as a trashed one, lets the tab reconnect
+    // quickly and silently.
+    test('a trashed document closes its socket without 1013', async () => {
+        const doc = await drivePost<DrivePath>(user.sessionToken, user.id, 'default', `folder/${rootId}/create/doc`, {
+            fileName: 'Trash probe',
+        });
+        const socket = openSocket(user.sessionToken, `${socketBase}/${doc.id}`);
+        await waitFor(socket.synced, 10_000);
+
+        await driveDelete(user.sessionToken, user.id, 'default', `path/${doc.id}`);
+
+        const { code } = await socket.closed;
+        expect(code).not.toBe(COLLAB_STORAGE_UNAVAILABLE_CLOSE);
     });
 
     // The Home starts to close after getSharedDrive found it and before the socket holds it.

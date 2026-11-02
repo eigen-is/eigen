@@ -50,9 +50,9 @@ export class SharedDrive {
         return this.drive.lockManager;
     }
 
-    // Holding the owner's home needs no access check of its own: the caller checks access to what it holds it for.
-    public holdHome(): () => void {
-        return this.drive.holdHome();
+    // Holding the owner's home has no access check of its own: the caller checks access before it holds.
+    public holdHome(onClosing?: () => void): () => void {
+        return this.drive.holdHome(onClosing);
     }
 
     // ---- Access checks ----

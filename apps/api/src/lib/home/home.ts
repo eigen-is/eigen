@@ -187,15 +187,16 @@ export class Home {
     }
 
     // Keeps the home open, however long the work takes, until the returned release is called. A holder that
-    // must stop when the home closes anyway, such as for a restore, passes onClose. A holder that opened the
-    // home only for itself may ask for a shorter idle when it lets go. A closing home refuses, because its
-    // holder would never hear the close.
-    public hold(onClose?: () => void): (idleMs?: number) => void {
+    // must stop when the home closes anyway, such as for a restore, passes onClosing. The home runs it when the
+    // close starts, before the parts close, unlike the onClosed of the constructor, which runs when the close
+    // is done. A holder that opened the home only for itself may ask for a shorter idle when it lets go. A
+    // closing home refuses, because its holder would never hear the close.
+    public hold(onClosing?: () => void): (idleMs?: number) => void {
         this.refuseIfClosing();
         this.holds++;
         clearTimeout(this.idleTimer);
         // A callback of its own, so two holds that pass the same function stay two entries.
-        const callback = onClose && (() => onClose());
+        const callback = onClosing && (() => onClosing());
         if (callback) this.holderCloseCallbacks.add(callback);
         // Releasing twice must not count as two releases.
         let released = false;

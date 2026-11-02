@@ -210,14 +210,17 @@ export const collabRouter = new Elysia({
                     return;
                 }
                 const drive = await getSharedDrive(ownerId, user);
-                // The socket keeps the document's Home open until cleanupSession lets go, whichever way this
-                // open ends. A Home that closes anyway, such as for a restore, closes the socket through its
-                // documents. A Home that began to close after getSharedDrive found it refuses with a 503.
-                session.releaseHome = drive.holdHome();
                 if (!(await drive.canRead(mountId, pathId, user))) {
                     ws.close(1008, 'Access denied');
                     return;
                 }
+                // Only a user who may read holds the Home. The hold keeps it open until cleanupSession lets go,
+                // whichever way this open ends. A Home that closes anyway, such as for a restore, runs the
+                // callback, which closes the socket with the retry close. A Home that began to close after
+                // getSharedDrive found it refuses with a 503.
+                session.releaseHome = drive.holdHome(() =>
+                    rawWs.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON),
+                );
 
                 const document = await drive.getCollabDocument(mountId, pathId);
                 rawWs.send(collabEpochMessage(ownerId));
