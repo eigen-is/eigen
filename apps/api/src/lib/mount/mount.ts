@@ -1334,6 +1334,8 @@ export class Mount {
         return documentDb.withDatabase(this, config, pathId, fn);
     }
 
+    // Opens the database and holds it until the caller lets go, such as an open collab document for
+    // its whole life. It then closes after a few idle minutes, as after withDatabase.
     public async holdDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         pathId: string,

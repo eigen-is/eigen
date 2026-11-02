@@ -14,6 +14,7 @@ import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
 import { getShutdownDrainDeadline } from '../mount/upload-limits';
+import type { UploadQueue } from '../mount/upload-queue';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
 import type { RetentionPolicy } from './retention';
 import { selectSnapshotsToPrune } from './retention';
@@ -86,10 +87,10 @@ async function takeSnapshot(
     // the existing one rather than failing on the duplicate name.
     const existing = await mount.getChildByName(versions.id, snapshotName);
     if (existing) return existing;
-    // isRemote ENQUEUES the version's upload, so a close-time snapshot never blocks on the
-    // backend. Local backends write it synchronously.
-    const versionPathId = mount.isRemote
-        ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName, order)
+    // On s3 the version's upload is queued, so a close-time snapshot never waits on the bucket. A local
+    // mount writes it before this returns.
+    const versionPathId = mount.uploadQueue
+        ? await snapshotDataDbToVersionStaged(mount, mount.uploadQueue, dataDb, versions.id, snapshotName, order)
         : await snapshotDataDbToVersionLocal(mount, dataDb, versions.id, snapshotName, order);
     const copy = await mount.getPath(versionPathId);
     if (!copy) throw new ApiError(500, 'Failed to create version snapshot');
@@ -109,17 +110,16 @@ async function takeSnapshot(
     return copy;
 }
 
-// isRemote version snapshot: source the bytes from the freshest LOCAL copy of data.db, then
-// create the version metadata row and enqueue the upload (so a close-time snapshot never
-// blocks on the backend). Caller holds the container lock.
+// The s3 version snapshot. It copies the freshest local copy of data.db, creates the version's row and
+// queues its upload, so a close-time snapshot never waits on the bucket. The caller holds the container lock.
 async function snapshotDataDbToVersionStaged(
     mount: Mount,
+    queue: UploadQueue,
     dataDb: DrivePath,
     versionsId: string,
     snapshotName: string,
     order: CopyOrder,
 ): Promise<string> {
-    const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
     const staged = await stageManagedDbCopy(mount, dataDb.id, versionStaging, order).catch((error: unknown) => {
         // A failed read leaves a half-written copy no pending upload references.

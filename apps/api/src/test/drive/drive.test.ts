@@ -8,6 +8,7 @@ import {
     teamOwnerId,
 } from '@workspace/lib/types';
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
+import { comments } from '../../lib/chat/comment-schema';
 import { getServerConfig } from '../../lib/config/server-config';
 import { copyPathAcross } from '../../lib/drive/copy-across';
 import { getSharedDrive } from '../../lib/drive/get-drive';
@@ -3813,14 +3814,16 @@ describe('Drive', () => {
             // Bob holds no share on the doc. Opening its managed DB by pathId must be refused —
             // pre-fix the wrapper delegated with no ACL check, an arbitrary-DB-open hole on the seam.
             const open = () =>
-                bobShared.withDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (db) => db);
+                bobShared.withDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (managed) =>
+                    managed.db.select().from(comments).all(),
+                );
             await expect(open()).rejects.toThrow('No read permission');
 
             // Granting read on the container (comments.db inherits it) lets the same open through.
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
                 add: [{ id: BOB_EMAIL, read: true, write: false }],
             });
-            expect((await open()).db).toBeDefined();
+            expect(await open()).toEqual([]);
         });
     });
 
