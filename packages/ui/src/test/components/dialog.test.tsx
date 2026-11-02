@@ -1,5 +1,6 @@
 // DialogDescription wraps a long unbroken word, such as a file name, instead of making the dialog scroll sideways.
-// Over an open preview, a click outside a dialog closes that dialog alone, and a dialog under the preview stays open.
+// Over an open preview, a click outside a dialog or an Escape closes that dialog alone, and a dialog under the preview
+// stays open. Which one a dialog is follows from where it sits in the document, with no prop to say so.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import { installHappyDom } from '../happy-dom';
@@ -9,13 +10,12 @@ installHappyDom();
 
 const { act, createElement, useState } = await import('react');
 const { Dialog, DialogContent, DialogDescription, DialogTitle } = await import('../../components/dialog');
-const { PreviewContext } = await import('../../components/preview-provider/preview-context');
+const { isLayerAbove } = await import('../../hooks/use-dialog-open');
 
-const closePreview = mock(() => {});
 let unmount = async () => {};
 afterEach(async () => {
     await unmount();
-    closePreview.mockClear();
+    for (const overlay of document.querySelectorAll('[data-preview-overlay]')) overlay.remove();
 });
 
 test('the description breaks long words', async () => {
@@ -34,21 +34,20 @@ test('the description breaks long words', async () => {
     expect(document.querySelector('[data-slot="dialog-description"]')?.classList.contains('break-words')).toBe(true);
 });
 
-const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview, isPreviewOpen: true };
+// The file preview's overlay as the dialog sees it: an element on <body>, after every layer opened before it.
+const showPreview = () => {
+    const overlay = document.createElement('div');
+    overlay.setAttribute('data-preview-overlay', '');
+    document.body.append(overlay);
+};
 
-const dialog = (
-    title: string,
-    onOpenChange: (open: boolean) => void,
-    abovePreview: boolean,
-    children?: ReactNode,
-    open = true,
-) =>
+const dialog = (title: string, onOpenChange: (open: boolean) => void, children?: ReactNode, open = true) =>
     createElement(
         Dialog,
         { open, onOpenChange },
         createElement(
             DialogContent,
-            { abovePreview, 'aria-describedby': undefined },
+            { 'aria-describedby': undefined },
             createElement(DialogTitle, null, title),
             children,
         ),
@@ -56,6 +55,13 @@ const dialog = (
 
 // Radix starts listening for outside clicks a tick after the dialog opens.
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+// Cancelable, as a browser's is, so a dialog under the preview can refuse it.
+const pressEscape = () =>
+    act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
 // Radix waits for the click before it closes a dialog, so the whole press goes in.
 const clickTopOverlay = async () => {
     const overlays = document.querySelectorAll('[data-slot="dialog-overlay"]');
@@ -77,38 +83,51 @@ test('over a preview, a click outside a dialog closes that dialog alone, also on
     function Picker() {
         const [newFolderOpen, setNewFolderOpen] = useState(false);
         openNewFolder = () => setNewFolderOpen(true);
-        return dialog('Save to Drive', picker, true, dialog('New folder', newFolder, true, null, newFolderOpen));
+        return dialog('Save to Drive', picker, dialog('New folder', newFolder, null, newFolderOpen));
     }
-    ({ unmount } = await renderInDocument(
-        createElement(PreviewContext.Provider, { value: preview }, createElement(Picker)),
-    ));
+    showPreview();
+    ({ unmount } = await renderInDocument(createElement(Picker)));
     await settle();
     await act(async () => openNewFolder());
     await settle();
     await clickTopOverlay();
     expect(newFolder.mock.calls).toEqual([[false]]);
     expect(picker).not.toHaveBeenCalled();
-    expect(closePreview).not.toHaveBeenCalled();
     await unmount();
 
     // Rename over the preview, with no dialog under it.
     const rename = mock((_open: boolean) => {});
-    ({ unmount } = await renderInDocument(
-        createElement(PreviewContext.Provider, { value: preview }, dialog('Rename', rename, true)),
-    ));
+    ({ unmount } = await renderInDocument(dialog('Rename', rename)));
     await settle();
     await clickTopOverlay();
     expect(rename.mock.calls).toEqual([[false]]);
-    expect(closePreview).not.toHaveBeenCalled();
 });
 
-test('a dialog under an open preview ignores a click outside it', async () => {
+test('a plain dialog opened over a preview takes its own Escape and paints above it', async () => {
+    const rename = mock((_open: boolean) => {});
+    showPreview();
+    ({ unmount } = await renderInDocument(dialog('Rename', rename)));
+    const preview = document.querySelector('[data-preview-overlay]');
+    const content = document.querySelector('[data-slot="dialog-content"]');
+    if (!preview || !content) throw new Error('no preview or no dialog');
+    // Later in the document at the same z-index paints above.
+    expect(isLayerAbove(preview, content)).toBe(true);
+    expect(content.className).not.toMatch(/\bz-\[/);
+    await pressEscape();
+    expect(rename.mock.calls).toEqual([[false]]);
+});
+
+test('a dialog under an open preview ignores a click outside it and an Escape', async () => {
     const card = mock((_open: boolean) => {});
-    ({ unmount } = await renderInDocument(
-        createElement(PreviewContext.Provider, { value: preview }, dialog('Sticky', card, false)),
-    ));
+    ({ unmount } = await renderInDocument(dialog('Sticky', card)));
+    showPreview();
     await settle();
     await clickTopOverlay();
+    await pressEscape();
     expect(card).not.toHaveBeenCalled();
-    expect(closePreview).not.toHaveBeenCalled();
+
+    // Once the preview is gone, the same dialog takes its Escape again.
+    document.querySelector('[data-preview-overlay]')?.remove();
+    await pressEscape();
+    expect(card.mock.calls).toEqual([[false]]);
 });

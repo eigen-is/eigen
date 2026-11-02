@@ -26,8 +26,7 @@ afterAll(() => fetchSpy.mockRestore());
 const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { DriveItemNameDialog } = await import('../../../components/drive/drive-item-name-dialog');
-const { ABOVE_PREVIEW_Z } = await import('../../../components/dialog');
-const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
+const { isLayerAbove } = await import('../../../hooks/use-dialog-open');
 
 // A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
 const toasted = (message: string) => {
@@ -80,12 +79,13 @@ async function openNewFolder() {
     ({ unmount } = await renderInDocument(createElement(Harness)));
 }
 
-// A file preview is open, as when Save to Drive's picker opens New folder over it.
+// A file preview is open, as when Save to Drive's picker opens New folder over it. The overlay is on <body> first.
 async function openNewFolderOverPreview() {
-    const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
-    ({ unmount } = await renderInDocument(
-        createElement(PreviewContext.Provider, { value: preview }, createElement(Harness)),
-    ));
+    const preview = document.createElement('div');
+    preview.setAttribute('data-preview-overlay', '');
+    document.body.append(preview);
+    ({ unmount } = await renderInDocument(createElement(Harness)));
+    return preview;
 }
 
 const dialog = () => document.querySelector('[role="dialog"]');
@@ -130,13 +130,17 @@ test('New folder shows a labelled name field, Cancel and Create', async () => {
     expect(button('Create')).toBeDefined();
 });
 
-test('over an open file preview the dialog lifts above it, and Escape closes the dialog', async () => {
-    await openNewFolderOverPreview();
-    expect(dialog()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
+test('over an open file preview the dialog sits after it in the document, and Escape closes the dialog', async () => {
+    const preview = await openNewFolderOverPreview();
+    const content = dialog();
+    if (!content) throw new Error('no dialog');
+    expect(isLayerAbove(preview, content)).toBe(true);
+    expect(content.className).not.toMatch(/\bz-\[/);
     await act(async () => {
         nameField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
     });
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+    preview.remove();
 });
 
 test('Create waits for a name with more than spaces', async () => {

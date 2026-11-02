@@ -1,10 +1,12 @@
 // The overlay's keys listen on the document, and everything its content can open above it — a picker,
 // the `.eml` reader header's details popover — is a layer of its own that handles Escape itself. What is
 // pinned here is that the overlay stands its keys down while such a layer is open, and that Space on a
-// focused control inside the overlay is that control's own activation rather than a close.
+// focused control inside the overlay is that control's own activation rather than a close. Every layer
+// portals to <body> as it opens, so document order says which one is on top and whose Escape it is.
 import { expect, mock, test } from 'bun:test';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
@@ -13,11 +15,18 @@ const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
 
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
-const { act, createElement } = await import('react');
+const { act, createElement, Fragment, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { Popover, PopoverContent, PopoverTrigger } = await import('../../../components/popover');
 const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
 const { FilePreview } = await import('../../../components/drive/file-preview');
+const { PreviewProvider, usePreview } = await import('../../../components/preview-provider/preview-provider');
+const { Dialog, DialogContent, DialogTitle } = await import('../../../components/dialog');
+const { FormDialog, FormDialogForm } = await import('../../../components/form-dialog');
+const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } = await import(
+    '../../../components/dropdown-menu'
+);
+const { isLayerAbove } = await import('../../../hooks/use-dialog-open');
 
 // A part with no preview of its own: the overlay draws its file card, and no query runs.
 const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
@@ -156,4 +165,161 @@ test('a dialog the overlay was opened over leaves the overlay its keys', async (
     expect(closed.count).toBe(1);
     await cleanup();
     card.remove();
+});
+
+// Stickies: a card is a dialog holding a chat; an attachment in it opens the preview over the card, and Save to Drive
+// in the preview's footer opens over the preview. None of them is told where it sits: each Escape and each click
+// closes the top layer alone, and the card stays.
+async function mountStickiesChain() {
+    const card = { closed: 0 };
+    const save = { closed: 0 };
+    const controls = { openAttachment: () => {}, openSave: () => {}, openMenu: () => {} };
+    function Card() {
+        const { openPreview } = usePreview();
+        const [saveOpen, setSaveOpen] = useState(false);
+        const [menuOpen, setMenuOpen] = useState(false);
+        controls.openAttachment = () => openPreview(subject, [subject, next]);
+        controls.openSave = () => setSaveOpen(true);
+        controls.openMenu = () => setMenuOpen(true);
+        return createElement(
+            Fragment,
+            null,
+            createElement(
+                Dialog,
+                {
+                    open: true,
+                    onOpenChange: () => {
+                        card.closed += 1;
+                    },
+                },
+                createElement(
+                    DialogContent,
+                    { 'aria-describedby': undefined },
+                    createElement(DialogTitle, null, 'Groceries'),
+                ),
+            ),
+            createElement(FormDialog, {
+                open: saveOpen,
+                onOpenChange: (open: boolean) => {
+                    if (!open) save.closed += 1;
+                    setSaveOpen(open);
+                },
+                title: 'Save to Drive',
+                children: createElement(FormDialogForm, {
+                    onSubmit: () => {},
+                    submitLabel: 'Save here',
+                    children: createElement(
+                        DropdownMenu,
+                        { open: menuOpen, onOpenChange: setMenuOpen },
+                        createElement(DropdownMenuTrigger, null, 'Folder actions'),
+                        createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, null, 'Rename')),
+                    ),
+                }),
+            }),
+        );
+    }
+    const { unmount } = await renderInDocument(createElement(PreviewProvider, null, createElement(Card)));
+    // Radix starts listening for outside clicks a tick after a layer opens.
+    const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    const run = async (action: () => void) => {
+        await act(async () => action());
+        await settle();
+    };
+    const layerTitled = (title: string) =>
+        [...document.querySelectorAll('[data-slot="dialog-content"]')].find(
+            (layer) => layer.querySelector('h2')?.textContent === title,
+        );
+    const preview = () => document.querySelector('[data-preview-overlay]');
+    const pressEscape = () =>
+        act(async () => {
+            (document.activeElement ?? document).dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+            );
+        });
+    // Radix waits for the click before it closes a layer, so the whole press goes in.
+    const press = async (target: Element | null | undefined) => {
+        if (!target) throw new Error('nothing to press');
+        await act(async () => {
+            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+            target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
+        });
+        await settle();
+    };
+    await settle();
+    await run(controls.openAttachment);
+    return { card, save, controls, layerTitled, preview, pressEscape, press, run, unmount };
+}
+
+const noZAbove50 = (element: Element | null | undefined) => expect(element?.className).not.toMatch(/\bz-\[/);
+
+test('Stickies: card, preview and Save to Drive stack in the order they opened, and each Escape closes the top one', async () => {
+    const { card, save, controls, layerTitled, preview, pressEscape, run, unmount } = await mountStickiesChain();
+    await run(controls.openSave);
+    const cardContent = layerTitled('Groceries');
+    const overlay = preview();
+    const saveContent = layerTitled('Save to Drive');
+    if (!cardContent || !overlay || !saveContent) throw new Error('a layer did not open');
+    expect(isLayerAbove(cardContent, overlay)).toBe(true);
+    expect(isLayerAbove(overlay, saveContent)).toBe(true);
+    for (const layer of [cardContent, overlay, saveContent]) noZAbove50(layer);
+
+    await pressEscape();
+    expect(save.closed).toBe(1);
+    expect(preview()).not.toBeNull();
+    expect(card.closed).toBe(0);
+
+    await pressEscape();
+    expect(preview()).toBeNull();
+    expect(card.closed).toBe(0);
+
+    await pressEscape();
+    expect(card.closed).toBe(1);
+    await unmount();
+});
+
+test('Stickies: X, Cancel and a click outside close Save to Drive alone, and the backdrop closes the preview alone', async () => {
+    const { card, save, controls, layerTitled, preview, press, run, unmount } = await mountStickiesChain();
+    const overlays = () => [...document.querySelectorAll('[data-slot="dialog-overlay"]')];
+
+    await run(controls.openSave);
+    await press(layerTitled('Save to Drive')?.querySelector('[data-slot="dialog-close"]'));
+    expect(save.closed).toBe(1);
+
+    await run(controls.openSave);
+    await press(
+        [...(layerTitled('Save to Drive')?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Cancel'),
+    );
+    expect(save.closed).toBe(2);
+
+    await run(controls.openSave);
+    await press(overlays().at(-1));
+    expect(save.closed).toBe(3);
+    expect(preview()).not.toBeNull();
+    expect(card.closed).toBe(0);
+
+    await press(preview());
+    expect(preview()).toBeNull();
+    expect(card.closed).toBe(0);
+    await unmount();
+});
+
+test('a menu opened in a dialog over the preview portals after both, and its Escape closes only the menu', async () => {
+    const { card, save, controls, layerTitled, preview, pressEscape, run, unmount } = await mountStickiesChain();
+    await run(controls.openSave);
+    await run(controls.openMenu);
+    const overlay = preview();
+    const saveContent = layerTitled('Save to Drive');
+    const menu = document.querySelector('[role="menu"]');
+    if (!overlay || !saveContent || !menu) throw new Error('a layer did not open');
+    expect(isLayerAbove(overlay, menu)).toBe(true);
+    expect(isLayerAbove(saveContent, menu)).toBe(true);
+    noZAbove50(menu);
+
+    await pressEscape();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(save.closed).toBe(0);
+    expect(preview()).not.toBeNull();
+    expect(card.closed).toBe(0);
+    await unmount();
 });

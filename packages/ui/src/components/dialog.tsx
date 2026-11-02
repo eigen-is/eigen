@@ -1,12 +1,15 @@
 // The shared modal dialog, built on Radix: the overlay, the content box with its corner X, and the header, title,
-// description and footer parts that dialogs across the apps put inside it.
+// description and footer parts that dialogs across the apps put inside it. A dialog under an open file preview, such as
+// the one the preview was opened from, leaves Escape and a click outside to the preview.
 
 import { Button } from '@workspace/ui/components/button';
+import { isLayerAbove } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
+import { useComposedRefs } from 'radix-ui/internal';
 import type * as React from 'react';
-import { useOptionalPreview } from './preview-provider/preview-context';
+import { useRef } from 'react';
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
     return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -38,35 +41,40 @@ const dialogSizeMap: Record<DialogSize, string> = {
     lg: 'sm:max-w-2xl',
 };
 
-// The layer above the full-screen file preview. Every surface that has to sit over an open preview uses it, such as a
-// dialog or the popover in the mail reader's header.
-export const ABOVE_PREVIEW_Z = 'z-[200]';
-
 // A field that closes something of its own on Escape: a combobox with its list open, or a field that marks itself,
 // such as the light editor's link field. Radix hears Escape on the document before the field does, so the dialog has
 // to leave the key alone. cmdk's input says expanded always, because its list is the dialog.
 const OWNS_ESCAPE = '[role="combobox"][aria-expanded="true"]:not([cmdk-input]), [data-owns-escape]';
+
+// The file preview is no Radix layer, so Radix can't tell a dialog under it from one over it. Every layer portals to
+// <body> in the order it opened, so a dialog earlier in the document than the preview is under it, such as the
+// Stickies card the preview was opened from.
+function isUnderPreview(content: Element | null): boolean {
+    const preview = document.querySelector('[data-preview-overlay]');
+    return !!preview && !!content && !isLayerAbove(preview, content);
+}
 
 function DialogContent({
     className,
     children,
     showCloseButton = true,
     size,
-    abovePreview,
     onPointerDownOutside,
     onEscapeKeyDown,
+    ref,
     ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean;
     size?: DialogSize;
-    abovePreview?: boolean;
 }) {
-    const preview = useOptionalPreview();
+    const contentRef = useRef<HTMLDivElement>(null);
+    const composedRef = useComposedRefs(ref, contentRef);
 
     return (
         <DialogPortal>
-            <DialogOverlay className={abovePreview ? ABOVE_PREVIEW_Z : undefined} />
+            <DialogOverlay />
             <DialogPrimitive.Content
+                ref={composedRef}
                 data-slot="dialog-content"
                 className={cn(
                     // A form taller than the screen scrolls inside the dialog, so its footer stays on screen. A
@@ -74,7 +82,6 @@ function DialogContent({
                     // below its content: an auto column would grow to fit a very long title and push the footer's
                     // buttons out of the dialog.
                     'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
-                    abovePreview ? ABOVE_PREVIEW_Z : undefined,
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
@@ -83,14 +90,14 @@ function DialogContent({
                 // preview closes itself when its own overlay is clicked. A dialog above the preview closes alone,
                 // as anywhere else, so a click outside New folder over the Save to Drive picker leaves the picker.
                 onPointerDownOutside={(e) => {
-                    if (preview?.isPreviewOpen && !abovePreview) e.preventDefault();
+                    if (isUnderPreview(contentRef.current)) e.preventDefault();
                     onPointerDownOutside?.(e);
                 }}
                 // Escape over an open preview is the preview's to close, not the dialog's under it. Escape in a
                 // field that closes something of its own is that field's.
                 onEscapeKeyDown={(e) => {
                     const fieldOwnsEscape = e.target instanceof Element && e.target.matches(OWNS_ESCAPE);
-                    if ((preview?.isPreviewOpen && !abovePreview) || fieldOwnsEscape) e.preventDefault();
+                    if (isUnderPreview(contentRef.current) || fieldOwnsEscape) e.preventDefault();
                     onEscapeKeyDown?.(e);
                 }}
                 {...props}

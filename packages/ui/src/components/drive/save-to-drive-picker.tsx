@@ -9,7 +9,6 @@ import { useSaveMailAttachmentsToDrive } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { useEffect, useRef, useState } from 'react';
-import { useOptionalPreview } from '../preview-provider/preview-context';
 import { DriveLocationPicker } from './drive-location-picker';
 
 type SaveToDrivePickerProps = {
@@ -24,7 +23,6 @@ type SaveToDrivePickerProps = {
 };
 
 export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, confirmLabel }: SaveToDrivePickerProps) {
-    const preview = useOptionalPreview();
     // Siblings come from one surface, so a batch is all Drive items or all mail parts: the first picks the branch.
     const source = subjects[0]?.drive;
     const mail = subjects[0]?.mail;
@@ -62,8 +60,6 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
             onOpenChange={(next) => {
                 if (!next) onClose();
             }}
-            // The picker opens over the preview overlay when one is showing, and has to outrank it.
-            abovePreview={preview?.isPreviewOpen}
             mode="folder"
             title={title ?? (count > 1 ? `Save ${count} files to Drive` : 'Save to Drive')}
             confirmLabel={confirmLabel ?? 'Save here'}
