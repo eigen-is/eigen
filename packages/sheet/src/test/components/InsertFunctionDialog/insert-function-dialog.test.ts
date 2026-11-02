@@ -92,3 +92,14 @@ test('a clicked function is the one OK inserts', async () => {
     await dialog.click('OK');
     expect(dialog.editorText()).toBe(`=${name}(`);
 });
+
+test('the search matches a description in any case, after the names that match', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'cosine of');
+    expect(listed()).toContain('COS');
+    await dialog.type(SEARCH, 'SUM OF A SERIES');
+    expect(listed()).toContain('SUM');
+    await dialog.type(SEARCH, 'sum');
+    const byName = listed().map((name) => name?.includes('SUM'));
+    expect(byName.indexOf(false)).toBeGreaterThan(byName.lastIndexOf(true));
+});

@@ -42,12 +42,14 @@ export function InsertFunctionDialog() {
     const [searchText, setSearchText] = useState('');
 
     const functions = useMemo(() => {
-        if (searchText) {
-            const text = searchText.toUpperCase();
-            const isAlpha = /^[a-zA-Z]+$/.test(text);
-            return FUNCTION_LIST.filter((fn) => (isAlpha ? fn.n.includes(text) : fn.a.includes(text)));
-        }
-        return FUNCTION_LIST.filter((fn) => fn.t === category);
+        const text = searchText.trim().toLowerCase();
+        if (!text) return FUNCTION_LIST.filter((fn) => fn.t === category);
+        const matches = (s: string) => s.toLowerCase().includes(text);
+        // The names that match come first, so Enter after a typed name inserts a function of that name.
+        return [
+            ...FUNCTION_LIST.filter((fn) => matches(fn.n)),
+            ...FUNCTION_LIST.filter((fn) => !matches(fn.n) && matches(fn.a)),
+        ];
     }, [category, searchText]);
 
     // The caret goes after the bracket, and the function's hint shows. An edit already open in the cell is replaced.
