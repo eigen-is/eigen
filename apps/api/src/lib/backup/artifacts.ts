@@ -1,14 +1,15 @@
 // The home archives in the backups folder: what the admin pane lists, how a name becomes a path, where an uploaded
-// archive lands, and what a delete takes with it. The backup routes call it, and so does a restore that reads one.
+// archive lands, and what a delete takes with it. It also reads and writes the sidecar beside each archive, the
+// manifest and verify result the list shows. The backup routes and jobs call it, and so does a restore.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import type { BackupArtifact } from '@workspace/lib/types/backup';
-import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName } from '@workspace/lib/validation';
+import type { BackupArtifact, BackupManifest, BackupVerifyRecord } from '@workspace/lib/types/backup';
+import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
-import { ARCHIVE_MODE, readArtifactManifest, readSidecar, writeSidecar } from './archive';
+import { ARCHIVE_MODE, readArtifactManifest, writeRecord } from './archive';
 import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
@@ -135,4 +136,24 @@ function landUploadedArtifact(tempPath: string, artifactPath: string): void {
 export function deleteArtifact(artifactPath: string): void {
     fs.rmSync(artifactPath, { force: true });
     fs.rmSync(sidecarPath(artifactPath), { force: true });
+}
+
+export async function writeSidecar(
+    artifactPath: string,
+    manifest: BackupManifest,
+    verify: BackupVerifyRecord,
+): Promise<void> {
+    // It names every file of the home, and ./eigen never reads it.
+    await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
+}
+
+// Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
+// it as unverified until a verify job writes one.
+export async function readSidecar(
+    artifactPath: string,
+): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
+    const text = await Bun.file(sidecarPath(artifactPath))
+        .text()
+        .catch(() => null);
+    return text === null ? null : parseBackupSidecar(text);
 }

@@ -10,16 +10,10 @@ import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
-import type {
-    BackupEntry,
-    BackupManifest,
-    BackupProgress,
-    BackupVerifyRecord,
-    ServerArchiveManifest,
-} from '@workspace/lib/types/backup';
-import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
+import type { BackupEntry, BackupManifest, BackupProgress, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import { parseBackupManifest } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
-import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
+import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath } from './paths';
 import {
     archiveEnd,
     BLOCK,
@@ -330,24 +324,4 @@ export async function writeRecord(target: string, value: unknown, mode?: number)
         throw error;
     }
     fs.renameSync(tempPath, target);
-}
-
-export async function writeSidecar(
-    artifactPath: string,
-    manifest: BackupManifest,
-    verify: BackupVerifyRecord,
-): Promise<void> {
-    // It names every file of the home, and ./eigen never reads it.
-    await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
-}
-
-// Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
-// it as unverified until a verify job writes one.
-export async function readSidecar(
-    artifactPath: string,
-): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
-    const text = await Bun.file(sidecarPath(artifactPath))
-        .text()
-        .catch(() => null);
-    return text === null ? null : parseBackupSidecar(text);
 }
