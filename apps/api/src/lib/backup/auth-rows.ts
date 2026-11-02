@@ -20,6 +20,9 @@ import { ARCHIVE_AUTH_FILE } from './paths';
 // archived.
 type AuthArchiveKey = 'user' | 'account' | 'two_factor' | 'apikey' | 'member' | 'team_member';
 
+// The rows of an auth.json that parsed, keyed the way the file spells them.
+type AuthArchiveRows = Record<string, Record<string, unknown>[]>;
+
 // A users3.db table one user's archive carries: the key it has in auth.json, the column that scopes
 // its rows to that user, and for a membership the parent row it would be an orphan without.
 type AuthTableSpec = {
@@ -68,10 +71,8 @@ export function readAuthRows(userId: string): Record<string, unknown[]> {
     return rows;
 }
 
-// Re-inserts the identity the archive carries, for a user the server no longer has.
-export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folder: string): void {
-    const archive = authRowsToRestore(ownerId, manifest, folder);
-    if (!archive) return;
+// Inserts the rows authRowsToRestore judged, for a user the server no longer has.
+export function restoreAuthRows(ownerId: string, archive: AuthArchiveRows): void {
     const db = getAuthDrizzleDb();
     const orgId = getPublicConfig().orgId;
     const drop = (table: string, reason: string): void => {
@@ -130,12 +131,8 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
 // The rows of the archive's auth.json a restore would insert, or null when it inserts none: a team has no auth.json,
 // and a user who is still here keeps every row they have, since a restore puts a home's data back and never rewrites
 // who somebody is. It throws for an archive that is not this user's, so a restore calls it while it judges the archive,
-// before it takes the home, and again right before the insert.
-export function authRowsToRestore(
-    ownerId: string,
-    manifest: BackupManifest,
-    folder: string,
-): Record<string, Record<string, unknown>[]> | null {
+// before it takes the home.
+export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): AuthArchiveRows | null {
     const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
     if (!fs.existsSync(authPath)) return null;
 

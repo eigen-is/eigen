@@ -1,7 +1,7 @@
 // Restores one home from a backup, or from a safety copy of an earlier restore. The backup is unpacked and judged
 // while the home still serves. Then the current home folder is moved aside as a new safety copy, the backup goes in
-// its place, and a failed restore puts both folders back. Last come the owner's rows outside the folder, such as their
-// auth rows, shares and avatar. The backup routes call it.
+// its place, and a failed restore puts both folders back. Once the home is in place and serves again, the owner's rows
+// outside the folder go in, such as their auth rows, shares and avatar. The backup routes call it.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -56,7 +56,7 @@ export async function restoreHome(
     const { artifactPath } = requireArtifact(artifactName);
     const homeDir = await resolveHomeDir(ownerId);
 
-    await replaceHomeFolder(
+    const identity = await replaceHomeFolder(
         ownerId,
         homeDir,
         jobId,
@@ -85,13 +85,16 @@ export async function restoreHome(
                 unpackedHome,
                 carried.map((summary) => summary.id),
             );
-            // Read before the first write, since nothing takes an auth row back: a shares.json that does not read
-            // would otherwise leave a deleted user signed in to an empty home.
-            const shares = readShares(folder);
-            // An archive of somebody else is refused now rather than after the install. The insert reads it again.
-            authRowsToRestore(ownerId, manifest, folder);
+            // The rows outside the home folder are judged now too, so an archive of somebody else, or a shares.json
+            // that does not read, is refused before the home is taken. The avatar is read now because the staging
+            // folder is gone by the time it is written.
+            const judged = {
+                authRows: authRowsToRestore(ownerId, manifest, folder),
+                shares: readShares(folder),
+                avatars: await readAvatars(ownerId, folder),
+            };
 
-            return async (stamp) => {
+            const install: InstallHome = async (stamp) => {
                 // The archive's `home/` is the home folder, one for one.
                 onProgress?.('home files', 0, 1);
                 await movePathAsync(unpackedHome, homeDir);
@@ -100,17 +103,18 @@ export async function restoreHome(
                     materializeMount(homeDir, summary, stamp);
                     onProgress?.('mounts', index + 1, carried.length);
                 }
-
-                // The rows that live outside the home folder (users only).
-                restoreAuthRows(ownerId, manifest, folder);
-                await restoreShares(ownerId, shares);
-                await restoreAvatar(ownerId, folder);
             };
+            return { install, judged };
         },
         // A half-written extraction is not a home: it keeps a name of its own, which the admin pane
         // lists with a delete and no restore.
         (stamp) => buildSafetyCopyName(homeDir, 'failed-restore', stamp),
     );
+    // Only once the home is in place, and nothing rolls the folder back for them. Each write inserts only what is
+    // missing, so a failure here fails the job with the home restored, and a retry finishes it.
+    if (identity.authRows) restoreAuthRows(ownerId, identity.authRows);
+    await restoreShares(ownerId, identity.shares);
+    await restoreAvatars(identity.avatars);
     onProgress?.('done', 1, 1);
 }
 
@@ -152,7 +156,7 @@ export async function restoreSafetyCopy(
         // made passes both, and one carried over from a newer server does not.
         async () => {
             await checkRestoredDatabases(folder, mountIds, containerDatabasesIn(folder, mountIds));
-            return install;
+            return { install, judged: null };
         },
         // Back under the name it came from, here and at boot after a kill. A `.failed-restore-` name would make a
         // pristine home unrestorable, and the only action left on one deletes its bytes.
@@ -184,41 +188,56 @@ export async function restoreShares(ownerId: string, rows: readonly BackupShare[
     for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
 }
 
-// The avatar is server data, not home data. It goes back only where the server has none, so a picture
-// the user changed after the backup is not quietly reverted. The name comes from the archive and lands
-// in the server-wide avatars folder, so it must be this user's, `{ownerId}.{ext}`: otherwise a hostile
-// archive could plant a picture for somebody who has none.
-async function restoreAvatar(ownerId: string, folder: string): Promise<void> {
+// The avatar is server data, not home data. Its name comes from the archive and lands in the server-wide avatars
+// folder, so it must be this user's, `{ownerId}.{ext}`. Otherwise a hostile archive could plant a picture for
+// somebody who has none.
+async function readAvatars(ownerId: string, folder: string): Promise<RestoredAvatar[]> {
     const avatarDir = path.join(folder, ARCHIVE_AVATAR_DIR);
-    if (!fs.existsSync(avatarDir)) return;
+    if (!fs.existsSync(avatarDir)) return [];
+    const avatars: RestoredAvatar[] = [];
     for (const name of fs.readdirSync(avatarDir)) {
         if (path.parse(name).name !== ownerId) {
             console.warn(`[backup] ${ownerId}: ${name} in the archive is not this user's avatar, not restored`);
             continue;
         }
-        const target = path.join(getAvatarsDir(), name);
+        avatars.push({ name, bytes: await Bun.file(path.join(avatarDir, name)).bytes() });
+    }
+    return avatars;
+}
+
+// An avatar goes back only where the server has none, so a picture the user changed after the backup is not quietly
+// reverted.
+async function restoreAvatars(avatars: readonly RestoredAvatar[]): Promise<void> {
+    for (const avatar of avatars) {
+        const target = path.join(getAvatarsDir(), avatar.name);
         if (fs.existsSync(target)) continue;
-        await Bun.write(target, Bun.file(path.join(avatarDir, name)));
+        await Bun.write(target, avatar.bytes);
     }
 }
+
+// One picture from the archive's avatar folder, read into memory while the archive is judged.
+type RestoredAvatar = { name: string; bytes: Uint8Array };
 
 // What a restore does once the home is out of everyone's hands and its folder is aside: put the new
 // folder at `homeDir`. The step that prepared it returns it, so it closes over whatever that step judged.
 type InstallHome = (stamp: string) => Promise<void>;
 
+// What judging a replacement hands on: the install, and what the restore writes once the home serves again.
+type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
+
 // The moves every restore is made of: judge the replacement while the home still serves, so a refusal costs nobody a
 // page, then take the home from everyone, put its folder aside, install the replacement, and on a failure put both
 // folders back, deleting nothing. The marker written here is the only note the next boot reads of an interrupted
-// restore, so recoverInterruptedRestores covers every kind.
-async function replaceHomeFolder(
+// restore, so recoverInterruptedRestores covers every kind. It hands back what the preparing step judged.
+async function replaceHomeFolder<Judged>(
     ownerId: string,
     homeDir: string,
     jobId: string,
-    prepare: () => Promise<InstallHome>,
+    prepare: () => Promise<PreparedHome<Judged>>,
     parkOnFailure: (stamp: string) => string,
-): Promise<void> {
+): Promise<Judged> {
     try {
-        const install = await prepare();
+        const { install, judged } = await prepare();
         // Throws when another restore or a deletion of this home holds it, before anything below runs.
         markHomeRestoring(ownerId);
         try {
@@ -227,6 +246,7 @@ async function replaceHomeFolder(
             // Whatever happened is over, and a failed install put the home back itself.
             clearHomeRestoring(ownerId);
         }
+        return judged;
     } finally {
         // It may not throw over the failure that brought us here.
         try {
