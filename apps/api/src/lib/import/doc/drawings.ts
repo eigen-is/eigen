@@ -5,7 +5,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { isFigureFrameNode, mmToPx, pageTwips } from '@workspace/lib/docs/eigendoc';
+import { isFigureFrameNode, mmToPx, pageTwips, TEXT_BOX_DEFAULT_WIDTH } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
@@ -331,12 +331,13 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
-    const { cx } = extentOf(xmlChild(anchor, WP_NS, 'extent'));
+    const drawn = drawnWidth(anchor);
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
-    const placed = align ? alignedIn(xmlText(align).trim(), area.width, cx) : roundedInt(offset && xmlText(offset));
+    const placed = align ? alignedIn(xmlText(align).trim(), area.width, drawn) : roundedInt(offset && xmlText(offset));
     // The offset from the text column's left edge, kept on the paper.
     const { width, margin } = pageTwips(reader.page);
     const marginLeft = margin.left * EMU_PER_TWIP;
+    const cx = drawn ?? 0;
     const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
     // One anchor has one place, so only a lone picture or chart can take it. A group's or a canvas's pictures would
     // stack there, and its text boxes and shapes would draw elsewhere.
@@ -359,6 +360,14 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     return named === undefined || named === side ? { alignment: side } : {};
 }
 
+// The width in EMU an anchor's drawing draws at: its extent's, else a text box's default width. A picture with no
+// extent takes its own size once it loads, so its width is unknown here.
+function drawnWidth(anchor: XmlElement): number | undefined {
+    const { cx } = extentOf(xmlChild(anchor, WP_NS, 'extent'));
+    if (cx > 0) return cx;
+    return loneTextBox(anchor) ? TEXT_BOX_DEFAULT_WIDTH * EMU_PER_PX : undefined;
+}
+
 // The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at
 // the paper's edge, the right or outside margin at the column's end, and the margin, the column and a character at the
 // column, a character's place in its line being unknown.
@@ -374,8 +383,10 @@ function areaOf(reader: Reader, relativeFrom: string | undefined): { start: numb
     return { start: 0, width: column };
 }
 
-// Where an alignment puts a picture `cx` wide in an area, from its start.
-function alignedIn(align: string, area: number, cx: number): number {
+// Where an alignment puts a drawing `cx` wide in an area, from its start. One of a width not yet known sits at the
+// start, as aligned left, so it can't overhang the area's end.
+function alignedIn(align: string, area: number, cx: number | undefined): number {
+    if (cx === undefined) return 0;
     if (align === 'center') return (area - cx) / 2;
     return align === 'right' || align === 'outside' ? area - cx : 0;
 }

@@ -333,6 +333,22 @@ describe('placement', () => {
             expect(placesOf(json).map(([, , y]) => y)).toEqual([0, 0, 0, 0]);
         });
 
+        // A picture with no extent takes its own size once it loads, so no width is known to align it by.
+        test('a picture aligned right with no width it can read is placed as one aligned left', async () => {
+            const right =
+                '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>';
+            const unsized = (cx: string) => placed(right).replaceAll('cx="381000"', `cx="${cx}"`);
+            const { json } = await importDocxBody(
+                ['0', '-381000', 'x'].map((cx) => paragraph(`${unsized(cx)}${text('x')}`)).join(''),
+            );
+            expect(placesOf(json)).toEqual([
+                ['front', 0, 0],
+                ['front', 0, 0],
+                ['front', 0, 0],
+            ]);
+            expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['width'])).toEqual([null, null, null]);
+        });
+
         test('its width caps at the paper, a block one at the column', async () => {
             const wide = (run: string) => run.replaceAll('cx="381000"', `cx="${1000 * EMU}"`);
             const { json } = await importDocxBody(paragraph(wide(front())) + paragraph(wide(GOLDEN_DOCX_IMAGE_RUN)));
@@ -723,16 +739,17 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
-    test('a box aligned right with no width it can read is placed at the right edge of the column', async () => {
+    // It draws at the default width, so it is aligned by that width, as a sized box is by its own.
+    test('a box aligned right with no width it can read ends at the right edge of the column', async () => {
         const right =
             '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV>';
         const { boxes } = await boxesOf(
-            [Number.NaN, -1905000, 0].map((cx) => anchored({ position: right, cx })).join(''),
+            [1905000, Number.NaN, -1905000, 0].map((cx) => anchored({ position: right, cx })).join(''),
         );
-        const [unread, negative, zero] = boxes.map((box) => box.attrs?.['offsetX']);
-        expect(unread).toBe(zero);
-        expect(negative).toBe(zero);
-        expect(typeof unread).toBe('number');
+        const ends = boxes.map((box) => Number(box.attrs?.['offsetX']) + Number(box.attrs?.['width']));
+        const [sized, ...unsized] = ends;
+        expect(boxes.map((box) => box.attrs?.['width'])).toEqual([200, ...unsized.map(() => TEXT_BOX_DEFAULT_WIDTH)]);
+        expect(unsized).toEqual(unsized.map(() => sized));
     });
 
     test('its fill, outline, insets, vertical alignment and rounded corners are its look', async () => {
