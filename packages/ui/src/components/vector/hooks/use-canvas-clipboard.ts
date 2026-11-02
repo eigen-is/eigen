@@ -1,18 +1,13 @@
-// The canvas's clipboard: the ⌘C, ⌘X and ⌘V document listeners, the async menu ops, and the paste ladder (eigen
-// items, then our SVG's embedded metadata, then OS files, then plain text). buildSelectionData builds the payload and
-// planElementsPaste decides what a pasted canvas copy adds; this hook owns the events, the transactions and the placement.
+// The canvas's clipboard: the ⌘C, ⌘X and ⌘V document listeners, the menu's copy, cut and paste, and the order a paste
+// tries its flavors in: our items, then our SVG's embedded items, then OS files, then plain text. buildSelectionData
+// builds what a copy writes, and the paste planners decide what a paste adds. This hook owns the events and the writes.
 
 import { onMutationError } from '@workspace/lib/api-error';
-import { newChartSpecParts } from '@workspace/lib/charts';
 import {
     classifyPaste,
-    clipboardTextItemHasContent,
     EIGEN_CLIPBOARD_RENDER_ATTR,
     extractClipboardSvgMetadata,
     inlineClipboardSvgMedia,
-    needsReUpload,
-    pastedChartFields,
-    readClipboardBox,
     readEigenClipboardAsync,
     reUploadImage,
     svgToImageDataUri,
@@ -20,7 +15,6 @@ import {
     writeEigenClipboard,
     writeEigenClipboardAsync,
 } from '@workspace/lib/clipboard';
-import { PENDING_PREFIX } from '@workspace/lib/drive';
 import { textToParagraphHtml } from '@workspace/lib/html';
 import { htmlToPlainText, readDominantTextAlign } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem, EigenClipboardItem } from '@workspace/lib/types/clipboard';
@@ -29,20 +23,15 @@ import type {
     NewVectorElement,
     Point,
     StyleDefaults,
-    TextAlign,
     VectorElement,
     VectorElementPatch,
     VectorMeta,
 } from '@workspace/lib/vector';
 import {
-    canvasPtToPx,
-    IMAGE_CASCADE_OFFSET,
     isTextBox,
     pasteAnchorOffset,
-    readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
-    textBoxDefaults,
     textBoxFitHeight,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
@@ -52,76 +41,38 @@ import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import { downloadCanvasImage } from '../canvas-image';
 import type { HealTextSize } from '../text-measure';
-import { measureVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
 import type { PastePlan } from '../tools/paste-elements';
-import { emptyPastePlan, planElementsPaste } from '../tools/paste-elements';
+import { planElementsPaste, planForeignPaste, planTextPaste, textBoxWidth } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
 
-// How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
-// hundreds of parallel fetch + upload round-trips; a handful keeps a normal multi-image paste quick.
+// How many images from another media folder upload again at once. Any web page can write the payload, so a paste must
+// not start hundreds of fetches and uploads together. A handful keeps a normal paste of several images quick.
 const REUPLOAD_CONCURRENCY = 4;
-
-// A text box as wide as its measured text, rounded up to whole px. The browser rounds the text's width up and the
-// box's down as it lays them out, so a box even a hair narrower than its text wraps the last word.
-function textBoxWidth(measured: number): number {
-    return Math.ceil(measured);
-}
 
 // The fields of a text box that its measured width depends on.
 const FONT_FIELDS = ['fontSize', 'fontFamily', 'fontWeight', 'letterSpacing'] as const;
 
-// Cut deletes only what the clipboard carries, so an image that could not be serialized stays put. Tell
-// the user, or the difference between "cut" and "cut most of it" is invisible — and between "cut" and
-// "did nothing at all" when the selection was that image alone.
-function warnPartialCut(pendingImages: number) {
-    if (pendingImages <= 0) return;
-    toast.info(
-        pendingImages === 1
-            ? 'One image is still uploading, so it stayed in the drawing'
-            : `${pendingImages} images are still uploading, so they stayed in the drawing`,
-    );
-}
-
-// A non-collapsed text selection OUTSIDE the canvas, if there is one: the run a copy would carry.
-function outsideTextSelection(container: HTMLElement | null): Selection | null {
-    const selection = container?.ownerDocument.getSelection() ?? null;
-    if (!selection || selection.isCollapsed || selection.toString().trim() === '') return null;
-    const node = selection.anchorNode;
-    return node && container?.contains(node) ? null : selection;
-}
-
-// The canvas drops such a run when the pointer lands on it. The surface is `select-none` and the
-// in-place editor swallows its own pointerdown, so nothing else ever collapses a selection made in the
-// comments pane or the properties panel — it would survive the click that selects an element and keep
-// owning ⌘C/⌘X, copying that text and cutting nothing.
-export function dropOutsideTextSelection(container: HTMLElement | null): void {
-    outsideTextSelection(container)?.removeAllRanges();
-}
-
 type CanvasClipboardParams = {
     canEdit: boolean;
-    // Read from listeners bound once, so the live "a text surface owns the keyboard" answer rides a
-    // ref: the overlay and the in-place editor keep native clipboard while they are open.
+    // Whether a text editor owns the keyboard. The listeners are bound once, so they read it from a ref. The label
+    // editor and the in-place editor keep the native clipboard while they are open.
     textEditingRef: { current: boolean };
-    // The canvas surface, for the same question about the MOUSE: a text run selected outside it (a
-    // comment, the activity list) owns copy/cut.
+    // The canvas surface. A text run selected outside it, such as in a comment, owns copy and cut.
     containerRef: { current: HTMLDivElement | null };
     viewport: 'infinite' | 'frame';
     frameId: string;
-    // The host's table for a NEW element (vector: Excalifont 20, slides: Inter 48). A pasted text box
-    // is a new element like any other, so it is measured and created with this, never the engine's own
-    // defaults — else ⌘V and the T tool disagree on the same slide.
+    // The host's table for a new element, such as Excalifont 20 in a drawing. A pasted text box is a new element like
+    // any other, so it is measured and created with this table. Otherwise ⌘V and the Text tool would disagree.
     styleDefaults: StyleDefaults;
-    // The scene in z-order, its background, and the selection — what a copy serializes.
+    // The scene in z-order, its background and the selection: what a copy writes.
     ordered: VectorElement[];
     meta: VectorMeta;
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
-    // Frame-stamped writers: the canvas' own addElements wrapper stamps the active frameId after the
-    // caller's fields, so a pasted element lands in the frame being pasted INTO, never the one it was
-    // copied from.
+    // The canvas's writers. Its addElements stamps the active frame over the caller's fields, so a pasted element lands
+    // in the frame it is pasted into, never the one it was copied from.
     addElements: (partials: NewVectorElement[]) => string[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     updateElementUntracked: (id: string, fields: VectorElementPatch) => void;
@@ -131,7 +82,7 @@ type CanvasClipboardParams = {
     viewportCenterScene: () => Point;
     // The canvas's heal of a size measured before the slices of its text loaded, which a pasted text box needs.
     healTextSize: HealTextSize;
-    // OS files on the clipboard go through the canvas' own image-insert path.
+    // OS files on the clipboard go through the canvas's own image insert.
     insertImageFiles: (files: File[], anchor: Point) => Promise<void>;
     mediaFolderId: string | null;
     resolveMediaPath: (name: string) => DrivePath | undefined;
@@ -140,18 +91,12 @@ type CanvasClipboardParams = {
 };
 
 export function useCanvasClipboard(params: CanvasClipboardParams) {
-    const { canEdit, textEditingRef, containerRef, viewport, frameId, ordered, meta, selectedIds } = params;
-    const { styleDefaults } = params;
-    const { setSelectedIds } = params;
-    const { addElements, updateElements, updateElementUntracked } = params;
-    const { deleteElements, deleteElementsUntracked, undoManager } = params;
-    const { viewportCenterScene, healTextSize, insertImageFiles, mediaFolderId } = params;
-    const { resolveMediaPath, resolveMediaUrl, uploadFile } = params;
+    const { canEdit, textEditingRef, containerRef, viewport, frameId, styleDefaults, ordered, meta } = params;
+    const { selectedIds, setSelectedIds, addElements, updateElements, updateElementUntracked } = params;
+    const { deleteElements, deleteElementsUntracked, undoManager, viewportCenterScene, healTextSize } = params;
+    const { insertImageFiles, mediaFolderId, resolveMediaPath, resolveMediaUrl, uploadFile } = params;
 
-    // The clipboard PRODUCER (the native elements item, the typed image/text items and the
-    // self-contained SVG flavor) + the plain-text flavor live in ../tools/clipboard; this calls them
-    // with the live z-order, selection, background, home frame and path resolver.
-    // A deck converts a text item's size at its own width, a drawing at 96 dpi (canvasPxToPt).
+    // A deck converts a text item's size at its own width, and a drawing at 96 dpi.
     const slideWidth = viewport === 'frame' ? meta.slideWidth : undefined;
     const buildData = useCallback(
         () => buildSelectionData(ordered, selectedIds, meta, frameId, resolveMediaPath, slideWidth),
@@ -159,11 +104,10 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     );
     const plainText = useCallback(() => selectionPlainText(ordered, selectedIds), [ordered, selectedIds]);
 
-    // The eigen `svg` field references images BY NAME and renders blank outside eigen's server-side
-    // inliner. For the async menu-copy path only, build a foreign-visible `<img src="data:svg…">` whose
-    // images are inlined as base64 data URIs, so a plain contenteditable pastes the drawing as an image.
-    // Bytes come from the credentialed media resolver; over the soft cap (or on inline failure) we skip
-    // the flavor. The sync ⌘C path stays byte-free (a copy event can't fetch).
+    // Our `svg` references images by name, so it draws them blank outside Eigen. The menu's copy alone also writes an
+    // `<img>` of that SVG with its images inlined as data URIs, so a plain editor in another app pastes a picture. The
+    // bytes come from the media resolver, and past the size cap, or when inlining fails, the flavor is skipped. ⌘C
+    // writes no bytes, because a copy event can't wait for a fetch.
     const fetchMediaBlob = useCallback(
         async (name: string): Promise<Blob | null> => {
             const url = resolveMediaUrl(name);
@@ -181,8 +125,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         async (svg: string | undefined): Promise<string | undefined> => {
             if (!svg) return undefined;
             const inlined = await inlineClipboardSvgMedia(svg, fetchMediaBlob);
-            // Mark the img so hasRichHtmlBeyondMarker ignores it — else a shape-only vector copy reads
-            // as rich HTML and a non-media host persists the base64 SVG as a figure.
+            // The mark makes hasRichHtmlBeyondMarker ignore the img. Otherwise a copy of shapes reads as rich HTML, and
+            // a host without media would store the base64 SVG as a figure.
             return inlined
                 ? `<img ${EIGEN_CLIPBOARD_RENDER_ATTR}="" src="${await svgToImageDataUri(inlined)}">`
                 : undefined;
@@ -190,100 +134,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [fetchMediaBlob],
     );
 
-    // A payload with no native elements item: another app's images, charts and text. Each lands centered on the
-    // viewport, cascading so a multi-item paste stays visible. An image sizes from the TYPED wire box
-    // (authoritative), text re-measures LOCALLY (a wire size is never written onto text).
-    const planForeignPaste = useCallback(
-        (items: EigenClipboardItem[]): PastePlan => {
-            const anchor = viewportCenterScene();
-            const plan = emptyPastePlan();
-            let cascade = 0;
-            const placeAt = (w: number, h: number): Point => {
-                const off = cascade * IMAGE_CASCADE_OFFSET;
-                cascade += 1;
-                return { x: anchor.x - w / 2 + off, y: anchor.y - h / 2 + off };
-            };
-            for (const item of items) {
-                const box = readClipboardBox(item);
-                const angle = box.angle ?? 0;
-                if (item.type === 'image') {
-                    // No media/ folder means no upload target and nothing to resolve a name against, so
-                    // the image is dropped rather than pasted broken (insertImageFiles bails the same way).
-                    if (!mediaFolderId) continue;
-                    const { width, height } = box;
-                    const index = plan.partials.length;
-                    const crossMount = needsReUpload(item.sourceParentId, mediaFolderId);
-                    plan.partials.push({
-                        type: 'image',
-                        ...placeAt(width, height),
-                        width,
-                        height,
-                        angle,
-                        // Optimistic add with a pending name; the real name swaps in a late transact.
-                        mediaName: crossMount ? `${PENDING_PREFIX}${crypto.randomUUID()}` : item.mediaName,
-                    });
-                    if (crossMount) plan.crossMount.push({ index, item });
-                    continue;
-                }
-                // A chart keeps its parts as they came, a newer build's too, its font included, and its look as the
-                // element's own fields.
-                if (item.type === 'chart') {
-                    const parts = pastedChartFields(item.parts, newChartSpecParts);
-                    if (!parts) continue;
-                    const { width, height } = box;
-                    plan.partials.push({
-                        type: 'chart',
-                        ...placeAt(width, height),
-                        width,
-                        height,
-                        angle,
-                        ...parts,
-                        ...item.look,
-                    });
-                    continue;
-                }
-                // An empty text item is a foreign contentless carrier — skip it.
-                if (item.type !== 'text' || !clipboardTextItemHasContent(item)) continue;
-                const typo = item.typography ?? {};
-                const fontFamily = typo.fontFamily ?? styleDefaults.fontFamily;
-                // The wire's size is pt; the payload is forgeable, so only a finite number is one.
-                const fontSize =
-                    typo.fontSize !== undefined && Number.isFinite(typo.fontSize)
-                        ? canvasPtToPx(typo.fontSize, slideWidth)
-                        : styleDefaults.fontSize;
-                const typography = readClipboardTypography(typo);
-                const font = {
-                    fontSize,
-                    fontFamily,
-                    fontWeight: typography.fontWeight,
-                    letterSpacing: typography.letterSpacing,
-                };
-                const measured = measureVectorText(item.text, font);
-                const width = textBoxWidth(measured.width);
-                plan.measuredText.push({ index: plan.partials.length, text: item.text, font, width });
-                plan.partials.push({
-                    type: 'rectangle',
-                    autoFit: true,
-                    ...placeAt(width, measured.height),
-                    width,
-                    height: measured.height,
-                    angle,
-                    html: textToParagraphHtml(item.text),
-                    fontSize,
-                    fontFamily,
-                    // A color the item doesn't name is left to the host's table, as for any new text box.
-                    ...(typo.color === undefined ? {} : { color: typo.color }),
-                    ...typography,
-                });
-            }
-            return plan;
-        },
-        [viewportCenterScene, mediaFolderId, styleDefaults, slideWidth],
-    );
-
-    // One paste = one undo step: every ADD in one transact, the arrow-binding remap inside the same
-    // capture window (one `sealed` around both), then the cross-mount images resolve untracked and the
-    // text boxes are measured again once the slices of their text have loaded.
+    // One paste is one undo step: every add and the remap of the arrows' bindings are sealed together. Then the images
+    // from another media folder upload untracked, and the text boxes are measured again once their slices load.
     const commitPaste = useCallback(
         (plan: PastePlan): boolean => {
             if (!plan.partials.length) return false;
@@ -314,10 +166,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 );
             }
 
-            // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
-            // (late transact) or drop the element on failure — the shared optimistic-insert idiom. A
-            // forged wire can carry hundreds of image items, so a few drain at a time instead of firing
-            // every fetch + upload at once.
+            // An image from another media folder is fetched from its source and uploaded into ours. Its pending name
+            // is then swapped for the real one, or the element is dropped when the upload fails. A forged payload can
+            // carry hundreds of images, so a few upload at a time.
             const pending = [...plan.crossMount];
             const drain = async (): Promise<void> => {
                 const next = pending.shift();
@@ -332,10 +183,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         uploadFile,
                         next.item.mediaName,
                     ).catch(() => null);
-                    // Untracked: this technical swap is NOT its own undo step, so the whole cross-mount
-                    // paste is a single ⌘Z (reverts the insert; peers converge via its inverse). Redo
-                    // re-adds the element at its recorded pending name, the accepted edge of every
-                    // optimistic insert.
+                    // Untracked, so the swap is no undo step of its own and one ⌘Z takes back the whole paste. A redo
+                    // adds the element back under its pending name, as every optimistic insert does.
                     if (result) updateElementUntracked(id, { mediaName: result.mediaName });
                     else deleteElementsUntracked([id]);
                 }
@@ -357,19 +206,21 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         ],
     );
 
-    // Element clipboard CONSUMER. Our own payload restores NATIVE elements — whole stored records
-    // through the reader, re-anchored as a set — and its image items are only the re-upload manifest.
-    // A foreign payload falls back to the cross-app items.
+    // Our own payload restores its elements: whole stored records through the reader, moved as a set. Its image items
+    // only say where each image's bytes are. A payload without an elements item pastes another app's items.
     //
-    // Returns whether anything was actually placed. A payload can be non-empty and still place nothing —
-    // every item dropped as forged at the read seam, or images with no media/ folder to upload into — and
-    // the caller must not claim the event for a paste that did nothing (the rungs below it, and the
-    // container's OS-file handler, still deserve their turn).
+    // Returns whether anything was placed. A payload can hold items and still place nothing, such as when the reader
+    // drops every item as forged, or when images have no media folder to upload into. The caller must not claim the
+    // event then, because the later flavors and the container's file handler still deserve their turn.
     const pasteEigenItems = useCallback(
         (items: EigenClipboardItem[]): boolean => {
             if (!items.length) return false;
             const native = readElementsClipboardItem(items);
-            if (!native?.elements.length) return commitPaste(planForeignPaste(items));
+            if (!native?.elements.length) {
+                return commitPaste(
+                    planForeignPaste(items, viewportCenterScene(), mediaFolderId, styleDefaults, slideWidth),
+                );
+            }
             const { dx, dy } = pasteAnchorOffset(
                 native.elements,
                 native.sourceFrameId,
@@ -379,12 +230,12 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             const imageItems = items.filter((i): i is EigenClipboardImageItem => i.type === 'image');
             return commitPaste(planElementsPaste(reanchorElements(native.elements, dx, dy), imageItems, mediaFolderId));
         },
-        [commitPaste, planForeignPaste, viewport, frameId, viewportCenterScene, mediaFolderId],
+        [commitPaste, viewport, frameId, viewportCenterScene, mediaFolderId, styleDefaults, slideWidth],
     );
 
-    // An SVG string → native elements when it is one of ours (its items ride a `<metadata>` block).
-    // False for a foreign drawing, which the caller then inserts as an image. Shared by ⌘V's svg rung
-    // and the file-drop path, so dropping an .svg we exported restores elements exactly as pasting it does.
+    // An SVG of ours carries its items in a `<metadata>` block, and pastes as those elements. Another app's drawing
+    // returns false, and the caller inserts it as an image. ⌘V and a file drop share this, so dropping an SVG we
+    // exported restores its elements as pasting it does.
     const pasteSvgText = useCallback(
         (svg: string): boolean => {
             const restored = extractClipboardSvgMetadata(svg);
@@ -393,59 +244,25 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [pasteEigenItems],
     );
 
-    // Plain text, with no eigen payload and no OS files on the clipboard, becomes one text box at the viewport center,
-    // measured here in the host's typography. The partial names no font, so the box is created with the same table it
-    // is measured with. textToParagraphHtml keeps one paragraph per line, and commitPaste makes the paste one undo step.
-    const pasteTextElement = useCallback(
-        (text: string, textAlign: TextAlign = 'left') => {
-            const anchor = viewportCenterScene();
-            const { fontSize, fontFamily, fontWeight, letterSpacing } = textBoxDefaults(styleDefaults);
-            const font = { fontSize, fontFamily, fontWeight, letterSpacing };
-            const measured = measureVectorText(text, font);
-            const width = textBoxWidth(measured.width);
-            const { height } = measured;
-            commitPaste({
-                ...emptyPastePlan(),
-                partials: [
-                    {
-                        type: 'rectangle',
-                        autoFit: true,
-                        x: anchor.x - width / 2,
-                        y: anchor.y - height / 2,
-                        width,
-                        height,
-                        angle: 0,
-                        html: textToParagraphHtml(text),
-                        textAlign,
-                    },
-                ],
-                measuredText: [{ index: 0, text, font, width }],
-            });
-        },
-        [viewportCenterScene, commitPaste, styleDefaults],
-    );
-
-    // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
-    // text, or the flattened text of pasted HTML, becomes one text box. Prose alignment rides in
-    // text/html as a block text-align, which readDominantTextAlign reads as a TextAlign. Returns true
-    // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
+    // Text with no payload of ours and no OS files becomes one text box at the viewport center: the plain text, or the
+    // text of pasted HTML. Its alignment comes from the HTML's block text-align. ⌘V and the menu share this. It returns
+    // whether it pasted, so ⌘V claims the event only for a real paste.
     const pasteNonEigenText = useCallback(
         (html: string, plain: string): boolean => {
             const content = plain || htmlToPlainText(html);
             if (!content.trim()) return false;
-            pasteTextElement(content, (html && readDominantTextAlign(html)) || 'left');
+            const textAlign = (html && readDominantTextAlign(html)) || 'left';
+            commitPaste(planTextPaste(content, textAlign, viewportCenterScene(), styleDefaults));
             return true;
         },
-        [pasteTextElement],
+        [commitPaste, viewportCenterScene, styleDefaults],
     );
 
-    // ⌘C / ⌘X / ⌘V via document-level ClipboardEvent listeners (the slides idiom — native events are
-    // required to write the MIME flavors and to read the DataTransfer synchronously). Gated
-    // canEdit && !editing; isTypingTarget() bails so the text overlay + a comments composer keep native
-    // clipboard (the typing-target invariant). Eigen items are consumed FIRST; a non-eigen paste falls
-    // through (capture phase, no stopPropagation) to the container's useFilePasteTarget for OS files.
-    // The three listeners bind ONCE and read the live scene/selection/writers through this ref: a
-    // canvas render (a drag preview, a pan commit) must not tear them down and rebuild them.
+    // ⌘C, ⌘X and ⌘V listen for the document's clipboard events, because only a native event can write our MIME and read
+    // the clipboard at once. They stand down while a text field has focus, so the label editor and a comment composer
+    // keep the native clipboard. Our items are tried first. A paste of anything else falls through, in the capture
+    // phase, to the container's file paste target. The three listeners bind once and read the live scene and writers
+    // through this ref, so a canvas render, such as a drag preview, never rebinds them.
     const handlers = {
         canEdit,
         selectedIds,
@@ -466,10 +283,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
 
     useEffect(() => {
         const blocked = () => isTypingTarget() || !live.current.canEdit || textEditingRef.current;
-        // Such a run owns copy/cut: the user is copying that text (a comment, an activity row), and
-        // writing the element payload would take the clipboard from them with nothing on screen to
-        // explain it. Inside the canvas there is no text to copy — the in-place editor is `blocked()`
-        // above — so only the outside case bails.
+        // A text run selected outside the canvas owns copy and cut: the user is copying that text, and writing the
+        // elements instead would take the clipboard from them with nothing on screen to explain it. Inside the canvas
+        // there is no such text, because the in-place editor is `blocked()` above.
         const textSelectedOutside = () => outsideTextSelection(containerRef.current) !== null;
         const onCopyEvent = (e: ClipboardEvent) => {
             const { selectedIds, buildData, plainText } = live.current;
@@ -484,9 +300,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             if (blocked() || textSelectedOutside() || selectedIds.length === 0) return;
             const { data, serializedIds, pendingImages } = buildData();
             if (!data.items.length) {
-                // A selection of only still-uploading images serializes to nothing: there is no payload
-                // to write and nothing that may be deleted. Claim the event and say why anyway — silently
-                // doing nothing is indistinguishable from a cut that worked.
+                // A selection of only images still uploading copies nothing, so nothing may be deleted. The event is
+                // claimed anyway to say why, because a cut that silently did nothing looks like one that worked.
                 if (!pendingImages) return;
                 e.preventDefault();
                 warnPartialCut(pendingImages);
@@ -494,10 +309,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             }
             e.preventDefault();
             writeEigenClipboard(e, data, plainText());
-            // Delete ONLY what the payload carries. An image whose media path doesn't resolve yet was
-            // left out of the copy, so cutting it would destroy the one copy that existed — undo is not
-            // a substitute for not losing it. One sealed undo step (deleteSelection stopCaptures on both
-            // sides).
+            // Only what the payload carries is deleted. An image whose media path doesn't resolve yet was left out of
+            // the copy, so cutting it would destroy its one copy, and undo is no substitute for not losing it. The
+            // delete is one undo step.
             deleteSelection(serializedIds, deleteElements, setSelectedIds, undoManager);
             warnPartialCut(pendingImages);
         };
@@ -512,41 +326,37 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 e.preventDefault();
                 e.stopPropagation();
             };
-            // Eigen items are consumed FIRST (before the SVG rung) so a vector→vector paste restores
-            // native elements instead of landing as one flat image. The event is claimed only if
-            // something was actually placed: a payload whose items were all dropped at the read seam,
-            // or images with no media/ folder to land in, must fall through to the rungs below rather
-            // than swallow the paste.
+            // Our items go before the SVG, so a paste between canvases restores the elements rather than one flat
+            // image. The event is claimed only when something was placed, so a payload that places nothing leaves the
+            // flavors below their turn.
             if (paste.eigen && pasteEigenItems(paste.eigen.items)) {
                 claim();
                 return;
             }
-            // A bare SVG on the clipboard: ours (the items in `<metadata>`) restores native elements;
-            // any other SVG inserts as an image via the media path. OS files still fall through.
+            // An SVG on its own: one of ours restores its elements, and any other is inserted as an image.
             if (paste.svg) {
                 if (pasteSvgText(paste.svg.svg)) {
                     claim();
                     return;
                 }
-                // A foreign SVG lands as an IMAGE, which needs a media/ folder to upload into —
-                // insertImageFiles places nothing without one, so this rung claims the paste only when
-                // it can actually place it and otherwise leaves the text rung below its turn.
+                // Another app's SVG lands as an image, which needs a media folder to upload into. Without one
+                // insertImageFiles places nothing, so the paste is claimed only when there is one, and the text
+                // below gets its turn otherwise.
                 if (mediaFolderId) {
                     claim();
                     void insertImageFiles([svgToImageFile(paste.svg.svg)], viewportCenterScene());
                     return;
                 }
             }
-            // Nothing placed by the rungs above. OS files fall through to useFilePasteTarget (image drop path).
+            // Nothing was placed yet. OS files fall through to the container's file paste target.
             if (paste.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new text box; only claim the event when
-            // content is actually consumed, else it falls through to the OS-file path.
+            // Plain text, or the text of pasted HTML, becomes a text box. The event is claimed only when it did.
             if (pasteNonEigenText(paste.html, paste.text)) {
                 claim();
                 return;
             }
-            // An eigen payload was there and no rung could place any of it. Without this ⌘V is a dead
-            // key with no explanation.
+            // A payload of ours was there and nothing in it could be placed. Without this ⌘V would do nothing and say
+            // nothing.
             if (paste.eigen) toast.info('Nothing in this paste could be placed on the canvas');
         };
         document.addEventListener('copy', onCopyEvent);
@@ -559,27 +369,25 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         };
     }, [textEditingRef, containerRef]);
 
-    // Menu clipboard rows: no ClipboardEvent here, so copy/cut go through the async writer and paste
-    // through the async reader (eigen items only — OS files still need ⌘V). Same producer/consumer as
-    // the keyboard path, so the two stay one behavior.
+    // The menu's clipboard rows. They have no clipboard event, so copy and cut go through the async writer and paste
+    // through the async reader, which gives no OS files. They build and place through the same code as the keys.
     const onMenuCopy = () => {
         const { data } = buildData();
         if (!data.items.length) return;
-        // The inliner promise goes straight into the writer: the clipboard write must start inside
-        // the user gesture (Safari/Firefox), not after the media fetch resolves.
+        // The inliner's promise goes straight into the writer, because Safari and Firefox let a clipboard write start
+        // only inside the user's gesture, not once the media fetch resolves.
         void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg)).catch(() => {});
     };
     const onMenuCut = () => {
         if (!canEdit) return;
         const { data, serializedIds, pendingImages } = buildData();
         if (!data.items.length) {
-            // Nothing serialized — the keyboard sibling's case, minus an event to claim.
+            // Nothing was copied, as in the ⌘X case, but there is no event to claim.
             warnPartialCut(pendingImages);
             return;
         }
-        // Delete only once the async write lands — a denied/failed clipboard write must not destroy
-        // the selection (the content would exist nowhere but the undo stack) — and only the ids the
-        // payload actually carries, exactly like the keyboard path.
+        // The delete waits for the write to land, because a denied write must not destroy the selection: it would then
+        // exist nowhere but the undo stack. It deletes only the ids the payload carries, as ⌘X does.
         void writeEigenClipboardAsync(data, plainText(), foreignImgHtml(data.svg))
             .then(() => {
                 deleteSelection(serializedIds, deleteElements, setSelectedIds, undoManager);
@@ -588,16 +396,15 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             .catch(() => {});
     };
     const onMenuPaste = () => {
-        // The keyboard sibling is gated on canEdit; so is this one. The object menu only opens when
-        // canEdit, but a clipboard write must never depend on a caller remembering that.
+        // ⌘V asks canEdit, and so does this. The menu opens only when the user can edit, but a write must never depend on
+        // a caller remembering that.
         if (!canEdit) return;
         (async () => {
             const data = await readEigenClipboardAsync();
             if (data && pasteEigenItems(data.items)) return;
-            // Nothing placed yet: walk the SAME ladder ⌘V does, over the same classifier, so the menu
-            // row and the keystroke are one behavior — an SVG restores our elements or lands as an
-            // image, anything else becomes a text box. OS-file image paste stays ⌘V-only (the async
-            // API exposes no File objects for the drop pipeline).
+            // Nothing was placed yet, so this tries the flavors in ⌘V's order, through the same classifier: an SVG
+            // restores our elements or lands as an image, and anything else becomes a text box. Pasting OS files needs
+            // ⌘V, because the async API gives no File objects.
             let html = '';
             let text = '';
             for (const clip of await navigator.clipboard.read()) {
@@ -616,8 +423,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 }
             }
             if (pasteNonEigenText(paste.html, paste.text)) return;
-            // An eigen payload was there and no rung could place any of it — the keyboard path's toast,
-            // for the same reason: ⌘V doing nothing silently is indistinguishable from a broken menu.
+            // A payload of ours was there and nothing in it could be placed: ⌘V's toast, for the same reason.
             if (data) toast.info('Nothing in this paste could be placed on the canvas');
         })().catch(() => {
             /* clipboard read denied or unavailable */
@@ -633,4 +439,30 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     );
 
     return { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage };
+}
+
+// The canvas drops a text run selected outside it when the pointer lands on the canvas. The surface is `select-none`,
+// and the in-place editor swallows its own pointerdown, so nothing else collapses a selection made in, say, a comment. It would survive
+// the click that selects an element and keep ⌘C and ⌘X, which would copy that text and cut nothing.
+export function dropOutsideTextSelection(container: HTMLElement | null): void {
+    outsideTextSelection(container)?.removeAllRanges();
+}
+
+// A cut deletes only what the clipboard carries, so an image that could not be copied stays put. The user is told,
+// or a cut of most of the selection would look like a cut of all of it, and a cut of that image alone like nothing.
+function warnPartialCut(pendingImages: number) {
+    if (pendingImages <= 0) return;
+    toast.info(
+        pendingImages === 1
+            ? 'One image is still uploading, so it stayed in the drawing'
+            : `${pendingImages} images are still uploading, so they stayed in the drawing`,
+    );
+}
+
+// A text selection outside the canvas that is more than a caret, if there is one: the run a copy would carry.
+function outsideTextSelection(container: HTMLElement | null): Selection | null {
+    const selection = container?.ownerDocument.getSelection() ?? null;
+    if (!selection || selection.isCollapsed || selection.toString().trim() === '') return null;
+    const node = selection.anchorNode;
+    return node && container?.contains(node) ? null : selection;
 }
