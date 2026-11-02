@@ -73,7 +73,7 @@ function FigureView(props: NodeViewProps) {
     // A stretched picture draws at its stored box, any other at its own ratio.
     const ratio = width && height ? width / height : aspectRatio;
 
-    // Re-arm the one-shot loader when the source changes so the author's width reset recomputes the ratio.
+    // A new picture, such as Replace image puts in, loads again: its ratio is read anew, and a width it lacks is set.
     useEffect(() => {
         imageProcessed.current = false;
         setAspectRatio(null);
@@ -96,12 +96,10 @@ function FigureView(props: NodeViewProps) {
     const handleImageLoad = useCallback(() => {
         if (!imageRef.current || imageProcessed.current) return;
 
-        const nw = imageRef.current.naturalWidth;
-        const nh = imageRef.current.naturalHeight;
-        const hasIntrinsicSize = nw > 0 && nh > 0;
-        // Intrinsic dimensions need no layout, so the resize handles get their ratio even from a load
-        // that happens while the editor is hidden.
-        if (hasIntrinsicSize) setAspectRatio(nw / nh);
+        const { naturalWidth, naturalHeight } = imageRef.current;
+        const hasIntrinsicSize = naturalWidth > 0 && naturalHeight > 0;
+        // A natural size needs no layout, so the grips get their ratio even from a load in a hidden editor.
+        if (hasIntrinsicSize) setAspectRatio(naturalWidth / naturalHeight);
         // The Image panel reads the picture's own ratio off this <img>, and a load is no transaction that tells it.
         if (selected && !height) editor.view.dispatch(editor.state.tr);
 
@@ -115,7 +113,7 @@ function FigureView(props: NodeViewProps) {
 
         if (hasIntrinsicSize) {
             if (!width) {
-                setAttributes({ width: Math.round(Math.min(nw, maxWidth)) });
+                setAttributes({ width: Math.round(Math.min(naturalWidth, maxWidth)) });
             }
             return;
         }
@@ -140,8 +138,8 @@ function FigureView(props: NodeViewProps) {
     // or all its container gives: a fixed minimum would push a narrow table cell wider. The wrapper takes it too, as a
     // wrapped figure floats and shrinks to fit. With no alt text the image would draw 0 px tall, so it keeps a line.
     const failed = failedSrc === src;
-    // Mount the shared transform chrome only once we have a resolvable px box (sized, its ratio known, editable, not a
-    // pending placeholder). Otherwise a selected figure shows the plain ring.
+    // The grips mount only on a box of a known size: an editable picture with a width and a ratio, not a pending
+    // placeholder. Otherwise a selected figure shows the plain ring.
     const box: Box | null =
         selected && isEditable && !showPlaceholder && displayRatio && displayWidth
             ? { x: 0, y: 0, width: displayWidth, height: displayWidth / displayRatio, angle: 0 }

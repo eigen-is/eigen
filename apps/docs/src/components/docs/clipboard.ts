@@ -76,10 +76,10 @@ export function chartClipboardItem(node: ProseMirrorNode): EigenClipboardChartIt
     return buildChartClipboardItem({ chart: node.attrs, box: chartBox(attrs), look: attrs });
 }
 
-// The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file
-// resolves, a chart item per chart with inline data, and the text between them as a text item, a line per
-// paragraph, an equation as its text, a page number as its # and a note or a text box as nothing. None → no items, and the
-// copy is ProseMirror's own.
+// The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file resolves, a
+// chart item per chart with inline data, and the text between them as a text item. The text has a line per paragraph,
+// an equation as its text, a page number as its # and a note or a text box as nothing. With no figure and no chart it
+// writes no items, and the copy is ProseMirror's own.
 function copiedClipboardItems(
     view: EditorView,
     from: number,
@@ -226,19 +226,19 @@ export function writeDocsClipboard(
 
 // A text item lands as a paragraph per line at the caret, with the typography docs models; it has no
 // fontSize, letter-spacing or line-height.
-function eigenTextItemContent({ text, typography: typo }: EigenClipboardTextItem): JSONContent[] {
+function eigenTextItemContent({ text, typography }: EigenClipboardTextItem): JSONContent[] {
     if (!text.trim()) return [];
     const textStyleAttrs: Record<string, string> = {};
-    if (typo?.fontFamily) textStyleAttrs.fontFamily = getFontName(typo.fontFamily);
-    if (typo?.color) textStyleAttrs.color = typo.color;
+    if (typography?.fontFamily) textStyleAttrs.fontFamily = getFontName(typography.fontFamily);
+    if (typography?.color) textStyleAttrs.color = typography.color;
     const marks: { type: string; attrs?: Record<string, string> }[] = [];
     if (Object.keys(textStyleAttrs).length > 0) marks.push({ type: 'textStyle', attrs: textStyleAttrs });
-    if (typo?.fontWeight === 'bold') marks.push({ type: 'bold' });
-    if (typo?.fontStyle === 'italic') marks.push({ type: 'italic' });
-    if (typo?.textDecoration === 'underline') marks.push({ type: 'underline' });
-    if (typo?.textDecoration === 'line-through') marks.push({ type: 'strike' });
-    // An unrecognized wire alignment reads as left, the alignment an unaligned paragraph has, rather than storing garbage.
-    const textAlign = oneOf(typo?.textAlign, TEXT_ALIGNS, 'left');
+    if (typography?.fontWeight === 'bold') marks.push({ type: 'bold' });
+    if (typography?.fontStyle === 'italic') marks.push({ type: 'italic' });
+    if (typography?.textDecoration === 'underline') marks.push({ type: 'underline' });
+    if (typography?.textDecoration === 'line-through') marks.push({ type: 'strike' });
+    // An alignment Docs doesn't know reads as left, the alignment an unaligned paragraph has, so none is stored.
+    const textAlign = oneOf(typography?.textAlign, TEXT_ALIGNS, 'left');
     return text.split('\n').map((line) => ({
         type: 'paragraph',
         ...(textAlign !== 'left' ? { attrs: { textAlign } } : {}),
