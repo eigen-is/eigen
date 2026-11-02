@@ -61,3 +61,25 @@ test("Format › Number checks the cell's format and a pick sets it", async () =
     await openNumber(container);
     expect(checked()).toEqual([['Percent10.12%', 'true']]);
 });
+
+async function openConditionalFormatting(container: HTMLElement) {
+    const format = [...container.querySelectorAll('button[aria-haspopup="menu"]')].find(
+        (button) => button.textContent === 'Format',
+    );
+    await act(async () => {
+        format?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
+    });
+    await openSubmenu('Conditional formatting');
+}
+
+// One dialog, not a FormDialog nested in the slot's old shell.
+const dialogTitles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((title) => title.textContent);
+
+test('Format › Conditional formatting opens a rule dialog as one dialog', async () => {
+    const container = await mountWorkbook();
+    await openConditionalFormatting(container);
+    await openSubmenu('Highlight cell rules');
+    await clickRow('Greater than>');
+    expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
+    expect(dialogTitles()).toEqual(['Greater than']);
+});

@@ -15,7 +15,6 @@ export const OWN_DIALOG_FOOTER = new Set([
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
     // Sheet dialogs not yet moved onto FormDialog.
     'packages/sheet/src/components/CellRangeDialog/index.tsx',
-    'packages/sheet/src/components/ConditionFormat/ConditionRules.tsx',
     'packages/sheet/src/components/ConditionFormat/ManageRules.tsx',
     'packages/sheet/src/components/DataVerification/index.tsx',
     'packages/sheet/src/components/FormatDialogs/CustomCurrencies.tsx',

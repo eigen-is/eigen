@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { SingleRange } from '@workspace/lib/sheets';
 import type { Context } from '../../../index';
-import { getComputeMap, setConditionRules } from '../../../state/modules/condition-format';
+import { conditionRuleError, getComputeMap, setConditionRules } from '../../../state/modules/condition-format';
 import type { ConditionRulesProps } from '../../../state/types';
 import { contextFactory, workbookContextFactory } from '../factories/context';
 
@@ -228,7 +228,7 @@ function ruleDraft(rulesType: string, typed: Partial<ConditionRulesProps> = {}):
 // A1 holds 5 and B1 holds 7; B2:C3 is selected.
 function ctxForRule(): Context {
     const ctx = workbookContextFactory({
-        selections: [{ row: [1, 2], column: [1, 2], row_focus: 1, column_focus: 1 }],
+        selections: [{ row: [1, 2], column: [1, 2] }],
     });
     ctx.sheets[0].data = numberRows([
         [5, 7, 0, 0],
@@ -240,16 +240,30 @@ function ctxForRule(): Context {
 }
 
 const savedRules = (ctx: Context) => ctx.sheets[0].conditionalFormatRules ?? [];
+const savedValues = (ctx: Context) =>
+    savedRules(ctx).flatMap((rule) => (rule.type === 'default' ? [rule.conditionValue] : []));
+
+// What conditionRuleError says about a rule. A refused rule saves nothing, and neither way leaves a notice behind.
+function refusal(draft: ConditionRulesProps): string | null {
+    const ctx = ctxForRule();
+    const error = conditionRuleError(ctx, draft);
+    setConditionRules(ctx, draft);
+    expect(savedRules(ctx)).toHaveLength(error ? 0 : 1);
+    expect(ctx.warnDialog).toBeUndefined();
+    return error;
+}
+
+const NUMBER_OR_CELL = 'The condition value can only be a number or a single cell';
 
 describe('state/condition-format — setConditionRules', () => {
     it('reads a single cell typed as the value of a one-value rule', () => {
-        for (const rulesType of ['greaterThan', 'lessThan', 'equal', 'textContains']) {
+        for (const rulesType of ['greaterThan', 'lessThan', 'equal', 'textContains'] as const) {
             const ctx = ctxForRule();
             setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'A1' }));
             expect(savedRules(ctx)).toEqual([
                 {
                     type: 'default',
-                    cellrange: [{ row: [1, 2], column: [1, 2], row_focus: 1, column_focus: 1 }],
+                    cellrange: [{ row: [1, 2], column: [1, 2] }],
                     format: { textColor: null, cellColor: '#d0fae5' },
                     conditionName: rulesType,
                     conditionRange: [{ row: [0, 0], column: [0, 0] }],
@@ -261,18 +275,12 @@ describe('state/condition-format — setConditionRules', () => {
 
     it('refuses a range or a list of cells as the value of a one-value rule', () => {
         for (const rulesValue of ['A1:B1', 'A1,B1']) {
-            const ctx = ctxForRule();
-            setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue }));
-            expect(savedRules(ctx)).toEqual([]);
-            expect(ctx.warnDialog).toBe('Only a single cell can be referenced');
+            expect(refusal(ruleDraft('greaterThan', { rulesValue }))).toBe('Only a single cell can be referenced');
         }
     });
 
     it('refuses a Between rule whose second value is empty', () => {
-        const ctx = ctxForRule();
-        setConditionRules(ctx, ruleDraft('between', { betweenValue: { value1: '1', value2: '' } }));
-        expect(savedRules(ctx)).toEqual([]);
-        expect(ctx.warnDialog).toBe('The condition value can only be a number or a single cell');
+        expect(refusal(ruleDraft('between', { betweenValue: { value1: '1', value2: '' } }))).toBe(NUMBER_OR_CELL);
     });
 
     it('refuses text where a number rule needs a number', () => {
@@ -283,18 +291,30 @@ describe('state/condition-format — setConditionRules', () => {
             { rulesType: 'between', betweenValue: { value1: '1', value2: 'abc' } },
         ];
         for (const draft of typed) {
-            const ctx = ctxForRule();
-            setConditionRules(ctx, ruleDraft('', draft));
-            expect(savedRules(ctx)).toEqual([]);
-            expect(ctx.warnDialog).toBe('The condition value can only be a number or a single cell');
+            expect(refusal(ruleDraft('', draft))).toBe(NUMBER_OR_CELL);
         }
     });
 
-    it('takes text as the value of Equal to and Text contains', () => {
+    it('takes text as the value of Equal to and Text contains, and refuses only an empty one', () => {
         for (const rulesType of ['equal', 'textContains']) {
             const ctx = ctxForRule();
             setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'abc' }));
-            expect(savedRules(ctx).map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([['abc']]);
+            expect(savedValues(ctx)).toEqual([['abc']]);
+            expect(refusal(ruleDraft(rulesType))).toBe('Enter a value or a single cell');
         }
+    });
+
+    it('refuses a missing date and a count outside 1 to 1000', () => {
+        expect(refusal(ruleDraft('occurrenceDate'))).toBe('Please select a date');
+        expect(refusal(ruleDraft('occurrenceDate', { dateValue: '2026-11-02' }))).toBeNull();
+        for (const projectValue of ['0', '1001', '2.5', '']) {
+            expect(refusal(ruleDraft('top10', { projectValue }))).toBe('Please enter an integer between 1 and 1000');
+        }
+        expect(refusal(ruleDraft('last10_percent', { projectValue: '1000' }))).toBeNull();
+    });
+
+    it('takes a rule with no value as it is', () => {
+        expect(refusal(ruleDraft('aboveAverage'))).toBeNull();
+        expect(refusal(ruleDraft('duplicateValue', { repeatValue: '1' }))).toBeNull();
     });
 });

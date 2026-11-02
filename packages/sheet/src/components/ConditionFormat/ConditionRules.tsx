@@ -1,20 +1,23 @@
-// The dialog for one conditional-format rule, such as "Greater than" or "Top 10", opened from the
-// Format menu. It edits the draft in ctx.conditionRules, reads back a range picked with the range
-// picker, and hands the draft to setConditionRules on confirm. RULE_COPY names each rule once, so
-// this dialog and the places that list rules, such as the Format menu, show the same words.
+// The dialog for one conditional-format rule, such as "Greater than" or "Top 10", opened from the Format menu. It
+// holds the rule's value and colors, and on OK it checks them with conditionRuleError: a refused value keeps the
+// dialog open with the reason under the field, and a good one goes to setConditionRules. RULE_COPY names each rule
+// once, so this dialog and the places that list rules, such as the Format menu, show the same words.
 
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FieldError } from '@workspace/ui/components/field';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { ColorPicker } from '@workspace/ui/components/media';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { useDialog } from '../../hooks/useDialog';
-import { setConditionRules } from '../../state';
+import { useDialogProps } from '../../hooks/useDialog';
+import type { ConditionRulesProps } from '../../state';
+import { conditionRuleError, setConditionRules } from '../../state';
 
 export type ConditionRuleType =
     | 'greaterThan'
@@ -54,254 +57,191 @@ export const RULE_COPY: Record<ConditionRuleType, { label: string; description: 
 
 export function ConditionRules({ type }: { type: ConditionRuleType }) {
     const { context, setContext } = useContext(WorkbookContext);
-    const { hideDialog } = useDialog();
+    const dialogProps = useDialogProps();
     const { label, description } = RULE_COPY[type];
-    const [colorRules, setColorRules] = useState<{
-        textColor: string;
-        cellColor: string;
-    }>({ textColor: '#009966', cellColor: '#d0fae5' });
+    const [rule, setRule] = useState<ConditionRulesProps>({
+        rulesType: type,
+        rulesValue: '',
+        textColor: { check: false, color: '#009966' },
+        cellColor: { check: true, color: '#d0fae5' },
+        betweenValue: { value1: '', value2: '' },
+        dateValue: '',
+        repeatValue: '0',
+        projectValue: '10',
+    });
+    // The reason the last OK was refused, until the next edit.
+    const [error, setError] = useState<string | null>(null);
+    const edit = (change: Partial<ConditionRulesProps>) => {
+        setRule((prev) => ({ ...prev, ...change }));
+        setError(null);
+    };
 
-    const close = useCallback(
-        (closeType: string) => {
-            if (closeType === 'confirm') {
-                setContext((ctx) => {
-                    ctx.conditionRules.textColor.color = colorRules.textColor;
-                    ctx.conditionRules.cellColor.color = colorRules.cellColor;
-                    setConditionRules(ctx, ctx.conditionRules);
-                });
-            }
-            setContext((ctx) => {
-                ctx.conditionRules = {
-                    rulesType: '',
-                    rulesValue: '',
-                    textColor: { check: false, color: '#009966' },
-                    cellColor: { check: true, color: '#d0fae5' },
-                    betweenValue: { value1: '', value2: '' },
-                    dateValue: '',
-                    repeatValue: '0',
-                    projectValue: '10',
-                };
-            });
-            hideDialog();
-        },
-        [colorRules, hideDialog, setContext],
-    );
-
-    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only initialization from `type` prop and rangeDialog state
-    useEffect(() => {
-        setContext((ctx) => {
-            ctx.conditionRules.rulesType = type;
-
-            const rangeDialogType = ctx.rangeDialog.type;
-            const rangeT = ctx.rangeDialog.rangeTxt;
-            if (rangeDialogType === 'conditionRulesbetween1') {
-                ctx.conditionRules.betweenValue.value1 = rangeT;
-            } else if (rangeDialogType === 'conditionRulesbetween2') {
-                ctx.conditionRules.betweenValue.value2 = rangeT;
-            } else if (rangeDialogType.includes('conditionRules')) {
-                ctx.conditionRules.rulesValue = rangeT;
-            } else if (rangeDialogType === '') {
-                ctx.conditionRules = {
-                    rulesType: type,
-                    rulesValue: '',
-                    textColor: { check: false, color: '#009966' },
-                    cellColor: { check: true, color: '#d0fae5' },
-                    betweenValue: { value1: '', value2: '' },
-                    dateValue: '',
-                    repeatValue: '0',
-                    projectValue: '10',
-                };
-            }
-            ctx.rangeDialog.type = '';
-            ctx.rangeDialog.rangeTxt = '';
-        });
-    }, []);
+    const valueField = ruleValueField(type, rule, edit);
 
     return (
-        <div className="flex flex-col gap-4">
-            <DialogHeader>
-                <DialogTitle className="text-base">{label}</DialogTitle>
-            </DialogHeader>
-
-            <div>
-                <p className="text-sm text-muted-foreground mb-2">{description}</p>
-
-                {(type === 'greaterThan' || type === 'lessThan' || type === 'equal' || type === 'textContains') && (
-                    <Input
-                        className="mb-3 h-8"
-                        type="text"
-                        value={context.conditionRules.rulesValue}
-                        onChange={(e) => {
-                            const { value } = e.target;
-                            setContext((ctx) => {
-                                ctx.conditionRules.rulesValue = value;
-                            });
-                        }}
-                    />
-                )}
-
-                {type === 'between' && (
-                    <div className="flex items-center gap-2 mb-3">
-                        <Input
-                            className="h-8 w-24"
-                            type="text"
-                            value={context.conditionRules.betweenValue.value1}
-                            onChange={(e) => {
-                                const { value } = e.target;
-                                setContext((ctx) => {
-                                    ctx.conditionRules.betweenValue.value1 = value;
-                                });
-                            }}
-                        />
-                        <span className="text-sm">to</span>
-                        <Input
-                            className="h-8 w-24"
-                            type="text"
-                            value={context.conditionRules.betweenValue.value2}
-                            onChange={(e) => {
-                                const { value } = e.target;
-                                setContext((ctx) => {
-                                    ctx.conditionRules.betweenValue.value2 = value;
-                                });
-                            }}
-                        />
+        <FormDialog {...dialogProps} title={label} description={description} size="md">
+            <FormDialogForm
+                submitLabel="OK"
+                onSubmit={() => {
+                    const refusal = conditionRuleError(context, rule);
+                    if (refusal) {
+                        setError(refusal);
+                        return false;
+                    }
+                    setContext((ctx) => setConditionRules(ctx, rule));
+                }}
+            >
+                {valueField && (
+                    <div>
+                        {valueField}
+                        {error && <FieldError className="mt-1.5">{error}</FieldError>}
                     </div>
                 )}
 
-                {type === 'occurrenceDate' && (
-                    <Input
-                        type="date"
-                        className="mb-3 h-8 w-48"
-                        value={context.conditionRules.dateValue}
-                        onChange={(e) => {
-                            const { value } = e.target;
-                            setContext((ctx) => {
-                                ctx.conditionRules.dateValue = value;
-                            });
-                        }}
-                    />
-                )}
-
-                {type === 'duplicateValue' && (
-                    <Select
-                        value={context.conditionRules.repeatValue}
-                        onValueChange={(value) => {
-                            setContext((ctx) => {
-                                ctx.conditionRules.repeatValue = value;
-                            });
-                        }}
-                    >
-                        <SelectTrigger size="sm" className="mb-3">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="0">Duplicate value</SelectItem>
-                            <SelectItem value="1">Unique value</SelectItem>
-                        </SelectContent>
-                    </Select>
-                )}
-
-                {(type === 'top10' || type === 'top10_percent' || type === 'last10' || type === 'last10_percent') && (
-                    <div className="flex items-center gap-2 mb-3 text-sm">
-                        {type === 'top10' || type === 'top10_percent' ? 'Top' : 'Last'}
-                        <Input
-                            className="h-8 w-16"
-                            type="number"
-                            value={context.conditionRules.projectValue}
-                            onChange={(e) => {
-                                const { value } = e.target;
-                                setContext((ctx) => {
-                                    ctx.conditionRules.projectValue = value;
-                                });
-                            }}
-                        />
-                        {type === 'top10' || type === 'last10' ? '' : '%'}
-                    </div>
-                )}
-
-                <p className="text-sm text-muted-foreground mt-3 mb-2">Set as:</p>
-
-                <div className="rounded-md border p-3 space-y-3 mb-4">
-                    <div className="flex items-center gap-3">
-                        <Checkbox
+                <div className="space-y-2">
+                    <p className="text-sm text-muted-foreground">Set as:</p>
+                    <div className="rounded-md border p-3 space-y-3">
+                        <ColorChoice
                             id="checkTextColor"
-                            checked={context.conditionRules.textColor.check}
-                            onCheckedChange={(checked) => {
-                                setContext((ctx) => {
-                                    ctx.conditionRules.textColor.check = !!checked;
-                                });
-                            }}
+                            label="Text color"
+                            choice={rule.textColor}
+                            onChange={(textColor) => edit({ textColor })}
                         />
-                        <Label htmlFor="checkTextColor" className="text-sm w-20">
-                            Text color
-                        </Label>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 w-10 p-0"
-                                    style={{ backgroundColor: colorRules.textColor }}
-                                />
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-3">
-                                <ColorPicker
-                                    value={colorRules.textColor}
-                                    showReset={false}
-                                    onChange={(color) => {
-                                        if (color) {
-                                            setColorRules((prev) => ({ ...prev, textColor: color }));
-                                        }
-                                    }}
-                                />
-                            </PopoverContent>
-                        </Popover>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <Checkbox
+                        <ColorChoice
                             id="checkCellColor"
-                            checked={context.conditionRules.cellColor.check}
-                            onCheckedChange={(checked) => {
-                                setContext((ctx) => {
-                                    ctx.conditionRules.cellColor.check = !!checked;
-                                });
-                            }}
+                            label="Cell color"
+                            choice={rule.cellColor}
+                            onChange={(cellColor) => edit({ cellColor })}
                         />
-                        <Label htmlFor="checkCellColor" className="text-sm w-20">
-                            Cell color
-                        </Label>
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="h-6 w-10 p-0"
-                                    style={{ backgroundColor: colorRules.cellColor }}
-                                />
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-3">
-                                <ColorPicker
-                                    value={colorRules.cellColor}
-                                    showReset={false}
-                                    onChange={(color) => {
-                                        if (color) {
-                                            setColorRules((prev) => ({ ...prev, cellColor: color }));
-                                        }
-                                    }}
-                                />
-                            </PopoverContent>
-                        </Popover>
                     </div>
                 </div>
-            </div>
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => close('close')}>
-                    Cancel
-                </Button>
-                <Button size="sm" onClick={() => close('confirm')}>
-                    OK
-                </Button>
-            </DialogFooter>
+            </FormDialogForm>
+        </FormDialog>
+    );
+}
+
+// The field a rule's value is typed or picked in, or null for a rule that takes none, such as Above average.
+function ruleValueField(
+    type: ConditionRuleType,
+    rule: ConditionRulesProps,
+    edit: (change: Partial<ConditionRulesProps>) => void,
+): ReactNode {
+    switch (type) {
+        case 'greaterThan':
+        case 'lessThan':
+        case 'equal':
+        case 'textContains':
+            return (
+                <Input
+                    aria-label="Value"
+                    value={rule.rulesValue}
+                    onChange={(e) => edit({ rulesValue: e.target.value })}
+                />
+            );
+        case 'between':
+            return (
+                <div className="flex items-center gap-2">
+                    <Input
+                        aria-label="Lower value"
+                        className="w-24"
+                        value={rule.betweenValue.value1}
+                        onChange={(e) => edit({ betweenValue: { ...rule.betweenValue, value1: e.target.value } })}
+                    />
+                    <span className="text-sm">and</span>
+                    <Input
+                        aria-label="Upper value"
+                        className="w-24"
+                        value={rule.betweenValue.value2}
+                        onChange={(e) => edit({ betweenValue: { ...rule.betweenValue, value2: e.target.value } })}
+                    />
+                </div>
+            );
+        case 'occurrenceDate':
+            return (
+                <Input
+                    type="date"
+                    aria-label="Date"
+                    className="w-48"
+                    value={rule.dateValue}
+                    onChange={(e) => edit({ dateValue: e.target.value })}
+                />
+            );
+        case 'duplicateValue':
+            return (
+                <Select value={rule.repeatValue} onValueChange={(repeatValue) => edit({ repeatValue })}>
+                    <SelectTrigger size="sm" aria-label="Type of value">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="0">Duplicate value</SelectItem>
+                        <SelectItem value="1">Unique value</SelectItem>
+                    </SelectContent>
+                </Select>
+            );
+        case 'top10':
+        case 'top10_percent':
+        case 'last10':
+        case 'last10_percent': {
+            const percent = type === 'top10_percent' || type === 'last10_percent';
+            return (
+                <div className="flex items-center gap-2 text-sm">
+                    {type === 'top10' || type === 'top10_percent' ? 'Top' : 'Last'}
+                    <Input
+                        type="number"
+                        aria-label={percent ? 'Percent of cells' : 'Number of cells'}
+                        className="w-20"
+                        value={rule.projectValue}
+                        onChange={(e) => edit({ projectValue: e.target.value })}
+                    />
+                    {percent && '%'}
+                </div>
+            );
+        }
+        default:
+            return null;
+    }
+}
+
+// A tick box that turns one of the rule's colors on, and the swatch that picks it.
+function ColorChoice({
+    id,
+    label,
+    choice,
+    onChange,
+}: {
+    id: string;
+    label: string;
+    choice: { check: boolean; color: string };
+    onChange: (choice: { check: boolean; color: string }) => void;
+}) {
+    return (
+        <div className="flex items-center gap-3">
+            <Checkbox
+                id={id}
+                checked={choice.check}
+                onCheckedChange={(checked) => onChange({ ...choice, check: checked === true })}
+            />
+            <Label htmlFor={id} className="text-sm w-20">
+                {label}
+            </Label>
+            <Popover>
+                <PopoverTrigger asChild>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        aria-label={`Choose ${label.toLowerCase()}`}
+                        className="h-6 w-10 p-0"
+                        style={{ backgroundColor: choice.color }}
+                    />
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-3">
+                    <ColorPicker
+                        value={choice.color}
+                        showReset={false}
+                        onChange={(color) => onChange({ ...choice, color })}
+                    />
+                </PopoverContent>
+            </Popover>
         </div>
     );
 }

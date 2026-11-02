@@ -1,6 +1,6 @@
-// Conditional formats in the editor: the rule the dialog builds for the selection, the per-cell format map the
-// painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The evaluation itself lives
-// in the engine, which the server export shares.
+// Conditional formats in the editor: the check and the write of the rule the dialog builds for the selection, the
+// per-cell format map the painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The
+// evaluation itself lives in the engine, which the server export shares.
 
 import type {
     ColorGradationRule,
@@ -44,171 +44,117 @@ const KNOWN_CONDITION_NAMES = [
     'formula',
 ] as const satisfies readonly ConditionalFormatConditionName[];
 
-function isKnownConditionName(s: string): s is ConditionalFormatConditionName {
-    return (KNOWN_CONDITION_NAMES as readonly string[]).includes(s);
-}
-
-// Coerce a raw cell value (which can be any of Cell['v'] = string | number |
-// boolean | undefined) into the `(string | number)[]` shape stored on the rule.
-function toRuleValue(raw: unknown): string | number {
-    if (typeof raw === 'number' || typeof raw === 'string') return raw;
-    if (raw == null) return '';
-    return String(raw);
-}
-
 const ONLY_SINGLE_CELL = 'Only a single cell can be referenced';
 const VALUE_MUST_BE_NUMBER_OR_CELL = 'The condition value can only be a number or a single cell';
+const VALUE_OR_CELL = 'Enter a value or a single cell';
 
-// Set condition rules
+// What a rule compares each cell against. A value read from a cell keeps that cell's range beside it.
+type RuleValues = { conditionRange: SingleRange[]; conditionValue: (string | number)[] };
+
+// Why the dialog's rule can't be saved, or null when it can. The dialog shows the reason under its fields and stays
+// open, so the check runs before setConditionRules.
+export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): string | null {
+    const values = readRuleValues(ctx, rules);
+    return typeof values === 'string' ? values : null;
+}
+
+// Adds the dialog's rule over the selection, unless conditionRuleError refuses it or the sheet is protected.
 export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
-    if (!checkProtectionFormatCells(ctx)) {
-        return;
-    }
-
-    // The dialog seeds rules.rulesType from a substring of the rangeDialog type
-    // (`conditionRules` prefix stripped) and never validates against the engine's
-    // canonical name set. Bail out on names the engine doesn't recognize rather
-    // than persisting a rule that would silently no-op on every paint.
-    if (!isKnownConditionName(rules.rulesType)) {
-        return;
-    }
-    const conditionName = rules.rulesType;
-
-    const conditionRange: SingleRange[] = [];
-    const conditionValue: (string | number)[] = [];
-
-    if (
-        conditionName === 'greaterThan' ||
-        conditionName === 'lessThan' ||
-        conditionName === 'equal' ||
-        conditionName === 'textContains'
-    ) {
-        const rangeArr = getRangeByTxt(ctx, rules.rulesValue);
-        if (rangeArr.length > 1) {
-            ctx.warnDialog = ONLY_SINGLE_CELL;
-            return;
-        }
-        if (rangeArr.length === 1) {
-            const first = rangeArr[0];
-            if (!first) return;
-            const [r1, r2] = first.row;
-            const [c1, c2] = first.column;
-            if (r1 === r2 && c1 === c2) {
-                const d = getFlowdata(ctx);
-                if (!d || isNil(r1) || isNil(c1)) return;
-                conditionRange.push({ row: first.row, column: first.column });
-                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
-            } else {
-                ctx.warnDialog = ONLY_SINGLE_CELL;
-                return;
-            }
-        } else {
-            const v = rules.rulesValue;
-            // Equal to and Text contains also compare text, so only an empty value is refused.
-            const isText = conditionName === 'equal' || conditionName === 'textContains';
-            if (isText ? v === '' : !isRealNum(v)) {
-                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-                return;
-            }
-            conditionValue.push(v);
-        }
-    } else if (conditionName === 'between') {
-        const v1 = rules.betweenValue.value1;
-        const v2 = rules.betweenValue.value2;
-
-        const rangeArr1 = getRangeByTxt(ctx, v1);
-        if (rangeArr1.length > 1) {
-            ctx.warnDialog = ONLY_SINGLE_CELL;
-            return;
-        }
-        if (rangeArr1.length === 1) {
-            const first = rangeArr1[0];
-            if (!first) return;
-            const [r1, r2] = first.row;
-            const [c1, c2] = first.column;
-            if (r1 === r2 && c1 === c2) {
-                const d = getFlowdata(ctx);
-                if (!d || isNil(r1) || isNil(c1)) return;
-                conditionRange.push({ row: first.row, column: first.column });
-                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
-            } else {
-                ctx.warnDialog = ONLY_SINGLE_CELL;
-                return;
-            }
-        } else if (rangeArr1.length === 0) {
-            if (!isRealNum(v1)) {
-                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-                return;
-            }
-            conditionValue.push(v1);
-        }
-        const rangeArr2 = getRangeByTxt(ctx, v2);
-        if (rangeArr2.length > 1) {
-            ctx.warnDialog = ONLY_SINGLE_CELL;
-            return;
-        }
-        if (rangeArr2.length === 1) {
-            const first = rangeArr2[0];
-            if (!first) return;
-            const [r1, r2] = first.row;
-            const [c1, c2] = first.column;
-            if (r1 === r2 && c1 === c2) {
-                const d = getFlowdata(ctx);
-                if (!d || isNil(r1) || isNil(c1)) return;
-                conditionRange.push({ row: first.row, column: first.column });
-                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
-            } else {
-                ctx.warnDialog = ONLY_SINGLE_CELL;
-                return;
-            }
-        } else if (rangeArr2.length === 0) {
-            if (!isRealNum(v2)) {
-                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-                return;
-            }
-            conditionValue.push(v2);
-        }
-    } else if (conditionName === 'occurrenceDate') {
-        const v = rules.dateValue;
-        if (!v) {
-            ctx.warnDialog = 'Please select a date';
-            return;
-        }
-        conditionValue.push(v);
-    } else if (conditionName === 'duplicateValue') {
-        conditionValue.push(rules.repeatValue);
-    } else if (
-        conditionName === 'top10' ||
-        conditionName === 'top10_percent' ||
-        conditionName === 'last10' ||
-        conditionName === 'last10_percent'
-    ) {
-        const v = rules.projectValue;
-        const n = parseInt(v, 10);
-        if (n.toString() !== v || n < 1 || n > 1000) {
-            ctx.warnDialog = 'Please enter an integer between 1 and 1000';
-            return;
-        }
-        conditionValue.push(v);
-    }
-
-    const textColor = rules.textColor.check ? rules.textColor.color : null;
-    const cellColor = rules.cellColor.check ? rules.cellColor.color : null;
+    if (!checkProtectionFormatCells(ctx)) return;
+    // rulesType is a plain string, so a name the engine doesn't know would save a rule that never paints.
+    if (!isKnownConditionName(rules.rulesType)) return;
+    const values = readRuleValues(ctx, rules);
+    if (typeof values === 'string') return;
 
     const rule: DefaultConditionalFormatRule = {
         type: 'default',
         cellrange: ctx.selections ?? [],
-        format: { textColor, cellColor },
-        conditionName,
-        conditionRange,
-        conditionValue,
+        format: {
+            textColor: rules.textColor.check ? rules.textColor.color : null,
+            cellColor: rules.cellColor.check ? rules.cellColor.color : null,
+        },
+        conditionName: rules.rulesType,
+        ...values,
     };
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     const ruleArr = ctx.sheets[index].conditionalFormatRules ?? [];
     ruleArr.push(rule);
-
     ctx.sheets[index].conditionalFormatRules = ruleArr;
+}
+
+function isKnownConditionName(s: string): s is ConditionalFormatConditionName {
+    return (KNOWN_CONDITION_NAMES as readonly string[]).includes(s);
+}
+
+// The rule's values as the dialog typed them, or the message that refuses them.
+function readRuleValues(ctx: Context, rules: ConditionRulesProps): RuleValues | string {
+    switch (rules.rulesType) {
+        case 'greaterThan':
+        case 'lessThan':
+            return readTypedValues(ctx, [rules.rulesValue], isRealNum, VALUE_MUST_BE_NUMBER_OR_CELL);
+        // These also compare text, so only an empty value is refused.
+        case 'equal':
+        case 'textContains':
+            return readTypedValues(ctx, [rules.rulesValue], (v) => v !== '', VALUE_OR_CELL);
+        case 'between':
+            return readTypedValues(
+                ctx,
+                [rules.betweenValue.value1, rules.betweenValue.value2],
+                isRealNum,
+                VALUE_MUST_BE_NUMBER_OR_CELL,
+            );
+        case 'occurrenceDate':
+            if (!rules.dateValue) return 'Please select a date';
+            return { conditionRange: [], conditionValue: [rules.dateValue] };
+        case 'duplicateValue':
+            return { conditionRange: [], conditionValue: [rules.repeatValue] };
+        case 'top10':
+        case 'top10_percent':
+        case 'last10':
+        case 'last10_percent': {
+            const n = parseInt(rules.projectValue, 10);
+            if (n.toString() !== rules.projectValue || n < 1 || n > 1000) {
+                return 'Please enter an integer between 1 and 1000';
+            }
+            return { conditionRange: [], conditionValue: [rules.projectValue] };
+        }
+        default:
+            return { conditionRange: [], conditionValue: [] };
+    }
+}
+
+// Each typed value is either one cell's reference, which reads that cell's value, or a value `accepts` takes as typed.
+function readTypedValues(
+    ctx: Context,
+    typed: readonly string[],
+    accepts: (value: string) => boolean,
+    refusal: string,
+): RuleValues | string {
+    const values: RuleValues = { conditionRange: [], conditionValue: [] };
+    for (const value of typed) {
+        const ranges = getRangeByTxt(ctx, value);
+        if (ranges.length === 0) {
+            if (!accepts(value)) return refusal;
+            values.conditionValue.push(value);
+            continue;
+        }
+        const [range] = ranges;
+        if (ranges.length > 1 || !range || range.row[0] !== range.row[1] || range.column[0] !== range.column[1]) {
+            return ONLY_SINGLE_CELL;
+        }
+        const data = getFlowdata(ctx);
+        values.conditionRange.push({ row: range.row, column: range.column });
+        values.conditionValue.push(toRuleValue(data && getCellValue(range.row[0], range.column[0], data)));
+    }
+    return values;
+}
+
+// A cell's value can be a boolean too, which the rule stores as text.
+function toRuleValue(raw: unknown): string | number {
+    if (typeof raw === 'number' || typeof raw === 'string') return raw;
+    if (raw == null) return '';
+    return String(raw);
 }
 
 // Cache for getComputeMap — avoids recomputing the entire CF map on every
