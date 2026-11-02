@@ -1266,16 +1266,18 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
-    // An API on another kernel, such as the Mac host beside the container, holds no file lock the swap can see.
+    // An API on another kernel, such as the Mac host beside the container, holds no file lock the swap can see. Each
+    // swap waits LEASE_WAIT_MS on a foreign lease, so the two run side by side on installs of their own.
     test(
         'a swap with a live lease in data/server is refused before anything moves, and a stale one only delays it',
         async () => {
-            const dir = install();
-            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
-            const leaseFile = join(dir, 'data/server', DATA_LEASE_FILE);
+            const live = install();
+            const stale = install();
+            const staged = await Promise.all([live, stale].map((dir) => stage(dir, basename(fullArchive))));
+            expect(staged.map((result) => result.code)).toEqual([0, 0]);
             const startedAt = new Date().toISOString();
-            const heartbeat = () =>
-                writeLease(leaseFile, {
+            const heartbeat = (dir: string) =>
+                writeLease(join(dir, 'data/server', DATA_LEASE_FILE), {
                     id: 'remote-id',
                     host: 'other-machine',
                     kernel: 'other-kernel',
@@ -1285,23 +1287,27 @@ describe('restore --stage and --swap', () => {
                     startedAt,
                     heartbeatAt: new Date().toISOString(),
                 });
-            heartbeat();
-            const remote = setInterval(heartbeat, 50);
+            heartbeat(live);
+            heartbeat(stale);
+            const remote = setInterval(() => heartbeat(live), 50);
+            const started = Date.now();
             try {
-                const result = await swap(dir);
-                expect(result.code).toBe(1);
-                expect(result.stderr).toContain('other-machine');
-                expect(result.stderr).toContain('4242');
-                expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-                expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
-                expect(asideDirs(dir)).toEqual([]);
+                const [refused, delayed] = await Promise.all([
+                    swap(live),
+                    // A stopped heartbeat leaves a lease that no longer moves, so it delays the swap once, not forever.
+                    swap(stale),
+                ]);
+                expect(refused.code).toBe(1);
+                expect(refused.stderr).toContain('other-machine');
+                expect(refused.stderr).toContain('4242');
+                expect(readFileSync(join(live, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(live, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(live)).toEqual([]);
+                expect(delayed.code).toBe(0);
+                expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
             } finally {
                 clearInterval(remote);
             }
-            // A stopped heartbeat leaves a lease that no longer moves, so it delays the swap once, not forever.
-            const started = Date.now();
-            expect((await swap(dir)).code).toBe(0);
-            expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
         },
         JOB_TIMEOUT_MS,
     );
