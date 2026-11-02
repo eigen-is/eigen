@@ -122,6 +122,8 @@ A properties panel has no Delete button. An object's Delete is its menu's last r
 
 Pink `#f6339a`, the accent row of the pink column in `packages/lib/src/constants/colors.ts`, is Eigen's accent color. It comes first in `EIGEN_ACCENT_COLORS_SHUFFLED`, the order calendars, labels, chart series and presence hand the accents out in, so what Eigen picks for a user starts in its own color: a new account's first calendar and a chart's first series. A new deck's title slide opens on it too. Rose and fuchsia sit close to it, so they come late in that order ([CHARTS.md](CHARTS.md) has the reasoning).
 
+A fixed color mapped onto the palette (`eigenColor(name, step)`, as the sheet's color scales and data bars do in `CF_PRESETS`) takes the nearest palette color by OKLab distance, and where the choice is in doubt the lighter, less saturated step, because the originals are muted.
+
 ## A choice is a submenu with a check
 
 **A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way (View › Mode, Format › Line & paragraph spacing, View › Show ruler), so a user reads every Eigen menu the same way, and a screen reader hears each row as checked or not.
