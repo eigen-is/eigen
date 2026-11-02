@@ -267,4 +267,11 @@ describe('state/condition-format — setConditionRules', () => {
             expect(ctx.warnDialog).toBe('Only a single cell can be referenced');
         }
     });
+
+    it('refuses a Between rule whose second value is empty', () => {
+        const ctx = ctxForRule();
+        setConditionRules(ctx, ruleDraft('between', { betweenValue: { value1: '1', value2: '' } }));
+        expect(savedRules(ctx)).toEqual([]);
+        expect(ctx.warnDialog).toBe('The condition value can only be a number or a single cell');
+    });
 });

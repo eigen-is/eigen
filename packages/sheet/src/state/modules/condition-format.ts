@@ -161,9 +161,9 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
         } else if (rangeArr2.length === 0) {
             if (Number.isNaN(v2) || v2 === '') {
                 ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-            } else {
-                conditionValue.push(v2);
+                return;
             }
+            conditionValue.push(v2);
         }
     } else if (conditionName === 'occurrenceDate') {
         const v = rules.dateValue;
