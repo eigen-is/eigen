@@ -1,7 +1,7 @@
-// Picks a free name beside existing ones by adding a number, such as `photo (2).jpg`, for an upload, a
-// copy or a restore that would collide with a sibling. Creates into one folder run at once, so the name a
-// running create picked counts as taken until that create ends. The API is one process, which holds the
-// data dir's instance lock, so this one map sees every create.
+// Picks a free name beside existing ones by adding a number, such as `photo (2).jpg`, for a create that
+// would collide with a sibling, such as an upload, a copy or a restore. Creates into one folder run at
+// once, so the name a running create picked counts as taken until that create ends. The API is one
+// process, which holds the data dir's instance lock, so this one map sees every create.
 
 import type { Mount } from '../mount';
 import { foldName, MAX_NAME_BYTES } from '../mount/names';
@@ -66,9 +66,9 @@ export async function withFreeName<T>(
 // is one the mount takes.
 export function getUniqueFileName(name: string, usedNames: ReadonlySet<string>): string {
     // A leading dot starts a dotfile, not an extension, the same as in buildStorageKey.
-    const dotIdx = name.lastIndexOf('.');
-    const ext = dotIdx > 0 ? name.slice(dotIdx) : '';
-    let base = dotIdx > 0 ? name.slice(0, dotIdx) : name;
+    const dotIndex = name.lastIndexOf('.');
+    const ext = dotIndex > 0 ? name.slice(dotIndex) : '';
+    let base = dotIndex > 0 ? name.slice(0, dotIndex) : name;
 
     const suffixMatch = base.match(/ \((\d+)\)$/);
     let counter = suffixMatch ? parseInt(suffixMatch[1], 10) : 1;
