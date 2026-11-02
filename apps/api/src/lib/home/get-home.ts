@@ -38,7 +38,7 @@ const deletingHomes = new Set<string>();
 let shuttingDown = false;
 
 // Whether the cache holds a home for the owner, built or still being built. Never opens one.
-export function atHome(ownerId: string): boolean {
+export function isHomeCached(ownerId: string): boolean {
     return homeFactories.has(ownerId);
 }
 

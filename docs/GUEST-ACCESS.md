@@ -114,7 +114,7 @@ The topbar limits a guest's app switcher to Drive, Docs, Stickies, Slides, Vecto
 
 Activity is `MAX(session.updatedAt)` for the guest, falling back to `user.updatedAt` when the guest has no session yet. better-auth refreshes a session row when it validates it, so any authenticated request keeps the guest alive.
 
-A guest whose home is loaded (`atHome(userId)`) is skipped, to protect an in-flight collaboration session. The next sweep after the home idles out catches it.
+A guest whose home is loaded (`isHomeCached(userId)`) is skipped, to protect an in-flight collaboration session. The next sweep after the home idles out catches it.
 
 The sweep calls `deleteUserCompletely(userId, null)`, the system mode that goes through better-auth's internal adapter instead of its admin API. The teardown is the same as any deletion, and the registry entries addressed to the guest stay.
 

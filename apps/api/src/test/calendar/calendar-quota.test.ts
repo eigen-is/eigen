@@ -628,7 +628,7 @@ describe('Calendar storage quota', () => {
         expect(await agree()).toBeLessThan(afterDelete);
     });
 
-    // What `meteredIngest = atHome(...)` is for: a Calendar over a home no factory holds has no Home to ask
+    // What `meteredIngest = isHomeCached(...)` is for: a Calendar over a home no factory holds has no Home to ask
     // for a quota, and asking would boot a second one over its very files.
     test('a home nobody registered stores past a budget that refuses a booted one', async () => {
         const user = await makeUser();

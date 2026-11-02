@@ -243,7 +243,7 @@ describe('Contacts import', () => {
     });
 });
 
-// makeContacts homes are deliberately unmetered (never registered, so atHome is false), so the quota result
+// makeContacts homes are deliberately unmetered (never registered, so isHomeCached is false), so the quota result
 // putCard returns is only reachable against a real registered home — the shape the CardDAV burst-cache test
 // uses. Its own user keeps the squeezed ceiling away from the shared fixtures' books.
 describe('Contacts import quota', () => {

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
-import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
+import { evictHome, getHome, isHomeCached, shutdownAllHomes } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { getTestContext } from '../setup';
 
@@ -83,7 +83,7 @@ describe('getHome teardown race', () => {
         const home = await getHome(userId);
 
         await home.close();
-        expect(atHome(userId)).toBe(false);
+        expect(isHomeCached(userId)).toBe(false);
 
         const next = await getHome(userId);
         expect(next).not.toBe(home);
@@ -93,7 +93,7 @@ describe('getHome teardown race', () => {
     test('an owner whose home fails to build is not left in the cache', async () => {
         const ownerId = 'abcdefghijklmnopqrstuvwxyz012345';
         await expect(getHome(ownerId)).rejects.toThrow('User not found');
-        expect(atHome(ownerId)).toBe(false);
+        expect(isHomeCached(ownerId)).toBe(false);
     });
 
     // The process ends once the shutdown is done, so a Home built during it would be killed half-open.
@@ -122,6 +122,6 @@ describe('getHome teardown race', () => {
         release();
         await shutdown;
         await reader.cancel();
-        expect(atHome(userId)).toBe(false);
+        expect(isHomeCached(userId)).toBe(false);
     });
 });

@@ -62,7 +62,7 @@ A contact card, an imported `.eml` and a calendar resource are all written throu
 
 Each ingress turns the 507 into its own answer: a CalDAV `PUT` gets the typed `quota` result (`dav-store.ts`), and an `.ics` import stops with a 507 that names how many events went in (`calendar/transfer.ts`). An inbound invitation has nobody to answer, so it is dropped while its mail still lands ([CALENDAR.md](CALENDAR.md)).
 
-A Home that `atHome()` does not know, such as a test harness or a seeding script, is not metered, because the quota lookup goes through `getHome` and would boot a second Home over the same files. Contacts turns metering on only at the end of its init ([CONTACTS.md](CONTACTS.md)).
+A Home that `isHomeCached()` does not know, such as a test harness or a seeding script, is not metered, because the quota lookup goes through `getHome` and would boot a second Home over the same files. Contacts turns metering on only at the end of its init ([CONTACTS.md](CONTACTS.md)).
 
 Mail attachments and contact avatars take their own checks. `getMailUploadMaxSize` returns `min(per-file cap, 25 MB, what is left of home data)` and throws 507 when nothing is left. `enforceAvatarUpload` runs the per-file cap and then `used + fileSize > max`, with no credit and no grace ([ROADMAP-POST-1.md](ROADMAP-POST-1.md)). A label rename is unmetered by decision: it rewrites every member card's `CATEGORIES` with no ceiling in front, but a typed name is capped at `LABEL_NAME_MAX_LENGTH` (100 characters), so each card grows by at most one such name, and the delta settles into `cardsBytes` after the commit (`settleFanOut`, `contacts/labels.ts`).
 

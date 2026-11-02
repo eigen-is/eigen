@@ -6,7 +6,7 @@ import { user as userSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
-import { atHome, getHome } from '../../lib/home';
+import { getHome, isHomeCached } from '../../lib/home';
 import { sendToHome } from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import { authedRequest, createTestUser, getTestContext } from '../setup';
@@ -50,14 +50,14 @@ describe('A calendar read for an owner without a calendar of theirs to see', () 
         const ownerId = await createUserWithoutSignIn('user');
         expect(await answersFor(ownerId)).toEqual(NO_ACCESS);
         expect(fs.existsSync(getUserHomePath(ownerId))).toBe(false);
-        expect(atHome(ownerId)).toBe(false);
+        expect(isHomeCached(ownerId)).toBe(false);
     });
 
     test('a guest answers as no access, and its home stays closed', async () => {
         const ownerId = await createUserWithoutSignIn('guest');
         expect(await answersFor(ownerId)).toEqual(NO_ACCESS);
         expect(fs.existsSync(getUserHomePath(ownerId))).toBe(false);
-        expect(atHome(ownerId)).toBe(false);
+        expect(isHomeCached(ownerId)).toBe(false);
     });
 
     test('an organization answers as no access', async () => {
@@ -67,7 +67,7 @@ describe('A calendar read for an owner without a calendar of theirs to see', () 
     test('an id without a user answers the same as a user without a share', async () => {
         const missing = crypto.randomUUID().replaceAll('-', '');
         expect(await answersFor(missing)).toEqual(NO_ACCESS);
-        expect(atHome(missing)).toBe(false);
+        expect(isHomeCached(missing)).toBe(false);
         // Other tests share alice's calendars with bob, so the user without a share has a home of its own.
         const existing = await createTestUser(
             `owner-kind-${crypto.randomUUID()}@test.eigen.is`,

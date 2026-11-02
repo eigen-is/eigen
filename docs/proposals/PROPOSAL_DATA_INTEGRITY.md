@@ -103,7 +103,7 @@ What already exists, so the design extends rather than reinvents:
   + versioning check at config time.
 - **Scheduler** (`lib/scheduler/`): `scheduleInterval(name, ms, fn)` with error isolation; two
   registered jobs (`guest-cleanup`, daily, and `server-backup`) in `jobs.ts`. Guest-cleanup also shows the enumeration
-  pattern: query the auth DB for users, skip live homes via `atHome()`.
+  pattern: query the auth DB for users, skip live homes via `isHomeCached()`.
 - **Pacing pattern** (`lib/mount/content-reindex-queue.ts`): per-mount, self-scheduled, batch-capped
   (100 rows/turn), durable via the `contentDirty` bit on `paths` (metadata.db v6) — resumable across
   restarts by construction. The sweep mirrors this shape.
@@ -187,9 +187,9 @@ dir is on the right side of it — when homes shard across servers, each server 
 Mount configs (S3 credentials) come from the home's `settings.json`, same as `Drive.init` reads them.
 A home directory with no matching auth row is itself a finding (orphan home).
 
-**A second connection on a live home's database is NOT safe here — the `atHome()` skip is
+**A second connection on a live home's database is NOT safe here — the `isHomeCached()` skip is
 mandatory, not an optimization.** `ManagedDatabase.close()` leaves `-wal` and `-shm` to SQLite ([DATABASE.md](../DATABASE.md)), but `Mount.cleanupTemp` at close still unlinks a container temp and its journals by hand. With a sweep connection also open on that temp: the close's `wal_checkpoint(TRUNCATE)` silently can't complete, and the unlink then deletes a WAL still holding committed-but-uncheckpointed frames under the sweep's handle — a crash in that window loses them, and a fresh open racing the unlink creates a new WAL while the old inode is still mapped (the documented SQLite corruption scenario). So disk-level opens are for
-**cold homes only**: check `atHome()` before opening *and again after* — if the home went live
+**cold homes only**: check `isHomeCached()` before opening *and again after* — if the home went live
 mid-check, discard the result and move on. A live home's databases are instead checked through the
 home's own cached handles: `ManagedDatabase.stageCopy` a frozen `VACUUM INTO` copy and probe that
 (the seam-D mechanics, reused). The `readYjsStateFromFile` open-raw precedent applies only to
@@ -382,7 +382,7 @@ fault injection from `sync-resilience.test.ts`):
   row whose object was deleted, one deleted maildir file behind a live `mail.db` row — one sweep
   pass reports all five; fixing each and re-sweeping clears its alert state (first-seen dedup +
   resolved notification asserted via the notification list). Plus the live-home rule: a sweep pass
-  over a home held open by the test skips its DBs (`atHome()` mandatory) and covers them once the
+  over a home held open by the test skips its DBs (`isHomeCached()` mandatory) and covers them once the
   home is evicted.
 - **Post-ack verify**: FaultyStorage-style backend that acks a PUT but stores truncated bytes —
   upload is retried, not acked; alert fires after the attempt threshold.
