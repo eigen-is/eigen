@@ -16,7 +16,7 @@ import type { Context } from '../../state';
 import { getSheetIndex, sortSelection } from '../../state';
 
 export function CustomSort() {
-    const [rangeColChar, setRangeColChar] = useState<string[]>([]);
+    const [rangeColumns, setRangeColumns] = useState<{ offset: number; label: string }[]>([]);
     const [ascOrDesc, setAscOrDesc] = useState(true);
     const { context, setContext } = useContext(WorkbookContext);
     const [selectedValue, setSelectedValue] = useState<string>('0');
@@ -31,25 +31,25 @@ export function CustomSort() {
     const sheetIndex = getSheetIndex(context, context.currentSheetId);
 
     useEffect(() => {
-        const list: string[] = [];
+        const list: { offset: number; label: string }[] = [];
         if (isTitleChange) {
             for (let i = col_start; i <= col_end; i += 1) {
                 const cell = sheetIndex == null ? undefined : context.sheets[sheetIndex].data?.[row_start]?.[i];
                 const colHeaderValue = cellDisplay(cell) || cell?.v;
                 if (colHeaderValue) {
-                    list.push(String(colHeaderValue));
+                    list.push({ offset: i - col_start, label: String(colHeaderValue) });
                 } else {
                     const ColumnChar = columnIndexToLabel(i);
-                    list.push(`Column ${ColumnChar}`);
+                    list.push({ offset: i - col_start, label: `Column ${ColumnChar}` });
                 }
             }
         } else {
             for (let i = col_start; i <= col_end; i += 1) {
                 const ColumnChar = columnIndexToLabel(i);
-                list.push(ColumnChar);
+                list.push({ offset: i - col_start, label: ColumnChar });
             }
         }
-        setRangeColChar(list);
+        setRangeColumns(list);
     }, [col_end, col_start, context.sheets, isTitleChange, row_start, sheetIndex]);
 
     return (
@@ -76,9 +76,9 @@ export function CustomSort() {
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {rangeColChar.map((col, index) => (
-                                    <SelectItem value={String(index)} key={col}>
-                                        {col}
+                                {rangeColumns.map(({ offset, label }) => (
+                                    <SelectItem value={String(offset)} key={offset}>
+                                        {label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
