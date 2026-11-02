@@ -52,20 +52,6 @@ export const PATHS = {
     },
 } as const;
 
-export function getDataRoot(): string {
-    const envRoot = process.env['EIGEN_DATA_ROOT'];
-    if (envRoot) return envRoot;
-
-    if (isProduction()) {
-        throw new Error(
-            'EIGEN_DATA_ROOT environment variable is required in production. ' +
-                'Set it to the absolute path of your data directory (e.g. /home/user/eigen/data).',
-        );
-    }
-
-    return './../../data';
-}
-
 // The server's own folder in data/, beside the homes.
 export const SERVER_DIR = 'server';
 // The folders in data/ that hold one home each, by owner kind.
@@ -91,6 +77,20 @@ export const SERVER_RUNTIME_FILES = {
     epoch: 'data-epoch',
     homeEpochs: 'home-data-epochs.json',
 } as const;
+
+export function getDataRoot(): string {
+    const envRoot = process.env['EIGEN_DATA_ROOT'];
+    if (envRoot) return envRoot;
+
+    if (isProduction()) {
+        throw new Error(
+            'EIGEN_DATA_ROOT environment variable is required in production. ' +
+                'Set it to the absolute path of your data directory (e.g. /home/user/eigen/data).',
+        );
+    }
+
+    return './../../data';
+}
 
 export function getServerDataPath(filename?: string): string {
     const serverData = path.join(getDataRoot(), SERVER_DIR);
