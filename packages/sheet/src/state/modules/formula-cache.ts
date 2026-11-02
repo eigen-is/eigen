@@ -177,7 +177,7 @@ export class FormulaCache {
         const map = this.formulaCellInfoMap;
         if (map == null) return;
 
-        // Every formula change carries a `data` patch, so the map follows those alone.
+        // Every formula change carries a `data` patch, so the map follows those, and a sheet's rename.
         for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
             if (root !== 'sheets') continue;

@@ -27,7 +27,7 @@ import type {
 type WorkingSheet = { id: string; name: string; data: CellMatrix };
 
 // What extractDependencies reads: the pass's working sheets, or the editor's.
-type GraphCtx = {
+type WalkContext = {
     sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[];
     // Resolved references, as the editor's formulaCache keeps them: by the reference's text for one into another
     // sheet, by `${text}_${sheetId}` for one into the formula's own.
@@ -81,14 +81,15 @@ export function recalcSheets(
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
-    const indexById = new Map<string, number>();
+    const byId = new Map<string, WorkingSheet>();
     for (const sheet of sheets) {
         if (!sheet.id) continue;
-        indexById.set(sheet.id, working.length);
-        working.push({ id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) });
+        const w = { id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) };
+        byId.set(w.id, w);
+        working.push(w);
     }
 
-    const g: GraphCtx = { sheets: working, cellTextToIndexList: {} };
+    const walk: WalkContext = { sheets: working, cellTextToIndexList: {} };
     const extents = new Map<string, SheetExtent>();
     for (const w of working) {
         let columns = 0;
@@ -115,7 +116,7 @@ export function recalcSheets(
                 const key = `r${r}c${c}i${w.id}`;
                 let deps: FormulaDependency[];
                 try {
-                    deps = extractDependencies(g, f, w.id, w.data);
+                    deps = extractDependencies(walk, f, w.id, w.data);
                 } catch {
                     // A malformed formula must not stop the scan. It reads nothing here and still evaluates below.
                     deps = [];
@@ -142,7 +143,7 @@ export function recalcSheets(
     const allInfos = Object.values(infoMap);
     if (allInfos.length === 0) {
         // No formulas: still write celldata and an empty calcChain, so the read gate sees the doc as computed.
-        return finalize(working, sheets, calcChainBySheet);
+        return finalize(byId, sheets, calcChainBySheet);
     }
 
     // 3. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
@@ -171,9 +172,7 @@ export function recalcSheets(
         if (VOLATILE_RE.test(info.calc_funcStr)) continue;
         try {
             const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
-            const idx = indexById.get(info.id);
-            if (idx == null) continue;
-            const rowArr = working[idx].data[info.r];
+            const rowArr = byId.get(info.id)?.data[info.r];
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
@@ -195,7 +194,7 @@ export function recalcSheets(
     overRead();
 
     // 6. Write celldata from the computed data, and stamp each sheet's calcChain.
-    return finalize(working, sheets, calcChainBySheet);
+    return finalize(byId, sheets, calcChainBySheet);
 }
 
 // A sheet's dense `data`, built from `celldata` when it has none, as the editor's initSheetData does: a resolver over
@@ -213,7 +212,7 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
 // The reference INDEX returns lies inside its range argument, so that argument covers it. OFFSET and INDIRECT build a
 // reference the text doesn't hold, which only matters once the engine can compute them.
 export function extractDependencies(
-    g: GraphCtx,
+    walk: WalkContext,
     formula: string,
     sheetId: string,
     data: CellMatrix | null | undefined,
@@ -225,7 +224,7 @@ export function extractDependencies(
         // resolveCellRange checks a reference that names a sheet with its own pattern, which also reads a quoted name
         // on both ends of a range, as in 'My Data'!A1:'My Data'!B2.
         if (reference.length < 2 || (!reference.includes('!') && !iscelldata(reference))) continue;
-        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference, sheetId, data);
+        const range = resolveCellRange(walk.sheets, walk.cellTextToIndexList, reference, sheetId, data);
         if (range != null) dependencies.push(range);
     }
     return dependencies;
@@ -354,13 +353,10 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
 }
 
 function finalize(
-    working: readonly WorkingSheet[],
+    byId: ReadonlyMap<string, WorkingSheet>,
     sheets: readonly Sheet[],
-    calcChainBySheet: Map<string, CalcChainEntry[]>,
+    calcChainBySheet: ReadonlyMap<string, CalcChainEntry[]>,
 ): Sheet[] {
-    const byId = new Map<string, WorkingSheet>();
-    for (const w of working) byId.set(w.id, w);
-
     return sheets.map((sheet) => {
         if (!sheet.id) return sheet;
         const w = byId.get(sheet.id);
