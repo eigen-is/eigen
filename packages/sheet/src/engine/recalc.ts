@@ -222,7 +222,9 @@ export function extractDependencies(
     for (const token of tokenize(formula)) {
         // A token keeps the spaces around it, as in `=A1 + B1`.
         const reference = token.trim();
-        if (reference.length < 2 || !iscelldata(reference)) continue;
+        // resolveCellRange checks a reference that names a sheet with its own pattern, which also reads a quoted name
+        // on both ends of a range, as in 'My Data'!A1:'My Data'!B2.
+        if (reference.length < 2 || (!reference.includes('!') && !iscelldata(reference))) continue;
         const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference, sheetId, data);
         if (range != null) dependencies.push(range);
     }
@@ -235,7 +237,7 @@ const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\))
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
-// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5.
+// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5. A name that ends a range joins its start, as in '1-2'!A1:'1-2'!B2.
 function tokenize(formula: string): string[] {
     let tokenStart = 0;
     let singleQuoteStart = -1;
@@ -261,8 +263,10 @@ function tokenize(formula: string): string[] {
                 // Two quotes in a row are an escaped quote inside the name.
                 j += 1;
             } else {
+                const name = formula.substring(singleQuoteStart, j + 1);
+                const rangeStart = formula.charAt(singleQuoteStart - 1) === ':' && tokens.at(-1)?.endsWith(':');
+                sheetName = rangeStart ? `${tokens.pop()}${name}` : name;
                 tokenStart = j + 1;
-                sheetName = formula.substring(singleQuoteStart, tokenStart);
                 singleQuoteStart = -1;
             }
         } else if (char === '"' && singleQuoteStart === -1) {
