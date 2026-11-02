@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, troubleshooting, logs, https, mail, docker]
 related: [self-hosting/commands-and-files, self-hosting/behind-your-web-server, self-hosting/mail-relay]
 order: 130
-updated: 2026-10-01
+updated: 2026-11-02
 ---
 
 Start with `./eigen status`, which shows every service and its health, the disk, and the certificate. `./eigen logs` shows what the services say, and `./eigen logs <service>` shows one. When a step of `./eigen` fails, it prints the last lines of its output, and the full output is in `.eigen/last-step.log`.
@@ -27,6 +27,14 @@ Eigen runs as user 1000 and must be able to write in `data/` and `backups/`, and
 
 ```bash
 sudo chown -R 1000:1000 data backups
+```
+
+## Other users share this folder's group
+
+Every start gives `backups/` the group of the install folder, so you can list your backups and read their records and nobody else on the server can. When other users share that group, like the `users` group, a group that lists other members or a group that is another user's main group, `./eigen` leaves `backups/` as it was and says so in yellow on every start. Give the install folder a group that only you are in, then run `./eigen restart`. On most Linux systems your own group has your user name:
+
+```bash
+sudo chgrp <your user name> /opt/eigen
 ```
 
 ## A backup or restore stops with an error

@@ -8,7 +8,6 @@ import type { AdminUserRow } from '@workspace/lib/types/admin';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type {
     HomeSizeResponse,
-    MountResponse,
     MountSettings,
     S3HardenResult,
     ServerSettings,
@@ -25,6 +24,7 @@ import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../..
 import { atHome } from '../../lib/home/get-home';
 import { homeSize } from '../../lib/home/home';
 import { pullHomeSize } from '../../lib/home/home-relay';
+import type { TeamHome } from '../../lib/home/team-home';
 import * as s3Storage from '../../lib/storage/s3-storage';
 import {
     addMember,
@@ -36,6 +36,9 @@ import {
     driveUpload,
     getTestContext,
 } from '../setup';
+
+// A new mount answers with its id. A list or an update answers with the settings alone.
+type AddedMount = Awaited<ReturnType<TeamHome['addMount']>>;
 
 describe('Server Settings', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -275,7 +278,7 @@ describe('Team Mount Management', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: 'Shared Files', maxSizeMB: 200 }),
         });
-        const mount = await assertJson<MountResponse>(res);
+        const mount = await assertJson<AddedMount>(res);
         expect(mount.id).toBeTruthy();
         expect(mount.name).toBe('Shared Files');
         expect(mount.maxSizeMB).toBe(200);
@@ -290,7 +293,7 @@ describe('Team Mount Management', () => {
 
     test('admin can disable a mount', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        const mounts = await assertJson<Record<string, MountResponse>>(res);
+        const mounts = await assertJson<Record<string, MountSettings>>(res);
         const mountId = Object.keys(mounts)[0];
 
         const updateRes = await authedRequest(
@@ -302,7 +305,7 @@ describe('Team Mount Management', () => {
                 body: JSON.stringify({ enabled: false }),
             },
         );
-        const updated = await assertJson<MountResponse>(updateRes);
+        const updated = await assertJson<MountSettings>(updateRes);
         expect(updated.enabled).toBe(false);
     });
 
@@ -338,7 +341,7 @@ describe('Team Mount Management', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: 'Archives', storageType: 'local-key', maxSizeMB: 100 }),
         });
-        const mount = await assertJson<MountResponse>(res);
+        const mount = await assertJson<AddedMount>(res);
         expect(mount.name).toBe('Archives');
         expect(mount.storageType).toBe('local-key');
         expect(mount.maxSizeMB).toBe(100);
@@ -346,7 +349,7 @@ describe('Team Mount Management', () => {
 
     test('mounts list shows both mounts', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        const mounts = await assertJson<Record<string, MountResponse>>(res);
+        const mounts = await assertJson<Record<string, MountSettings>>(res);
         expect(Object.keys(mounts).length).toBe(2);
         const names = Object.values(mounts).map((m) => m.name);
         expect(names).toContain('Shared Files');
@@ -355,7 +358,7 @@ describe('Team Mount Management', () => {
 
     test('disabling one mount does not affect the other', async () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        const mounts = await assertJson<Record<string, MountResponse>>(listRes);
+        const mounts = await assertJson<Record<string, MountSettings>>(listRes);
         // Select by name, not Object.keys order — all-digit mount ids reorder the keys
         // numerically, which can surface a residual-disabled mount from an earlier test.
         const sharedId = Object.entries(mounts).find(([, m]) => m.name === 'Shared Files')![0];
@@ -377,14 +380,14 @@ describe('Team Mount Management', () => {
         });
 
         const afterRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        const after = await assertJson<Record<string, MountResponse>>(afterRes);
+        const after = await assertJson<Record<string, MountSettings>>(afterRes);
         expect(after[archiveId].enabled).toBe(false);
         expect(after[sharedId].enabled).toBe(true);
     });
 
     test('admin can update specific mount among multiple', async () => {
         const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mounts`);
-        const mounts = await assertJson<Record<string, MountResponse>>(listRes);
+        const mounts = await assertJson<Record<string, MountSettings>>(listRes);
         const archiveId = Object.entries(mounts).find(([, m]) => m.name === 'Archives')![0];
 
         const res = await authedRequest(
@@ -396,7 +399,7 @@ describe('Team Mount Management', () => {
                 body: JSON.stringify({ maxSizeMB: 250, name: 'Archives (Expanded)' }),
             },
         );
-        const updated = await assertJson<MountResponse>(res);
+        const updated = await assertJson<MountSettings>(res);
         expect(updated.maxSizeMB).toBe(250);
         expect(updated.name).toBe('Archives (Expanded)');
         expect(updated.storageType).toBe('local-key');
@@ -474,7 +477,7 @@ describe('Team Mount Management', () => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name: 'Keeps S3', storageType: 'local-key', s3Config }),
         });
-        const { id } = await assertJson<MountResponse>(add);
+        const { id } = await assertJson<AddedMount>(add);
 
         const update = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamOwnerId(teamId)}/mount/${id}`, {
             method: 'PUT',
@@ -493,7 +496,7 @@ describe('Team Mount Management', () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: 'Server default' }),
             });
-            expect((await assertJson<MountResponse>(add)).storageType).toBe('local-key');
+            expect((await assertJson<AddedMount>(add)).storageType).toBe('local-key');
         } finally {
             await updateServerSettings({ defaults: { mount: { storageType: before } } });
         }

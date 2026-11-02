@@ -9,7 +9,6 @@ services:
     command: caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
 
   eigen-api:
-    user: ""
     environment:
       PRODUCTION: 0
       # Plain-HTTP cookies, dev warnings, and better-auth's limiter off unless forced on.

@@ -873,6 +873,24 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    // rewrittenMember writes the modes builds up to 0.4.1 packed: 0755 folders and 0644 files.
+    test(
+        "an older archive's 0644 files and 0755 folders stage for the API's user alone",
+        async () => {
+            const dir = install();
+            const member = await rewrittenMember(fullArchive, alice.id, (entries) => entries);
+            const crafted = await craft(fullArchive, { replace: { [member.name]: member.file } });
+            const result = await stage(dir, crafted);
+            expect(result.stderr).toBe('');
+            expect(result.code).toBe(0);
+            const home = join(dir, 'data/.restoring/data/home', alice.id);
+            expect(statSync(home).mode & 0o7777).toBe(0o700);
+            expect(statSync(join(home, 'mounts')).mode & 0o7777).toBe(0o700);
+            expect(statSync(join(home, 'settings.json')).mode & 0o7777).toBe(0o600);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test(
         'a link planted in the staged tree is refused by the swap before anything moves',
         async () => {
@@ -1201,13 +1219,21 @@ describe('restore --stage and --swap', () => {
         'a trash that cannot be dated names its home',
         async () => {
             const dir = install();
-            const member = await rewrittenMember(lightArchive, alice.id, (entries) =>
-                entries.map((entry) => (entry.name.endsWith('/metadata.db') ? { ...entry, mode: 0o444 } : entry)),
-            );
-            const crafted = await craft(lightArchive, { replace: { [member.name]: member.file } });
-            const result = await stage(dir, crafted);
+            const replace = await editedMember(lightArchive, alice.id, (folder) => {
+                for (const metadata of new Bun.Glob(`home/mounts/*/${PATHS.DRIVE.METADATA_DB}`).scanSync(folder)) {
+                    const db = new Database(join(folder, metadata));
+                    try {
+                        db.run(
+                            "CREATE TRIGGER no_redate BEFORE UPDATE OF trashedAt ON paths BEGIN SELECT RAISE(ABORT, 'no redate'); END",
+                        );
+                    } finally {
+                        db.close();
+                    }
+                }
+            });
+            const result = await stage(dir, await craft(lightArchive, { replace }));
             expect(result.code).toBe(1);
-            expect(result.stderr).toContain(`the trash of ${alice.name}`);
+            expect(result.stderr).toContain(`the trash of ${alice.name} cannot be dated: no redate`);
             expectUntouched(dir);
         },
         JOB_TIMEOUT_MS,

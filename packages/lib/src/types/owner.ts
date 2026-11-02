@@ -48,10 +48,6 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
     return { id, type };
 }
 
-export function userOwnerId(userId: string): string {
-    return userId;
-}
-
 export function teamOwnerId(teamId: string): string {
     return `team_${teamId}`;
 }

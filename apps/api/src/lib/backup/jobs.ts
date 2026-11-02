@@ -8,7 +8,8 @@ import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
-import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
+import { extractArtifact, packFolder, readUnpackedHome } from './archive';
+import { writeSidecar } from './artifacts';
 import { describeError } from './errors';
 import {
     buildHomeFolderName,

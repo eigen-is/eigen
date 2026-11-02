@@ -3,10 +3,10 @@
 // to each face's own loaded promise, and waits for the set to be ready so that the faces of one load redraw each
 // grid once. A grid that is gone is no longer listening, and no face holds on to it.
 
-import { afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
-installHappyDom();
+const window = installHappyDom();
 
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
@@ -47,13 +47,27 @@ beforeEach(() => {
     });
 });
 
-// happy-dom lays nothing out, and the grid skips a frame on a 0 × 0 surface.
+// happy-dom lays nothing out, and the grid skips a frame on a 0 × 0 surface. Every happy-dom window shares one
+// HTMLElement class, so the stubs and spies are undone after this file. Left in place, they made a later file
+// measure every line as 600 pixels tall.
+const elementPrototype = window.HTMLElement.prototype;
+const realSizes = new Map<string, PropertyDescriptor | undefined>();
 for (const key of ['clientWidth', 'clientHeight']) {
-    Object.defineProperty(window.HTMLElement.prototype, key, { configurable: true, get: () => 600 });
+    realSizes.set(key, Object.getOwnPropertyDescriptor(elementPrototype, key));
+    Object.defineProperty(elementPrototype, key, { configurable: true, get: () => 600 });
 }
 
 const clears = spyOn(textModule, 'clearMeasureTextCache');
 const draws = spyOn(frameModule, 'drawFrame').mockImplementation(() => {});
+
+afterAll(() => {
+    for (const [key, descriptor] of realSizes) {
+        if (descriptor) Object.defineProperty(elementPrototype, key, descriptor);
+        else Reflect.deleteProperty(elementPrototype, key);
+    }
+    clears.mockRestore();
+    draws.mockRestore();
+});
 
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 

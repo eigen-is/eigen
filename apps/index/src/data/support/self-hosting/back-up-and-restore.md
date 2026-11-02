@@ -165,7 +165,7 @@ Each server backup holds a backup of every user and team, under `homes/`. Copy o
 
 ```bash
 cd /opt/eigen
-tar -tf backups/server-scheduled-full-<date>-<time>.tar | grep homes/
+sudo tar -tf backups/server-scheduled-full-<date>-<time>.tar | grep homes/
 sudo sh -c 'tar -xOf backups/server-scheduled-full-<date>-<time>.tar homes/home-<id>-<date>-<time>.tar.zst > backups/home-<id>-<date>-<time>.tar.zst'
 sudo chown 1000:1000 backups/home-<id>-<date>-<time>.tar.zst
 ```

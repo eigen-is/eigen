@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import type { FullOrganization, OrgTeam } from '@workspace/lib/types/admin';
+import type { OrgMember, OrgTeam } from '@workspace/lib/types/admin';
 import { getServerConfig } from '../../lib/config/server-config';
 import { authedRequest, findOrFail, getTestContext } from '../setup';
+
+// What better-auth's get-full-organization answers, as far as these tests read it.
+type FullOrganization = { name: string; slug: string; members: OrgMember[]; teams: OrgTeam[] };
 
 async function getFullOrganization(sessionToken: string, orgId: string) {
     const res = await authedRequest(sessionToken, `/auth/organization/get-full-organization?organizationId=${orgId}`);
