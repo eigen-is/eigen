@@ -154,9 +154,16 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId',
         async ({ params, request, user }) => {
-            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
+            // The body streams in while the upload writes, which over a slow link can outlast the home's idle
+            // timeout. So the upload holds the home until it is done.
+            const release = drive.holdHome();
+            try {
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
+            } finally {
+                release();
+            }
         },
         { auth: true, parse: 'none' },
     )

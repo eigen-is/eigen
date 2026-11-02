@@ -24,8 +24,7 @@ export async function readImportSourceBytes(
     }
     if (path.size > opts.maxBytes) throw payloadTooLarge();
 
-    // A large read from slow storage can outlast the idle timeout of the source's home, which nothing
-    // else may be using.
+    // The hold covers the database work in downloadFile, which fails if the source's home closes meanwhile.
     const release = drive.holdHome();
     try {
         const file = await drive.downloadFile(source.sourceMountId, source.sourcePathId);

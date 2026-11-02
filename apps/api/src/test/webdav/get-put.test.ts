@@ -5,6 +5,7 @@ import { DEFAULT_MOUNT_ID } from '../../lib/mount/helpers';
 import { DAV_PASSWORD } from '../dav-test-helpers';
 import type { TestContext } from '../setup';
 import {
+    authedRequest,
     createTestUser,
     driveGet,
     drivePut,
@@ -556,6 +557,69 @@ describe('WebDAV PUT holds its Home', () => {
             gatedWrite.mockRestore();
         }
         expect(res.status).toBe(201);
+        expect(closingMidBody).toBe(false);
+        expect(home.closing).toBe(false);
+
+        jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+        expect(home.closing).toBe(true);
+        jest.useRealTimers();
+        await home.close();
+    });
+});
+
+// A plain Drive upload streams its body in too, so it holds the Home the same way.
+describe('Drive upload holds its Home', () => {
+    const USER_IDLE_MS = 5 * 60_000;
+
+    beforeAll(() => getTestContext());
+    afterEach(() => jest.useRealTimers());
+
+    test('an upload whose body arrives after the idle timeout lands, and the Home idles after it', async () => {
+        const user = await createTestUser(`up-hold-${crypto.randomUUID()}@test.eigen.is`, DAV_PASSWORD, 'Holder');
+        const home = await getHome(user.id);
+        const root = await driveGet(user.sessionToken, user.id, DEFAULT_MOUNT_ID, 'root');
+        const writeStarted = Promise.withResolvers<void>();
+        const uploadFiles = home.drive.uploadFiles.bind(home.drive);
+        const gatedUpload = spyOn(home.drive, 'uploadFiles').mockImplementation((...args) => {
+            writeStarted.resolve();
+            return uploadFiles(...args);
+        });
+        const boundary = 'hold-boundary';
+        const encoder = new TextEncoder();
+        let closingMidBody: boolean | undefined;
+        let sent = 0;
+        const body = new ReadableStream<Uint8Array>({
+            async pull(controller) {
+                if (sent++ === 0) {
+                    controller.enqueue(
+                        encoder.encode(
+                            `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="slow.txt"\r\nContent-Type: text/plain\r\n\r\nfirst half, `,
+                        ),
+                    );
+                    return;
+                }
+                await writeStarted.promise;
+                jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                closingMidBody = home.closing;
+                controller.enqueue(encoder.encode(`second half\r\n--${boundary}--\r\n`));
+                controller.close();
+            },
+        });
+        jest.useFakeTimers();
+        // A request re-arms the idle on the fake clock, so only the upload's hold can keep the Home past it.
+        home.touch();
+
+        let res: Response;
+        try {
+            res = await authedRequest(user.sessionToken, `/drive/${user.id}/${DEFAULT_MOUNT_ID}/file/${root.id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}` },
+                body,
+            });
+        } finally {
+            gatedUpload.mockRestore();
+        }
+        expect(res.status).toBe(200);
         expect(closingMidBody).toBe(false);
         expect(home.closing).toBe(false);
 
