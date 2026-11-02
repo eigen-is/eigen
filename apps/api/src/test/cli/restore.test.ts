@@ -879,7 +879,7 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file or link',
+        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file, link or huge file',
         async () => {
             const crafted = await craft(fullArchive, {
                 drop: (name) => name.startsWith('certs/'),
@@ -894,6 +894,11 @@ describe('restore --stage and --swap', () => {
                     'is setuid',
                 ],
                 [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'is a link'],
+                // Root reads a file whole, so a planted huge one could run the swap out of memory.
+                [
+                    (certs: string) => writeFileSync(join(certs, 'key.pem'), Buffer.alloc(1024 * 1024 + 1)),
+                    'is bigger than a key or a certificate',
+                ],
             ] as const) {
                 const dir = install();
                 mkdirSync(join(dir, 'data/certs'));
