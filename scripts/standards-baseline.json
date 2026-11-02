@@ -87,7 +87,6 @@
     "packages/ui/src/components/toggle-group.tsx": 1,
     "packages/ui/src/hooks/is-typing-target.ts": 1,
     "packages/ui/src/hooks/use-focus-trap.ts": 1,
-    "packages/ui/src/hooks/use-keyboard-list-navigation.ts": 1,
     "packages/ui/src/hooks/use-scroll-to-index.ts": 1
   },
   "non-null-assertions": {
