@@ -30,6 +30,8 @@ Double-click a tab to edit its name inline. Type the new name, then press **Ente
 
 A name has 1 to 31 characters. It can't contain `\ / ? * [ ] :`, and it can't start or end with an apostrophe (`'`). The fullwidth `：` and `？` are fine. If a name breaks these rules, Sheets keeps the old name and tells you why.
 
+Sheet names ignore letter case, as in Excel. A name that differs from another tab's only in case, such as `data` next to `Data`, isn't accepted, and the tab keeps its old name. A formula finds the sheet even when its name's case differs, so `=data!A1` reads the tab named `Data`.
+
 You can also click the **⌄** arrow on the tab and choose **Rename** from the menu.
 
 ## Reorder sheets

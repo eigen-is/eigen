@@ -80,6 +80,8 @@ When you copy or cut cells and paste them in the same browser tab, their rules c
 
 A row or column you insert inside a rule's range gets the rule. One you insert above or right below the range doesn't.
 
+An edit that would break one rule into too many separate pieces isn't made. Pasting a cell with a rule and one without down a long column does that, since the rule would land on every other row. Sheets leaves the sheet as it was and shows "This edit would make a data validation rule too complex." The same goes for a fill, a move and the format painter.
+
 <div class="eigen-callout">
 
 A spreadsheet whose rules were set up in an older version of Eigen opens without its dropdowns, checkboxes and other rules. Every cell keeps its value. Set the rules up again, or import the original Excel file again.
