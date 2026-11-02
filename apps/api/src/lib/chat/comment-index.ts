@@ -15,7 +15,7 @@ import type { DriveLike } from '../drive/get-drive';
 import { COMMENT_INDEX_DB_CONFIG } from './comment-db-config';
 import * as commentSchema from './comment-schema';
 
-// Comment search indexes only the newest 8 KB of each thread. Older text can't be found.
+// Comment search indexes only the newest 8192 characters of each thread. Older text can't be found.
 export const RECENT_TEXT_CAP = 8192;
 const COMMENT_SEARCH_LIMIT = 8;
 
@@ -26,19 +26,10 @@ export class CommentIndex {
         this.db = db;
     }
 
-    public async ensureComment(
-        chatName: string,
-        seed?: { createdBy?: string | null; createdAt?: Date },
-    ): Promise<void> {
-        const values: typeof commentSchema.comments.$inferInsert = {
-            chatName,
-            createdAt: seed?.createdAt ?? new Date(),
-            createdBy: seed?.createdBy ?? null,
-        };
-
+    public async ensureComment(chatName: string, seed?: { createdBy?: string | null }): Promise<void> {
         await this.db
             .insert(commentSchema.comments)
-            .values(values)
+            .values({ chatName, createdBy: seed?.createdBy ?? null })
             .onConflictDoUpdate({
                 target: commentSchema.comments.chatName,
                 // A row that has a creator keeps it. Only a missing creator is filled in.
@@ -112,8 +103,8 @@ export class CommentIndex {
         return this.db.select().from(commentSchema.comments).where(eq(commentSchema.comments.chatName, chatName)).get();
     }
 
-    // The list holds only what the comments panel shows. The search text is about 8 KB a thread,
-    // and no client reads the creator.
+    // The list holds only what the comments panel shows. The search text can be RECENT_TEXT_CAP
+    // characters a thread, and no client reads the creator.
     public async list(): Promise<CommentEntry[]> {
         const { comments } = commentSchema;
         const { recentText: _text, createdBy: _by, ...columns } = getTableColumns(comments);

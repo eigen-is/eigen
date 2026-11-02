@@ -338,6 +338,48 @@ describe('Calendar Invites', () => {
             expect((await cal.getCalendarById(defaultCal.id))!.ctag).toBe(preCtag);
             expect(await cal.getEventsByUid(uid)).toHaveLength(1);
         });
+
+        test('an organizer with no name or address gets neutral notice titles', async () => {
+            const bobHome = await getHome(ctx.bob.user.id);
+            const cal = bobHome.calendar;
+            const uid = `nameless-${crypto.randomUUID()}`;
+            const orgEventId = `org-${uid}`;
+            const payload = {
+                uid,
+                title: 'Nameless Invite',
+                description: null,
+                location: null,
+                startTime: new Date('2026-11-14T09:00:00Z'),
+                endTime: new Date('2026-11-14T10:00:00Z'),
+                allDay: false,
+                rrule: null,
+                timezone: null,
+                status: 'confirmed' as const,
+                sequence: 0,
+                data: { organizer: { userId: ctx.alice.user.id, email: '' }, organizerEventId: orgEventId },
+                createByUserId: ctx.alice.user.id,
+                organizerEventId: orgEventId,
+                organizerUserId: ctx.alice.user.id,
+            };
+            const persist = spyOn(bobHome.notifications, 'persist');
+            try {
+                await cal.receiveInvitation(payload);
+                await cal.receiveInvitationUpdate(orgEventId, ctx.alice.user.id, {
+                    ...payload,
+                    title: 'Nameless Invite Moved',
+                    sequence: 1,
+                });
+                await cal.removeInvitation(orgEventId, ctx.alice.user.id);
+                const notices = persist.mock.calls.map((call) => call[0]).filter((n) => n.tag?.includes(orgEventId));
+                expect(notices.map((n) => n.title)).toEqual([
+                    'New invitation',
+                    'Invitation updated',
+                    'Invitation canceled',
+                ]);
+            } finally {
+                persist.mockRestore();
+            }
+        });
     });
 
     describe('Linked event guard', () => {
