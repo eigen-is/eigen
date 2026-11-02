@@ -48,3 +48,15 @@ export function measureVectorText(text: string, fontSize: number, fontFamily: st
     for (const line of lines) width = Math.max(width, ctx.measureText(line).width);
     return { width, height: lines.length * getLineHeightPx(fontFamily, fontSize) };
 }
+
+// The measure once the slices of the text have loaded, so it is the face's and never the fallback's. A writer that can
+// wait, such as a font change, stores only this one. A writer that must store a size at once, such as a paste, stores
+// measureVectorText's and heals it with this one.
+export async function measureLoadedVectorText(
+    text: string,
+    fontSize: number,
+    fontFamily: string,
+): Promise<TextDimensions> {
+    await loadVectorFont(fontSize, fontFamily, text);
+    return measureVectorText(text, fontSize, fontFamily);
+}

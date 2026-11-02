@@ -27,6 +27,7 @@ import type {
     VectorArrowElement,
     VectorElement,
     VectorElementPatch,
+    VectorRectangleElement,
     ZOp,
 } from '@workspace/lib/vector';
 import {
@@ -108,7 +109,7 @@ import { RichTextInPlaceEditor } from './kinds/rich-text';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import type { EditingState } from './text-editing';
 import { arrowLabelEditing } from './text-editing';
-import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-measure';
+import { isVectorFontLoaded, measureLoadedVectorText, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
@@ -432,9 +433,9 @@ export function CanvasEditor({
         return m;
     }, [ordered, committedById]);
 
-    // Freehand / line / eraser gestures + line point-handles live in a sibling hook (the canvas only
-    // dispatches) — CANVAS.md's rule that this file must not grow. `busy` hides the point handles while
-    // any canvas gesture or overlay owns the surface.
+    // The freehand, line and eraser gestures and a line's point handles live in a sibling hook, so this file only
+    // dispatches to them and does not grow. `busy` hides the point handles while any canvas gesture or overlay owns
+    // the surface.
     const drawing = useDrawingTools({
         tool,
         setTool,
@@ -706,24 +707,31 @@ export function CanvasEditor({
         },
     });
 
-    // The overlay loads the slices of its text while the user types, so the width measured at commit is
-    // normally exact. A label committed before the slices of its text have loaded was measured in the
-    // fallback, and the stored width is what every renderer and export draws. So this loads those slices
-    // and measures the label again. It checks the live element first: a newer edit of the text, font or
-    // size owns the width, and a slow load must not write a stale width over it.
-    const healLabelWidth = useCallback(
-        (id: string, text: string, fontSize: number, fontFamily: string) => {
+    // A size measured before the slices of its text have loaded is the fallback's, and the stored size is what every
+    // renderer and export draws. The overlay loads the slices of a label while the user types, so its commit is
+    // normally exact. But a label committed before they arrive, and a text box ⌘V measured as it landed, are measured
+    // again here once they load. Only the width changes: a label's height and a text box's both follow from the line
+    // count and the line height, which no face changes. The live element is checked first. A newer edit of the text,
+    // font or size owns the size, and so does whatever `holds` says, so a slow load never writes a stale size over it.
+    const healTextSize = useCallback(
+        (
+            id: string,
+            text: string,
+            fontSize: number,
+            fontFamily: string,
+            holds: (el: VectorArrowElement | VectorRectangleElement) => boolean,
+        ) => {
             if (isVectorFontLoaded(fontSize, fontFamily, text)) return;
-            loadVectorFont(fontSize, fontFamily, text)
-                .then(() => {
+            measureLoadedVectorText(text, fontSize, fontFamily)
+                .then(({ width }) => {
                     const el = visibleRef.current.find((x) => x.id === id);
-                    // The label was deleted meanwhile, so there is nothing to heal.
-                    if (el?.type !== 'arrow') return;
-                    if (el.text !== text || el.fontSize !== fontSize || el.fontFamily !== fontFamily) return;
-                    // A label's height derives from its line count, so only labelWidth is measured.
-                    const healed = measureVectorText(text, fontSize, fontFamily);
-                    if (healed.width === el.labelWidth) return;
-                    sealed(undoManager, () => updateElement(id, { labelWidth: healed.width }));
+                    // The element was deleted meanwhile, so there is nothing to heal.
+                    if (el?.type !== 'arrow' && el?.type !== 'rectangle') return;
+                    if (el.fontSize !== fontSize || el.fontFamily !== fontFamily || !holds(el)) return;
+                    if (width === (el.type === 'arrow' ? el.labelWidth : el.width)) return;
+                    sealed(undoManager, () =>
+                        updateElement(id, el.type === 'arrow' ? { labelWidth: width } : { width }),
+                    );
                 })
                 .catch(() => {});
         },
@@ -747,12 +755,16 @@ export function CanvasEditor({
             if (!(ed.isNew && empty)) {
                 const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
                 sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text, labelWidth }));
-                if (!empty) healLabelWidth(ed.id, text, ed.fontSize, ed.fontFamily);
+                if (!empty) {
+                    healTextSize(ed.id, text, ed.fontSize, ed.fontFamily, (el) => {
+                        return el.type === 'arrow' && el.text === text;
+                    });
+                }
             }
             setSelectedIds([ed.id]);
             setTool('select');
         },
-        [updateElement, undoManager, setSelectedIds, setTool, healLabelWidth],
+        [updateElement, undoManager, setSelectedIds, setTool, healTextSize],
     );
 
     // Open an in-place rich-text session. Seal first, so the session's writes are their own undo step.
@@ -929,7 +941,6 @@ export function CanvasEditor({
         meta,
         selectedIds,
         setSelectedIds,
-        addElement,
         addElements,
         updateElements,
         updateElementUntracked,
@@ -937,6 +948,7 @@ export function CanvasEditor({
         deleteElementsUntracked,
         undoManager,
         viewportCenterScene,
+        healTextSize,
         insertImageFiles,
         mediaFolderId,
         resolveMediaPath,

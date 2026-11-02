@@ -22,7 +22,7 @@ import {
     useHeldGesture,
 } from '@workspace/ui/components/properties-panel';
 import { useRef } from 'react';
-import { loadVectorFont, measureVectorText } from '../text-measure';
+import { measureLoadedVectorText } from '../text-measure';
 import type { KindPanelSectionProps } from './index';
 
 // Derived from the canonical ARROW_SHAPES vocabulary so the row and the model never drift.
@@ -83,20 +83,19 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
     const applyFont = async (fields: (el: VectorArrowElement) => { fontSize?: number; fontFamily?: string }) => {
         pendingFontWrites.current += 1;
         try {
-            await Promise.all(
-                arrows.map((el) => {
-                    const patch = fields(el);
-                    return loadVectorFont(patch.fontSize ?? el.fontSize, patch.fontFamily ?? el.fontFamily, el.text);
-                }),
+            const patches = new Map(
+                await Promise.all(
+                    arrows.map(async (el) => {
+                        const patch = fields(el);
+                        const size = patch.fontSize ?? el.fontSize;
+                        const family = patch.fontFamily ?? el.fontFamily;
+                        const { width } = await measureLoadedVectorText(el.text, size, family);
+                        return [el.id, { ...patch, labelWidth: width }] as const;
+                    }),
+                ),
             );
             hold();
-            onChangeEach((el) => {
-                if (el.type !== 'arrow') return {};
-                const patch = fields(el);
-                const size = patch.fontSize ?? el.fontSize;
-                const family = patch.fontFamily ?? el.fontFamily;
-                return { ...patch, labelWidth: measureVectorText(el.text, size, family).width };
-            });
+            onChangeEach((el) => patches.get(el.id) ?? {});
         } finally {
             pendingFontWrites.current -= 1;
             if (pendingFontWrites.current === 0) endGesture();

@@ -1,6 +1,6 @@
-// Clipboard elements → what the doc hook needs to add them: partials in z-order, the index→source-id
-// map the arrow-binding remap keys on, and the cross-mount image manifest. Pure — the hook owns the
-// transacts, this owns the decisions.
+// Plans the paste of a canvas copy's own elements: the partials to add in z-order, the id each one had when it was
+// copied, which the arrow-binding remap keys on, and the images whose bytes must be uploaded again. It decides and
+// writes nothing. The clipboard hook owns the transacts, and it plans another app's items into the same PastePlan.
 
 import { needsReUpload } from '@workspace/lib/clipboard';
 import { PENDING_PREFIX } from '@workspace/lib/drive';
@@ -16,13 +16,16 @@ export type PastePlan = {
     arrowRemaps: PastedArrow[];
     // Images whose bytes live in another container: index → the typed item that can fetch them.
     crossMount: { index: number; item: EigenClipboardImageItem }[];
+    // Text boxes sized as the paste landed by a measure of their text: index → that text, its font and the width it
+    // measured, so the hook measures it again once the slices of the text have loaded.
+    measuredText: { index: number; text: string; fontSize: number; fontFamily: string; width: number }[];
 };
 
-// The whole stored record minus what the writer allocates (id, index, a fresh seed — a copy takes its
-// own jitter, as a duplicate does). `commentCardIds` clears: a copy starts with no comments, the same
-// rule duplicateElementsInDoc follows. The `html` of a text box or a shape is forgeable
-// (any web page can write our MIME), so it passes the LightEditor allowlist before it reaches the doc —
-// the same sanitizer the mount seam runs, so nothing hostile is ever stored.
+// The whole stored record minus what the writer allocates: the id, the index and the seed. A copy takes its own
+// jitter, as a duplicate does. `commentCardIds` clears, because a copy starts with no comments, the rule
+// duplicateElementsInDoc follows too. Any web page can write our MIME, so the `html` of a text box or a shape passes
+// the LightEditor allowlist before it reaches the doc. It is the sanitizer the mount seam runs, so nothing hostile is
+// ever stored.
 function pastePartial(el: VectorElement): NewVectorElement {
     const { id, index, seed, ...rest } = el;
     const partial: NewVectorElement = { ...rest, commentCardIds: '' };
@@ -35,7 +38,7 @@ export function planElementsPaste(
     imageItems: EigenClipboardImageItem[],
     mediaFolderId: string | null,
 ): PastePlan {
-    const plan: PastePlan = { partials: [], cloneIds: new Map(), arrowRemaps: [], crossMount: [] };
+    const plan: PastePlan = { partials: [], cloneIds: new Map(), arrowRemaps: [], crossMount: [], measuredText: [] };
     for (const el of elements) {
         const partial = pastePartial(el);
         if (el.type === 'image') {

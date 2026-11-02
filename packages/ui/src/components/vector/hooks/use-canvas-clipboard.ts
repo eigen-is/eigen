@@ -30,9 +30,11 @@ import type {
     Point,
     StyleDefaults,
     TextAlign,
+    VectorArrowElement,
     VectorElement,
     VectorElementPatch,
     VectorMeta,
+    VectorRectangleElement,
 } from '@workspace/lib/vector';
 import {
     canvasPtToPx,
@@ -106,10 +108,9 @@ type CanvasClipboardParams = {
     meta: VectorMeta;
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
-    // Frame-stamped writers: the canvas' own addElement/addElements wrappers stamp the active frameId
-    // after the caller's fields, so a pasted element lands in the frame being pasted INTO, never the
-    // one it was copied from.
-    addElement: (partial: NewVectorElement) => string | undefined;
+    // Frame-stamped writers: the canvas' own addElements wrapper stamps the active frameId after the
+    // caller's fields, so a pasted element lands in the frame being pasted INTO, never the one it was
+    // copied from.
     addElements: (partials: NewVectorElement[]) => string[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     updateElementUntracked: (id: string, fields: VectorElementPatch) => void;
@@ -117,6 +118,14 @@ type CanvasClipboardParams = {
     deleteElementsUntracked: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
     viewportCenterScene: () => Point;
+    // The canvas's heal of a size measured before the slices of its text loaded, which a pasted text box needs.
+    healTextSize: (
+        id: string,
+        text: string,
+        fontSize: number,
+        fontFamily: string,
+        holds: (el: VectorArrowElement | VectorRectangleElement) => boolean,
+    ) => void;
     // OS files on the clipboard go through the canvas' own image-insert path.
     insertImageFiles: (files: File[], anchor: Point) => Promise<void>;
     mediaFolderId: string | null;
@@ -129,9 +138,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     const { canEdit, textEditingRef, containerRef, viewport, frameId, ordered, meta, selectedIds } = params;
     const { styleDefaults } = params;
     const { setSelectedIds } = params;
-    const { addElement, addElements, updateElements, updateElementUntracked } = params;
+    const { addElements, updateElements, updateElementUntracked } = params;
     const { deleteElements, deleteElementsUntracked, undoManager } = params;
-    const { viewportCenterScene, insertImageFiles, mediaFolderId } = params;
+    const { viewportCenterScene, healTextSize, insertImageFiles, mediaFolderId } = params;
     const { resolveMediaPath, resolveMediaUrl, uploadFile } = params;
 
     // The clipboard PRODUCER (the native elements item, the typed image/text items and the
@@ -182,7 +191,13 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     const planForeignPaste = useCallback(
         (items: EigenClipboardItem[]): PastePlan => {
             const anchor = viewportCenterScene();
-            const plan: PastePlan = { partials: [], cloneIds: new Map(), arrowRemaps: [], crossMount: [] };
+            const plan: PastePlan = {
+                partials: [],
+                cloneIds: new Map(),
+                arrowRemaps: [],
+                crossMount: [],
+                measuredText: [],
+            };
             let cascade = 0;
             const placeAt = (w: number, h: number): Point => {
                 const off = cascade * IMAGE_CASCADE_OFFSET;
@@ -238,6 +253,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         ? canvasPtToPx(typo.fontSize, slideWidth)
                         : styleDefaults.fontSize;
                 const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
+                plan.measuredText.push({ index: plan.partials.length, text: item.text, fontSize, fontFamily, width });
                 plan.partials.push({
                     type: 'rectangle',
                     autoFit: true,
@@ -258,7 +274,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     );
 
     // One paste = one undo step: every ADD in one transact, the arrow-binding remap inside the same
-    // capture window (one `sealed` around both), then the cross-mount images resolve untracked.
+    // capture window (one `sealed` around both), then the cross-mount images resolve untracked and the
+    // text boxes are measured again once the slices of their text have loaded.
     const commitPaste = useCallback(
         (plan: PastePlan): boolean => {
             if (!plan.partials.length) return false;
@@ -270,6 +287,15 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             });
             if (!ids.length) return false;
             setSelectedIds(ids);
+
+            // A box that no longer holds the pasted text at the width it was measured at has been edited or resized,
+            // and that edit owns its size.
+            for (const { index, text, fontSize, fontFamily, width } of plan.measuredText) {
+                const html = textToParagraphHtml(text);
+                healTextSize(ids[index], text, fontSize, fontFamily, (el) => {
+                    return el.type === 'rectangle' && el.html === html && el.width === width;
+                });
+            }
 
             // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
             // (late transact) or drop the element on failure — the shared optimistic-insert idiom. A
@@ -306,6 +332,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             updateElements,
             setSelectedIds,
             undoManager,
+            healTextSize,
             mediaFolderId,
             uploadFile,
             updateElementUntracked,
@@ -349,30 +376,35 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [pasteEigenItems],
     );
 
-    // Plain-text paste (no eigen payload, no OS files) → ONE text box at the viewport center, in the
-    // HOST's typography and with a locally-measured box (the pasteEigenItems text idiom). The partial names
-    // no font, so the box is created with the same table it is measured with. Multi-line text is preserved
-    // — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
+    // Plain text, with no eigen payload and no OS files on the clipboard, becomes one text box at the viewport center,
+    // measured here in the host's typography. The partial names no font, so the box is created with the same table it
+    // is measured with. textToParagraphHtml keeps one paragraph per line, and commitPaste makes the paste one undo step.
     const pasteTextElement = useCallback(
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
-            const { width: w, height: h } = measureVectorText(text, styleDefaults.fontSize, styleDefaults.fontFamily);
-            const id = sealed(undoManager, () =>
-                addElement({
-                    type: 'rectangle',
-                    autoFit: true,
-                    x: anchor.x - w / 2,
-                    y: anchor.y - h / 2,
-                    width: w,
-                    height: h,
-                    angle: 0,
-                    html: textToParagraphHtml(text),
-                    textAlign,
-                }),
-            );
-            if (id) setSelectedIds([id]);
+            const { fontSize, fontFamily } = styleDefaults;
+            const { width, height } = measureVectorText(text, fontSize, fontFamily);
+            commitPaste({
+                partials: [
+                    {
+                        type: 'rectangle',
+                        autoFit: true,
+                        x: anchor.x - width / 2,
+                        y: anchor.y - height / 2,
+                        width,
+                        height,
+                        angle: 0,
+                        html: textToParagraphHtml(text),
+                        textAlign,
+                    },
+                ],
+                cloneIds: new Map(),
+                arrowRemaps: [],
+                crossMount: [],
+                measuredText: [{ index: 0, text, fontSize, fontFamily, width }],
+            });
         },
-        [viewportCenterScene, addElement, setSelectedIds, undoManager, styleDefaults],
+        [viewportCenterScene, commitPaste, styleDefaults],
     );
 
     // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
