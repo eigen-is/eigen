@@ -168,7 +168,7 @@ export function checkDatabases(targets: readonly VersionedDatabase[]): void {
                     `supports (v${target.config.currentVersion}) — restore it on a server at least as new`,
             );
         }
-        const db = new Database(target.filePath, { readwrite: true, create: false });
+        const db = openToCheck(target.filePath);
         try {
             const row = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get();
             if (row?.quick_check !== 'ok') {
@@ -204,7 +204,7 @@ export function containerDatabasesIn(homeDir: string, mountIds: readonly string[
         const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
         const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
-        const db = new Database(metadataPath, { readwrite: true, create: false });
+        const db = openToCheck(metadataPath);
         try {
             const rows = readMountPathRows(db);
             const byId = new Map(rows.map((row) => [row.id, row]));
@@ -244,12 +244,11 @@ export async function movePathAsync(from: string, to: string): Promise<void> {
 }
 
 // A database with no stamp, or one that does not open, reads as 0, which ManagedDatabase takes as "never migrated".
-// The quick_check after it names the failure. The open is read-write, because a closed WAL database has no -shm and
-// a read-only open of it fails.
+// The quick_check after it names the failure.
 function schemaVersionOf(filePath: string): number {
     let db: Database | null = null;
     try {
-        db = new Database(filePath, { readwrite: true, create: false });
+        db = openToCheck(filePath);
         const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
         return row?.version ?? 0;
     } catch {
@@ -257,6 +256,15 @@ function schemaVersionOf(filePath: string): number {
     } finally {
         db?.close();
     }
+}
+
+// A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is
+// read-write, because a closed WAL database has no -shm and a read-only open of it fails. A writer is waited out as
+// long as the API waits for one, so a busy database is not read as damaged.
+export function openToCheck(filePath: string): Database {
+    const db = new Database(filePath, { readwrite: true, create: false });
+    db.run('PRAGMA busy_timeout = 5000;');
+    return db;
 }
 
 // Verify refuses a paths table that could leave its mount (checkArchivedPathRows). This second guard resolves every

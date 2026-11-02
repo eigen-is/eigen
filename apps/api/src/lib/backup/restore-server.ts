@@ -19,7 +19,7 @@ import type { MountPathRow } from './archive-layout';
 import { flatStorageKey, insideDocument, readMountPathRows, rowArchivePath, storageKeyOf } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
-import { checkRestoredDatabases, materializeMount, mountIdsIn, movePath } from './materialize-mount';
+import { checkRestoredDatabases, materializeMount, mountIdsIn, movePath, openToCheck } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
@@ -260,14 +260,12 @@ function livePendingKeys(liveMountDir: string): Set<string> | null {
 
 // What `read` finds in a mount's metadata.db, or null for a mount that never ran here or whose metadata.db does not
 // read: a damaged live database is a reason to restore, not to refuse one, and the warning says what that costs.
-// Read-write like readMountTotalSize: a closed WAL database has no -shm, and a read-only open of it fails.
 function readMetadata<T>(mountDir: string, read: (db: Database) => T, otherwise: string): T | null {
     const metadata = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadata)) return null;
     let db: Database | undefined;
     try {
-        db = new Database(metadata, { readwrite: true, create: false });
-        db.run('PRAGMA busy_timeout = 5000;');
+        db = openToCheck(metadata);
         return read(db);
     } catch (error) {
         console.warn(`${metadata} does not read (${describeError(error)}): ${otherwise}`);
