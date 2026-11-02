@@ -89,6 +89,19 @@ describe('a tab rename', () => {
         expect(rename("Q1's").name).toBe("Q1's");
     });
 
+    // A formula's sheet name may read another sheet now, so the formula map is built again on the next edit.
+    test('resets the formula map, unless the name stays', () => {
+        const ctx = workbook();
+        const tab = document.createElement('span');
+        tab.innerText = 'One';
+        ctx.formulaCache.formulaCellInfoMap = {};
+        editSheetName(ctx, tab);
+        expect(ctx.formulaCache.formulaCellInfoMap).toEqual({});
+        tab.innerText = 'Old';
+        editSheetName(ctx, tab);
+        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+    });
+
     test('refuses an empty name, and keeps the old one for a name another tab has', () => {
         expect(rename('')).toEqual({ name: 'One', tab: 'One', error: 'Sheet name cannot be empty' });
         expect(rename('Two')).toEqual({ name: 'One', tab: 'One', error: undefined });

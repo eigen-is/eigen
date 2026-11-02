@@ -155,6 +155,9 @@ export function deleteSheet(
     if (arrIndex == null) return;
 
     const [deleted] = ctx.sheets.splice(arrIndex, 1);
+    // The formula map and its resolved references still read the deleted sheet under its name, which a sheet added
+    // later may take.
+    ctx.formulaCache.formulaCellInfoMap = null;
     if (fromBatch) return;
     shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
@@ -198,7 +201,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         );
     }
 
-    if (index == null) return;
+    if (index == null || ctx.sheets[index].name === txt) return;
 
     if (ctx.sheets.some((sheet, i) => i !== index && sheet.name === txt)) {
         editable.innerText = oldtxt;
@@ -206,6 +209,8 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     }
 
     ctx.sheets[index].name = txt;
+    // A formula's sheet name may now read this sheet, or no sheet.
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 // Grows the current grid for a paste that runs past its last row or column. The sheet's size grows with it, because a

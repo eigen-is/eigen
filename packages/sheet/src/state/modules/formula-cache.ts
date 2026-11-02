@@ -96,6 +96,10 @@ export class FormulaCache {
 
     public cellTextToIndexList: Record<string, FormulaDependency>;
 
+    // Each sheet's id and name when setFormulaCellInfo first resolved references for the current map. A batch may
+    // write a sheet's name as it was, such as the fields a row undo sends, and only a changed name resets the map.
+    public sheetNames?: string;
+
     public rangechangeindex?: number;
 
     public selectingRangeIndex: number;
@@ -148,9 +152,12 @@ export class FormulaCache {
 
     public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
-        // Code only assigns the map to reset it, to null or to an empty map. The reverse index mirrors the map, so it
-        // resets too. setFormulaCellInfo fills both again.
+        // Code only assigns the map to reset it, to null or to an empty map, such as after a row insert or a sheet
+        // rename. The reverse index mirrors the map, so it resets too. So do the resolved references, which hold the
+        // sheets' old sizes and names. setFormulaCellInfo fills all three again.
         this.engine.state.dependencyIndex.clear();
+        this.cellTextToIndexList = {};
+        this.sheetNames = undefined;
     }
 
     // For each cell, the formulas that read it. It lives in the engine's state next to the formula map, so a new
@@ -173,7 +180,18 @@ export class FormulaCache {
         // Every formula change carries a `data` patch, so the map follows those alone.
         for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
-            if (root !== 'sheets' || (field != null && field !== 'data')) continue;
+            if (root !== 'sheets') continue;
+            // A renamed sheet changes which sheet a sheet name reads. Without names kept, no formula has resolved a
+            // reference since the last reset, so only the references other callers resolved go.
+            if (field === 'name' && sheetNamesOf(ctx) !== this.sheetNames) {
+                if (this.sheetNames == null) {
+                    this.cellTextToIndexList = {};
+                } else {
+                    this.formulaCellInfoMap = null;
+                    return;
+                }
+            }
+            if (field != null && field !== 'data') continue;
             const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
             if (typeof r === 'number' && typeof c === 'number') {
                 if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
@@ -211,6 +229,7 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         ctx.formulaCache.dependencyIndex.delete(key);
         return;
     }
+    ctx.formulaCache.sheetNames ??= sheetNamesOf(ctx);
     // The server's recalc finds the cells a formula reads with this same walk. The editor keeps its cache of resolved
     // references from one edit to the next.
     const formulaDependency = extractDependencies(
@@ -235,6 +254,10 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         const matrix = getFlowdata(ctx, sheetId);
         return matrix ? { rows: matrix.length, columns: matrix[0]?.length ?? 0 } : undefined;
     });
+}
+
+function sheetNamesOf(ctx: Context): string {
+    return JSON.stringify(ctx.sheets.map((sheet) => [sheet.id, sheet.name]));
 }
 
 // A sheet arriving whole carries no cell patches; an unbuilt map reads it when it builds.
