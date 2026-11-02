@@ -65,7 +65,8 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    rangeDialog: RangeDialogProps; // coordinate range mouse selection
+    // The data-verification range picker is open, so the cell editor keeps out of the way of the pick.
+    rangeDialog: RangeDialogProps;
     // warning dialog
     warnDialog?: string;
     currency?: string;
@@ -225,9 +226,6 @@ export function defaultContext(refs: RefValues): Context {
         currency: '€',
         rangeDialog: {
             show: false,
-            rangeTxt: '',
-            type: '',
-            singleSelect: false,
         },
 
         validationListOpen: false,
