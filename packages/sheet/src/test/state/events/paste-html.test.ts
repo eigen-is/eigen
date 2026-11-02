@@ -1,18 +1,6 @@
-// Characterization tests for the HTML-table paste branch (SHEETS-TODO group 4).
-// handlePaste's `txtdata.indexOf('table') > -1` arm builds a real DOM
-// (document.createElement('div').innerHTML + querySelectorAll + td.style/innerText +
-// CSSOM border decomposition + <style> class-block parsing), turns each <td> into a
-// Cell, then hands the parsed CellMatrix + per-cell border map to the non-exported
-// pasteHandler CellMatrix arm (paste.ts ~157-283 — the third copy of the
-// offsetMC/merge remap). Bun's runtime has no DOM, so this file installs a real
-// happy-dom document at module scope and drives handlePaste with a structurally
-// stubbed ClipboardEvent. Tests pin observable output in the resulting Context
-// (cell values/ct/styles, cfg.merge, cfg.borderInfo, cfg.rowlen, selections) so the
-// upcoming refactors near the paste pipeline are gated on current behavior. They
-// never assert on internal call sequences.
-
 import { describe, expect, it, spyOn } from 'bun:test';
 import { SHEET_DEFAULT_FONT_SIZE, SHEET_DEFAULT_ROW_HEIGHT } from '@workspace/lib/sheets';
+import { pick } from 'es-toolkit/compat';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -68,11 +56,8 @@ function pasteHtml(ctx: Context, html: string) {
     handlePaste(ctx, fakeClipboardEvent(html));
 }
 
-// Real Excel clipboards indent every property line of the <style> block, leaving the
-// selector lines as the only unindented ones — which is what the branch's class-block
-// parser (nameReg = /^\S.*/gm) keys on. Windows Excel indents with a TAB, Excel for Mac
-// with spaces: this hand-written table pins the tab-indented shape, the committed Excel
-// fixture the space-indented one.
+// Windows Excel indents each rule's declarations with a tab and Excel for Mac with spaces.
+// This hand-written table pins the tab-indented shape, the committed Excel fixture the other.
 const excelClassBlockHtml = `<html><head><style>
 <!--table
 \t{color:black;}
@@ -295,6 +280,116 @@ describe('HTML-table paste — style extraction', () => {
         expect(d[0][1]?.vt).toBe(1);
         expect(d[0][2]?.ht).toBe(1);
         expect(d[0][2]?.vt).toBe(2);
+    });
+});
+
+// The style fields a pasted cell can take from the <style> block, read from the top-left rows x cols.
+function styleGrid(ctx: Context, rows: number, cols: number) {
+    return (ctx.sheets[0].data ?? [])
+        .slice(0, rows)
+        .map((row) =>
+            row
+                .slice(0, cols)
+                .map((cell) => pick(cell, ['bl', 'it', 'un', 'cl', 'ff', 'fs', 'fc', 'bg', 'ht', 'vt', 'rt'])),
+        );
+}
+
+function styleBlockHtml(css: string, cells: string): string {
+    return `<html><head><style>${css}</style></head><body><table><tr>${cells}</tr></table></body></html>`;
+}
+
+describe('HTML-table paste — the <style> block', () => {
+    // A td the block styles only through its td rule: Excel's and WPS's both say vertical-align:middle.
+    const plain = { bl: 0, it: 0, fs: SHEET_DEFAULT_FONT_SIZE, ht: 1, vt: 0 };
+    const wps = { ...plain, fs: 12, fc: '#000000' };
+
+    it.each<['Excel' | 'WPS', Partial<Cell>[][]]>([
+        [
+            'Excel',
+            [
+                [plain, { ...plain, bl: 1 }, { ...plain, fc: '#ED7D31' }],
+                [{ ...plain, bg: '#ED7D31' }, plain, plain],
+                [{ ...plain, un: 1 }, plain, plain],
+                [{ ...plain, it: 1 }, plain, plain],
+            ],
+        ],
+        [
+            'WPS',
+            [
+                [wps, { ...wps, bl: 1 }, { ...wps, bl: 1, fc: '#ED7D31' }],
+                [{ ...wps, bg: '#ED7D31' }, plain, plain],
+                [{ ...wps, un: 1 }, plain, plain],
+                [{ ...wps, it: 1 }, plain, plain],
+            ],
+        ],
+    ])('styles every cell of the %s fixture from its inline styles and its rules', (source, expected) => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, pastedHtmlFactory(source));
+        expect(styleGrid(ctx, 4, 3)).toEqual(expected);
+    });
+
+    it('styles every cell of the tab-indented Excel block', () => {
+        const ctx = makeCtx();
+        pasteHtml(ctx, excelClassBlockHtml);
+        const top = { ...plain, vt: 1 };
+        expect(styleGrid(ctx, 3, 2)).toEqual([
+            [
+                { ...top, bl: 1 },
+                { ...top, fc: '#ED7D31' },
+            ],
+            [
+                { ...top, bg: '#ED7D31' },
+                { ...top, un: 1 },
+            ],
+            [{ ...top, it: 1 }, top],
+        ]);
+    });
+
+    it('reads a block written on one line, several declarations to a rule', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            styleBlockHtml(
+                '<!--td {vertical-align:bottom;}.c1 {font-weight:700;color:#ED7D31;mso-rotate:90}-->',
+                '<td class=c1>a</td><td>b</td>',
+            ),
+        );
+        expect(styleGrid(ctx, 1, 2)).toEqual([
+            [
+                { ...plain, bl: 1, fc: '#ED7D31', rt: 90, vt: 2 },
+                { ...plain, vt: 2 },
+            ],
+        ]);
+    });
+
+    it('skips comments and at-rules, nested rules included', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            styleBlockHtml(
+                '@page {margin:1in;} @media print { .xl65 {font-weight:700;} } /* .xl65 {color:red;} */ .xl66 {font-style:italic;}',
+                '<td class=xl65>a</td><td class=xl66>b</td>',
+            ),
+        );
+        expect(styleGrid(ctx, 1, 2)).toEqual([
+            [
+                { ...plain, vt: 1 },
+                { ...plain, vt: 1, it: 1 },
+            ],
+        ]);
+    });
+
+    it('reads td.xlNN and selector lists, and keeps a semicolon inside quotes in its value', () => {
+        const ctx = makeCtx();
+        pasteHtml(
+            ctx,
+            styleBlockHtml(
+                'td.xl65, .xl66 {font-family:"Wingdings;x", "Courier New", monospace; font-weight:700;}',
+                '<td class=xl65>a</td><td class=xl66>b</td>',
+            ),
+        );
+        const mono = { ...plain, vt: 1, bl: 1, ff: 'JetBrains Mono' };
+        expect(styleGrid(ctx, 1, 2)).toEqual([[mono, mono]]);
     });
 });
 
