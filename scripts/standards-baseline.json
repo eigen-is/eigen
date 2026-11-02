@@ -66,7 +66,6 @@
     "packages/ui/src/components/collab/use-awareness-peers.ts": 1,
     "packages/ui/src/components/comments/comment-filter-button.tsx": 1,
     "packages/ui/src/components/contacts/contact-autosuggest.tsx": 1,
-    "packages/ui/src/components/dialog.tsx": 1,
     "packages/ui/src/components/drive/drive-preview.tsx": 1,
     "packages/ui/src/components/drive/eigendoc-config.ts": 1,
     "packages/ui/src/components/dropdown-menu.tsx": 1,
@@ -84,7 +83,6 @@
     "packages/ui/src/components/toggle-group.tsx": 1,
     "packages/ui/src/hooks/is-typing-target.ts": 1,
     "packages/ui/src/hooks/use-focus-trap.ts": 1,
-    "packages/ui/src/hooks/use-keyboard-list-navigation.ts": 1,
     "packages/ui/src/hooks/use-scroll-to-index.ts": 1
   },
   "non-null-assertions": {

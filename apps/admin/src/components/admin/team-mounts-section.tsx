@@ -9,7 +9,7 @@ import type { MountSettings } from '@workspace/lib/types/settings';
 import { mapStorageType } from '@workspace/lib/types/settings';
 import { EmptyState, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import type { MountFormValues } from '@workspace/ui/components/mount/mount-form';
+import type { MountFormValues } from '@workspace/ui/components/mount';
 import { Switch } from '@workspace/ui/components/switch';
 import { HardDrive, Settings } from 'lucide-react';
 import { useState } from 'react';

@@ -89,7 +89,7 @@ function SharedCalendarConfigForm({
             }}
             footerStart={
                 !isTeamCalendar && (
-                    <Button type="button" variant="destructive" onClick={onRemove}>
+                    <Button variant="destructive" onClick={onRemove}>
                         Remove
                     </Button>
                 )

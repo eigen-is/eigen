@@ -59,8 +59,6 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
                     tooltipText="Copy emails"
                     variant="ghost"
                     className="h-7 w-7"
-                    // The list may sit in a form, such as Edit event's, where a button with no type would submit it.
-                    type="button"
                     onClick={handleCopyEmails}
                 />
             }
@@ -91,7 +89,7 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
 }
 
 function buildAttendeeSummary(attendees: readonly Attendee[]): string {
-    const counts: Record<string, number> = {};
+    const counts: Partial<Record<Attendee['status'], number>> = {};
     for (const a of attendees) {
         counts[a.status] = (counts[a.status] ?? 0) + 1;
     }

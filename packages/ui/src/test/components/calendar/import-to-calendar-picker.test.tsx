@@ -1,12 +1,14 @@
-// The one thing an .ics import needs that the other two do not: a target. What is pinned here is which
-// calendars are offered (the home's own, plus a team calendar the viewer may write in — a calendar shared
-// from another user's home is refused by the import route, so it is not on the list), the target the dialog
-// hands `useImportToCalendar`, that the defaults land once, and that a list that would not load offers a
-// retry rather than loading for ever. Making, filling and unmaking a new calendar is the hook's, pinned in
-// packages/lib (src/test/core/calendar/hooks/use-transfer.test.ts).
+// The one thing an .ics import needs that the other two do not: a target. What is pinned here is which calendars are
+// offered: the home's own, plus a team calendar the viewer may write in. A calendar shared from another user's home is
+// refused by the import route, so it is not on the list. Also pinned: the file and target the dialog hands
+// `useImportToCalendar`, that a later fetch overwrites no choice, that Enter submits, that a failure keeps the dialog
+// open, that a calendar that went away can't be imported into, and that a list that would not load offers a retry
+// rather than loading for ever. Making, filling and deleting a new calendar is the hook's, pinned in packages/lib's
+// use-transfer test.
 import { expect, mock, test } from 'bun:test';
-import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
+import { importSourceOf, subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
+import { pressEnter } from '../../press-enter';
 
 installHappyDom();
 
@@ -26,6 +28,11 @@ type Shared = {
 type Target = { kind: 'existing'; ownerId: string; calendarId: string } | { kind: 'new'; name: string; color: string };
 
 let handed: Target[] = [];
+// The files handed with each target, which this dialog passes on as the file action gave them.
+let sources: unknown[] = [];
+// A failure the hook has already toasted, as useImportToCalendar's mutations do; null imports.
+let failure: Error | null = null;
+const refetch = mock(() => {});
 const calendars: Calendar[] = [
     { id: 'cal-work', name: 'Work', color: '#111111', isDefault: false },
     { id: 'cal-home', name: 'Home', color: '#222222', isDefault: true },
@@ -69,18 +76,23 @@ const sharedCalendars: Shared[] = [
     },
 ];
 // What the hooks answer for the render under test: the list may not have arrived.
-const served: { calendars: Calendar[] | undefined; isError: boolean } = { calendars, isError: false };
+const served: { calendars: Calendar[] | undefined; sharedCalendars: Shared[]; isError: boolean } = {
+    calendars,
+    sharedCalendars,
+    isError: false,
+};
 
 const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
-    useCalendars: () => ({ data: served.calendars, isError: served.isError, refetch: () => {} }),
-    useSharedCalendars: () => ({ data: sharedCalendars }),
+    useCalendars: () => ({ data: served.calendars, isError: served.isError, refetch }),
+    useSharedCalendars: () => ({ data: served.sharedCalendars }),
     useImportToCalendar: () => ({
-        importToCalendar: async (_source: unknown, target: Target) => {
+        importToCalendar: async (source: unknown, target: Target) => {
+            sources.push(source);
             handed.push(target);
+            if (failure) throw failure;
         },
-        forgetNewCalendar: () => {},
     }),
 }));
 
@@ -94,8 +106,11 @@ mock.module('@workspace/lib/public', () => ({
     usePublicUsers: () => ({ [TEAM]: { name: 'Marketing' } }),
 }));
 
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
+const { ABOVE_PREVIEW_Z } = await import('../../../components/dialog');
 const { ImportToCalendarPicker } = await import('../../../components/calendar/import-to-calendar-picker');
 
 const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
@@ -104,8 +119,17 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     size: 2048,
 });
 
-async function open() {
+const openPreviewContext = {
+    openPreview: () => {},
+    updatePreview: () => {},
+    closePreview: () => {},
+    isPreviewOpen: true,
+};
+
+async function open(previewOpen = false) {
     handed = [];
+    sources = [];
+    refetch.mockClear();
     const closed = { count: 0 };
     const container = document.createElement('div');
     document.body.append(container);
@@ -113,13 +137,17 @@ async function open() {
     const draw = async () => {
         await act(async () => {
             root.render(
-                createElement(ImportToCalendarPicker, {
-                    subject,
-                    open: true,
-                    onClose: () => {
-                        closed.count += 1;
-                    },
-                }),
+                createElement(
+                    PreviewContext.Provider,
+                    { value: previewOpen ? openPreviewContext : undefined },
+                    createElement(ImportToCalendarPicker, {
+                        subject,
+                        open: true,
+                        onClose: () => {
+                            closed.count += 1;
+                        },
+                    }),
+                ),
             );
         });
     };
@@ -165,6 +193,9 @@ async function open() {
             input.dispatchEvent(new Event('input', { bubbles: true }));
         });
     };
+    const enter = async () => {
+        await act(async () => pressEnter(nameInput()));
+    };
     const cleanup = async () => {
         await act(async () => root.unmount());
         container.remove();
@@ -177,6 +208,7 @@ async function open() {
         cleanup,
         dialog,
         draw,
+        enter,
         nameInput,
         openList,
         textsOf,
@@ -185,11 +217,25 @@ async function open() {
     };
 }
 
+test('the dialog names the file and offers a calendar, with a name field only for a new one', async () => {
+    const { chooseCalendar, cleanup, dialog, trigger } = await open();
+    expect(dialog().querySelector('h2')?.textContent).toBe('Import to Calendar');
+    expect(dialog().textContent).toContain('Pick the calendar “Autumn market.ics” lands in.');
+    expect(trigger().textContent).toContain('Home');
+    expect(dialog().querySelector('input')).toBeNull();
+
+    await chooseCalendar('New calendar');
+    expect(dialog().querySelector('label[for="import-calendar-name"]')?.textContent).toBe('Calendar name');
+    expect(dialog().querySelector('input')?.id).toBe('import-calendar-name');
+    await cleanup();
+});
+
 test('the viewer’s own default calendar is preselected, and the import names their own home', async () => {
     const { click, closed, cleanup, dialog } = await open();
     expect(dialog().textContent).toContain('Home');
 
     await click('button', 'Import');
+    expect(sources).toEqual([importSourceOf(subject)]);
     expect(handed).toEqual([{ kind: 'existing', ownerId: 'owner-1', calendarId: 'cal-home' }]);
     expect(closed.count).toBe(1);
     await cleanup();
@@ -220,12 +266,89 @@ test('a calendar the viewer only reads, and one shared from another user’s hom
 });
 
 test('New calendar asks for one named after the file, in the viewer’s own home', async () => {
-    const { chooseCalendar, click, cleanup, nameInput } = await open();
+    const { chooseCalendar, click, closed, cleanup, nameInput } = await open();
     await chooseCalendar('New calendar');
     expect(nameInput().value).toBe('Autumn market');
 
     await click('button', 'Import');
+    expect(sources).toEqual([importSourceOf(subject)]);
     expect(handed).toEqual([{ kind: 'new', name: 'Autumn market', color: expect.any(String) }]);
+    expect(closed.count).toBe(1);
+    await cleanup();
+});
+
+test('Enter in the new calendar’s name imports into a calendar of that name, trimmed', async () => {
+    const { chooseCalendar, closed, cleanup, enter, typeName } = await open();
+    await chooseCalendar('New calendar');
+    await typeName('  Market season ');
+
+    await enter();
+    expect(handed).toEqual([{ kind: 'new', name: 'Market season', color: expect.any(String) }]);
+    expect(closed.count).toBe(1);
+    await cleanup();
+});
+
+test('a new calendar with no name cannot be imported, by the button or by Enter', async () => {
+    const { button, chooseCalendar, closed, cleanup, enter, typeName } = await open();
+    await chooseCalendar('New calendar');
+    await typeName('');
+    expect(button('Import')?.disabled).toBe(true);
+    await typeName('   ');
+    expect(button('Import')?.disabled).toBe(true);
+
+    await enter();
+    expect(handed).toEqual([]);
+    expect(closed.count).toBe(0);
+    await cleanup();
+});
+
+test('an import that fails keeps the dialog open with the calendar and name still chosen', async () => {
+    failure = new Error('offline');
+    // The hook's mutation toasts its failure before the dialog sees it.
+    onMutationError(failure);
+    const { button, chooseCalendar, click, closed, cleanup, nameInput, trigger, typeName } = await open();
+    await chooseCalendar('New calendar');
+    await typeName('Market season');
+
+    await click('button', 'Import');
+    expect(handed).toEqual([{ kind: 'new', name: 'Market season', color: expect.any(String) }]);
+    expect(closed.count).toBe(0);
+    expect(trigger().textContent).toContain('New calendar');
+    expect(nameInput().value).toBe('Market season');
+    expect(button('Import')?.disabled).toBe(false);
+
+    failure = null;
+    await cleanup();
+});
+
+test('over an open preview the calendar list is lifted above the dialog, and otherwise it is not', async () => {
+    const plain = await open();
+    await plain.openList();
+    const list = () => [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
+    expect(list()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(false);
+    await plain.cleanup();
+
+    const over = await open(true);
+    await over.openList();
+    expect(list()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
+    await over.cleanup();
+});
+
+test('a calendar that went away after it was chosen greys Import out until another is picked', async () => {
+    const { button, chooseCalendar, click, closed, cleanup, draw, trigger } = await open();
+    await chooseCalendar('Marketing');
+
+    served.sharedCalendars = [];
+    await draw();
+    expect(trigger().textContent).toBe('Select calendar');
+    expect(button('Import')?.disabled).toBe(true);
+    await click('button', 'Import');
+    expect(handed).toEqual([]);
+    expect(closed.count).toBe(0);
+
+    await chooseCalendar('Work');
+    expect(button('Import')?.disabled).toBe(false);
+    served.sharedCalendars = sharedCalendars;
     await cleanup();
 });
 
@@ -252,12 +375,13 @@ test('while the calendars load there is no target to import into, and the defaul
 });
 
 test('a later fetch of the calendars overwrites neither the chosen target nor the typed name', async () => {
-    const { chooseCalendar, cleanup, draw, nameInput, typeName } = await open();
+    const { chooseCalendar, cleanup, draw, nameInput, trigger, typeName } = await open();
     await chooseCalendar('New calendar');
     await typeName('Market season');
 
     served.calendars = [...calendars];
     await draw();
+    expect(trigger().textContent).toContain('New calendar');
     expect(nameInput().value).toBe('Market season');
     served.calendars = calendars;
     await cleanup();
@@ -265,11 +389,15 @@ test('a later fetch of the calendars overwrites neither the chosen target nor th
 
 test('a calendar list that would not load offers a retry instead of loading for ever', async () => {
     served.isError = true;
-    const { button, cleanup, dialog } = await open();
+    const { button, click, closed, cleanup, dialog } = await open();
     expect(dialog().textContent).toContain('Could not load your calendars');
     expect(dialog().textContent).not.toContain('Loading calendars');
-    expect(button('Try again')).toBeDefined();
     expect(button('Import')?.disabled).toBe(true);
+
+    await click('button', 'Try again');
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(handed).toEqual([]);
+    expect(closed.count).toBe(0);
 
     served.isError = false;
     await cleanup();

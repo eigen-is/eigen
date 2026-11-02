@@ -25,7 +25,6 @@ mock.module('@workspace/lib/calendar', () => ({
         importToCalendar: async (source: { url?: string }, target: { ownerId: string; calendarId: string }) => {
             calls.imported.push({ ownerId: target.ownerId, calendarId: target.calendarId, url: source.url });
         },
-        forgetNewCalendar: () => {},
     }),
 }));
 

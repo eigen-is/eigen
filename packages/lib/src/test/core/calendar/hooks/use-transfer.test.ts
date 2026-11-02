@@ -29,6 +29,7 @@ const driveImportOwners: string[] = [];
 const created: { ownerId: string; name: string }[] = [];
 const deleted: string[] = [];
 let failNextDriveImport = false;
+let failNextDelete = false;
 
 const realApiModule = await import('../../../../core/api');
 mock.module('../../../../core/api', () => ({
@@ -48,6 +49,10 @@ mock.module('../../../../core/api', () => ({
         calendars: Object.assign(
             ({ calId }: { calId: string }) => ({
                 delete: async () => {
+                    if (failNextDelete) {
+                        failNextDelete = false;
+                        return { data: null, error: { value: 'delete failed' }, status: 500 };
+                    }
                     deleted.push(calId);
                     return { data: { success: true }, error: null, status: 200 };
                 },
@@ -225,7 +230,7 @@ describe('useImportToCalendar', () => {
         expect(deleted).toEqual(['cal-1']);
     });
 
-    test('a retry after a failed import reuses the calendar the first attempt made', async () => {
+    test('a new calendar whose import fails goes again, so a retry under another name makes that one', async () => {
         const { act } = await import('react');
         const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
         const { queryClient } = trackingClient();
@@ -237,16 +242,192 @@ describe('useImportToCalendar', () => {
                 latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' }),
             ).rejects.toThrow('import failed');
         });
+        expect(deleted).toEqual(['cal-1']);
 
-        driveImportResult = { imported: 2, skipped: 0, failed: 0 };
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Market season', color: '#34a853' });
+        });
+        await unmount();
+
+        expect(created).toEqual([
+            { ownerId: OWNER, name: 'Autumn market' },
+            { ownerId: OWNER, name: 'Market season' },
+        ]);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: 'cal-2' })]);
+        expect(deleted).toEqual(['cal-1']);
+    });
+
+    test('a retry into a calendar that exists after a failed new one imports there and makes nothing', async () => {
+        const { act } = await import('react');
+        const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportToCalendar(OWNER), queryClient);
+
+        failNextDriveImport = true;
+        await act(async () => {
+            await expect(
+                latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' }),
+            ).rejects.toThrow('import failed');
+        });
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'existing', ownerId: OWNER, calendarId: CALENDAR });
+        });
+        await unmount();
+
+        expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
+        expect(deleted).toEqual(['cal-1']);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: CALENDAR })]);
+    });
+
+    test('when the failed import’s calendar will not go either, the caller gets the import’s error and a retry fills it', async () => {
+        const { act } = await import('react');
+        const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportToCalendar(OWNER), queryClient);
+
+        failNextDriveImport = true;
+        failNextDelete = true;
+        await act(async () => {
+            await expect(
+                latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' }),
+            ).rejects.toThrow('import failed');
+        });
+        expect(failNextDelete).toBe(false);
+        expect(deleted).toEqual([]);
+
         await act(async () => {
             await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' });
         });
         await unmount();
 
         expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
-        expect(driveImportBodies.map((body) => (body as { calendarId: string }).calendarId)).toEqual(['cal-1']);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: 'cal-1' })]);
         expect(deleted).toEqual([]);
+    });
+
+    // An import that failed into a new calendar whose delete failed too, which leaves that calendar behind as cal-1.
+    const HOLIDAY = { kind: 'new', name: 'Holiday', color: '#34a853' } as const;
+    // CALENDAR is the id the stub hands the first calendar it makes, so a calendar that exists needs another.
+    const EXISTING = 'cal-work';
+    async function leaveACalendarBehind() {
+        const { act } = await import('react');
+        const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
+        const { queryClient } = trackingClient();
+        const rendered = await renderHook(() => useImportToCalendar(OWNER), queryClient);
+        failNextDriveImport = true;
+        failNextDelete = true;
+        await act(async () => {
+            await expect(rendered.latest.importToCalendar(DRIVE_SOURCE, HOLIDAY)).rejects.toThrow('import failed');
+        });
+        expect(deleted).toEqual([]);
+        return { act, ...rendered };
+    }
+
+    test('a retry under another name deletes the calendar left behind and makes the one it asks for', async () => {
+        const { act, latest, unmount } = await leaveACalendarBehind();
+
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Work', color: '#34a853' });
+        });
+        await unmount();
+
+        expect(deleted).toEqual(['cal-1']);
+        expect(created.map((calendar) => calendar.name)).toEqual(['Holiday', 'Work']);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: 'cal-2' })]);
+    });
+
+    test('a retry under the same name in another color does not fill the calendar left behind', async () => {
+        const { act, latest, unmount } = await leaveACalendarBehind();
+
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { ...HOLIDAY, color: '#4285f4' });
+        });
+        await unmount();
+
+        expect(deleted).toEqual(['cal-1']);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: 'cal-2' })]);
+    });
+
+    test('a retry into a calendar that exists deletes the calendar left behind', async () => {
+        const { act, latest, unmount } = await leaveACalendarBehind();
+
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'existing', ownerId: OWNER, calendarId: EXISTING });
+        });
+        await unmount();
+
+        expect(deleted).toEqual(['cal-1']);
+        expect(created.map((calendar) => calendar.name)).toEqual(['Holiday']);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: EXISTING })]);
+    });
+
+    // The calendar left behind shows in the picker's list like any other.
+    test('a retry that picks the calendar left behind as an existing one keeps it and imports there', async () => {
+        const { act, latest, unmount } = await leaveACalendarBehind();
+
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'existing', ownerId: OWNER, calendarId: 'cal-1' });
+        });
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'existing', ownerId: OWNER, calendarId: EXISTING });
+        });
+        await unmount();
+
+        expect(deleted).toEqual([]);
+        expect(driveImportBodies).toEqual([
+            expect.objectContaining({ calendarId: 'cal-1' }),
+            expect.objectContaining({ calendarId: EXISTING }),
+        ]);
+    });
+
+    test('when the calendar left behind will not go on a retry either, the import goes on and the next try deletes it', async () => {
+        const { act, latest, unmount } = await leaveACalendarBehind();
+
+        failNextDelete = true;
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Work', color: '#34a853' });
+        });
+        expect(deleted).toEqual([]);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: 'cal-2' })]);
+
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'existing', ownerId: OWNER, calendarId: EXISTING });
+        });
+        await unmount();
+
+        expect(deleted).toEqual(['cal-1']);
+        expect(driveImportBodies.at(-1)).toMatchObject({ calendarId: EXISTING });
+    });
+
+    test('when a new calendar nothing landed in will not go, a retry fills it, and once it goes the next makes one', async () => {
+        const { act } = await import('react');
+        const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportToCalendar(OWNER), queryClient);
+        const tryNew = () =>
+            act(async () => {
+                await latest
+                    .importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' })
+                    .catch(() => {});
+            });
+
+        driveImportResult = { imported: 0, skipped: 4, failed: 0 };
+        failNextDelete = true;
+        await tryNew();
+        expect(deleted).toEqual([]);
+
+        await tryNew();
+        expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
+        expect(deleted).toEqual(['cal-1']);
+
+        await tryNew();
+        await unmount();
+        expect(created.map((calendar) => calendar.name)).toEqual(['Autumn market', 'Autumn market']);
+        expect(driveImportBodies).toEqual([
+            expect.objectContaining({ calendarId: 'cal-1' }),
+            expect.objectContaining({ calendarId: 'cal-1' }),
+            expect.objectContaining({ calendarId: 'cal-2' }),
+        ]);
     });
 });
 
