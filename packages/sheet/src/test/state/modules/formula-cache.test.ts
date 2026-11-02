@@ -154,6 +154,24 @@ describe('setFormulaCellInfo — lookups into whole columns', () => {
         expect(dependencySlots(deps, extentOf)).toBe(2);
         expect(ctx.formulaCache.dependencyIndex.dependentsOf('d', 6_399, 0)).toEqual(['r0c1ir']);
     });
+
+    // A stored matrix may lack rows, its first among them.
+    it('measures a sheet by its widest row', () => {
+        const ctx = contextFactory({
+            currentSheetId: 'r',
+            sheets: [
+                { name: 'Holey', id: 'h', order: 0, data: JSON.parse('[null, [null, null]]') },
+                { name: 'Report', id: 'r', order: 1, data: [[{ f: '=SUM(Holey!1:2)' }]] },
+            ],
+        }) as Context;
+        warmFormulaCellInfoMap(ctx);
+        const set = spyOn(ctx.formulaCache.dependencyIndex, 'set');
+
+        setFormulaCellInfo(ctx, { r: 0, c: 0, id: 'r' });
+
+        const [[, , extentOf]] = set.mock.calls;
+        expect(extentOf('h')).toEqual({ rows: 2, columns: 2 });
+    });
 });
 
 // The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates

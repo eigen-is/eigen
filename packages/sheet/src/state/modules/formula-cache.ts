@@ -4,8 +4,9 @@
 // walk the server's recalc uses too, and an undo or redo replays its patches.
 
 import { current, isDraft } from 'immer';
-import type { DependencyIndex } from '../../engine/dependency-index';
+import type { DependencyIndex, SheetExtent } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
+import { matrixWidth } from '../../engine/formula-utils';
 import { extractDependencies } from '../../engine/recalc';
 import type {
     CalcChainEntry,
@@ -96,6 +97,10 @@ export class FormulaCache {
 
     public cellTextToIndexList: Record<string, FormulaDependency>;
 
+    // Each sheet's size, by id, which the dependency index lists ranges by. Measuring a sheet scans its rows, so it is
+    // kept as long as the resolved references, which a change to a grid's size resets too.
+    public sheetExtents = new Map<string, SheetExtent>();
+
     public rangechangeindex?: number;
 
     public selectingRangeIndex: number;
@@ -153,6 +158,7 @@ export class FormulaCache {
         // sheets' old sizes and names. setFormulaCellInfo fills all three again.
         this.engine.state.dependencyIndex.clear();
         this.cellTextToIndexList = {};
+        this.sheetExtents.clear();
     }
 
     // For each cell, the formulas that read it. It lives in the engine's state next to the formula map, so a new
@@ -165,6 +171,7 @@ export class FormulaCache {
     public resetEngine() {
         this.engine = new FormulaEngine();
         this.cellTextToIndexList = {};
+        this.sheetExtents.clear();
     }
 
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
@@ -239,9 +246,16 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         children: {},
         color: 'w',
     };
+    const { sheetExtents } = ctx.formulaCache;
     ctx.formulaCache.dependencyIndex.set(key, formulaDependency, (sheetId) => {
-        const matrix = getFlowdata(ctx, sheetId);
-        return matrix ? { rows: matrix.length, columns: matrix[0]?.length ?? 0 } : undefined;
+        let extent = sheetExtents.get(sheetId);
+        if (extent === undefined) {
+            const matrix = getFlowdata(ctx, sheetId);
+            if (matrix == null) return undefined;
+            extent = { rows: matrix.length, columns: matrixWidth(matrix) };
+            sheetExtents.set(sheetId, extent);
+        }
+        return extent;
     });
 }
 

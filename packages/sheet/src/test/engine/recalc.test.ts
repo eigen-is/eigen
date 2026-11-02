@@ -401,6 +401,16 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets)[0].data![0][0]?.v).toBe(8);
     });
 
+    // A stored matrix may lack rows, its first among them, so a whole row reads as wide as the sheet's widest row.
+    test('a whole row reads to the last column of a sheet whose first row is short', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=SUM(Holey!2:2)'), formula('=SUM(Holey!A2:C2)')]]),
+            sheet('s2', 'Holey', [[], [num(1), num(2)]]),
+        ];
+        const [out] = recalcSheets(sheets);
+        expect([out.data![0][0]?.v, out.data![0][1]?.v]).toEqual([3, 3]);
+    });
+
     test('one poisoned formula does not kill the pass', () => {
         // =NoSheet!A1 throws ERROR_REF (unresolvable sheet name); the sibling
         // formula must still compute.

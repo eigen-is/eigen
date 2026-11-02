@@ -5,6 +5,7 @@
 
 import { DependencyIndex } from './dependency-index';
 import { cellValue } from './format';
+import { matrixWidth } from './formula-utils';
 import { Parser } from './parser';
 import errorParser, {
     ERROR,
@@ -19,6 +20,7 @@ import { dateToSerial } from './parser/helper/number';
 import type {
     Cell,
     CellInfo,
+    CellMatrix,
     CellResolver,
     CompiledFormula,
     EvaluationResult,
@@ -60,6 +62,10 @@ export class FormulaEngine {
     public state: FormulaEngineState;
     private parser: Parser;
     private currentResolver: CellResolver | null = null;
+    // Each sheet's width, by sheet id, for the resolver in `widthsOf`. A resolver hands out the same matrices for as
+    // long as it is used, so their widths hold as long, and a range read needn't scan every row of its sheet.
+    private widths = new Map<string, number>();
+    private widthsOf: CellResolver | null = null;
     // The cells range reads have cost; a read that would pass `maxCellsRead` fails before it reads.
     public cellsRead = 0;
     private readonly maxCellsRead: number;
@@ -117,7 +123,7 @@ export class FormulaEngine {
                 // as `ROWS(A:A)` does.
                 const sheetData = resolver.getSheetData(sheetId);
                 const lastRow = (sheetData?.length ?? 0) - 1;
-                const lastCol = (sheetData?.[0]?.length ?? 0) - 1;
+                const lastCol = this.widthOf(resolver, sheetId, sheetData) - 1;
                 if (emptyRow) startRow = 0;
                 if (emptyCol) startCol = 0;
                 endRow = emptyRow ? lastRow : Math.min(endRow, lastRow);
@@ -203,5 +209,19 @@ export class FormulaEngine {
         } finally {
             this.currentResolver = null;
         }
+    }
+
+    // The number of columns a sheet has: its widest row's, as a stored matrix may lack rows, its first among them.
+    private widthOf(resolver: CellResolver, sheetId: string, matrix: CellMatrix | null): number {
+        if (this.widthsOf !== resolver) {
+            this.widthsOf = resolver;
+            this.widths.clear();
+        }
+        let width = this.widths.get(sheetId);
+        if (width === undefined) {
+            width = matrix ? matrixWidth(matrix) : 0;
+            this.widths.set(sheetId, width);
+        }
+        return width;
     }
 }
