@@ -14,10 +14,10 @@ import { getIndexAppUrl } from '@workspace/lib/api';
 import { BACKUP_KEEP_MAX, BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import type { BackupLevel, BackupReason, ServerArchive } from '@workspace/lib/types/backup';
+import type { BackupReason, FullBackupLevel, ServerArchive } from '@workspace/lib/types/backup';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { BACKUP_LEVELS, canUploadServerArchive } from '@workspace/lib/validation';
+import { canUploadServerArchive, FULL_BACKUP_LEVELS } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
 import { Badge } from '@workspace/ui/components/badge';
@@ -77,7 +77,7 @@ export function ServerBackupSection({
     saveNotice,
     onDismissNotice,
 }: ServerBackupSectionProps) {
-    const [level, setLevel] = useState<BackupLevel>('full');
+    const [level, setLevel] = useState<FullBackupLevel>('full');
     const [deleting, setDeleting] = useState<string | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [dismissed, setDismissed] = useState<string[]>([]);
@@ -90,7 +90,7 @@ export function ServerBackupSection({
     const checkDestination = useCheckBackupDestination();
 
     const hasS3Mounts = !!data?.hasS3Mounts;
-    const levels = BACKUP_LEVELS.filter((option) => option !== 'full-s3' || hasS3Mounts);
+    const levels = FULL_BACKUP_LEVELS.filter((option) => option !== 'full-s3' || hasS3Mounts);
     // The last S3 mount can go while the page is open.
     const shownLevel = levels.includes(level) ? level : 'full';
     // Newest first. An upload starts as its backup ends and can run beside the next one, so every running job gets

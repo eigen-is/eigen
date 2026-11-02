@@ -10,8 +10,11 @@ export type BackupEntry = {
 
 // How much of a home a capture takes. `full-s3` is complete, what the per-home backup writes. `full`
 // leaves an s3 mount's objects to its bucket and keeps its metadata.db and staged uploads. `light`
-// keeps the databases and the home outside its mounts and mail: no file bodies, no Maildir.
-export const BACKUP_LEVELS = ['light', 'full', 'full-s3'] as const;
+// keeps the databases and the home outside its mounts and mail: no file bodies, no Maildir. Settings offers only the
+// full levels: a Light restore cannot bring back the files changed since, so Light is left to the launcher.
+export const FULL_BACKUP_LEVELS = ['full', 'full-s3'] as const;
+export type FullBackupLevel = (typeof FULL_BACKUP_LEVELS)[number];
+export const BACKUP_LEVELS = ['light', ...FULL_BACKUP_LEVELS] as const;
 export type BackupLevel = (typeof BACKUP_LEVELS)[number];
 
 export const BACKUP_KINDS = ['user', 'team', 'server'] as const;

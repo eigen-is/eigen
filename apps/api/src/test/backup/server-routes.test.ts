@@ -17,7 +17,7 @@ import type { TestContext, TestUser } from '../setup';
 import { authedRequest, createTestUser, getTestContext } from '../setup';
 import { holdCaptures, removeServerRecords, serverRecords, waitForJob, writeServerRecord } from './backup-test-helpers';
 
-// A Light job of the file's few homes, for real.
+// A Full job of the file's few homes, for real.
 const JOB_TIMEOUT_MS = 120_000;
 
 describe('Server backup routes', () => {
@@ -54,7 +54,7 @@ describe('Server backup routes', () => {
         const name = buildServerArchiveName('manual', 'full', new Date('2026-09-01T02:00:00Z'));
         writeServerRecord(name, { state: 'done', startedAt: '2026-09-01T02:00:00.000Z' }, 'archive bytes');
         for (const api of [adminApi, ctx.bob.api]) {
-            expect((await api.admin['server-backup'].post({ level: 'light' })).status).toBe(403);
+            expect((await api.admin['server-backup'].post({ level: 'full' })).status).toBe(403);
             expect((await api.admin['server-backup'].archives.get()).status).toBe(403);
             expect((await api.admin['server-backup'].archives({ name }).delete()).status).toBe(403);
             expect((await api.admin['server-backup'].archives({ name }).upload.post()).status).toBe(403);
@@ -68,20 +68,20 @@ describe('Server backup routes', () => {
     test(
         'the owner starts a backup, and the list shows it with its record',
         async () => {
-            const { data, error } = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
+            const { data, error } = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
             expect(error).toBeNull();
             const job = await waitForJob(data!.jobId);
             expect(job.error).toBeUndefined();
             expect(job.state).toBe('done');
             expect(job.startedBy).toBe(ctx.alice.user.id);
-            expect(parseServerArchiveName(job.artifact ?? '')).toMatchObject({ reason: 'manual', level: 'light' });
+            expect(parseServerArchiveName(job.artifact ?? '')).toMatchObject({ reason: 'manual', level: 'full' });
 
             const list = await ctx.alice.api.admin['server-backup'].archives.get();
             expect(list.error).toBeNull();
             expect(list.data!.hasS3Mounts).toBe(false);
             const [archive] = list.data!.archives;
             expect(archive.name).toBe(job.artifact!);
-            expect(archive.level).toBe('light');
+            expect(archive.level).toBe('full');
             expect(archive.reason).toBe('manual');
             expect(archive.createdAt).toBeInstanceOf(Date);
             expect(archive.bytes).toBeGreaterThan(0);
@@ -92,12 +92,22 @@ describe('Server backup routes', () => {
         JOB_TIMEOUT_MS,
     );
 
+    test('a Light backup is refused: it is the launcher’s, for an update', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/admin/server-backup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ level: 'light' }),
+        });
+        expect(res.status).toBe(422);
+        expect(serverRecords()).toEqual([]);
+    });
+
     test(
         'a second start while one runs is refused, naming the archive being written',
         async () => {
             const held = holdCaptures();
             try {
-                const first = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
+                const first = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
                 const running = getBackupJob(first.data!.jobId)!;
                 const second = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
                 expect(second.status).toBe(409);
@@ -117,7 +127,7 @@ describe('Server backup routes', () => {
             const held = holdCaptures();
             try {
                 send.mockClear();
-                const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
+                const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
                 const id = data!.jobId;
                 const ids = async (api: typeof adminApi) =>
                     ((await api.admin.backup.jobs.get({ query: {} })).data ?? []).map((job) => job.id);
@@ -212,7 +222,7 @@ describe('Server backup routes', () => {
         async () => {
             const held = holdCaptures();
             try {
-                const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'light' });
+                const { data } = await ctx.alice.api.admin['server-backup'].post({ level: 'full' });
                 const name = getBackupJob(data!.jobId)!.artifact!;
                 writeFileSync(serverSidecarPath(join(getBackupsDir(), name)), '{ not json');
                 const res = await ctx.alice.api.admin['server-backup'].archives({ name }).delete();

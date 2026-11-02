@@ -1,12 +1,12 @@
 // The admin routes for backing up the whole server: start a backup, list and delete the archives in the backups
 // folder, upload one to the backup destination, and check that the destination works. Only the owner of the server may
 // use them, because an archive holds everything on the server. Their paths carry no owner id, as no Home holds a
-// server backup.
+// server backup. A backup started here is Full or Full + S3: a Light one is the launcher's.
 // There is no download: an archive leaves the machine by scp or the bucket, never through a browser.
 
 import type { ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
-import { BACKUP_LEVELS } from '@workspace/lib/validation';
+import { FULL_BACKUP_LEVELS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { requireOwner } from '../lib/auth/access';
 import { hasS3Mounts } from '../lib/backup/enumerate-homes';
@@ -27,7 +27,7 @@ export const serverBackupRouter = new Elysia({ name: 'server-backup' })
             const job = await startServerBackup({ level: body.level, reason: 'manual', startedBy: user.id });
             return { jobId: job.id };
         },
-        { auth: true, body: t.Object({ level: t.UnionEnum(BACKUP_LEVELS) }) },
+        { auth: true, body: t.Object({ level: t.UnionEnum(FULL_BACKUP_LEVELS) }) },
     )
 
     .get(

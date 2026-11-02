@@ -11,6 +11,7 @@ export {
     buildBackupStamp,
     canUploadServerArchive,
     FAILED_RESTORE_SUFFIX,
+    FULL_BACKUP_LEVELS,
     incompleteReason,
     isCompleteArchive,
     ON_DEMAND_BACKUP_REASONS,

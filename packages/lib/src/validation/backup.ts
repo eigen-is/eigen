@@ -18,11 +18,12 @@ import {
     BACKUP_LEVELS,
     BACKUP_REASONS,
     BACKUP_VERIFY_STATUSES,
+    FULL_BACKUP_LEVELS,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';
 
-export { BACKUP_LEVELS, BACKUP_REASONS };
+export { BACKUP_LEVELS, BACKUP_REASONS, FULL_BACKUP_LEVELS };
 
 // One grammar for the names in the backups folder, so the pane, the upload route and the artifact
 // list can never disagree about what an artifact is called.
