@@ -7,18 +7,17 @@ import type {
     ConditionalFormatConditionName,
     DataBarRule,
     DefaultConditionalFormatRule,
-    SingleRange,
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
+import { toA1 } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
-import { getCellValue, getRangeByTxt } from './cell';
+import { getRangeByTxt } from './cell';
 import { createContextResolver } from './formula-cache';
 import { checkProtectionFormatCells } from './protection';
 import { isRealNum } from './validation';
@@ -44,12 +43,20 @@ const KNOWN_CONDITION_NAMES = [
     'formula',
 ] as const satisfies readonly ConditionalFormatConditionName[];
 
-const ONLY_SINGLE_CELL = 'Only a single cell can be referenced';
-const VALUE_MUST_BE_NUMBER_OR_CELL = 'The condition value can only be a number or a single cell';
-const VALUE_OR_CELL = 'Enter a value or a single cell';
+const SINGLE_CELL = 'Enter a single cell, such as =A1';
+const NUMBER_OR_CELL = 'Enter a number, or a cell such as =A1';
+const VALUE_OR_CELL = 'Enter a value, or a cell such as =A1';
 
-// What a rule compares each cell against. A value read from a cell keeps that cell's range beside it.
-type RuleValues = { conditionRange: SingleRange[]; conditionValue: (string | number)[] };
+// The formulas Excel writes for a rule whose value reads a cell, with the rule's top-left cell and its typed values.
+// Like the xlsx import, the editor stores such a rule as a formula rule, so it reads the cell each time it paints.
+const REFERENCE_FORMULAS: Partial<Record<ConditionalFormatConditionName, (cell: string, values: string[]) => string>> =
+    {
+        greaterThan: (cell, [value]) => `${cell}>${value}`,
+        lessThan: (cell, [value]) => `${cell}<${value}`,
+        equal: (cell, [value]) => `${cell}=${value}`,
+        textContains: (cell, [value]) => `NOT(ISERROR(SEARCH(${value},${cell})))`,
+        between: (cell, [lower, upper]) => `AND(${cell}>=${lower},${cell}<=${upper})`,
+    };
 
 // Why the dialog's rule can't be saved, or null when it can. The dialog shows the reason under its fields and stays
 // open, so the check runs before setConditionRules.
@@ -64,17 +71,24 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
     // rulesType is a plain string, so a name the engine doesn't know would save a rule that never paints.
     if (!isKnownConditionName(rules.rulesType)) return;
     const values = readRuleValues(ctx, rules);
-    if (typeof values === 'string') return;
+    const cellrange = ctx.selections ?? [];
+    const [anchor] = cellrange;
+    if (typeof values === 'string' || !anchor) return;
 
+    const formula = REFERENCE_FORMULAS[rules.rulesType];
+    const readsCell = formula && values.some(isCellReference);
+    const topLeft = toA1(anchor.row[0], anchor.column[0]);
+    const operands = values.map((value) => value.replace(/^=/, ''));
     const rule: DefaultConditionalFormatRule = {
         type: 'default',
-        cellrange: ctx.selections ?? [],
+        cellrange,
         format: {
             textColor: rules.textColor.check ? rules.textColor.color : null,
             cellColor: rules.cellColor.check ? rules.cellColor.color : null,
         },
-        conditionName: rules.rulesType,
-        ...values,
+        conditionName: readsCell ? 'formula' : rules.rulesType,
+        conditionRange: [],
+        conditionValue: readsCell ? [`=${formula(topLeft, operands)}`] : values,
     };
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -88,27 +102,27 @@ function isKnownConditionName(s: string): s is ConditionalFormatConditionName {
 }
 
 // The rule's values as the dialog typed them, or the message that refuses them.
-function readRuleValues(ctx: Context, rules: ConditionRulesProps): RuleValues | string {
+function readRuleValues(ctx: Context, rules: ConditionRulesProps): string[] | string {
     switch (rules.rulesType) {
         case 'greaterThan':
         case 'lessThan':
-            return readTypedValues(ctx, [rules.rulesValue], isRealNum, VALUE_MUST_BE_NUMBER_OR_CELL);
+            return checkTypedValues(ctx, [rules.rulesValue], isRealNum, NUMBER_OR_CELL);
         // These also compare text, so only an empty value is refused.
         case 'equal':
         case 'textContains':
-            return readTypedValues(ctx, [rules.rulesValue], (v) => v !== '', VALUE_OR_CELL);
+            return checkTypedValues(ctx, [rules.rulesValue], (v) => v !== '', VALUE_OR_CELL);
         case 'between':
-            return readTypedValues(
+            return checkTypedValues(
                 ctx,
                 [rules.betweenValue.value1, rules.betweenValue.value2],
                 isRealNum,
-                VALUE_MUST_BE_NUMBER_OR_CELL,
+                NUMBER_OR_CELL,
             );
         case 'occurrenceDate':
             if (!rules.dateValue) return 'Please select a date';
-            return { conditionRange: [], conditionValue: [rules.dateValue] };
+            return [rules.dateValue];
         case 'duplicateValue':
-            return { conditionRange: [], conditionValue: [rules.repeatValue] };
+            return [rules.repeatValue];
         case 'top10':
         case 'top10_percent':
         case 'last10':
@@ -117,45 +131,37 @@ function readRuleValues(ctx: Context, rules: ConditionRulesProps): RuleValues | 
             if (n.toString() !== rules.projectValue || n < 1 || n > 1000) {
                 return 'Please enter an integer between 1 and 1000';
             }
-            return { conditionRange: [], conditionValue: [rules.projectValue] };
+            return [rules.projectValue];
         }
         default:
-            return { conditionRange: [], conditionValue: [] };
+            return [];
     }
 }
 
-// Each typed value is either one cell's reference, which reads that cell's value, or a value `accepts` takes as typed.
-function readTypedValues(
+// As in Excel and Google Sheets, a value that starts with = names one cell, such as =A1 or =Data!A1. Any other value,
+// FY2024 included, is the value itself, and `accepts` decides whether the rule takes it.
+function checkTypedValues(
     ctx: Context,
-    typed: readonly string[],
+    typed: string[],
     accepts: (value: string) => boolean,
     refusal: string,
-): RuleValues | string {
-    const values: RuleValues = { conditionRange: [], conditionValue: [] };
+): string[] | string {
     for (const value of typed) {
-        const ranges = getRangeByTxt(ctx, value);
-        if (ranges.length === 0) {
+        if (!isCellReference(value)) {
             if (!accepts(value)) return refusal;
-            values.conditionValue.push(value);
             continue;
         }
+        const ranges = getRangeByTxt(ctx, value.slice(1));
         const [range] = ranges;
-        if (ranges.length > 1 || !range || range.row[0] !== range.row[1] || range.column[0] !== range.column[1]) {
-            return ONLY_SINGLE_CELL;
+        if (ranges.length !== 1 || !range || range.row[0] !== range.row[1] || range.column[0] !== range.column[1]) {
+            return SINGLE_CELL;
         }
-        // A reference that names a sheet, such as Data!A1, reads that sheet.
-        const data = getFlowdata(ctx, range.sheetId);
-        values.conditionRange.push({ row: range.row, column: range.column });
-        values.conditionValue.push(toRuleValue(data && getCellValue(range.row[0], range.column[0], data)));
     }
-    return values;
+    return typed;
 }
 
-// A cell's value can be a boolean too, which the rule stores as text.
-function toRuleValue(raw: unknown): string | number {
-    if (typeof raw === 'number' || typeof raw === 'string') return raw;
-    if (raw == null) return '';
-    return String(raw);
+function isCellReference(value: string): boolean {
+    return value.startsWith('=');
 }
 
 // Cache for getComputeMap — avoids recomputing the entire CF map on every

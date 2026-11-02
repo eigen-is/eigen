@@ -74,11 +74,11 @@ test('it adds a Greater than rule over the selection on OK and closes', async ()
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('Enter in the value field submits, and a typed cell reads that cell', async () => {
+test('Enter in the value field submits, and a cell typed with = stays a reference', async () => {
     const dialog = await openRule('equal');
-    await dialog.type('Value', 'A1');
+    await dialog.type('Value', '=A1');
     await act(async () => pressEnter(dialog.field('Value')));
-    expect(values(dialog.context())).toEqual([[5]]);
+    expect(values(dialog.context())).toEqual([['=B2=A1']]);
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
@@ -87,14 +87,14 @@ test('a refused value stays open with the reason under the field and the typed v
     await dialog.type('Value', 'abc');
     await dialog.click('OK');
     expect(dialog.dialogs()).toHaveLength(1);
-    expect(alert()).toBe('The condition value can only be a number or a single cell');
+    expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Value').value).toBe('abc');
     expect(rules(dialog.context())).toEqual([]);
     expect(dialog.context().warnDialog).toBeUndefined();
 
-    await dialog.type('Value', 'A1:B2');
+    await dialog.type('Value', '=A1:B2');
     await act(async () => pressEnter(dialog.field('Value')));
-    expect(alert()).toBe('Only a single cell can be referenced');
+    expect(alert()).toBe('Enter a single cell, such as =A1');
     expect(dialog.dialogs()).toHaveLength(1);
 });
 
@@ -102,7 +102,7 @@ test('Between takes two values, and refuses an empty second one', async () => {
     const dialog = await openRule('between');
     await dialog.type('Lower value', '1');
     await dialog.click('OK');
-    expect(alert()).toBe('The condition value can only be a number or a single cell');
+    expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Lower value').value).toBe('1');
     await dialog.type('Upper value', '9');
     await dialog.click('OK');

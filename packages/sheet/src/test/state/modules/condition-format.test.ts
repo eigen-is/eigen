@@ -253,29 +253,64 @@ function refusal(draft: ConditionRulesProps): string | null {
     return error;
 }
 
-const NUMBER_OR_CELL = 'The condition value can only be a number or a single cell';
+const NUMBER_OR_CELL = 'Enter a number, or a cell such as =A1';
 
 describe('state/condition-format — setConditionRules', () => {
-    it('reads a single cell typed as the value of a one-value rule', () => {
-        for (const rulesType of ['greaterThan', 'lessThan', 'equal', 'textContains'] as const) {
+    it('stores a value typed with = as the formula Excel writes, so the rule reads the cell live', () => {
+        const formulas: [string, Partial<ConditionRulesProps>, string][] = [
+            ['greaterThan', { rulesValue: '=A1' }, '=B2>A1'],
+            ['lessThan', { rulesValue: '=$A$1' }, '=B2<$A$1'],
+            ['equal', { rulesValue: '=A1' }, '=B2=A1'],
+            ['textContains', { rulesValue: '=A1' }, '=NOT(ISERROR(SEARCH(A1,B2)))'],
+            ['between', { betweenValue: { value1: '=A1', value2: '9' } }, '=AND(B2>=A1,B2<=9)'],
+        ];
+        for (const [rulesType, typed, formula] of formulas) {
             const ctx = ctxForRule();
-            setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'A1' }));
+            setConditionRules(ctx, ruleDraft(rulesType, typed));
             expect(savedRules(ctx)).toEqual([
                 {
                     type: 'default',
                     cellrange: [{ row: [1, 2], column: [1, 2] }],
                     format: { textColor: null, cellColor: '#d0fae5' },
-                    conditionName: rulesType,
-                    conditionRange: [{ row: [0, 0], column: [0, 0] }],
-                    conditionValue: [5],
+                    conditionName: 'formula',
+                    conditionRange: [],
+                    conditionValue: [formula],
                 },
             ]);
         }
     });
 
-    it('refuses a range or a list of cells as the value of a one-value rule', () => {
-        for (const rulesValue of ['A1:B1', 'A1,B1']) {
-            expect(refusal(ruleDraft('greaterThan', { rulesValue }))).toBe('Only a single cell can be referenced');
+    it('repaints a rule that reads a cell when that cell changes', () => {
+        const ctx = ctxForRule();
+        ctx.sheets[0].data = numberRows([
+            [5, 0, 0],
+            [0, 4, 6],
+            [0, 8, 2],
+        ]);
+        setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue: '=$A$1' }));
+        expect(Object.keys(getComputeMap(ctx) ?? {}).sort()).toEqual(['1_2', '2_1']);
+        ctx.sheets[0].data = numberRows([
+            [3, 0, 0],
+            [0, 4, 6],
+            [0, 8, 2],
+        ]);
+        expect(Object.keys(getComputeMap(ctx) ?? {}).sort()).toEqual(['1_1', '1_2', '2_1']);
+    });
+
+    it('takes text that looks like a cell, such as FY2024, as text', () => {
+        for (const rulesValue of ['FY2024', 'Q1', 'ID1', 'A1']) {
+            for (const rulesType of ['equal', 'textContains']) {
+                const ctx = ctxForRule();
+                setConditionRules(ctx, ruleDraft(rulesType, { rulesValue }));
+                expect(savedRules(ctx)).toMatchObject([{ conditionName: rulesType, conditionValue: [rulesValue] }]);
+            }
+            expect(refusal(ruleDraft('greaterThan', { rulesValue }))).toBe(NUMBER_OR_CELL);
+        }
+    });
+
+    it('refuses a range, a list of cells or no cell after =', () => {
+        for (const rulesValue of ['=A1:B1', '=A1,B1', '=abc', '=', '=Nowhere!A1']) {
+            expect(refusal(ruleDraft('greaterThan', { rulesValue }))).toBe('Enter a single cell, such as =A1');
         }
     });
 
@@ -300,7 +335,7 @@ describe('state/condition-format — setConditionRules', () => {
             const ctx = ctxForRule();
             setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'abc' }));
             expect(savedValues(ctx)).toEqual([['abc']]);
-            expect(refusal(ruleDraft(rulesType))).toBe('Enter a value or a single cell');
+            expect(refusal(ruleDraft(rulesType))).toBe('Enter a value, or a cell such as =A1');
         }
     });
 
@@ -321,8 +356,14 @@ describe('state/condition-format — setConditionRules', () => {
     it('reads a cell on another sheet from that sheet', () => {
         const ctx = ctxForRule();
         ctx.sheets[1].name = 'Data';
-        ctx.sheets[1].data = numberRows([[9]]);
-        setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue: 'Data!A1' }));
-        expect(savedValues(ctx)).toEqual([[9]]);
+        ctx.sheets[1].data = numberRows([[6]]);
+        ctx.sheets[0].data = numberRows([
+            [0, 0, 0],
+            [0, 4, 7],
+            [0, 9, 1],
+        ]);
+        setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue: '=Data!$A$1' }));
+        expect(savedValues(ctx)).toEqual([['=B2>Data!$A$1']]);
+        expect(Object.keys(getComputeMap(ctx) ?? {}).sort()).toEqual(['1_2', '2_1']);
     });
 });

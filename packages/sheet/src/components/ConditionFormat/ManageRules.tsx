@@ -51,6 +51,7 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         case 'notEqual':
         case 'textContains':
         case 'occurrenceDate':
+        case 'formula':
             return values[0] != null ? `${label} ${values[0]}` : label;
         case 'between':
         case 'notBetween':

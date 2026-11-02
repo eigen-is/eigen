@@ -66,6 +66,11 @@ test('each rule has a named delete button that removes it at once', async () => 
     expect(dialog.dialogs()).toHaveLength(1);
 });
 
+test('a formula rule, such as one whose value reads a cell, shows its formula', async () => {
+    const dialog = await openManageRules([{ ...GREATER_THAN, conditionName: 'formula', conditionValue: ['=A1>$B$1'] }]);
+    expect(dialog.dialogs()[0]?.textContent).toContain('Custom formula =A1>$B$1');
+});
+
 test('a protected sheet keeps its rule and shows its hint', async () => {
     const hintText = 'This sheet is protected.';
     const dialog = await openManageRules([GREATER_THAN], { authority: { sheet: 1, hintText } });
