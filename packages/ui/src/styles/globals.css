@@ -481,10 +481,11 @@
         padding: 1rem;
     }
 
-    /* The wordmark's ket as a right edge, for an active sidebar item: at the logo's 4:15 angle
-       whatever the height. The SVG is the two corners right of the ket, sized to the full height,
-       and the mask cuts them out. */
-    .eigen-ket-end {
+    /* The wordmark's ket as a right edge, for a sidebar item's hover and active fills: at the
+       logo's 4:15 angle whatever the height. The SVG is the two corners right of the ket, sized to
+       the full height, and the mask cuts them out. A focused item drops the mask, which would cut
+       its focus ring too. */
+    .eigen-ket-end:not(:focus-visible) {
         mask:
             linear-gradient(#000 0 0),
             url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='15'%3E%3Cpath d='M0 0H4V15H0L4 7.5Z'/%3E%3C/svg%3E")

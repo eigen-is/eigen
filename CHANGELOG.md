@@ -11,7 +11,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Changed
 
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
-- **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open item in the sidebar ends in a point, as the eigen logo does
+- **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
 - **Scrolling in Sheets** — the grid keeps up with the scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets
