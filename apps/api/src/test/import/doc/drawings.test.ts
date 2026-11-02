@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
+import { TEXT_BOX_DEFAULT_WIDTH } from '@workspace/lib/docs/eigendoc';
 import { CAPTION_LOOK, LIST_LEVEL } from '../../../lib/document/looks';
 import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
 import { MAX_MEDIA_PARTS, PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
@@ -488,6 +489,20 @@ describe('size', () => {
             [601, 150],
         ]);
     });
+
+    test('an extent that is no number gives no size on that side', async () => {
+        const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);
+        const { json } = await importDocxBody(
+            [forged('cx="wide" cy="381000"'), forged('cx="1e400" cy="1e400"'), forged('cx="381000" cy="tall"')]
+                .map(paragraph)
+                .join(''),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+            [null, null],
+            [40, null],
+        ]);
+    });
 });
 
 // VML's office attributes are read by their namespace, whatever prefix binds it.
@@ -675,6 +690,32 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
+    test('an extent that is no number or not positive gives no size, and a fraction of an EMU rounds', async () => {
+        const { boxes } = await boxesOf(
+            [
+                anchored({ cx: Number.NaN, cy: Number.NaN }),
+                anchored({ cx: -1905000, cy: 0 }),
+                anchored({ cx: 2857499.6, cy: 1428750.4 }),
+            ].join(''),
+        );
+        expect(boxes.map((box) => [box.attrs?.['width'], box.attrs?.['height']])).toEqual([
+            [TEXT_BOX_DEFAULT_WIDTH, null],
+            [TEXT_BOX_DEFAULT_WIDTH, null],
+            [300, 150],
+        ]);
+    });
+
+    test('a box aligned right with no width it can read is placed at the right edge of the column', async () => {
+        const right =
+            '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV>';
+        const { boxes } = await boxesOf(
+            `${anchored({ position: right, cx: Number.NaN })}${anchored({ position: right, cx: 0 })}`,
+        );
+        const [unread, zero] = boxes.map((box) => box.attrs?.['offsetX']);
+        expect(unread).toBe(zero);
+        expect(typeof unread).toBe('number');
+    });
+
     test('its fill, outline, insets, vertical alignment and rounded corners are its look', async () => {
         const spPr =
             '<a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FFF2CC"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a:prstDash val="dash"/></a:ln>';
@@ -705,6 +746,26 @@ describe('text boxes as boxes', () => {
             [null, '1px double #000000'],
             [null, '1px dotted #000000'],
             [null, null],
+        ]);
+    });
+
+    test("a gradient's first stop, a see-through color and the style's refs read as opaque colors", async () => {
+        const rect = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+        const halfClear = (hex: string) => `<a:srgbClr val="${hex}"><a:alpha val="50000"/></a:srgbClr>`;
+        const gradient = `<a:gradFill><a:gsLst><a:gs pos="0">${halfClear('FFF2CC')}</a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst></a:gradFill>`;
+        const solid = `<a:solidFill>${halfClear('C00000')}</a:solidFill><a:ln><a:solidFill>${halfClear('0070C0')}</a:solidFill></a:ln>`;
+        const style = `<wps:style><a:lnRef idx="1"><a:srgbClr val="00B050"/></a:lnRef><a:fillRef idx="1"><a:srgbClr val="7030A0"/></a:fillRef><a:effectRef idx="0"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></wps:style>`;
+        const { boxes } = await boxesOf(
+            [
+                anchored({ spPr: `${rect}${gradient}` }),
+                anchored({ spPr: `${rect}${solid}` }),
+                anchored({ spPr: rect, style }),
+            ].join(''),
+        );
+        expect(boxes.map((box) => [box.attrs?.['fill'], box.attrs?.['outline']])).toEqual([
+            ['#fff2cc', null],
+            ['#c00000', '1px solid #0070c0'],
+            ['#7030a0', '1px solid #00b050'],
         ]);
     });
 
@@ -1153,6 +1214,16 @@ describe('charts', () => {
             [601, 301],
             [70, CHART_MAX_SIDE],
         ]);
+    });
+
+    test('a chart whose extent is no number or not positive takes the default size', async () => {
+        const runs = ['cx="wide" cy="2743200"', 'cx="4572000" cy="1e400"', 'cx="-4572000" cy="2743200"'].map((extent) =>
+            chartRun('rId20', { extent }),
+        );
+        const { json } = await imported(paragraph(runs.join('')), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual(
+            runs.map(() => [CHART_DEFAULT_SIZE.width, CHART_DEFAULT_SIZE.height]),
+        );
     });
 
     // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.

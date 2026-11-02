@@ -28,7 +28,7 @@ import {
 import { A_NS, EMU_PER_PX, V_NS, W10_NS, WPS_NS } from '../../ooxml/ooxml';
 import type { Item } from './assemble';
 import { buildBlocks } from './assemble';
-import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { storyParagraphs } from './paragraphs';
 
@@ -79,8 +79,7 @@ export function readTextBox(
     const spPr = xmlChild(shape, WPS_NS, 'spPr');
     const style = xmlChild(shape, WPS_NS, 'style');
     const bodyPr = xmlChild(shape, WPS_NS, 'bodyPr');
-    const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
-    const cy = roundedInt(extent && xmlAttr(extent, '', 'cy')) ?? 0;
+    const { cx, cy } = extentOf(extent);
     const grows = !!bodyPr && xmlElements(bodyPr).some((child) => child.local === 'spAutoFit');
     const geometry = spPr && xmlChild(spPr, A_NS, 'prstGeom');
     const preset = geometry ? xmlAttr(geometry, '', 'prst') : 'rect';
@@ -203,12 +202,12 @@ function shapeFill(reader: Reader, spPr: XmlElement | undefined, style: XmlEleme
     if (own?.local === 'noFill') return null;
     if (own?.local === 'gradFill') {
         const stop = descendants(own, A_NS, 'gs')[0];
-        return readHexColor(drawingColor(stop, reader.colors)?.slice(0, 7));
+        return shapeColor(reader, stop);
     }
-    if (own) return readHexColor(drawingColor(own, reader.colors)?.slice(0, 7));
+    if (own) return shapeColor(reader, own);
     const ref = style && xmlChild(style, A_NS, 'fillRef');
     if (!ref || Number(xmlAttr(ref, '', 'idx') ?? 0) === 0) return null;
-    return readHexColor(drawingColor(ref, reader.colors)?.slice(0, 7));
+    return shapeColor(reader, ref);
 }
 
 // The shape's own line, else its style's, in the cell-border form: its width in px between a cell border's bounds, its
@@ -219,13 +218,18 @@ function shapeOutline(reader: Reader, spPr: XmlElement | undefined, style: XmlEl
     if (line && xmlChild(line, A_NS, 'noFill')) return null;
     const fill = line && xmlChild(line, A_NS, 'solidFill');
     const fromStyle = !fill && ref && Number(xmlAttr(ref, '', 'idx') ?? 0) > 0 ? ref : undefined;
-    const color = readHexColor(drawingColor(fill ?? fromStyle, reader.colors)?.slice(0, 7));
+    const color = shapeColor(reader, fill ?? fromStyle);
     if (!color) return null;
     const width = (lineWidthEmu(line ? xmlAttr(line, '', 'w') : undefined) ?? DEFAULT_LINE_WIDTH_EMU) / EMU_PER_PX;
     const dash = line && xmlChild(line, A_NS, 'prstDash');
     const kind: BorderStyle =
         line && xmlAttr(line, '', 'cmpd') === 'dbl' ? 'double' : strokeStyleOf(dash && xmlAttr(dash, '', 'val'));
     return borderValue({ width: fitBorderPx(width), style: kind, color });
+}
+
+// The color an element of a fill or a line names, through the theme. The box draws it opaque, so its alpha goes.
+function shapeColor(reader: Reader, element: XmlElement | undefined): string | null {
+    return readHexColor(drawingColor(element, reader.colors)?.slice(0, 7));
 }
 
 // A bodyPr anchor as the box's vertical alignment: DrawingML's center is the box's middle, and the top is its default.

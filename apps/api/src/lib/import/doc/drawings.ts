@@ -23,7 +23,7 @@ import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, ParagraphItem } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
-import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
@@ -76,8 +76,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 continue;
             }
             const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
-            const cx = roundedInt(ext && xmlAttr(ext, '', 'cx'));
-            const cy = roundedInt(ext && xmlAttr(ext, '', 'cy'));
+            const { cx, cy } = extentOf(ext);
             const size = cx ? pictureSize(cx / EMU_PER_PX, cy ? cy / EMU_PER_PX : null, room) : NO_SIZE;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, ...size, ...layout } });
             if (anchored && inBand) reader.lost('band-images-unanchored');
@@ -274,8 +273,7 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
 // Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
 // that size is drawn at in the file.
 function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
-    const cx = roundedInt(ext && xmlAttr(ext, '', 'cx')) ?? 0;
-    const cy = roundedInt(ext && xmlAttr(ext, '', 'cy')) ?? 0;
+    const { cx, cy } = extentOf(ext);
     const drawn = cx > 0 && cy > 0;
     const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
     const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
@@ -333,8 +331,7 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
-    const extent = xmlChild(anchor, WP_NS, 'extent');
-    const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
+    const { cx } = extentOf(xmlChild(anchor, WP_NS, 'extent'));
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
     const placed = align ? alignedIn(xmlText(align).trim(), area.width, cx) : roundedInt(offset && xmlText(offset));
     // The offset from the text column's left edge, kept on the paper.
