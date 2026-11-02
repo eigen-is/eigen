@@ -1,6 +1,6 @@
 // One grammar for the names in the backups folder: a home archive's and a server archive's, the stamp both carry, and
-// the suffixes of the folders a restore leaves beside a home. The admin pane, the routes, retention and the CLI read
-// names with it, so they never disagree about what a file is.
+// the suffixes of the folders a restore leaves beside a home. Every reader of those names reads them with it, such as
+// the admin pane, retention or the CLI, so they never disagree about what a file is.
 
 import type { BackupLevel, BackupReason, ServerArchive } from '../types/backup';
 import { BACKUP_LEVELS, BACKUP_REASONS } from '../types/backup';

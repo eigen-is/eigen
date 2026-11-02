@@ -5,15 +5,13 @@
 
 import type { RestartReason, SSEventRestartNotice } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { RESTART_NOTICE_EXPIRY_MS } from '@workspace/lib/validation';
 import { broadcastToLoadedHomes } from '../home/get-home';
-
-// Room for what follows the announced time and still runs on this server: the backup, the handover and the stop.
-// A launcher that died meanwhile, such as one killed with -9, takes no notice back.
-const EXPIRY_MS = 5 * 60_000;
 
 export type AnnouncedRestart = { at: string };
 
-type RestartNotice = { at: number; reason: RestartReason; message: string | null };
+// `announcedAt` and `at` are this server's clock, in milliseconds.
+type RestartNotice = { announcedAt: number; at: number; reason: RestartReason; message: string | null };
 
 let current: RestartNotice | null = null;
 let expiry: Timer | undefined;
@@ -21,9 +19,10 @@ let expiry: Timer | undefined;
 // Replaces any notice there is, and starts its expiry over.
 export function announceRestart(inSeconds: number, reason: RestartReason, message: string | null): AnnouncedRestart {
     clearTimeout(expiry);
-    const at = Date.now() + inSeconds * 1000;
-    current = { at, reason, message };
-    expiry = setTimeout(clearRestartNotice, inSeconds * 1000 + EXPIRY_MS);
+    const announcedAt = Date.now();
+    const at = announcedAt + inSeconds * 1000;
+    current = { announcedAt, at, reason, message };
+    expiry = setTimeout(clearRestartNotice, inSeconds * 1000 + RESTART_NOTICE_EXPIRY_MS);
     // A notice must never hold the process open at shutdown.
     expiry.unref();
     broadcastToLoadedHomes(buildRestartNoticeEvent());
@@ -39,9 +38,10 @@ export function clearRestartNotice(): void {
 
 export function buildRestartNoticeEvent(): SSEventRestartNotice {
     if (!current) return { type: SSEventType.SERVER_RESTART_NOTICE, notice: null };
-    const { at, reason, message } = current;
+    const { announcedAt, at, reason, message } = current;
+    const now = Date.now();
     return {
         type: SSEventType.SERVER_RESTART_NOTICE,
-        notice: { reason, message, msLeft: Math.max(0, at - Date.now()) },
+        notice: { reason, message, msLeft: Math.max(0, at - now), msSinceAnnounced: now - announcedAt },
     };
 }

@@ -130,9 +130,12 @@ export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => 
     return whenHomeSlotFree(ownerId, () => holdSlot(ownerId, holder));
 }
 
+// The jobs of a whole-server archive: its backup and its upload.
+export type ServerJobKind = Extract<BackupJob['kind'], 'server-backup' | 'upload'>;
+
 // A server backup and an archive's upload are the owner's alone: they name a server archive, which holds every
 // home's mail, password hashes and mount keys.
-export function isServerJob(kind: BackupJob['kind']): kind is 'server-backup' | 'upload' {
+export function isServerJob(kind: BackupJob['kind']): kind is ServerJobKind {
     return kind === 'server-backup' || kind === 'upload';
 }
 

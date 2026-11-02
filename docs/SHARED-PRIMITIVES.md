@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2100 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2102 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -547,7 +547,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (445)
+## Types (446)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -787,6 +787,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `Fill` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `FillPaint` | `@workspace/lib/types/background` | packages/lib/src/types/background.ts |
 | `BackupArtifact` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
+| `BackupAuthRows` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupEntry` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupJob` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupLevel` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
@@ -997,7 +998,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1139)
+## Utilities & constants (1140)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1697,6 +1698,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `mountStorageIdentity` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `orgOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `parseOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
+| `RESTART_REASONS` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SERVER_STORAGE_TYPES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `sharedChainHead` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `SSEventType` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
@@ -1762,7 +1764,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseStringRecord` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `RESTART_MESSAGE_PATTERN` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
-| `RESTART_REASONS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
+| `RESTART_NOTICE_EXPIRY_MS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `SERVER_ARCHIVE_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `SERVER_ARCHIVE_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |

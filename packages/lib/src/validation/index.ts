@@ -40,7 +40,7 @@ export {
     MAX_RESTART_MESSAGE_LENGTH,
     MAX_RESTART_WAIT_SECONDS,
     RESTART_MESSAGE_PATTERN,
-    RESTART_REASONS,
+    RESTART_NOTICE_EXPIRY_MS,
 } from './restart';
 export { CONTROL_CHARS, NO_CONTROL_PATTERN } from './text';
 export { ROLE_MAILBOX_LOCAL_PARTS, validateUsername } from './username';

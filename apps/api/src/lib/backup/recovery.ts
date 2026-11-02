@@ -7,8 +7,9 @@
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
-import { parseBackupArtifactName, parseServerArchiveName } from '@workspace/lib/validation';
-import { getDataRoot, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
+import { parseOwnerId } from '@workspace/lib/types/owner';
+import { BACKUP_OWNER_ID, parseBackupArtifactName, parseServerArchiveName } from '@workspace/lib/validation';
+import { getDataRoot, homeDirUnder, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
 import { ARCHIVE_MODE } from './archive';
 import { describeError } from './errors';
 import {
@@ -29,9 +30,9 @@ const RESTORING_MARKER = 'restoring.json';
 // Written beside it the moment the install is done, before the mark clears. A marker without this
 // beside it means the process died with a home folder that is somewhere between the two states.
 const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
-// `preRestoreName` is null when there was no home folder to move aside (a restore of a deleted
-// user). The marker is still written: the folder the install puts in place is not a home until
-// it is done, and nothing but this says so. `parkName` is what that folder goes aside as: a
+// `homeDir` is where the home was when the note was written. `preRestoreName` is null when there was no home folder
+// to move aside (a restore of a deleted user). The marker is still written: the folder the install puts in place is
+// not a home until it is done, and nothing but this says so. `parkName` is what that folder goes aside as: a
 // `.failed-restore-` name for a home from an archive, the copy's own name for a safety copy put back.
 type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null; parkName: string };
 
@@ -81,11 +82,22 @@ export function recoverInterruptedRestores(): void {
         for (const name of fs.readdirSync(homesDir)) {
             if (!isRestoreStagingName(name)) continue;
             const restoreDir = path.join(homesDir, name);
-            recoverRestore(restoreDir);
+            recoverRestore(restoreDir, (marker) => homeBesideNotes(homesDir, marker));
             dropRestoringMarker(restoreDir);
             fs.rmSync(restoreDir, { recursive: true, force: true });
         }
     }
+}
+
+// The home that notes beside the homes speak of: the owner's folder in the homes folder they sit in. The path they
+// were written with must end in that same folder and its homes folder. Its start may differ, so a data folder moved
+// since, such as to another disk, still recovers.
+function homeBesideNotes(homesDir: string, marker: RestoringMarker): string | null {
+    const homeDir = homeDirUnder(path.dirname(homesDir), marker.ownerId);
+    if (path.dirname(homeDir) !== homesDir) return null;
+    const sameName = path.basename(marker.homeDir) === path.basename(homeDir);
+    const sameKind = path.basename(path.dirname(marker.homeDir)) === path.basename(homesDir);
+    return sameName && sameKind ? homeDir : null;
 }
 
 // The marker goes before the rest of its folder. A kill partway through removing the folder could otherwise leave it
@@ -104,47 +116,16 @@ function recoverOlderBuildRestores(): void {
     for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
         const notesDir = path.join(stagingRoot, entry.name);
-        recoverRestore(notesDir);
+        recoverRestore(notesDir, homeInDataRoot);
         dropRestoringMarker(notesDir);
     }
 }
 
-// A restore killed anywhere between the move-aside and the last install step left the home's path
-// empty or holding a folder it had not finished with, and the home's real contents under the
-// `{id}.pre-restore-{ts}` its marker names. The process that knew about it is dead, so nothing else
-// will ever put it back. This does, and logs it as an error. A completion note beside the marker
-// tells a restore that finished from one that did not. A safety copy with no marker is not evidence
-// of anything: nothing deletes them automatically, so a deleted user leaves one behind.
-function recoverRestore(notesDir: string): void {
-    const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
-    if (!marker) return;
-    // The install finished. Whatever the job did after that cannot leave the home folder out of place.
-    if (fs.existsSync(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return;
-    const aside = marker.preRestoreName && path.join(path.dirname(marker.homeDir), marker.preRestoreName);
-    // The home never went aside, or the restore's own rollback already put it back. Either way the folder in place
-    // is the home, and this must not move it.
-    if (aside && !fs.existsSync(aside)) return;
-    // A folder that is there without the completion note is the one the install put in place:
-    // a home from an archive moved in just before the kill, or a safety copy renamed into place
-    // before its trash was re-dated. It goes aside under the name the marker gives, exactly as a
-    // failure the job itself caught would have left it. Nothing is deleted, whether or not there
-    // is a copy to put back afterwards.
-    if (fs.existsSync(marker.homeDir)) {
-        fs.renameSync(marker.homeDir, path.join(path.dirname(marker.homeDir), marker.parkName));
-        console.error(
-            `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
-        );
-    }
-    if (!aside) {
-        // A restore of a deleted user: there was no home to move aside, so the only thing to do
-        // is refuse to leave the half-written folder standing as one.
-        console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
-        return;
-    }
-    fs.renameSync(aside, marker.homeDir);
-    console.error(
-        `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
-    );
+// An older build's notes are in the backups folder, apart from the homes, so the path they name must be the owner's
+// home in this data folder exactly.
+function homeInDataRoot(marker: RestoringMarker): string | null {
+    const homeDir = homeDirUnder(getDataRoot(), marker.ownerId);
+    return marker.homeDir === homeDir ? homeDir : null;
 }
 
 // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, so other users of the host read
@@ -170,17 +151,50 @@ function closeArchives(): void {
     }
 }
 
-// The marker survived a crash and names two paths this then renames, so it is read as untrusted
-// input: both names have to be safety copies of exactly the home folder it claims, the one to put back a
-// pre-restore copy.
-function readRestoringMarker(markerPath: string): RestoringMarker | null {
-    if (!fs.existsSync(markerPath)) return null;
-    let value: unknown;
-    try {
-        value = JSON.parse(fs.readFileSync(markerPath, 'utf8'));
-    } catch {
-        return null;
+// A restore killed anywhere between the move-aside and the last install step left the home's path
+// empty or holding a folder it had not finished with, and the home's real contents under the
+// `{id}.pre-restore-{ts}` its marker names. The process that knew about it is dead, so nothing else
+// will ever put it back. This does, and logs it as an error. A completion note beside the marker
+// tells a restore that finished from one that did not. A safety copy with no marker is not evidence
+// of anything: nothing deletes them automatically, so a deleted user leaves one behind. `homeOf` says which home
+// folder the marker may act on, or refuses it.
+function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): void {
+    const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
+    const homeDir = marker && homeOf(marker);
+    if (!marker || !homeDir || !namesCopiesOf(marker, path.basename(homeDir))) return;
+    // The install finished. Whatever the job did after that cannot leave the home folder out of place.
+    if (isRestoreComplete(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return;
+    const aside = marker.preRestoreName && path.join(path.dirname(homeDir), marker.preRestoreName);
+    // The home never went aside, or the restore's own rollback already put it back. Either way the folder in place
+    // is the home, and this must not move it.
+    if (aside && !fs.existsSync(aside)) return;
+    // A folder that is there without the completion note is the one the install put in place:
+    // a home from an archive moved in just before the kill, or a safety copy renamed into place
+    // before its trash was re-dated. It goes aside under the name the marker gives, exactly as a
+    // failure the job itself caught would have left it. Nothing is deleted, whether or not there
+    // is a copy to put back afterwards.
+    if (fs.existsSync(homeDir)) {
+        fs.renameSync(homeDir, path.join(path.dirname(homeDir), marker.parkName));
+        console.error(
+            `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
+        );
     }
+    if (!aside) {
+        // A restore of a deleted user: there was no home to move aside, so the only thing to do
+        // is refuse to leave the half-written folder standing as one.
+        console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
+        return;
+    }
+    fs.renameSync(aside, homeDir);
+    console.error(
+        `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
+    );
+}
+
+// The marker survived a crash and names folders this then renames, so it is read as untrusted input. Its owner must
+// be one whose home a restore replaces, a user or a team. Which home folder that is, its caller decides.
+function readRestoringMarker(markerPath: string): RestoringMarker | null {
+    const value = readNote(markerPath);
     if (typeof value !== 'object' || value === null) return null;
     if (!('ownerId' in value) || !('homeDir' in value) || !('preRestoreName' in value) || !('parkName' in value)) {
         return null;
@@ -188,10 +202,34 @@ function readRestoringMarker(markerPath: string): RestoringMarker | null {
     const { ownerId, homeDir, preRestoreName, parkName } = value;
     if (typeof ownerId !== 'string' || typeof homeDir !== 'string' || typeof parkName !== 'string') return null;
     if (preRestoreName !== null && typeof preRestoreName !== 'string') return null;
-    if (parseSafetyCopyName(parkName)?.homeName !== path.basename(homeDir)) return null;
-    if (preRestoreName !== null) {
-        const parsed = parseSafetyCopyName(preRestoreName);
-        if (parsed?.kind !== 'pre-restore' || parsed.homeName !== path.basename(homeDir)) return null;
-    }
+    const { type } = parseOwnerId(ownerId);
+    if (!BACKUP_OWNER_ID.test(ownerId) || (type !== 'user' && type !== 'team')) return null;
     return { ownerId, homeDir, preRestoreName, parkName };
+}
+
+// Both names the marker gives have to be safety copies of exactly the home folder it acts on, the one to put back a
+// pre-restore copy.
+function namesCopiesOf({ preRestoreName, parkName }: RestoringMarker, homeName: string): boolean {
+    if (parseSafetyCopyName(parkName)?.homeName !== homeName) return false;
+    if (preRestoreName === null) return true;
+    const parsed = parseSafetyCopyName(preRestoreName);
+    return parsed?.kind === 'pre-restore' && parsed.homeName === homeName;
+}
+
+// The completion note as writeRestoreCompleteMarker writes it. Anything else beside a marker says nothing.
+function isRestoreComplete(notePath: string): boolean {
+    const value = readNote(notePath);
+    return (
+        typeof value === 'object' && value !== null && 'completedAt' in value && typeof value.completedAt === 'string'
+    );
+}
+
+// A note's JSON, or undefined for one that is not there or does not parse.
+function readNote(notePath: string): unknown {
+    if (!fs.existsSync(notePath)) return undefined;
+    try {
+        return JSON.parse(fs.readFileSync(notePath, 'utf8'));
+    } catch {
+        return undefined;
+    }
 }

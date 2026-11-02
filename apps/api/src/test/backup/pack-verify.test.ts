@@ -56,6 +56,7 @@ import { getHome } from '../../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
+    countLoopTurns,
     createTeam,
     createTestUser,
     drivePost,
@@ -64,6 +65,7 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
+import { unpackWhole } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -252,7 +254,7 @@ describe('Backup pack and verify', () => {
 
     async function extractFresh(prefix: string): Promise<string> {
         const dir = mkdtempSync(join(TEST_DATA_DIR, prefix));
-        await extractArtifact(artifact, dir);
+        await unpackWhole(artifact, dir);
         return dir;
     }
 
@@ -518,7 +520,11 @@ describe('Backup pack and verify', () => {
         mkdirSync(join(dir, 'home-x', mailbox), { recursive: true });
         writeFileSync(join(dir, 'home-x', mailbox, '1.eml'), 'mail');
         await packFolder(join(dir, 'home-x'), join(dir, 'x.tar.zst'));
-        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'));
+        // A bare folder, with no manifest to bound its unpack by.
+        await extractArtifact(join(dir, 'x.tar.zst'), join(dir, 'out'), {
+            maxBytes: Number.POSITIVE_INFINITY,
+            chargeFolders: true,
+        });
         expect(readFileSync(join(dir, 'out/home-x', mailbox, '1.eml'), 'utf8')).toBe('mail');
         rmSync(dir, { recursive: true, force: true });
     });
@@ -801,7 +807,7 @@ describe('Whole-server archive', () => {
                 const name = basename(member.name);
                 expect(parseBackupArtifactName(name)).toEqual({ ownerId: home.ownerId, at });
                 const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'member-extract-'));
-                await extractArtifact(member, unpackDir);
+                await unpackWhole(member, unpackDir);
                 const { folder, manifest: inner } = readUnpackedHome(unpackDir, home.ownerId, name);
                 expect(inner.ownerId).toBe(home.ownerId);
                 const record = await verifyFolder(folder);
@@ -816,7 +822,7 @@ describe('Whole-server archive', () => {
         async () => {
             const members = await hashArchiveMembers(archivePath);
             const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'server-extract-'));
-            await extractArtifact(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
+            await unpackWhole(members.find((m) => m.name === SERVER_ARCHIVE_SERVER_MEMBER)!, unpackDir);
             const folder = join(unpackDir, buildServerFolderName(at));
             expect(existsSync(join(folder, 'server', SERVER_DATABASES.users))).toBe(true);
             const record = await verifyFolder(folder);
@@ -1146,4 +1152,41 @@ describe('The unpack bound', () => {
         },
         PACK_TIMEOUT_MS,
     );
+});
+
+// A home can hold tens of thousands of databases, and each quick_check blocks the thread. A restore verifies in the API,
+// so other requests run between every few databases.
+describe('verifyFolder', () => {
+    test('lets other work run while it checks the databases', async () => {
+        const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-yield-'));
+        const manifest: BackupManifest = {
+            formatVersion: 1,
+            kind: 'user',
+            ownerId: 'verifyyieldAAAAAAAAAAAAAAAAAAAAA',
+            name: 'yield',
+            createdAt: new Date().toISOString(),
+            appVersion: 'test',
+            server: { domain: 'test', orgId: 'test' },
+            counts: { databases: 0, files: 0, bytes: 0 },
+            mounts: [],
+            entries: [],
+        };
+        writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest));
+        for (let index = 0; index < 120; index++) {
+            mkdirSync(join(folder, 'home', 'mounts', `m${index}`), { recursive: true });
+            new Database(join(folder, 'home', 'mounts', `m${index}`, 'metadata.db')).close();
+        }
+        const turns = countLoopTurns();
+        const turnsAt: number[] = [];
+        try {
+            await verifyFolder(folder, (step) => {
+                if (step === 'verify databases') turnsAt.push(turns.read());
+            });
+        } finally {
+            turns.stop();
+            rmSync(folder, { recursive: true, force: true });
+        }
+        expect(turnsAt).toHaveLength(120);
+        expect(turnsAt.at(-1)).toBeGreaterThan(turnsAt[0]);
+    });
 });

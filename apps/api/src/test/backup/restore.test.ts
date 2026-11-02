@@ -80,7 +80,7 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
-import { expectRealShape, expectRealShapeServed, realShapeHome, waitForJob } from './backup-test-helpers';
+import { expectRealShape, expectRealShapeServed, realShapeHome, unpackWhole, waitForJob } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -786,6 +786,35 @@ describe('Backup restoreHome', () => {
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
         expect(restoreStagingFolders()).toEqual([]);
         // The mark is cleared, so the home serves again — from the folder that was put back.
+        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+
+    // A rollback that could not put the home back leaves it aside, and only the notes tell the next boot where. So the
+    // job keeps them, and the boot finishes the rollback.
+    test('a rollback that fails keeps the notes, and the boot puts the home back', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const homeDir = join(TEST_DATA_DIR, 'home', target.id);
+        const jobId = `restore-rollback-fails-${Date.now()}`;
+        const epochSpy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
+            throw new ApiError(500, 'failed by the test');
+        });
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            // The rollback's first move, the new folder aside.
+            if (from === homeDir && String(to).includes(FAILED_RESTORE_SUFFIX)) throw new Error('rename failed');
+            rename(from, to);
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, jobId)).rejects.toThrow('failed by the test');
+        } finally {
+            epochSpy.mockRestore();
+            renameSpy.mockRestore();
+        }
+
+        const staging = buildRestoreStagingDir(homeDir, jobId);
+        expect(existsSync(join(staging, 'restoring.json'))).toBe(true);
+        await recoverBackupsAfterRestart();
+        expect(restoreStagingFolders()).toEqual([]);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 });
@@ -1722,13 +1751,37 @@ describe('Backup restore of one home judges, then takes the home', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
+    // verifyFolder ran SQLite's check on every database of the unpacked archive, so the check before the swap reads only
+    // their schema stamps. A large home takes minutes per pass.
+    test('the check before the swap reads the stamps only, after verify checked the pages', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 91_000));
+        const querySpy = spyOn(Database.prototype, 'query');
+        const pagesChecked = () => querySpy.mock.calls.filter(([sql]) => sql.includes('quick_check')).length;
+        const during: number[] = [];
+        const check = materializeModule.checkUnpackedHome;
+        const checkSpy = spyOn(materializeModule, 'checkUnpackedHome').mockImplementation(async (homeDir, mounts) => {
+            const before = pagesChecked();
+            await check(homeDir, mounts);
+            during.push(pagesChecked() - before);
+        });
+        try {
+            await restoreHome(artifact, user.id, `restore-stamps-${Date.now()}`);
+        } finally {
+            querySpy.mockRestore();
+            checkSpy.mockRestore();
+        }
+        expect(during).toEqual([0]);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+
     // The archive is unpacked on the data disk beside the home, so the home is offline only for the swap's two renames.
     test('the mounts are put in place beside the home while it serves, and the swap is two renames', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 95_000));
         const homeDir = join(TEST_DATA_DIR, 'home', user.id);
         const jobId = `restore-renames-${Date.now()}`;
         const stagingDir = buildRestoreStagingDir(homeDir, jobId);
-        const unpackedHome = join(stagingDir, buildHomeFolderName(user.id), 'home');
+        const unpackedHome = join(stagingDir, 'unpack', buildHomeFolderName(user.id), 'home');
         const serving = await getHome(user.id);
         const materialize = materializeModule.materializeMount;
         const staged: { served: boolean; mode: number; homeDir: string }[] = [];
@@ -1844,7 +1897,7 @@ describe('Backup restore of one home judges, then takes the home', () => {
     test('putting a mount in place gives the event loop back between batches of files', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 99_000));
         const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'restore-batches-'));
-        await archiveModule.extractArtifact(join(getBackupsDir(), artifact), unpackDir);
+        await unpackWhole(join(getBackupsDir(), artifact), unpackDir);
         const { folder, manifest } = archiveModule.readUnpackedHome(unpackDir, user.id, artifact);
         const mountDir = join(folder, 'home', 'mounts', mountId);
         const db = openMountMetadata(join(mountDir, 'metadata.db'));

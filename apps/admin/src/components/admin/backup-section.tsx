@@ -30,9 +30,8 @@ const SAFETY_COPY_LABEL: Record<BackupSafetyCopy['kind'], string> = {
     'failed-restore': 'A restore that did not finish',
 };
 
-// The four confirmations this pane asks for. One dialog is mounted for all of them — a dialog that
-// unmounts on close skips its own closing animation — and the choice keeps its name and kind until
-// the next one replaces it.
+// The four confirmations this pane asks for. One dialog is mounted for all of them, because a dialog that unmounts
+// on close skips its own closing animation. The choice keeps its name and kind until the next one replaces it.
 type BackupConfirm =
     | { kind: 'restore-artifact'; name: string }
     | { kind: 'delete-artifact'; name: string }
@@ -85,7 +84,7 @@ export function BackupSection({ ownerId }: BackupSectionProps) {
     const deleteArtifact = useDeleteBackupArtifact(ownerId);
     const deleteSafetyCopy = useDeleteSafetyCopy(ownerId);
 
-    // Newest first, and the server allows one job per home — so the newest job is the whole story.
+    // Newest first. The server runs one job per home at a time, so the newest job is the whole story.
     const latest = jobs[0];
     const running = latest?.state === 'running' ? latest : undefined;
     const rowCount = data ? data.artifacts.length + data.safetyCopies.length : 0;

@@ -243,16 +243,12 @@ type ArtifactSource = string | ArchiveMemberLocation;
 // Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
 // says. Only the API's user reads a restored home, so an older archive with 0644 files restores as private as a
 // new one. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
-// for a folder that its own extract cannot enter either. With a `bound`, it refuses an archive whose entries add up
-// to more, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
-export async function extractArtifact(
-    source: ArtifactSource,
-    targetDir: string,
-    bound: UnpackBound = { maxBytes: Number.POSITIVE_INFINITY, chargeFolders: true },
-): Promise<void> {
+// for a folder that its own extract cannot enter either. It refuses an archive whose entries add up to more than
+// `bound`, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
+export async function extractArtifact(source: ArtifactSource, targetDir: string, bound: UnpackBound): Promise<void> {
     const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
-    const existed = fs.existsSync(targetDir);
-    makeFolder(targetDir);
+    // The outermost folder this call made, or undefined when `targetDir` was there already.
+    const made = makeFolder(targetDir);
     let bytes = 0;
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
@@ -278,7 +274,7 @@ export async function extractArtifact(
     } catch (error) {
         // Half an unpacked archive is worse than none, because nothing downstream can tell the two apart.
         // Only a folder this call made is removed. A folder the caller already had is left alone.
-        if (!existed) await fsp.rm(targetDir, { recursive: true, force: true });
+        if (made) await fsp.rm(made, { recursive: true, force: true });
         throw error;
     }
 }
@@ -332,13 +328,13 @@ async function* entryChunks(dir: string, rootName: string, onProgress?: BackupPr
     relPaths.sort();
     // Directories get entries of their own. An empty one, such as a Maildir `new/`, is part of the home and has to
     // survive the round trip.
-    yield* headerChunks(`${rootName}/`, 0, fs.statSync(dir).mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
+    yield* headerChunks(`${rootName}/`, 0, (await fsp.stat(dir)).mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
     for (const [index, rel] of relPaths.entries()) {
         // Packing takes most of a large home's backup time, so it reports progress for every entry.
         onProgress?.('pack', index + 1, relPaths.length);
         const name = `${rootName}/${rel}`;
         const abs = path.join(dir, rel);
-        const stat = fs.statSync(abs);
+        const stat = await fsp.stat(abs);
         if (stat.isDirectory()) {
             yield* headerChunks(`${name}/`, 0, stat.mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
             continue;

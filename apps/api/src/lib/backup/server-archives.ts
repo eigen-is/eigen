@@ -16,9 +16,10 @@ import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { alertOwner } from '../user/alert-owner';
-import { ARCHIVE_MODE } from './archive';
+import { writeRecord } from './artifacts';
+import type { ServerJobKind } from './jobs';
 import { isServerJob, listBackupJobs, runningJobOn } from './jobs';
-import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath, writeRecord } from './paths';
+import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
 import type { RetentionCandidate } from './retention';
 import { pruneServerArchives } from './retention';
 
@@ -26,7 +27,7 @@ const INTERRUPTED = 'interrupted by a restart';
 
 // For the API's user alone, like the archive: it names every home the archive holds.
 export function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
-    return writeRecord(serverSidecarPath(archivePath), sidecar, ARCHIVE_MODE);
+    return writeRecord(serverSidecarPath(archivePath), sidecar);
 }
 
 // Null when there is none, or none that reads: nothing is judged or deleted on a record nobody can read.
@@ -83,7 +84,7 @@ export type ServerBackupStatus = {
     warned: ArchiveLine | null;
     newestGoodAt: string | null;
     // The server backup and the uploads that run now, from the job list: what ./eigen waits for before a stop.
-    running: { kind: 'server-backup' | 'upload'; archive: string }[];
+    running: { kind: ServerJobKind; archive: string }[];
 };
 
 export async function getServerBackupStatus(): Promise<ServerBackupStatus> {

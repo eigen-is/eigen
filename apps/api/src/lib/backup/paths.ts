@@ -1,7 +1,7 @@
 // Where backups live and what they are called. It builds the names of archives, home folders, safety copies and the
 // folder a restore unpacks into, and the places inside an archive where each part of a home goes. It makes the private
-// staging folder every job works in, and writes the record kept beside an archive through it. It also resolves a path
-// inside a folder without ever leaving it, which every restore step needs before it touches the disk.
+// staging folder every job works in. It also resolves a path inside a folder without ever leaving it, which every
+// restore step needs before it touches the disk.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -79,6 +79,12 @@ const RESTORE_STAGING_PREFIX = '.restore-';
 
 export function buildRestoreStagingDir(homeDir: string, jobId: string): string {
     return path.join(path.dirname(homeDir), `${RESTORE_STAGING_PREFIX}${jobId}`);
+}
+
+// The archive goes in a folder of its own inside that one. The notes the next boot reads sit beside it, so no entry
+// of the archive can be taken for one of them.
+export function buildRestoreUnpackDir(homeDir: string, jobId: string): string {
+    return path.join(buildRestoreStagingDir(homeDir, jobId), 'unpack');
 }
 
 export function isRestoreStagingName(name: string): boolean {
@@ -209,19 +215,6 @@ export function sidecarPath(artifactPath: string): string {
 
 export function serverSidecarPath(archivePath: string): string {
     return `${archivePath}${SERVER_SIDECAR_SUFFIX}`;
-}
-
-// Writes the JSON record beside an archive, its sidecar. It is written in the staging folder and renamed into
-// place, so a reader never sees half of one.
-export async function writeRecord(target: string, value: unknown, mode: number): Promise<void> {
-    const tempPath = getBackupTempPath('.json');
-    try {
-        await fsp.writeFile(tempPath, JSON.stringify(value, null, 2), { mode });
-    } catch (error) {
-        fs.rmSync(tempPath, { force: true });
-        throw error;
-    }
-    fs.renameSync(tempPath, target);
 }
 
 // The stamp a new whole-server archive takes, under the same rule; its members carry it too. A

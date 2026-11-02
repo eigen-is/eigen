@@ -1,5 +1,5 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     chmodSync,
     copyFileSync,
@@ -23,18 +23,18 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { CANNOT_OPEN, DECLINED } from '../../cli/install';
 import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
+import * as archiveModule from '../../lib/backup/archive';
 import {
     copyArchiveMember,
     createServerArchiveWriter,
     declaredUnpackBytes,
     ENTRY_ALLOWANCE_BYTES,
-    extractArtifact,
     packFolder,
     readArtifactManifest,
     withUnpackSlack,
 } from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
-import { stageBytesNeeded } from '../../lib/backup/restore-server';
+import { readMemberManifests, stageBytesNeeded, stageServerArchive } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { DATA_LEASE_FILE, LEASE_WAIT_MS, lockDataDir, writeLease } from '../../lib/config/data-lock';
 import {
@@ -55,6 +55,7 @@ import {
     readServerManifest,
     realShapeHome,
     removeServerRecords,
+    unpackWhole,
     waitForJob,
 } from '../backup/backup-test-helpers';
 import type { FaultStorage } from '../fault-storage-helpers';
@@ -267,7 +268,7 @@ async function rewrittenMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-member-');
-    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
     const entries: Parameters<typeof tarOf>[0] = [];
     for (const rel of new Bun.Glob('**/*').scanSync({ cwd: join(work, 'tree'), onlyFiles: false, dot: true })) {
         const abs = join(work, 'tree', rel);
@@ -283,7 +284,7 @@ async function rewrittenMember(
 async function serverMemberWithEpochs(archive: string): Promise<Record<string, string>> {
     const { members } = await readServerManifest(archive);
     const work = scratch('restore-server-member-');
-    await extractArtifact(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     const manifest = JSON.parse(readFileSync(join(root, ARCHIVE_MANIFEST_FILE), 'utf8'));
@@ -307,7 +308,7 @@ async function editedMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-edited-');
-    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     edit(root);
@@ -337,15 +338,19 @@ async function withUnbackedPendingRow(archive: string): Promise<string> {
     return craft(archive, { replace });
 }
 
-// The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged.
-// WAL and closed, as an idle home leaves it on Linux: no -wal or -shm beside it.
-function liveS3Mount(dir: string, pending: Record<string, string>): void {
+// The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged, and
+// whose files are at the storage keys `files`. WAL and closed, as an idle home leaves it on Linux: no -wal or -shm
+// beside it.
+function liveS3Mount(dir: string, pending: Record<string, string>, files = [stagedUploadKey]): void {
     const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
     mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
     const metadata = join(mount, PATHS.DRIVE.METADATA_DB);
     const db = new Database(metadata);
     try {
         db.run('PRAGMA journal_mode = WAL');
+        db.run('CREATE TABLE paths (id TEXT PRIMARY KEY, type TEXT NOT NULL, file TEXT NOT NULL)');
+        for (const [index, key] of files.entries())
+            db.run("INSERT INTO paths VALUES (?, 'file', ?)", [`f${index}`, key]);
         db.run('CREATE TABLE pending_uploads (storageKey TEXT PRIMARY KEY, stagingPath TEXT NOT NULL)');
         for (const [key, name] of Object.entries(pending)) {
             db.run('INSERT INTO pending_uploads VALUES (?, ?)', [key, name]);
@@ -1081,6 +1086,36 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    // A member's manifest is its last entry, so each read of one decompresses the whole member. The stage reads them once
+    // for its room check, and bounds every unpack by those.
+    test(
+        'the manifests read for the room check bound the stage, which reads none again',
+        async () => {
+            const read = await readServerManifest(fullArchive);
+            const archived = {
+                name: basename(fullArchive),
+                manifest: read.manifest,
+                members: new Map(read.members.map((member) => [member.name, member])),
+            };
+            const manifests = await readMemberManifests(archived);
+            const spy = spyOn(archiveModule, 'readArtifactManifest');
+            let reads = -1;
+            try {
+                await stageBytesNeeded(archived, manifests);
+                await stageServerArchive(archived, scratch('restore-one-read-'), {
+                    s3FromArchive: false,
+                    onStep: () => {},
+                    manifests,
+                });
+                reads = spy.mock.calls.length;
+            } finally {
+                spy.mockRestore();
+            }
+            expect(reads).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test(
         'a stage while another stages is refused and leaves its tree alone',
         async () => {
@@ -1590,7 +1625,7 @@ for (const [what, archive] of [
 ] as const) {
     describe(what, () => {
         test(
-            'a pending upload the live mount has no row for any more is not replayed',
+            'a pending upload the live mount uploaded since is not replayed',
             async () => {
                 const dir = install();
                 liveS3Mount(dir, {});
@@ -1627,6 +1662,23 @@ for (const [what, archive] of [
                         db.close();
                     }
                 }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        // A restore of the home gives every file a new key, and its old pending uploads stay in the copy it put aside.
+        // So a key the live mount no longer has may never have reached the bucket.
+        test(
+            'a pending upload whose key the live mount no longer has is replayed',
+            async () => {
+                const dir = install();
+                liveS3Mount(dir, {}, ['rekeyed-by-a-restore']);
+                const result = await stage(dir, basename(archive()));
+                expect(result.code).toBe(0);
+                expect(result.stdout).not.toContain('pending upload');
+                expect(readFileSync(join(stagedS3Mount(dir), PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
+                    'not in the bucket yet',
+                );
             },
             JOB_TIMEOUT_MS,
         );

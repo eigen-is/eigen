@@ -5,6 +5,7 @@
 // shares and avatar. The backup routes call it.
 
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
@@ -35,6 +36,7 @@ import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_SHARES_FILE,
     buildRestoreStagingDir,
+    buildRestoreUnpackDir,
     buildSafetyCopyName,
     freeSafetyCopyStamp,
     roomShortfall,
@@ -61,7 +63,7 @@ export async function restoreHome(
         jobId,
         async () => {
             // Beside the home, so the swap is a rename on one disk.
-            const unpackDir = buildRestoreStagingDir(homeDir, jobId);
+            const unpackDir = buildRestoreUnpackDir(homeDir, jobId);
             // Refused before a byte is written. The unpack stops at the same bound, so an archive that holds more than
             // it declares takes no more of the disk the homes share than the room check found free.
             const bound = unpackBound(await readDeclaredManifest(artifactPath));
@@ -227,7 +229,8 @@ type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
 // The moves every restore is made of: judge the replacement while the home still serves, so a refusal costs nobody a
 // page, then take the home from everyone, put its folder aside, install the replacement, and on a failure put both
 // folders back, deleting nothing. The marker written here is the only note the next boot reads of an interrupted
-// restore, so recoverInterruptedRestores covers every kind. It hands back what the preparing step judged.
+// restore, so recoverInterruptedRestores covers every kind, and a rollback that failed too. It hands back what the
+// preparing step judged.
 async function replaceHomeFolder<Judged>(
     ownerId: string,
     homeDir: string,
@@ -235,70 +238,68 @@ async function replaceHomeFolder<Judged>(
     prepare: () => Promise<PreparedHome<Judged>>,
     parkOnFailure: (stamp: string) => string,
 ): Promise<Judged> {
+    const restoreDir = buildRestoreStagingDir(homeDir, jobId);
+    // Set when the rollback below could not put the home back. Its notes then stay for the next boot to finish it.
+    let homeOutOfPlace = false;
     try {
         const { install, judged } = await prepare();
         // Throws when another restore or a deletion of this home holds it, before anything below runs.
         markHomeRestoring(ownerId);
         try {
-            await takeAndReplace(ownerId, homeDir, jobId, install, parkOnFailure);
+            // Every request to the home meets the 503 from here until the mark clears. Sessions are untouched, so
+            // the user stays signed in.
+            closeCollabConnectionsForHome(ownerId);
+            await evictHome(ownerId);
+
+            // Picked now, so the safety copies are dated by the swap, however long the unpack took.
+            const stamp = freeSafetyCopyStamp(homeDir, new Date());
+            // There is no home folder to move aside on a restore after the user was deleted.
+            const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
+            const parked = parkOnFailure(stamp);
+            // Before the move: a process killed from here on leaves the home's path empty or holding a folder the
+            // restore did not finish with. Only this note tells the next boot which, with the name that folder goes
+            // aside under.
+            writeRestoringMarker(restoreDir, {
+                ownerId,
+                homeDir,
+                preRestoreName: movedAside && path.basename(movedAside),
+                parkName: path.basename(parked),
+            });
+            if (movedAside) fs.renameSync(homeDir, movedAside);
+
+            try {
+                await install();
+                // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
+                // between the two costs an extra reload, never a stale tab over the new home.
+                await rotateHomeDataEpoch(ownerId);
+                writeRestoreCompleteMarker(restoreDir);
+            } catch (error) {
+                // A failure while putting the home back must not hide the one that brought us here.
+                try {
+                    if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parked);
+                    if (movedAside) fs.renameSync(movedAside, homeDir);
+                } catch (rollbackError) {
+                    homeOutOfPlace = true;
+                    console.error(
+                        `[backup] could not put ${ownerId}'s home back after a failed restore:`,
+                        rollbackError,
+                    );
+                }
+                throw error;
+            }
         } finally {
-            // Whatever happened is over, and a failed install put the home back itself.
+            // The job is over. A failed install put the home back, or left the notes that let the next boot do it.
             clearHomeRestoring(ownerId);
         }
         return judged;
     } finally {
         // It may not throw over the failure that brought us here.
         try {
-            await wipeRestoreStagingDir(homeDir, jobId);
+            if (homeOutOfPlace) await fsp.rm(buildRestoreUnpackDir(homeDir, jobId), { recursive: true, force: true });
+            else await wipeRestoreStagingDir(homeDir, jobId);
         } catch (error) {
             console.error(`[backup] could not clear the staging folder of job ${jobId}:`, error);
         }
-    }
-}
-
-// The part of a restore that runs while the home is marked restoring, and every request to it meets the 503.
-async function takeAndReplace(
-    ownerId: string,
-    homeDir: string,
-    jobId: string,
-    install: InstallHome,
-    parkOnFailure: (stamp: string) => string,
-): Promise<void> {
-    // Sessions are untouched: the user stays signed in, every request just meets the 503 until the mark clears.
-    closeCollabConnectionsForHome(ownerId);
-    await evictHome(ownerId);
-
-    // Picked now, so the safety copies are dated by the swap, however long the unpack took.
-    const stamp = freeSafetyCopyStamp(homeDir, new Date());
-    // There is no home folder to move aside on a restore after the user was deleted.
-    const movedAside = fs.existsSync(homeDir) ? buildSafetyCopyName(homeDir, 'pre-restore', stamp) : null;
-    const parked = parkOnFailure(stamp);
-    // Before the move: a process killed from here on leaves the home's path empty or holding a folder the restore did
-    // not finish with. Only this note tells the next boot which, with the name that folder goes aside under.
-    const restoreDir = buildRestoreStagingDir(homeDir, jobId);
-    writeRestoringMarker(restoreDir, {
-        ownerId,
-        homeDir,
-        preRestoreName: movedAside && path.basename(movedAside),
-        parkName: path.basename(parked),
-    });
-    if (movedAside) fs.renameSync(homeDir, movedAside);
-
-    try {
-        await install();
-        // Every tab of the home reloads, once the folder is whole and before the completion note: a crash
-        // between the two costs an extra reload, never a stale tab over the new home.
-        await rotateHomeDataEpoch(ownerId);
-        writeRestoreCompleteMarker(restoreDir);
-    } catch (error) {
-        // A failure while putting the home back must not hide the one that brought us here.
-        try {
-            if (fs.existsSync(homeDir)) fs.renameSync(homeDir, parked);
-            if (movedAside) fs.renameSync(movedAside, homeDir);
-        } catch (rollbackError) {
-            console.error(`[backup] could not put ${ownerId}'s home back after a failed restore:`, rollbackError);
-        }
-        throw error;
     }
 }
 

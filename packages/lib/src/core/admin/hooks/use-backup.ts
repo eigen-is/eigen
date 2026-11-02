@@ -14,10 +14,9 @@ import { AppError, onMutationError } from '../../api-error';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { backupKeys, invalidateBackup } from './keys';
 
-// While a job of this home runs the job list polls: the SSE poke reaches every admin's home, and an
-// admin restoring their OWN home stops receiving it for the length of the restore. One mechanism
-// carries that to the artifact list — the effect below, when the job stops running — rather than a
-// second poll reading the job cache from the other query.
+// While a job of this home runs, the job list polls. The SSE poke reaches every admin's home, but an admin who
+// restores their own home stops receiving it while the restore runs. The artifact list learns of the end from the
+// effect below, which runs when the job stops. A second poll on the job cache would be a second mechanism.
 const JOB_POLL_MS = 2000;
 
 function hasRunningJob(jobs: BackupJob[] | undefined): boolean {
@@ -54,9 +53,8 @@ export function useBackupJobs(ownerId: string, listKey: QueryKey = backupKeys.ar
         refetchInterval: (query) => (hasRunningJob(query.state.data) ? JOB_POLL_MS : false),
     });
 
-    // The moment a job leaves `running` is the moment its artifact (or its safety copy) exists, and
-    // it is also the moment the artifact list stops polling — so the refetch has to be asked for
-    // here rather than left to an interval that clears on the same render.
+    // A job's artifact or safety copy exists from the moment the job leaves `running`. That is also the moment the
+    // job list stops polling, so the refetch is asked for here. An interval would clear on the same render.
     const running = hasRunningJob(query.data);
     const wasRunning = useRef(false);
     useEffect(() => {
@@ -92,8 +90,8 @@ export function useUploadBackup() {
             // file the server would refuse never leaves the browser.
             const parsed = parseBackupArtifactName(file.name);
             if (!parsed) throw new Error(`'${file.name}' is not the name of an Eigen backup archive`);
-            // Both sizes are the route's 413, said before a long upload starts — and on an empty file
-            // that 413 talks about the maximum size, which says nothing about what is wrong with it.
+            // Both sizes are the route's 413, said before a long upload starts. On an empty file that 413 names the
+            // maximum size, which says nothing about what is wrong with it.
             if (file.size === 0) throw new Error(`'${file.name}' is empty`);
             if (file.size > BACKUP_UPLOAD_MAX_BYTES) {
                 throw new Error(
