@@ -10,6 +10,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
 - **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
+- **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
 
 ### Changed
 
@@ -48,6 +49,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
 - **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
 - **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
+- **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 
 ## [0.4.1] - 2026-10-28
 

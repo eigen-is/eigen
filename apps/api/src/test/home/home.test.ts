@@ -1,11 +1,22 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { orgOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { ApiError } from '../../lib/core';
 import { evictHome, getHome } from '../../lib/home/get-home';
+import type { HomeSettings } from '../../lib/home/home';
 import type { TestContext } from '../setup';
-import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
+import {
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestGuest,
+    createTestUser,
+    findOrFail,
+    getTestContext,
+} from '../setup';
 
 type MyTeam = {
     id: string;
@@ -142,5 +153,83 @@ describe('Home init', () => {
         await getHome(user.id);
         expect(existsSync(stale)).toBe(false);
         expect(existsSync(young)).toBe(true);
+    });
+
+    test('a fresh user home saves its default mount in settings.json and opens it', async () => {
+        const user = await createTestUser(`fresh-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Fresh');
+        const home = await getHome(user.id);
+
+        const saved: HomeSettings = JSON.parse(readFileSync(join(getUserHomePath(user.id), 'settings.json'), 'utf8'));
+        expect(saved.mounts?.['default']?.enabled).toBe(true);
+        expect(home.drive.getMountConfig('default').isDefault).toBe(true);
+    });
+
+    test('a default mount switched off in settings.json stays off', async () => {
+        const user = await createTestUser(`mount-off-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Off');
+        const home = await getHome(user.id);
+        await home.settings.set({ mounts: { default: { enabled: false } } });
+        await evictHome(user.id);
+
+        const reopened = await getHome(user.id);
+        expect(reopened.drive.getMounts().map((mount) => mount.config.id)).not.toContain('default');
+    });
+
+    test('a user home whose default mount is off still answers its size, files included', async () => {
+        const user = await createTestUser(`size-off-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Size');
+        const home = await getHome(user.id);
+        const root = await home.drive.getRootFolder('default');
+        if (!root) throw new Error('The default mount has no root folder');
+        await home.drive.createFileFromData('default', root.id, 'note.txt', 'text/plain', Buffer.from('some bytes'));
+        const before = await home.size();
+        expect(before.drive.default.used).toBeGreaterThan(0);
+        await home.settings.set({ mounts: { default: { enabled: false } } });
+        await evictHome(user.id);
+
+        const reopened = await getHome(user.id);
+        expect(await reopened.size()).toEqual(before);
+    });
+});
+
+function thrownBy(read: () => unknown): unknown {
+    try {
+        read();
+    } catch (err) {
+        return err;
+    }
+    return undefined;
+}
+
+describe('Home parts', () => {
+    let ctx: TestContext;
+    let orgId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const config = getServerConfig();
+        if (!config) throw new Error('No server config');
+        orgId = config.orgId;
+    });
+
+    test('a part the home lacks answers 404', async () => {
+        const team = await getHome(teamOwnerId(await createTeam(ctx, orgId, 'Parts Team')));
+        const org = await getHome(orgOwnerId(orgId));
+
+        for (const err of [thrownBy(() => team.notifications), thrownBy(() => org.drive)]) {
+            expect(err).toBeInstanceOf(ApiError);
+            expect(err).toMatchObject({ status: 404 });
+        }
+    });
+
+    test('notify reaches user and guest homes, and a team home drops it', async () => {
+        const user = await getHome(ctx.alice.user.id);
+        const guest = await getHome((await createTestGuest('Parts Guest')).id);
+        const team = await getHome(teamOwnerId(await createTeam(ctx, orgId, 'Parts Team Two')));
+
+        user.notify({ type: 'share', title: 'Notify user' });
+        guest.notify({ type: 'share', title: 'Notify guest' });
+        expect(() => team.notify({ type: 'share', title: 'Notify team' })).not.toThrow();
+
+        expect(user.notifications.list().map((n) => n.title)).toContain('Notify user');
+        expect(guest.notifications.list().map((n) => n.title)).toContain('Notify guest');
     });
 });

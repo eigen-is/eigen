@@ -17,6 +17,8 @@ The idea underneath is that the mount's paths table is the tree and the backend 
 | `OrgHome` | `data/org/{orgId}/` | Only its filesystem |
 | `GuestHome` | `data/guest/{userId}/` | Drive, Notifications ([GUEST-ACCESS.md](GUEST-ACCESS.md)) |
 
+A getter for a part the Home lacks, such as `mail` on a guest's or `notifications` on a team's, throws `ApiError(404)`, so a route that reaches for it answers 404 instead of crashing. Code that may meet any kind of home checks first, through `hasCalendar` or `instanceof TeamHome`. A notice goes through `Home.notify`, which drops it on a home without a notification center. The home relay hands a team's notices to its members instead.
+
 A Home serves its own owner. Another owner's data goes through `home-relay.ts` ([SCALABILITY.md](SCALABILITY.md)).
 
 ## Every owner's data lives under one folder

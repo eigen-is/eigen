@@ -95,10 +95,10 @@ describe('Comment search', () => {
         expect(await assertJson<DocCommentMatch[]>(res)).toEqual([]);
     });
 
-    test('only the recent ~8 KB tail is searchable', async () => {
+    test('only the newest 8192 characters are searchable', async () => {
         const t2 = await createThread(ctx, mountId, chatFolderId, 'thread-cap');
         await postComment(ctx, mountId, t2.id, 'earlybirdterm at the very start');
-        // A newer, larger message pushes the early term past the ~8 KB cap.
+        // A newer, larger message pushes the early term past the 8192-character cap.
         await postComment(ctx, mountId, t2.id, `freshmarkerterm ${'x'.repeat(9000)}`);
 
         const fresh = await assertJson<DocCommentMatch[]>(

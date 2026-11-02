@@ -6,7 +6,7 @@ category: Sharing
 tags: [vector, sharing, permissions, comments, collaboration]
 related: [vector/get-started, drive/share-a-file]
 order: 70
-updated: 2026-09-11
+updated: 2026-11-02
 ---
 
 Drawings are private to you until you share them. You can share with specific people, with a team, or with anyone who has a link, and choose whether they can view or edit. If you can edit a drawing, you can also leave comments, either on a single object or on the drawing as a whole.
@@ -70,6 +70,8 @@ Click the colored triangle on an object to open that comment's thread. You can r
 Click the **Comments** button (speech bubble icon) in the toolbar to open the comments panel on the right. The panel lists every comment on the drawing, and the **New comment** button at the top of the panel adds one that belongs to the drawing as a whole rather than to an object. Use the filter button (funnel icon) at the top of the panel to narrow the list by who a comment is **Assigned to**, by color, or by **Status**: **Open**, **Resolved**, or **All**.
 
 Click a comment in the panel to jump to the object it is attached to and open its thread.
+
+A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 
 ### Resolve a comment
 

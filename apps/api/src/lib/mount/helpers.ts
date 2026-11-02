@@ -1,15 +1,15 @@
-// Small pieces that Mount and its sibling modules share, such as the SQL that finds a path's ancestors,
-// the errors of a paths write, and how a mount's config and storage backend are built. The backup uses
-// some of them too, for a mount that no Home has open.
+// Small pieces that Mount and the code around it share, such as the SQL that finds a path's ancestors,
+// the errors of a paths write, and how a mount's settings, config and storage backend are built. Some of
+// them work on a mount that no Home has open, such as for a backup or for sizing a home from its files.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
-import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
-import { getS3Config } from '../config/server-settings';
+import { PATHS } from '../config/paths';
+import { getS3Config, getServerSettings, mapStorageType } from '../config/server-settings';
 import { ApiError } from '../core';
 import type { StorageBackend } from '../storage';
 import { LocalStorage, S3Storage } from '../storage';
@@ -110,9 +110,10 @@ export function isSqliteFile(filePath: string): boolean {
     }
 }
 
-// What Mount.getTotalSize answers, for a mount nobody has open. The admin usage view sizes every home at
-// once, and opening each Home would take seconds. The open is read-write on purpose. A WAL database that
-// nobody holds open has no -shm file beside it, and a read-only open of it fails. Only this SELECT runs.
+// What Mount.getTotalSize answers, read from the file, so it needs no live mount. The admin usage view
+// sizes every home at once, and opening each Home would take seconds. A home whose default mount is
+// switched off has no live mount to ask. The open is read-write on purpose. A WAL database that nobody
+// holds open has no -shm file beside it, and a read-only open of it fails. Only this SELECT runs.
 export function readMountTotalSize(metadataPath: string): number {
     if (!fs.existsSync(metadataPath)) return 0;
     const db = new Database(metadataPath, { readwrite: true, create: false });
@@ -142,9 +143,22 @@ export function isViableRecoveryTemp(tempPath: string, knownSize: number): boole
 }
 
 const DEFAULT_MOUNT_NAME = 'My Drive';
+// A user's own drive. Its id is also the name of its folder under the home.
+export const DEFAULT_MOUNT_ID = PATHS.DRIVE.DEFAULT_MOUNT;
 
 export function createDefaultMountConfig(): MountConfig {
     return { id: DEFAULT_MOUNT_ID, name: DEFAULT_MOUNT_NAME, storageType: 'local', isDefault: true };
+}
+
+// The settings a new mount starts with, taken from the server defaults, such as a user's first drive
+// or a team's new one. They are saved with the mount, so a later change to the defaults leaves it as it is.
+export function newMountSettings(): MountSettings {
+    const serverSettings = getServerSettings();
+    return {
+        storageType: mapStorageType(serverSettings.defaults.mount.storageType),
+        maxSizeMB: serverSettings.quotas.defaultMountMaxSizeMB,
+        enabled: true,
+    };
 }
 
 export function createMountConfig(id: string, settings: Omit<MountSettings, 'enabled'>): MountConfig {

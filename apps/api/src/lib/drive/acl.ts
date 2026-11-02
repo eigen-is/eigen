@@ -6,8 +6,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import type { DriveACL, DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
 import { isCollabType } from '@workspace/lib/types/drive';
 import { validateEmailAddress } from '@workspace/lib/validation';
-import type { User } from '../user';
-import type { Memberships } from '../user/';
+import type { Memberships, User } from '../user';
 
 export function grantsPublicRead(visibility: DriveVisibility): boolean {
     return visibility === 'public-read' || visibility === 'public-write';

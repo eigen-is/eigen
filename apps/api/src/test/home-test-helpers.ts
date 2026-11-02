@@ -7,7 +7,7 @@ import type { Home } from '../lib/home';
 
 // A domain class over a temp home directory with no booted app behind it: the stub Home supplies only the
 // members a domain touches — a memoized getLocalDatabase (so a second init() reuses the same connection), the
-// current user, and a broadcast sink. The Contacts and Calendar harnesses are both built on this.
+// current user, a broadcast sink and a notify that drops the notice. The Contacts and Calendar harnesses are both built on this.
 
 export type TestHomeUser = { id: string; email: string; name: string };
 
@@ -54,6 +54,7 @@ export async function openTestHome<T extends TestHomeDomain>(
         user,
         getLocalDatabase,
         broadcast: (e: SSEvent) => broadcasts.push(e),
+        notify: () => {},
     } as unknown as Home;
     const instance = create(home);
     await instance.init();
