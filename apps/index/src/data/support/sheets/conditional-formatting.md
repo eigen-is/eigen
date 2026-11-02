@@ -24,7 +24,7 @@ Highlight rules apply a text color or background color to cells that match a spe
    - **Date is**: pick a date.
    - **Duplicate value**: flag duplicate or unique values in the selection.
 4. In the dialog that opens, set the colors you want to apply. Tick **Text color** to change the text color, or **Cell color** to fill the background, then click the color swatch next to each to pick a color.
-5. Click **OK**.
+5. Click **OK**. If the value can't be used, such as text where the rule needs a number, the dialog stays open and says why under the field.
 
 ## Add an item selection rule
 
@@ -33,7 +33,7 @@ Item selection rules highlight the top or bottom values in a range, or cells abo
 1. Select the cells you want to format.
 2. Open the **Format** menu, choose **Conditional formatting**, then point to **Item selection rules**.
 3. Choose a condition: **Top 10**, **Top 10%**, **Last 10**, **Last 10%**, **Above average**, or **Below average**.
-4. For the top/bottom rules, change the number in the dialog if you want more or fewer items highlighted.
+4. For the top/bottom rules, change the number in the dialog if you want more or fewer items highlighted. It takes a whole number from 1 to 1000.
 5. Set the colors and click **OK**.
 
 ## Apply a color scale
