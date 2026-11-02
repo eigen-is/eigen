@@ -73,8 +73,8 @@ function render(actions: DriveActionRunner) {
     return seen.controller;
 }
 
-test('Delete runs the delete row, even after another destructive row', () => {
-    const { actions, ran } = runner([destructive('rename'), destructive('trash')]);
+test('Delete runs the row that shows the Delete key, even after another destructive row', () => {
+    const { actions, ran } = runner([destructive('rename'), { ...destructive('trash'), shortcut: 'Delete' }]);
     render(actions).handleKeyDown({
         key: 'Delete',
         preventDefault: () => {},
