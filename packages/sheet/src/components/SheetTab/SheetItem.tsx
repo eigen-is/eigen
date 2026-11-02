@@ -133,6 +133,9 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         [context.allowEdit, setContext, id],
     );
 
+    // The workbook always shows one sheet, so its last shown sheet can't be hidden or deleted.
+    const lastShownSheet = context.sheets.filter((s) => s.hide !== 1).length < 2;
+
     const menuItems = (
         <MenuSections
             create={
@@ -171,11 +174,8 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     <DropdownMenuItem
                         onClick={() => {
                             if (context.allowEdit === false) return;
-                            setContext((ctx) => {
-                                const shownSheets = ctx.sheets.filter((s) => s.hide !== 1);
-                                if (shownSheets.length > 1) api.hideSheet(ctx, id);
-                                else showAlert(NO_MORE_SHEET, 'ok');
-                            });
+                            if (lastShownSheet) showAlert(NO_MORE_SHEET, 'ok');
+                            else setContext((ctx) => api.hideSheet(ctx, id));
                         }}
                     >
                         Hide
@@ -192,8 +192,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                 <DropdownMenuItem
                     variant="destructive"
                     onClick={() => {
-                        const shownSheets = context.sheets.filter((s) => s.hide !== 1);
-                        if (context.sheets.length < 2 || shownSheets.length < 2) {
+                        if (lastShownSheet) {
                             showAlert(NO_MORE_SHEET, 'ok');
                             return;
                         }
