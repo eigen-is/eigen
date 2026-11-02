@@ -15,10 +15,6 @@ export const LEASE_HEARTBEAT_MS = 5_000;
 // Two missed heartbeats: a lease that did not move in this time has no live holder.
 export const LEASE_WAIT_MS = 2 * LEASE_HEARTBEAT_MS;
 
-// The file systems of a folder a VM shares from its host, such as Docker Desktop's bind mounts: virtiofs today,
-// grpcfuse and osxfs in older releases, 9p for Windows drives under WSL2 and for qemu VMs.
-const SHARED_MOUNT_TYPES: ReadonlySet<string> = new Set(['virtiofs', 'fuse.grpcfuse', 'fuse.osxfs', '9p']);
-
 // `kernel` and `dev` say whose file lock the holder shares. `host` and `pid` are only for the messages: a container's
 // hostname changes when Compose recreates it.
 export type DataLease = {
@@ -101,23 +97,6 @@ export function liveLeaseAfterWait(file: string): DataLease | null {
     if (after && (after.id !== before.id || after.heartbeatAt !== before.heartbeatAt)) return after;
     if (after) console.warn(`The lease of ${before.host} (pid ${before.pid}) did not move, so it is stale.`);
     return null;
-}
-
-// The file system type of `root` when it is a folder shared from another machine or VM, or null. `mounts` is the text
-// of /proc/mounts, whose mount points escape a space, a tab, a newline and a backslash as octal.
-export function sharedMountType(root: string, mounts: string): string | null {
-    let found: { point: string; type: string } | undefined;
-    for (const line of mounts.split('\n')) {
-        const [, escaped, type] = line.split(' ');
-        if (!escaped || !type) continue;
-        const point = escaped.replace(/\\([0-7]{3})/g, (_, code: string) =>
-            String.fromCharCode(Number.parseInt(code, 8)),
-        );
-        const inside = root === point || root.startsWith(point.endsWith('/') ? point : `${point}/`);
-        // The later of two mounts on one point is the one on top.
-        if (inside && point.length >= (found?.point.length ?? 0)) found = { point, type };
-    }
-    return found && SHARED_MOUNT_TYPES.has(found.type) ? found.type : null;
 }
 
 function isDataLease(value: unknown): value is DataLease {

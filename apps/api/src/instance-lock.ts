@@ -1,9 +1,9 @@
 // Makes this API process the only one on its data folder, because two of them corrupt its databases. The entry
 // point imports it before anything opens a database. It takes the file lock, which refuses a second process on this
 // kernel, and then the lease, which refuses one the lock does not reach and is kept alive by a heartbeat until the
-// graceful shutdown releases it. Last, it warns when the data folder is shared from another machine or VM.
+// graceful shutdown releases it.
 
-import { readFileSync, realpathSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { hostname } from 'node:os';
 import * as path from 'node:path';
 import type { DataLease } from './lib/config/data-lock';
@@ -15,10 +15,8 @@ import {
     lockDataDir,
     lockScope,
     readLease,
-    sharedMountType,
     writeLease,
 } from './lib/config/data-lock';
-import { isDataMountWarningOn } from './lib/config/env';
 import { getDataRoot, getServerDataPath } from './lib/config/paths';
 
 const dataRoot = path.resolve(getDataRoot());
@@ -30,7 +28,6 @@ const lease = holdInstanceLease();
 let beatFailed = false;
 // Unref'd, so a process that has nothing else to do still exits.
 const heartbeat = setInterval(beat, LEASE_HEARTBEAT_MS).unref();
-warnOnSharedMount();
 
 // Called by the graceful shutdown once the homes are closed, so the heartbeat runs through the whole drain.
 export function releaseInstanceLease(): void {
@@ -84,16 +81,4 @@ function beat() {
         if (!beatFailed) console.error('[instance-lock] could not write the data dir lease:', err);
         beatFailed = true;
     }
-}
-
-// A warning, not a refusal: the dev stack in Docker Desktop runs on such a folder, and it is safe while nothing on
-// the other side opens it. The lease is what refuses.
-function warnOnSharedMount() {
-    if (process.platform !== 'linux' || !isDataMountWarningOn()) return;
-    const root = realpathSync(dataRoot);
-    const type = sharedMountType(root, readFileSync('/proc/mounts', 'utf8'));
-    if (!type) return;
-    console.warn(
-        `The data dir ${root} is on ${type}, a folder shared from another machine or VM. File locks do not reach across it: never run a second Eigen API on this folder from the other side. Set EIGEN_DATA_MOUNT_WARNING=0 to silence this.`,
-    );
 }

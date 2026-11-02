@@ -25,12 +25,6 @@ export function isMailAppEnabled(): boolean {
     return isMailEnabled() || isDemo();
 }
 
-// The boot warns when the data folder is shared from another machine or VM. A setup that knows nothing on the other
-// side opens it, such as the dev stack in Docker Desktop, sets EIGEN_DATA_MOUNT_WARNING=0.
-export function isDataMountWarningOn(): boolean {
-    return process.env['EIGEN_DATA_MOUNT_WARNING'] !== '0';
-}
-
 // The `edge` docker profile runs the bundled Caddy; the API reads COMPOSE_PROFILES from .env.production through env_file.
 export function isBundledCaddy(): boolean {
     return (process.env['COMPOSE_PROFILES'] ?? '').split(',').includes('edge');

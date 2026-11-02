@@ -94,8 +94,6 @@ The restore swap reads the lease the same way and refuses while one from another
 
 Two APIs in different scopes that start in the same moment both find no lease and both write one. The loser's next heartbeat finds the winner's lease and exits, so for up to 5 s both may write. Closing that gap would cost every cold boot another wait, so it stays open.
 
-On Linux the boot also warns once when the data folder is on a file system a VM shares from its host: virtiofs, grpcfuse, osxfs or 9p (`sharedMountType`, over `/proc/mounts`). It is a warning, not a refusal, because the dev stack in Docker Desktop runs on such a folder and is safe while nothing on the host opens it. `EIGEN_DATA_MOUNT_WARNING=0` silences it. Network file systems are left out, or a server whose data sits on NFS would warn on every boot.
-
 ## See also
 
 - [SYNC.md](SYNC.md): how a container database reaches an `s3` bucket
