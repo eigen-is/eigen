@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { EIGEN_COLORS } from '@workspace/lib/constants/colors';
 import type { Context } from '../../index';
 import {
     applyColorScalePreset,
@@ -19,6 +20,15 @@ describe('CF_PRESETS', () => {
         for (let i = 1; i <= 6; i++) {
             expect(CF_PRESETS[`solidColorDataBar_${i}`]).toHaveLength(1);
         }
+    });
+
+    it('offers only colors of the Eigen palette, and white', () => {
+        const palette = new Set([...EIGEN_COLORS.flat().map((color) => color.value), '#ffffff']);
+        expect(
+            Object.values(CF_PRESETS)
+                .flat()
+                .filter((color) => !palette.has(color)),
+        ).toEqual([]);
     });
 });
 

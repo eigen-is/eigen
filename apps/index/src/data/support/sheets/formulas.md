@@ -52,7 +52,7 @@ Sheets inserts the chosen formula with the most likely range already filled in. 
 
 To find a function you do not know by name:
 
-1. Open **Insert → Auto SUM → Learn more...**
+1. Open **Insert → Auto SUM → More functions…**
 2. The **Select a function** dialog opens. Type a name or description in the **Search function** box to filter the list, or pick a category from the **Or select a category** dropdown (such as **Statistical**, **Logical**, or **Text**).
 3. Click a function in the list to choose it, or press the **↑** and **↓** arrow keys in the search box to move through the list.
 4. Click **OK** or press **Enter**. The active cell opens with the function and an opening bracket, so you can type its arguments. Click **Cancel** to close without inserting.

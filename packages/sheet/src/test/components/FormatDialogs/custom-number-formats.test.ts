@@ -55,7 +55,7 @@ test('Apply sets the pattern on the selection and closes', async () => {
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     expect(dialog.field(PATTERN).value).toBe('#,##0.00');
     await dialog.type(PATTERN, '0.0');
-    expect(dialog.dialogs()[0]?.textContent).toContain('Sample: 1234.5');
+    expect(dialog.dialogs()[0]?.textContent).toContain('Preview: 1234.5');
     await dialog.click('Apply');
     expect(formats(dialog.context())).toEqual(['0.0', '0.0']);
     expect(dialog.dialogs()).toHaveLength(0);
@@ -94,5 +94,8 @@ test('a preset row fills the pattern field, and the keyboard can pick it', async
     expect(pickableByKeyboard(row)).toBe(true);
     await act(async () => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(dialog.field(PATTERN).value).toBe('0.00%');
+    // The preset in use is marked, as in the other format dialogs.
+    expect(presetRow('0.00%')?.classList).toContain('eigen-list-item-active');
+    expect(document.querySelectorAll('[role="dialog"] .eigen-list-item-active')).toHaveLength(1);
     expect(dialog.dialogs()).toHaveLength(1);
 });

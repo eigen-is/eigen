@@ -8,7 +8,7 @@ import { describe, expect, test } from 'bun:test';
 import type { DateTokenId, FormatSegment } from '../../../components/FormatDialogs/format-pattern';
 import {
     buildCurrencyPattern,
-    CURRENCY_VARIANTS,
+    CURRENCY_VARIANT_IDS,
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
     NUMBER_FORMAT_PRESETS,
@@ -196,12 +196,7 @@ describe('buildCurrencyPattern', () => {
     });
 
     test('the variant list covers exactly the four spec variants in order', () => {
-        expect(CURRENCY_VARIANTS.map((v) => v.id)).toEqual([
-            'symbolFirst',
-            'symbolFirstRounded',
-            'symbolLast',
-            'symbolLastRounded',
-        ]);
+        expect(CURRENCY_VARIANT_IDS).toEqual(['symbolFirst', 'symbolFirstRounded', 'symbolLast', 'symbolLastRounded']);
     });
 
     test('double quotes cannot be represented and are stripped', () => {

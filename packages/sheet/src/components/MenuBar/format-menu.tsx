@@ -17,7 +17,7 @@ import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import type { RunStyle } from '../../state';
+import type { ConditionRuleType, RunStyle } from '../../state';
 import {
     applyColorScalePreset,
     applyDataBarPreset,
@@ -43,7 +43,6 @@ import {
     SHEET_HOTKEYS,
     updateFormat,
 } from '../../state';
-import type { ConditionRuleType } from '../ConditionFormat/ConditionRules';
 import { ConditionRules, RULE_COPY } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
@@ -645,8 +644,6 @@ function ConditionalFormattingSubmenu() {
                         >
                             Delete sheet rules
                         </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
             </DropdownMenuSubContent>

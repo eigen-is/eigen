@@ -2,7 +2,6 @@
 // the Custom sort dialog. A header row, when the caller says the range has one, stays in place. Formulas in the
 // sorted rows are shifted to the rows they land on and evaluated again.
 
-import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
@@ -51,7 +50,7 @@ export function sortDataRange(
     startColumn: number,
     endColumn: number,
 ) {
-    const { sortedData, rowOffsets } = orderbydata(isAsc, index, dataRange);
+    const { sortedData, rowOffsets } = sortRows(isAsc, index, dataRange);
 
     // One live resolver serves every formula in the sort, so no formula takes its own snapshot of the workbook.
     const resolver = createContextResolver(ctx);
@@ -75,7 +74,8 @@ export function sortDataRange(
     jfrefreshgrid(ctx, sheetData, [{ row: [startRow, endRow], column: [startColumn, endColumn] }]);
 }
 
-export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[][]) {
+// The rows in their sorted order by the column at `index`, empty cells last, and how far each one moved.
+export function sortRows(isAsc: boolean, index: number, data: readonly (Cell | null)[][]) {
     const ascending = (x: (Cell | null)[], y: (Cell | null)[]) => {
         const x1 = cellValue(x[index]);
         const y1 = cellValue(y[index]);
@@ -107,13 +107,8 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
         return 0;
     };
     const descending = (x: (Cell | null)[], y: (Cell | null)[]) => ascending(y, x);
-    const sortedData = clone(data);
-    sortedData.sort(isAsc ? ascending : descending);
-
-    const rowOffsets = sortedData.map((r, i) => {
-        const origIndex = findIndex(data, (origR) => origR === r);
-        return i - origIndex;
-    });
-
-    return { sortedData, rowOffsets };
+    const compare = isAsc ? ascending : descending;
+    // The old place of each row in its new order, so a formula knows how far its row moved.
+    const order = data.map((_, i) => i).sort((a, b) => compare(data[a], data[b]));
+    return { sortedData: order.map((i) => data[i]), rowOffsets: order.map((from, to) => to - from) };
 }

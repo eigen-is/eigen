@@ -12,7 +12,7 @@ const { act, createElement } = await import('react');
 const { renderSheetDialog } = await import('../sheet-dialog');
 const { ConditionRules } = await import('../../../components/ConditionFormat/ConditionRules');
 
-type RuleType = import('../../../components/ConditionFormat/ConditionRules').ConditionRuleType;
+type RuleType = import('../../../state').ConditionRuleType;
 
 const cell = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } });
 
@@ -74,11 +74,11 @@ test('it adds a Greater than rule over the selection on OK and closes', async ()
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('Enter in the value field submits, and a typed cell reads that cell', async () => {
+test('Enter in the value field submits, and a cell typed with = stays a reference', async () => {
     const dialog = await openRule('equal');
-    await dialog.type('Value', 'A1');
+    await dialog.type('Value', '=A1');
     await act(async () => pressEnter(dialog.field('Value')));
-    expect(values(dialog.context())).toEqual([[5]]);
+    expect(values(dialog.context())).toEqual([['=B2=A1']]);
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
@@ -87,14 +87,19 @@ test('a refused value stays open with the reason under the field and the typed v
     await dialog.type('Value', 'abc');
     await dialog.click('OK');
     expect(dialog.dialogs()).toHaveLength(1);
-    expect(alert()).toBe('The condition value can only be a number or a single cell');
+    expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Value').value).toBe('abc');
+    // The field names the reason as its description, so a screen reader reads it there.
+    const reason = document.querySelector('[role="dialog"] [role="alert"]');
+    expect(reason?.id).toBeTruthy();
+    expect(dialog.field('Value').getAttribute('aria-describedby')).toBe(reason?.id ?? null);
+    expect(dialog.field('Value').getAttribute('aria-invalid')).toBe('true');
     expect(rules(dialog.context())).toEqual([]);
     expect(dialog.context().warnDialog).toBeUndefined();
 
-    await dialog.type('Value', 'A1:B2');
+    await dialog.type('Value', '=A1:B2');
     await act(async () => pressEnter(dialog.field('Value')));
-    expect(alert()).toBe('Only a single cell can be referenced');
+    expect(alert()).toBe('Enter a single cell, such as =A1');
     expect(dialog.dialogs()).toHaveLength(1);
 });
 
@@ -102,9 +107,11 @@ test('Between takes two values, and refuses an empty second one', async () => {
     const dialog = await openRule('between');
     await dialog.type('Lower value', '1');
     await dialog.click('OK');
-    expect(alert()).toBe('The condition value can only be a number or a single cell');
+    expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Lower value').value).toBe('1');
+    expect(dialog.field('Upper value').getAttribute('aria-describedby')).toBeTruthy();
     await dialog.type('Upper value', '9');
+    expect(dialog.field('Upper value').getAttribute('aria-describedby')).toBeNull();
     await dialog.click('OK');
     expect(values(dialog.context())).toEqual([['1', '9']]);
     expect(dialog.dialogs()).toHaveLength(0);
@@ -114,8 +121,9 @@ test('Top 10 refuses a count past 1000 and keeps it', async () => {
     const dialog = await openRule('top10');
     await dialog.type('Number of cells', '1001');
     await dialog.click('OK');
-    expect(alert()).toBe('Please enter an integer between 1 and 1000');
+    expect(alert()).toBe('Enter a whole number from 1 to 1000');
     expect(dialog.field('Number of cells').value).toBe('1001');
+    expect(dialog.field('Number of cells').getAttribute('aria-invalid')).toBe('true');
     expect(rules(dialog.context())).toEqual([]);
 });
 

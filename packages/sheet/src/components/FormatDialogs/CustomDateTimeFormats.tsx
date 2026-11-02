@@ -10,14 +10,11 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
-import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
-import { useContext, useState } from 'react';
-import { WorkbookContext } from '../../context';
+import { useState } from 'react';
 import { is_date } from '../../engine/format';
-import { useDialogProps } from '../../hooks/useDialog';
-import { DATE_FORMAT_PRESETS, handleNumberFormat } from '../../state';
+import { DATE_FORMAT_PRESETS } from '../../state';
+import { FormatDialog, PatternPreview, PresetList, PresetRow } from './format-dialog';
 import type { FormatSegment } from './format-pattern';
 import {
     DATE_TOKENS,
@@ -75,9 +72,6 @@ function TokenChip({
 }
 
 export function CustomDateTimeFormats() {
-    const { setContext, refs } = useContext(WorkbookContext);
-    const dialogProps = useDialogProps();
-
     const anchor = useAnchorCell();
     const anchorFa = anchor?.ct?.fa;
     const [segments, setSegments] = useState<FormatSegment[]>(() =>
@@ -92,110 +86,88 @@ export function CustomDateTimeFormats() {
     };
 
     return (
-        <FormDialog {...dialogProps} title="Custom date and time formats" size="md">
-            <FormDialogForm
-                submitLabel="Apply"
-                canSubmit={!!pattern && preview.ok}
-                onSubmit={() =>
-                    setContext((ctx) => {
-                        const cellInput = refs.cellInput.current;
-                        if (!cellInput) return;
-                        handleNumberFormat(ctx, cellInput, pattern);
-                    })
-                }
-            >
-                <div className="flex flex-col gap-1.5">
-                    <div className="flex flex-wrap items-center gap-1 rounded-md border border-input px-2 py-1.5 min-h-9">
-                        {segments.map((segment, index) =>
-                            segment.kind === 'token' ? (
-                                <TokenChip
-                                    // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and have no identity
-                                    key={`token-${index}`}
-                                    segment={segment}
-                                    onVariantChange={(p) => replaceSegment(index, { ...segment, pattern: p })}
-                                    onDelete={() => setSegments((prev) => prev.filter((_, i) => i !== index))}
-                                />
-                            ) : (
-                                <input
-                                    // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and have no identity
-                                    key={`literal-${index}`}
-                                    aria-label="Separator text"
-                                    className="h-5 bg-transparent text-sm outline-none"
-                                    style={{ width: `${Math.max(segment.text.length, 1)}ch` }}
-                                    value={segment.text}
-                                    onChange={(e) => replaceSegment(index, { kind: 'literal', text: e.target.value })}
-                                />
-                            ),
-                        )}
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <button
-                                    type="button"
-                                    aria-label="Insert token"
-                                    className="ml-auto inline-flex items-center rounded-md px-1 py-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                                >
-                                    <ChevronDown className="size-4" />
-                                </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent className="sheet-mousedown-cancel" align="end">
-                                {TOKEN_GROUPS.map(({ label, group }) => (
-                                    <div key={group}>
-                                        <DropdownMenuLabel className="text-xs text-muted-foreground">
-                                            {label}
-                                        </DropdownMenuLabel>
-                                        {DATE_TOKENS.filter((t) => t.group === group).map((token) => (
-                                            <DropdownMenuItem
-                                                key={token.id}
-                                                onClick={() =>
-                                                    setSegments((prev) => [
-                                                        ...prev,
-                                                        {
-                                                            kind: 'token',
-                                                            token: token.id,
-                                                            pattern: token.insertPattern,
-                                                        },
-                                                    ])
-                                                }
-                                            >
-                                                {token.label}
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </div>
-                                ))}
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem
-                                    onClick={() => setSegments((prev) => [...prev, { kind: 'literal', text: '' }])}
-                                >
-                                    Separator text
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                    {preview.ok ? (
-                        <div className="text-sm text-muted-foreground">
-                            Preview: <span className="text-foreground">{preview.text}</span>
-                        </div>
-                    ) : (
-                        <div className="text-sm text-destructive">{preview.error}</div>
+        <FormatDialog title="Custom date and time formats" pattern={pattern} canSubmit={!!pattern && preview.ok}>
+            <div className="flex flex-col gap-1.5">
+                <div className="flex flex-wrap items-center gap-1 rounded-md border border-input px-2 py-1.5 min-h-9">
+                    {segments.map((segment, index) =>
+                        segment.kind === 'token' ? (
+                            <TokenChip
+                                // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and have no identity
+                                key={`token-${index}`}
+                                segment={segment}
+                                onVariantChange={(p) => replaceSegment(index, { ...segment, pattern: p })}
+                                onDelete={() => setSegments((prev) => prev.filter((_, i) => i !== index))}
+                            />
+                        ) : (
+                            <input
+                                // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and have no identity
+                                key={`literal-${index}`}
+                                aria-label="Separator text"
+                                className="h-5 bg-transparent text-sm outline-none"
+                                style={{ width: `${Math.max(segment.text.length, 1)}ch` }}
+                                value={segment.text}
+                                onChange={(e) => replaceSegment(index, { kind: 'literal', text: e.target.value })}
+                            />
+                        ),
                     )}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label="Insert token"
+                                className="ml-auto inline-flex items-center rounded-md px-1 py-0.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                            >
+                                <ChevronDown className="size-4" />
+                            </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="sheet-mousedown-cancel" align="end">
+                            {TOKEN_GROUPS.map(({ label, group }) => (
+                                <div key={group}>
+                                    <DropdownMenuLabel className="text-xs text-muted-foreground">
+                                        {label}
+                                    </DropdownMenuLabel>
+                                    {DATE_TOKENS.filter((t) => t.group === group).map((token) => (
+                                        <DropdownMenuItem
+                                            key={token.id}
+                                            onClick={() =>
+                                                setSegments((prev) => [
+                                                    ...prev,
+                                                    {
+                                                        kind: 'token',
+                                                        token: token.id,
+                                                        pattern: token.insertPattern,
+                                                    },
+                                                ])
+                                            }
+                                        >
+                                            {token.label}
+                                        </DropdownMenuItem>
+                                    ))}
+                                </div>
+                            ))}
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                                onClick={() => setSegments((prev) => [...prev, { kind: 'literal', text: '' }])}
+                            >
+                                Separator text
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
-                <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
-                    {DATE_FORMAT_PRESETS.map(({ name, value }) => (
-                        <button
-                            type="button"
-                            className={cn(
-                                'flex w-full items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
-                                value === pattern && 'eigen-list-item-active',
-                            )}
-                            key={value}
-                            onClick={() => setSegments(tokenizePattern(value))}
-                        >
-                            <span>{name}</span>
-                            <span className="text-muted-foreground font-mono">{value}</span>
-                        </button>
-                    ))}
-                </div>
-            </FormDialogForm>
-        </FormDialog>
+                <PatternPreview preview={preview} />
+            </div>
+            <PresetList>
+                {DATE_FORMAT_PRESETS.map(({ name, value }) => (
+                    <PresetRow
+                        key={value}
+                        active={value === pattern}
+                        onPick={() => setSegments(tokenizePattern(value))}
+                    >
+                        <span>{name}</span>
+                        <span className="text-muted-foreground font-mono">{value}</span>
+                    </PresetRow>
+                ))}
+            </PresetList>
+        </FormatDialog>
     );
 }

@@ -23,6 +23,8 @@ Highlight rules apply a text color or background color to cells that match a spe
    - **Text contains**: enter a text string.
    - **Date is**: pick a date.
    - **Duplicate value**: flag duplicate or unique values in the selection.
+
+   To compare with the value in another cell, start with `=`, such as `=B1` or `=Data!B1`. The rule reads that cell each time, so it follows the cell when its value changes. Write `=$B$1` to compare every selected cell with B1: without the `$` signs, the reference moves from cell to cell, as it does in a copied formula. A value without `=` is used as typed, so `FY2024` is text, not a cell.
 4. In the dialog that opens, set the colors you want to apply. Tick **Text color** to change the text color, or **Cell color** to fill the background, then click the color swatch next to each to pick a color.
 5. Click **OK**. If the value can't be used, such as text where the rule needs a number, the dialog stays open and says why under the field.
 
@@ -54,6 +56,6 @@ A data bar draws a colored bar inside each cell proportional to its value.
 
 ## View and delete rules
 
-To see all the rules on the current sheet, open **Format → Conditional formatting → Manage rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. Click the **×** next to a rule to delete it.
+To see all the rules on the current sheet, open **Format → Conditional formatting → Manage rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. A rule that compares with another cell is listed as **Custom formula**, with its formula. Click the **×** next to a rule to delete it.
 
 To remove all conditional formatting from the current sheet at once, open **Format → Conditional formatting → Delete rule → Delete sheet rules**.

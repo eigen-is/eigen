@@ -12,7 +12,14 @@ import { useContext, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
-import { FUNCTION_CATEGORIES, FUNCTION_LIST, setCaretPosition } from '../../state';
+import { FUNCTION_CATEGORIES, FUNCTION_LIST, placeEditorCaret } from '../../state';
+
+// Each function with its name and description in lower case, so a search ignores case without lowering them per key.
+const SEARCHABLE_FUNCTIONS = FUNCTION_LIST.map((fn) => ({
+    fn,
+    name: fn.n.toLowerCase(),
+    description: fn.a.toLowerCase(),
+}));
 
 export function InsertFunctionDialog() {
     const {
@@ -31,15 +38,14 @@ export function InsertFunctionDialog() {
         if (!text) return FUNCTION_LIST.filter((fn) => fn.t === category);
         // The typed name comes first, then the names that start with it, the other names that hold it and the
         // descriptions that do, so Enter after a typed name inserts that function.
-        const rank = (fn: FormulaFunctionEntry) => {
-            const name = fn.n.toLowerCase();
-            if (name === text) return 0;
-            if (name.startsWith(text)) return 1;
-            return name.includes(text) ? 2 : 3;
-        };
-        return FUNCTION_LIST.filter(
-            (fn) => fn.n.toLowerCase().includes(text) || fn.a.toLowerCase().includes(text),
-        ).sort((a, b) => rank(a) - rank(b));
+        const ranked: { fn: FormulaFunctionEntry; rank: number }[] = [];
+        for (const { fn, name, description } of SEARCHABLE_FUNCTIONS) {
+            if (name === text) ranked.push({ fn, rank: 0 });
+            else if (name.startsWith(text)) ranked.push({ fn, rank: 1 });
+            else if (name.includes(text)) ranked.push({ fn, rank: 2 });
+            else if (description.includes(text)) ranked.push({ fn, rank: 3 });
+        }
+        return ranked.sort((a, b) => a.rank - b.rank).map(({ fn }) => fn);
     }, [category, searchText]);
 
     // The caret goes after the bracket, and the function's hint shows. An edit already open in the cell is replaced.
@@ -55,8 +61,7 @@ export function InsertFunctionDialog() {
             ];
             globalCache.doNotUpdateCell = true;
             input.innerHTML = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${name}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
-            const bracket = input.lastElementChild;
-            if (bracket instanceof HTMLElement) setCaretPosition(ctx, bracket, 0, 1);
+            placeEditorCaret(input, name.length + 2);
             ctx.functionHint = name;
             ctx.functionCandidates = [];
             if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
@@ -72,9 +77,9 @@ export function InsertFunctionDialog() {
             <FormDialogForm submitLabel="OK" canSubmit={functions.length > 0} onSubmit={insert}>
                 <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
                     <div className="space-y-1.5">
-                        <Label htmlFor="searchFormulaListInput">Search function</Label>
+                        <Label htmlFor="search-function">Search function</Label>
                         <Input
-                            id="searchFormulaListInput"
+                            id="search-function"
                             placeholder="Function name or brief description of function"
                             spellCheck={false}
                             onChange={(e) => {
@@ -91,7 +96,7 @@ export function InsertFunctionDialog() {
                         />
                     </div>
                     <div className="space-y-1.5">
-                        <Label htmlFor="insertFunctionCategory">Or select a category</Label>
+                        <Label htmlFor="function-category">Or select a category</Label>
                         <Select
                             value={String(category)}
                             onValueChange={(value) => {
@@ -99,13 +104,13 @@ export function InsertFunctionDialog() {
                                 setHighlight(0);
                             }}
                         >
-                            <SelectTrigger id="insertFunctionCategory" className="w-[160px]">
+                            <SelectTrigger id="function-category" className="w-[160px]">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {FUNCTION_CATEGORIES.map(({ t, n }) => (
-                                    <SelectItem key={t} value={String(t)}>
-                                        {n}
+                                {FUNCTION_CATEGORIES.map(({ id, name }) => (
+                                    <SelectItem key={id} value={String(id)}>
+                                        {name}
                                     </SelectItem>
                                 ))}
                             </SelectContent>

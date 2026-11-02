@@ -18,7 +18,7 @@ Sorting rearranges your rows by the values in a chosen column. Filtering hides r
 2. Open the **Data** menu and hover over **Sort range**.
 3. Choose **Ascending** to sort A to Z (or smallest to largest), or **Descending** to sort Z to A (or largest to smallest).
 
-Sheets sorts every row of your selection, the first one included. To keep a header row in place, use **Custom sort**. You can also right-click a cell in the range and choose **Sort range A → Z** or **Sort range Z → A**.
+**Sort range** works on one selected range, so it stays grayed out until exactly one range is selected. Sheets sorts by the first column of your selection. It sorts the rows from the first to the last one with a value in that column, the first row included, so empty rows above or below them stay where they are. To keep a header row in place, use **Custom sort**. You can also right-click a cell in the range and choose **Sort range A → Z** or **Sort range Z → A**.
 
 ### Custom sort
 
@@ -30,6 +30,8 @@ Sheets sorts every row of your selection, the first one included. To keep a head
 4. Choose the column to sort by from the **Sort by** dropdown.
 5. Select **Ascending** or **Descending**.
 6. Click **Sort**.
+
+As with a quick sort, the rows that move are those from the first to the last one with a value in the first column of your selection.
 
 <div class="eigen-callout">
 
