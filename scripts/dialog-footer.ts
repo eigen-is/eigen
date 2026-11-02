@@ -32,8 +32,6 @@ export const OWN_DIALOG_FOOTER = new Set([
     'packages/ui/src/components/charts/chart-data-dialog.tsx', // a grid
     'packages/ui/src/components/chat/chat-create-wizard.tsx', // several steps
     'packages/ui/src/components/confirm-dialog.tsx', // a yes or no
-    // An autocomplete with its own Enter, a submit label that changes, and a read-only branch.
-    'packages/ui/src/components/drive/drive-access-list-edit.tsx',
     'packages/ui/src/components/drive/drive-file-picker.tsx', // a picker
     'packages/ui/src/components/drive/drive-location-picker.tsx', // a picker
     'packages/ui/src/components/layout/app/about-dialog.tsx', // information only
