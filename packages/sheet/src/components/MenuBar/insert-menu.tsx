@@ -25,6 +25,14 @@ import {
 } from '../../state';
 import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
+// The Auto SUM functions after SUM, which has its own handler.
+const AUTO_SUM_FUNCTIONS = [
+    { formula: 'AVERAGE', label: 'Average' },
+    { formula: 'COUNT', label: 'Count' },
+    { formula: 'MAX', label: 'Max' },
+    { formula: 'MIN', label: 'Min' },
+] as const;
+
 export function InsertMenu() {
     const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
@@ -135,72 +143,30 @@ export function InsertMenu() {
                     <DropdownMenuItem
                         onClick={() => {
                             setContext((ctx) => {
-                                handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache!);
+                                handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache);
                             });
                         }}
                     >
                         Sum (SUM)
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setContext((ctx) => {
-                                autoSelectionFormula(
-                                    ctx,
-                                    refs.cellInput.current!,
-                                    refs.fxInput.current,
-                                    'AVERAGE',
-                                    refs.globalCache,
-                                );
-                            });
-                        }}
-                    >
-                        Average
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setContext((ctx) => {
-                                autoSelectionFormula(
-                                    ctx,
-                                    refs.cellInput.current!,
-                                    refs.fxInput.current,
-                                    'COUNT',
-                                    refs.globalCache,
-                                );
-                            });
-                        }}
-                    >
-                        Count
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setContext((ctx) => {
-                                autoSelectionFormula(
-                                    ctx,
-                                    refs.cellInput.current!,
-                                    refs.fxInput.current,
-                                    'MAX',
-                                    refs.globalCache,
-                                );
-                            });
-                        }}
-                    >
-                        Max
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setContext((ctx) => {
-                                autoSelectionFormula(
-                                    ctx,
-                                    refs.cellInput.current!,
-                                    refs.fxInput.current,
-                                    'MIN',
-                                    refs.globalCache,
-                                );
-                            });
-                        }}
-                    >
-                        Min
-                    </DropdownMenuItem>
+                    {AUTO_SUM_FUNCTIONS.map(({ formula, label }) => (
+                        <DropdownMenuItem
+                            key={formula}
+                            onClick={() => {
+                                setContext((ctx) => {
+                                    autoSelectionFormula(
+                                        ctx,
+                                        refs.cellInput.current!,
+                                        refs.fxInput.current,
+                                        formula,
+                                        refs.globalCache,
+                                    );
+                                });
+                            }}
+                        >
+                            {label}
+                        </DropdownMenuItem>
+                    ))}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog onCancel={hideDialog} />)}>
                         Learn more...

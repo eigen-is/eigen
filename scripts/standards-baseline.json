@@ -138,7 +138,7 @@
     "packages/sheet/src/components/ContextMenu/useSheetContextMenu.tsx": 2,
     "packages/sheet/src/components/CustomSort/index.tsx": 4,
     "packages/sheet/src/components/FormatDialogs/format-pattern.ts": 2,
-    "packages/sheet/src/components/MenuBar/insert-menu.tsx": 6,
+    "packages/sheet/src/components/MenuBar/insert-menu.tsx": 2,
     "packages/sheet/src/engine/formula-engine.ts": 2,
     "packages/sheet/src/state/events/mouse-cell.ts": 3,
     "packages/sheet/src/state/events/mouse-header.ts": 6,
