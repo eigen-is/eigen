@@ -141,14 +141,11 @@ export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSp
 // A data-validation rule, such as a list or a number check. A sheet holds each one with the ranges it covers
 // (SheetValidation). The editor writes it, and the canvas painter reads it for the list chevron and the tick box.
 //
-// `value1` carries the encoded payload as a string regardless of `type`:
-// comma-separated list for `dropdown`, numeric literal for the `number*` and
-// `text_length` variants, "selected" label for `checkbox`, ISO date for `date`.
-// `value2` is only populated for `between`/`notBetween` ranges and by
-// `checkbox` (its not-selected label) and is otherwise blank. A tick box stores
-// no checked flag — the cell value answers that (see `isCheckboxChecked`).
-// `hintShow` + `hintValue` drive the cell-focus hint popup. `prohibitInput`
-// blocks the input when validation fails (read by `updateCell`).
+// `value1` is a string whatever the type: the list's items, comma-separated, or a range, for a dropdown, a number for
+// the number and text-length checks, the checked value for a tick box and a YYYY-MM-DD date for a date check.
+// `value2` holds the upper bound of a between or not-between check, and a tick box's unchecked value. A tick box
+// stores no checked flag: the cell's value says whether it is checked (isCheckboxChecked). `hintShow` and `hintValue`
+// make the prompt a selected cell shows, and `prohibitInput` refuses a value that fails the check (updateCell).
 //
 // `type` and `type2` are `string` rather than a narrow union: the `DataVerification` dialog assigns them from Radix
 // Select's `onValueChange(value: string)`, and a union would need narrowing at every callback. Known values:
@@ -165,9 +162,8 @@ export type DataVerificationRule = {
     hintShow?: boolean;
     hintValue?: string;
     prohibitInput?: boolean;
-    // Editor-side draft fields preserved on the stored rule because the
-    // `DataVerification` dialog spreads `regulation` into the saved item. They
-    // have no effect at validation time but must be permitted by the type.
+    // Fields of the dialog's draft that land on the stored rule, because the dialog saves its whole draft. Only the
+    // dialog reads them back, when it opens on a cell of the rule.
     rangeTxt?: string;
     validity?: string;
     remote?: boolean;

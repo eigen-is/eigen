@@ -143,50 +143,38 @@ export function DataVerification() {
         [hideDialog, setContext, showDialog],
     );
 
-    // Initialize
+    // On open, the draft takes the focus cell's rule, or a new list, over the selection. A column or row header's
+    // selection is named B:B or 2:2, so the rule covers the whole column or row. Back from the range picker, the draft
+    // keeps what the user had and takes the range or the list source they picked.
     // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — initializes the data-verification dialog from current selection + rangeDialog
     useEffect(() => {
         setContext((ctx) => {
-            let rangeT = '';
-
-            // The selection as text, a column or row header's as B:B or 2:2, so its rule covers the whole column or row
-            if (ctx.selections) {
-                const range = ctx.selections[ctx.selections.length - 1];
-                const named: RangeOrWholeAxis =
-                    range.column_select && !range.row_select
-                        ? { row: [null, null], column: range.column }
-                        : range.row_select && !range.column_select
-                          ? { row: range.row, column: [null, null] }
-                          : range;
-                rangeT = getRangetxt(context, context.currentSheetId, named, context.currentSheetId);
-            }
-
-            // Initialize values
-            if (!ctx.selections) return;
-            const last = ctx.selections[ctx.selections.length - 1];
-            const rowIndex = last.row_focus;
-            const colIndex = last.column_focus;
-            if (rowIndex == null || colIndex == null) return;
-            const item = validationAt(getSheet(ctx).dataValidations, rowIndex, colIndex);
-            let rangValue = item?.value1 ?? '';
-            // Range assignment related
-            const dataRegulation = ctx.validationDraft;
-            if (ctx.rangeDialog.type === 'dropDown' && dataRegulation.rangeTxt) {
-                // When it's a dropdown list selection, assign dropdown selection, keep range unchanged
-                rangeT = dataRegulation.rangeTxt;
-                rangValue = ctx.rangeDialog.rangeTxt;
-            } else if (ctx.rangeDialog.type === 'rangeTxt' && dataRegulation.value1) {
-                // When it's a range selection, assign range, keep dropdown selection unchanged
-                rangValue = dataRegulation.value1;
-                rangeT = ctx.rangeDialog.rangeTxt;
+            const last = ctx.selections?.at(-1);
+            if (!last || last.row_focus == null || last.column_focus == null) return;
+            const named: RangeOrWholeAxis =
+                last.column_select && !last.row_select
+                    ? { row: [null, null], column: last.column }
+                    : last.row_select && !last.column_select
+                      ? { row: last.row, column: [null, null] }
+                      : last;
+            let rangeTxt = getRangetxt(context, context.currentSheetId, named, context.currentSheetId);
+            const item = validationAt(getSheet(ctx).dataValidations, last.row_focus, last.column_focus);
+            let value1 = item?.value1 ?? '';
+            const draft = ctx.validationDraft;
+            if (ctx.rangeDialog.type === 'dropDown' && draft.rangeTxt) {
+                rangeTxt = draft.rangeTxt;
+                value1 = ctx.rangeDialog.rangeTxt;
+            } else if (ctx.rangeDialog.type === 'rangeTxt' && draft.value1) {
+                value1 = draft.value1;
+                rangeTxt = ctx.rangeDialog.rangeTxt;
             }
             ctx.rangeDialog.type = '';
 
             if (item) {
                 ctx.validationDraft = {
                     ...item,
-                    value1: rangValue,
-                    rangeTxt: rangeT,
+                    value1,
+                    rangeTxt,
                     validity: item.validity ?? '',
                     remote: item.remote ?? false,
                     prohibitInput: item.prohibitInput ?? false,
@@ -197,8 +185,8 @@ export function DataVerification() {
                 ctx.validationDraft = {
                     type: 'dropdown',
                     type2: '',
-                    rangeTxt: rangeT,
-                    value1: rangValue,
+                    rangeTxt,
+                    value1,
                     value2: '',
                     validity: '',
                     remote: false,
