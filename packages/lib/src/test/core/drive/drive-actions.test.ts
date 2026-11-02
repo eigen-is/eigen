@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { DRIVE_ACTIONS, driveActionsFor } from '../../../core/drive/drive-actions';
-import type { DriveActionId, DriveActionSubject, DriveCapabilities, DrivePath } from '../../../types/drive';
+import type { DriveCapabilities, DrivePath } from '../../../types/drive';
+import type { DriveActionId, DriveActionSubject } from '../../../types/drive-actions';
 
 function path(p: Partial<DrivePath> & { name: string }): DrivePath {
     return {

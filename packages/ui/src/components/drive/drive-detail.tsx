@@ -5,8 +5,9 @@
 import { formatDateTime } from '@workspace/lib/date';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import { formatFileSize } from '@workspace/lib/format';
-import type { DriveActionId, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import type { FileActionId } from '@workspace/lib/types/file-subject';
 import { Button } from '@workspace/ui/components/button';
 import { DropdownMenu, DropdownMenuContent } from '@workspace/ui/components/dropdown-menu';

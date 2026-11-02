@@ -17,8 +17,8 @@ import {
     Trash2,
     UserRoundPlus,
 } from 'lucide-react';
-import type { DriveAction, DriveActionSubject } from '../../types/drive';
 import { exportFormatsFor, isOpenable } from '../../types/drive';
+import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
 import { getDriveItemUrl } from '../api';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;

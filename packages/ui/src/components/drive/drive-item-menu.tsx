@@ -2,8 +2,9 @@
 // column's ⋮. It draws the Drive actions the runner offers for the items beside the shared file actions,
 // each in its menu group. The caller wraps it in ContextMenuAnchor or DropdownMenuContent.
 
-import type { DriveAction, DriveActionGroup, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { EXPORT_FORMAT_LABELS, exportFormatsFor } from '@workspace/lib/types/drive';
+import type { DriveAction, DriveActionGroup } from '@workspace/lib/types/drive-actions';
 import {
     DropdownMenuItem,
     DropdownMenuShortcut,

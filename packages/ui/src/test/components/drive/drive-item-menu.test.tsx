@@ -4,7 +4,8 @@
 import { afterEach, expect, mock, test } from 'bun:test';
 import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DriveActionId, DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import type { FileAction } from '@workspace/lib/types/file-subject';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';

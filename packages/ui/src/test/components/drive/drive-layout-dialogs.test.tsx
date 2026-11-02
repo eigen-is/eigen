@@ -1,7 +1,7 @@
 // A guest may not mail people through the server, so Drive offers Email collaborators on a shared item
 // to an editor and hides it from a guest editor.
 import { afterEach, expect, mock, test } from 'bun:test';
-import type { DriveActionId } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';

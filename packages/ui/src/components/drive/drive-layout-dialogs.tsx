@@ -15,15 +15,9 @@ import {
     useMovePath,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import type {
-    DriveAction,
-    DriveActionId,
-    DriveCapabilities,
-    DrivePath,
-    EigenDocType,
-    ExportFormat,
-} from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
 import type { ReactNode } from 'react';
 import { toast } from 'sonner';
 import { DriveAccessDialog } from './drive-access-dialog';
