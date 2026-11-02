@@ -6,12 +6,12 @@ import { DEFAULT_NORMAL_STYLE, DEFAULT_PAGE_SETUP } from '@workspace/lib/docs/ei
 import { escapeHtml } from '@workspace/lib/html';
 import type { BackgroundFill } from '@workspace/lib/types/background';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { VectorElement, VectorFrame, VectorRichTextElement, VectorScene } from '@workspace/lib/vector';
+import type { VectorElement, VectorFrame, VectorRectangleElement, VectorScene } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_RICHTEXT_PROPS,
     DEFAULT_SCENE_META,
     DEFAULT_SHAPE_TEXT_PROPS,
+    DEFAULT_TEXT_BOX_PROPS,
     FRAME_FIELDS,
     generateNKeysBetween,
     SLIDE_SIZES,
@@ -679,13 +679,14 @@ function deckText(
     id: string,
     frameId: string,
     index: string,
-    over: Partial<VectorRichTextElement>,
-): VectorRichTextElement {
+    over: Partial<VectorRectangleElement>,
+): VectorRectangleElement {
     return {
         ...DEFAULT_ELEMENT_PROPS,
-        ...DEFAULT_RICHTEXT_PROPS,
+        ...DEFAULT_TEXT_BOX_PROPS,
         id,
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         index,
         frameId,
         x: 160,
@@ -855,6 +856,7 @@ export function buildGoldenVectorScene(): VectorScene {
             seed: 1,
             index: 'a0',
             corners: 'straight',
+            autoFit: false,
         },
         {
             ...base,
@@ -873,7 +875,8 @@ export function buildGoldenVectorScene(): VectorScene {
             ...base,
             ...filled,
             id: 'v-text',
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 0,
             y: 100,
             width: 160,
@@ -1005,6 +1008,7 @@ export function buildGoldenVectorScene(): VectorScene {
             seed: 9,
             index: 'a8',
             corners: 'curved',
+            autoFit: false,
             fill: serializeFill({ type: 'gradient', from: '#e60076', to: '#2563eb', angle: 45, style: 'hachure' }),
         },
     ];

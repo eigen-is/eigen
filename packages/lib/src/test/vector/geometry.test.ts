@@ -1,32 +1,39 @@
 import { describe, expect, test } from 'bun:test';
 import { RoughGenerator } from 'roughjs/bin/generator';
+import {
+    anchorToScene,
+    bindingAnchor,
+    bindingDistance,
+    bindingGap,
+    boundEndpoint,
+    elbowAnchorScene,
+    elementBounds,
+    focusSnapPoint,
+    followBindings,
+    hitTestElement,
+    normalizeFixedPoint,
+    outlinePoint,
+    projectFixedPointOntoDiagonal,
+    remapBinding,
+    shapeAnchorPoints,
+} from '../../vector/binding';
 import { elbowBindPoint } from '../../vector/elbow-heading';
 import { elbowRoute } from '../../vector/elbow-route';
 import { solidFill } from '../../vector/fill';
 import type { Box, Point } from '../../vector/geometry';
 import {
-    anchorToScene,
     applyResize,
     arrowCurveBeziers,
     arrowheadGeometry,
     arrowLabelBox,
-    bindingAnchor,
-    bindingDistance,
-    bindingGap,
-    boundEndpoint,
     boxCenter,
     COARSE_HIT_SLOP_MULTIPLIER,
     distanceToPolyline,
-    elbowAnchorScene,
-    elementBounds,
-    focusSnapPoint,
-    followBindings,
     getElementBounds,
     getElementsBounds,
     HIT_THRESHOLD_SCREEN,
     hitTestBox,
     hitTestDiamond,
-    hitTestElement,
     hitTestEllipse,
     hitThresholdScreen,
     isClosedPath,
@@ -34,16 +41,11 @@ import {
     linearSceneToLocal,
     marqueeHits,
     marqueeMode,
-    normalizeFixedPoint,
     normalizeLinear,
-    outlinePoint,
-    projectFixedPointOntoDiagonal,
-    remapBinding,
     rescalePoints,
     resizeLinear,
     resizeRotatedRect,
     rotatePoint,
-    shapeAnchorPoints,
     snapAngle,
     unionBounds,
 } from '../../vector/geometry';
@@ -57,11 +59,10 @@ import type {
     VectorElement,
     VectorLinearElement,
     VectorRectangleElement,
-    VectorRichTextElement,
     VectorShapeElement,
 } from '../../vector/types';
 import { arrowsBoundTo, DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, serializeBinding } from '../../vector/types';
-import { byIdOf, richtext } from './element-factories';
+import { byIdOf, textBox } from './element-factories';
 
 const box = (over: Partial<Box>): Box => ({ x: 0, y: 0, width: 100, height: 60, angle: 0, ...over });
 
@@ -151,7 +152,7 @@ describe('hitTestDiamond', () => {
 });
 
 describe('hitTestElement', () => {
-    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'richtext' | 'image'): VectorElement => {
+    const make = (type: 'rectangle' | 'diamond' | 'ellipse' | 'text' | 'image'): VectorElement => {
         const base = {
             ...DEFAULT_ELEMENT_PROPS,
             ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
@@ -164,11 +165,15 @@ describe('hitTestElement', () => {
             index: 'a0',
             fill: solidFill('transparent'),
             corners: 'straight',
+            autoFit: false,
         } satisfies Omit<VectorRectangleElement, 'type' | 'roughness' | 'seed'>;
-        if (type === 'richtext')
+        if (type === 'text')
             return {
                 ...base,
-                type,
+                type: 'rectangle',
+                autoFit: true,
+                roughness: 1,
+                seed: 1,
                 html: '<p>hi</p>',
                 fontFamily: 'Excalifont',
                 fontSize: 20,
@@ -191,7 +196,7 @@ describe('hitTestElement', () => {
         expect(hitTestElement(make('rectangle'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('ellipse'), { x: 0, y: 0 }, 0)).toBe(false);
         expect(hitTestElement(make('diamond'), { x: 0, y: 0 }, 0)).toBe(false);
-        expect(hitTestElement(make('richtext'), { x: 0, y: 0 }, 0)).toBe(true);
+        expect(hitTestElement(make('text'), { x: 0, y: 0 }, 0)).toBe(true);
         expect(hitTestElement(make('image'), { x: 0, y: 0 }, 0)).toBe(true);
     });
 });
@@ -633,6 +638,7 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     roughness: 1,
     seed: 1,
     corners: 'straight',
+    autoFit: false,
 };
 
 const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
@@ -1023,7 +1029,7 @@ describe('binding a rich text box', () => {
     // Rich text is a DOM box, but an arrow docks on it exactly as on a rectangle: the outline the kind
     // declares (rounded by `corners`), the gap its stroke width sets, the follow every bound end gets.
     // Same box as followBindings' rectangle, so the two are directly comparable.
-    const box = richtext({ id: 'txt', x: 150, y: -30, width: 60, height: 60, corners: 'curved' });
+    const box = textBox({ id: 'txt', x: 150, y: -30, width: 60, height: 60, corners: 'curved' });
     const byId = new Map<string, VectorElement>([[box.id, box]]);
     const toward = arrowEl({ points: '[[0,0],[100,0]]', width: 100, endBinding: bind(box, [0, 0.5]) });
 
@@ -1059,7 +1065,7 @@ describe('binding a rich text box', () => {
     });
 
     test('the dock honours the rounded corner the box is drawn with', () => {
-        const sharp: VectorRichTextElement = { ...box, corners: 'straight' };
+        const sharp: VectorRectangleElement = { ...box, corners: 'straight' };
         // aimed diagonally at the top-left corner anchor, where a rounded outline and a sharp one differ
         const atCorner = arrowEl({
             points: '[[0,0],[50,50]]',

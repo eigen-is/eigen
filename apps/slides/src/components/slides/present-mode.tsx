@@ -1,6 +1,6 @@
 // Present mode: one slide, full screen, nothing else. It renders FrameView — the same read-only page
-// the rail thumbnail draws — so what a presenter shows is what the editor showed, and links inside a
-// rich-text box work because the layers take pointer events here.
+// the rail thumbnail draws — so what a presenter shows is what the editor showed, and links in the text
+// of a text box or a shape work because the layers take pointer events here.
 
 import { useMediaResolver } from '@workspace/lib/drive';
 import type { VectorElement, VectorFrame } from '@workspace/lib/vector';

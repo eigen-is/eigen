@@ -92,6 +92,14 @@ describe('an import summary', () => {
         );
     });
 
+    // A cropped picture comes in uncropped, unless its crop is a centered fit.
+    test("a picture's crop is said to be what was not imported", () => {
+        expect(lossSummary([{ code: 'crops-dropped', count: 1 }], 'import')).toBe("1 picture's crop was not imported.");
+        expect(lossSummary([{ code: 'crops-dropped', count: 2 }], 'import')).toBe(
+            "2 pictures' crops were not imported.",
+        );
+    });
+
     test("a docx's losses have their nouns", () => {
         expect(
             lossSummary(

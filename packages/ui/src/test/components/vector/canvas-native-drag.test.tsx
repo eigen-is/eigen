@@ -50,7 +50,17 @@ const { CanvasEditor, useCanvasDoc } = await import('../../../components/vector'
 // A bar with a label's text box stacked over it, as Convert to shapes leaves a chart.
 const ELEMENTS: (NewVectorElement & { id: string })[] = [
     { id: 'bar', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 },
-    { id: 'label', type: 'richtext', x: 0, y: 40, width: 300, height: 40, html: '<p>Sun</p>', fontFamily: 'Inter' },
+    {
+        id: 'label',
+        type: 'rectangle',
+        autoFit: true,
+        x: 0,
+        y: 40,
+        width: 300,
+        height: 40,
+        html: '<p>Sun</p>',
+        fontFamily: 'Inter',
+    },
 ];
 
 beforeEach(() => {

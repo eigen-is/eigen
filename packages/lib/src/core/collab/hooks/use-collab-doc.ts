@@ -39,7 +39,7 @@ export type UseCollabDocOptions = {
     // (no options): any non-null transaction origin escapes capture. Omit → no UndoManager. The return
     // type is Y.UndoManager's own `typeScope` param, so hosts hand back Y.Map/Y.Array roots directly.
     // Existing escape sentinels: NORMALIZE_ORIGIN (shared repairs, collab/normalize-refs) and vector's
-    // private UNTRACKED_ORIGIN (use-vector-doc) — reuse one of those before inventing another.
+    // private UNTRACKED_ORIGIN (useCanvasDoc) — reuse one of those before inventing another.
     undoScope?: (doc: Y.Doc) => ConstructorParameters<typeof Y.UndoManager>[0];
     // Runs once per doc creation, inside the lifecycle effect, after doc/provider/undoManager exist.
     // Attach observers and seed initial React state here; return a cleanup that unregisters them — it

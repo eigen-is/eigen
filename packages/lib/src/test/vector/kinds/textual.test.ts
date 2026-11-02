@@ -3,7 +3,7 @@ import { richTextCssText, SLIDES_STYLE_DEFAULTS } from '../../../vector/kinds';
 import { MAX_HTML_BYTES } from '../../../vector/kinds/read-fields';
 import { hasText, plainText, readTextual, textRender, textualDefaults } from '../../../vector/kinds/textual';
 import type { Textual } from '../../../vector/types';
-import { DEFAULT_RICHTEXT_PROPS, DEFAULT_SHAPE_TEXT_PROPS } from '../../../vector/types';
+import { DEFAULT_SHAPE_TEXT_PROPS, DEFAULT_TEXT_BOX_PROPS } from '../../../vector/types';
 import { shape } from '../element-factories';
 
 const stored = (fields: Record<string, unknown>) => new Map(Object.entries(fields));
@@ -24,7 +24,7 @@ describe('textualDefaults', () => {
             lineHeight: 1.2,
             padding: 10,
         });
-        expect(textualDefaults(SLIDES_STYLE_DEFAULTS, DEFAULT_RICHTEXT_PROPS)).toMatchObject({
+        expect(textualDefaults(SLIDES_STYLE_DEFAULTS, DEFAULT_TEXT_BOX_PROPS)).toMatchObject({
             textAlign: 'left',
             verticalAlign: 'top',
             padding: 0,
@@ -48,7 +48,7 @@ describe('readTextual', () => {
             lineHeight: 1.2,
             padding: 10,
         });
-        expect(readTextual(stored({}), DEFAULT_RICHTEXT_PROPS)).toMatchObject({
+        expect(readTextual(stored({}), DEFAULT_TEXT_BOX_PROPS)).toMatchObject({
             textAlign: 'left',
             verticalAlign: 'top',
             padding: 0,

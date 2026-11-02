@@ -217,12 +217,16 @@ describe('a chart', () => {
 describe('a chart left as a box', () => {
     const boxOf = (deck: ReturnType<typeof readPptx>) => {
         const [found] = deck.slides[0].elements;
-        return { type: found?.type, html: found?.html };
+        return { type: found?.type, autoFit: found?.autoFit, html: found?.html };
     };
 
     test('a chart the reader cannot draw says its kind and title, counted as a dropped chart', () => {
         const deck = deckWith(SCATTER);
-        expect(boxOf(deck)).toEqual({ type: 'richtext', html: '<p>Scatter chart not imported</p><p>Spread</p>' });
+        expect(boxOf(deck)).toEqual({
+            type: 'rectangle',
+            autoFit: true,
+            html: '<p>Scatter chart not imported</p><p>Spread</p>',
+        });
         expect(deck.warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
     });
 
@@ -339,7 +343,11 @@ describe('bounds', () => {
         const deck = readPptx(pptx, OPTIONS);
         expect(cpuMs()).toBeLessThan(3000);
         expect(deck.slides[0].elements[0]?.type).toBe('chart');
-        expect(deck.slides[399].elements[0]).toMatchObject({ type: 'richtext', html: '<p>Chart not imported</p>' });
+        expect(deck.slides[399].elements[0]).toMatchObject({
+            type: 'rectangle',
+            autoFit: true,
+            html: '<p>Chart not imported</p>',
+        });
     });
 
     test('a chart is charged the points its caches declare, not only its elements', () => {
@@ -395,7 +403,7 @@ describe('bounds', () => {
         expect(deck.slides).toHaveLength(10);
         const [text, chart, after] = deck.slides[9].elements;
         expect(text?.html).toStartWith('<p>xxx');
-        expect(chart).toMatchObject({ type: 'richtext', html: '<p>Chart not imported</p>' });
+        expect(chart).toMatchObject({ type: 'rectangle', autoFit: true, html: '<p>Chart not imported</p>' });
         expect(after?.html).toContain('After');
         expect(deck.warnings).toEqual([{ code: 'charts-dropped', count: 1 }]);
     });

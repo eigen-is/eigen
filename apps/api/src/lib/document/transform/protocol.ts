@@ -151,6 +151,7 @@ export const COUNTED_WARNING_CODES = [
     'images-unshown',
     'images-dropped',
     'mirrors-dropped',
+    'crops-dropped',
     'tables-dropped',
     'tables-simplified',
     'charts-dropped',

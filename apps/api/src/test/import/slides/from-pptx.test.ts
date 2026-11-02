@@ -180,11 +180,13 @@ describe('limits', () => {
             });
             for (let i = 0; i < count; i++) parts[`ppt/media/image${i}.png`] = PIXEL_PNG;
             const deck = readPptx(zipParts(parts), options);
-            const types = deck.slides[0].elements.map((element) => element.type);
+            const types = deck.slides[0].elements.map((element) =>
+                element.type === 'rectangle' && element.autoFit ? 'text' : element.type,
+            );
             return {
                 media: deck.media.length,
                 images: types.filter((type) => type === 'image').length,
-                boxes: types.filter((type) => type === 'richtext').length,
+                boxes: types.filter((type) => type === 'text').length,
                 warnings: deck.warnings,
             };
         };

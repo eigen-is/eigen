@@ -1,7 +1,9 @@
+// File › Page setup in Slides: Google Slides' slide size, Widescreen 16:9 or Standard 4:3, which every slide of the
+// deck shares. A writer picks one and OK writes it to the deck. A viewer sees the size with only a Close button.
+
 import type { SlideSize } from '@workspace/lib/vector';
 import { oneOf, SLIDE_SIZE_KEYS } from '@workspace/lib/vector';
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
@@ -24,42 +26,28 @@ const SLIDE_SIZE_LABELS: Record<SlideSize, string> = {
 // Google Slides' Page setup without 16:10 and Custom.
 export function PageSetupDialog({ open, onOpenChange, slideSize, canWrite, onSlideSizeChange }: PageSetupDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent size="sm" showCloseButton={false} aria-describedby={undefined}>
-                <DialogHeader>
-                    <DialogTitle>Page setup</DialogTitle>
-                </DialogHeader>
-                <PageSetupForm
-                    slideSize={slideSize}
-                    canWrite={canWrite}
-                    onSubmit={onSlideSizeChange}
-                    onDone={() => onOpenChange(false)}
-                />
-            </DialogContent>
-        </Dialog>
+        <FormDialog open={open} onOpenChange={onOpenChange} title="Page setup" size="sm">
+            <PageSetupForm slideSize={slideSize} canWrite={canWrite} onSlideSizeChange={onSlideSizeChange} />
+        </FormDialog>
     );
 }
 
-type PageSetupFormProps = {
-    slideSize: SlideSize;
-    canWrite: boolean;
-    onSubmit: (size: SlideSize) => void;
-    onDone: () => void;
-};
-
 // Mounted with the dialog, so each opening starts unpicked. Until the user picks, it shows the deck's size as it is
 // now, a peer's change included, and OK writes only a pick that differs from it.
-function PageSetupForm({ slideSize, canWrite, onSubmit, onDone }: PageSetupFormProps) {
+function PageSetupForm({
+    slideSize,
+    canWrite,
+    onSlideSizeChange,
+}: Omit<PageSetupDialogProps, 'open' | 'onOpenChange'>) {
     const [picked, setPicked] = useState<SlideSize | null>(null);
     const size = picked ?? slideSize;
 
     return (
-        <form
-            className="flex flex-col gap-6"
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (size !== slideSize) onSubmit(size);
-                onDone();
+        <FormDialogForm
+            submitLabel="OK"
+            readOnly={!canWrite}
+            onSubmit={() => {
+                if (size !== slideSize) onSlideSizeChange(size);
             }}
         >
             <FieldSet>
@@ -77,17 +65,6 @@ function PageSetupForm({ slideSize, canWrite, onSubmit, onDone }: PageSetupFormP
                     ))}
                 </RadioGroup>
             </FieldSet>
-
-            {canWrite ? (
-                <DialogFooter>
-                    <Button type="button" variant="outline" onClick={onDone}>
-                        Cancel
-                    </Button>
-                    <Button type="submit">OK</Button>
-                </DialogFooter>
-            ) : (
-                <DialogFooter showCloseButton />
-            )}
-        </form>
+        </FormDialogForm>
     );
 }

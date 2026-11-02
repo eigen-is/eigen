@@ -1,5 +1,5 @@
-// The image writer behind Download image and Vector's File › Download › SVG. It draws canvas elements, or a doc's
-// or a sheet's chart, as one standalone SVG. Rich text becomes SVG text from the browser's own layout of each box.
+// Writes a downloaded image, such as the one Download image saves. It draws canvas elements, or a doc's or a sheet's
+// chart, as one standalone SVG. Rich text becomes SVG text from the browser's own layout of each box.
 // The file embeds the font slices its text draws in and inlines images from the canvas's own media, so it draws
 // the same in any SVG reader. Measuring needs the DOM, so it lives here, and lib writes the SVG.
 
@@ -19,9 +19,8 @@ import type {
 import {
     canvasImageScene,
     canvasImageSlices,
+    drawsTextBody,
     eigenMediaHref,
-    hasText,
-    isTextual,
     layerInnerHtml,
     richTextCssText,
     richTextSvg,
@@ -63,30 +62,28 @@ export async function downloadCanvasImage(
 
 // Each text box and shape with text, laid out as its canvas layer is: the layer's own markup and style at
 // the box's size, under the app's canvas-text.css. It is read back as where every character landed.
-async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
-    const boxes = elements
-        .filter((el): el is VectorTextualElement => isTextual(el) && (el.type === 'richtext' || hasText(el)))
-        .map((el) => {
-            const host = document.createElement('div');
-            host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
-            // Stored html arrives verbatim from any peer, so it is sanitized here as at every seam that renders it.
-            host.innerHTML = layerInnerHtml({
-                svg: '',
-                html: sanitizeToLightEditorHtml(el.html),
-                style: richTextCssText(el),
-            });
-            // A list marker is a ::marker no Range reaches, so the measured copy carries a number as text where the
-            // browser draws it: its own figures, ending where the item starts. A disc is no text (discOf).
-            for (const item of host.querySelectorAll<HTMLLIElement>('ol > li')) {
-                const marker = document.createElement('span');
-                marker.style.cssText = 'position:absolute;right:100%;white-space:pre;font-variant-numeric:tabular-nums';
-                marker.textContent = `${[...(item.parentElement?.children ?? [])].indexOf(item) + 1}. `;
-                item.style.position = 'relative';
-                item.prepend(marker);
-            }
-            document.body.append(host);
-            return { el, host };
+async function measureRichText(elements: readonly VectorElement[]): Promise<Map<string, MeasuredRichText>> {
+    const boxes = elements.filter(drawsTextBody).map((el) => {
+        const host = document.createElement('div');
+        host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
+        // Stored html arrives verbatim from any peer, so it is sanitized here as at every seam that renders it.
+        host.innerHTML = layerInnerHtml({
+            svg: '',
+            html: sanitizeToLightEditorHtml(el.html),
+            style: richTextCssText(el),
         });
+        // A list marker is a ::marker that no Range reaches, so the measured copy puts the number in as text where the
+        // browser draws it, ending where the item starts. A bullet's disc is not text, so discOf measures it apart.
+        for (const item of host.querySelectorAll<HTMLLIElement>('ol > li')) {
+            const marker = document.createElement('span');
+            marker.style.cssText = 'position:absolute;right:100%;white-space:pre;font-variant-numeric:tabular-nums';
+            marker.textContent = `${[...(item.parentElement?.children ?? [])].indexOf(item) + 1}. `;
+            item.style.position = 'relative';
+            item.prepend(marker);
+        }
+        document.body.append(host);
+        return { el, host };
+    });
     try {
         // Laying the boxes out asks for every face they draw in; the characters are read once those have loaded.
         for (const { host } of boxes) host.getBoundingClientRect();
@@ -95,26 +92,6 @@ async function measureRichText(elements: VectorElement[]): Promise<Map<string, M
     } finally {
         for (const { host } of boxes) host.remove();
     }
-}
-
-// A disc sits on its item's first line, at the item's start, in the item's font. A zero-width space at the start of
-// the item's first block finds that line's baseline, an empty paragraph's too, after every character is read.
-function discOf(item: Element, origin: DOMRect, root: Element): MeasuredDisc {
-    const line = item.firstElementChild ?? item;
-    const probe = document.createTextNode('\u200b');
-    line.prepend(probe);
-    const range = document.createRange();
-    range.selectNodeContents(probe);
-    const top = range.getBoundingClientRect().top;
-    const baseline = top - origin.top + ascentOf(line);
-    probe.remove();
-    return {
-        x: item.getBoundingClientRect().left - origin.left,
-        baseline,
-        ascent: ascentOf(item),
-        color: getComputedStyle(item).color,
-        opacity: opacityOf(item, root),
-    };
 }
 
 function readBox(el: VectorTextualElement, host: HTMLDivElement): MeasuredRichText {
@@ -232,4 +209,25 @@ function rulesOf(root: Element, origin: DOMRect): MeasuredRule[] {
         });
     }
     return rules;
+}
+
+// A disc sits on its item's first line, at the item's start, in the item's font. A zero-width space put at the start of
+// the item's first block finds that line's baseline, even in an empty paragraph. It goes in after every character has
+// been read, so it moves none of them.
+function discOf(item: Element, origin: DOMRect, root: Element): MeasuredDisc {
+    const line = item.firstElementChild ?? item;
+    const probe = document.createTextNode('\u200b');
+    line.prepend(probe);
+    const range = document.createRange();
+    range.selectNodeContents(probe);
+    const top = range.getBoundingClientRect().top;
+    const baseline = top - origin.top + ascentOf(line);
+    probe.remove();
+    return {
+        x: item.getBoundingClientRect().left - origin.left,
+        baseline,
+        ascent: ascentOf(item),
+        color: getComputedStyle(item).color,
+        opacity: opacityOf(item, root),
+    };
 }

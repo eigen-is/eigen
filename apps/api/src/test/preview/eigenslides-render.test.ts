@@ -26,7 +26,7 @@ function previewOf(html: string): string {
     const scene = buildGoldenDeckScene();
     return previewOfScene({
         ...scene,
-        elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html } : el)),
+        elements: scene.elements.map((el) => (el.type === 'rectangle' && el.autoFit ? { ...el, html } : el)),
     });
 }
 
@@ -68,7 +68,7 @@ describe('renderEigenslidesPreviewBody', () => {
         // drawing preview's element budget exists to refuse.
         const scene = buildGoldenDeckScene();
         const frames = scene.frames.slice(0, 2);
-        const template = scene.elements.find((el) => el.type === 'richtext');
+        const template = scene.elements.find((el) => el.type === 'rectangle' && el.autoFit);
         if (!template) throw new Error('the golden deck lost its rich-text boxes');
         const elements = Array.from({ length: 520 }, (_, i) => ({
             ...template,
@@ -173,7 +173,7 @@ describe('renderEigenslidesPreviewBody', () => {
         // so it takes a slide packed with boxes to get past the 8-slide limit, and then only the
         // byte guard stands between it and the cache.
         const scene = buildGoldenDeckScene();
-        const template = scene.elements.find((el) => el.type === 'richtext');
+        const template = scene.elements.find((el) => el.type === 'rectangle' && el.autoFit);
         if (!template) throw new Error('the golden deck lost its rich-text boxes');
         const big = `<p>${'x'.repeat(64 * 1024)}</p>`;
         const elements = scene.frames.flatMap((frame) =>

@@ -1,10 +1,9 @@
 // The dialog that adds a column to a board. It asks for the column's title and hands it to the board, which
 // writes the column into the board's document.
 
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
 
 type AddColumnDialogProps = {
@@ -14,48 +13,33 @@ type AddColumnDialogProps = {
 };
 
 export function AddColumnDialog({ isOpen, onClose, onAddColumn }: AddColumnDialogProps) {
+    return (
+        <FormDialog open={isOpen} onOpenChange={onClose} title="Add column" size="sm">
+            <AddColumnForm onAddColumn={onAddColumn} />
+        </FormDialog>
+    );
+}
+
+// Mounted with the dialog, so each opening starts with an empty title.
+function AddColumnForm({ onAddColumn }: Pick<AddColumnDialogProps, 'onAddColumn'>) {
     const [title, setTitle] = useState('');
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!title.trim()) return;
-
-        onAddColumn(title.trim());
-
-        setTitle('');
-        onClose();
-    };
-
     return (
-        <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent size="sm" aria-describedby={undefined}>
-                <form onSubmit={handleSubmit}>
-                    <DialogHeader>
-                        <DialogTitle>Add column</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="column-title">Title</Label>
-                            <Input
-                                id="column-title"
-                                value={title}
-                                onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Enter column title"
-                                autoFocus
-                                required
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={onClose}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={!title.trim()}>
-                            Add column
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+        <FormDialogForm
+            canSubmit={title.trim() !== ''}
+            submitLabel="Add column"
+            onSubmit={() => onAddColumn(title.trim())}
+        >
+            <Field>
+                <FieldLabel htmlFor="column-title">Title</FieldLabel>
+                <Input
+                    id="column-title"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder="Enter column title"
+                    autoFocus
+                />
+            </Field>
+        </FormDialogForm>
     );
 }

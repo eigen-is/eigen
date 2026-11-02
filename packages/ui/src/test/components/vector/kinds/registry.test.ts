@@ -37,7 +37,7 @@ describe('ELEMENT_KIND_UI', () => {
 
     test('the tool list reads its icons and labels from the registry', () => {
         for (const entry of VECTOR_TOOLS) {
-            if (entry.tool === 'select' || entry.tool === 'eraser') continue;
+            if (entry.tool === 'select' || entry.tool === 'text' || entry.tool === 'eraser') continue;
             expect(entry.icon).toBe(ELEMENT_KIND_UI[entry.tool].icon);
             expect(entry.label).toBe(ELEMENT_KIND_UI[entry.tool].label);
         }
@@ -62,7 +62,7 @@ describe('ELEMENT_KIND_UI', () => {
             if (ELEMENT_KINDS[type].capabilities.creation !== 'box') continue;
             expect([type, isBoxTool(type)]).toEqual([type, true]);
             if (!isBoxTool(type)) continue;
-            expect(creatingElement({ type, seed: 1, box }, VECTOR_STYLE_DEFAULTS).type).toBe(type);
+            expect(creatingElement({ tool: type, seed: 1, box }, VECTOR_STYLE_DEFAULTS).type).toBe(type);
         }
     });
 
@@ -70,18 +70,18 @@ describe('ELEMENT_KIND_UI', () => {
         // The deck's table is flat and solid in Inter; the drawing canvas' is sketchy and cross-hatched in
         // Excalifont. A preview built from the wrong one changes look the moment the pointer lifts.
         const box = { x: 0, y: 0, width: 10, height: 10, angle: 0 };
-        const rect = creatingElement({ type: 'rectangle', seed: 1, box }, SLIDES_STYLE_DEFAULTS);
+        const rect = creatingElement({ tool: 'rectangle', seed: 1, box }, SLIDES_STYLE_DEFAULTS);
         expect(rect.type === 'rectangle' && rect.roughness).toBe(SLIDES_STYLE_DEFAULTS.roughness);
         expect(rect.type === 'rectangle' && rect.fill).toBe(SLIDES_STYLE_DEFAULTS.fill);
-        const text = creatingElement({ type: 'richtext', seed: 1, box }, SLIDES_STYLE_DEFAULTS);
-        expect(text.type === 'richtext' && text.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
+        const text = creatingElement({ tool: 'text', seed: 1, box }, SLIDES_STYLE_DEFAULTS);
+        expect(text.type === 'rectangle' && text.fontFamily).toBe(SLIDES_STYLE_DEFAULTS.fontFamily);
     });
 
     test('a preview box carries the host roughness and the gesture seed, whatever the kind', () => {
-        // The DOM-box kinds are sketched too, so a rich-text preview jitters like the committed box
-        // instead of taking the shared table's reader fallback (roughness 0, seed 0).
+        // A text box is sketched too, so its preview jitters like the committed box instead of taking the
+        // shared table's reader fallback (roughness 0, seed 0).
         const box = { x: 0, y: 0, width: 10, height: 10, angle: 0 };
-        const text = creatingElement({ type: 'richtext', seed: 7, box }, VECTOR_STYLE_DEFAULTS);
+        const text = creatingElement({ tool: 'text', seed: 7, box }, VECTOR_STYLE_DEFAULTS);
         expect(text.roughness).toBe(VECTOR_STYLE_DEFAULTS.roughness);
         expect(text.seed).toBe(7);
     });

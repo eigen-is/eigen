@@ -6,7 +6,7 @@ import { buildChartClipboardItem } from '../../core/clipboard/clipboard';
 import { canvasImageName, canvasImageScene, canvasImageSlices, chartImageName } from '../../vector/canvas-image';
 import { solidFill } from '../../vector/fill';
 import type { MeasuredRichText, MeasuredText } from '../../vector/rich-text-svg';
-import { arrow, chart, richtext, shape } from './element-factories';
+import { arrow, chart, shape, textBox } from './element-factories';
 
 function measured(fontFamily: string, fontStyle = 'normal'): MeasuredText {
     return {
@@ -127,7 +127,7 @@ describe('canvasImageSlices', () => {
     });
 
     test("a text box embeds the slices its measured runs touch, in each run's own family and style", async () => {
-        const text = richtext({ id: 't', html: '<p><em>x</em></p>', fontFamily: 'Inter' });
+        const text = textBox({ id: 't', html: '<p><em>x</em></p>', fontFamily: 'Inter' });
 
         expect(await files([text], new Map([['t', box(run('"Source Serif 4", serif', 'x', 'italic'))]]))).toEqual([
             'source-serif/SourceSerif4-Variable-Italic.latin.woff2',
@@ -139,7 +139,7 @@ describe('canvasImageSlices', () => {
     });
 
     test('a family without an italic slants its upright slices, which are embedded', async () => {
-        const text = richtext({ id: 't', html: '<p><em>x</em></p>', fontFamily: 'Excalifont' });
+        const text = textBox({ id: 't', html: '<p><em>x</em></p>', fontFamily: 'Excalifont' });
 
         expect(await files([text], new Map([['t', box(run('Excalifont', 'x', 'italic'))]]))).toEqual([
             'excalifont/Excalifont-Regular.all.woff2',
@@ -147,7 +147,7 @@ describe('canvasImageSlices', () => {
     });
 
     test('an emoji or a Chinese character in a run embeds the fallback slice that draws it', async () => {
-        const text = richtext({ id: 't', html: '<p>x</p>', fontFamily: 'Inter' });
+        const text = textBox({ id: 't', html: '<p>x</p>', fontFamily: 'Inter' });
         const picked = await canvasImageSlices([text], new Map([['t', box(run('Inter', 'a😀中', 'italic'))]]));
 
         expect(picked.map((slice) => `${slice.family} ${slice.style}`)).toEqual([

@@ -1,4 +1,7 @@
-// The pptx writer's lines: lines, arrows, freehand strokes and paths, and the a:ln every stroke is written as.
+// The pptx writer's lines, such as a line, an arrow, a freehand stroke or a path, and the a:ln every stroke is
+// written as. A two-point line is a connector, as PowerPoint draws one, and more points are a custom path. A freehand
+// stroke is the outline of its ink, filled. The slide writer calls these per element, and every border goes through
+// lineXml.
 
 import type {
     Arrowhead,
@@ -32,6 +35,8 @@ import { customXml, fillXml, presetXml, spXml, toEmu, xfrmXml } from './shapes';
 import { NO_MARKS, textBodyXml } from './text';
 
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
+
+export const NO_LINE = '<a:ln><a:noFill/></a:ln>';
 
 // Eigen draws every stroke with round caps.
 export function lineXml(
@@ -125,19 +130,13 @@ export function freedrawXml(el: VectorLinearElement, slide: Slide, opacity: numb
     const points = parsePoints(el.points);
     const outline = freedrawOutline(el, points).map(([x, y]) => ({ x, y }));
     if (outline.length === 0) return '';
+    const paint = parseFill(el.fill);
     let fill = '';
-    if (isClosedPath(points) && !isTransparentFill(parseFill(el.fill))) {
+    if (isClosedPath(points) && !isTransparentFill(paint)) {
         const { box, pt } = pathFrame(el, points, slide);
         const lines = points.slice(1).map((p) => `<a:lnTo>${pt(p)}</a:lnTo>`);
         const path = `<a:moveTo>${pt(points[0])}</a:moveTo>${lines.join('')}<a:close/>`;
-        fill = spXml(
-            slide,
-            'Fill',
-            box,
-            customXml(slide, box, path, true),
-            fillXml(parseFill(el.fill), opacity, box),
-            NO_LINE,
-        );
+        fill = spXml(slide, 'Fill', box, customXml(slide, box, path, true), fillXml(paint, opacity, box), NO_LINE);
     }
     const { box, pt } = pathFrame(el, outline, slide);
     const mid = (a: Point, b: Point) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
@@ -148,8 +147,6 @@ export function freedrawXml(el: VectorLinearElement, slide: Slide, opacity: numb
     const ink = fillXml({ type: 'solid', color: el.strokeColor }, opacity);
     return fill + spXml(slide, 'Ink', box, customXml(slide, box, path, true), ink, NO_LINE);
 }
-
-export const NO_LINE = '<a:ln><a:noFill/></a:ln>';
 
 // The box a path is drawn in, centered where the element turns so a turned path turns about the canvas's center, and
 // a point of the element's local frame as a point of that path.
@@ -202,6 +199,7 @@ export function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number):
             lineHeight: getFontMetrics(el.fontFamily).lineHeight,
             inset: ARROW_LABEL_PAD,
             wrap: false,
+            autoFit: false,
             opacity,
         },
     );

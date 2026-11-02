@@ -5,7 +5,7 @@ type: how-to
 tags: [slides, import, powerpoint, pptx]
 related: [slides/export-slides, slides/add-slides]
 order: 100
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 You can bring a PowerPoint file (`.pptx`) into Slides in two ways: convert it in Drive into a new presentation, or import its slides into a presentation you already have open, next to your own slides or in their place. Its slides come across with their text, shapes, pictures, charts, SmartArt graphics, and backgrounds.
@@ -34,7 +34,7 @@ An **Importing pptx file** dialog shows while the file imports. Pictures from th
 - Every slide, hidden slides included, in the same order. A slide takes its name from its title.
 - The slide size. A converted presentation takes 16:9 or 4:3, whichever is closer to the file's, and keeps the file's width, so a 44 pt title still shows 44 pt. Slides added to an open presentation are fitted to its slides, and their text grows or shrinks with them.
 - Text keeps its bold, italic, underline, color, size, and alignment. Fonts become Eigen's own: a sans-serif font such as Calibri or Arial shows in Inter, a serif font such as Times New Roman in Source Serif 4, and a monospace font such as Courier New in JetBrains Mono.
-- Rectangles, rounded rectangles, ovals, diamonds, pie shapes, lines, and arrows, with their fill and outline. A shape keeps its text inside it, so the text moves with the shape. A text box, a title, or another placeholder comes in as a text box. The text of a line, an arrow, turned text, and some other shapes (see below) still comes as a separate text box on top. A bent or curved connector, or a freeform line that isn't closed, comes in as an arrow along the same path when it has arrowheads.
+- Rectangles, rounded rectangles, ovals, diamonds, pie shapes, lines, and arrows, with their fill and outline. A shape keeps its text inside it, so the text moves with the shape. A text box, a title, another placeholder, or a rectangle set to resize to fit its text comes in as a text box, which grows with its text. The text of a line, an arrow, turned text, and some other shapes (see below) still comes as a separate text box on top. A bent or curved connector, or a freeform line that isn't closed, comes in as an arrow along the same path when it has arrowheads.
 - Every other shape, such as a star, a block arrow, a flowchart shape, a map outline, or a freeform drawing, with its fill and outline. You can move, resize, and recolor it like any other shape. A shape drawn as one closed outline keeps its text inside it. A shape of several outlines, or an open one, gets its text as a separate text box on top.
 - PNG, JPEG, GIF, WebP, and SVG pictures.
 - Column, bar, line, and pie charts, with their data, colors, title, background, text and line colors, and data labels. They become Slides charts, so you can [edit their data](/support/slides/insert-content) like any other chart. A 3-D chart comes in flat.
@@ -52,7 +52,7 @@ After an import into an open presentation, a message counts what didn't come acr
 - A SmartArt graphic the file holds without its shapes, as LibreOffice saves one and PowerPoint saves a few kinds, becomes a box that says **SmartArt not imported**, with the graphic's text listed below. A SmartArt graphic that comes in as shapes counts in the message as one that lost its layout.
 - A chart Slides can't draw the way PowerPoint does, such as an area, scatter, doughnut, or combo chart, becomes a box that names the kind of chart and its title, for example **Scatter chart not imported**. A chart with more than 32 series, or more than 2,000 values in all, becomes a box that says **Chart not imported**, with its title.
 - An arc, or a freeform line that mixes straight and curved parts, comes in without its arrowheads. Arrowheads take the sizes Slides draws them in. Shadows, glows, and 3-D effects are left out.
-- Pictures come in uncropped and unflipped. A TIFF, BMP, EMF, or WMF picture becomes a box that says **Picture not imported**. So does every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it).
+- A picture cropped by the same amount on two opposite sides comes in whole, set to **Fill** if the crop cut into it or to **Fit** if it added space around it. Any other crop, and a flip, is left out: the picture comes in uncropped and unflipped, and the message counts it. A TIFF, BMP, EMF, or WMF picture becomes a box that says **Picture not imported**. So does every picture after the first 1,000, or once the pictures add up to more than the largest file you can upload (35 MB unless your administrator changed it).
 - A pattern fill becomes a plain color, a gradient keeps its first and last color, and a picture used to fill a shape is left out.
 - Within one text box, every line takes the font, size, color, and letter spacing used most in that box. The message after an import counts such a box as a simplified text box.
 - Speaker notes, animations, and transitions aren't imported.
