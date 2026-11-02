@@ -233,7 +233,7 @@ export function extractDependencies(
 
 // The operators a formula splits at. A `:` that joins a reference to a function call, as in A1:INDEX(…) or
 // INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
-const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
+const OPERATORS = /==|!=|<>|<=|>=|[-,()=+/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
