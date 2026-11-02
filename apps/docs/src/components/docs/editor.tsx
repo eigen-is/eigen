@@ -18,7 +18,7 @@ import {
     useDocumentPanels,
 } from '@workspace/lib/comments';
 import { useDocsTextWidth } from '@workspace/lib/docs';
-import type { BandEdge, BandRoot, PageSetup } from '@workspace/lib/docs/eigendoc';
+import type { BandEdge, BandRoot, PageSetup, StoryNode } from '@workspace/lib/docs/eigendoc';
 import {
     BAND_ROOTS,
     bandEdge,
@@ -88,6 +88,7 @@ import {
     updateCommentDecorations,
 } from './extensions/comment-mark';
 import type { EquationOptions } from './extensions/equation';
+import type { FigureFrameOptions } from './extensions/figure-frame';
 import { insertNote } from './extensions/footnote';
 import { TextBoxContext } from './extensions/text-box';
 import { FigurePropertiesPanel } from './figure-properties-panel';
@@ -289,17 +290,17 @@ const TiptapEditor = ({
     const setDocumentEl = useCallback((el: HTMLDivElement | null) => {
         documentRef.current = el;
         if (!el) return;
-        const ro = new ResizeObserver(() => {
+        const observer = new ResizeObserver(() => {
             // Only the scaled branch reads docHeight; the effect below seeds it on the way in.
             if (!needsScaleRef.current) return;
             const height = el.offsetHeight;
             if (height === 0) return;
             setDocHeight(height);
         });
-        ro.observe(el);
+        observer.observe(el);
         return () => {
             documentRef.current = null;
-            ro.disconnect();
+            observer.disconnect();
         };
     }, []);
 
@@ -313,6 +314,11 @@ const TiptapEditor = ({
         [isMobile, openComments],
     );
 
+    // The body's images, charts and text boxes open their card and the one figure menu.
+    const figureFrame: FigureFrameOptions = {
+        onOpenComment: handleCommentClick,
+        onContextMenu: (...args) => figureContextMenuRef.current(...args),
+    };
     // Every editor's equations open the one Equation panel and menu.
     const equation: Omit<EquationOptions, 'onOpenComment'> = {
         onEdit: isMobile ? undefined : () => editEquationRef.current(),
@@ -330,23 +336,12 @@ const TiptapEditor = ({
             provider,
             editable: canWrite,
             target: { undoManager, cardIds: () => new Set(Object.keys(cardsRef.current)) },
-            figure: {
-                onOpenComment: handleCommentClick,
-                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-            },
-            chart: {
-                onOpenComment: handleCommentClick,
-                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-                onEditData: () => setChartDataOpen(true),
-            },
+            figure: figureFrame,
+            chart: { ...figureFrame, onEditData: () => setChartDataOpen(true) },
             equation: { ...equation, onOpenComment: handleCommentClick },
             table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
             footnote: { onOpen: (pos) => openNoteRef.current(pos), onInsert: () => insertFootnoteRef.current() },
-            textBox: {
-                onOpenComment: handleCommentClick,
-                onContextMenu: (node, pos, event) => figureContextMenuRef.current(node, pos, event),
-                onOpen: (pos, at) => openBoxRef.current(pos, at),
-            },
+            textBox: { ...figureFrame, onOpen: (pos, at) => openBoxRef.current(pos, at) },
             tableOfContents: { ...tableOfContentsMenu, onJump: (pos) => jumpToHeadingRef.current(pos) },
             extensions: [
                 SearchHighlight,
@@ -397,27 +392,20 @@ const TiptapEditor = ({
         equation,
         table: { onContextMenu: (...args) => tableContextMenuRef.current(...args) },
     });
-    // The open footnote's one live editor, kept as long as the doc is open; it holds whichever note is open. A writer's
-    // on a desktop or a tablet, as a band is.
-    const noteEditor = useDocEditor({
+    // One live editor for each kind of story, kept as long as the doc is open. The footnote's holds whichever note is
+    // open, and the text box's draws in the box itself. A story opens for a writer on a desktop or a tablet, as a band
+    // does.
+    const storyEditorOptions = (story: StoryNode) => ({
         media,
         yDoc,
         provider: null,
         editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'footnote' },
+        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story },
         equation,
         tableOfContents: tableOfContentsMenu,
     });
-    // The open text box's live editor, which draws in the box itself.
-    const boxEditor = useDocEditor({
-        media,
-        yDoc,
-        provider: null,
-        editable: canWrite,
-        target: { body: () => editorRef.current, onLeave: () => leaveStoryRef.current(), story: 'textBox' },
-        equation,
-        tableOfContents: tableOfContentsMenu,
-    });
+    const noteEditor = useDocEditor(storyEditorOptions('footnote'));
+    const boxEditor = useDocEditor(storyEditorOptions('textBox'));
     const storyEditors = useMemo(() => ({ footnote: noteEditor, textBox: boxEditor }), [noteEditor, boxEditor]);
     const story = useOpenStory(editor, storyEditors, bandsAllowed);
     leaveStoryRef.current = story.leave;
@@ -594,16 +582,13 @@ const TiptapEditor = ({
         tableOfContentsContextMenu.openAt(target, event.clientX, event.clientY);
     };
 
-    const removeCommentMarks = (cardId: string) => {
-        removeCommentAnchors(editor, cardId);
-    };
+    const removeCommentMarks = (cardId: string) => removeCommentAnchors(editor, cardId);
 
     const handleSaveNew = useCallback(
         async (patch: CardFormPatch, attachments?: CardAttachmentDraft[], assignee?: string | null) => {
             if (!pendingMarkRange) return;
-            const range = pendingMarkRange;
-            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (card) =>
-                addCommentAnchor(editor, range, card.id),
+            const card = await createCard({ title: pendingMarkRange.text, ...patch, attachments }, (created) =>
+                addCommentAnchor(editor, pendingMarkRange, created.id),
             );
             if (assignee !== undefined && card?.chatName) {
                 assignComment.mutate({ chatName: card.chatName, assignee, title: card.title });
@@ -718,14 +703,13 @@ const TiptapEditor = ({
     // Plain object per render; usePaletteDocSearch stabilises it, so reveal sees the current cards.
     const commentSearch: DocCommentSearch = {
         ...commentSearchHalf,
+        // openCard opens the comments panel on a desktop only, as a tap on a phone comes from the pane. A search hit
+        // comes from the palette, so it opens the pane on a phone too.
         reveal: (chatName) => {
             const cardId = findCardIdByChatName(cardsRef.current, chatName);
             if (!cardId) return;
-            setEditingBand(null);
             openComments();
-            // The mobile pane hides the editor, so scrolling would drive a view nobody can see.
-            if (!isMobile) selectCommentAnchor(editor, cardId);
-            setOpenCardId(cardId);
+            openCard(cardId);
         },
     };
 
@@ -1074,9 +1058,9 @@ const TiptapEditor = ({
 
             <CardFormDialog
                 open={addOpen}
-                onOpenChange={(o) => {
-                    setAddOpen(o);
-                    if (!o) setPendingMarkRange(null);
+                onOpenChange={(open) => {
+                    setAddOpen(open);
+                    if (!open) setPendingMarkRange(null);
                 }}
                 initialTitle={pendingMarkRange?.text ?? ''}
                 onSave={handleSaveNew}
