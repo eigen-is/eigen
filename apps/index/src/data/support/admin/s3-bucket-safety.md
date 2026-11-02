@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, storage, s3, settings, backup]
 related: [admin/storage-quotas, admin/server-settings]
 order: 70
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 When Eigen stores files in an S3 bucket, it writes the whole file again on every save. If the bucket has no versioning, the previous copy is replaced and nothing can bring it back. The **Bucket safety** panel tells you where the bucket stands and can set it right for you.
@@ -66,7 +66,7 @@ Once both lines have a tick, the button is gone. Click **Change** at the end of 
 
 ## Set the bucket up by hand
 
-Some access keys are allowed to read and write files but not to change bucket settings. In that case, and when the bucket already has a lifecycle rule of its own, the panel shows the same settings as `aws` commands. Click **Copy commands** and run them against the bucket yourself, from a machine where the AWS command-line tool is set up for that provider.
+Some access keys are allowed to read and write files but not to change bucket settings. In that case, and when the bucket already has a lifecycle rule of its own, the panel shows the same settings as `aws` commands. Click the copy button on the box of commands (its tooltip reads **Copy to clipboard**) and run them against the bucket yourself, from a machine where the AWS command-line tool is set up for that provider.
 
 The panel fills the commands in with your endpoint, bucket, prefix, and the number of days you picked. Keep the rule's ID as it is. Eigen recognizes its own rule by that ID, so a rule under a different name reads as somebody else's and is left alone.
 
