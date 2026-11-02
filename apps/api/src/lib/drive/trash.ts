@@ -28,9 +28,10 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
     }
 
     const trashedItem = await mount.trashPath(item.id);
-    // A document can move into the folder after Drive.deletePath read the paths it guards. trashPath
-    // closed its database with the rest, so the document closes now, before the slow steps below, and
-    // stops taking edits it can't save. The trash is in, so a close that fails is only logged.
+    // A restore or a create can put a document in the folder after Drive.deletePath read the paths it
+    // guards, and the document can then be opened. trashPath closed its database with the rest, so the
+    // document closes now, before the slow steps below, and stops taking edits it can't save. The trash
+    // is in, so a close that fails is only logged.
     for (const id of [item.id, ...mount.collectDescendantIds(item.id)]) {
         if (!drive.hasCollabDocument(mount.id, id)) continue;
         await drive

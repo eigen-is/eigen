@@ -80,7 +80,8 @@ export async function withDatabase<S extends SchemaType, T>(
 // every edit to its data.db. It lets go in its own close, before it closes the database. What closes
 // such a database, such as a trash, closes the document first. So this holder alone may take the
 // container path lock while it holds, as a workbook's version before its compaction does. Only a
-// document that moves into a folder while the folder is trashed makes a close wait out HOLDER_WAIT_MS.
+// document that a restore or a create puts in a folder that is being trashed, and that opens before the
+// trash closes the databases, makes a close wait out HOLDER_WAIT_MS.
 export async function holdDatabase<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
