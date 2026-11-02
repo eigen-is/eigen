@@ -1,7 +1,7 @@
 // Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
 // workbook sees, such as the cells, the formulas and the validation rules (applySheetsInsertRowCol). This module
-// writes that result back into the editor's draft, then shifts what the engine leaves alone, such as read-only rows,
-// the links, the calc chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
+// writes that result back into the editor's draft, then shifts what the engine leaves alone, such as the links, the
+// calc chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
 // and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
@@ -11,8 +11,6 @@ import {
     applySheetsInsertRowCol,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
-    shiftKeyedMapForDelete,
-    shiftKeyedMapForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
 } from '../../engine/rowcol';
@@ -39,16 +37,6 @@ export function insertRowCol(
     const sheetIndex = getSheetIndex(ctx, id);
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
-
-    // The engine refuses an op on a read-only row or column, but it does not move them.
-    // They move here, by the same rule as hidden rows and columns.
-    const { config } = sheet;
-    if (type === 'row' && config?.rowReadOnly) {
-        config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, direction);
-    }
-    if (type === 'column' && config?.colReadOnly) {
-        config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, direction);
-    }
 
     sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).map((rule) => ({
         ...rule,
@@ -94,16 +82,6 @@ export function deleteRowCol(
     const sheetIndex = getSheetIndex(ctx, id);
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
-
-    // The engine refuses an op on a read-only row or column, but it does not move them.
-    // They move here, by the same rule as hidden rows and columns.
-    const { config } = sheet;
-    if (type === 'row' && config?.rowReadOnly) {
-        config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
-    }
-    if (type === 'column' && config?.colReadOnly) {
-        config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
-    }
 
     sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).flatMap((rule) => {
         const cellrange = shiftRangeForDelete(rule.cellrange, op);

@@ -102,13 +102,13 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink']));
-        // Every receiver's engine moves the validation rules itself, so the insert ships none.
-        expect(ops.filter((op) => op.path[0] === 'dataValidations')).toEqual([]);
+        expect(ops.find((op) => op.path[0] === 'hyperlink')?.value).toEqual(next.sheets[0].hyperlink);
+        // Every receiver's engine moves the config, with its merges, and the validation rules itself, so the insert
+        // ships neither, and no merge stamp a peer's row op could leave unresolved.
+        expect(ops.filter((op) => op.path[0] === 'dataValidations' || op.path[0] === 'config')).toEqual([]);
+        expect(ops.filter((op) => op.path.at(-1) === 'mc')).toEqual([]);
         // Every receiver derives the sheet's size from its cells, so the size does not ship.
         expect(metaPaths).not.toContain('row');
-        const configOp = ops.find((op) => op.path[0] === 'config');
-        expect(configOp?.value).toEqual(next.sheets[0].config);
         // calcChain scales with formula count and every consumer re-derives it,
         // so a plain insert must not ship it.
         expect(metaPaths).not.toContain('calcChain');
@@ -351,6 +351,51 @@ describe('two row ops sent at once keep the sheet size in step with its cells', 
         const onB = receive(b.next, a.ops).sheets[0];
         const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
         for (const sheet of [onA, onB, joined]) expect(size(sheet)).toEqual(grid(sheet));
+    });
+});
+
+// Every receiver's engine moves the merges and the conditional formats, and stamps the merges' cells again. So two
+// row ops sent at once on a sheet with a merge both apply, on both tabs and for a joiner, and the merge and the
+// format stay on their cells. The log holds A's batch first.
+describe('two row ops sent at once on a sheet with a merge', () => {
+    const inserted = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+    const deleted = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;
+    const cases = [
+        ['two inserts', { insertRowColOp: inserted }, 6, 5],
+        ['a delete and an insert', { deleteRowColOp: deleted }, 4, 3],
+    ] as const;
+    const run = (options: PatchOptions) => (ctx: Context) => {
+        if (options.insertRowColOp) insertRowCol(ctx, options.insertRowColOp);
+        else if (options.deleteRowColOp) deleteRowCol(ctx, options.deleteRowColOp);
+    };
+
+    test.each(cases)('%s', (_, first, rows, mergeRow) => {
+        const base = produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].conditionalFormatRules = [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [3, 3], column: [2, 3] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'greaterThan',
+                    conditionValue: [0],
+                },
+            ];
+        });
+        const a = author(base, run(first), first);
+        const b = author(base, run({ insertRowColOp: inserted }), { insertRowColOp: inserted });
+        const onA = receive(a.next, b.ops).sheets[0];
+        const onB = receive(receive(base, a.ops), b.ops).sheets[0];
+        const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
+        const merge = { r: mergeRow, c: 2, rs: 1, cs: 2 };
+        for (const sheet of [onA, onB, joined]) {
+            expect(sheet.data?.length).toBe(rows);
+            expect(sheet.config?.merge).toEqual({ [`${mergeRow}_2`]: merge });
+            expect(sheet.data?.[mergeRow]?.[2]?.mc).toEqual(merge);
+            expect(sheet.data?.[mergeRow]?.[3]?.mc).toEqual({ r: mergeRow, c: 2 });
+            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+                { row: [mergeRow, mergeRow], column: [2, 3] },
+            ]);
+        }
     });
 });
 

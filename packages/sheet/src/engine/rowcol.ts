@@ -1,8 +1,8 @@
-// Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, merges, borders, row heights,
-// column widths, conditional formats, validation rules, frozen pane, filter and size of the sheet the op names, and
-// the formula text and chart ranges on every sheet that point at it. It runs wherever such an op applies, for example in the editor's own
-// insert and in the server's replay of the op log. The shifters for one kind of map are exported for code that moves
-// the same maps, such as the undo stacks.
+// Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, the config with its merges,
+// borders and row heights, the conditional formats, validation rules, frozen pane, filter and size of the sheet the
+// op names, and the formula text and chart ranges on every sheet that point at it. It runs wherever such an op
+// applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
+// of map are exported for code that moves the same maps, such as the undo stacks.
 
 import type { CellMatrix, MergeCell, Sheet, SheetChart, SheetValidation } from '@workspace/lib/sheets';
 import {
@@ -443,6 +443,8 @@ function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
         if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForInsert(cfg.rowlen, op.index, count, op.direction);
         if (cfg.customHeight != null)
             newCfg.customHeight = shiftKeyedMapForInsert(cfg.customHeight, op.index, count, op.direction);
+        if (cfg.rowReadOnly != null)
+            newCfg.rowReadOnly = shiftKeyedMapForInsert(cfg.rowReadOnly, op.index, count, op.direction);
 
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
@@ -457,6 +459,8 @@ function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
             newCfg.columnlen = shiftKeyedMapForInsert(cfg.columnlen, op.index, count, op.direction);
         if (cfg.customWidth != null)
             newCfg.customWidth = shiftKeyedMapForInsert(cfg.customWidth, op.index, count, op.direction);
+        if (cfg.colReadOnly != null)
+            newCfg.colReadOnly = shiftKeyedMapForInsert(cfg.colReadOnly, op.index, count, op.direction);
 
         const blanks = new Array<null>(count).fill(null);
         for (const row of newData) {
@@ -529,12 +533,14 @@ function applyDelete<S extends ShiftedSheet>(sheets: S[], targetIndex: number, o
         if (cfg.rowhidden != null) newCfg.rowhidden = shiftKeyedMapForDelete(cfg.rowhidden, op.start, op.end);
         if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForDelete(cfg.rowlen, op.start, op.end);
         if (cfg.customHeight != null) newCfg.customHeight = shiftKeyedMapForDelete(cfg.customHeight, op.start, op.end);
+        if (cfg.rowReadOnly != null) newCfg.rowReadOnly = shiftKeyedMapForDelete(cfg.rowReadOnly, op.start, op.end);
 
         newData.splice(op.start, removeCount);
     } else {
         if (cfg.colhidden != null) newCfg.colhidden = shiftKeyedMapForDelete(cfg.colhidden, op.start, op.end);
         if (cfg.columnlen != null) newCfg.columnlen = shiftKeyedMapForDelete(cfg.columnlen, op.start, op.end);
         if (cfg.customWidth != null) newCfg.customWidth = shiftKeyedMapForDelete(cfg.customWidth, op.start, op.end);
+        if (cfg.colReadOnly != null) newCfg.colReadOnly = shiftKeyedMapForDelete(cfg.colReadOnly, op.start, op.end);
 
         for (const row of newData) row.splice(op.start, removeCount);
     }

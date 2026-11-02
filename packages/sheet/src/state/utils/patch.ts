@@ -35,8 +35,9 @@ export type PatchOptions = {
     deletedSheet?: Sheet;
 };
 
-// The `mc` stamps of every merge in the batch's whole config. The merge map alone doesn't draw a merge: each of its
-// cells points at the corner, and the corner holds the merge's size.
+// The `mc` stamps of every merge in a row or column step's whole config. The merge map alone doesn't draw a merge:
+// each of its cells points at the corner, and the corner holds the merge's size. The op itself ships no config, since
+// every receiver's engine moves the merges and stamps them again.
 function mergeStampOps(ops: Op[], id: string): Op[] {
     const config = ops.find((op) => op.op === 'replace' && op.path.length === 1 && op.path[0] === 'config');
     const merges: MergeCell[] = Object.values(config?.value?.merge ?? {});
@@ -125,6 +126,8 @@ const ENGINE_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['data', 
 // author's write would overwrite the receiver's own shift of a peer's edit sent at the same time. An undo or redo
 // ships them, since the marker alone would not bring back what the entry restores.
 const SHIFTED_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>([
+    'config',
+    'conditionalFormatRules',
     'dataValidations',
     'frozen',
     'filterRange',
@@ -200,6 +203,9 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
         const { id } = marker;
         if (step) {
             ops = [...ops.filter(writesOneObject), marker, ...sheetMetadataOps(step.fields, id), ...step.repair];
+            // The engine fills inserted rows with nulls, and a stamp can't land on a cell that doesn't exist yet, so
+            // the repaired cells go before the stamps.
+            ops.push(...mergeStampOps(ops, id));
         } else {
             ops = [...ops.filter((op) => writesOneObject(op) && !SHIFTED_SHEET_FIELDS.has(op.path[0])), marker];
             const index = getSheetIndex(ctx, id);
@@ -212,9 +218,6 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
             }
             if (options.insertRowColOp) ops.push(...additionalCellOps(ctx, options.insertRowColOp));
         }
-        // The engine fills inserted rows with nulls, and a ['data', r, c, 'mc'] patch can't be applied to a cell that
-        // doesn't exist yet, so the cells go before the merge stamps.
-        ops.push(...mergeStampOps(ops, id));
     } else if (options.addSheetOp) {
         // A copy moves the sheets after it, and the batch carries their orders.
         const [[added], rest] = partition(ops, (op) => op.op === 'add' && op.path.length === 0);
