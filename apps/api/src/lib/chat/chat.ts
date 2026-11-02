@@ -151,7 +151,7 @@ export class ChatRoom {
         if (this.containerPath && type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
                 await index.ensureComment(this.path.name, { createdBy: authorEmail });
-                await index.updateActivity(this.path.name, authorEmail, content);
+                await index.updateActivity(this.path.name, authorEmail);
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
                 }
@@ -365,7 +365,7 @@ export class ChatRoom {
 
         if (this.containerPath && existing.type !== 'whisper') {
             await this.updateCommentIndex(async (index) => {
-                await index.updateActivity(this.path.name, existing.authorEmail, content, false);
+                await index.updateActivity(this.path.name, existing.authorEmail, false);
                 for (const email of extractMentionedEmails(content)) {
                     await index.addMention(this.path.name, email);
                 }
