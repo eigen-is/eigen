@@ -9,6 +9,7 @@ import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
+import { useOptionalPreview } from '../preview-provider/preview-context';
 
 type DriveCreateItemDialogProps = {
     open: boolean;
@@ -33,9 +34,16 @@ export function DriveCreateItemDialog({
     confirmLabel = 'Create',
 }: DriveCreateItemDialogProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
+    // Opened over a file preview, such as New folder in Save to Drive's picker, it has to sit above that preview.
+    const preview = useOptionalPreview();
 
     return (
-        <FormDialog open={open} onOpenChange={onOpenChange} title={title || `New ${type.toLowerCase()}`}>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title={title || `New ${type.toLowerCase()}`}
+            abovePreview={preview?.isPreviewOpen}
+        >
             <ItemNameForm
                 type={type}
                 defaultValue={defaultValue}
