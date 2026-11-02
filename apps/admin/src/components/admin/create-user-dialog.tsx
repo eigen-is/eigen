@@ -38,13 +38,13 @@ function CreateUserForm() {
         <FormDialogForm
             canSubmit={!!config && name !== '' && username !== '' && password.length >= MIN_PASSWORD_LENGTH}
             submitLabel="Create"
-            onSubmit={() => {
+            onSubmit={async () => {
                 if (!config) return false;
                 const normalized = username.toLowerCase().split('@')[0];
                 const validationError = validateUsername(normalized);
                 setUsernameError(validationError ?? '');
                 if (validationError) return false;
-                return createUser.mutateAsync({
+                await createUser.mutateAsync({
                     name,
                     email: `${normalized}@${config.mailDomain}`,
                     password,

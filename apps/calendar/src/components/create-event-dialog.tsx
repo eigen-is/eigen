@@ -70,10 +70,10 @@ function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDia
         <FormDialogForm
             canSubmit={title.trim() !== '' && !!selectedCal}
             submitLabel="Save"
-            onSubmit={() => {
+            onSubmit={async () => {
                 if (!selectedCal) return false;
                 const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
-                return createEvent.mutateAsync({
+                await createEvent.mutateAsync({
                     calendarId: selectedCal.id,
                     title: title.trim(),
                     startTime: start,

@@ -119,7 +119,7 @@ function CalendarConfigForm({
                         await save(data);
                         saved = true;
                     })();
-                    return saved;
+                    if (!saved) return false;
                 }}
                 footerStart={
                     calendar &&

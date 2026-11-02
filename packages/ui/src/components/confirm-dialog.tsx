@@ -43,7 +43,13 @@ export function ConfirmDialog({
                     </Button>
                     <Button
                         variant={destructive ? 'destructive' : 'default'}
-                        onClick={() => run(onConfirm)}
+                        // A handler typed as returning nothing may still resolve its mutation's false, which must not keep
+                        // a yes/no open.
+                        onClick={() =>
+                            run(async () => {
+                                await onConfirm();
+                            })
+                        }
                         disabled={pending}
                     >
                         {confirmText}

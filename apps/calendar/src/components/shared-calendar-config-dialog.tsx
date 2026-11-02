@@ -78,12 +78,12 @@ function SharedCalendarConfigForm({
     return (
         <FormDialogForm
             submitLabel="Save"
-            onSubmit={() =>
-                updateSharedCalendar.mutateAsync({
+            onSubmit={async () => {
+                await updateSharedCalendar.mutateAsync({
                     id: sharedCalendar.id,
                     color: color !== sharedCalendar.calendarColor ? color : null,
-                })
-            }
+                });
+            }}
             footerStart={
                 !isTeamCalendar && (
                     <Button

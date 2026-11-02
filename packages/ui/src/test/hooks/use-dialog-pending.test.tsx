@@ -1,6 +1,8 @@
-// A dialog's action that throws an error no toast has shown, such as a bug in a synchronous submit, reaches whoever
-// called run, and the dialog stays open. An error the mutation hook toasted ends there, as before.
+// A dialog's action that returns or resolves false keeps it open, and any other result closes it. An action that throws
+// an error no toast has shown, such as a bug in a synchronous submit, reaches whoever called run, and the dialog stays
+// open. An error the mutation hook toasted ends there.
 import { afterEach, expect, mock, test } from 'bun:test';
+import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { installHappyDom } from '../happy-dom';
 import { renderInDocument } from '../render-in-document';
 
@@ -21,7 +23,7 @@ async function mount(closeOnRefusal: boolean) {
         return null;
     }
     ({ unmount } = await renderInDocument(createElement(Harness)));
-    const run = async (action: () => void | Promise<void>) => {
+    const run = async (action: DialogAction) => {
         const pending = latest;
         if (!pending) throw new Error('hook has not rendered');
         let outcome: unknown = 'resolved';
@@ -32,6 +34,15 @@ async function mount(closeOnRefusal: boolean) {
 }
 
 const refusal = () => new AppError({ error: { status: 403, value: 'No' }, status: 403 });
+
+test('an action that returns or resolves false keeps the dialog open, and one that resolves closes it', async () => {
+    const { onOpenChange, run } = await mount(false);
+    await run(() => false);
+    await run(() => Promise.resolve(false));
+    expect(onOpenChange).not.toHaveBeenCalled();
+    await run(() => Promise.resolve());
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
 
 test('a synchronous throw reaches the caller, and the dialog stays open', async () => {
     const { onOpenChange, run } = await mount(false);

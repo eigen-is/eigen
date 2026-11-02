@@ -37,7 +37,9 @@ function ResetPasswordForm({ userId }: { userId: string }) {
         <FormDialogForm
             canSubmit={password.length >= MIN_PASSWORD_LENGTH}
             submitLabel="Reset password"
-            onSubmit={() => resetPassword.mutateAsync({ userId, password })}
+            onSubmit={async () => {
+                await resetPassword.mutateAsync({ userId, password });
+            }}
         >
             <FieldGroup>
                 <Field>

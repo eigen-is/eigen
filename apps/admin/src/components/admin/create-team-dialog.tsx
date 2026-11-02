@@ -30,7 +30,9 @@ function CreateTeamForm({ organizationId }: { organizationId?: string }) {
         <FormDialogForm
             canSubmit={trimmed !== ''}
             submitLabel="Create"
-            onSubmit={() => createTeam.mutateAsync(trimmed)}
+            onSubmit={async () => {
+                await createTeam.mutateAsync(trimmed);
+            }}
         >
             <Input placeholder="Team name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
         </FormDialogForm>

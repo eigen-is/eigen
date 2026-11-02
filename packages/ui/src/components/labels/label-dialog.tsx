@@ -106,7 +106,7 @@ function LabelForm({
                         await onSubmit(data);
                         saved = true;
                     })();
-                    return saved;
+                    if (!saved) return false;
                 }}
                 footerStart={
                     selectedLabel && (
