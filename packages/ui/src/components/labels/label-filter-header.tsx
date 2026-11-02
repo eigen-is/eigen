@@ -42,7 +42,7 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
                 open={dialogOpen}
                 onOpenChange={setDialogOpen}
                 selectedLabel={label}
-                onSubmit={(data) => updateLabel({ ...label, name: data.name, color: data.color })}
+                onSubmit={(data) => updateLabel({ ...label, ...data })}
                 onDelete={async () => {
                     await deleteLabel(label.id);
                     setDialogOpen(false);

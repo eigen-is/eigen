@@ -26,8 +26,8 @@ type FormDialogFormProps = {
     onSubmit: DialogAction;
     canSubmit?: boolean;
     submitLabel: string;
-    // A button on the left of the footer, such as Delete. It comes first in the form, so it needs type="button", or
-    // Enter in a field would click it instead of submitting.
+    // A button on the left of the footer, such as Delete, which waits while a submit runs. It comes first in the form,
+    // so it needs type="button", or Enter in a field would click it instead of submitting.
     footerStart?: ReactNode;
     // A Close button alone, for someone who may only look.
     readOnly?: boolean;
@@ -101,7 +101,11 @@ export function FormDialogForm({
                 <DialogFooter showCloseButton />
             ) : (
                 <DialogFooter>
-                    {footerStart && <div className="mr-auto flex gap-2">{footerStart}</div>}
+                    {footerStart && (
+                        <fieldset disabled={pending} className="mr-auto flex gap-2">
+                            {footerStart}
+                        </fieldset>
+                    )}
                     <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
                         Cancel
                     </Button>

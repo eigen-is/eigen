@@ -1,6 +1,7 @@
 // Add label and Edit label: Save and Enter wait for a name with more than spaces, Save hands the trimmed name and the
-// color on and closes, and a save that fails stays open. Delete asks first, on top of the open dialog, so a cancelled
-// delete keeps the edits. The label header's pencil edits its label, and a failed save there stays open too.
+// color on and closes, and a save that fails stays open. Delete waits while a save runs, and asks first, on top of the
+// open dialog, so a cancelled delete keeps the edits. The label header's pencil edits its label, and a failed save there
+// stays open too.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
@@ -88,6 +89,9 @@ const click = (target: HTMLButtonElement | undefined) =>
         if (!target) throw new Error('nothing to click');
         target.click();
     });
+// happy-dom doesn't disable a button inside a disabled fieldset, which a browser does.
+const isDisabled = (target: HTMLButtonElement | undefined) =>
+    !!target && (target.disabled || target.closest('fieldset')?.disabled === true);
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
 test('Add label waits for a name with more than spaces, then hands the trimmed label on and closes', async () => {
@@ -132,6 +136,20 @@ test('a save that fails keeps the dialog open', async () => {
     await settle();
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('Delete waits while a save runs', async () => {
+    let finish = () => {};
+    onSubmit.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    await open(urgent);
+    const dialog = dialogTitled('Edit label');
+    expect(isDisabled(button(dialog, 'Delete'))).toBe(false);
+    await click(button(dialog, 'Save'));
+    await settle();
+    expect(isDisabled(button(dialog, 'Delete'))).toBe(true);
+    await act(async () => finish());
+    await settle();
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('Delete asks on top of the open dialog, a cancel keeps the edits, and a yes deletes', async () => {

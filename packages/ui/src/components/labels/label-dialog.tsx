@@ -20,7 +20,7 @@ const labelFormSchema = z.object({
     color: z.string().min(1, 'Color is required.'),
 });
 
-type LabelFormValues = z.infer<typeof labelFormSchema>;
+export type LabelFormValues = z.infer<typeof labelFormSchema>;
 
 type LabelDialogProps = {
     open: boolean;
