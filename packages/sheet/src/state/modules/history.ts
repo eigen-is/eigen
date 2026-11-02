@@ -36,7 +36,7 @@ import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-e
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
-// A row or column step the sheet refused sends nothing, and its entry stays on its stack.
+// A row or column step the sheet refused sends nothing, and its entry leaves the stacks.
 type Step = { ctx: Context; ops: Op[]; refused?: boolean };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
@@ -89,7 +89,8 @@ function holdsWholeMatrices({ patches, inversePatches, options }: History): bool
 }
 
 // Runs the newest entry of `from` and moves it onto `to`: an undo takes it from the undo stack to the redo stack, and a
-// redo back. A step the sheet refused stays where it was, so both stacks still hold every step in order.
+// redo back. A step the sheet refused says so once and leaves `from` for neither stack, so the next press steps the
+// entry before it, rather than meeting the same refusal until a peer lifts its cause.
 export function stepNewestEntry(
     ctx: Context,
     from: History[],
@@ -99,9 +100,8 @@ export function stepNewestEntry(
     const entry = from.at(-1);
     if (!entry) return undefined;
     const next = step(ctx, entry);
-    if (next.refused) return next;
     from.pop();
-    to.push(entry);
+    if (!next.refused) to.push(entry);
     return next;
 }
 
