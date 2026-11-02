@@ -74,65 +74,6 @@ export function* archiveEnd(written: number): Generator<Uint8Array> {
     if (tail > 0) yield new Uint8Array(tail);
 }
 
-function tarHeader(name: string, size: number, mtime: number, typeflag: string, mode: number): Uint8Array {
-    const header = new Uint8Array(BLOCK);
-    const put = (offset: number, text: string) => header.set(ENCODER.encode(text), offset);
-    put(0, name);
-    put(100, octalField(mode, 8));
-    put(108, octalField(0, 8));
-    put(116, octalField(0, 8));
-    writeSize(header, 124, size);
-    put(136, octalField(mtime, 12));
-    header.fill(0x20, 148, 156); // the checksum is summed with its own field blank
-    put(156, typeflag);
-    put(257, 'ustar');
-    put(263, '00');
-    let sum = 0;
-    for (const byte of header) sum += byte;
-    put(148, `${sum.toString(8).padStart(6, '0')}\0 `);
-    return header;
-}
-
-function writeSize(header: Uint8Array, offset: number, size: number): void {
-    if (size <= MAX_OCTAL_SIZE) {
-        header.set(ENCODER.encode(octalField(size, 12)), offset);
-        return;
-    }
-    // GNU base-256: high bit on the first byte, big-endian value in the rest. GNU tar, libarchive
-    // and headerNumber below all read it, and it is the only shape a header has above 8 GiB.
-    header[offset] = 0x80;
-    let rest = size;
-    for (let i = offset + 11; i > offset; i--) {
-        header[i] = rest % 256;
-        rest = Math.floor(rest / 256);
-    }
-}
-
-function octalField(value: number, width: number): string {
-    return `${value.toString(8).padStart(width - 1, '0')}\0`;
-}
-
-function truncateUtf8(text: string, maxBytes: number): string {
-    const bytes = ENCODER.encode(text);
-    if (bytes.length <= maxBytes) return text;
-    let end = maxBytes;
-    while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
-    return DECODER.decode(bytes.subarray(0, end));
-}
-
-// A pax extended header record: "{length} {key}={value}\n", where length counts itself.
-function paxRecord(key: string, value: string): string {
-    const body = ` ${key}=${value}\n`;
-    const bodyLength = ENCODER.encode(body).length;
-    let total = bodyLength + 1;
-    while (`${total}`.length + bodyLength !== total) total = `${total}`.length + bodyLength;
-    return `${total}${body}`;
-}
-
-function padLength(size: number): number {
-    return (BLOCK - (size % BLOCK)) % BLOCK;
-}
-
 // `offset` is where the body starts in the tar stream: in a plain tar, its offset in the file.
 type TarEntry = {
     path: string;
@@ -250,10 +191,63 @@ export async function collect(chunks: AsyncGenerator<Uint8Array>): Promise<Uint8
     return Buffer.concat(parts);
 }
 
-function headerField(header: Uint8Array, offset: number, length: number): string {
-    const field = header.subarray(offset, offset + length);
-    const end = field.indexOf(0);
-    return DECODER.decode(end === -1 ? field : field.subarray(0, end));
+// A pax extended header record: "{length} {key}={value}\n", where length counts itself.
+function paxRecord(key: string, value: string): string {
+    const body = ` ${key}=${value}\n`;
+    const bodyLength = ENCODER.encode(body).length;
+    let total = bodyLength + 1;
+    while (`${total}`.length + bodyLength !== total) total = `${total}`.length + bodyLength;
+    return `${total}${body}`;
+}
+
+function truncateUtf8(text: string, maxBytes: number): string {
+    const bytes = ENCODER.encode(text);
+    if (bytes.length <= maxBytes) return text;
+    let end = maxBytes;
+    while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+    return DECODER.decode(bytes.subarray(0, end));
+}
+
+function tarHeader(name: string, size: number, mtime: number, typeflag: string, mode: number): Uint8Array {
+    const header = new Uint8Array(BLOCK);
+    const put = (offset: number, text: string) => header.set(ENCODER.encode(text), offset);
+    put(0, name);
+    put(100, octalField(mode, 8));
+    put(108, octalField(0, 8));
+    put(116, octalField(0, 8));
+    writeSize(header, 124, size);
+    put(136, octalField(mtime, 12));
+    header.fill(0x20, 148, 156); // the checksum is summed with its own field blank
+    put(156, typeflag);
+    put(257, 'ustar');
+    put(263, '00');
+    let sum = 0;
+    for (const byte of header) sum += byte;
+    put(148, `${sum.toString(8).padStart(6, '0')}\0 `);
+    return header;
+}
+
+function octalField(value: number, width: number): string {
+    return `${value.toString(8).padStart(width - 1, '0')}\0`;
+}
+
+function writeSize(header: Uint8Array, offset: number, size: number): void {
+    if (size <= MAX_OCTAL_SIZE) {
+        header.set(ENCODER.encode(octalField(size, 12)), offset);
+        return;
+    }
+    // GNU base-256: high bit on the first byte, big-endian value in the rest. GNU tar, libarchive
+    // and headerNumber below all read it, and it is the only shape a header has above 8 GiB.
+    header[offset] = 0x80;
+    let rest = size;
+    for (let i = offset + 11; i > offset; i--) {
+        header[i] = rest % 256;
+        rest = Math.floor(rest / 256);
+    }
+}
+
+function padLength(size: number): number {
+    return (BLOCK - (size % BLOCK)) % BLOCK;
 }
 
 function headerNumber(header: Uint8Array, offset: number, length: number): number {
@@ -265,6 +259,12 @@ function headerNumber(header: Uint8Array, offset: number, length: number): numbe
     const value = Number.parseInt(headerField(header, offset, length).trim(), 8);
     if (!Number.isFinite(value) || value < 0) throw new Error('backup archive: unreadable tar header field');
     return value;
+}
+
+function headerField(header: Uint8Array, offset: number, length: number): string {
+    const field = header.subarray(offset, offset + length);
+    const end = field.indexOf(0);
+    return DECODER.decode(end === -1 ? field : field.subarray(0, end));
 }
 
 // A record's length counts bytes, so the records are cut out of the bytes: one holding a non-ASCII
