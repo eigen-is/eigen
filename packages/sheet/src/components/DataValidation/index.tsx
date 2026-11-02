@@ -5,6 +5,7 @@
 
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
+import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -14,8 +15,9 @@ import type React from 'react';
 import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog, useDialogProps } from '../../hooks/useDialog';
-import type { Context, DataRegulationProps } from '../../state';
+import type { Context, DataRegulationProps, RangeOrWholeAxis } from '../../state';
 import {
+    api,
     applyDataVerification,
     CHECKBOX_CHECKED_VALUE,
     CHECKBOX_UNCHECKED_VALUE,
@@ -26,47 +28,46 @@ import {
     validationRange,
     validationValueProblem,
 } from '../../state';
-import { getSheet } from '../../state/api/common';
-import type { RangeOrWholeAxis } from '../../state/types';
 import { CellRangeDialog } from '../CellRangeDialog';
 
+// Each rule type with the condition a new rule of it starts on. A list and a tick box have none.
 const VALIDATION_TYPES = [
-    { value: 'dropdown', label: 'Drop-down list' },
-    { value: 'checkbox', label: 'Checkbox' },
-    { value: 'number', label: 'Number' },
-    { value: 'number_integer', label: 'Number-integer' },
-    { value: 'number_decimal', label: 'Number-decimal' },
-    { value: 'text_content', label: 'Text-content' },
-    { value: 'text_length', label: 'Text-length' },
-    { value: 'date', label: 'Date' },
-];
+    { value: 'dropdown', label: 'Drop-down list', condition: '' },
+    { value: 'checkbox', label: 'Checkbox', condition: '' },
+    { value: 'number', label: 'Number', condition: 'between' },
+    { value: 'number_integer', label: 'Whole number', condition: 'between' },
+    { value: 'number_decimal', label: 'Decimal number', condition: 'between' },
+    { value: 'text_content', label: 'Text', condition: 'include' },
+    { value: 'text_length', label: 'Text length', condition: 'between' },
+    { value: 'date', label: 'Date', condition: 'between' },
+] as const;
 
 const NUMBER_CONDITIONS = [
     { value: 'between', label: 'Between' },
     { value: 'notBetween', label: 'Not between' },
-    { value: 'equal', label: 'Equal' },
+    { value: 'equal', label: 'Equal to' },
     { value: 'notEqualTo', label: 'Not equal to' },
-    { value: 'moreThanThe', label: 'More than the' },
+    { value: 'moreThanThe', label: 'Greater than' },
     { value: 'lessThan', label: 'Less than' },
-    { value: 'greaterOrEqualTo', label: 'Greater or equal to' },
+    { value: 'greaterOrEqualTo', label: 'Greater than or equal to' },
     { value: 'lessThanOrEqualTo', label: 'Less than or equal to' },
 ];
 
 const DATE_CONDITIONS = [
     { value: 'between', label: 'Between' },
     { value: 'notBetween', label: 'Not between' },
-    { value: 'equal', label: 'Equal' },
+    { value: 'equal', label: 'Equal to' },
     { value: 'notEqualTo', label: 'Not equal to' },
     { value: 'earlierThan', label: 'Earlier than' },
-    { value: 'noEarlierThan', label: 'No earlier than' },
+    { value: 'noEarlierThan', label: 'Not earlier than' },
     { value: 'laterThan', label: 'Later than' },
-    { value: 'noLaterThan', label: 'No later than' },
+    { value: 'noLaterThan', label: 'Not later than' },
 ];
 
 const TEXT_CONTENT_CONDITIONS = [
-    { value: 'include', label: 'Include' },
-    { value: 'exclude', label: 'Exclude' },
-    { value: 'equal', label: 'Equal' },
+    { value: 'include', label: 'Includes' },
+    { value: 'exclude', label: 'Does not include' },
+    { value: 'equal', label: 'Equal to' },
 ];
 
 const HINT_TOGGLES = [
@@ -107,9 +108,9 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
 
     const problemMessage = (field: Problem['field']) =>
         problem?.field === field && (
-            <p id={problemId} className="mt-1.5 text-sm text-destructive">
+            <FieldError id={problemId} className="mt-1.5">
                 {problem.message}
-            </p>
+            </FieldError>
         );
 
     // The picker leaves the grid usable to pick on, so rangeDialog.show keeps the cell editor out of the way. However
@@ -158,7 +159,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
         const target = rangeOrRefuse();
         if (!target) return;
         setContext((ctx) => {
-            clearValidations(getSheet(ctx), target);
+            clearValidations(api.getSheet(ctx), target);
         });
         dialogProps.onOpenChange(false);
     };
@@ -200,13 +201,15 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                         <div className="text-sm font-medium">Validation condition</div>
                         <Select
                             value={draft.type}
-                            onValueChange={(type) => {
+                            onValueChange={(value) => {
+                                const picked = VALIDATION_TYPES.find((type) => type.value === value);
+                                if (!picked) return;
                                 // A tick box arrives usable: the same TRUE/FALSE pair Insert → Tick box writes, so the
                                 // two routes to a checkbox rule agree.
-                                const isCheckbox = type === 'checkbox';
+                                const isCheckbox = picked.value === 'checkbox';
                                 update({
-                                    type,
-                                    type2: CONDITION_DEFAULTS[type] ?? '',
+                                    type: picked.value,
+                                    type2: picked.condition,
                                     value1: isCheckbox ? CHECKBOX_CHECKED_VALUE : '',
                                     value2: isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '',
                                 });
@@ -230,7 +233,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                                     <Input
                                         className="flex-1 border-none rounded-none h-full"
                                         spellCheck={false}
-                                        placeholder="Please enter the options, separated by commas, such as 1,2,3,4,5"
+                                        placeholder="Enter the options, separated by commas, such as 1,2,3,4,5"
                                         {...textField('value1', 'Options')}
                                     />
                                     <Button
@@ -259,7 +262,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                                     <span className="text-sm shrink-0">Selected</span>
                                     <Input
                                         className="h-8"
-                                        placeholder="Please enter content"
+                                        placeholder="Enter a value"
                                         {...textField('value1', 'Selected')}
                                     />
                                 </div>
@@ -267,7 +270,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                                     <span className="text-sm shrink-0">Not selected</span>
                                     <Input
                                         className="h-8"
-                                        placeholder="Please enter content"
+                                        placeholder="Enter a value"
                                         {...textField('value2', 'Not selected')}
                                     />
                                 </div>
@@ -318,11 +321,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                                     conditions={TEXT_CONTENT_CONDITIONS}
                                     onChange={(type2) => update({ type2, value1: '', value2: '' })}
                                 />
-                                <Input
-                                    className="h-8"
-                                    placeholder="Please enter the specified text"
-                                    {...textField('value1', 'Text')}
-                                />
+                                <Input className="h-8" placeholder="Enter the text" {...textField('value1', 'Text')} />
                             </div>
                         )}
 
@@ -360,7 +359,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                         {draft.hintShow && (
                             <Input
                                 className="h-8"
-                                placeholder="Please enter the prompt displayed when the cell is selected"
+                                placeholder="Enter the prompt shown when the cell is selected"
                                 {...textField('hintValue', 'Prompt')}
                             />
                         )}
@@ -370,16 +369,6 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
         </FormDialog>
     );
 }
-
-// The condition a new rule of each type starts on. A list and a tick box have none.
-const CONDITION_DEFAULTS: Record<string, string> = {
-    number: 'between',
-    number_integer: 'between',
-    number_decimal: 'between',
-    text_length: 'between',
-    date: 'between',
-    text_content: 'include',
-};
 
 function ConditionSelect({
     value,
@@ -419,7 +408,7 @@ function draftAtSelection(context: Context): DataRegulationProps {
     const rangeTxt = named ? getRangetxt(context, context.currentSheetId, named, context.currentSheetId) : '';
     const item =
         last?.row_focus != null && last.column_focus != null
-            ? validationAt(getSheet(context).dataValidations, last.row_focus, last.column_focus)
+            ? validationAt(api.getSheet(context).dataValidations, last.row_focus, last.column_focus)
             : undefined;
     return {
         type: item?.type ?? 'dropdown',

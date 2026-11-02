@@ -74,6 +74,37 @@ test('a column header selection is named B:B, and OK puts the rule on the whole 
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
+// The choices of the dialog's drop-downs, in order: the rule type first, then the condition.
+const choices = () =>
+    [...document.querySelectorAll('[role="dialog"] select')].map((select) =>
+        [...select.querySelectorAll('option')].map((option) => option.textContent),
+    );
+
+test('the rule types and their conditions read as plain words', async () => {
+    await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    expect(choices()).toEqual([
+        ['Drop-down list', 'Checkbox', 'Number', 'Whole number', 'Decimal number', 'Text', 'Text length', 'Date'],
+        [
+            'Between',
+            'Not between',
+            'Equal to',
+            'Not equal to',
+            'Greater than',
+            'Less than',
+            'Greater than or equal to',
+            'Less than or equal to',
+        ],
+    ]);
+});
+
+test('the reason a value is refused is an alert the field points at', async () => {
+    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: NUMBER } });
+    await dialog.type('Value 2', '0');
+    await dialog.click('OK');
+    const id = dialog.field('Value 2').getAttribute('aria-describedby');
+    expect(id && document.getElementById(id)?.getAttribute('role')).toBe('alert');
+});
+
 test('Enter in a text field submits', async () => {
     const dialog = await openDialog(B3);
     await dialog.type('Options', 'Red,Green');

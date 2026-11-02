@@ -72,7 +72,7 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                     className="h-8"
                     readOnly
                     tabIndex={-1}
-                    placeholder="Please select a range of cells"
+                    placeholder="Select a range of cells"
                     value={rangeTxt}
                 />
             )}
