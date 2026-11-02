@@ -1,3 +1,7 @@
+// A small rich-text editor on TipTap, for text such as a mail body, a card's description or an email signature: bold,
+// italic, lists, quotes and links, with no headings or code. Its toolbar floats over a selection, sits above the text,
+// or is left out. It hands its content on as html and as plain text, without empty paragraphs at either end.
+
 import { TaskItem, TaskList } from '@tiptap/extension-list';
 import type { Editor } from '@tiptap/react';
 import { EditorContent, useEditor } from '@tiptap/react';
@@ -13,8 +17,7 @@ type LightEditorProps = {
     content: string;
     onChange?: (html: string) => void;
     onChangeText?: (text: string) => void;
-    // Canonical (trimmed) html/text on first parse — so callers that fingerprint
-    // state don't see spurious diffs on first interaction.
+    // The trimmed html and text of the first parse, so a caller that compares against them sees no change until an edit.
     onReady?: (arg: { editor: Editor; html: string; text: string }) => void;
     placeholder?: string;
     toolbar?: 'floating' | 'fixed' | 'none';
@@ -22,22 +25,12 @@ type LightEditorProps = {
     editable?: boolean;
     proseStyle?: boolean;
     containerClassName?: string;
-    // Read once at mount — useEditor doesn't re-initialize on prop change.
+    // Read once, when the editor mounts.
     taskList?: boolean;
-    // Inside a form: swallow Mod+Enter so StarterKit's HardBreak doesn't insert a
-    // line break before the host's submit hotkey fires. Read once at mount.
+    // Inside a form, Mod+Enter adds no line break, so the form's submit shortcut gets the key. Read once, when the editor
+    // mounts.
     submitOnModEnter?: boolean;
 };
-
-// TipTap leaves an empty paragraph at the end after Enter and sometimes at the
-// start. Strip those from the emitted HTML so consumers (mail body, doc save)
-// don't carry trailing whitespace that renders as blank lines. Mid-content
-// empties are preserved — they're intentional spacing the user added.
-const EMPTY_PARA_LEADING = /^\s*(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+/i;
-const EMPTY_PARA_TRAILING = /(?:\s*<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>)+\s*$/i;
-function trimEmptyEdges(html: string): string {
-    return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
-}
 
 export function LightEditor({
     content,
@@ -79,7 +72,7 @@ export function LightEditor({
             transformPastedHTML: mathAsText,
             // No file node in the schema: decline files-only pastes so the event bubbles to the host's attach flow.
             handlePaste: (_view, event) => event.clipboardData != null && isFilesOnlyClipboard(event.clipboardData),
-            // Swallow Mod+Enter (runs before the HardBreak keymap) so the host's submit hotkey gets a clean event.
+            // This runs before the line-break shortcut, so taking Mod+Enter here keeps the line break out.
             handleKeyDown: (_view, event) =>
                 submitOnModEnter && (event.metaKey || event.ctrlKey) && event.key === 'Enter',
         },
@@ -113,4 +106,14 @@ export function LightEditor({
             <EditorContent editor={editor} className="flex-1 flex flex-col [&>.tiptap]:flex-1" />
         </div>
     );
+}
+
+// TipTap leaves an empty paragraph at the end after Enter, and sometimes at the start. The html handed on drops them, so
+// a mail body or a saved text has no blank lines at its edges. An empty paragraph in the middle is spacing the user
+// added, and stays.
+const EMPTY_PARA_LEADING = /^\s*(?:<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>\s*)+/i;
+const EMPTY_PARA_TRAILING = /(?:\s*<p>(?:\s|&nbsp;|<br\s*\/?>)*<\/p>)+\s*$/i;
+
+function trimEmptyEdges(html: string): string {
+    return html.replace(EMPTY_PARA_LEADING, '').replace(EMPTY_PARA_TRAILING, '');
 }

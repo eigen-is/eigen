@@ -10,30 +10,6 @@ import { cn } from '../../lib/utils';
 // The key of the bubble menu a floating toolbar sits in, so the toolbar can ask the menu to place itself again.
 export const LIGHT_EDITOR_BUBBLE_MENU = 'lightEditorBubbleMenu';
 
-type ToolbarButtonProps = {
-    icon: React.ComponentType<{ className?: string }>;
-    isActive?: boolean;
-    onClick: () => void;
-    title: string;
-};
-
-function ToolbarButton({ icon: Icon, isActive, onClick, title }: ToolbarButtonProps) {
-    return (
-        <button
-            type="button"
-            title={title}
-            aria-label={title}
-            className={cn('p-1.5 rounded hover:bg-muted transition-colors', isActive && 'bg-muted text-foreground')}
-            onMouseDown={(e) => {
-                e.preventDefault();
-                onClick();
-            }}
-        >
-            <Icon className="h-4 w-4" />
-        </button>
-    );
-}
-
 export function LightEditorToolbar({ editor }: { editor: Editor }) {
     const [linkUrl, setLinkUrl] = useState('');
     const [showLinkInput, setShowLinkInput] = useState(false);
@@ -130,5 +106,29 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                 />
             )}
         </div>
+    );
+}
+
+type ToolbarButtonProps = {
+    icon: React.ComponentType<{ className?: string }>;
+    isActive?: boolean;
+    onClick: () => void;
+    title: string;
+};
+
+function ToolbarButton({ icon: Icon, isActive, onClick, title }: ToolbarButtonProps) {
+    return (
+        <button
+            type="button"
+            title={title}
+            aria-label={title}
+            className={cn('p-1.5 rounded hover:bg-muted transition-colors', isActive && 'bg-muted text-foreground')}
+            onMouseDown={(e) => {
+                e.preventDefault();
+                onClick();
+            }}
+        >
+            <Icon className="h-4 w-4" />
+        </button>
     );
 }
