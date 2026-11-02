@@ -53,29 +53,6 @@ const CUSTOM = 'Custom';
 const CM_STEP = 0.01;
 const CM_DECIMALS = 2;
 
-type CmInputProps = { id: string; value: string; onValueChange: (value: string) => void; disabled?: boolean };
-
-function CmInput({ id, value, onValueChange, disabled }: CmInputProps) {
-    const [typing, setTyping] = useState(false);
-    const number = Number(value);
-    const shown = typing || value.trim() === '' || !Number.isFinite(number) ? value : numberAtStep(number, CM_STEP);
-    return (
-        <Input
-            id={id}
-            type="number"
-            step={CM_STEP}
-            className="w-24"
-            value={shown}
-            onChange={(e) => {
-                setTyping(true);
-                onValueChange(e.target.value);
-            }}
-            onBlur={() => setTyping(false)}
-            disabled={disabled}
-        />
-    );
-}
-
 // Margins to 0.01 cm, as Google shows 0.75 in as 1.91 cm.
 const marginText = (mm: number) => cmText(mm, CM_DECIMALS);
 // Portrait first, as Google lists every paper.
@@ -379,5 +356,28 @@ function HeadersAndFootersForm({ setup, onSetupChange }: Pick<PageSetupFormProps
                 </div>
             </FieldSet>
         </FormDialogForm>
+    );
+}
+
+type CmInputProps = { id: string; value: string; onValueChange: (value: string) => void; disabled?: boolean };
+
+function CmInput({ id, value, onValueChange, disabled }: CmInputProps) {
+    const [typing, setTyping] = useState(false);
+    const number = Number(value);
+    const shown = typing || value.trim() === '' || !Number.isFinite(number) ? value : numberAtStep(number, CM_STEP);
+    return (
+        <Input
+            id={id}
+            type="number"
+            step={CM_STEP}
+            className="w-24"
+            value={shown}
+            onChange={(e) => {
+                setTyping(true);
+                onValueChange(e.target.value);
+            }}
+            onBlur={() => setTyping(false)}
+            disabled={disabled}
+        />
     );
 }
