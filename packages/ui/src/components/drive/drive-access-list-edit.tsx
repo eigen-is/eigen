@@ -35,6 +35,7 @@ import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserItem } from '../user/user-item';
+import { GeneralAccess } from './drive-access-list';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
@@ -48,8 +49,8 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
 
     const { baseDirectList, directList, inheritedList } = useDriveAccess(path, directListOverride);
 
-    const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private');
-    const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted ?? false);
+    const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility);
+    const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted);
 
     const { data: myTeams } = useMyTeams();
 
@@ -271,8 +272,9 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
 
             <div>
                 <h4 className="text-sm font-medium mb-2">General access</h4>
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center">
+                <GeneralAccess
+                    visibility={visibility}
+                    icon={
                         <Tooltip>
                             <TooltipTrigger asChild>
                                 <Button
@@ -289,18 +291,8 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                             </TooltipTrigger>
                             <TooltipContent>{lockLabel}</TooltipContent>
                         </Tooltip>
-                        <div className="ml-3">
-                            <p className="text-sm font-medium">
-                                {visibility !== 'private' ? 'Unrestricted' : 'Restricted'}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                {visibility !== 'private'
-                                    ? 'Any authenticated user with the link'
-                                    : 'Only people with access'}
-                            </p>
-                        </div>
-                    </div>
-
+                    }
+                >
                     {visibility !== 'private' && (
                         <Select
                             value={visibility === 'public-write' ? 'editor' : 'viewer'}
@@ -317,10 +309,10 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                             </SelectContent>
                         </Select>
                     )}
-                </div>
+                </GeneralAccess>
 
                 {isEffectiveOwner && (
-                    <label className="flex items-center cursor-pointer">
+                    <label className="mt-2 flex items-center cursor-pointer">
                         <div className="w-8 h-8 flex items-center justify-center shrink-0">
                             <Checkbox checked={!sharingRestricted} onCheckedChange={handleSharingRestrictedChange} />
                         </div>
