@@ -22,7 +22,6 @@ import type {
     GlobalCache,
     LinkCardProps,
     Presence,
-    RangeDialogProps,
     Rect,
     SearchHighlight,
     Selection,
@@ -64,9 +63,10 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    // A range picker is open, so the cell editor and the link card keep out of the way of the pick.
-    rangeDialog: RangeDialogProps;
-    // warning dialog
+    // Whether a range picker is open. While it is, the cell editor and the link card keep out of the way of the pick.
+    rangePickerOpen: boolean;
+    // A notice for the overlay to show, such as why a protected sheet refused an edit. A write sets it, and the
+    // overlay opens the notice and clears it.
     warnDialog?: string;
     currency?: string;
     // Whether a list cell's drop-down is open.
@@ -219,12 +219,9 @@ export function defaultContext(refs: RefValues): Context {
 
         currentSheetId: '',
         calculateSheetId: '',
-        // warning dialog
         warnDialog: undefined,
         currency: '€',
-        rangeDialog: {
-            show: false,
-        },
+        rangePickerOpen: false,
 
         validationListOpen: false,
 

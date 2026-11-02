@@ -207,7 +207,7 @@ describe('the range picker', () => {
         await dialog.type('Display text', 'Totals');
         await clickLabelled('Select cell range');
         expect(dialog.title()).toBe('Select cell range');
-        expect(dialog.context().rangeDialog.show).toBe(true);
+        expect(dialog.context().rangePickerOpen).toBe(true);
         return dialog;
     };
 
@@ -218,7 +218,7 @@ describe('the range picker', () => {
         expect(dialog.title()).toBe('Edit link');
         expect(dialog.field('Display text').value).toBe('Totals');
         expect(dialog.field('Cell range').value).toBe('Sheet1!C2');
-        expect(dialog.context().rangeDialog.show).toBe(false);
+        expect(dialog.context().rangePickerOpen).toBe(false);
     });
 
     test('Cancel brings the dialog back with the text as typed', async () => {
@@ -228,13 +228,13 @@ describe('the range picker', () => {
         expect(dialog.title()).toBe('Edit link');
         expect(dialog.field('Display text').value).toBe('Totals');
         expect(dialog.field('Cell range').value).toBe('Sheet1!B1');
-        expect(dialog.context().rangeDialog.show).toBe(false);
+        expect(dialog.context().rangePickerOpen).toBe(false);
     });
 
     test('a notice that takes its place lets the cell editor and the link card back', async () => {
         const dialog = await openPicker();
         await dialog.show((d) => d.showNotice('A notice'));
-        expect(dialog.context().rangeDialog.show).toBe(false);
+        expect(dialog.context().rangePickerOpen).toBe(false);
         expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
     });
 

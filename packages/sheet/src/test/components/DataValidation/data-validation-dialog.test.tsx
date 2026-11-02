@@ -170,13 +170,13 @@ test('back from the range picker, the draft keeps every value the user typed', a
     await dialog.type('Value 2', '50');
     await pickWith('Select cell range');
     expect(dialog.title()).toBe('Select cell range');
-    expect(dialog.context().rangeDialog.show).toBe(true);
+    expect(dialog.context().rangePickerOpen).toBe(true);
     await dialog.click('OK');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Value 2').value).toBe('50');
-    expect(dialog.context().rangeDialog.show).toBe(false);
+    expect(dialog.context().rangePickerOpen).toBe(false);
 });
 
 test('Cancel in the range picker brings the dialog back with its draft too', async () => {
@@ -186,15 +186,15 @@ test('Cancel in the range picker brings the dialog back with its draft too', asy
     await dialog.click('Cancel');
     expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Value 2').value).toBe('50');
-    expect(dialog.context().rangeDialog.show).toBe(false);
+    expect(dialog.context().rangePickerOpen).toBe(false);
 });
 
 test("a notice that takes the range picker's place lets the cell editor back", async () => {
     const dialog = await openDialog(B3);
     await pickWith('Select cell range');
-    expect(dialog.context().rangeDialog.show).toBe(true);
+    expect(dialog.context().rangePickerOpen).toBe(true);
     await dialog.show((d) => d.showNotice('A notice'));
-    expect(dialog.context().rangeDialog.show).toBe(false);
+    expect(dialog.context().rangePickerOpen).toBe(false);
     expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
 });
 

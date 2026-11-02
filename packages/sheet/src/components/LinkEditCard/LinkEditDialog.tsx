@@ -74,7 +74,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
         );
     };
 
-    // The picker leaves the grid usable, so rangeDialog.show keeps the cell editor and the link card out of the way.
+    // The picker leaves the grid usable, so rangePickerOpen keeps the cell editor and the link card out of the way.
     // A pick may wander to another sheet, so the picker hands back the link's sheet and cell however it leaves. Its
     // OK opens this dialog again with the picked range, and Cancel or Escape with the draft as it was.
     const pickRange = (before: LinkDraft) => {
@@ -83,7 +83,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
             setContext((ctx) => {
                 changeSheet(ctx, link.sheetId);
                 ctx.selections = normalizeSelection(ctx, [{ row: [r, r], column: [c, c] }]);
-                ctx.rangeDialog.show = picking;
+                ctx.rangePickerOpen = picking;
             });
         backToLinkCell(true);
         showNonModalDialog(

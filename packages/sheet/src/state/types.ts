@@ -178,10 +178,6 @@ export type LinkCardProps = {
     isEditing: boolean;
 };
 
-export type RangeDialogProps = {
-    show: boolean;
-};
-
 // The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it
 // into the stored DataVerificationRule. `rangeTxt` is the range the user typed or picked for the rule.
 export type DataRegulationProps = {
