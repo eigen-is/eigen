@@ -1,6 +1,6 @@
-// The workbook bar's format icon row, mirrored from the docs toolbar: font, size, bold and italic, the colors and the
-// alignment. It drives the same handlers as the Format menu, and is an extra surface, not a replacement: every icon
-// it folds away on a narrow bar is a row of that menu. A viewer gets no row.
+// The workbook bar's format icon row, modeled on the docs toolbar, such as the font, bold, the colors and the alignment.
+// It drives the same handlers as the Format menu and replaces none of it, so every icon it folds away on a narrow bar
+// is still a row of that menu. A viewer gets no icon row.
 
 import { nextFontSize } from '@workspace/lib/constants/fonts';
 import { ToolbarSeparator, TooltipButton } from '@workspace/ui';
@@ -34,8 +34,8 @@ export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
 
     const textColor = caret?.fc ?? cell?.fc ?? '';
     const fillColor = cell?.bg ?? '';
-    // The align handler stores `ht` as '1', '0' or '2', a default or an import as a number: 0 is center, 1 left and
-    // 2 right.
+    // The align handler stores `ht` as the text '1', '0' or '2', while a default or an import stores a number. Either
+    // way 0 is center, 1 left and 2 right.
     const align = cell?.ht == null ? undefined : Number(cell.ht);
     const { ff: fontName, fs: fontSize, bl, it } = caret ?? runStyleOf(cell);
     // Every handler formats through the cell input, which holds the open editor's selection.
@@ -48,9 +48,9 @@ export function FormatToolbar({ caret }: { caret: RunStyle | null }) {
     const setFontSize = (size: number) =>
         format((ctx, input) => handleTextSize(ctx, input, size, refs.canvas.current?.getContext('2d') ?? undefined));
 
-    // The row folds from its right end as the bar narrows, as Docs' does, so its order is its priority order. Each
-    // breakpoint is where a part fits beside the menus, the font picker on its widest font. The breakpoints read the
-    // width of the bar, which is a size container.
+    // The row folds from its right end as the bar narrows, as the Docs bar does, so its order is its priority order.
+    // Each breakpoint is the bar width at which a part fits beside the menus, measured with the font picker showing
+    // its widest font.
     return (
         <div className="hidden @[1000px]:flex items-center gap-0.5" role="toolbar" aria-label="Formatting">
             <FontPicker
