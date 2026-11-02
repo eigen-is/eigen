@@ -1,5 +1,6 @@
 // New event is a form: Enter in the title saves the event, while Enter in the guest field adds a guest and Enter in a
-// time field sets the time, and neither saves. The guest row's buttons are named and save nothing either. A save the
+// time field sets the time, and neither saves. The guest row's buttons are named, the remove button after its guest,
+// and save nothing either. A save the
 // server refuses keeps the dialog open beside the hook's toast, with no unhandled rejection, and every opening starts
 // empty.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
@@ -164,7 +165,11 @@ test("the guest row's add and remove buttons are named and save nothing", async 
     await type(guestField(), 'ada@example.org');
     await act(async () => named('Add').click());
     expect(guests()).toEqual(['ada@example.orgPending']);
-    await act(async () => named('Remove').click());
+    await type(guestField(), 'bob@example.org');
+    await act(async () => named('Add').click());
+    await act(async () => named('Remove ada@example.org').click());
+    expect(guests()).toEqual(['bob@example.orgPending']);
+    await act(async () => named('Remove bob@example.org').click());
     expect(guests()).toEqual([]);
     expect(createEvent.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();

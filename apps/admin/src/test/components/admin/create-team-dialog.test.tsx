@@ -1,5 +1,6 @@
-// Create team creates a team from the trimmed name and closes. Create waits for a name, Enter submits, and a create
-// the server refuses keeps the dialog open beside the hook's toast, with no unhandled rejection.
+// Create team creates a team from the trimmed name and closes. Its field is labelled Team name. Create waits for a
+// name, Enter submits, and a create the server refuses keeps the dialog open beside the hook's toast, with no unhandled
+// rejection.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { pressEnter } from '@workspace/ui/test/press-enter';
@@ -52,7 +53,13 @@ beforeEach(() => {
     unhandled.length = 0;
 });
 
-const nameField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input[placeholder="Team name"]');
+// The field a screen reader names Team name, through its label.
+const nameField = () => {
+    const label = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')].find(
+        (l) => l.textContent === 'Team name',
+    );
+    return label ? document.getElementById(label.htmlFor) : null;
+};
 const createButton = () =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === 'Create');
 
@@ -61,7 +68,7 @@ async function openAndType(name: string) {
         createElement(CreateTeamDialog, { open: true, onOpenChange, organizationId: 'org-1' }),
     ));
     const input = nameField();
-    if (!input) throw new Error('the dialog has no name field');
+    if (!(input instanceof HTMLInputElement)) throw new Error('the dialog has no field labelled Team name');
     await act(async () => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(input, name);
         input.dispatchEvent(new Event('input', { bubbles: true }));
