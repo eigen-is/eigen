@@ -953,6 +953,29 @@ describe('pptx text', () => {
         ]);
     });
 
+    test('a centered or bottom-aligned text box keeps its height, so PowerPoint never shrinks it and moves its text', () => {
+        const all = shapes(
+            pptx(
+                sceneOf([
+                    textBox({ index: 'a0', html: '<p>Top</p>', verticalAlign: 'top' }),
+                    textBox({ index: 'a1', html: '<p>Middle</p>', verticalAlign: 'center' }),
+                    textBox({ index: 'a2', html: '<p>Bottom</p>', verticalAlign: 'bottom' }),
+                ]),
+            ),
+        );
+        expect(
+            all.map((shape) => [
+                attr(first(shape, P, 'cNvSpPr'), 'txBox'),
+                attr(first(shape, A, 'bodyPr'), 'anchor'),
+                xmlElements(first(shape, A, 'bodyPr')).map((child) => child.local),
+            ]),
+        ).toEqual([
+            ['1', 't', ['spAutoFit']],
+            ['1', 'ctr', ['noAutofit']],
+            ['1', 'b', ['noAutofit']],
+        ]);
+    });
+
     test('a shape whose list the user emptied holds no text, so it writes no body', () => {
         const shape = only(pptx(sceneOf([element('rectangle', { html: '<ul><li><p></p></li></ul>' })])));
         expect(descendants(shape, P, 'txBody')).toEqual([]);

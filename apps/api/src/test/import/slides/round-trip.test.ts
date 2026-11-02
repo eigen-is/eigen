@@ -224,6 +224,23 @@ describe('a deck exported and read back', () => {
         ]);
     });
 
+    test('keeps a bottom-aligned text box a text box at its height, though its body does not grow the shape', () => {
+        const title: NewVectorElement = {
+            type: 'rectangle',
+            autoFit: true,
+            x: 40,
+            y: 600,
+            width: 800,
+            height: 300,
+            angle: 0,
+            html: '<p>Title</p>',
+            verticalAlign: 'bottom',
+        };
+        const [back] = roundTrip([title]).deck.slides[0].elements;
+        expect(back).toMatchObject({ type: 'rectangle', autoFit: true, verticalAlign: 'bottom' });
+        expectPx(back.height, 300);
+    });
+
     test('keeps rich text: its html, typography and box fields', () => {
         for (const [element, found] of pairs) {
             if (element.type !== 'rectangle' || !element.autoFit) continue;

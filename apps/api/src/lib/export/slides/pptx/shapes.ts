@@ -144,8 +144,9 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     }
 }
 
-// An element's text as a text body, inset by its padding and its border, as the canvas insets it. A text box's body
-// grows its shape to its text, as the canvas grows the box.
+// An element's text as a text body, inset by its padding and its border, as the canvas insets it. A top-aligned text
+// box's body grows its shape to its text, as the canvas grows the box. A centered or bottom-aligned one keeps its height,
+// because PowerPoint shrinks a growing shape to its text on the next edit, which would move that text up.
 function textXml(el: VectorTextualElement, slide: Slide, opacity: number): string {
     const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
     const paragraphs = paragraphsOf(el.html);
@@ -159,7 +160,7 @@ function textXml(el: VectorTextualElement, slide: Slide, opacity: number): strin
         strike: el.textDecoration === 'line-through',
         inset,
         wrap: true,
-        autoFit: isTextBox(el),
+        autoFit: isTextBox(el) && el.verticalAlign === 'top',
         opacity,
     });
 }
