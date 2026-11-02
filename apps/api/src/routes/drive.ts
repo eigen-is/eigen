@@ -24,13 +24,11 @@ import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
 import { copyPathAcross, copySize } from '../lib/drive/copy-across';
-import { FREE_NAME_ATTEMPTS, getUniqueFileName } from '../lib/drive/naming';
+import { withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
-import { isNameTakenError } from '../lib/mount/helpers';
-import { foldName } from '../lib/mount/names';
 import {
     assertEmlPreviewable,
     assertIcsPreviewable,
@@ -183,7 +181,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     )
     .post(
         '/drive/:ownerId/:mountId/path/:pathId/copy',
-        async ({ params, body, request, user, server }) => {
+        async ({ params, body, request, user, server }): Promise<DrivePath> => {
             // A deep copy across mounts or on S3 sends nothing for longer than the server's idle timeout.
             // Without this the client would retry and copy the tree twice.
             server?.timeout(request, 0);
@@ -207,35 +205,30 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
             const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
-            // Two copies into one folder at once can both pick the same free name. The one that creates
-            // second gets a 409, so it reads the folder again and picks the next free name.
-            for (let attempt = 1; ; attempt++) {
-                const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
-                const used = new Set(siblings.map((s) => foldName(s.name)));
-                const finalName = used.has(foldName(desired)) ? getUniqueFileName(desired, used) : desired;
-                try {
-                    if (sameMount) {
-                        return await sourceDrive.copyPath(
-                            params.mountId,
-                            params.pathId,
-                            body.targetParentId,
-                            finalName,
-                            user,
-                        );
-                    }
-                    return await copyPathAcross(
-                        sourceDrive,
-                        source,
-                        targetDrive,
-                        body.targetMountId,
-                        body.targetParentId,
-                        finalName,
-                        user,
-                    );
-                } catch (e) {
-                    if (attempt === FREE_NAME_ATTEMPTS || !isNameTakenError(e, finalName)) throw e;
-                }
-            }
+            const copy = (name: string): Promise<DrivePath> =>
+                sameMount
+                    ? sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user)
+                    : copyPathAcross(
+                          sourceDrive,
+                          source,
+                          targetDrive,
+                          body.targetMountId,
+                          body.targetParentId,
+                          name,
+                          user,
+                      );
+            // A file copied to another mount is uploaded there, and the upload picks its own free name.
+            if (!sameMount && !isContainerType(source.type)) return copy(desired);
+            const folder = {
+                ownerId: body.targetOwnerId,
+                mountId: body.targetMountId,
+                parentId: body.targetParentId,
+                isTaken: async (name: string) =>
+                    (await targetDrive.getChildByName(body.targetMountId, body.targetParentId, name)) !== null,
+                childNames: async () =>
+                    (await targetDrive.getFolderContents(body.targetMountId, body.targetParentId)).map((s) => s.name),
+            };
+            return withFreeName(folder, desired, copy);
         },
         {
             body: t.Object({

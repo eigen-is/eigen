@@ -5,12 +5,10 @@
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import type { Mount } from '../mount';
-import { isNameTakenError } from '../mount/helpers';
-import { foldName } from '../mount/names';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
-import { FREE_NAME_ATTEMPTS, getUniqueFileName } from './naming';
+import { withFreeName } from './naming';
 
 // The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
 // caller removes the temp file.
@@ -29,7 +27,14 @@ export async function finalizeUpload(
 ): Promise<DrivePath> {
     // The store keeps names in NFC, so the name is compared with its siblings in that form too.
     const originalName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
-    const { pathId, name: safeName } = await createUnderFreeName(mount, args.parentId, originalName, (name) =>
+    const folder = {
+        ownerId: mount.history.ownerId,
+        mountId: mount.id,
+        parentId: args.parentId,
+        isTaken: async (name: string) => (await mount.getChildByName(args.parentId, name)) !== null,
+        childNames: async () => (await mount.listFolder(args.parentId)).map((child) => child.name),
+    };
+    const pathId = await withFreeName(folder, originalName, (name) =>
         mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
     );
     const uploadedFile = originalName
@@ -51,35 +56,18 @@ export async function finalizeUpload(
         // bytes later through writeFileContent.
         await mount.cleanupTemp(args.tempId);
     } else {
-        regenerateThumbnailAsync(drive, mount, pathId, mount.getTempPath(args.tempId), args.mimeType, safeName, () =>
-            mount.cleanupTemp(args.tempId),
+        regenerateThumbnailAsync(
+            drive,
+            mount,
+            pathId,
+            mount.getTempPath(args.tempId),
+            args.mimeType,
+            uploadedFile.name,
+            () => mount.cleanupTemp(args.tempId),
         );
     }
 
     return uploadedFile;
-}
-
-// Two uploads of one name into one folder at once, such as two pasted screenshots, both read the name as
-// free, and the one that creates second gets a 409. That one reads the folder again and picks the next free
-// name, as the copy route does. The temp file is only read by a create, so a lost one can try again.
-async function createUnderFreeName(
-    mount: Mount,
-    parentId: string,
-    desired: string,
-    create: (name: string) => Promise<string>,
-): Promise<{ pathId: string; name: string }> {
-    for (let attempt = 1; ; attempt++) {
-        let name = desired;
-        if (await mount.getChildByName(parentId, desired)) {
-            const siblings = await mount.listFolder(parentId);
-            name = getUniqueFileName(desired, new Set(siblings.map((s) => foldName(s.name))));
-        }
-        try {
-            return { pathId: await create(name), name };
-        } catch (e) {
-            if (attempt === FREE_NAME_ATTEMPTS || !isNameTakenError(e, name)) throw e;
-        }
-    }
 }
 
 export function regenerateThumbnailAsync(

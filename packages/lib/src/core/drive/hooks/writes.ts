@@ -226,23 +226,16 @@ export function useCopyToMediaFolder(ownerId: string, mountId: string) {
     });
 }
 
-// The server gives each copy a free name, so two copies sent into one folder at once could pick the same
-// one. Copies into one folder therefore go one after another, and copies into different folders go at once.
+// Every copy goes at once. The server gives each copy into one folder its own free name, however many
+// arrive together.
 async function copyEach(queryClient: QueryClient, copies: readonly DriveCopy[]): Promise<DrivePath[]> {
-    const lastInFolder = new Map<string, Promise<unknown>>();
     const results = await Promise.allSettled(
-        copies.map(({ source, ...body }) => {
-            const folder = `${body.targetOwnerId}/${body.targetMountId}/${body.targetParentId}`;
-            const sent = (lastInFolder.get(folder) ?? Promise.resolve()).then(async () => {
-                const response = await driveApi({ ownerId: source.ownerId })({ mountId: source.mountId })
-                    .path({ pathId: source.id })
-                    .copy.post(body);
-                if (response.error) throw new AppError(response);
-                return response.data;
-            });
-            // The next copy into this folder waits for this one, whether it lands or fails.
-            lastInFolder.set(folder, Promise.allSettled([sent]));
-            return sent;
+        copies.map(async ({ source, ...body }) => {
+            const response = await driveApi({ ownerId: source.ownerId })({ mountId: source.mountId })
+                .path({ pathId: source.id })
+                .copy.post(body);
+            if (response.error) throw new AppError(response);
+            return response.data;
         }),
     );
     const copied = results

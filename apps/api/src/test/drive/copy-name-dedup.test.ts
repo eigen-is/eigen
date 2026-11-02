@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { authedRequest, driveGet, drivePost, driveUpload, getTestContext } from '../setup';
+import { authedRequest, driveGet, drivePost, drivePut, driveUpload, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const MOUNT = 'default';
@@ -53,39 +53,69 @@ describe('copy route name dedup', () => {
         expect(((await res.json()) as DrivePath).name).toBe('café (2).txt');
     });
 
-    // Both copies read the target folder before either one creates, so both pick the same free name.
-    // The loser has to pick again instead of answering 409.
-    test('two same-named files copied into one folder at once both land, with distinct names', async () => {
+    // Eight same-named sources, each in a folder of its own.
+    async function sameNamedSources(): Promise<DrivePath[]> {
         const token = ctx.alice.user.sessionToken;
         const ownerId = ctx.alice.user.id;
-        const sources: DrivePath[] = [];
-        for (const folderName of ['race-a', 'race-b']) {
-            const folder = await drivePost<DrivePath>(token, ownerId, MOUNT, `folder/${folderId}`, { folderName });
-            sources.push(await driveUpload(token, ownerId, MOUNT, folder.id, new File([folderName], 'same.txt')));
-        }
+        return Promise.all(
+            Array.from({ length: 8 }, async (_, n) => {
+                const folder = await drivePost<DrivePath>(token, ownerId, MOUNT, `folder/${folderId}`, {
+                    folderName: `race-${crypto.randomUUID()}`,
+                });
+                return driveUpload(token, ownerId, MOUNT, folder.id, new File([`${n}`], 'same.txt'));
+            }),
+        );
+    }
+
+    function copyInto(source: DrivePath, targetOwnerId: string, targetParentId: string): Promise<Response> {
+        return authedRequest(ctx.alice.user.sessionToken, `/drive/${source.ownerId}/${MOUNT}/path/${source.id}/copy`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ targetOwnerId, targetMountId: MOUNT, targetParentId }),
+        });
+    }
+
+    // The names a burst of eight same-named copies lands under, after `start - 1` of them already exist.
+    function landedNames(start: number): string[] {
+        return Array.from({ length: 8 }, (_, i) => (start + i === 1 ? 'same.txt' : `same (${start + i}).txt`));
+    }
+
+    // Every copy reads the target folder before any one of them creates, so each must still get its own name.
+    // The second burst lands beside the first one's copies, so it reads the folder too.
+    test('eight same-named files copied into one folder at once all land, with distinct names', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const sources = await sameNamedSources();
         const target = await drivePost<DrivePath>(token, ownerId, MOUNT, `folder/${folderId}`, {
             folderName: 'race-target',
         });
 
-        for (let round = 0; round < 3; round++) {
-            const responses = await Promise.all(
-                sources.map((source) =>
-                    authedRequest(token, `/drive/${ownerId}/${MOUNT}/path/${source.id}/copy`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            targetOwnerId: ownerId,
-                            targetMountId: MOUNT,
-                            targetParentId: target.id,
-                        }),
-                    }),
-                ),
-            );
-            expect(responses.map((res) => res.status)).toEqual([200, 200]);
+        for (let round = 0; round < 2; round++) {
+            const responses = await Promise.all(sources.map((source) => copyInto(source, ownerId, target.id)));
+            expect(responses.map((res) => res.status)).toEqual(Array(8).fill(200));
         }
         const names = (await driveGet<DrivePath[]>(token, ownerId, MOUNT, `folder/${target.id}`)).map((p) => p.name);
-        expect(names).toHaveLength(6);
-        expect(new Set(names).size).toBe(6);
+        expect(names.toSorted()).toEqual([...landedNames(1), ...landedNames(9)].toSorted());
+    });
+
+    // A file copied to another drive is uploaded there, and the upload picks its free name.
+    test('eight same-named files copied into a folder on another drive at once all land, with distinct names', async () => {
+        const bob = ctx.bob.user;
+        const bobRoot = await driveGet<DrivePath>(bob.sessionToken, bob.id, MOUNT, 'root');
+        const target = await drivePost<DrivePath>(bob.sessionToken, bob.id, MOUNT, `folder/${bobRoot.id}`, {
+            folderName: `race-shared-${crypto.randomUUID()}`,
+        });
+        await drivePut(bob.sessionToken, bob.id, MOUNT, `path/${target.id}/acl`, {
+            add: [{ id: ctx.alice.user.email, read: true, write: true }],
+        });
+        const sources = await sameNamedSources();
+
+        const responses = await Promise.all(sources.map((source) => copyInto(source, bob.id, target.id)));
+        expect(responses.map((res) => res.status)).toEqual(Array(8).fill(200));
+        const names = (await driveGet<DrivePath[]>(bob.sessionToken, bob.id, MOUNT, `folder/${target.id}`)).map(
+            (p) => p.name,
+        );
+        expect(names.toSorted()).toEqual(landedNames(1).toSorted());
     });
 
     // A name already at the 255-byte limit still gets a copy: the dedup suffix trims the stem to fit.
