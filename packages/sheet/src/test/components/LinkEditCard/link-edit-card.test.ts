@@ -115,7 +115,10 @@ test('an address Sheets cannot open disables OK, says why, and keeps what was ty
     const dialog = await openCard();
     await dialog.type('Link address', 'javascript:alert(1)');
     expect(dialog.button('OK')?.disabled).toBe(true);
-    expect(dialog.dialogs()[0]?.textContent).toContain('Please enter a valid link');
+    const describedBy = dialog.field('Link address').getAttribute('aria-describedby');
+    const reason = describedBy ? document.getElementById(describedBy) : null;
+    expect(reason?.textContent).toBe('Please enter a valid link');
+    expect(reason?.getAttribute('role')).toBe('alert');
     await act(async () => pressEnter(dialog.field('Link address')));
     expect(link(dialog.context())).toBeUndefined();
     expect(dialog.field('Link address').value).toBe('javascript:alert(1)');

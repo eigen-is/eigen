@@ -2,13 +2,14 @@
 // to a web page, a range or a sheet in the workbook, and its OK waits for an address Sheets can open. Picking a range
 // hands its place to the range picker, which opens this dialog again with the draft, back on the link's cell.
 
+import { FieldError } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
 import { Grid3x3 } from 'lucide-react';
-import { useContext, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog, useDialogProps } from '../../hooks/useDialog';
 import type { LinkCardProps, ViewportPoint } from '../../state';
@@ -47,8 +48,10 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
     const { r, c } = link;
     const validity = isLinkValid(linkType, linkAddress);
     const invalidBorder = linkAddress && !validity.isValid && 'border-destructive';
+    const refusalId = useId();
+    const describedBy = validity.tooltip ? refusalId : undefined;
 
-    const tooltip = <div className="h-[17px] my-[3px] text-xs text-destructive">{validity.tooltip}</div>;
+    const refusal = validity.tooltip && <FieldError id={refusalId}>{validity.tooltip}</FieldError>;
 
     // The position is in sheet-content coordinates, where the cell's overlay region applies the pane's scroll. The
     // picker is portaled and fixed, so it is converted here off the same pane the region would use.
@@ -149,12 +152,13 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                             <Label htmlFor="link-address">Link address</Label>
                             <Input
                                 id="link-address"
+                                aria-describedby={describedBy}
                                 className={cn(invalidBorder)}
                                 spellCheck="false"
                                 value={linkAddress}
                                 onChange={(e) => setLinkAddress(e.target.value)}
                             />
-                            {tooltip}
+                            {refusal}
                         </div>
                     )}
                     {linkType === 'cellrange' && (
@@ -163,6 +167,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                             <div className="relative">
                                 <Input
                                     id="link-cell"
+                                    aria-describedby={describedBy}
                                     className={cn('pr-9', invalidBorder)}
                                     spellCheck="false"
                                     value={linkAddress}
@@ -177,7 +182,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                     <Grid3x3 className="size-4" aria-hidden="true" />
                                 </button>
                             </div>
-                            {tooltip}
+                            {refusal}
                         </div>
                     )}
                     {linkType === 'sheet' && (
@@ -201,7 +206,7 @@ export function LinkEditDialog({ link, draft }: { link: LinkCardProps; draft?: L
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {tooltip}
+                            {refusal}
                         </div>
                     )}
                 </div>

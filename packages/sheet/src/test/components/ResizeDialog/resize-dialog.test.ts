@@ -47,7 +47,10 @@ test('a size past the limit disables OK, says why, and keeps the typed value', a
     const dialog = await openRowHeight();
     await dialog.type(ROW_HEIGHT, '600');
     expect(dialog.button('OK')?.disabled).toBe(true);
-    expect(dialog.dialogs()[0]?.textContent).toContain('Enter a value between 1 and 545.');
+    const describedBy = dialog.field(ROW_HEIGHT).getAttribute('aria-describedby');
+    const reason = describedBy ? document.getElementById(describedBy) : null;
+    expect(reason?.textContent).toBe('Enter a value between 1 and 545.');
+    expect(reason?.getAttribute('role')).toBe('alert');
     await act(async () => pressEnter(dialog.field(ROW_HEIGHT)));
     expect(getSheetConfig(dialog.context())?.rowlen).toEqual({ 0: 30, 1: 30 });
     expect(dialog.field(ROW_HEIGHT).value).toBe('600');
