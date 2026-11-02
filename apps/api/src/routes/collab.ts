@@ -16,7 +16,7 @@ import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
-import { getCommentIndex } from '../lib/chat/comment-index';
+import { withCommentIndex } from '../lib/chat/comment-index';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
@@ -73,8 +73,7 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/comments',
         async ({ params, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            return await index.list();
+            return withCommentIndex(drive, params.mountId, params.pathId, (index) => index.list());
         },
         { auth: true },
     )
@@ -83,8 +82,7 @@ export const collabRouter = new Elysia({
         '/collab/:ownerId/:mountId/:pathId/comments/search',
         async ({ params, query, user }) => {
             const drive = await getSharedDrive(params.ownerId, user);
-            const index = await getCommentIndex(drive, params.mountId, params.pathId);
-            return await index.searchComments(query.q);
+            return withCommentIndex(drive, params.mountId, params.pathId, (index) => index.searchComments(query.q));
         },
         {
             auth: true,

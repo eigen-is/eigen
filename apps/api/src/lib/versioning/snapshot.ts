@@ -8,12 +8,13 @@ import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError, storageGone } from '../core';
-import { withDocumentDb } from '../mount/document-db';
+import { closeInSlot, withDocumentDb } from '../mount/document-db';
 import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
 import { markContainerContentDirty } from '../mount/search-index';
 import { getShutdownDrainDeadline } from '../mount/upload-limits';
+import type { UploadQueue } from '../mount/upload-queue';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
 import type { RetentionPolicy } from './retention';
 import { selectSnapshotsToPrune } from './retention';
@@ -86,10 +87,10 @@ async function takeSnapshot(
     // the existing one rather than failing on the duplicate name.
     const existing = await mount.getChildByName(versions.id, snapshotName);
     if (existing) return existing;
-    // isRemote ENQUEUES the version's upload, so a close-time snapshot never blocks on the
-    // backend. Local backends write it synchronously.
-    const versionPathId = mount.isRemote
-        ? await snapshotDataDbToVersionStaged(mount, dataDb, versions.id, snapshotName, order)
+    // On s3 the version's upload is queued, so a close-time snapshot never waits on the bucket. A local
+    // mount writes it before this returns.
+    const versionPathId = mount.uploadQueue
+        ? await snapshotDataDbToVersionStaged(mount, mount.uploadQueue, dataDb, versions.id, snapshotName, order)
         : await snapshotDataDbToVersionLocal(mount, dataDb, versions.id, snapshotName, order);
     const copy = await mount.getPath(versionPathId);
     if (!copy) throw new ApiError(500, 'Failed to create version snapshot');
@@ -109,17 +110,16 @@ async function takeSnapshot(
     return copy;
 }
 
-// isRemote version snapshot: source the bytes from the freshest LOCAL copy of data.db, then
-// create the version metadata row and enqueue the upload (so a close-time snapshot never
-// blocks on the backend). Caller holds the container lock.
+// The s3 version snapshot. It copies the freshest local copy of data.db, creates the version's row and
+// queues its upload, so a close-time snapshot never waits on the bucket. The caller holds the container lock.
 async function snapshotDataDbToVersionStaged(
     mount: Mount,
+    queue: UploadQueue,
     dataDb: DrivePath,
     versionsId: string,
     snapshotName: string,
     order: CopyOrder,
 ): Promise<string> {
-    const queue = mount.uploadQueue!; // isRemote-only path (snapshotContainerDataDb branch)
     const versionStaging = queue.newStagingPath();
     const staged = await stageManagedDbCopy(mount, dataDb.id, versionStaging, order).catch((error: unknown) => {
         // A failed read leaves a half-written copy no pending upload references.
@@ -240,10 +240,9 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
         const { size, hash } = await hashFile(sourcePath);
         await withDocumentDb(mount, dataDb.id, async (slot) => {
-            // skipFinalSnapshot: the db is being discarded, and snapshotting would re-enter this lock.
-            const db = slot.db;
-            slot.db = null;
-            await db?.close({ skipFinalSnapshot: true });
+            // It waits for a request still reading the chat. skipFinalSnapshot: the db is being
+            // discarded, and snapshotting would re-enter this lock.
+            await closeInSlot(slot, dataDb.id, { skipFinalSnapshot: true });
             // The next open would adopt a crash temp over the new bytes.
             await mount.cleanupTemp(dataDb.id);
             await mount.withTreeShared(async () => {

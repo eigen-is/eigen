@@ -104,14 +104,14 @@ describe('Drive.create is atomic under degraded storage', () => {
         const key = await mount.getStorageKey(dataDb.id);
 
         await fault.inner.delete(key);
-        const missing = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
+        const missing = await mount.withDatabase(COLLAB_DB_CONFIG, dataDb.id, async () => {}).catch((e: unknown) => e);
         expect(missing).toBeInstanceOf(ApiError);
         expect(missing).toMatchObject({ status: 410 });
 
         // A 0-byte object is the same refusal one layer down: ManagedDatabase's mustExist guard
         // must not open an empty working copy as a fresh database.
         await fault.inner.write(key, new Uint8Array(0));
-        const empty = await mount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
+        const empty = await mount.withDatabase(COLLAB_DB_CONFIG, dataDb.id, async () => {}).catch((e: unknown) => e);
         expect(empty).toBeInstanceOf(ApiError);
         expect(empty).toMatchObject({ status: 503 });
     });
@@ -132,7 +132,9 @@ describe('Drive.create is atomic under degraded storage', () => {
             await settleContainer(localMount, doc.id);
 
             rmSync(localMount.storage.getPath!(await localMount.getStorageKey(dataDb.id)));
-            const missing = await localMount.openDatabase(COLLAB_DB_CONFIG, dataDb.id).catch((e: unknown) => e);
+            const missing = await localMount
+                .withDatabase(COLLAB_DB_CONFIG, dataDb.id, async () => {})
+                .catch((e: unknown) => e);
             expect(missing).toBeInstanceOf(ApiError);
             expect(missing).toMatchObject({ status: 410 });
         } finally {

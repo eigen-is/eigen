@@ -2417,13 +2417,14 @@ describe('Managed-db open vs create', () => {
         rootId = (await mount.getRootFolder())!.id;
     });
 
-    test('openDatabase throws when the storage object is missing', async () => {
+    test('an open throws when the storage object is missing', async () => {
         const containerId = await mount.createFolder(rootId, 'StrictOpenMissing', 'doc');
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
         // touchFile created the metadata row but no actual storage object — the
-        // exact state the old openDatabase would have masked by silently
-        // creating a fresh DB.
-        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('Stored data not found');
+        // exact state an open that made a fresh DB would have masked.
+        await expect(mount.withDatabase(minimalConfig, dataDbId, async () => {})).rejects.toThrow(
+            'Stored data not found',
+        );
     });
 
     test('createDatabase provisions a real storage object', async () => {
@@ -2431,8 +2432,10 @@ describe('Managed-db open vs create', () => {
         const dataDbId = await mount.touchFile(containerId, 'data.db', 'application/x-sqlite3');
 
         // Pre-condition: touchFile creates the metadata row but no storage
-        // object — openDatabase must reject.
-        await expect(mount.openDatabase(minimalConfig, dataDbId)).rejects.toThrow('Stored data not found');
+        // object — an open must reject.
+        await expect(mount.withDatabase(minimalConfig, dataDbId, async () => {})).rejects.toThrow(
+            'Stored data not found',
+        );
 
         await mount.createDatabase(minimalConfig, dataDbId);
         await mount.closeDatabase(dataDbId);
@@ -2440,7 +2443,7 @@ describe('Managed-db open vs create', () => {
         // After close, syncDocumentDbSize stats the now-populated storage
         // object and writes the size into the metadata row. A non-zero size
         // proves a real SQLite file was created and persisted — i.e. that
-        // openDatabase on the same path from a fresh process (after a restart)
+        // an open of the same path from a fresh process (after a restart)
         // would find a real object. We don't reopen in-process because Bun +
         // Drizzle's cached prepared statements keep file refs alive past
         // rawDb.close() and trip SQLITE_IOERR_VNODE; production doesn't hit

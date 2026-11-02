@@ -163,15 +163,16 @@ beforeAll(async () => {
 async function corruptNewestUpdate(mount: Mount, drivePath: DrivePath): Promise<() => Promise<void>> {
     const setNewestUpdate = async (updateData: Buffer): Promise<Buffer> => {
         const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
-        const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath!.id);
-        const last = managedDb.db.select().from(collabSchema.docUpdates).all().at(-1);
-        if (!last) throw new Error(`${drivePath.name}: no update to corrupt`);
-        managedDb.db
-            .update(collabSchema.docUpdates)
-            .set({ updateData })
-            .where(eq(collabSchema.docUpdates.id, last.id))
-            .run();
-        return last.updateData;
+        return mount.withDatabase(COLLAB_DB_CONFIG, dataDbPath!.id, async (managedDb) => {
+            const last = managedDb.db.select().from(collabSchema.docUpdates).all().at(-1);
+            if (!last) throw new Error(`${drivePath.name}: no update to corrupt`);
+            managedDb.db
+                .update(collabSchema.docUpdates)
+                .set({ updateData })
+                .where(eq(collabSchema.docUpdates.id, last.id))
+                .run();
+            return last.updateData;
+        });
     };
     const original = await setNewestUpdate(GARBAGE);
     return async () => {

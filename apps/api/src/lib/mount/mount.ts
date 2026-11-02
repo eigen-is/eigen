@@ -31,7 +31,7 @@ import type { ContentExtractor } from './content-reindex-queue';
 import { ContentReindexQueue } from './content-reindex-queue';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
-import type { DocumentDbSlot } from './document-db';
+import type { DatabaseHold, DocumentDbSlot } from './document-db';
 import * as documentDb from './document-db';
 import {
     ancestorIds,
@@ -1305,23 +1305,33 @@ export class Mount {
 
     // ---- Document databases and versions ----
 
-    // Opens an existing document database. A missing storage object is a 410, never a fresh empty
-    // database. createDatabase makes a new one.
-    public async openDatabase<S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return documentDb.openDatabase(this, config, pathId);
-    }
-
     // Makes a new document database at a row touchFile created. It refuses when the storage object
-    // exists already. It writes the empty schema to storage before it returns, so a later openDatabase
-    // finds it, even after a restart.
+    // exists already. It writes the empty schema to storage before it returns, so a later open finds
+    // it, even after a restart. Nobody holds it, so it closes after a few idle minutes.
     public async createDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
         return documentDb.createDatabase(this, config, pathId);
+    }
+
+    // Runs fn with the database open, which then closes after a few idle minutes. A close that comes
+    // meanwhile waits for fn. A missing storage object is a 410, never a fresh empty database.
+    public async withDatabase<S extends SchemaType, T>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
+        return documentDb.withDatabase(this, config, pathId, fn);
+    }
+
+    // Opens the database and holds it until the caller lets go, such as an open collab document for
+    // its whole life. It then closes after a few idle minutes, as after withDatabase.
+    public async holdDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<DatabaseHold<S>> {
+        return documentDb.holdDatabase(this, config, pathId);
     }
 
     public async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {

@@ -4,6 +4,7 @@ import { CollabDocument } from '../../lib/collab/collab-document';
 import { ApiError } from '../../lib/core/errors';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
+import { HOLDER_WAIT_MS } from '../../lib/mount/document-db';
 import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
 
 // Trashing an open eigendoc tears the collab document down, so no live session keeps editing a
@@ -97,70 +98,80 @@ describe('trash closes open collab documents', () => {
     });
 
     // A move that passed its checks before the trash began can still land in the folder. Its document
-    // was open outside the folder, so the trash closes it afterwards, and no stale copy is served.
-    test('a document moved into the folder while it is trashed is closed, and edits after the restore persist', async () => {
-        const folder = await home.drive.createFolder(mountId, rootId, 'trash-move-in');
-        const doc = await createDoc('trash-move-in-doc');
-        const collab = await home.drive.getCollabDocument(mountId, doc.id);
-        collab.doc.getMap('state').set('before', 'kept');
-        const { mount } = await home.drive.resolveFile(mountId, doc.id);
-        const trashPath = mount.trashPath.bind(mount);
-        const spy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            await mount.updatePath(doc.id, { parentId: folder.id });
-            return trashPath(pathId);
-        });
-        try {
-            await home.drive.deletePath(mountId, folder.id);
-        } finally {
-            spy.mockRestore();
-        }
-        expect((await mount.getPath(doc.id))?.trashedAt).not.toBeNull();
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+    // was open outside the folder, so the trash closes it afterwards, and no stale copy is served. The
+    // open document still holds its data.db, so the trash's close first waits out HOLDER_WAIT_MS.
+    test(
+        'a document moved into the folder while it is trashed is closed, and edits after the restore persist',
+        async () => {
+            const folder = await home.drive.createFolder(mountId, rootId, 'trash-move-in');
+            const doc = await createDoc('trash-move-in-doc');
+            const collab = await home.drive.getCollabDocument(mountId, doc.id);
+            collab.doc.getMap('state').set('before', 'kept');
+            const { mount } = await home.drive.resolveFile(mountId, doc.id);
+            const trashPath = mount.trashPath.bind(mount);
+            const spy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+                await mount.updatePath(doc.id, { parentId: folder.id });
+                return trashPath(pathId);
+            });
+            try {
+                await home.drive.deletePath(mountId, folder.id);
+            } finally {
+                spy.mockRestore();
+            }
+            expect((await mount.getPath(doc.id))?.trashedAt).not.toBeNull();
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
 
-        await home.drive.restorePath(mountId, folder.id);
-        const reopened = await home.drive.getCollabDocument(mountId, doc.id);
-        expect(reopened).not.toBe(collab);
-        reopened.doc.getMap('state').set('afterRestore', 'typed');
-        await home.drive.closeCollabDocument(mountId, doc.id);
-        const fresh = await home.drive.getCollabDocument(mountId, doc.id);
-        expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', afterRestore: 'typed' });
-    });
+            await home.drive.restorePath(mountId, folder.id);
+            const reopened = await home.drive.getCollabDocument(mountId, doc.id);
+            expect(reopened).not.toBe(collab);
+            reopened.doc.getMap('state').set('afterRestore', 'typed');
+            await home.drive.closeCollabDocument(mountId, doc.id);
+            const fresh = await home.drive.getCollabDocument(mountId, doc.id);
+            expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', afterRestore: 'typed' });
+        },
+        HOLDER_WAIT_MS + 10_000,
+    );
 
     // The trash is in once trashPath returns. A document that moved in and then fails to close only
-    // logs, and the DELETE still answers that the folder is in the trash.
-    test('a close that fails after the trash still answers the DELETE with success', async () => {
-        const folder = await home.drive.createFolder(mountId, rootId, 'trash-close-fails');
-        const doc = await createDoc('trash-close-fails-doc');
-        await home.drive.getCollabDocument(mountId, doc.id);
-        const { mount } = await home.drive.resolveFile(mountId, doc.id);
-        const trashPath = mount.trashPath.bind(mount);
-        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
-            await mount.updatePath(doc.id, { parentId: folder.id });
-            return trashPath(pathId);
-        });
-        const closeSpy = spyOn(mount, 'closeDatabase').mockImplementation(async () => {
-            throw new ApiError(503, 'storage unavailable');
-        });
-        const errors = spyOn(console, 'error').mockImplementation(() => {});
-        let res: Response;
-        let logged: unknown[][];
-        try {
-            res = await authedRequest(
-                ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${mountId}/path/${folder.id}`,
-                { method: 'DELETE' },
-            );
-        } finally {
-            logged = errors.mock.calls;
-            errors.mockRestore();
-            closeSpy.mockRestore();
-            trashSpy.mockRestore();
-        }
-        expect(res.status).toBe(200);
-        expect((await mount.getPath(folder.id))?.trashedAt).not.toBeNull();
-        expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
-        expect(logged.some((call) => String(call[0]).includes(doc.id))).toBe(true);
-    });
+    // logs, and the DELETE still answers that the folder is in the trash. Its close waits out
+    // HOLDER_WAIT_MS as above.
+    test(
+        'a close that fails after the trash still answers the DELETE with success',
+        async () => {
+            const folder = await home.drive.createFolder(mountId, rootId, 'trash-close-fails');
+            const doc = await createDoc('trash-close-fails-doc');
+            await home.drive.getCollabDocument(mountId, doc.id);
+            const { mount } = await home.drive.resolveFile(mountId, doc.id);
+            const trashPath = mount.trashPath.bind(mount);
+            const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+                await mount.updatePath(doc.id, { parentId: folder.id });
+                return trashPath(pathId);
+            });
+            const closeSpy = spyOn(mount, 'closeDatabase').mockImplementation(async () => {
+                throw new ApiError(503, 'storage unavailable');
+            });
+            const errors = spyOn(console, 'error').mockImplementation(() => {});
+            let res: Response;
+            let logged: unknown[][];
+            try {
+                res = await authedRequest(
+                    ctx.alice.user.sessionToken,
+                    `/drive/${ctx.alice.user.id}/${mountId}/path/${folder.id}`,
+                    { method: 'DELETE' },
+                );
+            } finally {
+                logged = errors.mock.calls;
+                errors.mockRestore();
+                closeSpy.mockRestore();
+                trashSpy.mockRestore();
+            }
+            expect(res.status).toBe(200);
+            expect((await mount.getPath(folder.id))?.trashedAt).not.toBeNull();
+            expect(home.drive.hasCollabDocument(mountId, doc.id)).toBe(false);
+            expect(logged.some((call) => String(call[0]).includes(doc.id))).toBe(true);
+        },
+        HOLDER_WAIT_MS + 10_000,
+    );
 
     // Each trash refuses the opens below its own path. When a trash of a document inside the folder
     // fails, the folder's trash still refuses an open of that document.

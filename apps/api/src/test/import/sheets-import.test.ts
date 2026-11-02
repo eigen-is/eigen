@@ -146,9 +146,10 @@ async function readSnapshot(ownerId: string, mountId: string, pathId: string): P
     const home = await getHome(ownerId);
     const dataDbPath = await home.drive.getChildByName(mountId, pathId, 'data.db');
     if (!dataDbPath) throw new Error('data.db not found');
-    const managedDb = await home.drive.openDatabase(mountId, COLLAB_DB_CONFIG, dataDbPath.id);
     const doc = new Y.Doc();
-    loadYjsState(managedDb, doc);
+    await home.drive.withDatabase(mountId, COLLAB_DB_CONFIG, dataDbPath.id, async (managedDb) => {
+        loadYjsState(managedDb, doc);
+    });
     const snapshot = doc.getMap('state').get('snapshot');
     doc.destroy();
     if (typeof snapshot !== 'string') throw new Error('Snapshot missing');
@@ -509,18 +510,18 @@ describe('Sheets xlsx import/convert', () => {
         const home = await getHome(ctx.alice.user.id);
         const dataDbPath = await home.drive.getChildByName(mountId, converted.id, 'data.db');
         if (!dataDbPath) throw new Error('data.db not found');
-        const managedDb = await home.drive.openDatabase(mountId, COLLAB_DB_CONFIG, dataDbPath.id);
-        const updateBlobs = managedDb.db
-            .select()
-            .from(collabSchema.docUpdates)
-            .all()
-            .map((r) => r.updateData as Uint8Array);
-        const snapshotBlobs = managedDb.db
-            .select()
-            .from(collabSchema.docSnapshots)
-            .all()
-            .map((r) => r.stateData as Uint8Array);
-        const allBlobs = [...updateBlobs, ...snapshotBlobs];
+        const allBlobs = await home.drive.withDatabase(mountId, COLLAB_DB_CONFIG, dataDbPath.id, async (managedDb) => [
+            ...managedDb.db
+                .select()
+                .from(collabSchema.docUpdates)
+                .all()
+                .map((r) => r.updateData as Uint8Array),
+            ...managedDb.db
+                .select()
+                .from(collabSchema.docSnapshots)
+                .all()
+                .map((r) => r.stateData as Uint8Array),
+        ]);
         expect(allBlobs.length).toBeGreaterThan(0);
         const anyZstd = allBlobs.some(
             (b) => b.byteLength >= 4 && b[0] === 0x28 && b[1] === 0xb5 && b[2] === 0x2f && b[3] === 0xfd,

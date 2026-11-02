@@ -30,7 +30,7 @@ The access dialog opens from the toolbar's Share button, which only a writer see
 
 ## A chat inside a document is a comment thread
 
-A document container has a `chat/` folder, and every `.eigenchat` in it is the thread behind one comment card ([COMMENTS.md](COMMENTS.md)). `ChatRoom` finds its container once on init (`findContainerPath`). With a container, every message also updates the container's `comments.db` index, and notifications name the document plus the thread instead of the chat file. Whispers never reach the index.
+A document container has a `chat/` folder, and every `.eigenchat` in it is the thread behind one comment card ([COMMENTS.md](COMMENTS.md)). `ChatRoom.open` finds the room's container once per request (`findContainerPath`). With a container, every message also updates the container's `comments.db` index, and notifications name the document plus the thread instead of the chat file. Whispers never reach the index.
 
 ## Commands split between the server and the client
 

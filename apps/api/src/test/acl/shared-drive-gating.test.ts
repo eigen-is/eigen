@@ -180,10 +180,10 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'read-gated (403 unless the caller can read the path)',
             call: (sd) => sd.checkAccessForEmails(mountId, fileId, ['probe@example.com']),
         },
-        openDatabase: {
+        withDatabase: {
             gate: 'denies',
             reason: 'read-gated (opening a container db reads it)',
-            call: (sd) => sd.openDatabase(mountId, probeDbConfig, docId),
+            call: (sd) => sd.withDatabase(mountId, probeDbConfig, docId, async () => {}),
         },
         listVersions: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.listVersions(mountId, docId) },
         getFileHistory: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.getFileHistory(mountId, fileId) },

@@ -10,7 +10,7 @@ Eigen has no central database of user content. Each user and team has a Home, it
 |---|---|---|---|
 | Server | `users3.db` (better-auth), `eigen.db` (the [share registry](ACL.md#share-registry)), `waitlist.db`, all in `data/server/` (`SERVER_DATABASES`, `apps/api/src/lib/config/paths.ts`) | Once per process, through `createAsyncSingleton` (`apps/api/src/utils/singleton.ts`) | Only in a backup ([BACKUP.md](BACKUP.md)) |
 | Home | `mounts/shared.db`, each mount's `metadata.db`, and the mail, contacts, calendar and notification databases (`PATHS`, `apps/api/src/lib/config/paths.ts`) | `Home.getLocalDatabase(config, relativePath)`, once per path | Only in a backup |
-| Container | A collab document's or chat's `data.db` and a collab document's `comments.db`, stored as Drive files keyed by their `pathId` | `Mount.openDatabase`, one slot per `pathId` | Through the mount, queued on `s3` ([SYNC.md](SYNC.md)), and in a backup |
+| Container | A collab document's or chat's `data.db` and a collab document's `comments.db`, stored as Drive files keyed by their `pathId` | `Mount.withDatabase` for a reader, `holdDatabase` for an open collab document, one slot per `pathId` | Through the mount, queued on `s3` ([SYNC.md](SYNC.md)), and in a backup |
 
 A container database lives in its container folder:
 
@@ -69,6 +69,16 @@ Every open sets `journal_mode=WAL`, `foreign_keys=ON` and `busy_timeout=5000`. A
 Every open, create and close of one container database runs through `withDocumentDb` (`apps/api/src/lib/mount/document-db.ts`), one at a time and in call order. So a fresh instance never shares a closing one's temp or journal files. The slot holds the live instance only while it is open. A close clears it before closing, so a snapshot read mid-close never sees the closing instance. It is a promise chain rather than `withPathLock`, because `has` must also see queued opens and closes.
 
 Once `closeAllDatabases` starts its sweep, after the downloads abort, the reindex drain and the thumbnail wait, a new open is refused with a 503. The lock order is in [STORAGE.md](STORAGE.md#on-local-a-key-is-a-name-path-so-renames-lock-the-whole-tree).
+
+## A reader holds a container database only while it runs
+
+A slot counts its holders. A reader, such as the content reindex, an export's `captureCollabSource`, a chat request or a comment route, runs its queries inside `withDatabase`, which opens the database, counts the reader in, and counts it out when the callback ends. A hold's `release` counts out once, so a second call does nothing. An open collab document is a holder for its whole life (`holdDatabase`), because its `DbProvider` writes every edit to `data.db`. It lets go in its own close, right before the registry closes the database. Without that hold, a reader of an open document would start the idle close under the provider.
+
+When the last holder lets go, the database stays open for `IDLE_CLOSE_MS`, five minutes, as long as an idle Home, and then closes, unless a new holder came in. A close may take a version snapshot. On `s3`, and on a `local` mount that works on a temp copy, an open is a download and a close an upload. So a chat that gets a message now and then must not pay that per message. The content reindex reads a changed container again two minutes later (`CONTENT_REINDEX_CAP_SECONDS`), and a shorter wait would close a busy document just before that read opens it again.
+
+A database that `createDatabase` makes has no holder, so the create arms the same idle close. A new document that nobody opens closes its `data.db` and `comments.db` after the idle window, instead of keeping them open until the mount closes. A collab document's `comments.db` is opened early the same way as a reader's, and closes after the idle window too.
+
+A close, such as a trash, a version restore's `replaceContainerDataDb` or `closeAllDatabases`, waits inside its slot call for the holders to let go. After `HOLDER_WAIT_MS` (5 s) it closes anyway and logs, so a holder that hangs can't hang a shutdown. Because that wait can run under the container path lock, a holder never takes the container path lock and never calls `withDatabase` again for the same path: either one waits on the close that waits on the holder. A `ChatRoom` therefore runs all its queries of one call in one `withDatabase`, after its path-locked create of a missing `data.db`. The open collab document is the one holder that may take the path lock, for the version before a workbook compaction, because what closes its database closes the document first. The exception is a document that moves into a folder while the folder is trashed: the trash's close waits out `HOLDER_WAIT_MS`, closes the database under the document, and then closes the document. `apps/api/src/test/storage/docdb-open-close-race.test.ts` and `apps/api/src/test/collab/collab-restore-race.test.ts` pin the waits.
 
 ## One API process owns a data folder
 

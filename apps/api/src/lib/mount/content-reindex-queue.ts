@@ -1,3 +1,9 @@
+// The content reindex of one mount: it extracts the text of a changed file or container, such as a doc
+// or a chat, for Drive's content search. Its queue is the contentDirty bit on the paths row, so it reads
+// the live state when a row is due and many edits become one extract. A producer, such as a file write
+// or a container sync, sets the bit and calls kick(). One drain loop works off the request path and
+// times its own next pass for rows still inside the cap window.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { settlesWithin } from '../../utils/timing';
 import { ApiError } from '../core';
@@ -20,12 +26,6 @@ const REINDEX_CLOSE_TIMEOUT_MS = 120_000;
 
 export type ContentExtractor = (mount: Mount, path: DrivePath) => Promise<string>;
 
-// Per-mount, self-scheduled content reindexer — the read-side mirror of UploadQueue. The durable
-// queue is the contentDirty bit on `paths` (no separate table, no staged copies: a reindex re-reads
-// live state at drain time, so there is nothing to freeze, and the bit coalesces many edits into one
-// re-extract). Producers (file writes, container onSync, copy, the v6 backfill) set the bit then
-// call kick(); a single drain loop drains due rows off the request path and self-times the next pass
-// for rows still inside the cap window. No process-global sweep.
 export class ContentReindexQueue {
     private readonly mount: Mount;
     private readonly extract: ContentExtractor;
@@ -82,12 +82,11 @@ export class ContentReindexQueue {
         return this.draining;
     }
 
-    // Mount teardown: stop scheduling and AWAIT the in-flight drain so the current extract finishes.
-    // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
-    // close; awaiting here lets closeAllDatabases close it in its sweep — otherwise an open landing
-    // after the sweep leaks. Only the current extract is drained: leftover dirty rows replay on
-    // the next mount open (the bit is the durable queue). The await is bounded by
-    // REINDEX_CLOSE_TIMEOUT_MS: past it teardown proceeds and a hung extract leaks.
+    // Mount teardown: stop scheduling and wait for the drain in flight, so the current extract
+    // finishes. That extract may hold a document database through mount.withDatabase, and the close
+    // sweep of closeAllDatabases would otherwise wait for it. Only the current extract is drained.
+    // The other dirty rows replay on the next mount open, because the bit is the durable queue. The
+    // wait ends after REINDEX_CLOSE_TIMEOUT_MS, and then teardown goes on without the extract.
     public async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
