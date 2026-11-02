@@ -1,11 +1,13 @@
 // The share summary in a Drive row and the chat toolbar shows who has access. Where a click opens Share, it is a button
-// the keyboard reaches, and its click stays off the row. Elsewhere it is no control at all. The lock on a shared link
+// the keyboard reaches, and its click stays off the row. Elsewhere it is no control at all. On an item nobody else
+// has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared link
 // says who the link lets in, in the Share dialog's words.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import type { DirectAccessItem } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
+import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
 import { pressKey } from '../../press-key';
 import { renderInDocument } from '../../render-in-document';
 
@@ -51,7 +53,7 @@ beforeEach(() => {
     entries = [OWNER, ADA];
 });
 
-// The summary inside a row that listens for clicks, as a Drive row does.
+// The summary inside a row's cell that listens for clicks and is the hover group, as a Drive row's Shared cell is.
 async function renderSummary(props: {
     onClick?: () => void;
     showIconOnHover?: boolean;
@@ -62,7 +64,7 @@ async function renderSummary(props: {
     const rendered = await renderInDocument(
         createElement(
             'div',
-            { onClick: onRowClick },
+            { className: 'group', onClick: onRowClick },
             createElement(DriveShareSummary, { path, onClick: props.onClick, showIconOnHover: props.showIconOnHover }),
         ),
     );
@@ -94,6 +96,15 @@ test('a summary that shows nothing is no button, so Tab does not stop on an empt
     entries = [OWNER];
     const { container } = await renderSummary({ onClick: () => {}, showIconOnHover: false });
     expect(container.querySelector('button')).toBeNull();
+});
+
+test('on an item nobody else has, the add-person icon shows on hover only, and when Tab reaches the button', async () => {
+    entries = [OWNER];
+    const { container } = await renderSummary({ onClick: () => {} });
+    const button = container.querySelector('button');
+    const icon = button?.querySelector('svg');
+    if (!button || !icon) throw new Error('the summary drew no add-person button');
+    expect(revealStates(icon, button)).toEqual(HOVER_REVEALED);
 });
 
 test('the lock on a shared link says who the link lets in, as the Share dialog does', async () => {

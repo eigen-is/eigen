@@ -1,6 +1,6 @@
 // The New chat wizard lists each picked person with an × that removes them, and with a team picked it shows the team
 // with an × of its own. A screen reader hears each × by what it removes, never a row of bare "Remove"s, and a click
-// removes only that one. The Location bar of the second step is a button that opens the folder browser.
+// removes only that one. A mouse user sees each × on hover only, and Tab reaches and shows it. The Location bar of the second step is a button that opens the folder browser.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -42,6 +42,7 @@ const { act, createElement } = await import('react');
 const { ChatCreateWizard } = await import('../../../components/chat/chat-create-wizard');
 const { clickRow } = await import('../../menu-rows');
 const { pressKey } = await import('../../press-key');
+const { HOVER_REVEALED, revealStates } = await import('../../keyboard-reach');
 
 async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
     myTeams = teams;
@@ -83,6 +84,14 @@ test('each picked person has a remove button named after them, and it removes on
     await act(async () => removeAda?.click());
     expect(buttonNamed('Remove ada@example.com')).toBeNull();
     expect(buttonNamed('Remove grace@example.com')).not.toBeNull();
+});
+
+test("a picked person's × shows on hover only for a mouse, and Tab reaches and shows it", async () => {
+    await openWizard();
+    await pick('ada@example.com');
+    const removeAda = buttonNamed('Remove ada@example.com');
+    if (!removeAda) throw new Error('the wizard drew no remove button');
+    expect(revealStates(removeAda)).toEqual(HOVER_REVEALED);
 });
 
 test('a picked team has a remove button named after the team, and it goes back to picking people', async () => {

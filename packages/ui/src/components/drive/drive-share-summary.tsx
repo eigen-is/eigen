@@ -1,13 +1,13 @@
 // A small summary of who can open a Drive item, for a place such as a Drive row's Shared column or a chat's toolbar.
 // It shows a lock when anyone signed in with the link may open the item, then the first few people's avatars and a
-// count of the rest. An item nobody else has shows an add-person icon, where the caller asks for one. When the caller
-// passes onClick, the summary is a button that opens Share, so the keyboard reaches it.
+// count of the rest. An item nobody else has shows an add-person icon on hover, where the caller asks for one. When
+// the caller passes onClick, the summary is a button that opens Share, so the keyboard reaches it.
 
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { UserAvatar } from '@workspace/ui/components/user/user-avatar';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { Unlock, UserRoundPlus } from 'lucide-react';
 
 export type DriveShareSummaryProps = {
@@ -58,7 +58,7 @@ export function DriveShareSummary({
         </span>
     ) : (
         showIconOnHover && (
-            <span className="invisible group-hover:visible group-focus-within:visible pointer-coarse:visible">
+            <span className={HOVER_REVEAL_CLASS}>
                 <UserRoundPlus className="h-4 w-4 text-muted-foreground" />
             </span>
         )

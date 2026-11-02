@@ -1,3 +1,8 @@
+// A chat's messages, oldest at the top: each with its author and time, its attachments, and an inline editor for
+// the one being edited. A message's own actions, such as Edit and Delete, sit in a bar shown on hover and in the
+// menu a right-click or a long press opens. The list scrolls to a new message at the end and asks for older ones
+// near the top. Its caller, such as the chat page or a comment thread, passes in the messages and the handlers.
+
 import { formatDateTime } from '@workspace/lib/date';
 import { useAttachmentSubjects } from '@workspace/lib/drive';
 import type { ChatMessage } from '@workspace/lib/types/chat';
@@ -108,7 +113,6 @@ export function ChatMessageList({
         });
     }, []);
 
-    // Scroll to bottom on initial load
     useEffect(() => {
         if (messages.length > 0 && isInitialLoadRef.current) {
             isInitialLoadRef.current = false;
@@ -133,7 +137,6 @@ export function ChatMessageList({
         }
     }, [messages, currentUserEmail, scrollToBottom]);
 
-    // Load more when scrolling near the top
     const onLoadMoreRef = useRef(onLoadMore);
     onLoadMoreRef.current = onLoadMore;
 
@@ -243,9 +246,11 @@ export function ChatMessageList({
                 const actions = getMessageActions(message);
                 const hasActions = actions.canSaveAttachments || actions.canEdit || actions.canDelete;
                 const actionProps = hasActions ? bind(message) : {};
-                // Desktop-only hover affordance (fine pointer); touch has none — long-press opens the same menu.
+                // A mouse user sees the bar while the pointer is over the message, and Tab reaches and shows it. Until
+                // then it takes no click, so a click there lands on the message, even where the bar hangs over the
+                // next one. A touch screen never shows it, since a long press opens the same actions in the menu.
                 const hoverActions = hasActions ? (
-                    <div className="absolute right-(--app-gutter-x) top-1 z-10 flex items-center rounded-md border bg-background shadow-sm invisible pointer-fine:group-hover:visible">
+                    <div className="absolute right-(--app-gutter-x) top-1 z-10 flex items-center rounded-md border bg-background shadow-sm pointer-events-none opacity-0 pointer-fine:group-hover:pointer-events-auto pointer-fine:group-hover:opacity-100 group-has-focus-visible:pointer-events-auto group-has-focus-visible:opacity-100">
                         {actions.canSaveAttachments && (
                             <TooltipButton
                                 icon={Download}

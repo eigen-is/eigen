@@ -31,7 +31,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -281,7 +281,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                                 className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50"
                                             >
                                                 <UserItem email={p.email} />
-                                                <div className="invisible group-hover:visible pointer-coarse:visible">
+                                                <div className={HOVER_REVEAL_CLASS}>
                                                     <TooltipButton
                                                         icon={X}
                                                         tooltipText={`Remove ${p.email}`}
