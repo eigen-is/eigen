@@ -31,7 +31,7 @@ import type { RangeOrWholeAxis } from '../../state/types';
 import { CellRangeDialog } from '../CellRangeDialog';
 
 const VERIFICATION_TYPES = [
-    { value: 'dropdown', label: 'drop-down list' },
+    { value: 'dropdown', label: 'Drop-down list' },
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'number', label: 'Number' },
     { value: 'number_integer', label: 'Number-integer' },
