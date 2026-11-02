@@ -59,7 +59,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const charts = chartsIn(frame, extent);
         // A picture in front of or behind the text may span the paper.
         const over = anchored && overText(frame, context);
-        const room = over ? Math.floor(mmToPx(reader.page.width)) : reader.columnPx;
+        const room = over ? paperPx(reader) : reader.columnPx;
         const layout = anchored ? anchorPlacement(frame, reader, context, over, room) : {};
         // Only the body holds a chart or a text box: a band's schema has neither and a note's Insert leaves both out, so
         // there a chart keeps its title and a box its paragraphs.
@@ -359,11 +359,13 @@ function anchorPlacement(
     const drawn = drawnWidth(anchor, room);
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
     const placed = align ? alignedIn(xmlText(align).trim(), area.width, drawn) : roundedInt(offset && xmlText(offset));
-    // The offset from the text column's left edge, kept on the paper.
-    const { width, margin } = pageTwips(reader.page);
-    const marginLeft = margin.left * EMU_PER_TWIP;
+    // The offset from the text column's left edge, kept on the paper's whole px, which a drawing is sized to.
+    const marginLeft = pageTwips(reader.page).margin.left * EMU_PER_TWIP;
     const cx = drawn ?? 0;
-    const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
+    const x = Math.min(
+        Math.max(area.start + (placed ?? 0), -marginLeft),
+        paperPx(reader) * EMU_PER_PX - marginLeft - cx,
+    );
     if (over) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
@@ -374,6 +376,11 @@ function anchorPlacement(
     // A block takes the side or the center its alignment names. Inside and outside align it to neither.
     if (named === 'center') return { alignment: named };
     return named === undefined || named === side ? { alignment: side } : {};
+}
+
+// The paper's width in whole px, the most a drawing in front of or behind the text may span.
+function paperPx(reader: Reader): number {
+    return Math.floor(mmToPx(reader.page.width));
 }
 
 // Whether an anchor is in front of or behind the text: over or under it, alone in its anchor, and in the body outside a

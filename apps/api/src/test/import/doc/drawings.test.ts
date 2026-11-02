@@ -38,7 +38,8 @@ const lines = (json: JSONContent) =>
         )
         .filter(Boolean);
 // Where each node in front of the text lands on the golden paper: its start and its end in px from the paper's left
-// edge. The paper is 11906 twips wide, 793.7 px, and its column runs from 96 px to 697.7 px. An offset is a whole px.
+// edge. The paper is 11906 twips wide, 793.7 px, and its column runs from 96 px to 697.7 px. An offset is a whole px,
+// and a node is kept on the paper's whole 793 px, as it is sized to them.
 const onPaper = (nodes: JSONContent[]) =>
     nodes.map((node) => {
         const start = Number(node.attrs?.['offsetX']) + 96;
@@ -324,7 +325,7 @@ describe('placement', () => {
             expect(placesOf(json)).toEqual([
                 ['front', -96, 0],
                 ['front', 281, 0],
-                ['front', 658, 0],
+                ['front', 657, 0],
             ]);
         });
 
@@ -379,7 +380,7 @@ describe('placement', () => {
             const paper = [
                 [0, 793],
                 [0, 793],
-                [1, 794],
+                [0, 793],
             ];
             expect(onPaper(nodesOfType(json, 'figure'))).toEqual([...paper, ...paper]);
         });
@@ -389,7 +390,7 @@ describe('placement', () => {
             expect(onPaper(nodesOfType(json, 'figure'))).toEqual([
                 [0, 793],
                 [0, 793],
-                [1, 794],
+                [0, 793],
             ]);
         });
 
@@ -837,7 +838,7 @@ describe('text boxes as boxes', () => {
         expect(onPaper(boxes)).toEqual([
             [0, 793],
             [0, 793],
-            [1, 794],
+            [0, 793],
         ]);
     });
 
@@ -847,7 +848,7 @@ describe('text boxes as boxes', () => {
         expect(onPaper(boxes)).toEqual([
             [0, 24],
             [385, 409],
-            [770, 794],
+            [769, 793],
         ]);
     });
 
@@ -1170,8 +1171,8 @@ describe('text boxes as boxes', () => {
             [793, 79.3],
         ]);
         expect(onPaper(figures)).toEqual([
-            [698, 794],
-            [1, 794],
+            [697, 793],
+            [0, 793],
         ]);
     });
 
@@ -1197,7 +1198,7 @@ describe('text boxes as boxes', () => {
         ]);
         expect(onPaper(figures)).toEqual([
             [196, 236],
-            [754, 794],
+            [753, 793],
         ]);
     });
 
