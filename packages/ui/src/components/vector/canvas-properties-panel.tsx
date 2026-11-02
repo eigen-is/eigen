@@ -1,15 +1,7 @@
-// The right-side w-64 properties panel for the canvas engine. It is mounted whenever the user can edit
-// — with nothing selected it edits the canvas itself (the background row). It edits every selected
-// element through the shared MIXED conventions: '—' in number inputs / color swatches / select
-// placeholders and a data-mixed attribute on toggles. Each control change is one updateElements transact
-// across the selection (one undo step, `sealed` on both sides); a control that writes as the user goes —
-// the Opacity slider's drag, a number typed digit by digit — holds one holdCapture gesture over the whole
-// edit, which `sealed` stands down inside, so ⌘Z takes that edit back in one go.
-//
-// Every row gates on a CAPABILITY, never on a type list: `fill` opens the Fill block, `strokeStyle` its
-// dash row, `corners` the Shape section, `text` the Text section. The Stroke and Sketch sections need no
-// gate — every kind paints a stroke, and every kind is drawn by roughjs. What a capability cannot
-// express, such as the image's fit, comes from the kind's own PanelSection in ELEMENT_KIND_UI.
+// The canvas's properties panel, mounted whenever the user can edit: with nothing selected it edits the canvas
+// background, otherwise every selected element at once, showing a mixed value as '—'. Each row gates on a capability,
+// never on a type list, and a kind adds what no capability expresses through its own PanelSection. A control change is
+// one undo step, and a control the user drags or types into holds one gesture open over the whole edit.
 
 import { isInlineSketchCapped, readChartSpec } from '@workspace/lib/charts';
 import type { Fill } from '@workspace/lib/types/background';
@@ -52,8 +44,8 @@ import type { ReactNode } from 'react';
 import { useCallback } from 'react';
 import type * as Y from 'yjs';
 import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
-import { ELEMENT_KIND_UI } from './kinds';
-import { RichTextPanelSection } from './kinds/richtext';
+import { ELEMENT_KIND_UI, elementLabel } from './kinds';
+import { RichTextPanelSection } from './kinds/rich-text';
 
 // The box kinds' corner treatment — a different question from a shaft's curvature, hence its own row.
 const CORNERS_OPTIONS: { value: Corners; label: string }[] = [
@@ -246,11 +238,12 @@ export function CanvasPropertiesPanel({
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
 
-    // The kind's own label, from the registry — a second table here would drift from the toolbar's.
+    // The element's own label, from the registry, where a text box is Text — a second table here would drift from the
+    // toolbar's.
     const title = !has
         ? (emptyTitle ?? 'Canvas')
         : selectedElements.length === 1
-          ? ELEMENT_KIND_UI[selectedElements[0].type].label
+          ? elementLabel(selectedElements[0])
           : `${selectedElements.length} elements`;
 
     // Sections follow the canonical order documented on PropertiesPanel — geometry, content, paint,

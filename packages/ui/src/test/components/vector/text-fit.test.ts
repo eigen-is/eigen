@@ -1,6 +1,11 @@
 import { afterAll, describe, expect, test } from 'bun:test';
-import type { VectorRichTextElement } from '@workspace/lib/vector';
-import { DEFAULT_ELEMENT_PROPS, ELEMENT_KINDS, richTextFitHeight, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
+import type { VectorElement, VectorRectangleElement } from '@workspace/lib/vector';
+import {
+    DEFAULT_ELEMENT_PROPS,
+    richTextFitHeight,
+    textBoxDefaults,
+    VECTOR_STYLE_DEFAULTS,
+} from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
 import type { FitHeight } from '../../../components/vector/text-fit';
 import { textBodyHeight, useRichTextAutoFit } from '../../../components/vector/text-fit';
@@ -52,11 +57,11 @@ function body(lines: { top: number; height: number }[]): HTMLElement {
     return div;
 }
 
-const box = (over: Partial<VectorRichTextElement> = {}): VectorRichTextElement => ({
+const box = (over: Partial<VectorRectangleElement> = {}): VectorRectangleElement => ({
+    ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
     ...DEFAULT_ELEMENT_PROPS,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id: 't1',
-    type: 'richtext',
+    type: 'rectangle',
     strokeColor: 'transparent',
     x: 0,
     y: 0,
@@ -125,9 +130,9 @@ describe('the fit a measured body drives', () => {
 
 // Only a layout effect picks the node the hook measures, so this mounts it for real. `backdrop` renders
 // the <svg> a painted box draws behind its text, which is the sibling the body must not be confused with.
-function Harness({ backdrop, onFit }: { backdrop: boolean; onFit: FitHeight }) {
+function Harness({ backdrop, onFit, el = box() }: { backdrop: boolean; onFit: FitHeight; el?: VectorElement }) {
     const host = useRef<HTMLDivElement>(null);
-    useRichTextAutoFit(host, box(), onFit, false);
+    useRichTextAutoFit(host, el, onFit, false);
     return createElement(
         'div',
         { ref: host },
@@ -136,11 +141,11 @@ function Harness({ backdrop, onFit }: { backdrop: boolean; onFit: FitHeight }) {
     );
 }
 
-function fittedHeight(backdrop: boolean): number | undefined {
+function fittedHeight(backdrop: boolean, el?: VectorElement): number | undefined {
     const heights: number[] = [];
     const container = document.createElement('div');
     const root = createRoot(container);
-    act(() => root.render(createElement(Harness, { backdrop, onFit: (_id, height) => heights.push(height) })));
+    act(() => root.render(createElement(Harness, { backdrop, el, onFit: (_id, height) => heights.push(height) })));
     const line = container.querySelector('p');
     if (!line) throw new Error('the harness rendered no measurable body');
     Object.defineProperty(line, 'offsetTop', { value: 0 });
@@ -154,5 +159,15 @@ describe('the body the hook measures', () => {
     test("is the host's last child, whether or not a backdrop precedes it", () => {
         expect(fittedHeight(true)).toBe(120);
         expect(fittedHeight(false)).toBe(120);
+    });
+});
+
+describe('which boxes fit their text', () => {
+    test('an autoFit rectangle grows to its text', () => {
+        expect(fittedHeight(true, box({ autoFit: true }))).toBe(120);
+    });
+
+    test('a plain rectangle keeps its size and lets its text spill', () => {
+        expect(fittedHeight(true, box({ autoFit: false }))).toBeUndefined();
     });
 });

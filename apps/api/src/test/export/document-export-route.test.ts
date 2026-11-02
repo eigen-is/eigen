@@ -75,7 +75,7 @@ beforeAll(async () => {
     const hatched = buildGoldenDeckScene();
     const fill = serializeFill({ type: 'solid', color: '#ff0000', style: 'hachure' });
     hatched.elements = hatched.elements.map((element) =>
-        element.id === 'el-1' && element.type === 'richtext' ? { ...element, fill } : element,
+        element.id === 'el-1' && element.type === 'rectangle' && element.autoFit ? { ...element, fill } : element,
     );
     seedDeckDoc((await home.drive.getCollabDocument(mountId, hatchedDeckPath.id)).doc, hatched);
     const hatchedDeck = await home.drive.resolveFile(mountId, hatchedDeckPath.id);

@@ -545,7 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (436)
+## Types (435)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -921,7 +921,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorPathElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorPieElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRectangleElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorTextualElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -986,7 +985,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1114)
+## Utilities & constants (1115)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1798,9 +1797,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_LINEAR_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_OBJECT_FIT` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
-| `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SHAPE_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_TEXT_BOX_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1957,7 +1956,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rewriteEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `RICH_TEXT_CLASS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
-| `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
+| `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `richTextSvg` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
@@ -2002,6 +2001,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
+| `textBoxDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `textualDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
 | `topmostIndex` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |

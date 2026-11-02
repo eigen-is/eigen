@@ -200,7 +200,7 @@ describe("⌘V of another app's items", () => {
             'infinite',
         );
         expect(added).toHaveLength(1);
-        expect(added[0]).toMatchObject({ type: 'richtext', fontSize: 40 / 3 });
+        expect(added[0]).toMatchObject({ type: 'rectangle', autoFit: true, fontSize: 40 / 3 });
     });
 
     // A 960 pt deck is 2 px a pt, so a 44 pt title lands at 88 px.
@@ -209,7 +209,7 @@ describe("⌘V of another app's items", () => {
             { type: 'text', text: 'title', width: 100, height: 20, typography: { fontSize: 44 } },
         ]);
         expect(added).toHaveLength(1);
-        expect(added[0]).toMatchObject({ type: 'richtext', fontSize: 88 });
+        expect(added[0]).toMatchObject({ type: 'rectangle', autoFit: true, fontSize: 88 });
     });
 
     test("a canvas copy's chart pastes from its elements item, not as a second chart", async () => {

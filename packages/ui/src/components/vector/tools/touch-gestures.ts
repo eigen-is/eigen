@@ -1,7 +1,6 @@
-// Touch / stylus gesture policy for the canvas editor, ported from Excalidraw (App.tsx:8398-8432 spike
-// discard, 8446-8453 penMode latch, 8578-8588 palm-rejection allowlist, 9061 pinch-pin-mid-freedraw).
-// The canvas only DISPATCHES into these handlers; all touch LOGIC lives here so the canvas file stays
-// flat. The behaviors are documented in docs/CANVAS.md § Touch policy lives beside the canvas.
+// The touch and stylus policy of the canvas editor, ported from Excalidraw: the palm-spike discard, the pen-mode latch,
+// the palm-rejection allowlist and the pinch that pins a freehand stroke. The canvas only dispatches into these
+// handlers, so every touch rule lives here and the canvas stays flat.
 
 import type { MutableRefObject } from 'react';
 import { useRef } from 'react';
@@ -10,23 +9,23 @@ import type { VectorTool } from '../hooks/use-tool';
 export type TouchXY = { x: number; y: number };
 
 // Below this live-point count a second-finger interruption treats the freehand stroke as a palm spike
-// and discards it; at or above it the stroke finalizes (Excalidraw App.tsx:8406).
+// and discards it; at or above it the stroke finalizes, as in Excalidraw.
 export const SPIKE_MAX_POINTS = 10;
 export function isFreedrawSpike(pointCount: number): boolean {
     return pointCount < SPIKE_MAX_POINTS;
 }
 
 // While a stylus stroke is live every touch is ignored entirely — palm rejection wins over the
-// two-finger takeover, so the pinch stays pinned out (Excalidraw App.tsx:9061 pinch-pin-mid-freedraw).
+// two-finger takeover, so the pinch stays pinned out, as in Excalidraw.
 // A TOUCH-originated stroke has no such lock: its second touch runs the spike-discard→pinch handoff.
 export function touchIgnoredDuringPen(penDrawing: boolean): boolean {
     return penDrawing;
 }
 
-// A finger keeps operating these tools even after a pen has latched penMode (Excalidraw's allowlist,
-// App.tsx:8580-8585 — selection/lasso/text/image; ours is select + rich text). Every other tool draws or
+// A finger keeps operating these tools even after a pen has latched penMode. Excalidraw's allowlist is
+// selection, lasso, text and image; ours is select and text. Every other tool draws or
 // creates, so a finger is locked out of it while a pen is in use.
-const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'richtext']);
+const PEN_MODE_TOUCH_ALLOWED: ReadonlySet<VectorTool> = new Set<VectorTool>(['select', 'text']);
 export function touchAllowedInPenMode(tool: VectorTool): boolean {
     return PEN_MODE_TOUCH_ALLOWED.has(tool);
 }

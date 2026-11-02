@@ -29,7 +29,6 @@ import type {
     VectorLinearElement,
     VectorPathElement,
     VectorPieElement,
-    VectorRichTextElement,
     VectorShapeElement,
 } from '../types';
 import { isLinearElement } from '../types';
@@ -44,14 +43,9 @@ const ARC_PIECE = 45;
 // Everything the fill paint needs: the stored Fill JSON plus the id its gradient def is scoped to.
 type FillSource = { id: string; fill: string };
 
-// What the one rough box drawable serves: the closed shapes, the pie slice and the path, plus the two DOM
-// boxes whose border it is.
-type RoughBoxElement =
-    | VectorShapeElement
-    | VectorPieElement
-    | VectorPathElement
-    | VectorImageElement
-    | VectorRichTextElement;
+// What the one rough box drawable serves: the closed shapes, the pie slice and the path, plus the image whose border
+// it is.
+type RoughBoxElement = VectorShapeElement | VectorPieElement | VectorPathElement | VectorImageElement;
 
 // A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
 // el.seed. The linecap rides the paths (the caller owns the placing <g>).
@@ -162,7 +156,7 @@ function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement, outline: string
 
 // Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
 // dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are shared
-// by every rough element — boxes (shapes, image, rich text) and linear ones; fill differs (a box that
+// by every rough element — boxes (shapes, a text box among them, and the image) and linear ones; fill differs (a box that
 // carries one always, lines only when they loop).
 export function baseRoughOptions(
     el: RoughBoxElement | VectorLinearElement | VectorArrowElement,
@@ -261,7 +255,7 @@ function adjustRoughness(el: RoughBoxElement | VectorLinearElement | VectorArrow
 }
 
 // The stroke-style vocabulary as roughjs `strokeLineDash`: one dash table behind every stroke roughjs
-// draws, the DOM boxes' borders included.
+// draws, the image's border included.
 function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
     if (strokeStyle === 'dashed') return [8, 8 + strokeWidth];
     if (strokeStyle === 'dotted') return [1.5, 6 + strokeWidth];

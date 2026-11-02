@@ -1,5 +1,5 @@
-// Rich text's auto-fit seam: the ONE place a box's stored height is measured back off the text that
-// renders in it. It hangs on the layer, so every surface that renders a live box runs it — the painted
+// A text box's auto-fit seam: the ONE place the stored height of a rectangle with `autoFit` is measured back off the
+// text that renders in it. It hangs on the layer, so every surface that renders a live box runs it — the painted
 // layer AND the in-place editor mounted inside that same layer. A typed line, a paste, a panel change
 // (inset, font, size, leading, tracking) and a width resize therefore all re-fit through one path
 // instead of one write seam per feature, and a peer's change re-fits on every client that renders it.
@@ -35,7 +35,7 @@ export function useRichTextAutoFit(
 ) {
     useLayoutEffect(() => {
         const body = host.current?.lastElementChild;
-        if (!onFit || el.type !== 'richtext' || !body) return;
+        if (!onFit || el.type !== 'rectangle' || !el.autoFit || !body) return;
         const box = el;
         const fit = () => {
             const content = textBodyHeight(body);

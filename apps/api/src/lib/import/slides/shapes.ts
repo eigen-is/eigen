@@ -295,7 +295,8 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const textOnTop = () =>
         text &&
         push(walk, {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             ...textBox,
             ...text,
             ...NO_STROKE,
@@ -310,11 +311,13 @@ function readShape(walk: Walk, leaf: Leaf): void {
             textOnTop();
         }
     };
-    // A placeholder such as a title or a footer is a text box too. A text box grows with its text, where a rectangle
-    // lets it spill.
-    const textBoxed = own !== undefined || marked;
+    // A placeholder such as a title or a footer is a text box too, and so is a body that grows its shape to its text.
+    // A text box grows with its text, where a rectangle lets it spill.
+    const bodyPr = body && childOf(body, A_NS, 'bodyPr');
+    const grows = bodyPr !== undefined && childOf(bodyPr, A_NS, 'spAutoFit') !== undefined;
+    const textBoxed = own !== undefined || marked || grows;
     if (framed && textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
-        push(walk, { type: 'richtext', ...textBox, ...framed, ...paint, corners: 'straight' });
+        push(walk, { type: 'rectangle', autoFit: true, ...textBox, ...framed, ...paint, corners: 'straight' });
     else if (kind) shapeAndText(kind);
     else if (geometry === 'pie') shapeAndText({ type: 'pie', ...pieAngles(shaped?.geom, placed) });
     else if (linear) {
@@ -470,7 +473,8 @@ function droppedBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box, line
     const color = textColorOf(walk.inheritance.theme.colors);
     // Unfilled, so a title or text it overlaps stays readable, as PowerPoint's chart plot area is see-through.
     push(walk, {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         ...box,
         html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(''),
         fill: TRANSPARENT_FILL_JSON,

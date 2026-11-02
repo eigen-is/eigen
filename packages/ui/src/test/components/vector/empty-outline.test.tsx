@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import type { Box, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
+import type { Box, VectorRectangleElement, VectorShapeElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SHAPE_TEXT_PROPS,
-    ELEMENT_KINDS,
     solidFill,
+    textBoxDefaults,
     textualDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
@@ -13,11 +13,11 @@ import { EmptyOutlines } from '../../../components/vector/empty-outline';
 
 const boxToStyle = (box: Box) => ({ left: box.x, top: box.y, width: box.width, height: box.height });
 
-const richtext = (over: Partial<VectorRichTextElement> = {}): VectorRichTextElement => ({
+const textBox = (over: Partial<VectorRectangleElement> = {}): VectorRectangleElement => ({
+    ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
     ...DEFAULT_ELEMENT_PROPS,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id: 't1',
-    type: 'richtext',
+    type: 'rectangle',
     strokeColor: 'transparent',
     x: 10,
     y: 20,
@@ -35,6 +35,7 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     roughness: 1,
     id: 'r1',
     type: 'rectangle',
+    autoFit: false,
     fill: solidFill('#dddddd'),
     x: 0,
     y: 0,
@@ -49,7 +50,7 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
 
 describe('EmptyOutlines', () => {
     test('rings an empty text box, at its own screen box', () => {
-        const html = renderToStaticMarkup(<EmptyOutlines elements={[richtext()]} boxToStyle={boxToStyle} />);
+        const html = renderToStaticMarkup(<EmptyOutlines elements={[textBox()]} boxToStyle={boxToStyle} />);
         expect(html).toContain('eigen-empty-outline');
         expect(html).toContain('left:10px');
         expect(html).toContain('width:200px');
@@ -62,14 +63,14 @@ describe('EmptyOutlines', () => {
 
     test('a box with text is painted, so it is not ringed', () => {
         const html = renderToStaticMarkup(
-            <EmptyOutlines elements={[richtext({ html: '<p>hello</p>' })]} boxToStyle={boxToStyle} />,
+            <EmptyOutlines elements={[textBox({ html: '<p>hello</p>' })]} boxToStyle={boxToStyle} />,
         );
         expect(html).not.toContain('eigen-empty-outline');
     });
 
     test('the ring follows the element rotation', () => {
         const html = renderToStaticMarkup(
-            <EmptyOutlines elements={[richtext({ angle: 30 })]} boxToStyle={boxToStyle} />,
+            <EmptyOutlines elements={[textBox({ angle: 30 })]} boxToStyle={boxToStyle} />,
         );
         expect(html).toContain('rotate(30deg)');
     });

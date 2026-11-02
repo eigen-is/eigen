@@ -1,9 +1,7 @@
-// The React half of the element registry. `packages/lib`'s ELEMENT_KINDS answers what a kind IS — its
-// fields, geometry, paint and search text; this answers how a kind is PRESENTED: the icon and label
-// every surface shows, the tool shortcut, the dialog a kind opens when it is edited on the canvas, and
-// the panel rows the generic capability rows do not cover. Text is edited in place for every kind that
-// holds it, so the rich-text UI owns that editor and no kind names one.
-// Adding a kind = one entry here and one in lib; TypeScript forces both.
+// The React half of the element registry. ELEMENT_KINDS answers what a kind is: its fields, geometry, paint and search
+// text. This answers how a kind is presented: the icon and label every surface shows, the tool shortcut, the dialog a
+// kind opens when it is edited on the canvas, and the panel rows the capability rows do not cover. Text is edited in
+// place for every kind that holds it, so the rich-text editor serves them all. Adding a kind adds one entry here.
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
 import type { NewVectorElement, VectorElement, VectorElementPatch, VectorElementType } from '@workspace/lib/vector';
@@ -19,7 +17,6 @@ import {
     Pencil,
     Spline,
     Square,
-    Type,
 } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { ArrowPanelSection } from './arrow';
@@ -74,6 +71,11 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     },
     line: { icon: Minus, label: 'Line', shortcut: { letter: 'L', digit: '6' } },
     freedraw: { icon: Pencil, label: 'Draw', shortcut: { letter: 'P', digit: '7' } },
-    richtext: { icon: Type, label: 'Text', shortcut: { letter: 'T', digit: '8' } },
     image: { icon: ImageIcon, label: 'Image', PanelSection: ImagePanelSection },
 };
+
+// The name an element shows, such as the panel's title or a comment's anchor. A text box is a rectangle that fits its
+// text, so it shows as Text rather than as a rectangle.
+export function elementLabel(el: VectorElement): string {
+    return el.type === 'rectangle' && el.autoFit ? 'Text' : ELEMENT_KIND_UI[el.type].label;
+}

@@ -4,13 +4,14 @@ import type {
     VectorChartElement,
     VectorElement,
     VectorPathElement,
-    VectorRichTextElement,
+    VectorRectangleElement,
 } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     ELEMENT_KINDS,
     SLIDES_STYLE_DEFAULTS,
     solidFill,
+    textBoxDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
 import { installHappyDom } from '../../happy-dom';
@@ -42,12 +43,12 @@ function path(over: Partial<VectorPathElement> = {}): VectorPathElement {
     };
 }
 
-function textBox(id: string, over: Partial<VectorRichTextElement> = {}): VectorRichTextElement {
+function textBox(id: string, over: Partial<VectorRectangleElement> = {}): VectorRectangleElement {
     return {
+        ...textBoxDefaults(SLIDES_STYLE_DEFAULTS),
         ...DEFAULT_ELEMENT_PROPS,
-        ...ELEMENT_KINDS.richtext.defaults(SLIDES_STYLE_DEFAULTS),
         id,
-        type: 'richtext',
+        type: 'rectangle',
         x: 0,
         y: 0,
         width: 400,

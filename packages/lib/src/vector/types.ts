@@ -12,7 +12,6 @@ export type VectorElementType =
     | 'ellipse'
     | 'pie'
     | 'image'
-    | 'richtext'
     | 'freedraw'
     | 'line'
     | 'arrow'
@@ -26,8 +25,8 @@ export type VectorElementType =
 export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid', 'zigzag'] as const;
 export const STROKE_STYLES = ['solid', 'dashed', 'dotted'] as const;
 export const ROUNDNESS = ['sharp', 'round'] as const;
-// Corner treatment for the box kinds. Replaces `roundness` on rectangle/diamond and reaches image and
-// rich text; lines and arrows keep `roundness` (sharp vs curved polyline), which is a different question.
+// Corner treatment for the box kinds: the rectangle, the diamond and the image. Lines and arrows keep `roundness`
+// (sharp vs curved polyline), which is a different question.
 export const CORNERS = ['straight', 'curved', 'round'] as const;
 export const OBJECT_FITS = ['fill', 'contain', 'cover'] as const;
 // Docs' TextAlign values too, in the order its toolbar lists them.
@@ -76,8 +75,7 @@ export type VectorElementBase = {
     strokeColor: string;
     strokeWidth: number;
     strokeStyle: StrokeStyle;
-    // roughjs jitter, on every kind — the two DOM boxes included, so one table answers how sketchy
-    // an element is.
+    // roughjs jitter, on every kind, the image included, so one table answers how sketchy an element is.
     roughness: number;
     seed: number;
 };
@@ -102,7 +100,11 @@ export type Textual = {
     padding: number; // px inset between the box edge and the text; the box keeps its stored size
 };
 
-export type VectorRectangleElement = VectorElementBase & Fillable & Textual & { type: 'rectangle'; corners: Corners };
+// A rectangle with `autoFit` is a text box: it grows to fit its text and is deleted when its text is emptied. A plain
+// one keeps its size, lets text that does not fit spill out, and stays when empty.
+export type VectorRectangleElement = VectorElementBase &
+    Fillable &
+    Textual & { type: 'rectangle'; corners: Corners; autoFit: boolean };
 export type VectorDiamondElement = VectorElementBase & Fillable & Textual & { type: 'diamond'; corners: Corners };
 // An ellipse has no corners to treat, so it carries no `corners` field; the panel hides the row
 // through the kind's capabilities.
@@ -142,13 +144,8 @@ export type VectorImageElement = VectorElementBase & {
     objectFit: ObjectFit; // → preserveAspectRatio none / xMidYMid meet / xMidYMid slice
 };
 
-// The text box: TipTap HTML in a box that grows to fit it, where a shape lets its text spill.
-// `strokeColor`/`strokeWidth`/`strokeStyle` are its border, `fill` its box background — both painted as
-// the same roughjs drawable a rectangle draws, behind the text, hatch style included.
-export type VectorRichTextElement = VectorElementBase & Fillable & Textual & { type: 'richtext'; corners: Corners };
-
 // The kinds that hold text. The runtime answer is the `text` capability (isTextual); the registry test pins the two.
-export type VectorTextualElement = VectorShapeElement | VectorPieElement | VectorPathElement | VectorRichTextElement;
+export type VectorTextualElement = VectorShapeElement | VectorPieElement | VectorPathElement;
 
 // One line of plain text in a kind's local frame, as svgTextLine draws it. y is the line's TOP: a renderer
 // adds the font's baseline offset. The line turns `rotate` degrees about (x, y).
@@ -177,8 +174,8 @@ export type VectorChartElement = VectorElementBase &
         seriesStrokeWidth?: number;
     };
 
-// What an arrow endpoint may dock to: the closed shapes, the pie slice, a closed path, the chart and the two
-// DOM boxes, whose outline is the rounded rect their `corners` describes. The RUNTIME answer is the registry's
+// What an arrow endpoint may dock to: the closed shapes, the pie slice, a closed path, the chart and the image, whose
+// outline is the rounded rect its `corners` describes. The RUNTIME answer is the registry's
 // `bindable` capability (isBindable in kinds/index.ts) — this union is its type-level face, and the
 // registry test pins the two against each other so neither can grow without the other.
 export type VectorBindableElement =
@@ -186,7 +183,6 @@ export type VectorBindableElement =
     | VectorPieElement
     | VectorPathElement
     | VectorChartElement
-    | VectorRichTextElement
     | VectorImageElement;
 
 // Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
@@ -241,7 +237,6 @@ export type VectorElement =
     | VectorPathElement
     | VectorChartElement
     | VectorImageElement
-    | VectorRichTextElement
     | VectorLinearElement
     | VectorArrowElement;
 
@@ -255,10 +250,10 @@ export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K
 // subset of any element variant's fields (the union members share the geometry base). id/type
 // are never patched; z-order changes rewrite `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
+    Partial<Omit<VectorRectangleElement, 'id' | 'type'>> &
     Partial<Omit<VectorPieElement, 'id' | 'type'>> &
     Partial<Omit<VectorPathElement, 'id' | 'type'>> &
     Partial<Omit<VectorChartElement, 'id' | 'type'>> &
-    Partial<Omit<VectorRichTextElement, 'id' | 'type'>> &
     Partial<Omit<VectorImageElement, 'id' | 'type'>> &
     Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
     Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
@@ -351,7 +346,7 @@ export const DEFAULT_ELEMENT_PROPS = {
 export type TextProps = Omit<Textual, 'html' | 'fontFamily' | 'fontSize' | 'color'>;
 
 // A text box's text starts at its top left, flush with its edge.
-export const DEFAULT_RICHTEXT_PROPS = {
+export const DEFAULT_TEXT_BOX_PROPS = {
     fontWeight: 'normal',
     fontStyle: 'normal',
     textDecoration: 'none',
@@ -364,7 +359,7 @@ export const DEFAULT_RICHTEXT_PROPS = {
 
 // A shape's text starts in its middle, inset from its edge.
 export const DEFAULT_SHAPE_TEXT_PROPS = {
-    ...DEFAULT_RICHTEXT_PROPS,
+    ...DEFAULT_TEXT_BOX_PROPS,
     textAlign: 'center',
     verticalAlign: 'center',
     padding: 10,

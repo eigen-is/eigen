@@ -1,7 +1,6 @@
-// The one writer of the stored canvas shape — the counterpart of read-vector.ts. Fresh ids, the seed
-// rule, the element and frame records and the live topmost index, over a plain Y.Doc: the editor's
-// add path, the deck seeder, the demo seeder and the server's deck writer all write through here.
-// React-free, so the API's transform process runs it too.
+// The one writer of the stored canvas shape, the counterpart of the reader: fresh ids, the seed rule, the element and
+// frame records and the live topmost index, over a plain Y.Doc. The editor's add path, the deck seeder, the demo
+// seeder and the server's deck writer all write through here. It is React-free, so the API's transform process runs it.
 
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
@@ -9,8 +8,9 @@ import { isValidFractionalIndex, keysAfter, orderByFractionalIndex } from './fra
 import type { VectorFrame } from './frames';
 import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS } from './frames';
 import type { StyleDefaults } from './kinds';
-import { baseDefaultsFor, ELEMENT_KINDS, storedElementFields, storedFields } from './kinds';
+import { baseDefaultsFor, ELEMENT_KINDS, storedElementFields, storedFields, textualDefaults } from './kinds';
 import type { NewVectorElement, VectorElementType } from './types';
+import { DEFAULT_TEXT_BOX_PROPS } from './types';
 
 export function newElementId(): string {
     return `el-${nanoid(10)}`;
@@ -28,15 +28,24 @@ export function randomSeed(): number {
 
 // The shared base props under the kind's own fields straight from the registry, styled by the HOST's
 // table (vector draws rough and hatched, slides flat and solid) — a new kind needs no entry here, and a
-// new host only a table. The base paint sits under the kind's overrides: rich text and images use the
-// stroke as a border, so a fresh one is unframed until the user picks a stroke color. The panel's reset
-// rows read baseDefaultsFor too, so a reset restores what creation gave.
+// new host only a table. The base paint sits under the kind's overrides: an image uses the stroke as a
+// border, so a fresh one is unframed until the user picks a stroke color.
 export function kindDefaults<T extends VectorElementType>(type: T, style: StyleDefaults) {
     return { ...baseDefaultsFor(type, style), ...ELEMENT_KINDS[type].defaults(style) };
 }
 
-// One element into the doc's `elements` map at the given fractional index, under the kind's defaults
-// and the host's style table. Honors a caller-supplied seed so a drag-create preview and its committed
+// A new text box: a rectangle that fits its text, with no border and its text at the top left, flush with its edge.
+export function textBoxDefaults(style: StyleDefaults) {
+    return {
+        ...baseDefaultsFor('rectangle', style, true),
+        ...ELEMENT_KINDS.rectangle.defaults(style),
+        ...textualDefaults(style, DEFAULT_TEXT_BOX_PROPS),
+        autoFit: true,
+    };
+}
+
+// One element into the doc's `elements` map at the given fractional index, under the kind's defaults, or a text
+// box's for a rectangle with `autoFit`, and the host's style table. Honors a caller-supplied seed so a drag-create preview and its committed
 // element share the same roughjs jitter (no visual pop on release). A caller-supplied `id` is the
 // seeders': two peers seeding one empty deck write the same key, so they converge on one element
 // instead of two. Nested in a live transact it joins that one, so a caller's origin and single-atom
@@ -55,7 +64,9 @@ export function writeElementInDoc(
         width: 0,
         height: 0,
         angle: 0,
-        ...kindDefaults(partial.type, style),
+        ...(partial.type === 'rectangle' && partial.autoFit
+            ? textBoxDefaults(style)
+            : kindDefaults(partial.type, style)),
         ...partial,
         id,
         type: partial.type,

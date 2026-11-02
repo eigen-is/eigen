@@ -36,6 +36,7 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     roughness: 1,
     seed: 1,
     corners: 'straight',
+    autoFit: false,
 };
 
 const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({

@@ -1,6 +1,6 @@
 // Vector clipboard PRODUCER — the selection→payload builder, a pure block kept out of the canvas so the
 // canvas stays a dispatcher. A selection rides as ONE typed `elements` item (whole stored records, so a
-// canvas→canvas paste restores exactly what was copied), plus the per-image and per-rich-text items every
+// canvas→canvas paste restores exactly what was copied), plus the per-image and per-text-box items every
 // other app reads, plus the self-contained SVG flavor. The paste consumer is the paste planner.
 
 import {
@@ -19,7 +19,7 @@ import type { VectorElement, VectorMeta } from '@workspace/lib/vector';
 import { buildElementsClipboardItem, canvasPxToPt, eigenMediaHref, sceneToSvg } from '@workspace/lib/vector';
 
 // The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
-// manifest a canvas→canvas paste keys on by `mediaName`), a text item per rich-text box carrying
+// manifest a canvas→canvas paste keys on by `mediaName`), a text item per text box carrying
 // the flattened text and the box's typography, which is what makes it paste styled, and a chart item per
 // chart with inline data, which pastes live.
 function foreignItems(
@@ -36,14 +36,13 @@ function foreignItems(
         } else if (el.type === 'chart') {
             const item = buildChartClipboardItem({ chart: el, box, look: el });
             if (item) items.push(item);
-        } else if (el.type === 'richtext') {
+        } else if (el.type === 'rectangle' && el.autoFit) {
             items.push(
                 buildTextClipboardItem({
                     text: stripTagsServer(el.html),
                     box,
-                    // The whole modeled set, not a subset: these are exactly the fields a rich-text box
-                    // stores, and dropping six of them was how bold/italic/underline/spacing quietly
-                    // stopped surviving a copy into docs. Every one has a consumer (see the type).
+                    // The whole set a text box stores, not a subset, so bold, italic, underline and spacing
+                    // survive a copy into docs. Every one has a consumer (see the type).
                     typography: {
                         fontFamily: el.fontFamily,
                         fontSize: canvasPxToPt(el.fontSize, slideWidth),
@@ -66,7 +65,7 @@ function foreignItems(
 // The SVG flavor for a selection, or undefined when it must not be written. Two gates:
 //
 // TEXT-ONLY and CHART-ONLY selections skip it. Every foreign host runs its svg rung BEFORE the typed
-// items, so a drawing that is nothing but a rich-text box or a chart would land in a document as a flat
+// items, so a drawing that is nothing but a text box or a chart would land in a document as a flat
 // picture of itself — the typed item never read. An SVG conveys nothing about a text box or a chart that
 // its item doesn't, so not writing it is what makes a copied text box paste as styled, editable text and
 // a chart as a live chart.
@@ -87,7 +86,8 @@ function selectionSvg(
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): string | undefined {
     if (selected.length === 0) return undefined;
-    if (selected.every((el) => el.type === 'richtext') || selected.every((el) => el.type === 'chart')) return undefined;
+    const textBoxes = selected.every((el) => el.type === 'rectangle' && el.autoFit);
+    if (textBoxes || selected.every((el) => el.type === 'chart')) return undefined;
     if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
     // The `html` of a text box or a shape is a stored scalar, so it arrives verbatim from any peer with write
     // access. It is sanitized here as at every other seam that renders it (the layer mount, the paste planner).
@@ -144,13 +144,13 @@ export function buildSelectionData(
     };
 }
 
-// Concatenated plain text of the selected RICH TEXT elements — the only flavor written alongside eigen
+// Concatenated plain text of the selected text boxes — the only flavor written alongside eigen
 // JSON (text copies carry text/plain, image/shape/linear copies carry neither). undefined when the
-// selection has no rich-text element.
+// selection has no text box.
 export function selectionPlainText(ordered: VectorElement[], selectedIds: string[]): string | undefined {
     const texts: string[] = [];
     for (const el of ordered) {
-        if (!selectedIds.includes(el.id) || el.type !== 'richtext') continue;
+        if (!selectedIds.includes(el.id) || el.type !== 'rectangle' || !el.autoFit) continue;
         const text = stripTagsServer(el.html);
         if (text.length > 0) texts.push(text);
     }

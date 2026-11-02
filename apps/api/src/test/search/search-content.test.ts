@@ -115,7 +115,8 @@ describe('Drive content-index', () => {
             collab.doc.getMap('frames').set('f1', frame);
             const el = new Y.Map();
             el.set('id', 'el1');
-            el.set('type', 'richtext');
+            el.set('type', 'rectangle');
+            el.set('autoFit', true);
             el.set('index', 'a0');
             el.set('frameId', 'f1');
             el.set('html', '<p>flibberslide deck</p>');

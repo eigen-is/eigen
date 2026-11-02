@@ -8,6 +8,7 @@ import {
     DEFAULT_SCENE_META,
     ELEMENT_KINDS,
     readElementsClipboardItem,
+    textBoxDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
@@ -52,11 +53,11 @@ const image = (id: string, index: string, mediaName: string): VectorElement => (
     mediaName,
 });
 
-const richtext = (id: string, index: string, html = '<p>hello</p>'): VectorElement => ({
+const textBox = (id: string, index: string, html = '<p>hello</p>'): VectorElement => ({
+    ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
     ...BASE,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id,
-    type: 'richtext',
+    type: 'rectangle',
     index,
     y: 200,
     html,
@@ -100,7 +101,7 @@ describe('buildSelectionData', () => {
     test('the selection round-trips losslessly through the elements item', () => {
         // Whole stored records ride the wire, so every field of every kind comes back — including the
         // rich-text color and the arrow's bindings, which the paste remaps across the pasted set.
-        const selection = [rect('r1', 'a0'), richtext('t1', 'a1'), elbowArrow('a1', 'a2')];
+        const selection = [rect('r1', 'a0'), textBox('t1', 'a1'), elbowArrow('a1', 'a2')];
         const { data } = buildSelectionData(selection, ['r1', 't1', 'a1'], meta, '', () => undefined);
         const read = readElementsClipboardItem(data.items);
         expect(read?.elements).toEqual(selection);
@@ -124,7 +125,7 @@ describe('buildSelectionData', () => {
 
     test('a rich-text box also ships a text item: flattened text and its typography', () => {
         // How a rich host outside the canvas pastes it styled — the canvas itself reads the elements item.
-        const { data } = buildSelectionData([richtext('t1', 'a0')], ['t1'], meta, '', () => undefined);
+        const { data } = buildSelectionData([textBox('t1', 'a0')], ['t1'], meta, '', () => undefined);
         expect(data.items.some((i) => i.type === 'text')).toBe(true);
         const text = data.items.find((i) => i.type === 'text');
         expect(text?.text).toBe('hello');
@@ -146,7 +147,7 @@ describe('buildSelectionData', () => {
 
     // A deck crosses at its own width: on a 960 pt deck an 88 px box is 44 pt.
     test("a deck's text item carries its size in the deck's pt", () => {
-        const title = { ...richtext('t1', 'a0'), fontSize: 88 };
+        const title = { ...textBox('t1', 'a0'), fontSize: 88 };
         const { data } = buildSelectionData([title], ['t1'], meta, 'f1', () => undefined, 960);
         const text = data.items.find((i) => i.type === 'text');
         expect(text?.typography?.fontSize).toBe(44);
@@ -197,7 +198,7 @@ describe('buildSelectionData', () => {
     });
 
     test('the svg flavour sanitizes rich text, so a hostile peer write cannot ride out on a copy', () => {
-        const hostile = richtext('t1', 'a1', '<p onclick="steal()">hi<img src=x onerror="alert(1)"></p>');
+        const hostile = textBox('t1', 'a1', '<p onclick="steal()">hi<img src=x onerror="alert(1)"></p>');
         const { data } = buildSelectionData([rect('r1', 'a0'), hostile], ['r1', 't1'], meta, '', () => undefined);
         // The DRAWN body only: the <metadata> block carries the stored records verbatim by design, and
         // every reader of those runs them back through the sanitizer.
@@ -227,14 +228,14 @@ describe('buildSelectionData', () => {
     test('a text-only selection ships NO svg, so it lands in a document as text and not as a picture', () => {
         // Every foreign host runs its svg rung before the typed items, so an svg here would make a
         // copied text box paste as a flat image with its typography unread.
-        const { data } = buildSelectionData([richtext('t1', 'a0')], ['t1'], meta, '', () => undefined);
+        const { data } = buildSelectionData([textBox('t1', 'a0')], ['t1'], meta, '', () => undefined);
         expect(data.svg).toBeUndefined();
         expect(data.items.some((i) => i.type === 'text')).toBe(true);
     });
 
     test('one shape beside the text brings the svg back', () => {
         const { data } = buildSelectionData(
-            [rect('r1', 'a0'), richtext('t1', 'a1')],
+            [rect('r1', 'a0'), textBox('t1', 'a1')],
             ['r1', 't1'],
             meta,
             '',
@@ -318,7 +319,7 @@ describe('buildSelectionData', () => {
     });
 
     test('a selection past the byte cap ships the typed items alone', () => {
-        const huge = richtext('t1', 'a1', `<p>${'x'.repeat(600_000)}</p>`);
+        const huge = textBox('t1', 'a1', `<p>${'x'.repeat(600_000)}</p>`);
         const { data } = buildSelectionData([rect('r1', 'a0'), huge], ['r1', 't1'], meta, '', () => undefined);
         expect(data.svg).toBeUndefined();
         expect(readElementsClipboardItem(data.items)?.elements).toHaveLength(2);
