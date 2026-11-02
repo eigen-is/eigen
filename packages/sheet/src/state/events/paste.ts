@@ -6,22 +6,22 @@
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, has, includes, isEmpty, isNil, trim } from 'es-toolkit/compat';
+import { cloneDeep, forEach, has, includes, isEmpty, isEqual, isNil, trim } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay, parseCellInput, richText } from '../../engine/format';
+import { numberDisplay, parseCellInput } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata, getSheetConfig } from '../context';
+import { getFlowdata, getSheetConfig, updateContextWithSheetData } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarriedLines, CarryTile } from '../modules/cell';
 import { carriedLines, carryCells, getQKBorder, setCellValue } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, copiedNumberText, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, rangeValueToClipboard, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -30,8 +30,8 @@ import { getSheetIndex, isAllowEdit } from '../utils';
 type CutPasteSide = { sheetId: string; range: SingleRange };
 
 // After a cut has landed: evaluate the moved formulas where they now live, queue the formulas that read either
-// range, and reflow the rows when a row height changed. The target is the sheet on screen.
-function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, RowlChange: boolean) {
+// range, and lay the grid out again when the paste grew it. The target is the sheet on screen.
+function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, grew: boolean) {
     const d = getFlowdata(ctx);
     if (!d) return;
 
@@ -69,17 +69,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         }
     }
 
-    if (RowlChange) {
-        const cfg = getSheetConfig(ctx);
-        ctx.visibledatarow = [];
-        ctx.rh_height = 0;
-
-        for (let i = 0; i < d.length; i += 1) {
-            if (cfg?.rowhidden?.[i] == null) ctx.rh_height += cfg?.rowlen?.[i] ?? ctx.defaultrowlen;
-            ctx.visibledatarow.push(ctx.rh_height);
-        }
-        ctx.rh_height += 80;
-    }
+    if (grew) updateContextWithSheetData(ctx, d);
 
     ctx.selections = [{ row: target.range.row, column: target.range.column }];
 
@@ -261,14 +251,11 @@ function pasteHandler(ctx: Context, data: CellMatrix | string, borderInfo?: Reco
     }
 }
 
-function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+function pasteHandlerOfCutPaste(ctx: Context, copyState: Context['copyState']) {
+    if (!isAllowEdit(ctx) || !copyState) return;
 
-    if (!copyRange) return;
-
-    const copySheetId = copyRange.dataSheetId;
-    const sourceRange = copyRange.copyRange[0];
+    const copySheetId = copyState.dataSheetId;
+    const sourceRange = copyState.copyRange[0];
 
     // A sheet without data has nothing to cut.
     const copySheet = getSheet(ctx, { id: copySheetId });
@@ -287,7 +274,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const minc = last.column_focus;
     const maxc = minc + copyc - 1; // first and last column of apply range
 
-    // warn if the apply range contains partially merged cells
+    // A cut never lands over part of a merge.
     if (hasPartMC(ctx, minh, maxh, minc, maxc)) {
         return;
     }
@@ -295,16 +282,13 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
     const sheet = getSheet(ctx);
     const d = getFlowdata(ctx);
     if (!d) return;
-    const rowMaxLength = d.length;
-    const cellMaxLength = d[0].length;
+    const addr = copyh + minh - d.length;
+    const addc = copyc + minc - d[0].length;
+    const grew = addr > 0 || addc > 0;
+    if (grew) expandRowsAndColumns(sheet, addr, addc);
 
-    const addr = copyh + minh - rowMaxLength;
-    const addc = copyc + minc - cellMaxLength;
-    if (addr > 0 || addc > 0) {
-        expandRowsAndColumns(sheet, addr, addc);
-    }
-
-    carryCells(ctx, lines, [{ row: minh, column: minc, height: copyh, width: copyc }], (cell) => cell, { cut: true });
+    const tile = { row: minh, column: minc, height: copyh, width: copyc };
+    carryCells(ctx, lines, [tile], ({ source }) => source, { cut: true });
 
     last.row = [minh, maxh];
     last.column = [minc, maxc];
@@ -341,22 +325,22 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         ctx,
         { sheetId: copySheetId, range: sourceRange },
         { sheetId: ctx.currentSheetId, range: targetRange },
-        addr > 0 || addc > 0 || copyRange.RowlChange,
+        grew,
     );
 }
 
-function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) {
+function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
 
-    if (!copyRange) return;
+    if (!copyState) return;
 
     // Live resolver, hoisted: one per paste instead of one snapshot per pasted
     // formula, and each evaluation sees the cells pasted before it.
     const resolver = createContextResolver(ctx);
 
-    const copySheetId = copyRange.dataSheetId;
-    const lines = carriedLines(ctx, copySheetId, copyRange.copyRange, true);
+    const copySheetId = copyState.dataSheetId;
+    const lines = carriedLines(ctx, copySheetId, copyState.copyRange, true);
     const copyh = lines.rows.length;
     const copyc = lines.columns.length;
     // A filter can hide every row of the copy.
@@ -408,8 +392,8 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
     }
 
     // A copy of several ranges pastes the values of its formulas, not the formulas.
-    const several = copyRange.copyRange.length > 1;
-    carryCells(ctx, lines, tiles, (cell, _replaced, r, c, sr, sc) => {
+    const several = copyState.copyRange.length > 1;
+    carryCells(ctx, lines, tiles, ({ source: cell, r, c, sr, sc }) => {
         if (cell?.f == null) return cell;
         if (several) {
             delete cell.f;
@@ -504,6 +488,11 @@ function readStyleRules(css: string): Map<string, Record<string, string>> {
     return rules;
 }
 
+// The text of every td in a table, in order. The browser may wrap the copied HTML, but it keeps the cells as written.
+function tableCellTexts(html: string): string[] {
+    return (html.match(/<td.*?>(.*?)<\/td>/g) ?? []).map((td) => trim(td.replace(/<td.*?>/, '').replace('</td>', '')));
+}
+
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
@@ -517,108 +506,21 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
         let txtdata = clipboardData.getData('text/html') || clipboardData.getData('text/plain');
 
-        // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
-        let isEqual = true;
-        if (
-            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
-            ctx.copyState?.copyRange != null &&
-            ctx.copyState.copyRange.length > 0
-        ) {
-            // parse clipboard content
-            const cpDataArr = [];
+        // A marked table is this tab's own copy while its cells are the ones the copy state would write now. A copy
+        // in another tab, or an edit of the copied cells since, pastes it as a table instead.
+        const { copyState } = ctx;
+        const own =
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 && copyState != null && copyState.copyRange.length > 0
+                ? rangeValueToClipboard(ctx, copyState.dataSheetId, copyState.copyRange, { cut: ctx.pasteIsCut })
+                : null;
 
-            const reg = /<tr.*?>(.*?)<\/tr>/g;
-            const reg2 = /<td.*?>(.*?)<\/td>/g;
-
-            const regArr = txtdata.match(reg) || [];
-
-            for (let i = 0; i < regArr.length; i += 1) {
-                const cpRowArr = [];
-
-                const reg2Arr = regArr[i].match(reg2);
-
-                if (!isNil(reg2Arr)) {
-                    for (let j = 0; j < reg2Arr.length; j += 1) {
-                        const cpValue = reg2Arr[j].replace(/<td.*?>/g, '').replace(/<\/td>/g, '');
-                        cpRowArr.push(cpValue);
-                    }
-                }
-
-                cpDataArr.push(cpRowArr);
-            }
-
-            // content of the copy area on the current page
-            const copy_r1 = ctx.copyState.copyRange[0].row[0];
-            const copy_r2 = ctx.copyState.copyRange[0].row[1];
-            const copy_c1 = ctx.copyState.copyRange[0].column[0];
-            const copy_c2 = ctx.copyState.copyRange[0].column[1];
-
-            const copy_index = ctx.copyState.dataSheetId;
-
-            let d: CellMatrix | null | undefined;
-            if (copy_index === ctx.currentSheetId) {
-                d = getFlowdata(ctx);
-            } else {
-                const index = getSheetIndex(ctx, copy_index);
-                if (isNil(index)) return;
-                d = ctx.sheets[index].data;
-            }
-            if (!d) return;
-
-            for (let r = copy_r1; r <= copy_r2; r += 1) {
-                if (r - copy_r1 > cpDataArr.length - 1) {
-                    break;
-                }
-
-                for (let c = copy_c1; c <= copy_c2; c += 1) {
-                    const cell = d[r][c];
-                    let isInlineStr = false;
-                    if (!isNil(cell) && !isNil(cell.mc) && isNil(cell.mc.rs)) {
-                        continue;
-                    }
-
-                    let v: Cell['v'] | undefined;
-                    if (!isNil(cell)) {
-                        if ((cell.ct?.fa?.indexOf('w') ?? -1) > -1) {
-                            v = cell.v;
-                        } else {
-                            v = copiedNumberText(cell) ?? cell.m;
-                        }
-                    } else {
-                        v = '';
-                    }
-
-                    const rich = isNil(v) ? richText(d[r]?.[c]) : undefined;
-                    if (rich !== undefined) {
-                        v = rich;
-                        isInlineStr = true;
-                    }
-                    if (isNil(v)) {
-                        v = '';
-                    }
-                    if (!isInlineStr) {
-                        if (trim(cpDataArr[r - copy_r1][c - copy_c1]) !== trim(String(v))) {
-                            isEqual = false;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (
-            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
-            ctx.copyState?.copyRange != null &&
-            ctx.copyState.copyRange.length > 0 &&
-            isEqual
-        ) {
-            // clipboard content matches what was copied from this sheet itself
+        if (own && isEqual(tableCellTexts(txtdata), tableCellTexts(own.html))) {
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
-                pasteHandlerOfCutPaste(ctx, ctx.copyState);
+                pasteHandlerOfCutPaste(ctx, copyState);
                 ctx.formulaRangeSelections = [];
             } else {
-                pasteHandlerOfCopyPaste(ctx, ctx.copyState);
+                pasteHandlerOfCopyPaste(ctx, copyState);
             }
         } else {
             if (txtdata.indexOf('table') > -1) {

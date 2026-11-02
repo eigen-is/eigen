@@ -241,7 +241,7 @@ export function onCellsMoveEnd(
         ctx,
         carriedLines(ctx, ctx.currentSheetId, [last], false),
         [{ row: row_s, column: col_s, height: row_e - row_s + 1, width: col_e - col_s + 1 }],
-        (cell) => cell,
+        ({ source }) => source,
         { cut: true },
     );
 

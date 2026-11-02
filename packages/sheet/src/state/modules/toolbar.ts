@@ -689,7 +689,6 @@ export function cancelPaintModel(ctx: Context) {
     ctx.copyState = {
         dataSheetId: '',
         copyRange: [{ row: [0], column: [0] }],
-        RowlChange: false,
     };
 
     ctx.formatPainterOn = false;
@@ -911,8 +910,6 @@ export function handleFormatPainter(ctx: Context) {
     ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
         copyRange: [{ row: selection.row, column: selection.column }],
-        // Only a cut reads it, and a cut takes a copy state of its own.
-        RowlChange: false,
     };
 
     ctx.formatPainterOn = true;

@@ -13,7 +13,6 @@ import { moveCountPastHiddenRowCol } from '..';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
-import { handleCut } from '../modules/clipboard';
 import { cellFocus, checkboxChange, getCellDataVerification } from '../modules/data-verification';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
@@ -22,7 +21,7 @@ import { handleBold, handleItalic, handleUnderline } from '../modules/toolbar';
 import type { GlobalCache, Selection } from '../types';
 import { getNowDateTime, getSheetIndex, isAllowEdit } from '../utils';
 import { clearSelectedContents } from './clear';
-import { handleCopy } from './copy';
+import { handleCopy, handleCut } from './copy';
 
 // Mod is ⌘ on a Mac and Ctrl elsewhere. A menu row shows its shortcut with formatForDisplay. Undo and redo are the
 // keys of every other editor.

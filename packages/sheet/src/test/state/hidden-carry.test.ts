@@ -9,19 +9,24 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { DataVerificationRule } from '@workspace/lib/sheets';
+import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
-import { handleCopy } from '../../state/events/copy';
-import { handlePasteByClick } from '../../state/events/paste';
-import { handleCut } from '../../state/modules/clipboard';
+import { handleCopy, handleCut } from '../../state/events/copy';
+import { handlePaste, handlePasteByClick } from '../../state/events/paste';
+import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
-import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
+import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
-import type { Cell, GlobalCache, Selection } from '../../state/types';
+import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
+import { author, join } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-(globalThis as any).sessionStorage = { setItem: () => {} };
+const g = globalThis as any;
+g.sessionStorage = { setItem: () => {} };
+// A paste the copy state can't serve parses the clipboard's table, so it needs a DOM.
+g.DOMParser = new Window().DOMParser;
 
 const SIZE = 12;
 const SIDE = { style: 1, color: '#000' };
@@ -55,8 +60,12 @@ function cellAt(r: number, c: number): Cell {
     return { v: text, m: text, bg: `#${r}${c}0000` };
 }
 
+function emptyGrid(): (Cell | null)[][] {
+    return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null));
+}
+
 function makeCtx({ filtered = false } = {}): Context {
-    const data: (Cell | null)[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null));
+    const data = emptyGrid();
     for (let r = 0; r < 4; r += 1) for (let c = 0; c < 4; c += 1) data[r][c] = cellAt(r, c);
     data[0][2] = { ...cellAt(0, 2), mc: { r: 0, c: 2, rs: 1, cs: 2 } };
     data[0][3] = { mc: { r: 0, c: 2 } };
@@ -114,6 +123,15 @@ function paste(ctx: Context, cut: boolean) {
     else handleCopy(ctx);
     ctx.selections = destination();
     handlePasteByClick(ctx, 'internal');
+}
+
+// ⌘V: the browser hands over the table the copy put on the clipboard.
+function pasteFromClipboard(ctx: Context) {
+    const html = consumePendingCopy()?.html ?? '';
+    ctx.selections = destination();
+    selectionCache.isPasteAction = true;
+    const clipboardData = { getData: (type: string) => (type === 'text/html' ? html : ''), files: [] };
+    handlePaste(ctx, { clipboardData } as unknown as ClipboardEvent);
 }
 
 function paint(ctx: Context) {
@@ -223,6 +241,22 @@ describe('a range with a hidden row and column inside it', () => {
         expect(d?.[7][7]?.v).toBeUndefined();
     });
 
+    // The other sheet has no links. A painted cell that kept the source's link marker would ship a write to a link
+    // that sheet doesn't have, and the replay would drop the whole paint.
+    test('the format painter onto another sheet replays for a reader who opens the workbook', () => {
+        const base = makeCtx();
+        base.sheets.push({ name: 'other', id: 'id_2', order: 1, data: emptyGrid(), config: {} });
+        handleFormatPainter(base);
+        const { next, ops } = author(base, (ctx) => {
+            ctx.currentSheetId = 'id_2';
+            ctx.selections = destination();
+            pasteHandlerOfPaintModel(ctx, ctx.copyState);
+        });
+        expect(next.sheets[1].data?.[7][7]?.hl).toBeUndefined();
+        const joined = join(base, [ops]).find((s) => s.id === 'id_2');
+        expect(joined?.data?.[7][7]?.bg).toBe('#110000');
+    });
+
     test('the clipboard carries the hidden row and column', () => {
         const ctx = makeCtx();
         const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
@@ -289,4 +323,123 @@ describe('a range with a row an active filter hides', () => {
         const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
         expect(text?.split('\n')).toEqual(['r0c0\tr0c1\tr0c2\t', 'r2c0\tr2c1\tr2c2\tr2c3', '\tr3c1\tr3c2\tr3c3']);
     });
+
+    test("a cut's clipboard holds the filtered row its paste moves", () => {
+        const ctx = makeCtx({ filtered: true });
+        handleCut(ctx);
+        expect(consumePendingCopy()?.cellText.split('\n')).toEqual([
+            'r0c0\tr0c1\tr0c2\t',
+            'r1c0\tr1c1\tr1c2\tr1c3',
+            'r2c0\tr2c1\tr2c2\tr2c3',
+            '\tr3c1\tr3c2\tr3c3',
+        ]);
+    });
+
+    // A1:A3 has the filtered row inside it, and A2:A3 has it as its first row. Either way the table keeps its shape.
+    test.each([
+        [0, 2],
+        [1, 2],
+    ])('the clipboard table closes a merge over rows %i to %i up with the rows', (first, last) => {
+        const ctx = makeCtx({ filtered: true });
+        mergeColumnA(ctx, first, last);
+        const html = rangeValueToClipboard(ctx, 'id_1', source())?.html ?? '';
+        expect(tableGrid(html)).toEqual([
+            ['r0c0', 'r0c1', 'r0c2', ''],
+            ['', 'r2c1', 'r2c2', 'r2c3'],
+            ['r3c0', 'r3c1', 'r3c2', 'r3c3'],
+        ]);
+    });
 });
+
+// The clipboard's table is the copy's own, so ⌘V serves it from the copy state, with every side table, rather than
+// as a table from another app.
+describe('a paste of the clipboard in the same tab', () => {
+    test.each([false, true])('takes the copy state, with a filter: %p', (filtered) => {
+        const ctx = makeCtx({ filtered });
+        handleCopy(ctx);
+        pasteFromClipboard(ctx);
+        expect(sheet(ctx).dataVerification?.[key(6, 6)]).toEqual(rule(0, 0));
+        expect(sheet(ctx).hyperlink?.[key(6, 6)]).toEqual(link(0, 0));
+    });
+
+    test('takes the copy state for a cut over a filter', () => {
+        const ctx = makeCtx({ filtered: true });
+        handleCut(ctx);
+        pasteFromClipboard(ctx);
+        expectValuesWhole(ctx);
+        expectSourceCleared(ctx);
+    });
+});
+
+// H7 takes B1, which has no rule and no link, and M12 is outside the paste. Both have a rule and a link of their own.
+describe('a paste over cells with a rule and a link of their own', () => {
+    function makeOwnCtx() {
+        const ctx = makeCtx();
+        const s = sheet(ctx);
+        for (const [r, c] of [
+            [6, 7],
+            [11, 11],
+        ]) {
+            (s.dataVerification ??= {})[key(r, c)] = rule(r, c);
+            (s.hyperlink ??= {})[key(r, c)] = link(r, c);
+        }
+        return ctx;
+    }
+
+    // A write of a whole map would undo a peer's concurrent rule or link on another cell.
+    const wholeMapWrites = (ops: Op[]) =>
+        ops.filter((op) => op.path.length === 1 && ['dataVerification', 'hyperlink'].includes(String(op.path[0])));
+
+    test("a copy takes the source cell's lack of both, and writes only the cells it lands on", () => {
+        const { next, ops } = author(makeOwnCtx(), (ctx) => paste(ctx, false));
+        const s = sheet(next);
+        expect(s.dataVerification?.[key(6, 7)]).toBeUndefined();
+        expect(s.hyperlink?.[key(6, 7)]).toBeUndefined();
+        expect(s.dataVerification?.[key(11, 11)]).toEqual(rule(11, 11));
+        expect(s.hyperlink?.[key(11, 11)]).toEqual(link(11, 11));
+        expect(wholeMapWrites(ops)).toEqual([]);
+    });
+
+    test("the format painter takes the source cell's lack of a rule, and leaves the link", () => {
+        const { next, ops } = author(makeOwnCtx(), paint);
+        const s = sheet(next);
+        expect(s.dataVerification?.[key(6, 7)]).toBeUndefined();
+        expect(s.hyperlink?.[key(6, 7)]).toEqual(link(6, 7));
+        expect(s.dataVerification?.[key(11, 11)]).toEqual(rule(11, 11));
+        expect(wholeMapWrites(ops)).toEqual([]);
+    });
+});
+
+// Merges column A from row first to row last, in place of A3:A4.
+function mergeColumnA(ctx: Context, first: number, last: number) {
+    const s = sheet(ctx);
+    const merge = s.config?.merge ?? {};
+    delete merge[key(2, 0)];
+    merge[key(first, 0)] = { r: first, c: 0, rs: last - first + 1, cs: 1 };
+    for (let r = 0; r < 4; r += 1) {
+        const row = s.data?.[r];
+        if (!row) continue;
+        if (r === first) row[0] = { ...cellAt(r, 0), mc: { r, c: 0, rs: last - first + 1, cs: 1 } };
+        else if (r > first && r <= last) row[0] = { mc: { r: first, c: 0 } };
+        else row[0] = cellAt(r, 0);
+    }
+}
+
+// The grid a browser lays the clipboard table out on: each td's text at its first slot, and '' where a span covers.
+function tableGrid(html: string): string[][] {
+    const grid: string[][] = [];
+    for (const [i, tr] of (html.match(/<tr>.*?<\/tr>/g) ?? []).entries()) {
+        grid[i] ??= [];
+        let j = 0;
+        for (const [, attributes, text] of tr.matchAll(/<td([^>]*)>(.*?)<\/td>/g)) {
+            while (grid[i][j] != null) j += 1;
+            const rs = Number(/rowspan="(\d+)"/.exec(attributes)?.[1] ?? 1);
+            const cs = Number(/colspan="(\d+)"/.exec(attributes)?.[1] ?? 1);
+            for (let a = 0; a < rs; a += 1) {
+                for (let b = 0; b < cs; b += 1) (grid[i + a] ??= [])[j + b] = a === 0 && b === 0 ? text : '';
+            }
+            j += cs;
+        }
+    }
+    return grid;
+}
