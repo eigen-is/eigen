@@ -2,7 +2,8 @@
 // with the app's stylesheet would draw it. happy-dom applies no CSS and moves no focus on Tab, so these read the
 // Tailwind classes. `hidden` and `invisible` take an element and all it holds out of the tab order and the
 // accessibility tree. `opacity-0` hides it from sight only, so a control under it is still a tab stop, and
-// `pointer-events-none` keeps the pointer going through it. A focus variant may set either back.
+// `pointer-events-none` keeps the pointer going through it. A focus variant may set either back. Any other
+// `opacity-N` shows it, as `opacity-80` does.
 
 const FOCUSABLE = 'button, input, select, textarea, a[href], [tabindex]';
 
@@ -24,8 +25,9 @@ export function tabStops(root: ParentNode = document.body): HTMLElement[] {
 export function isShown(element: Element, focus?: Focus): boolean {
     for (let node: Element | null = element; node; node = node.parentElement) {
         if (node.classList.contains('hidden')) return false;
-        if (classValue(node, ['invisible', 'visible'], focus) === 'invisible') return false;
-        if (classValue(node, ['opacity-0', 'opacity-100'], focus) === 'opacity-0') return false;
+        if (classValue(node, (utility) => utility === 'invisible' || utility === 'visible', focus) === 'invisible')
+            return false;
+        if (classValue(node, (utility) => /^opacity-\d+$/.test(utility), focus) === 'opacity-0') return false;
     }
     return true;
 }
@@ -34,7 +36,11 @@ export function isShown(element: Element, focus?: Focus): boolean {
 export function takesPointer(element: Element, focus?: Focus): boolean {
     if (element.closest('.hidden, .invisible')) return false;
     for (let node: Element | null = element; node; node = node.parentElement) {
-        const value = classValue(node, ['pointer-events-none', 'pointer-events-auto'], focus);
+        const value = classValue(
+            node,
+            (utility) => utility === 'pointer-events-none' || utility === 'pointer-events-auto',
+            focus,
+        );
         if (value) return value === 'pointer-events-auto';
     }
     return true;
@@ -61,14 +67,14 @@ export const HOVER_REVEALED = {
     keyboardFocused: { shown: true, takesPointer: true },
 };
 
-// Which of the given utilities node's classes set in this focus state: the bare class, overridden by a focus variant
+// Which of the utilities `isUtility` accepts node's classes set in this focus state: the bare class, overridden by a focus variant
 // that matches. Hover, pointer and other variants never match here.
-function classValue(node: Element, utilities: string[], focus?: Focus): string | undefined {
+function classValue(node: Element, isUtility: (utility: string) => boolean, focus?: Focus): string | undefined {
     let value: string | undefined;
     for (const token of node.classList) {
         const split = token.lastIndexOf(':') + 1;
         const utility = token.slice(split);
-        if (!utilities.includes(utility)) continue;
+        if (!isUtility(utility)) continue;
         const variant = token.slice(0, split);
         if (variant === '') value ??= utility;
         else if (focus && variantMatches(variant, node, focus)) return utility;
