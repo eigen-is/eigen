@@ -7,7 +7,7 @@ import { renderInDocument } from '../render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
-const { AppError } = await import('@workspace/lib/api-error');
+const { AppError, onMutationError } = await import('@workspace/lib/api-error');
 const { ConfirmDialog } = await import('../../components/confirm-dialog');
 
 let unmount = async () => {};
@@ -15,7 +15,10 @@ afterEach(() => unmount());
 
 async function confirmFailingWith(status: number) {
     const onOpenChange = mock((_open: boolean) => {});
-    const onConfirm = () => Promise.reject(new AppError({ error: { status, value: 'No' }, status }));
+    // The mutation hook toasts its failure before the dialog sees it.
+    const failure = new AppError({ error: { status, value: 'No' }, status });
+    onMutationError(failure);
+    const onConfirm = () => Promise.reject(failure);
     ({ unmount } = await renderInDocument(
         createElement(ConfirmDialog, {
             open: true,

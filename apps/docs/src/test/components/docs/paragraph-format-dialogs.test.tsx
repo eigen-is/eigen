@@ -13,6 +13,7 @@ const { Editor } = await import('@tiptap/react');
 const { DEFAULT_NORMAL_STYLE, getDocExtensions, PARAGRAPH_FORMAT_KEYS } = await import('@workspace/lib/docs/eigendoc');
 const { CustomSpacingDialog } = await import('../../../components/docs/custom-spacing-dialog');
 const { IndentationOptionsDialog } = await import('../../../components/docs/indentation-options-dialog');
+const { keepEditorFocus } = await import('../../../components/docs/editor-toolbar');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -78,7 +79,13 @@ async function open(
     editor.commands.setContent(content);
     editor.commands.setTextSelection({ from, to });
     ({ unmount } = await renderInDocument(
-        createElement(dialog, { editor, normal, open: true, onOpenChange: () => {}, onCloseAutoFocus: () => {} }),
+        createElement(dialog, {
+            editor,
+            normal,
+            open: true,
+            onOpenChange: () => {},
+            onCloseAutoFocus: keepEditorFocus(editor),
+        }),
     ));
 }
 
