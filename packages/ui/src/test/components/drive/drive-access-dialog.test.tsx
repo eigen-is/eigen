@@ -26,6 +26,8 @@ const CAROL: InheritedAccessItem = { id: 'carol@example.com', read: true, write:
 // What the Drive hooks answer, which a test changes before it opens the dialog.
 let baseDirectList: DirectAccessItem[] = [];
 let isGuest = false;
+let isEffectiveOwner = true;
+let canWrite = true;
 let myTeams: { id: string; name: string }[] = [];
 
 const updateACL = mock(async (_variables: unknown) => {});
@@ -38,8 +40,8 @@ const realPublic = { ...(await import('@workspace/lib/public')) };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useUpdateACL: () => ({ mutateAsync: updateACL }),
-    useIsEffectiveOwner: () => true,
-    useCheckPermissions: () => ({ data: { canWrite: true } }),
+    useIsEffectiveOwner: () => isEffectiveOwner,
+    useCheckPermissions: () => ({ data: { canRead: true, canWrite } }),
     useDriveAccess: (path: DrivePath, override?: DirectAccessItem[]) => {
         // A second item, which Erin can see and nobody else.
         const base = path.id === plans.id ? [OWNER, ERIN] : baseDirectList;
@@ -95,14 +97,18 @@ beforeEach(() => {
     onOpenChange.mockClear();
     baseDirectList = [OWNER, ADA, BOB];
     isGuest = false;
+    isEffectiveOwner = true;
+    canWrite = true;
+    sharedPath = notes;
     myTeams = [];
 });
 
 // The dialog under a parent that owns `open`, as Drive's item menu does.
+let sharedPath = notes;
 function Harness() {
     const [open, setOpen] = useState(true);
     return createElement(DriveAccessDialog, {
-        path: notes,
+        path: sharedPath,
         open,
         onOpenChange: (next: boolean) => {
             onOpenChange(next);
@@ -345,4 +351,28 @@ test('a viewer who may only look sees the list and Close alone', async () => {
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
     await click(button('Close'));
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+// Chat's share summary opens Share for every member, and the server refuses a save from one who may not write.
+test('a member who may not write sees the list, a line that says so and Close alone', async () => {
+    isEffectiveOwner = false;
+    canWrite = false;
+    await open();
+    expect(dialog()?.textContent).toContain('You can view who has access.');
+    expect(dialog()?.textContent).not.toContain('Sharing is restricted by the owner.');
+    expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).toBeNull();
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
+});
+
+test('an editor edits the list, unless the owner restricted sharing', async () => {
+    isEffectiveOwner = false;
+    await open();
+    expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).not.toBeNull();
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Cancel', 'Save']);
+    await unmount();
+
+    sharedPath = { ...notes, sharingRestricted: true };
+    await open();
+    expect(dialog()?.textContent).toContain('Sharing is restricted by the owner.');
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
 });
