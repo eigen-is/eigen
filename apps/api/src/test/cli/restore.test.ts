@@ -29,7 +29,6 @@ import {
     createServerArchiveWriter,
     declaredUnpackBytes,
     ENTRY_ALLOWANCE_BYTES,
-    extractArtifact,
     packFolder,
     readArtifactManifest,
     withUnpackSlack,
@@ -56,6 +55,7 @@ import {
     readServerManifest,
     realShapeHome,
     removeServerRecords,
+    unpackWhole,
     waitForJob,
 } from '../backup/backup-test-helpers';
 import type { FaultStorage } from '../fault-storage-helpers';
@@ -264,7 +264,7 @@ async function rewrittenMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-member-');
-    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
     const entries: Parameters<typeof tarOf>[0] = [];
     for (const rel of new Bun.Glob('**/*').scanSync({ cwd: join(work, 'tree'), onlyFiles: false, dot: true })) {
         const abs = join(work, 'tree', rel);
@@ -280,7 +280,7 @@ async function rewrittenMember(
 async function serverMemberWithEpochs(archive: string): Promise<Record<string, string>> {
     const { members } = await readServerManifest(archive);
     const work = scratch('restore-server-member-');
-    await extractArtifact(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     const manifest = JSON.parse(readFileSync(join(root, ARCHIVE_MANIFEST_FILE), 'utf8'));
@@ -304,7 +304,7 @@ async function editedMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-edited-');
-    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     edit(root);

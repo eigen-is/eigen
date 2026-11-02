@@ -80,7 +80,7 @@ import {
     TEST_DATA_DIR,
     TEST_PNG_BYTES,
 } from '../setup';
-import { expectRealShape, expectRealShapeServed, realShapeHome, waitForJob } from './backup-test-helpers';
+import { expectRealShape, expectRealShapeServed, realShapeHome, unpackWhole, waitForJob } from './backup-test-helpers';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -1897,7 +1897,7 @@ describe('Backup restore of one home judges, then takes the home', () => {
     test('putting a mount in place gives the event loop back between batches of files', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 99_000));
         const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'restore-batches-'));
-        await archiveModule.extractArtifact(join(getBackupsDir(), artifact), unpackDir);
+        await unpackWhole(join(getBackupsDir(), artifact), unpackDir);
         const { folder, manifest } = archiveModule.readUnpackedHome(unpackDir, user.id, artifact);
         const mountDir = join(folder, 'home', 'mounts', mountId);
         const db = openMountMetadata(join(mountDir, 'metadata.db'));
