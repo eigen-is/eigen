@@ -11,7 +11,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
-- **Text boxes in Vector and Slides** — a text box saved by an earlier version disappears when its drawing or deck opens. Text inside shapes stays
+- **Text boxes in Vector and Slides (breaking)** — a text box saved by an earlier version disappears when its drawing or deck opens. Text inside shapes stays
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
 - **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
