@@ -1,3 +1,9 @@
+// The comment list in a document's side panel: one card per comment the document still anchors, narrowed by the
+// comment filter, with a line saying how many the filter hides. Each card shows its replies, status and assignee,
+// and a dot while its thread holds an unread notification. Opening a card is the host's to handle.
+
+import { useAuth } from '@workspace/lib/auth';
+import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { matchesCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -14,12 +20,14 @@ function PanelCard({
     card,
     entry,
     title,
+    unread,
     onClick,
     onContextMenu,
 }: {
     card: CommentCard;
     entry: CommentEntry | undefined;
     title: string;
+    unread: boolean;
     onClick?: () => void;
     onContextMenu?: (e: React.MouseEvent) => void;
 }) {
@@ -30,6 +38,7 @@ function PanelCard({
             description={card.description}
             color={card.color}
             replyCount={entry?.messageCount}
+            unread={unread}
             resolved={entry?.status === 'resolved'}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
@@ -45,6 +54,7 @@ type CommentPanelProps = {
     entries: CommentEntry[];
     activeCardIds: Set<string>;
     anchorTexts: Map<string, string>;
+    pathId: string;
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
     onCommentClick?: (cardId: string) => void;
@@ -57,12 +67,15 @@ export function CommentPanel({
     entries,
     activeCardIds,
     anchorTexts,
+    pathId,
     currentUserEmail,
     filter,
     onCommentClick,
     onCommentContextMenu,
     className,
 }: CommentPanelProps) {
+    const { user } = useAuth();
+    const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', pathId);
     const { active, visible } = useMemo(() => {
         const byChatName = new Map(entries.map((e) => [e.chatName, e]));
         const all: { card: CommentCard; entry: CommentEntry | undefined }[] = [];
@@ -106,6 +119,7 @@ export function CommentPanel({
                                 card={card}
                                 entry={entry}
                                 title={anchorTexts.get(card.id) || card.title || 'Comment'}
+                                unread={!!card.chatName && unreadChatNames.has(card.chatName)}
                                 onClick={() => onCommentClick?.(card.id)}
                                 onContextMenu={
                                     onCommentContextMenu ? (e) => onCommentContextMenu(e, card, entry) : undefined
