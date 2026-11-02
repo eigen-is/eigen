@@ -101,7 +101,6 @@
     "apps/api/scripts/version-retention-sim.ts": 1,
     "apps/api/src/lib/calendar/calendar.ts": 9,
     "apps/api/src/lib/calendar/events.ts": 10,
-    "apps/api/src/lib/calendar/invitations.ts": 2,
     "apps/api/src/lib/calendar/shares.ts": 3,
     "apps/api/src/lib/chat/chat.ts": 1,
     "apps/api/src/lib/collab/collab-document.ts": 2,
