@@ -83,8 +83,11 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
         conditionName === 'textContains'
     ) {
         const rangeArr = getRangeByTxt(ctx, rules.rulesValue);
-        // check whether the condition value is a selection range
         if (rangeArr.length > 1) {
+            ctx.warnDialog = ONLY_SINGLE_CELL;
+            return;
+        }
+        if (rangeArr.length === 1) {
             const first = rangeArr[0];
             if (!first) return;
             const [r1, r2] = first.row;
@@ -96,8 +99,9 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
                 conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
             } else {
                 ctx.warnDialog = ONLY_SINGLE_CELL;
+                return;
             }
-        } else if (rangeArr.length === 0) {
+        } else {
             const v = rules.rulesValue;
             if (Number.isNaN(v) || v === '') {
                 ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;

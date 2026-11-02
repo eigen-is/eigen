@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'bun:test';
 import type { SingleRange } from '@workspace/lib/sheets';
 import type { Context } from '../../../index';
-import { getComputeMap } from '../../../state/modules/condition-format';
-import { contextFactory } from '../factories/context';
+import { getComputeMap, setConditionRules } from '../../../state/modules/condition-format';
+import type { ConditionRulesProps } from '../../../state/types';
+import { contextFactory, workbookContextFactory } from '../factories/context';
 
 function ctxWithRules(): Context {
     const ctx = contextFactory() as Context;
@@ -206,5 +207,64 @@ describe('state/condition-format — formula rules resolve relative refs per cel
 
     it('paints nothing for a formula that does not parse', () => {
         expect(painted('=A1>', [range(0, 5, 0, 1)])).toEqual([]);
+    });
+});
+
+// A rule the dialog hands to setConditionRules, with a value typed for its type.
+function ruleDraft(rulesType: string, typed: Partial<ConditionRulesProps> = {}): ConditionRulesProps {
+    return {
+        rulesType,
+        rulesValue: '',
+        textColor: { check: false, color: '#009966' },
+        cellColor: { check: true, color: '#d0fae5' },
+        betweenValue: { value1: '', value2: '' },
+        dateValue: '',
+        repeatValue: '0',
+        projectValue: '10',
+        ...typed,
+    };
+}
+
+// A1 holds 5 and B1 holds 7; B2:C3 is selected.
+function ctxForRule(): Context {
+    const ctx = workbookContextFactory({
+        selections: [{ row: [1, 2], column: [1, 2], row_focus: 1, column_focus: 1 }],
+    });
+    ctx.sheets[0].data = numberRows([
+        [5, 7, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+        [0, 0, 0, 0],
+    ]);
+    return ctx;
+}
+
+const savedRules = (ctx: Context) => ctx.sheets[0].conditionalFormatRules ?? [];
+
+describe('state/condition-format — setConditionRules', () => {
+    it('reads a single cell typed as the value of a one-value rule', () => {
+        for (const rulesType of ['greaterThan', 'lessThan', 'equal', 'textContains']) {
+            const ctx = ctxForRule();
+            setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'A1' }));
+            expect(savedRules(ctx)).toEqual([
+                {
+                    type: 'default',
+                    cellrange: [{ row: [1, 2], column: [1, 2], row_focus: 1, column_focus: 1 }],
+                    format: { textColor: null, cellColor: '#d0fae5' },
+                    conditionName: rulesType,
+                    conditionRange: [{ row: [0, 0], column: [0, 0] }],
+                    conditionValue: [5],
+                },
+            ]);
+        }
+    });
+
+    it('refuses a range or a list of cells as the value of a one-value rule', () => {
+        for (const rulesValue of ['A1:B1', 'A1,B1']) {
+            const ctx = ctxForRule();
+            setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue }));
+            expect(savedRules(ctx)).toEqual([]);
+            expect(ctx.warnDialog).toBe('Only a single cell can be referenced');
+        }
     });
 });
