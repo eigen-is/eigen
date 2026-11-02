@@ -1,5 +1,6 @@
 // One row of a side list, such as an app's sidebar or the docs outline: an icon and a label that link to a route,
 // open a URL or run a click. Condensed, it shows the icon alone. Following a route also closes the sidebar.
+// The active item ends in the wordmark's ket (.eigen-ket-end in globals.css).
 
 import { Link } from '@tanstack/react-router';
 import type { MouseEvent, ReactNode } from 'react';
@@ -41,7 +42,9 @@ export function SidebarItem({
         'flex items-center rounded-md px-2.5 py-1.5 text-sm font-normal select-none',
         // A Button centers its content. A list of labels reads better from the left edge, as links do.
         condensed ? 'justify-center' : 'justify-start gap-2.5 text-left',
-        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        isActive
+            ? 'bg-primary/10 text-primary eigen-ket-end'
+            : 'text-muted-foreground hover:bg-muted hover:text-foreground',
         className,
     );
 
@@ -67,7 +70,7 @@ export function SidebarItem({
                 }}
                 className={baseStyles}
                 activeProps={{
-                    className: 'bg-primary/10 text-primary',
+                    className: 'bg-primary/10 text-primary eigen-ket-end',
                 }}
                 inactiveProps={{
                     className: 'text-muted-foreground hover:bg-muted hover:text-foreground',

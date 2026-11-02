@@ -277,10 +277,7 @@ export function Topbar({ rootRoute }: TopbarProps) {
     }, [appName, documentTitle, unreadCount]);
 
     return (
-        <header
-            className="border-b shrink-0"
-            style={{ backgroundColor: 'var(--topbar-bg)', borderColor: 'var(--topbar-border)' }}
-        >
+        <header className="shrink-0" style={{ backgroundColor: 'var(--topbar-bg)' }}>
             {/* 1fr·auto·1fr grid keeps the title / command palette at the bar's true
                 center, independent of the left (logo) and right (actions) block widths */}
             <div className="grid h-12 items-center" style={{ gridTemplateColumns: '1fr auto 1fr' }}>

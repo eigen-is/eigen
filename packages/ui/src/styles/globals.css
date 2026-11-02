@@ -358,7 +358,6 @@
         /* Topbar chrome tokens — a neutral background bar that follows the
            light/dark theme. */
         --topbar-bg: var(--background);
-        --topbar-border: var(--border);
         --topbar-fg: var(--foreground);
         --topbar-bracket: var(--app-current-color);
         --topbar-icon: var(--muted-foreground);
@@ -480,6 +479,17 @@
     }
     .drive-preview-hero .drive-preview-code {
         padding: 1rem;
+    }
+
+    /* The wordmark's ket as a right edge, for an active sidebar item: at the logo's 4:15 angle
+       whatever the height. The SVG is the two corners right of the ket, sized to the full height,
+       and the mask cuts them out. */
+    .eigen-ket-end {
+        mask:
+            linear-gradient(#000 0 0),
+            url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='15'%3E%3Cpath d='M0 0H4V15H0L4 7.5Z'/%3E%3C/svg%3E")
+            right / auto 100% no-repeat;
+        mask-composite: exclude;
     }
 
     .eigen-list-item {
