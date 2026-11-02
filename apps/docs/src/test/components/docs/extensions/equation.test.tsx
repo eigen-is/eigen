@@ -13,6 +13,7 @@ const { Editor, EditorContent } = await import('@tiptap/react');
 const { getDocExtensions } = await import('@workspace/lib/docs/eigendoc');
 const { MATHML_NAMESPACE, readLatex, writeMathml } = await import('@workspace/math');
 const { Equation } = await import('../../../../components/docs/extensions/equation');
+const { CommentMark, updateCommentDecorations } = await import('../../../../components/docs/extensions/comment-mark');
 const { CELL_INDICATOR_SIZE } = await import('@workspace/lib/constants/comment-indicator');
 
 let unmount = async () => {};
@@ -27,7 +28,11 @@ const text = (t: string) => ({ type: 'text', text: t });
 // By default "a" at 1, the equation at 2.
 async function mount(attrs: object, content: object[] = [paragraph(text('a'), { type: 'equation', attrs })]) {
     const editor = new Editor({
-        extensions: [...getDocExtensions({ exclude: ['equation'] }), Equation.configure({ onOpenComment })],
+        extensions: [
+            ...getDocExtensions({ exclude: ['equation', 'comment'] }),
+            CommentMark,
+            Equation.configure({ onOpenComment }),
+        ],
         content: { type: 'doc', content },
     });
     const rendered = await renderInDocument(createElement(EditorContent, { editor }));
@@ -98,6 +103,14 @@ test('a commented equation has the corner mark beside its glyphs, which opens it
     const mark = view.querySelector<HTMLButtonElement>('button[aria-label="Open comment"]');
     await act(async () => mark?.click());
     expect(onOpenComment).toHaveBeenCalledWith('card-1');
+});
+
+// The card's color reaches the view as a decoration alone, with the node unchanged.
+test("a commented equation's mark takes its card's color when the color arrives", async () => {
+    const { editor, view } = await mount({ mathml: typed('x'), commentCardId: 'card-1' });
+    await act(async () => updateCommentDecorations(editor, new Set(), new Map([['card-1', '#123456']])));
+    const mark = view.querySelector<HTMLElement>('button[aria-label="Open comment"] span');
+    expect(mark?.style.borderTop).toContain('#123456');
 });
 
 test('an equation with no comment has no corner mark', async () => {

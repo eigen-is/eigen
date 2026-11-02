@@ -1,15 +1,13 @@
-// Drive's inline view of a text file, such as a .txt, a .md or source code: a rendered preview with the
-// file's crumbs and details, and an Edit button that swaps in the Markdown or code editor. The edit
-// route mounts it for any file Drive edits in place, whichever list or link opened it.
+// Drive's inline view of a text file, such as a .txt, a .md or source code: a rendered preview under the
+// file's crumbs, and an Edit button that swaps in the Markdown or code editor. The edit route mounts it
+// for any file Drive edits in place, whichever list or link opened it.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
-import { downloadDriveFile } from '@workspace/lib/download';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Column, ColumnLayout, ErrorState, LoadingState, useLayout } from '@workspace/ui';
-import { DriveDetail, DriveDetailToolbar } from '@workspace/ui/components/drive/drive-detail';
+import { Column, ColumnLayout, ErrorState, LoadingState } from '@workspace/ui';
 import { lazy, Suspense, useState } from 'react';
 import { ViewToolbar } from './editor-toolbar';
 
@@ -28,7 +26,6 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     const { data: permissions } = useCheckPermissions(path.ownerId, path.mountId, path.id);
     const canWrite = permissions?.canWrite ?? false;
     const queryClient = useQueryClient();
-    const { isMobile } = useLayout();
     const { data: preview, isError: previewFailed } = useTextPreview(
         path.ownerId,
         path.mountId,
@@ -37,18 +34,15 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         !editing,
     );
 
-    const handleReload = () => {
-        invalidateEditorContent(queryClient, path.ownerId, path.mountId, path.id);
-        setReloadKey((k) => k + 1);
-        setEditing(false);
-    };
-
     const exitEditMode = () => {
         setReloadKey((k) => k + 1);
         setEditing(false);
     };
 
-    const handleDownload = () => downloadDriveFile(path);
+    const handleReload = () => {
+        invalidateEditorContent(queryClient, path.ownerId, path.mountId, path.id);
+        exitEditMode();
+    };
 
     if (isLoading && !preview) {
         return <LoadingState />;
@@ -57,12 +51,6 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
     if (error || (!data && !preview)) {
         return <ErrorState detail={error?.message || 'Failed to load file'} />;
     }
-
-    const detailColumn = !isMobile && (
-        <Column id="detail" width="400px" toolbar={<DriveDetailToolbar />}>
-            <DriveDetail path={path} onDownload={handleDownload} />
-        </Column>
-    );
 
     if (!editing) {
         const viewToolbar = <ViewToolbar path={path} canWrite={canWrite && !!data} onEdit={() => setEditing(true)} />;
@@ -87,7 +75,6 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
                         </div>
                     </div>
                 </Column>
-                {detailColumn}
             </ColumnLayout>
         );
     }
@@ -120,7 +107,6 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
                     )}
                 </Suspense>
             </div>
-            {detailColumn}
         </ColumnLayout>
     );
 }

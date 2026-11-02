@@ -22,7 +22,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import { isImageMime } from '@workspace/lib/types/drive';
 import type { ImageSize } from '@workspace/lib/vector';
 import { fitImageSize } from '@workspace/lib/vector';
-import type { ChartPanelState, WorkbookInstance } from '@workspace/sheet';
+import type { Cell, ChartPanelState, WorkbookInstance } from '@workspace/sheet';
 import { ChartPanelSections, Workbook } from '@workspace/sheet';
 import {
     CollabDocumentGate,
@@ -86,13 +86,13 @@ function SheetEditorInner({
     initialSearchTerm,
 }: SheetEditorProps) {
     const workbookRef = useRef<WorkbookInstance>(null);
-    // The workbook-pane wrapper — its box is the "visible pane" viewport for image-fit sizing. Sheets
-    // has no zoom, so container px map 1:1 to the sheet-pixel units insertImage stores.
+    // The pane's box is the space a new image is fitted into. Sheets has no zoom, so a pixel of the pane
+    // is a pixel of the sheet.
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    // The selected image or chart (surfaced from the workbook via onActiveObjectChange) drives the
-    // right-side properties panel. Its Keep aspect ratio, checked by default for an image and not for a
-    // chart, feeds BOTH the panel checkbox and the grips, so it lives here, one level above both.
+    // The workbook reports the selected image or chart through onActiveObjectChange, and the properties
+    // panel on the right shows it. Keep aspect ratio is on by default for an image and off for a chart.
+    // The panel checkbox and the grips both read it, so it lives here, one level above both.
     const [activeObject, setActiveObject] = useState<SheetFloatingItem | null>(null);
     const [aspectLocked, setAspectLocked] = useAspectLock(
         activeObject ? [activeObject.object.id] : [],
@@ -121,8 +121,8 @@ function SheetEditorInner({
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
         useMediaResolver();
-    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
-    // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
+    // On a phone the side panel would squeeze the workbook to about 130px, so the panel takes the whole
+    // editor area instead. The engine measures its canvas again when the workbook shows again.
     const { isMobile } = useLayout();
     const {
         panel,
@@ -137,9 +137,9 @@ function SheetEditorInner({
     const [addOpen, setAddOpen] = useState(false);
     const [addInitialTitle, setAddInitialTitle] = useState('');
     const [addTargetCell, setAddTargetCell] = useState<{ r: number; c: number } | null>(null);
-    const [flowdata, setFlowdata] = useState<(import('@workspace/sheet').Cell | null)[][] | undefined>();
-    // flowdata is the republish identity key — set from every Workbook onChange, so the controller
-    // re-publishes per document change and the provider re-runs the open search (contract rule 4).
+    const [flowdata, setFlowdata] = useState<(Cell | null)[][] | undefined>();
+    // Every Workbook onChange sets a new flowdata. The search controller keys on it, so an open search
+    // runs again after each change to the document.
     const searchController = useSheetSearchController(workbookRef, flowdata, canWrite);
     const activeComments = useActiveComments(flowdata);
     const lifecycle = useCommentLifecycle({
@@ -154,7 +154,7 @@ function SheetEditorInner({
         ready: synced,
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
-    // Host-owned so the filter survives panel close/reopen.
+    // The filter lives here, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
@@ -165,9 +165,8 @@ function SheetEditorInner({
         setAddOpen(true);
     }, []);
 
-    // Size a placed image to fit the visible pane via the shared helper — natural size where it
-    // fits within 80% of the pane, never upscaled; unreadable intrinsic → the shared default box.
-    // Replaces insertImage's old halve-natural-dims quirk (killed in state/modules/image.ts).
+    // A new image keeps its natural size when that fits in the visible pane, and shrinks to fit when it
+    // does not. An image whose size can't be read gets the shared default box.
     const fitToPane = useCallback((intrinsic: ImageSize | null): ImageSize => {
         const rect = paneRef.current?.getBoundingClientRect();
         return fitImageSize(intrinsic, { width: rect?.width ?? 0, height: rect?.height ?? 0 });
@@ -178,10 +177,10 @@ function SheetEditorInner({
             if (!mediaFolderId || !file.type.startsWith('image/')) return;
             const { pendingName, promise } = startUpload(file);
 
-            // Read the intrinsic px (vector's createImageBitmap idiom; rejects on e.g. a
-            // dimensionless SVG → null → the shared default box). Awaited BEFORE the upload result
-            // so the insert always precedes the pending→real mediaName swap — a swap that ran first
-            // would no-op and strand the insert as a placeholder for the zombie sweep to delete.
+            // The size is read before the upload is awaited, so the image is inserted before its pending
+            // name is swapped for the real one. A swap that ran first would find nothing to rename, and the
+            // zombie sweep would later delete the placeholder. A file without a size, such as some SVGs,
+            // gets the default box.
             const bmp = await createImageBitmap(file).catch(() => null);
             const intrinsic = bmp ? { width: bmp.width, height: bmp.height } : null;
             bmp?.close();
@@ -195,10 +194,9 @@ function SheetEditorInner({
         [mediaFolderId, startUpload, fitToPane],
     );
 
-    // Consume a pasted eigen image item (from sheets/slides/vector/docs) as a floating image. The
-    // typed width/height/angle are AUTHORITATIVE — no fit-to-pane, no probing: the wire always
-    // carries both dims, so the image lands at its source box on the first paint. Cross-mount inserts
-    // a pending placeholder at that same exact box, re-uploads into our media/, then swaps the name.
+    // An image copied from another Eigen editor lands at the size and angle it had there, so it is not
+    // fitted to the pane. An image from another document is first placed under a pending name, then
+    // re-uploaded into this sheet's media folder, and then renamed.
     const handlePasteEigenImage = useCallback(
         async (item: EigenClipboardImageItem) => {
             if (!mediaFolderId) return;
@@ -226,10 +224,8 @@ function SheetEditorInner({
         [mediaFolderId, uploadFile.mutateAsync],
     );
 
-    // Consume a pasted vector SVG whose images are name-referenced (eigen-media:): materialize each
-    // into our media/ (re-uploading cross-container via the same seam as handlePasteEigenImage) and
-    // rewrite the svg's refs, then insert the rewritten svg as one floating image through the normal
-    // image path.
+    // A pasted Vector drawing refers to its images by name. Each image is copied into this sheet's media
+    // folder and the SVG is rewritten to point at the copies, before it is inserted as one image.
     const handlePasteSvgFile = useCallback(
         async (svg: string, imageItems: EigenClipboardImageItem[]) => {
             if (!mediaFolderId) return;
@@ -239,9 +235,8 @@ function SheetEditorInner({
         [mediaFolderId, uploadFile.mutateAsync, handleImageFile],
     );
 
-    // Sweep zombie placeholders left behind by a tab close or reload mid-upload. Snapshot pending
-    // mediaNames over the imperative workbook API; removeImageByMediaName is noUndo (correct for a
-    // sweep) and no-ops on a name a completed upload already swapped away.
+    // A tab closed during an upload leaves an image with a pending name behind. The sweep removes those
+    // images without an undo step, and skips a name that a finished upload has already replaced.
     useZombieMediaSweep({
         ready: synced,
         scan: () => {
@@ -261,29 +256,30 @@ function SheetEditorInner({
     });
 
     const handleImageFromDevice = useCallback(
-        (files: File[]) => {
+        (files: readonly File[]) => {
             const file = files[0];
             if (file) handleImageFile(file);
         },
         [handleImageFile],
     );
 
-    // OS-file drop → the same insert path as the Insert-image menu (handleImageFile guards non-images).
+    // A file dropped from the desktop goes the same way as Insert image. handleImageFile skips anything
+    // that is not an image.
     const { targetProps: imageDropProps, isDragging } = useFileDropTarget(
         handleImageFromDevice,
         canWrite && !!mediaFolderId,
     );
 
     const handleImagePickFromDrive = useCallback(
-        async (paths: DrivePath[]) => {
+        async (paths: readonly DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
-            const result = await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null);
-            if (!result?.[0]) return;
-            // Measure via the copy result's own path — by NAME the lookup would miss the media
-            // listing captured before the copy and size the image from the default box.
-            const intrinsic = await readImageSizeFromUrl(resolveMediaUrlByPath(result[0]));
+            const copied = (await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null))?.[0];
+            if (!copied) return;
+            // Measure through the copy's own path. A lookup by name reads the media listing from before
+            // the copy, misses the new file, and would size the image from the default box.
+            const intrinsic = await readImageSizeFromUrl(resolveMediaUrlByPath(copied));
             const { width, height } = fitToPane(intrinsic);
-            workbookRef.current?.insertImage(result[0].name, width, height);
+            workbookRef.current?.insertImage(copied.name, width, height);
         },
         [mediaFolderId, copyToMediaFolder, resolveMediaUrlByPath, fitToPane],
     );
@@ -306,7 +302,7 @@ function SheetEditorInner({
         [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
-    // One op per edit; the workbook re-surfaces the written record via onActiveObjectChange.
+    // Each edit is one op. The workbook then reports the written object again through onActiveObjectChange.
     const handleObjectTransform = useCallback(
         (fields: TransformFields) => {
             if (activeObject) {
@@ -372,8 +368,7 @@ function SheetEditorInner({
                 />
             )}
             <div className="flex h-full w-full flex-col overflow-hidden">
-                {/* Persistent read-only signal — a decode failure leaves a blank sheet otherwise
-                    indistinguishable from data loss. */}
+                {/* A sheet that failed to decode shows blank. Without this banner it would look like lost data. */}
                 {loadFailed && (
                     <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 app-gutter-x py-1.5 text-xs text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
@@ -488,8 +483,8 @@ function SheetEditorInner({
                             onOpenCard={setOpenCardId}
                         />
                     )}
-                    {/* The comment/activity pane wins over the properties panel (the slides arrangement), and a phone
-                        has no room for it (MOBILE.md). */}
+                    {/* The comment and activity panels take the place of the properties panel, as in Slides. A
+                        phone has no room for it. */}
                     {activeObject && !panel && !isMobile && (
                         <FloatingObjectPanel
                             item={activeObject}
@@ -541,11 +536,8 @@ function SheetEditorInner({
                 onDelete={(cardId) => {
                     const fd = workbookRef.current?.getFlowdata();
                     if (!fd) return;
-                    for (let r = 0; r < fd.length; r++) {
-                        const row = fd[r];
-                        if (!row) continue;
-                        for (let c = 0; c < row.length; c++) {
-                            const cell = row[c];
+                    for (const [r, row] of fd.entries()) {
+                        for (const [c, cell] of (row ?? []).entries()) {
                             if (cell?.commentCardIds?.includes(cardId)) {
                                 workbookRef.current?.setCellFormat(
                                     r,

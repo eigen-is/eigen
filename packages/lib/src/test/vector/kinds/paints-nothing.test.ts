@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { solidFill } from '../../../vector/fill';
 import { paintsNothing } from '../../../vector/kinds';
-import { ellipse, image, linear, path, pie, richtext, shape } from '../element-factories';
+import { ellipse, image, linear, path, pie, shape, textBox } from '../element-factories';
 
 // A fresh element is created unpainted but bordered (DEFAULT_ELEMENT_PROPS' ink stroke), so every
 // "invisible" fixture below says `strokeColor: 'transparent'` — that IS the case being described.
@@ -38,15 +38,15 @@ describe('paintsNothing', () => {
     });
 
     test('an empty rich text box is invisible; one with text is not', () => {
-        expect(paintsNothing(richtext({ id: 't', strokeColor: 'transparent', html: '' }))).toBe(true);
-        expect(paintsNothing(richtext({ id: 't', strokeColor: 'transparent', html: '<p>  </p>' }))).toBe(true);
-        expect(paintsNothing(richtext({ id: 't', strokeColor: 'transparent', html: '<p>hi</p>' }))).toBe(false);
+        expect(paintsNothing(textBox({ id: 't', strokeColor: 'transparent', html: '' }))).toBe(true);
+        expect(paintsNothing(textBox({ id: 't', strokeColor: 'transparent', html: '<p>  </p>' }))).toBe(true);
+        expect(paintsNothing(textBox({ id: 't', strokeColor: 'transparent', html: '<p>hi</p>' }))).toBe(false);
     });
 
     test('an empty box that paints its own background is visible', () => {
-        expect(
-            paintsNothing(richtext({ id: 't', strokeColor: 'transparent', html: '', fill: solidFill('#ff0') })),
-        ).toBe(false);
+        expect(paintsNothing(textBox({ id: 't', strokeColor: 'transparent', html: '', fill: solidFill('#ff0') }))).toBe(
+            false,
+        );
     });
 
     test('an image with no picture is invisible unless it is framed', () => {

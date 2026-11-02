@@ -1,7 +1,6 @@
-// The canvas surface cursor, resolved from the current pan/tool/hover state. Split out of
-// canvas-editor.tsx (the canvas only dispatches) so this file doesn't grow: pan wins (grabbing while
-// panning, grab in pan mode), then a drawing tool shows crosshair (text its own caret), then
-// select shows `move` over a draggable element (the suite convention) and `default` over empty canvas.
+// The canvas surface cursor, resolved from the pan, tool and hover state so the canvas only dispatches. Pan wins
+// (grabbing while panning, grab in pan mode), then a drawing tool shows a crosshair and the Text tool a caret, then
+// the select tool shows `move` over a draggable element, as the other apps do, and `default` over empty canvas.
 
 import type { VectorTool } from './hooks/use-tool';
 
@@ -14,7 +13,7 @@ export function pointerCursor(state: {
     const { panning, panMode, tool, hoveringSelectable } = state;
     if (panning) return 'grabbing';
     if (panMode) return 'grab';
-    if (tool === 'richtext') return 'text';
+    if (tool === 'text') return 'text';
     if (tool !== 'select') return 'crosshair';
     return hoveringSelectable ? 'move' : 'default';
 }

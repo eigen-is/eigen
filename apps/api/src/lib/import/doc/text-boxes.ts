@@ -4,15 +4,17 @@
 // A box elsewhere, such as in a band, a note or a group, keeps its paragraphs after its anchor's.
 
 import type { JSONContent } from '@tiptap/core';
-import type { CellBorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
+import { readHexColor } from '@workspace/lib/constants/colors';
+import type { BorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
 import {
-    cellBorderValue,
+    borderValue,
+    fitBorderPx,
     flattenNestedStories,
     isStoryNode,
     MAX_TEXT_BOX_PADDING,
     newStoryId,
-    readCellBackground,
     readTextBoxSide,
+    TEXT_BOX_DEFAULT_WIDTH,
     TEXT_BOX_INSET,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
@@ -27,10 +29,9 @@ import {
 import { A_NS, EMU_PER_PX, V_NS, W10_NS, WPS_NS } from '../../ooxml/ooxml';
 import type { Item } from './assemble';
 import { buildBlocks } from './assemble';
-import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, loneGraphic, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { storyParagraphs } from './paragraphs';
-import { fitBorderPx } from './styles';
 
 // The look a box draws in, read off a wps shape or a VML one. A width is null where the shape gives none.
 type BoxLook = Required<
@@ -52,10 +53,8 @@ export const textBoxScope = (scope: Scope): Scope => ({ ...scope, box: true, onF
 // The wps shape a drawing's graphic holds alone, when it holds text: a text box. A group, a canvas or a picture is no
 // box.
 export function loneTextBox(frame: XmlElement): XmlElement | undefined {
-    const graphic = xmlChild(frame, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [only, ...others] = data ? xmlElements(data) : [];
-    if (!only || others.length > 0 || !hasXmlName(only, WPS_NS, 'wsp')) return undefined;
+    const only = loneGraphic(frame);
+    if (!only || !hasXmlName(only, WPS_NS, 'wsp')) return undefined;
     return xmlChild(only, WPS_NS, 'txbx') || xmlChild(only, WPS_NS, 'linkedTxbx') ? only : undefined;
 }
 
@@ -79,8 +78,7 @@ export function readTextBox(
     const spPr = xmlChild(shape, WPS_NS, 'spPr');
     const style = xmlChild(shape, WPS_NS, 'style');
     const bodyPr = xmlChild(shape, WPS_NS, 'bodyPr');
-    const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
-    const cy = roundedInt(extent && xmlAttr(extent, '', 'cy')) ?? 0;
+    const { cy } = extentOf(extent);
     const grows = !!bodyPr && xmlElements(bodyPr).some((child) => child.local === 'spAutoFit');
     const geometry = spPr && xmlChild(spPr, A_NS, 'prstGeom');
     const preset = geometry ? xmlAttr(geometry, '', 'prst') : 'rect';
@@ -93,7 +91,7 @@ export function readTextBox(
         (!!spPr && Number(xmlAttr(xmlChild(spPr, A_NS, 'xfrm') ?? spPr, '', 'rot') ?? 0) !== 0) ||
         !xmlChild(shape, WPS_NS, 'txbx');
     const look: BoxLook = {
-        width: cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null,
+        width: textBoxWidth(extent, room),
         height: grows || cy <= 0 ? null : cy / EMU_PER_PX,
         fill: shapeFill(reader, spPr, style),
         outline: shapeOutline(reader, spPr, style),
@@ -102,6 +100,13 @@ export function readTextBox(
         rounded: preset === 'roundRect',
     };
     return textBoxNode(reader, items, look, layout, simplified);
+}
+
+// The width a wps box is stored at, and draws at: its extent's, capped at `room` and held between a box's least and
+// largest side. A new box's where the extent gives none.
+export function textBoxWidth(extent: XmlElement | undefined, room: number): number {
+    const { cx } = extentOf(extent);
+    return readTextBoxSide(cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null) ?? TEXT_BOX_DEFAULT_WIDTH;
 }
 
 // A VML shape holding a v:textbox outside a Fallback: its CSS style places and sizes it, its w10:wrap says how the text
@@ -146,16 +151,16 @@ export function readVmlTextBox(
     const filled = xmlAttr(shape, '', 'filled') !== 'f' && xmlAttr(shape, '', 'filled') !== 'false';
     const stroked = xmlAttr(shape, '', 'stroked') !== 'f' && xmlAttr(shape, '', 'stroked') !== 'false';
     const weight = vmlPx(xmlAttr(shape, '', 'strokeweight') ?? '0.75pt', 'emu') ?? 1;
-    const strokeColor = readCellBackground(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
+    const strokeColor = vmlColor(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
     const inset = (xmlAttr(textbox, '', 'inset') ?? '').split(',').map((length) => vmlPx(length, 'emu'));
     const [insetLeft, insetTop, insetRight, insetBottom] = inset;
     const look: BoxLook = {
         width: width === null ? null : Math.min(room, width),
         height: [css, vmlStyle(textbox)].some((style) => style.get('mso-fit-shape-to-text') === 't') ? null : height,
-        fill: filled ? readCellBackground(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
+        fill: filled ? vmlColor(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
-                ? cellBorderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
+                ? borderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
                 : null,
         paddingX: meanPadding(insetLeft ?? null, insetRight ?? null, TEXT_BOX_INSET.x),
         paddingY: meanPadding(insetTop ?? null, insetBottom ?? null, TEXT_BOX_INSET.y),
@@ -163,6 +168,13 @@ export function readVmlTextBox(
         rounded: shape.local === 'roundrect',
     };
     return textBoxNode(reader, items, look, layout, false);
+}
+
+// A VML color as #rrggbb. Word writes a theme color with its slot after it, as in `#4f81bd [3204]`, which goes. A named
+// color, such as black, reads as none.
+function vmlColor(value: string): string | null {
+    const [, color] = /^(\S*)(?:\s+\[\d+\])?$/.exec(value.trim()) ?? [];
+    return readHexColor(color);
 }
 
 // The box's paragraphs, read as a note's: a list's, a heading's or a table's become paragraphs and a nested box or note
@@ -203,29 +215,34 @@ function shapeFill(reader: Reader, spPr: XmlElement | undefined, style: XmlEleme
     if (own?.local === 'noFill') return null;
     if (own?.local === 'gradFill') {
         const stop = descendants(own, A_NS, 'gs')[0];
-        return readCellBackground(drawingColor(stop, reader.colors)?.slice(0, 7));
+        return shapeColor(reader, stop);
     }
-    if (own) return readCellBackground(drawingColor(own, reader.colors)?.slice(0, 7));
+    if (own) return shapeColor(reader, own);
     const ref = style && xmlChild(style, A_NS, 'fillRef');
     if (!ref || Number(xmlAttr(ref, '', 'idx') ?? 0) === 0) return null;
-    return readCellBackground(drawingColor(ref, reader.colors)?.slice(0, 7));
+    return shapeColor(reader, ref);
 }
 
-// The shape's own line, else its style's, in the cell-border form: its width in px between a cell border's bounds, its
-// dash and its compound line read as the nearest style.
+// The shape's own line, else its style's, as a border value. Its width goes through fitBorderPx, and its dash and its
+// compound line are read as the nearest border style.
 function shapeOutline(reader: Reader, spPr: XmlElement | undefined, style: XmlElement | undefined): string | null {
     const line = spPr && xmlChild(spPr, A_NS, 'ln');
     const ref = style && xmlChild(style, A_NS, 'lnRef');
     if (line && xmlChild(line, A_NS, 'noFill')) return null;
     const fill = line && xmlChild(line, A_NS, 'solidFill');
     const fromStyle = !fill && ref && Number(xmlAttr(ref, '', 'idx') ?? 0) > 0 ? ref : undefined;
-    const color = readCellBackground(drawingColor(fill ?? fromStyle, reader.colors)?.slice(0, 7));
+    const color = shapeColor(reader, fill ?? fromStyle);
     if (!color) return null;
     const width = (lineWidthEmu(line ? xmlAttr(line, '', 'w') : undefined) ?? DEFAULT_LINE_WIDTH_EMU) / EMU_PER_PX;
     const dash = line && xmlChild(line, A_NS, 'prstDash');
-    const kind: CellBorderStyle =
+    const kind: BorderStyle =
         line && xmlAttr(line, '', 'cmpd') === 'dbl' ? 'double' : strokeStyleOf(dash && xmlAttr(dash, '', 'val'));
-    return cellBorderValue({ width: fitBorderPx(width), style: kind, color });
+    return borderValue({ width: fitBorderPx(width), style: kind, color });
+}
+
+// The color an element of a fill or a line names, through the theme. The box draws it opaque, so its alpha goes.
+function shapeColor(reader: Reader, element: XmlElement | undefined): string | null {
+    return readHexColor(drawingColor(element, reader.colors)?.slice(0, 7));
 }
 
 // A bodyPr anchor as the box's vertical alignment: DrawingML's center is the box's middle, and the top is its default.
@@ -247,9 +264,10 @@ function insets(bodyPr: XmlElement | undefined): Pick<BoxLook, 'paddingX' | 'pad
     };
 }
 
-// A pair of insets as one padding: none where both are unset or the mean is Word's own.
+// A pair of insets as one padding: none where both are unset or the mean is Word's own. Each side is halved before
+// the two are added, so two lengths near the largest number never add up past it.
 function meanPadding(a: number | null, b: number | null, word: number): number | null {
     if (a === null && b === null) return null;
-    const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, ((a ?? b ?? 0) + (b ?? a ?? 0)) / 2));
+    const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, (a ?? b ?? 0) / 2 + (b ?? a ?? 0) / 2));
     return Math.abs(mean - word) < 0.01 ? null : mean;
 }

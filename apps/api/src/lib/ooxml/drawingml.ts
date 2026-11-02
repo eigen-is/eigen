@@ -3,7 +3,7 @@
 // maps text alignment, line ends and dashes onto the canvas's own, reads a text body's plain text, finds a SmartArt
 // graphic's cached drawing and text, and anchors a turned picture over a spreadsheet's cells.
 
-import type { CellBorderStyle } from '@workspace/lib/docs/eigendoc';
+import type { BorderStyle } from '@workspace/lib/docs/eigendoc';
 import type { Arrowhead, StrokeStyle, TextAlign, VerticalAlign } from '@workspace/lib/vector';
 import { isColorToken, isTransparentColor, normalizeAngle } from '@workspace/lib/vector';
 import { escapeXml } from '@workspace/lib/xml';
@@ -423,7 +423,7 @@ export const PRESET_DASH_BY_STYLE: Record<StrokeStyle, string> = { solid: '', da
 // The same for a CSS border, such as a text box's outline. A CSS border's dots stand one width apart, as `sysDot` draws
 // them. Word writes `sysDot` for a shape's round-dot outline, and `w:val="dotted"` for a dotted cell border, which draws
 // alike. A double line is the solid preset drawn as a compound line.
-export const BORDER_DASH_BY_STYLE: Record<CellBorderStyle, string> = {
+export const BORDER_DASH_BY_STYLE: Record<BorderStyle, string> = {
     ...PRESET_DASH_BY_STYLE,
     dotted: 'sysDot',
     double: '',

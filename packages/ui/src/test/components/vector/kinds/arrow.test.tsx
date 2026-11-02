@@ -6,26 +6,6 @@ import { installHappyDom } from '../../../happy-dom';
 
 const window = installHappyDom();
 
-// happy-dom has no font set and no 2d context, and the label measurement needs both. The load is a
-// deferred the test resolves itself — that IS the cold face this covers. It keeps the text of each load, because a
-// face loads only the slices its text needs.
-let resolveFont = () => {};
-const fontLoaded = new Promise<void>((resolve) => {
-    resolveFont = resolve;
-});
-const loadedTexts: (string | undefined)[] = [];
-// biome-ignore lint/suspicious/noExplicitAny: test-only DOM stubs happy-dom does not implement
-const g = globalThis as any;
-g.document.fonts = {
-    load: (_font: string, text?: string) => {
-        loadedTexts.push(text);
-        return fontLoaded;
-    },
-    check: () => false,
-};
-// biome-ignore lint/suspicious/noExplicitAny: test-only DOM stubs happy-dom does not implement
-(window.HTMLCanvasElement.prototype as any).getContext = () => ({ font: '', measureText: () => ({ width: 40 }) });
-
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
 const { holdCapture, sealed } = await import('../../../../components/properties-panel/property-gesture');
@@ -59,11 +39,11 @@ const arrow: VectorElement = {
     fontFamily: 'sans',
 };
 
-// The Size field holds its own gesture while it is focused; on a cold font face the write lands after
-// the blur that released it, so without a hold of its own every digit is an undo step of its own.
-test('a label size typed against a cold font face is one undo step', async () => {
+// The Size field holds its own gesture while it is focused, so the digits typed are one undo step. The canvas measures
+// the label's width in the new size, so the row writes the size alone.
+test('a label size typed is one undo step that writes the size alone', async () => {
     const doc = new Y.Doc();
-    const element = doc.getMap<number>('element');
+    const element = doc.getMap<unknown>('element');
     const undoManager = new Y.UndoManager(element);
 
     const container = document.createElement('div');
@@ -81,9 +61,7 @@ test('a label size typed against a cold font face is one undo step', async () =>
                     onReplace: () => {},
                     onChangeEach: (patch: (el: VectorElement) => Record<string, unknown>) =>
                         sealed(undoManager, () => {
-                            for (const [field, v] of Object.entries(patch(arrow))) {
-                                if (typeof v === 'number') element.set(field, v);
-                            }
+                            for (const [field, v] of Object.entries(patch(arrow))) element.set(field, v);
                         }),
                 }),
             ),
@@ -99,19 +77,11 @@ test('a label size typed against a cold font face is one undo step', async () =>
             input.dispatchEvent(new Event('input', { bubbles: true }));
         });
     }
-    // Leaving the field releases the field's own hold, before the face has loaded.
     await act(async () => input.dispatchEvent(new Event('focusout', { bubbles: true })));
 
-    await act(async () => {
-        resolveFont();
-        await fontLoaded;
-        await Promise.resolve();
-    });
-
+    expect([...element.keys()]).toEqual(['fontSize']);
     expect(element.get('fontSize')).toBe(12);
     expect(undoManager.undoStack.length).toBe(1);
-    // The face loads the slices of the label it re-measures.
-    expect(new Set(loadedTexts)).toEqual(new Set(['label']));
 
     await act(async () => root.unmount());
     container.remove();

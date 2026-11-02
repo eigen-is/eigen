@@ -1,8 +1,7 @@
-// One scene element as its own memoized, absolutely positioned layer: a div carrying the element's
-// box (a transform to its origin + rotate about the box center, which is CSS's default
-// transform-origin) holding the kind's body as layerInnerHtml writes it. The SAME lib render path
-// previews, embeds, export and the print compositor use — elementLayer's two halves, layerContent and
-// placeLayer, are the one definition of what an element draws and where it goes.
+// One scene element as its own memoized, absolutely positioned layer on the live canvas. The layer div carries the
+// element's box, a transform to its origin and a turn about its center, and holds the kind's body as layerInnerHtml
+// writes it. Previews, exports and the print compositor draw through the same lib functions: layerContent decides what
+// an element draws, and placeLayer where it goes.
 
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { Layer, MediaResolver, RenderOutput, VectorArrowElement, VectorElement } from '@workspace/lib/vector';
@@ -18,18 +17,18 @@ import {
 } from '@workspace/lib/vector';
 import { memo, useRef } from 'react';
 import type { FitHeight } from './text-fit';
-import { useRichTextAutoFit } from './text-fit';
+import { useTextBoxAutoFit } from './text-fit';
 
 type ElementLayerProps = {
     el: VectorElement;
     resolveMedia?: MediaResolver;
     // The whole scene map, so an elbow arrow can resolve its bound shapes and derive its route.
     byId?: Map<string, VectorElement>;
-    // An in-place editor for this element. While present the layer takes pointer events and the kind's
-    // own text body is not drawn — the editor IS what the user reads — but its box paint still is.
+    // An in-place editor for this element. While it is present the layer takes pointer events, and the kind's own text
+    // body is not drawn, because the user reads the editor instead. The box's paint is still drawn.
     children?: React.ReactNode;
-    // Rich text's height follows its text: pass a writer and the layer measures its own body and fits
-    // the box (text-fit.ts). Omitted by every read-only surface — a thumbnail must not write.
+    // A text box's height follows its text: with a writer, the layer measures its own body and fits the box. Every
+    // read-only surface omits it, because a thumbnail must not write.
     onFitHeight?: FitHeight;
     // Set by a read-only copy of the canvas, so its defs' ids stay apart from the canvas's (layerContent).
     idScope?: string;
@@ -38,9 +37,8 @@ type ElementLayerProps = {
 // A kind draws in its local frame, so a move, a turn or a fade re-places the body without redrawing it.
 const BODY_FIELDS = ELEMENT_FIELDS.filter((field) => !PLACEMENT_FIELDS.includes(field));
 
-// Pan/zoom re-renders without touching elements, so identity settles those in one compare; a drag and
-// a Yjs tick hand over fresh objects, so those need the field compare — every ELEMENT_FIELDS value is a
-// scalar/string, so it is exact.
+// A pan or zoom re-renders without touching the elements, so one identity compare settles it. A drag and a Yjs update
+// hand over fresh objects, which need the field compare. Every stored field is a scalar or a string, so it is exact.
 function sameFields(a: VectorElement, b: VectorElement, fields: readonly string[]): boolean {
     if (a === b) return true;
     // Widened, not copied: this runs per element per frame, so a spread here would allocate twice a frame.
@@ -58,9 +56,9 @@ function derivesRoute(el: VectorElement): el is VectorArrowElement {
     return el.type === 'arrow' && el.elbow && el.fixedSegments === '';
 }
 
-// A derived elbow arrow is the one layer whose output reads the scene map, and it reads it ONLY for the
-// shapes its two ends are bound to (elbowRoute's obstacles are the bound shapes, nothing else). So the
-// same two shapes mean the same route — answered without running A* to find out.
+// A derived elbow arrow is the one layer whose output reads the scene map. It reads only the shapes its two ends are
+// bound to, because those are elbowRoute's only obstacles. So the same two shapes mean the same route, and this answers
+// that without running A*.
 function sameRouteContext(
     el: VectorElement,
     prev?: Map<string, VectorElement>,
@@ -86,11 +84,9 @@ export function sameLayerProps(prev: ElementLayerProps, next: ElementLayerProps)
     if (prev.onFitHeight !== next.onFitHeight) return false;
     if (prev.resolveMedia !== next.resolveMedia || prev.idScope !== next.idScope) return false;
     if (!sameFields(prev.el, next.el, ELEMENT_FIELDS)) return false;
-    // Same element fields AND the same scene map → identical output (the pan/zoom common case). A drag
-    // rebuilds the map every frame, so identity alone cannot settle those: only an elbow arrow whose
-    // OWN fields are unchanged might still need re-routing (a BOUND SHAPE moved), and that is the one
-    // thing worth asking about — comparing derived routes here would re-run the router on every arrow,
-    // twice, per frame of the drag.
+    // The same fields and the same scene map give the same output, which is the pan and zoom case. A drag rebuilds the
+    // map every frame. Then only a derived elbow arrow with unchanged fields can still need a new route, because one of
+    // its bound shapes moved. Comparing the routes themselves would run the router twice per arrow on every frame.
     if (prev.byId === next.byId) return true;
     return sameRouteContext(next.el, prev.byId, next.byId);
 }
@@ -103,9 +99,9 @@ type BodyCache = {
     content: RenderOutput | null;
 };
 
-// The kind's body, redrawn only when what it reads changed: a move re-renders the layer for its box, and
-// this hands back the body it drew before — rough path generation, and a whole chart, are the expensive
-// part. Written during render like FrameView's scale: the same inputs always give the same body.
+// The kind's body, drawn again only when what it reads changed. A move re-renders the layer for its box, and this hands
+// back the body it drew before, because rough paths and a whole chart are the expensive part. It writes its cache
+// during render, as FrameView's scale does, which is safe because the same inputs always give the same body.
 function useLayerBody(
     el: VectorElement,
     resolveMedia?: MediaResolver,
@@ -124,9 +120,8 @@ function useLayerBody(
         return prev.content;
     }
     const content = layerContent(el, { resolveMedia, route: arrowRoute(el, byId), idScope });
-    // THE mount seam for stored rich text, so this is where it is sanitized: `html` reaches us
-    // verbatim from a hostile peer's Y.Doc write or a forged clipboard record. Same allowlist the
-    // in-place editor's paste runs, so legitimate LightEditor markup passes through unchanged.
+    // Stored rich text is mounted here, so it is sanitized here. Its `html` arrives as written by any peer or a forged
+    // clipboard record. It is the allowlist the in-place editor runs, so LightEditor markup passes unchanged.
     const safe = content && 'html' in content ? { ...content, html: sanitizeToLightEditorHtml(content.html) } : content;
     cache.current = { el, resolveMedia, byId, idScope, content: safe };
     return safe;
@@ -147,11 +142,10 @@ export const ElementLayer = memo(function ElementLayer({
     onFitHeight,
     idScope,
 }: ElementLayerProps) {
-    // The layer node, so rich text can measure the body inside it — its own, or the in-place editor's.
+    // The layer node, so the text fit can measure the body inside it: its own, or the in-place editor's.
     const hostRef = useRef<HTMLDivElement>(null);
-    // Hosting the in-place editor IS the user typing in this box, which is what makes its growth
-    // part of their edit rather than bookkeeping.
-    useRichTextAutoFit(hostRef, el, onFitHeight, !!children);
+    // A layer that hosts the in-place editor is the box the user types in, so its growth is part of their edit.
+    useTextBoxAutoFit(hostRef, el, onFitHeight, !!children);
     const content = useLayerBody(el, resolveMedia, byId, idScope);
     if (!content) return null;
     const style = layerStyle(placeLayer(el, content));

@@ -13,7 +13,7 @@ import {
     writeElementInDoc,
     writeFrameInDoc,
 } from '../../vector/write-vector';
-import { arrow, chart, ellipse, image, linear, pie, richtext, shape } from './element-factories';
+import { arrow, chart, ellipse, image, linear, pie, shape, textBox } from './element-factories';
 
 // Every kind a slide holds, each at its own index so the reader returns them in this order.
 const RECT = shape({ id: 'r', type: 'rectangle', index: 'a0', x: 10, y: 20, seed: 11 });
@@ -30,7 +30,7 @@ const SLIDE_KINDS = [
         endBinding: serializeBinding({ elementId: 'e', fixedPoint: [0, 0.5] }),
     }),
     image({ id: 'i', index: 'a6', mediaName: 'photo.png' }),
-    richtext({ id: 't', index: 'a7', html: '<p>Title</p>', fontSize: 64 }),
+    textBox({ id: 't', index: 'a7', html: '<p>Title</p>', fontSize: 64 }),
     chart({ id: 'c', index: 'a8' }),
 ];
 

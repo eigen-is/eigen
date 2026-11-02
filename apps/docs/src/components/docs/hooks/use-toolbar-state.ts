@@ -6,13 +6,13 @@ import { getAttributes, isActive } from '@tiptap/core';
 import { EditorState, TextSelection } from '@tiptap/pm/state';
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import { getFontName } from '@workspace/lib/constants/fonts';
 import type { FigureLayout } from '@workspace/lib/docs/eigendoc';
 import {
     canInsertTableOfContents,
     insertFootnote,
     insertTextBox,
-    readCellBackground,
     readFigureAttrs,
     readTextBoxAttrs,
     selectionFontSizes,
@@ -89,7 +89,7 @@ export function cellBackground(state: EditorState): string {
     for (let depth = $from.depth; depth > 0; depth--) {
         const node = $from.node(depth);
         if (node.type.spec['tableRole'] === 'cell' || node.type.spec['tableRole'] === 'header_cell')
-            return readCellBackground(node.attrs['backgroundColor']) ?? '';
+            return readHexColor(node.attrs['backgroundColor']) ?? '';
     }
     return '';
 }
@@ -107,7 +107,8 @@ export function useToolbarState(editor: Editor): ToolbarState {
         selector: () => {
             const normal = editor.storage.eigenFontSize.normalStyle();
             const { doc, selection } = editor.state;
-            // A longer range reads its first MAX_READ_RANGE positions, as a caret would take the marks before it; a state without the editor's plugins costs nothing to make.
+            // A longer range reads only its first MAX_READ_RANGE positions, as a caret takes the marks before it. A
+            // state without the editor's plugins costs nothing to make.
             const state =
                 selection.to - selection.from > MAX_READ_RANGE
                     ? EditorState.create({

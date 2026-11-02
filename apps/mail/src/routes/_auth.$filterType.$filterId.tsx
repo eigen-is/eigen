@@ -194,18 +194,6 @@ function MailRoute() {
         }
     };
 
-    const confirmDeleteEmails = async () => {
-        if (pendingDeleteEmails.length === 0) return;
-        const failed = await actions.confirmDeleteEmails(pendingDeleteEmails);
-        // Reject so the promise-aware DeleteDialog stays open on exactly the still-failed emails; each
-        // failure was already surfaced by onMutationError. Narrowing the retained set first means a
-        // retry re-hits only the failed ids.
-        if (failed.length > 0) {
-            setPendingDeleteEmails(failed);
-            throw new Error('Some emails could not be permanently deleted');
-        }
-    };
-
     // Owns the open-conversation landing (auto-advance), shared by the detail toolbar and the
     // keyboard layer. The land target is computed BEFORE the mutation. The mutation is fired but
     // NOT awaited — navigation must be instant; blocking on the move/delete round-trip leaves the
@@ -341,7 +329,7 @@ function MailRoute() {
                         : `Are you sure you want to permanently delete ${pendingDeleteEmails.length} emails`
                 }
                 itemName={pendingDeleteEmails.length === 1 ? pendingDeleteEmails[0]?.subject || undefined : undefined}
-                onDelete={confirmDeleteEmails}
+                onDelete={() => actions.confirmDeleteEmails(pendingDeleteEmails, setPendingDeleteEmails)}
             />
             {/* display:contents, so the ref hangs on a real node without changing the layout. */}
             <div ref={mailSurfaceRef} className="contents">

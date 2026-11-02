@@ -5,15 +5,14 @@
 
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator, useDriveViewPreferences } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
-import type React from 'react';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { ReactNode } from 'react';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
-import type { DriveCapabilities } from './drive-capabilities';
+import { useDriveActionRunner } from './drive-action-runner';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
-import { DriveLayoutDialogs, useDriveLayoutDialogs } from './drive-layout-dialogs';
 import { DriveList, DriveListToolbar } from './drive-list';
 
 export type DriveLayoutProps = {
@@ -26,17 +25,17 @@ export type DriveLayoutProps = {
     selectedPath?: DrivePath | null;
     currentPath?: DrivePath | null;
     onRowSelect: (path: DrivePath) => void;
-    onRowActivate?: (path: DrivePath) => void;
+    onRowActivate: (path: DrivePath) => void;
     onOpenSharedWithMe?: () => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
     capabilities: DriveCapabilities;
-    // Toolbar title shown when there's no breadcrumb (filter/sharing/watched views).
+    // The toolbar's title where there is no breadcrumb, such as in a filter by type or the watched feed.
     title?: string;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     pid?: string;
-    unreadPathIds?: Set<string>;
-    emptyState?: React.ReactNode;
+    unreadPathIds?: ReadonlySet<string>;
+    emptyState?: ReactNode;
 };
 
 export function DriveLayout({
@@ -61,7 +60,14 @@ export function DriveLayout({
     emptyState,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
-    const actions = useDriveLayoutDialogs({ ownerId, mountId, currentPath, capabilities, onAfterAction });
+    const actions = useDriveActionRunner({
+        ownerId,
+        mountId,
+        currentPath,
+        capabilities,
+        onOpen: onRowActivate,
+        onAfterAction,
+    });
 
     // Sort order comes from the shared view preference.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -89,24 +95,14 @@ export function DriveLayout({
         onCreateFolder: actions.onCreateFolder,
         onUploadFile: actions.onUploadFile,
         onUploadFiles: actions.onUploadFiles,
-        onDelete: actions.onDelete,
-        onShareClick: actions.onShareClick,
-        onEmailCollaborators: actions.onEmailCollaborators,
         onCreateEigenDoc: actions.onCreateEigenDoc,
         ownerId,
         mountId,
         pathId,
-        onExport: actions.onExport,
         // Every view links rows to the one canonical item URL.
         getItemHref: getDriveItemUrl,
-        allowDelete: capabilities.canDelete,
         allowUpload: capabilities.canUpload,
-        canWrite: capabilities.canWrite,
-        onRename: actions.onRename,
-        onMove: actions.onMove,
-        onMoveTo: actions.onMoveTo,
-        onCopyTo: actions.onCopyTo,
-        onDuplicate: actions.onDuplicate,
+        actions,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         unreadPathIds,
         emptyState,
@@ -127,33 +123,14 @@ export function DriveLayout({
         />
     );
 
-    // When `pid` is set the user is navigating to a specific file: don't fall
-    // back to `currentPath` (the folder) during the brief refetch frame, or
-    // the panel renders the folder's properties (with its Open button) for
-    // one tick when arrow-keying between files.
+    // A pid in the URL means the user is on one file. Falling back to the folder while that file
+    // refetches would draw the folder's details, Open button included, for a moment on every arrow key.
     const detailPath = pid ? selectedPath : selectedPath || currentPath;
 
-    const detailProps = {
-        path: detailPath,
-        siblings: sortedContents,
-        onDelete: actions.onDelete,
-        onShareClick: actions.onShareClick,
-        onDownload: actions.onDownload,
-        onItemOpen: onRowActivate,
-        allowDelete: capabilities.canDelete,
-        canWrite: capabilities.canWrite,
-        onRename: actions.onRename,
-        onMoveTo: actions.onMoveTo,
-        onCopyTo: actions.onCopyTo,
-        onDuplicate: actions.onDuplicate,
-        onExport: actions.onExport,
-        onEmailCollaborators: actions.onEmailCollaborators,
-    };
-
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
-    // A folder shows only its own rows (a file moved out keeps its pid in the URL); a feed without a
-    // folder (shared, watched, mime views) shows any resolved pid, since a share link or a reference
-    // chip lands there for an item the feed itself may not list.
+    // A folder shows the detail of its own rows only, since a file moved out keeps its pid in the URL. A
+    // feed without a folder, such as Shared with me, shows any pid it resolves: a share link or a
+    // reference chip can land there on an item the feed itself doesn't list.
     const pidInFolder = pid ? folderContents.some((p) => p.id === pid) : false;
     const desktopShowDetail = !!(
         pidInFolder ||
@@ -177,12 +154,12 @@ export function DriveLayout({
                         onBack={onBackToList}
                         toolbar={detailToolbar}
                     >
-                        <DriveDetail {...detailProps} />
+                        <DriveDetail path={detailPath} siblings={sortedContents} actions={actions} />
                     </Column>
                 )}
             </ColumnLayout>
 
-            <DriveLayoutDialogs actions={actions} />
+            {actions.dialogs}
         </>
     );
 }

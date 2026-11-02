@@ -15,6 +15,7 @@ This codebase values **simplicity, directness, and consistency** over cleverness
 - Fewer lines beat more: removing code is always a good idea when what remains is cleaner and easier to understand. Over-engineering (a flag threaded through layers, a prop every caller passes the same value for, a seam that closes a case that cannot happen) is a broken window: remove it on touch, and don't add it to close a nit
 - No placeholders: no stub method, type, field or flag for later. Code lands with its first real caller
 - Fix the root cause, through the framework's own pipeline: a guest session goes through better-auth's API, never a row inserted by hand. Code that routes around a framework is a hack
+- Speed first: independent work runs in parallel (requests, uploads, copies), and heavy work stays off the main thread and the server's event loop. Fix a race where it starts, never by making work wait in line
 - Code that wipes or overwrites data first writes a timestamped copy it can be restored from, and a failed copy stops the wipe; skip it only when there is nothing to lose. A guard alone is not enough: a flag kept in another file than the data it guards can be wrong about that data
 
 ## Review Hot Spots

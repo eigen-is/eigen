@@ -32,16 +32,14 @@ import {
     SERVER_DIR,
     SERVER_FILES,
 } from '../config/paths';
-import { resolveUserQuotas } from '../config/quota';
 import { readContactsTotalSize } from '../contacts/card-store';
 import { LocalFilesystem } from '../core';
 import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
-import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
 import type { User } from '../user';
 import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
 import { getHome, getTeamHome, loadedHome, openHome, requestedSince } from './get-home';
-import { homeSize } from './home';
+import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
 
 // --- Pushes ---
@@ -163,7 +161,7 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     message,
                 );
             } else {
-                home.notifications?.persist(message.notification);
+                home.notify(message.notification);
             }
             break;
     }
@@ -409,20 +407,10 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     const [contacts, mail, calendars] = homeFs
         ? await Promise.all([readContactsTotalSize(homeFs), readMailTotalSize(homeFs), readCalendarTotalSize(homeFs)])
         : [0, 0, 0];
-    const driveUsed = readMountTotalSize(
-        path.join(homeDir, PATHS.DRIVE.ROOT, PATHS.DRIVE.DEFAULT_MOUNT, PATHS.DRIVE.METADATA_DB),
-    );
-
     const settingsFile = Bun.file(path.join(homeDir, PATHS.SETTINGS));
     const settings: UserSettings = (await settingsFile.exists()) ? await settingsFile.json() : {};
-    const mountSettings = settings.mounts?.[PATHS.DRIVE.DEFAULT_MOUNT];
     const { teamIds } = await getMemberships(ownerUserId);
-    const quotas = await resolveUserQuotas(
-        mountSettings ? createMountConfig(PATHS.DRIVE.DEFAULT_MOUNT, mountSettings) : createDefaultMountConfig(),
-        teamIds,
-    );
-
-    return homeSize(contacts + mail + calendars, driveUsed, quotas);
+    return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
 }
 
 // How long a home that the backup opened for itself stays open after its capture. It is longer

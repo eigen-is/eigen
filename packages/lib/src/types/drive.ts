@@ -1,7 +1,8 @@
 // The Drive types the API serves and every app reads: a path and its ACL, the kinds of path and their
 // MIME types, the Eigen document types with their extensions, export formats and Y.Doc roots, and the
 // readers that classify a file by its name and MIME type. The API and the apps import them alike, so a
-// new kind of path or format is added here once.
+// new kind of path or format is added here once. The shape of a Drive view's capabilities lives here
+// too, beside the path it gates.
 
 import type { BytesTextPreviewMode } from '../constants/preview';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
@@ -65,7 +66,7 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 
 // Every download format the export route can produce. A type's own list is below and keeps this order,
 // so ⌘K's per-format rows read like that type's Download menu.
-export const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
+const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // What the convert route turns an office file into: the one format each target reads, by its extension alone, and the
@@ -501,6 +502,23 @@ export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;
 export type DriveSortKey = (typeof DRIVE_SORT_KEYS)[number];
 export type DriveSortDir = 'asc' | 'desc';
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
+
+// What a Drive view lets the user do. Each view declares its whole set as one value, such as a preset
+// spread with overrides, and every Drive action reads its gate from it.
+export type DriveCapabilities = {
+    canCreateFolder: boolean;
+    canUpload: boolean;
+    // May write where the listed items sit: a convert saves the new document beside its source.
+    canWrite: boolean;
+    canDelete: boolean;
+    canRename: boolean;
+    canMove: boolean;
+    canShare: boolean;
+    // The fs browser shows the folder breadcrumb; filtered views show a title instead.
+    showBreadcrumb: boolean;
+    // Omit to allow creating every EigenDocType; an empty set disables create entirely.
+    createTypes?: ReadonlySet<EigenDocType>;
+};
 
 // The Drive file an import-from-drive request names: the picked file's owner, mount and path, and
 // nothing about where it lands. One type for every format, so the contacts, mail and calendar hooks and

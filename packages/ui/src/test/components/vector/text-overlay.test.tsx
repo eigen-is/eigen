@@ -41,7 +41,6 @@ async function commitTyped(typed: string, initialText = ''): Promise<string> {
                 initialText,
                 fontSize: 20,
                 fontFamily: 'Excalifont',
-                textAlign: 'center' as const,
                 color: '#000000',
                 onCommit: (text: string) => {
                     events.push(`commit ${text}`);

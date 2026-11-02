@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import type { SlideSize, VectorRectangleElement, VectorRichTextElement, VectorScene } from '@workspace/lib/vector';
+import type { SlideSize, VectorRectangleElement, VectorScene } from '@workspace/lib/vector';
 import {
     baseDefaultsFor,
     DEFAULT_SCENE_META,
@@ -10,6 +10,7 @@ import {
     serializeBackgroundFill,
     solidFill,
     TRANSPARENT_COLOR,
+    textBoxDefaults,
 } from '@workspace/lib/vector';
 import { exportDocument } from '../../lib/export/export-document';
 import { isWeasyPrintAvailable } from '../../lib/export/weasyprint';
@@ -80,12 +81,11 @@ function textBox(
     frameId: string,
     box: { x: number; y: number; width: number; height: number },
     lines: number,
-): VectorRichTextElement {
+): VectorRectangleElement {
     return {
-        ...baseDefaultsFor('richtext', SLIDES_STYLE_DEFAULTS),
-        ...ELEMENT_KINDS.richtext.defaults(SLIDES_STYLE_DEFAULTS),
+        ...textBoxDefaults(SLIDES_STYLE_DEFAULTS),
         id: '1',
-        type: 'richtext',
+        type: 'rectangle',
         index: 'a1',
         frameId,
         ...box,

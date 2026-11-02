@@ -6,8 +6,8 @@
 import type { Command, EditorState, Transaction } from '@tiptap/pm/state';
 import type { Rect } from '@tiptap/pm/tables';
 import { addColumn, addRow, isInTable, selectedRect, TableMap } from '@tiptap/pm/tables';
-import type { CellBorder, CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
-import { CELL_BORDER_SIDES, cellBorderValue, readCellBorder } from '@workspace/lib/docs/eigendoc';
+import type { Border, CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
+import { borderValue, CELL_BORDER_SIDES, readBorder } from '@workspace/lib/docs/eigendoc';
 
 export type BorderSet = 'all' | 'outer' | 'none';
 
@@ -21,12 +21,12 @@ const FACING = {
 const LOOK = ['backgroundColor', ...CELL_BORDER_SIDES.map(([name]) => name)];
 
 // The pen a selection draws borders with: the first side its first cell draws of its own, null for Eigen's own look.
-export function cellBorderPen(state: EditorState): Exclude<CellBorder, 'none'> | null {
+export function cellBorderPen(state: EditorState): Exclude<Border, 'none'> | null {
     if (!isInTable(state)) return null;
     const { map, table, top, left } = selectedRect(state);
     const cell = table.nodeAt(map.map[top * map.width + left] ?? -1);
     for (const [name] of CELL_BORDER_SIDES) {
-        const border = readCellBorder(cell?.attrs[name]);
+        const border = readBorder(cell?.attrs[name]);
         if (border && border !== 'none') return border;
     }
     return null;
@@ -36,7 +36,7 @@ export function cellBorderPen(state: EditorState): Exclude<CellBorder, 'none'> |
 export function setCellBorders(set: BorderSet): Command {
     return (state, dispatch) => {
         const pen = cellBorderPen(state);
-        const value = pen && cellBorderValue(pen);
+        const value = pen && borderValue(pen);
         return writeSides(state, dispatch, (_, edge) =>
             set === 'none' || (set === 'outer' && !edge) ? 'none' : value,
         );
@@ -47,20 +47,18 @@ export function setCellBorders(set: BorderSet): Command {
 export function setCellBorderColor(color: string): Command {
     return (state, dispatch) => {
         const pen = cellBorderPen(state);
-        const border = readCellBorder(
-            cellBorderValue({ width: pen?.width ?? 1, style: pen?.style ?? 'solid', color: color.toLowerCase() }),
+        const border = readBorder(
+            borderValue({ width: pen?.width ?? 1, style: pen?.style ?? 'solid', color: color.toLowerCase() }),
         );
         if (!border || !isInTable(state)) return false;
-        const value = cellBorderValue(border);
+        const value = borderValue(border);
         const rect = selectedRect(state);
         const drawn = rect.map
             .cellsInRect(rect)
             .some((pos) =>
-                CELL_BORDER_SIDES.some(([name]) => readCellBorder(rect.table.nodeAt(pos)?.attrs[name]) !== 'none'),
+                CELL_BORDER_SIDES.some(([name]) => readBorder(rect.table.nodeAt(pos)?.attrs[name]) !== 'none'),
             );
-        return writeSides(state, dispatch, (current) =>
-            drawn && readCellBorder(current) === 'none' ? undefined : value,
-        );
+        return writeSides(state, dispatch, (current) => (drawn && readBorder(current) === 'none' ? undefined : value));
     };
 }
 

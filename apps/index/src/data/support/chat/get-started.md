@@ -7,14 +7,14 @@ tags: [chat, getting-started, messages, rooms, teams]
 related: [chat/personal-and-team-chats, chat/send-messages]
 crossSections: [getting-started]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Chat lets you send messages to other people in Eigen, organize conversations into named rooms, and share files without leaving the browser. This page is a quick tour of what you can do.
 
 ## Your chat rooms
 
-All your rooms are listed in the sidebar on the left. Each room shows a small indicator dot when there are unread messages. Chat automatically marks a room as read when you open it.
+All your rooms are listed in the sidebar on the left. A room shows a small indicator dot when it has new messages for you: in a room you've written in, or where someone mentions you. Chat automatically marks a room as read when you open it.
 
 The sidebar is split into two areas:
 

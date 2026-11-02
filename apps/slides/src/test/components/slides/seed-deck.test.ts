@@ -12,11 +12,11 @@ describe('seedDeck', () => {
         expect(scene.elements).toHaveLength(1);
         const welcome = scene.elements[0];
         expect(welcome.frameId).toBe(scene.frames[0].id);
-        expect(welcome.type).toBe('richtext');
+        expect(welcome).toMatchObject({ type: 'rectangle', autoFit: true, padding: 0, strokeColor: 'transparent' });
         // A new deck opens on the seed color with white text on it. Only the seeded slide: one added
         // with + keeps the shared DEFAULT_FRAME_BACKGROUND.
         expect(parseBackgroundFill(scene.frames[0].background)).toEqual({ type: 'solid', color: '#f6339a' });
-        expect(welcome.type === 'richtext' && welcome.color).toBe('#ffffff');
+        expect(welcome.type === 'rectangle' && welcome.color).toBe('#ffffff');
     });
 
     // A deck that stores no width reads as an older deck's 10 in, so a new one writes its own.

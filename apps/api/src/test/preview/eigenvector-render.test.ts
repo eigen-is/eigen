@@ -31,7 +31,7 @@ function previewOf(html: string): string {
     const scene = buildGoldenVectorScene();
     return previewOfScene({
         ...scene,
-        elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html } : el)),
+        elements: scene.elements.map((el) => (el.type === 'rectangle' && el.autoFit ? { ...el, html } : el)),
     });
 }
 

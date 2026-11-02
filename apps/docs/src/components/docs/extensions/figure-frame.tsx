@@ -1,8 +1,8 @@
 // The box a Docs figure draws in inside the editor, such as an image's or a chart's: the node view's wrapper that the
 // page's figure rules lay out, its selection ring, its grips and its comment mark. It also holds the plugins for a
-// click beside the box, a drag out of its paragraph and the selected figure's Keep aspect ratio. A figure in front of
-// or behind the text is that wrapper placed at its offsets, with its grips in a sibling above every layer, where a
-// press drags it. Each node view draws inside.
+// click beside the box, a drag out of its paragraph and the selected figure's Keep aspect ratio, and the node view
+// options that redraw a view on a decoration. A figure in front of or behind the text is that wrapper placed at its
+// offsets, with its grips in a sibling above every layer, where a press drags it. Each node view draws inside.
 
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -11,7 +11,7 @@ import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/stat
 import { Mapping } from '@tiptap/pm/transform';
 import type { Decoration as PMDecoration } from '@tiptap/pm/view';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import type { NodeViewProps } from '@tiptap/react';
+import type { NodeViewProps, ReactNodeViewRendererOptions } from '@tiptap/react';
 import { NodeViewWrapper } from '@tiptap/react';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { FigureFrameAttrs, FigureFrameNode, FigureLayout } from '@workspace/lib/docs/eigendoc';
@@ -32,7 +32,7 @@ import { CommentIndicator } from '@workspace/ui/components/comments';
 import type { CoupledSize } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
@@ -134,6 +134,17 @@ const placeStyle = (top: number, left: number, width: number | undefined): Recor
 // A grip's readout, in cm as Docs' fields show a size.
 const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
 
+// The node view options of a view that draws its decorations, such as a figure's or an equation's. TipTap re-renders a
+// React node view only when its node changes, not when only its decorations change. Some of what a view draws arrives
+// as a decoration, such as the comment mark's color and Keep aspect ratio, so this re-renders it on every update.
+// Returning true keeps the view, as TipTap's own update does. False would make ProseMirror draw a new one.
+export const RERENDER_ON_DECORATIONS: Partial<ReactNodeViewRendererOptions> = {
+    update: ({ updateProps }) => {
+        updateProps();
+        return true;
+    },
+};
+
 export type FigureFrameOptions = {
     // The host decides whether a menu opens, so a figure with no rows keeps the browser's own.
     onContextMenu: (node: PMNode, pos: number, event: React.MouseEvent) => void;
@@ -165,6 +176,14 @@ function keptOnPaper(next: Box, start: Box, room: PaperRoom | null): Box {
     return { ...next, x: left, y: top, width: right - left, height: next.y + next.height - top };
 }
 
+// A grip's gesture on a figure: its preview, which the view draws while it runs, and the transform's handlers.
+export type FigureResize<T extends FigureSize = FigureSize> = {
+    preview: { size: T; shift: FigureShift } | null;
+    onTransform: (next: Box) => void;
+    onCommit: (next: Box, start: Box) => void;
+    onGestureEnd: () => void;
+};
+
 // A resize previews locally and writes once, at the commit. `fit` turns a dragged box into the fitted size, and `stored`
 // picks what the node keeps of it, which the commit writes with the offsets a west or a north grip moved.
 export function useFigureResize<T extends FigureSize>({
@@ -178,12 +197,7 @@ export function useFigureResize<T extends FigureSize>({
     getMaxWidth: () => number;
     fit: (box: Box, maxWidth: number) => T;
     stored: (size: T) => Partial<FigureSize>;
-}): {
-    preview: { size: T; shift: FigureShift } | null;
-    onTransform: (next: Box) => void;
-    onCommit: (next: Box, start: Box) => void;
-    onGestureEnd: () => void;
-} {
+}): FigureResize<T> {
     const [preview, setPreview] = useState<{ size: T; shift: FigureShift } | null>(null);
     // ObjectTransform has no onStart, so the first onTransform of a gesture, the box as pressed, latches the start, the
     // max width and a positioned figure's room on the paper: a forced layout per move costs too much.
@@ -301,19 +315,16 @@ function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor
 type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'extension' | 'getPos' | 'decorations'> & {
     // The box the transform chrome resizes; none shows the plain ring on a selected figure.
     box: Box | null;
-    // The edges a grip has moved so far, which a positioned box draws at.
-    shift?: FigureShift;
+    // The grips' gesture. A positioned box draws at its preview's shift, as a west or a north grip moves its edges.
+    resize: FigureResize;
     resizeMode: 'aspect' | 'free';
-    onTransform: (next: Box) => void;
-    onCommit: (next: Box, start: Box) => void;
-    onGestureEnd: () => void;
     label: string;
     keyShortcuts?: string;
     className?: string;
     // A text box's: the move, the drag and the selection start on a band along its edge alone, and a press inside it
     // goes to `onInsidePress`, which opens it, or to its open editor when there is none. `text` is the element whose
     // border and padding hold the band.
-    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: RefObject<HTMLElement | null> };
+    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: HTMLElement | null };
     children: ReactNode;
 };
 
@@ -347,11 +358,8 @@ export function FigureFrame({
     getPos,
     decorations,
     box,
-    shift,
+    resize,
     resizeMode,
-    onTransform,
-    onCommit,
-    onGestureEnd,
     label,
     keyShortcuts,
     className,
@@ -381,6 +389,7 @@ export function FigureFrame({
     };
 
     const { travel, startMove } = useFigureMove({ editor, getPos, selected });
+    const shift = resize.preview?.shift;
     // Where a positioned box draws; none for a figure in the flow.
     const place = figureLayoutStyle({
         ...frame,
@@ -400,9 +409,9 @@ export function FigureFrame({
             formatSize={figureSize}
             // The default minSize of 1 stays: in aspect mode the component floors both sides, so a floor of
             // 100 would force a 4:1 banner to 400 px wide. The host's fit clamps the size instead.
-            onTransform={onTransform}
-            onCommit={onCommit}
-            onGestureEnd={onGestureEnd}
+            onTransform={resize.onTransform}
+            onCommit={resize.onCommit}
+            onGestureEnd={resize.onGestureEnd}
         />
     );
     // The mark comes after the transform, so the transform's top-right grip never covers it. It is a button, so
@@ -431,7 +440,7 @@ export function FigureFrame({
             if (e.target instanceof Element && e.target.closest('button')) return;
             const edge = contentRef.current;
             const inside = dragSurface?.onInsidePress;
-            if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text.current, e)) move?.(e);
+            if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text, e)) move?.(e);
             else if (e.button === 0 && inside) {
                 if (move && selected) move(e, inside);
                 else inside(e);

@@ -10,8 +10,11 @@ const { act, createElement, useState } = await import('react');
 const { PageSetupDialog } = await import('../../../components/slides/page-setup-dialog');
 
 const dialog = () => document.querySelector('[role="dialog"]');
-const button = (label: string) =>
-    [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+// A footer button, apart from the corner X, which a screen reader calls Close too.
+const footerButtons = () => [
+    ...(dialog()?.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button') ?? []),
+];
+const button = (label: string) => footerButtons().find((b) => b.textContent === label);
 const radios = () =>
     [...(dialog()?.querySelectorAll<HTMLButtonElement>('[role="radio"]') ?? [])].map((radio) => ({
         label: document.querySelector(`label[for="${radio.id}"]`)?.textContent,
@@ -59,7 +62,7 @@ test("a writer sees the deck's size among Google's two, both enabled", async () 
         { label: 'Widescreen 16:9', checked: true, disabled: false },
         { label: 'Standard 4:3', checked: false, disabled: false },
     ]);
-    expect(button('Close')).toBeUndefined();
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Cancel', 'OK']);
 });
 
 test('OK writes the picked size once and closes', async () => {
@@ -81,6 +84,14 @@ test('Cancel closes without a change', async () => {
     await render();
     await click(document.getElementById(radio('Standard 4:3')));
     await click(button('Cancel'));
+    expect(onSlideSizeChange).not.toHaveBeenCalled();
+    expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('the corner X closes without a change', async () => {
+    await render();
+    await click(document.getElementById(radio('Standard 4:3')));
+    await click(dialog()?.querySelector(':scope > [data-slot="dialog-close"]'));
     expect(onSlideSizeChange).not.toHaveBeenCalled();
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
@@ -108,8 +119,7 @@ test('a viewer sees the size read-only, with one Close button', async () => {
         { label: 'Widescreen 16:9', checked: false, disabled: true },
         { label: 'Standard 4:3', checked: true, disabled: true },
     ]);
-    expect(button('OK')).toBeUndefined();
-    expect(button('Cancel')).toBeUndefined();
+    expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
     await click(button('Close'));
     expect(onOpenChange.mock.calls).toEqual([[false]]);
     expect(onSlideSizeChange).not.toHaveBeenCalled();

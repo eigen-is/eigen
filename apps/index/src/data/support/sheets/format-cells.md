@@ -28,7 +28,7 @@ To change how text looks in one or more cells:
 4. To change the font family, open **Format → Text → Font** and pick a font from the list.
 5. To change the text color, open **Format → Text → Font color** and pick a color from the picker.
 
-The menu shows the shortcut next to each style that has one: **Ctrl+B** (Mac: **⌘B**) for bold, **Ctrl+I** (Mac: **⌘I**) for italic and **Ctrl+U** (Mac: **⌘U**) for underline.
+On a computer, the menu shows the shortcut next to each style that has one: **Ctrl+B** (Mac: **⌘B**) for bold, **Ctrl+I** (Mac: **⌘I**) for italic and **Ctrl+U** (Mac: **⌘U**) for underline.
 
 ## Font size
 

@@ -16,7 +16,8 @@ import type { ColumnItem } from './types';
 type ColumnProps = {
     column: ColumnItem;
     cards: CommentCard[];
-    entryByChatName: Map<string, CommentEntry>;
+    entryByChatName: ReadonlyMap<string, CommentEntry>;
+    unreadChatNames: ReadonlySet<string>;
     canWrite?: boolean;
     onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
@@ -35,6 +36,7 @@ export const Column = memo(function Column({
     column,
     cards,
     entryByChatName,
+    unreadChatNames,
     canWrite = true,
     onAddCard,
     onEditColumn,
@@ -131,6 +133,7 @@ export const Column = memo(function Column({
                                         key={card.id}
                                         card={card}
                                         replyCount={entry?.messageCount}
+                                        unread={!!card.chatName && unreadChatNames.has(card.chatName)}
                                         resolved={entry?.status === 'resolved'}
                                         assigneeEmail={entry?.assignee}
                                         canWrite={canWrite}

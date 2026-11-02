@@ -459,10 +459,10 @@ describe.skipIf(!runSlow)('seed-demo', () => {
             const deckMediaNames = new Set(deckImages.map((img) => img.name));
             for (const frame of deckFrames) {
                 const onFrame = elementsInFrame(deckScene.elements, frame.id);
-                expect(onFrame.filter((el) => el.type === 'richtext').length).toBeGreaterThanOrEqual(1);
+                expect(onFrame.filter((el) => el.type === 'rectangle' && el.autoFit).length).toBeGreaterThanOrEqual(1);
             }
             for (const element of deckScene.elements) {
-                if (element.type === 'richtext') expect(element.html.length).toBeGreaterThan(0);
+                if (element.type === 'rectangle' && element.autoFit) expect(element.html.length).toBeGreaterThan(0);
                 if (element.type === 'image') expect(deckMediaNames.has(element.mediaName)).toBe(true);
             }
             expect(deckScene.elements.filter((el) => el.type === 'image').length).toBe(deckImageSpecs.length);
@@ -636,7 +636,7 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                     shape.label === '' ? '' : textToParagraphHtml(shape.label),
                 );
             }
-            const richText = scene.elements.filter((el) => el.type === 'richtext');
+            const richText = scene.elements.filter((el) => el.type === 'rectangle' && el.autoFit);
             expect(richText.length).toBeGreaterThanOrEqual(20);
             for (const text of richText) {
                 expect(text.width).toBeGreaterThan(0);

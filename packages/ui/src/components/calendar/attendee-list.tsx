@@ -1,3 +1,7 @@
+// An event's guests, read-only, with a button that copies their addresses. It also owns how a reply reads, its icon
+// and its label, for other views of the guests such as the editor that collects them. It shows wherever someone reads
+// an event's guests, such as its detail card.
+
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import type { Attendee } from '@workspace/lib/types/calendar';
 import { Check, CircleDashed, ClipboardCopy, HelpCircle, X as XIcon } from 'lucide-react';
@@ -6,7 +10,6 @@ import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { CollapsibleUserList } from '../user/collapsible-user-list';
 import { UserItem } from '../user/user-item';
 
-// How a reply reads, for the list here and for the editor that collects the replies (apps/calendar).
 export const ATTENDEE_STATUS_ICON: Record<Attendee['status'], typeof Check> = {
     accepted: Check,
     declined: XIcon,
@@ -22,7 +25,7 @@ export const ATTENDEE_STATUS_LABEL: Record<Attendee['status'], string> = {
 };
 
 type AttendeeListProps = {
-    attendees: Attendee[];
+    attendees: readonly Attendee[];
     organizer?: { userId?: string; email: string; name?: string } | null;
     // Guests a capped payload did not carry: they count in the header, but there is no reply to show.
     remaining?: number;
@@ -56,6 +59,8 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
                     tooltipText="Copy emails"
                     variant="ghost"
                     className="h-7 w-7"
+                    // The list may sit in a form, such as Edit event's, where a button with no type would submit it.
+                    type="button"
                     onClick={handleCopyEmails}
                 />
             }
@@ -85,10 +90,10 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
     );
 }
 
-function buildAttendeeSummary(attendees: Attendee[]): string {
+function buildAttendeeSummary(attendees: readonly Attendee[]): string {
     const counts: Record<string, number> = {};
     for (const a of attendees) {
-        counts[a.status] = (counts[a.status] || 0) + 1;
+        counts[a.status] = (counts[a.status] ?? 0) + 1;
     }
     const parts: string[] = [];
     if (counts.accepted) parts.push(`${counts.accepted} accepted`);

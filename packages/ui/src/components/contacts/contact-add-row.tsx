@@ -1,3 +1,7 @@
+// A field that suggests contacts as you type, with a + button beside it, for adding people one at a time, such as a
+// share list or an event's guests. Enter in the field and the + both hand the typed person to the caller. Neither
+// submits a form the row sits in.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { Plus } from 'lucide-react';
 import { Button } from '../button';
@@ -40,7 +44,15 @@ export function ContactAddRow({
                     onEmptyEnter={onEmptyEnter}
                 />
             </div>
-            <Button size="icon" variant="outline" className="ml-2" onClick={onSubmit} disabled={!value}>
+            <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="ml-2"
+                aria-label="Add"
+                onClick={onSubmit}
+                disabled={!value}
+            >
                 <Plus className="h-4 w-4" />
             </Button>
         </div>

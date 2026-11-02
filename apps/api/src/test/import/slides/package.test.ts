@@ -40,7 +40,9 @@ function refusal(bytes: Uint8Array): { status: number; message: string } {
 const text = (words: string) => sp({ xfrm: box(0, 0, 100, 100), txBox: true, text: para(words) });
 const htmlOf = (bytes: Uint8Array) =>
     readPptx(bytes, OPTIONS).slides.map((slide) =>
-        slide.elements.flatMap((element) => (element.type === 'richtext' ? [element.html] : [])).join(''),
+        slide.elements
+            .flatMap((element) => (element.type === 'rectangle' && element.autoFit ? [element.html] : []))
+            .join(''),
     );
 
 describe('a pptx package', () => {
@@ -156,11 +158,11 @@ describe('a pptx package', () => {
         });
         const deck = readPptx(pptx, OPTIONS);
         expect(deck.media.map((media) => media.contentType)).toEqual(['image/png']);
-        expect(deck.slides[0].elements.map((element) => element.type)).toEqual([
-            'image',
-            'richtext',
-            'richtext',
-            'richtext',
+        expect(deck.slides[0].elements.map((element) => element.type === 'rectangle' && element.autoFit)).toEqual([
+            false,
+            true,
+            true,
+            true,
         ]);
         expect(deck.warnings).toContainEqual({ code: 'images-dropped', count: 3 });
     });

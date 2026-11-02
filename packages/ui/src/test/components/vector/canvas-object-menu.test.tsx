@@ -79,7 +79,8 @@ const ELEMENTS: (NewVectorElement & { id: string })[] = [
     { id: 'r', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 },
     {
         id: 't',
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: 200,
         y: 0,
         width: 200,

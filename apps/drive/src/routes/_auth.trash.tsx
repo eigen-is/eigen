@@ -1,3 +1,7 @@
+// Drive's Trash: what the viewer deleted, newest trashed first, with Restore and Delete permanently on
+// each row's menu and in the command palette, and Empty trash for everything at once. The rows have
+// no other actions, so the page hands the list its own rows instead of the Drive item menu's.
+
 import { createFileRoute } from '@tanstack/react-router';
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -9,14 +13,13 @@ import {
     usePermanentlyDelete,
     useRestorePath,
 } from '@workspace/lib/drive';
+import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { MenuSections } from '@workspace/ui/components/context-menu';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { RotateCcw, Trash2 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_auth/trash')({
     component: TrashRoute,
@@ -50,46 +53,40 @@ function TrashRoute() {
     const emptyTrash = useEmptyTrash(ownerId, mountId);
 
     const [emptyTrashOpen, setEmptyTrashOpen] = useState(false);
-    const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
+    const [deleteItems, setDeleteItems] = useState<readonly DrivePath[]>([]);
 
-    // "Modified" sorts by deletion time here — that's also the date column this page shows.
+    // Modified sorts by the time an item was trashed here, which is also the date this page shows.
     const { sortKey, sortDir } = useDriveViewPreferences();
     const sortedItems = useMemo(() => {
         const comparator = getDriveComparator(sortKey, sortDir, (p) => p.trashedAt ?? p.updatedAt);
         return [...trashedItems].sort(comparator);
     }, [trashedItems, sortKey, sortDir]);
 
-    const contextMenuItems = useCallback(
-        (items: DrivePath[], close: () => void) => {
-            const suffix = items.length > 1 ? ` ${items.length} items` : '';
-            return (
-                <MenuSections
-                    organize={
-                        <DropdownMenuItem
-                            onClick={() => {
-                                for (const item of items) restorePath.mutate(item.id);
-                                close();
-                            }}
-                        >
-                            <RotateCcw className="h-4 w-4" /> Restore{suffix}
-                        </DropdownMenuItem>
-                    }
-                    destructive={
-                        <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => {
-                                setDeleteItems(items);
-                                close();
-                            }}
-                        >
-                            <Trash2 className="h-4 w-4" /> Delete{suffix} permanently
-                        </DropdownMenuItem>
-                    }
-                />
-            );
+    // What a trashed item offers, drawn by its row's menu and handed to the command palette alike.
+    const trashActions = (items: readonly DrivePath[]): PaletteSelectionAction[] => [
+        {
+            action: {
+                id: 'restore',
+                label: 'Restore',
+                pluralLabel: 'Restore {n} items',
+                icon: RotateCcw,
+                group: 'organize',
+            },
+            run: () => {
+                for (const item of items) restorePath.mutate(item.id);
+            },
         },
-        [restorePath],
-    );
+        {
+            action: {
+                id: 'delete-permanently',
+                label: 'Delete permanently',
+                pluralLabel: 'Delete {n} items permanently',
+                icon: Trash2,
+                group: 'destructive',
+            },
+            run: () => setDeleteItems(items),
+        },
+    ];
 
     if (isLoading) return <LoadingState />;
 
@@ -112,7 +109,7 @@ function TrashRoute() {
                         hideShared
                         dateLabel="Trashed"
                         getItemDate={(item) => item.trashedAt}
-                        contextMenuItems={contextMenuItems}
+                        ownActions={trashActions}
                         emptyState={<EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />}
                     />
                 </Column>

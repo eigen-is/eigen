@@ -5,7 +5,7 @@ type: how-to
 tags: [admin, settings, landing, links]
 related: [admin/server-settings, admin/waitlist]
 order: 85
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 The landing page is what visitors see at the address of your server before they sign in. You can add your own buttons to it, each with a title you choose and a web address it opens. People use them for a status page, a handbook, or the organization's main website.
@@ -43,4 +43,4 @@ Visitors who are already signed in never see the landing page. Eigen sends them 
 
 ## Change or remove a button
 
-Open **Settings** again and scroll to **Landing page**. Edit either box to change a button's text or address. To take one away, click **Remove** (the bin icon) at the end of its row. Click **Save** when you are done.
+Open **Settings** again and scroll to **Landing page**. Edit either box to change a button's text or address. To take one away, click the bin icon at the end of its row. Click **Save** when you are done.

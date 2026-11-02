@@ -1,9 +1,13 @@
+// The New chat dialog: step 1 picks people or a team, step 2 names the chat and picks where it lives. Before it
+// creates anything it looks for an existing chat with exactly those members and offers to open that one instead.
+// Person-first surfaces open it, such as the chat sidebar's New chat button or a contact's Start chat. It creates
+// the chat already shared with the picked people, through useCreateChatRoom.
+
 import { openDocument } from '@workspace/lib/api';
 import { AppError } from '@workspace/lib/api-error';
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useChatSections, useCreateChatRoom, useFindChatByMembers } from '@workspace/lib/chat';
 import { useMyTeams } from '@workspace/lib/home';
-import type { ChatMatch } from '@workspace/lib/types/chat';
 import { CHATS_FOLDER_NAME } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
@@ -49,16 +53,9 @@ type ChatCreateWizardProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     initialPeople?: InitialPerson[];
-    // Typed router navigation for the target room; omitted → openDocument (window.location) fallback.
+    // Opens the room through the app's typed router. Without it, openDocument loads the room's page.
     onNavigate?: (path: DrivePath) => void;
 };
-
-// A 1:1 carries both names (the file name is shared); groups list the picked members only.
-function defaultChatName(pickedNames: string[], myName: string): string {
-    if (pickedNames.length === 0) return '';
-    if (pickedNames.length === 1) return `${pickedNames[0]} & ${myName}`;
-    return `${pickedNames.slice(0, -1).join(', ')} & ${pickedNames[pickedNames.length - 1]}`;
-}
 
 export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate }: ChatCreateWizardProps) {
     const { user } = useAuth();
@@ -86,11 +83,12 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     const selectedTeam = myTeams?.find((t) => t.id === selectedTeamId) ?? null;
     const teamMode = !!selectedTeam;
-    // Mounts arrive enabled-filtered, so the first is the team drive (team homes have no 'default' id).
+    // A team's mounts arrive without the disabled ones, so the first is the team drive. A team home has no
+    // 'default' mount.
     const teamMount = selectedTeam?.mounts[0] ?? null;
     const teamChatOwnerId = selectedTeam ? teamOwnerId(selectedTeam.id) : '';
     const teamRootId = teamMount?.rootPathId ?? '';
-    // The aggregate backs only the team-mode panel — closed or person-mode wizards skip the fetch.
+    // Only the team-mode panel needs the chat sections, so a closed or person-mode wizard skips the fetch.
     const { teams: teamSections, isLoading: teamChatsLoading } = useChatSections(open && teamMode);
     const teamChats = teamSections.find((t) => t.id === selectedTeamId)?.chats ?? [];
 
@@ -103,29 +101,29 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const pickedKey = pickedEmails.join(',');
     const debouncedKey = useDebouncedValue(pickedKey, MATCH_DEBOUNCE_MS);
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
-    // Gated on open + person mode: a closed or team-mode wizard runs no by-members lookup.
     const { data: fetchedMatches = [], isPending: matchesPending } = useFindChatByMembers(
         myOwnerId,
         open && !teamMode ? debouncedEmails : [],
     );
-    // Settled = debounce caught up AND the current key resolved or errored (isPending covers the
-    // pre-fetch idle frame isLoading misses). One predicate gates both the match panel and step 1,
-    // so they can't disagree; an errored lookup settles and falls through to create.
+    // The lookup has settled once the debounce has caught up and the current key has resolved or failed.
+    // isPending also covers the idle frame before the fetch starts, which isLoading misses. The match panel
+    // and step 1 both wait on this one check, so they never disagree. A failed lookup settles, and the
+    // wizard falls through to create.
     const personLookupPending = debouncedKey !== pickedKey || matchesPending;
     const matches = personLookupPending ? [] : fetchedMatches;
 
     // Already-picked people and self are excluded from the ACL suggestion popover (mirrors the share dialog).
     const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
 
-    // Every match shares the picked set's membership by definition (+1 = me).
+    // Every match has exactly the picked people and me as its members.
     const memberCount = picked.length + 1;
     // When any existing chat matches, the primary opens the first; "Create new chat" leads to step 2.
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
     const isBusy = createRoom.isPending || createTeamRoom.isPending;
-    // Both modes need a name — an emptied one would create a bare '.eigenchat' file.
+    // Both modes need a name. An empty one would create a file called just '.eigenchat'.
     const canCreate = !!name.trim() && (teamMode ? !!teamRootId : picked.length > 0);
-    // Open-first is only trustworthy once the lookup settles — hold step 1 so a quick Enter can't
-    // race past an existing match. Mountless teams stay on step 1 ("no drive yet" note).
+    // Step 1 waits for the lookup to settle, so a quick Enter can't skip past an existing chat. A team
+    // without a drive stays on step 1, which says so.
     const lookupPending = teamMode ? teamChatsLoading : personLookupPending;
     const step1CanProceed = (teamMode ? !!teamRootId : picked.length > 0) && !lookupPending;
 
@@ -137,7 +135,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         );
     };
 
-    // Typed input and picked suggestions join the picked set — same flow as the share dialog.
+    // Typed input and picked suggestions join the picked set, as in the share dialog.
     const contactInput = useContactInput((contact) => {
         addPerson(contact);
         return true;
@@ -182,7 +180,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
 
     if (!user || isGuest) return null;
 
-    // openDocument works from any app's route tree — this shared component can't own a typed navigate.
+    // This shared component has no typed router of its own, and openDocument works from any app.
     const goToRoom = (path: DrivePath) => {
         onOpenChange(false);
         if (onNavigate) onNavigate(path);
@@ -208,8 +206,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setCreateError(null);
         const fileName = name.trim();
         try {
-            // Team membership is implicit, so team rooms take no members. A default (non-dirty)
-            // name lets the server dedupe a collision; a user-typed one 409s, surfaced inline below.
+            // A team chat takes no members, because the whole team is in it. The server renames a default
+            // name that collides. A name the user typed gets a 409 instead, which shows under the name field.
             goToRoom(
                 teamMode
                     ? await createTeamRoom.mutateAsync({ fileName, members: [] })
@@ -251,7 +249,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                     </div>
                                     <TooltipButton
                                         icon={X}
-                                        tooltipText="Remove"
+                                        tooltipText={`Remove ${selectedTeam.name}`}
                                         variant="ghost"
                                         className="h-7 w-7 shrink-0"
                                         onClick={() => setSelectedTeamId(null)}
@@ -285,7 +283,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                                 <div className="invisible group-hover:visible pointer-coarse:visible">
                                                     <TooltipButton
                                                         icon={X}
-                                                        tooltipText="Remove"
+                                                        tooltipText={`Remove ${p.email}`}
                                                         variant="ghost"
                                                         className="h-7 w-7"
                                                         onClick={() =>
@@ -324,7 +322,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                               : 'Existing chats with these people'
                                       }
                                   >
-                                      {matches.map((m: ChatMatch) => (
+                                      {matches.map((m) => (
                                           <MatchRow
                                               key={m.path.id}
                                               name={stripEigenExtension(m.path.name)}
@@ -477,6 +475,13 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
             </DialogContent>
         </Dialog>
     );
+}
+
+// Both people see a 1:1 chat under the same file name, so it carries both names. A group lists only the picked people.
+function defaultChatName(pickedNames: readonly string[], myName: string): string {
+    if (pickedNames.length === 0) return '';
+    if (pickedNames.length === 1) return `${pickedNames[0]} & ${myName}`;
+    return `${pickedNames.slice(0, -1).join(', ')} & ${pickedNames[pickedNames.length - 1]}`;
 }
 
 function MatchPanel({ title, children }: { title: string; children: ReactNode }) {

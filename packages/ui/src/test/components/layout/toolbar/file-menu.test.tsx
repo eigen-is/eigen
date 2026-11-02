@@ -1,6 +1,9 @@
-// A guest may not mail people through the server, so the File menu offers Email collaborators to an
-// editor and hides it from a guest editor.
+// The File menu draws its Rename, Share, Email collaborators and delete rows from the Drive action catalog,
+// gated as Drive gates them, and hands the command palette the same rows. A guest may not mail people
+// through the server, a reader may not share, and an item shared with the viewer is removed, not trashed.
 import { afterEach, expect, mock, test } from 'bun:test';
+import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { installHappyDom } from '../../../happy-dom';
 import { renderInDocument } from '../../../render-in-document';
 
@@ -13,6 +16,7 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 
 const { act, createElement } = await import('react');
 const { createMemoryHistory, createRootRoute, createRouter, RouterProvider } = await import('@tanstack/react-router');
+const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { drivePath } = await import('../../../drive-path');
 const { CommandPaletteProvider } = await import(
@@ -22,19 +26,41 @@ const { FileMenu } = await import('../../../../components/layout/toolbar/file-me
 const { Menubar } = await import('../../../../components/menubar');
 
 let unmount = async () => {};
-afterEach(() => unmount());
+// Each render unmounts the one before, so a test can open several in turn.
+const unmountLast = async () => {
+    await unmount();
+    unmount = async () => {};
+};
+afterEach(unmountLast);
 
-async function fileMenuItems(): Promise<(string | undefined)[]> {
+const plan = drivePath({ name: 'Plan', mimeType: DRIVE_MIME_DOC, ownerId: 'user-1', parentId: 'root' });
+const sharedWithMe = drivePath({
+    name: 'Their plan',
+    mimeType: DRIVE_MIME_DOC,
+    ownerId: 'user-2',
+    parentId: 'root',
+    acl: [{ id: 'editor@example.com', read: true, write: true }],
+});
+
+// Opens the File menu on the item and returns its rows, and the ids of the rows it handed the palette.
+async function openFileMenu(path: DrivePath = plan, canWrite = true) {
+    await unmountLast();
+    const published: { actions: PaletteSelectionActions } = { actions: null };
+    function Reader() {
+        published.actions = useCommandPalette().selectionActions;
+        return null;
+    }
     const menu = createElement(FileMenu, {
-        path: drivePath({ name: 'Plan', mimeType: DRIVE_MIME_DOC }),
-        canWrite: true,
+        path,
+        canWrite,
         onAccessDialogOpen: () => {},
         createLabel: 'New doc',
         createType: 'doc',
     });
     const router = createRouter({
         routeTree: createRootRoute({
-            component: () => createElement(CommandPaletteProvider, null, createElement(Menubar, null, menu)),
+            component: () =>
+                createElement(CommandPaletteProvider, null, createElement(Menubar, null, menu), createElement(Reader)),
         }),
         history: createMemoryHistory(),
     });
@@ -47,17 +73,48 @@ async function fileMenuItems(): Promise<(string | undefined)[]> {
     await act(async () => {
         trigger?.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, button: 0 }));
     });
-    return [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) => item.textContent?.trim());
+    const rows = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')].map((item) =>
+        item.textContent?.trim(),
+    );
+    return { rows, palette: (published.actions ?? []).map(({ action }) => action.id) };
 }
 
-test('an editor can email the collaborators', async () => {
+test('an editor can email the collaborators of an item someone else can see', async () => {
     isGuest = false;
-    expect(await fileMenuItems()).toContain('Email collaborators');
+    expect((await openFileMenu(sharedWithMe)).rows).toContain('Email collaborators');
 });
 
 test('a guest editor can not', async () => {
     isGuest = true;
-    const items = await fileMenuItems();
-    expect(items).toContain('Rename');
-    expect(items).not.toContain('Email collaborators');
+    const { rows } = await openFileMenu(sharedWithMe);
+    expect(rows).toContain('Rename');
+    expect(rows).not.toContain('Email collaborators');
+});
+
+test('a private item has no collaborators to mail', async () => {
+    isGuest = false;
+    expect((await openFileMenu(plan)).rows).not.toContain('Email collaborators');
+});
+
+test('an item shared with the viewer is removed, not trashed', async () => {
+    isGuest = false;
+    const { rows } = await openFileMenu(sharedWithMe);
+    expect(rows).toContain('Remove shared item');
+    expect(rows).not.toContain('Move to trash');
+    expect((await openFileMenu(plan)).rows).toContain('Move to trash');
+});
+
+test('a reader may not share, rename or delete', async () => {
+    isGuest = false;
+    const { rows } = await openFileMenu(plan, false);
+    expect(rows).not.toContain('Share');
+    expect(rows).not.toContain('Rename');
+    expect(rows).not.toContain('Move to trash');
+    expect((await openFileMenu(plan, true)).rows).toContain('Share');
+});
+
+test('the palette gets the rows the menu draws, plus the link and the mail', async () => {
+    isGuest = false;
+    expect((await openFileMenu(plan)).palette).toEqual(['rename', 'share', 'copy-link', 'mail-to', 'trash']);
+    expect((await openFileMenu(plan, false)).palette).toEqual(['copy-link', 'mail-to']);
 });

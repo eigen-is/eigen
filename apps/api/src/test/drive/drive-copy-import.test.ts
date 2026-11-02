@@ -1,9 +1,15 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
+import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
+import { copyPathAcross, copySize } from '../../lib/drive/copy-across';
 import { getHome } from '../../lib/home';
+import { getUserById } from '../../lib/user';
+import { VERSIONS_FOLDER_NAME } from '../../lib/versioning/versions-folder';
+import type { TestUser } from '../setup';
 import {
     assertJson,
     authedRequest,
+    createTestUser,
     driveGet,
     drivePost,
     driveUpload,
@@ -151,6 +157,142 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             }
         });
 
+        describe('a folder whose child has lost its bytes', () => {
+            let folder: DrivePath;
+
+            beforeAll(async () => {
+                const token = ctx.alice.user.sessionToken;
+                const ownerId = ctx.alice.user.id;
+                folder = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${aliceRootId}`, {
+                    folderName: `half-${crypto.randomUUID()}`,
+                });
+                await driveUpload(token, ownerId, mountId, folder.id, new File(['kept'], 'kept.txt'));
+                const gone = await driveUpload(token, ownerId, mountId, folder.id, new File(['gone'], 'gone.txt'));
+                const { mount } = await (await getHome(ownerId)).drive.resolveFile(mountId, gone.id);
+                expect(await mount.storage.delete(await mount.getStorageKey(gone.id))).toBe(true);
+            });
+
+            async function emptyFolder(): Promise<DrivePath> {
+                return drivePost<DrivePath>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    `folder/${aliceRootId}`,
+                    {
+                        folderName: `half-target-${crypto.randomUUID()}`,
+                    },
+                );
+            }
+
+            function contents(target: DrivePath): Promise<DrivePath[]> {
+                return driveGet<DrivePath[]>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    `folder/${target.id}`,
+                );
+            }
+
+            test('a copy in one drive fails and leaves no folder in the target', async () => {
+                const target = await emptyFolder();
+                const res = await copyFile(ctx.alice.user.sessionToken, folder.ownerId, folder.mountId, folder.id, {
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: mountId,
+                    targetParentId: target.id,
+                });
+                expect(res.status).toBe(410);
+                expect(await contents(target)).toEqual([]);
+            });
+
+            test('a copy to another drive fails and leaves no folder in the target', async () => {
+                const target = await emptyFolder();
+                const home = await getHome(ctx.alice.user.id);
+                const user = await getUserById(ctx.alice.user.id);
+                if (!user) throw new Error('alice has no user row');
+                const copy = copyPathAcross(home.drive, folder, home.drive, mountId, target.id, folder.name, user);
+                expect(copy).rejects.toThrow();
+                await copy.catch(() => {});
+                expect(await contents(target)).toEqual([]);
+            });
+        });
+
+        // The per-file upload cap is for one file. A folder or a document is bounded by the free space.
+        describe('the size limit of a folder copy', () => {
+            let user: TestUser;
+            let rootId: string;
+            let folder: DrivePath;
+
+            // A new home takes the server's default drive size, so this user's drive holds 100 MB.
+            beforeAll(async () => {
+                const before = getServerSettings().quotas.defaultMountMaxSizeMB;
+                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 100 } });
+                try {
+                    user = await createTestUser(
+                        `copy-size-${crypto.randomUUID()}@test.eigen.is`,
+                        'testpassword123',
+                        'Copy',
+                    );
+                    await getHome(user.id);
+                } finally {
+                    await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
+                }
+                rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
+                folder = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${rootId}`, {
+                    folderName: 'two-files',
+                });
+                for (const name of ['a.bin', 'b.bin']) {
+                    const bytes = new Uint8Array(20 * 1024 * 1024);
+                    await driveUpload(user.sessionToken, user.id, mountId, folder.id, new File([bytes], name));
+                }
+            });
+
+            function copyFolder(): Promise<Response> {
+                return copyFile(user.sessionToken, user.id, mountId, folder.id, {
+                    targetOwnerId: user.id,
+                    targetMountId: mountId,
+                    targetParentId: rootId,
+                });
+            }
+
+            test('a folder larger than the upload cap copies', async () => {
+                const copied = await assertJson<DrivePath>(await copyFolder());
+                expect(copied.size).toBe(40 * 1024 * 1024);
+            });
+
+            test('a folder larger than the free space is refused', async () => {
+                // The folder and its first copy use 80 MB, so 20 MB is free.
+                expect((await copyFolder()).status).toBe(507);
+            });
+
+            test('a document is sized without its version history, which the copy leaves behind', async () => {
+                const doc = await drivePost<DrivePath>(
+                    user.sessionToken,
+                    user.id,
+                    mountId,
+                    `folder/${rootId}/create/doc`,
+                    {
+                        fileName: 'sized',
+                    },
+                );
+                const saved = await authedRequest(
+                    user.sessionToken,
+                    `/drive/${user.id}/${mountId}/file/${doc.id}/versions/save`,
+                    {
+                        method: 'POST',
+                    },
+                );
+                expect(saved.status).toBe(200);
+                const drive = (await getHome(user.id)).drive;
+                const versions = findOrFail(
+                    await drive.getFolderContents(mountId, doc.id),
+                    (child) => child.name === VERSIONS_FOLDER_NAME,
+                );
+                expect(versions.size).toBeGreaterThan(0);
+                const sized = await driveGet(user.sessionToken, user.id, mountId, `file/${doc.id}`);
+                expect(await copySize(drive, sized)).toBe(sized.size - versions.size);
+            });
+        });
+
         // The cross-mount bridge walks a container's children itself, so its versions/ skip is
         // separate from the same-mount copy's (pinned in mount-copy.test.ts).
         test('copying a container across drives starts the copy without the source versions/', async () => {
@@ -164,11 +306,9 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             });
             expect(saved.status).toBe(200);
 
-            const { copyPathAcross } = await import('../../lib/drive/copy-across');
-            const { getHome } = await import('../../lib/home');
-            const { getUserById } = await import('../../lib/user');
             const home = await getHome(ownerId);
             const user = await getUserById(ownerId);
+            if (!user) throw new Error('alice has no user row');
             const copied = await copyPathAcross(
                 home.drive,
                 doc,
@@ -176,7 +316,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 mountId,
                 aliceRootId,
                 'copy-across-versions-copy',
-                user!,
+                user,
             );
 
             const sourceNames = (await home.drive.getFolderContents(mountId, doc.id)).map((c) => c.name);
