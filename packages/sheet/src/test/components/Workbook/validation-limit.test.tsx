@@ -130,6 +130,25 @@ test('a paste that would make a rule too complex changes nothing, sends nothing 
     expect(await notice()).toContain(NOTICE);
 });
 
+// E1 and G1, and every other row below them, hold one rule, as many ranges as a rule may hold. E1:E2 pasted on the
+// grid's last row would add a range and a row. The row is refused with the paste.
+test('a paste on the last row that would make a rule too complex adds no row', async () => {
+    const ranges = spacedRanges([4, 6], MAX_VALIDATION_RANGES);
+    const { input, api, batches } = await mount({ dataValidations: { v: { ranges, rule: RULE } } });
+
+    await act(async () => api().setSelection([{ row: [0, 1], column: [4, 4] }]));
+    const clipboardData = await copy(input);
+    await act(async () => api().setSelection([{ row: [ROWS - 1, ROWS - 1], column: [2, 2] }]));
+    const sent = batches.length;
+    await paste(input, clipboardData);
+
+    expect(batches.length).toBe(sent);
+    expect(api().getFlowdata()?.length).toBe(ROWS);
+    await act(async () => api().undo());
+    expect(batches.length).toBe(sent);
+    expect(await notice()).toContain(NOTICE);
+});
+
 // One rule holds as many ranges as a rule may: every other row of columns P and R, D1 and the block H1:J3. A fill, a move or
 // a paint that adds a range to it is refused. The refusal also ends the drag, so the next click starts fresh.
 describe('a refused mouse-up ends its drag', () => {

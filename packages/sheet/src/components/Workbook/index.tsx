@@ -50,7 +50,6 @@ import {
     handlePaste,
     initSheetData,
     initSheetIndex,
-    insertRowCol,
     pasteChart,
     patchToOp,
     pushEntry,
@@ -651,32 +650,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         }
                     }
 
-                    const txtdata = paste.html || paste.text;
-                    // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML
-                    // and a live element's innerHTML loads <img> and fires its onerror even detached.
-                    const trList = new DOMParser().parseFromString(txtdata, 'text/html').querySelectorAll('table tr');
-                    const rowCount = getFlowdata(ctx)?.length ?? 0;
-                    const range = ctx.selections;
-                    const firstRow = range?.[0]?.row[0];
-                    const rowToBeAdded = firstRow == null ? 0 : trList.length + firstRow - rowCount;
-                    if (rowToBeAdded > 0) {
-                        const insertRowColOp: SetContextOptions['insertRowColOp'] = {
-                            type: 'row',
-                            index: rowCount - 1,
-                            count: rowToBeAdded,
-                            direction: 'rightbottom',
-                            id: ctx.currentSheetId,
-                        };
-                        setContextWithProduce(
-                            (draftCtx) => {
-                                insertRowCol(draftCtx, insertRowColOp);
-                                draftCtx.selections = range;
-                            },
-                            {
-                                insertRowColOp,
-                            },
-                        );
-                    }
+                    // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste
+                    // adds none.
                     setContextWithProduce((draftCtx) => {
                         try {
                             handlePaste(draftCtx, e);
