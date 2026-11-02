@@ -272,13 +272,13 @@ export type Sheet = {
 // The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
 export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
 
-// Whether a frozen pane freezes rows: every type but the two that freeze only columns.
+// Whether a frozen pane freezes rows: 'row', 'both', and their range forms 'rangeRow' and 'rangeBoth'.
 export function freezesRows(frozen: Sheet['frozen']): boolean {
     const type = frozen?.type;
     return type === 'row' || type === 'both' || type === 'rangeRow' || type === 'rangeBoth';
 }
 
-// Whether a frozen pane freezes columns: every type but the two that freeze only rows.
+// Whether a frozen pane freezes columns: 'column', 'both', and their range forms 'rangeColumn' and 'rangeBoth'.
 export function freezesColumns(frozen: Sheet['frozen']): boolean {
     const type = frozen?.type;
     return type === 'column' || type === 'both' || type === 'rangeColumn' || type === 'rangeBoth';
