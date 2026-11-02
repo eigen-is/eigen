@@ -1,9 +1,10 @@
 // Editors for a pinned elbow arrow, one that has fixed segments. Its `points` hold the full routed
 // polyline, so each edit is point surgery on it: `moveSegment` slides a dragged segment, `renormalize`
 // merges collinear runs and reindexes pins, and unpinning re-routes only the freed gap.
-// Callers, such as geometry and the canvas tools, write the returned patch.
+// Callers, such as followBindings and the canvas tools, write the returned patch.
 
 import type { Point } from './geometry';
+import { BASE_PADDING, DEDUP_THRESHOLD, headingIsHorizontalVec } from './heading';
 import { parsePoints, serializePoints } from './points';
 import type { FixedSegment, VectorArrowElement } from './types';
 import { parseFixedSegments, serializeFixedSegments } from './types';
@@ -43,10 +44,6 @@ const UNBOUND_PIN_CONTEXT: PinRoutingContext = {
     endHeadingPositive: false,
 };
 
-const DEDUP_THRESHOLD = 1;
-// Excalidraw's BASE_PADDING (elbowArrow.ts:111) — the room an inserted end connector leaves the shape by.
-const BASE_PADDING = 40;
-
 // A parsed pinned arrow: its polyline in GLOBAL scene coordinates plus the pins (global start/end) and the
 // synthetic-point markers. The editors work in global then re-origin through normalizeElbowUpdate.
 type Working = {
@@ -58,11 +55,6 @@ type Working = {
 type WorkingSegment = { index: number; start: Point; end: Point };
 
 // --- small vector helpers (Excalidraw's @excalidraw/math, inlined) ---------------------
-
-function headingIsHorizontalVec(a: Point, b: Point): boolean {
-    // The dominant axis of a→b — Excalidraw's headingForPointIsHorizontal (|dy| < |dx|).
-    return Math.abs(a.y - b.y) < Math.abs(a.x - b.x);
-}
 
 function pointsEqual(a: Point, b: Point): boolean {
     return a.x === b.x && a.y === b.y;

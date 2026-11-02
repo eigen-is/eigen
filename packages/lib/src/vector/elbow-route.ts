@@ -4,30 +4,29 @@
 // to a plain L when no route is found. `arrowRoute` is the entry point, called for example by the SVG
 // renderer, the pptx writer and the canvas.
 
-import type { B4, Heading } from './elbow-heading';
+import { boundShape, elementBounds } from './binding';
+import type { B4 } from './elbow-heading';
+import { aabbForElement, distanceToElement, getHeadingForElbowArrowSnap } from './elbow-heading';
+import type { PinRoutingContext } from './elbow-pins';
+import type { Bounds, Point } from './geometry';
+import { linearLocalToScene, linearSceneToLocal, unionBounds } from './geometry';
+import type { Heading } from './heading';
 import {
-    aabbForElement,
+    BASE_BINDING_GAP_ELBOW,
+    BASE_PADDING,
     compareHeading,
-    distanceToElement,
+    DEDUP_THRESHOLD,
     flipHeading,
-    getHeadingForElbowArrowSnap,
     HEADING_DOWN,
     HEADING_LEFT,
     HEADING_RIGHT,
     HEADING_UP,
     headingIsHorizontal,
+    headingIsHorizontalVec,
     vectorToHeading,
-} from './elbow-heading';
-import type { PinRoutingContext } from './elbow-pins';
-import type { Bounds, Point } from './geometry';
-import { boundShape, elementBounds, linearLocalToScene, linearSceneToLocal, unionBounds } from './geometry';
+} from './heading';
 import { parsePoints } from './points';
 import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
-
-// Excalidraw's BASE_PADDING / BASE_BINDING_GAP_ELBOW / DEDUP_TRESHOLD.
-const BASE_PADDING = 40;
-const BASE_BINDING_GAP_ELBOW = 5;
-const DEDUP_THRESHOLD = 1;
 
 // The derived orthogonal route of an elbow arrow, in its local frame: the two stored endpoints with a
 // right-angled path routed between them. The route ALWAYS starts at points[0] and ends at points[last]
@@ -818,11 +817,11 @@ function removeElbowArrowShortSegments(points: Point[]): Point[] {
 // Excalidraw's getElbowArrowCornerPoints.
 function getElbowArrowCornerPoints(points: Point[]): Point[] {
     if (points.length <= 1) return points;
-    let previousHorizontal = Math.abs(points[0].y - points[1].y) < Math.abs(points[0].x - points[1].x);
+    let previousHorizontal = headingIsHorizontalVec(points[0], points[1]);
     return points.filter((p, idx) => {
         if (idx === 0 || idx === points.length - 1) return true;
         const next = points[idx + 1];
-        const nextHorizontal = Math.abs(p.y - next.y) < Math.abs(p.x - next.x);
+        const nextHorizontal = headingIsHorizontalVec(p, next);
         if (previousHorizontal === nextHorizontal) {
             previousHorizontal = nextHorizontal;
             return false;
