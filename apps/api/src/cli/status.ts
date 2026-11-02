@@ -20,6 +20,7 @@ type Service = { service: string; state: string; health: string };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const CERT_WARN_DAYS = 14;
+const RUNNING_TIMEOUT_MS = 10_000;
 
 // The launcher passes what it gathers on the host as flags.
 // - --install is the install folder on the host. The CLI sees it as /install.
@@ -78,9 +79,10 @@ export async function status(flags: StatusFlags): Promise<void> {
 }
 
 // One line, such as "the server backup <archive> and the upload of <archive>", that the launcher puts in its wait.
+// The control socket sets no timeout, so a hung API would hold every stop: this one gives up and fails instead.
 async function printRunning(): Promise<void> {
     const ui = await createUi(true);
-    const res = await callControl('/status', ui.fail);
+    const res = await callControl('/status', ui.fail, { signal: AbortSignal.timeout(RUNNING_TIMEOUT_MS) });
     if (!res.ok) ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
     const { backup }: ControlStatus = await res.json();
     const running = backup.running.map(({ kind, archive }) =>

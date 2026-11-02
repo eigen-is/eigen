@@ -298,4 +298,21 @@ describe('the Backup row', () => {
         expect(stdout).toBe('');
         expect(stderr).toContain('Eigen is not answering.');
     });
+
+    // A hung API would otherwise hold every stop, since the control socket sets no timeout of its own.
+    test('--running gives up on a socket that takes the question and never answers', async () => {
+        const hung = Bun.listen({ unix: join(TEST_DATA_DIR, 'hung.sock'), socket: { data: () => {} } });
+        try {
+            const started = Date.now();
+            const { stdout, stderr, code } = await runCli(['status', '--running'], {
+                env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: hung.unix },
+            });
+            expect(code).toBe(1);
+            expect(stdout).toBe('');
+            expect(stderr).toContain('Eigen is not answering.');
+            expect(Date.now() - started).toBeLessThan(12_000);
+        } finally {
+            hung.stop(true);
+        }
+    }, 15_000);
 });
