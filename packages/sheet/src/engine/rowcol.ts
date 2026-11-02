@@ -51,12 +51,13 @@ export class RowColError extends Error {
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
-// Excel's rule for a range across an insert: an insert at or before its first row (or column)
-// moves it, one inside grows it, one right after leaves it. The same range comes back unmoved.
-// CF, validation, alternate formats and chart refs all shift through this pair.
+// Excel's rule for a range across an insert: an insert at or before its first row (or column) moves it, one inside
+// grows it, one right after leaves it. Conditional formats, validation rules, alternate formats and chart refs all
+// shift through this pair.
 //
 // A range stops at the grid's last row or column, as Excel's does. So a whole-column rule still ends there after an
-// insert, and a chart ref stays one readChartSpec accepts.
+// insert, and a chart ref stays one readChartSpec accepts. A range the insert leaves as it was comes back as the same
+// object, so its owner writes nothing.
 export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
@@ -67,6 +68,7 @@ export function shiftRangeForInsert<R extends AxisRange>(
     const last = (op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT) - 1;
     const moved = (line: number) => Math.min(line + op.count, last);
     const span: [number, number] = insertAt <= start ? [moved(start), moved(end)] : [start, moved(end)];
+    if (span[0] === start && span[1] === end) return range;
     return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 

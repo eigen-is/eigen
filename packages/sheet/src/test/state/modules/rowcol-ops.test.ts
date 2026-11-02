@@ -7,6 +7,7 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Sheet as LibSheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
@@ -352,6 +353,21 @@ describe('two row ops sent at once keep the sheet size in step with its cells', 
         const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
         for (const sheet of [onA, onB, joined]) expect(size(sheet)).toEqual(grid(sheet));
     });
+});
+
+// A whole-column rule already runs to the grid's last row, so an insert inside it leaves it as it was. The insert
+// then writes no rule, so the undo entry holds none, and an undo has none to put back over a peer's edit.
+test('a row insert inside a whole-column rule writes no rule', () => {
+    const base = produce(richContext(), (ctx: Context) => {
+        ctx.sheets[0].dataValidations = {
+            column: {
+                ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [0, 0] }],
+                rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
+            },
+        };
+    });
+    const op = author(base, (ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
+    expect([...op.patches, ...op.inverse].filter(({ path }) => path[2] === 'dataValidations')).toEqual([]);
 });
 
 // A peer can send any value in a row op, and a sheet can refuse one, such as an insert into a read-only row. A peer and
