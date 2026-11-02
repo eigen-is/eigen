@@ -31,6 +31,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back with its setting. An imported picture cropped evenly on two sides comes in as Fill or Fit, and the import message counts any other crop
 
 ## [0.4.1] - 2026-10-28
 

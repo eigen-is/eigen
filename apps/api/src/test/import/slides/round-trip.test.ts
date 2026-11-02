@@ -126,7 +126,15 @@ function roundTrip(elements = ELEMENTS, name = '') {
     for (const [i, element] of elements.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
-    const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
+    const media = [
+        {
+            name: 'pic.png',
+            contentType: 'image/png',
+            data: toTransferableBuffer(PIXEL_PNG.slice()),
+            width: 1,
+            height: 1,
+        },
+    ];
     const bytes = writePptx(scene, { title: 'Round trip.eigenslides', media, lost: () => {} });
     return { sent: scene.elements, deck: readPptx(bytes, { deck: scene.meta, maxMediaBytes: 1024 * 1024 }) };
 }
@@ -666,6 +674,63 @@ describe('a bordered picture exported and read back', () => {
         expect(read('1e300')?.strokeWidth).toBe(automatic);
         expect(read('99999999')?.strokeWidth).toBe(automatic);
         expect(read('12700')?.strokeWidth).not.toBe(automatic);
+    });
+});
+
+// A fitted picture is one picture in its own box, cropped with a centered srcRect: negative past the picture to contain
+// it, positive into it to cover. So it reads back as one picture with its fit.
+describe('a contained or covered picture exported and read back', () => {
+    const fitted: NewVectorElement = {
+        type: 'image',
+        x: 100,
+        y: 100,
+        width: 320,
+        height: 180,
+        angle: 0,
+        mediaName: 'pic.png',
+        objectFit: 'contain',
+    };
+
+    test('is one picture in its box, contained, with its border', () => {
+        const sent: NewVectorElement[] = [
+            fitted,
+            { ...fitted, x: 600, strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'solid' },
+        ];
+        const back = roundTrip(sent).deck.slides[0].elements;
+        expect(back.map((found) => [found.type, found.objectFit, found.strokeColor])).toEqual([
+            ['image', 'contain', 'transparent'],
+            ['image', 'contain', '#c0504d'],
+        ]);
+        for (const [i, found] of back.entries()) {
+            expectPx(found.x, Number(sent[i].x));
+            expectPx(found.y, 100);
+            expectPx(found.width, 320);
+            expectPx(found.height, 180);
+        }
+    });
+
+    // The square picture is narrower than a wide box and wider than a tall one, so each fit crops both axes in turn.
+    test('keeps contain and cover on either axis', () => {
+        const tall = { width: 180, height: 320 };
+        const sent: NewVectorElement[] = [
+            fitted,
+            { ...fitted, ...tall, x: 500 },
+            { ...fitted, x: 800, objectFit: 'cover' },
+            { ...fitted, ...tall, x: 1200, objectFit: 'cover' },
+        ];
+        const back = roundTrip(sent).deck.slides[0].elements;
+        expect(back.map((found) => found.objectFit)).toEqual(['contain', 'contain', 'cover', 'cover']);
+        for (const [i, found] of back.entries()) {
+            expectPx(found.width, Number(sent[i].width));
+            expectPx(found.height, Number(sent[i].height));
+        }
+    });
+
+    // A picture that already has its box's aspect draws the same stretched, so the export writes no crop to read.
+    test('whose aspect matches its box comes back as fill', () => {
+        const back = roundTrip([{ ...fitted, width: 200, height: 200 }]).deck;
+        expect(back.slides[0].elements.map((found) => found.objectFit)).toEqual(['fill']);
+        expect(back.warnings).toEqual([]);
     });
 });
 

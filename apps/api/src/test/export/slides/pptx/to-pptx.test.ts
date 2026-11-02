@@ -1114,8 +1114,16 @@ describe('pptx images and backgrounds', () => {
             undefined,
             undefined,
         ]);
-        expect(xfrm(contain)).toEqual({ x: 100 * EMU, y: 125 * EMU, cx: 200 * EMU, cy: 50 * EMU, rot: 0 });
-        expect(descendants(contain, A, 'srcRect')).toHaveLength(0);
+        // Contained, it keeps its box and crops 150% past the picture above and below, so the picture fills a quarter.
+        expect(xfrm(contain)).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 200 * EMU, rot: 0 });
+        const inset = first(contain, A, 'srcRect');
+        expect([attr(inset, 't'), attr(inset, 'b'), attr(inset, 'l'), attr(inset, 'r')]).toEqual([
+            '-150000',
+            '-150000',
+            undefined,
+            undefined,
+        ]);
+        expect(descendants(contain, A, 'fillRect').map((rect) => attr(rect, 't'))).toEqual([undefined]);
         expect(geometry(fill)).toBe('roundRect');
         expect(attr(first(fill, A, 'alphaModFix'), 'amt')).toBe('40000');
         // One media part, three references.
@@ -1126,8 +1134,7 @@ describe('pptx images and backgrounds', () => {
         expect(new Set(embeds.map((rel) => rel?.target))).toEqual(new Set(['../media/image1.png']));
     });
 
-    // A contained picture draws in the box it fits, so its border keeps the element's box as a shape of its own.
-    test("a bordered picture's border is its a:ln, a contained one's a shape around it", () => {
+    test("a bordered picture's border is its a:ln, a contained one's too", () => {
         const border = { strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'solid' } as const;
         const zip = pptx(
             sceneOf([
@@ -1136,13 +1143,65 @@ describe('pptx images and backgrounds', () => {
             ]),
             [PNG_MEDIA],
         );
-        const [fill, contain, frame] = shapes(zip);
-        expect([fill?.local, contain?.local, frame?.local]).toEqual(['pic', 'pic', 'sp']);
+        const [fill, contain, ...rest] = shapes(zip);
+        expect([fill?.local, contain?.local, rest]).toEqual(['pic', 'pic', []]);
         expect(descendants(fill, A, 'ln')).toHaveLength(1);
-        expect(descendants(contain, A, 'ln')).toHaveLength(0);
-        expect(xfrm(contain)).toEqual({ x: 100 * EMU, y: 125 * EMU, cx: 200 * EMU, cy: 50 * EMU, rot: 0 });
-        expect(xfrm(frame)).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 200 * EMU, rot: 0 });
-        expect(attr(first(frame, A, 'ln'), 'w')).toBe(String(4 * EMU));
+        expect(xfrm(contain)).toEqual({ x: 100 * EMU, y: 50 * EMU, cx: 200 * EMU, cy: 200 * EMU, rot: 0 });
+        expect(attr(first(contain, A, 'srcRect'), 't')).toBe('-150000');
+        expect(descendants(contain, A, 'ln').map((ln) => attr(ln, 'w'))).toEqual([String(4 * EMU)]);
+    });
+
+    // A fit that matches the box, or so nearly that its inset rounds to nothing, draws the picture stretched.
+    test('a picture whose aspect matches its box, or rounds to it, writes no crop and no inset', () => {
+        const media = (name: string, width: number, height: number): OfficeMedia => ({
+            ...PNG_MEDIA,
+            name,
+            width,
+            height,
+        });
+        const zip = pptx(
+            sceneOf([
+                element('image', { ...square, mediaName: 'square.png', objectFit: 'contain' }),
+                element('image', { ...square, mediaName: 'near.png', index: 'a1', objectFit: 'contain' }),
+                element('image', { ...square, mediaName: 'near.png', index: 'a2', objectFit: 'cover' }),
+            ]),
+            [media('square.png', 100, 100), media('near.png', 100_000, 100_001)],
+        );
+        expect(shapes(zip).map((found) => descendants(found, A, 'srcRect').length)).toEqual([0, 0, 0]);
+        // Nearly the slide's 16:9, a background's fill rectangle keeps no inset either.
+        const backgrounds = pptx(
+            sceneOf(
+                [],
+                (['cover', 'contain'] as const).map((fit, i) => ({
+                    id: `f${i}`,
+                    index: `a${i}`,
+                    background: { type: 'image', mediaName: 'near.png', fit },
+                })),
+            ),
+            [media('near.png', 1_600_000, 900_001)],
+        );
+        for (const n of [1, 2]) {
+            const rect = first(descendants(part(backgrounds, `ppt/slides/slide${n}.xml`), P, 'bgPr')[0], A, 'fillRect');
+            expect(['l', 'r', 't', 'b'].filter((side) => attr(rect, side) !== undefined)).toEqual([]);
+        }
+    });
+
+    // A 1 by 100,000 picture in a 2,000 by 100 box would crop 99,999,950,000 past it, outside ST_Percentage's int.
+    test('an extreme aspect writes an inset within range', () => {
+        const zip = pptx(
+            sceneOf([
+                element('image', { width: 2000, height: 100, mediaName: 'wide.png', objectFit: 'contain' }),
+                element('image', { width: 2000, height: 100, mediaName: 'wide.png', objectFit: 'cover', index: 'a1' }),
+            ]),
+            [{ ...PNG_MEDIA, width: 1, height: 100_000 }],
+        );
+        const [contain, cover] = shapes(zip).map((found) => first(found, A, 'srcRect'));
+        expect([attr(contain, 'l'), attr(contain, 'r'), attr(contain, 't')]).toEqual([
+            '-100000000',
+            '-100000000',
+            undefined,
+        ]);
+        expect([attr(cover, 't'), attr(cover, 'b'), attr(cover, 'l')]).toEqual(['49975', '49975', undefined]);
     });
 
     test('an SVG goes in beside its PNG, a picture with no media writes nothing', () => {

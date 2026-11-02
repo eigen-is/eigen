@@ -1130,6 +1130,46 @@ describe('pictures', () => {
         expect(deck.warnings).toEqual([]);
     });
 
+    // Without decoding the picture the reader can't check its aspect, so any centered crop on one axis is a fit: past
+    // the picture it is contain, into it cover. Any other crop is drawn uncropped and counted.
+    test('a centered crop on one axis is contain or cover in the whole box; any other crop is counted', () => {
+        const fitOf = (srcRect: string) => {
+            const deck = deckOf({
+                slides: [
+                    {
+                        shapes: pic({ xfrm: box(10, 20, 30, 40), embed: 'rId2', srcRect }),
+                        rels: rel('rId2', 'image', '../media/a.png'),
+                    },
+                ],
+                files,
+            });
+            const [image] = deck.slides[0].elements;
+            expectBox(image, 10, 20, 30, 40);
+            return [image.objectFit, deck.warnings.map((warning) => warning.code).join()];
+        };
+        expect(fitOf(' l="-150000" r="-150000"')).toEqual(['contain', '']);
+        expect(fitOf(' t="-12.5%" b="-12.5%" l="0" r="0"')).toEqual(['contain', '']);
+        expect(fitOf(' l="25000" r="25000"')).toEqual(['cover', '']);
+        expect(fitOf(' t="12.5%" b="12.5%" l="0" r="0"')).toEqual(['cover', '']);
+        expect(fitOf(' t="49999" b="49999"')).toEqual(['cover', '']);
+        // No crop, PowerPoint's empty one, and sides that don't read, which count as uncropped.
+        expect(fitOf('')).toEqual(['fill', '']);
+        expect(fitOf(' l="0" t="0" r="0" b="0"')).toEqual(['fill', '']);
+        expect(fitOf(' t="-1e400" b="-1e400"')).toEqual(['fill', '']);
+        expect(fitOf(' t="NaN" b="NaN"')).toEqual(['fill', '']);
+        for (const uneven of [
+            ' l="-10000" r="-20000"',
+            ' l="10000" r="20000"',
+            ' l="-10000" r="-10000" t="-5000" b="-5000"',
+            ' l="10000" r="10000" t="5000" b="5000"',
+            ' l="50000" r="50000"',
+            ' t="70000" b="70000"',
+            ' t="10000"',
+            ' t="NaN" b="10000"',
+        ])
+            expect(fitOf(uneven)).toEqual(['fill', 'crops-dropped']);
+    });
+
     test('a picture cropped to a rounded rectangle has curved corners', () => {
         const deck = deckOf({
             slides: [

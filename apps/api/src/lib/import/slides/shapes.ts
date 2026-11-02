@@ -7,6 +7,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type {
     Arrowhead,
     NewVectorElement,
+    ObjectFit,
     StrokeStyle,
     StyleDefaults,
     VectorElementPatch,
@@ -34,6 +35,7 @@ import {
     drawingLines,
     isSideways,
     lineWidthEmu,
+    percent,
     strokeStyleOf,
 } from '../../ooxml/drawingml';
 import {
@@ -396,10 +398,26 @@ function readPicture(
         ...box,
         ...strokeOf(lines, walk, lost),
         mediaName,
-        objectFit: 'fill',
+        objectFit: objectFitOf(blipFill, lost),
         // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.
         corners: chain.find((link) => link.geometry !== undefined)?.geometry === 'roundRect' ? 'curved' : 'straight',
     });
+}
+
+// The pptx export fits a picture with a crop centered on one axis: negative, past the picture, to contain it, and
+// positive, into it, to cover it. The reader keeps a picture's bytes unparsed, so it can't check the crop against the
+// picture's aspect, and reads any such crop as that fit. A side that doesn't read counts as uncropped. Any other crop
+// is drawn uncropped and counted.
+function objectFitOf(blipFill: XmlElement | undefined, lost: Lost): ObjectFit {
+    const rect = blipFill && childOf(blipFill, A_NS, 'srcRect');
+    if (!rect) return 'fill';
+    const [l, t, r, b] = ['l', 't', 'r', 'b'].map((side) => percent(xmlAttr(rect, '', side)) ?? 0);
+    if (l === 0 && t === 0 && r === 0 && b === 0) return 'fill';
+    const inset = t === 0 && b === 0 && l === r ? l : l === 0 && r === 0 && t === b ? t : undefined;
+    if (inset !== undefined && inset < 0) return 'contain';
+    if (inset !== undefined && inset < 0.5) return 'cover';
+    lost('crops-dropped');
+    return 'fill';
 }
 
 // A chart the reader draws becomes a chart, and a SmartArt graphic the shapes of the drawing PowerPoint cached of it.
