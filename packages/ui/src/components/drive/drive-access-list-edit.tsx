@@ -1,3 +1,7 @@
+// The editable half of the Share dialog: add people or a team, change or remove each one's access, set the link's
+// general access and, for the owner, whether editors may share. Save sends only what changed, so a dialog opened a
+// while ago can't undo what another sharer added since. The host does the save and decides what a finished one does.
+
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
@@ -34,7 +38,7 @@ import { UserItem } from '../user/user-item';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
-    onSave: (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => void;
+    onSave: (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => Promise<void>;
     onCancel?: () => void;
     onEmailClick?: () => void;
     className?: string;
@@ -76,7 +80,7 @@ export function DriveAccessListEdit({
 
     // Rejecting a duplicate returns false so the raw text stays in the field for the user to edit.
     const contactInput = useContactInput((contact) => {
-        if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === contact.email)) return false;
+        if (directList.some((item) => item.id.toLowerCase() === contact.email)) return false;
         setDirectListOverride((prevList) => [
             ...(prevList || baseDirectList),
             { id: contact.email, read: true, write: true, owner: false },
@@ -94,7 +98,7 @@ export function DriveAccessListEdit({
     const handleAddTeam = useCallback(
         (teamId: string) => {
             const id = teamOwnerId(teamId);
-            if (directList.some((item: DirectAccessItem) => item.id === id)) return;
+            if (directList.some((item) => item.id === id)) return;
             setDirectListOverride((prev) => [
                 ...(prev || baseDirectList),
                 {
@@ -112,7 +116,7 @@ export function DriveAccessListEdit({
     const handlePermissionChange = useCallback(
         (id: string, permission: string) => {
             setDirectListOverride((prev) =>
-                (prev || baseDirectList).map((item: DirectAccessItem) => {
+                (prev || baseDirectList).map((item) => {
                     if (item.id === id) {
                         if (permission === 'remove') {
                             return { ...item, read: false, write: false };
@@ -140,7 +144,7 @@ export function DriveAccessListEdit({
         setPendingChanges(true);
     }, []);
 
-    const handleSave = useCallback(() => {
+    const handleSave = useCallback(async () => {
         // Send only what changed — the server merges onto the current ACL, so a stale
         // dialog can't revert entries another sharer added while it was open.
         const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
@@ -160,7 +164,7 @@ export function DriveAccessListEdit({
             }
         }
 
-        onSave({ add, remove }, visibility, isEffectiveOwner ? sharingRestricted : undefined);
+        await onSave({ add, remove }, visibility, isEffectiveOwner ? sharingRestricted : undefined);
     }, [baseDirectList, directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
 
     return (
@@ -212,48 +216,44 @@ export function DriveAccessListEdit({
                     </div>
                 </div>
 
-                {directList.map((access: DirectAccessItem) => {
-                    return (
-                        <div key={access.id} className="flex items-center justify-between">
-                            <UserItem email={access.id} popover={parseOwnerId(access.id).type === 'team'} />
-                            {access.owner ? (
-                                <span className="text-xs text-muted-foreground w-28 text-right">Owner</span>
-                            ) : (
-                                <Select
-                                    defaultValue={access.write ? 'editor' : 'viewer'}
-                                    onValueChange={(value) => handlePermissionChange(access.id, value)}
-                                >
-                                    <SelectTrigger className="h-7 w-28">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="editor">Editor</SelectItem>
-                                        <SelectItem value="viewer">Viewer</SelectItem>
-                                        <SelectSeparator />
-                                        <SelectItem value="remove" variant="destructive">
-                                            Remove
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </div>
-                    );
-                })}
+                {directList.map((access) => (
+                    <div key={access.id} className="flex items-center justify-between">
+                        <UserItem email={access.id} popover={parseOwnerId(access.id).type === 'team'} />
+                        {access.owner ? (
+                            <span className="text-xs text-muted-foreground w-28 text-right">Owner</span>
+                        ) : (
+                            <Select
+                                defaultValue={access.write ? 'editor' : 'viewer'}
+                                onValueChange={(value) => handlePermissionChange(access.id, value)}
+                            >
+                                <SelectTrigger className="h-7 w-28">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="editor">Editor</SelectItem>
+                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                    <SelectSeparator />
+                                    <SelectItem value="remove" variant="destructive">
+                                        Remove
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
+                ))}
 
-                {inheritedList.map((access) => {
-                    return (
-                        <div key={access.id} className="flex items-center justify-between">
-                            <UserItem
-                                email={access.id}
-                                label={<>(inherited from /{access.sourceFolderName})</>}
-                                popover={parseOwnerId(access.id).type === 'team'}
-                            />
-                            <span className="text-xs text-muted-foreground w-28 text-right">
-                                {access.write ? 'Editor' : 'Viewer'}
-                            </span>
-                        </div>
-                    );
-                })}
+                {inheritedList.map((access) => (
+                    <div key={access.id} className="flex items-center justify-between">
+                        <UserItem
+                            email={access.id}
+                            label={<>(inherited from /{access.sourceFolderName})</>}
+                            popover={parseOwnerId(access.id).type === 'team'}
+                        />
+                        <span className="text-xs text-muted-foreground w-28 text-right">
+                            {access.write ? 'Editor' : 'Viewer'}
+                        </span>
+                    </div>
+                ))}
             </div>
 
             <Separator className="my-4 shrink-0" />
@@ -329,7 +329,7 @@ export function DriveAccessListEdit({
                                 <DropdownMenuItem
                                     key={team.id}
                                     onClick={() => handleAddTeam(team.id)}
-                                    disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
+                                    disabled={directList.some((i) => i.id === teamOwnerId(team.id))}
                                 >
                                     <Users className="h-4 w-4" />
                                     {team.name}

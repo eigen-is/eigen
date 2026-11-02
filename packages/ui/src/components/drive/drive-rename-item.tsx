@@ -1,77 +1,47 @@
+// The Rename dialog for one Drive item, which Drive's item menu and an editor's File menu open, for example. A file is
+// renamed without its extension: the field shows the name before the last dot, and the save puts the extension back,
+// once, even when the user typed it. A folder keeps the name as typed.
+
 import { useRenamePath } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { isFolderType } from '@workspace/lib/types/drive';
 import { DriveCreateItemDialog } from './drive-create-folder-item';
 
 export type DriveRenameItemProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onSave?: (newName: string) => void;
-    onCancel?: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
 };
 
-export function DriveRenameItem({ path, open, onOpenChange, onSave, onCancel, onAfterAction }: DriveRenameItemProps) {
+export function DriveRenameItem({ path, open, onOpenChange, onAfterAction }: DriveRenameItemProps) {
     const renamePathMutation = useRenamePath(
         path.ownerId,
         path.mountId,
         path.parentId || undefined,
         path.mimeType || undefined,
     );
+    const isFolder = isFolderType(path.type);
+    const dotIndex = path.name.lastIndexOf('.');
+    // A leading dot, as in .gitignore, is part of the name rather than an extension.
+    const extension = !isFolder && dotIndex > 0 ? path.name.slice(dotIndex) : '';
+    const baseName = path.name.slice(0, path.name.length - extension.length);
 
-    const handleOpenChange = (nextOpen: boolean) => {
-        onOpenChange(nextOpen);
-        if (!nextOpen && onCancel) onCancel();
+    const handleRename = async (typedName: string) => {
+        const newName = typedName.endsWith(extension) ? typedName : typedName + extension;
+        await renamePathMutation.mutateAsync({ pathId: path.id, newName });
+        onAfterAction?.('rename', { name: newName });
     };
-
-    const handleRename = async (newName: string) => {
-        // Extract extension from original name
-        const original = path.name;
-        const dotIdx = original.lastIndexOf('.');
-        let base = newName;
-        let ext = '';
-        // Only append extension for files (not folders)
-        if (path.type !== 'folder' && dotIdx > 0) {
-            ext = original.substring(dotIdx);
-            // Remove any extension the user may have typed
-            if (base.endsWith(ext)) {
-                base = base.slice(0, -ext.length);
-            }
-            newName = base + ext;
-        }
-        await renamePathMutation.mutateAsync({
-            pathId: path.id,
-            newName,
-        });
-        onOpenChange(false);
-
-        // Call onAfterAction if provided
-        if (onAfterAction) {
-            onAfterAction('rename', { name: newName });
-        }
-
-        if (onSave) onSave(newName || '');
-    };
-
-    // Compute base name (without extension) for defaultValue
-    let defaultValue = path.name;
-    if (path.type !== 'folder') {
-        const dotIdx = path.name.lastIndexOf('.');
-        if (dotIdx > 0) {
-            defaultValue = path.name.substring(0, dotIdx);
-        }
-    }
 
     return (
         <DriveCreateItemDialog
             open={open}
-            onOpenChange={handleOpenChange}
+            onOpenChange={onOpenChange}
             onCreateItem={handleRename}
-            isPending={renamePathMutation.isPending}
-            type="Rename"
+            type={isFolder ? 'Folder' : 'File'}
             path={path}
-            title={`Rename ${defaultValue}`}
-            defaultValue={defaultValue}
+            title={`Rename ${baseName}`}
+            defaultValue={baseName}
             confirmLabel="Rename"
         />
     );
