@@ -9,7 +9,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
-- **Shortcuts in the Drive menu** — on a computer, the menu shows **Space** next to **Quick preview** and **Delete** next to **Move to trash** and **Remove shared item**
+- **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
 
 ### Changed
 
@@ -45,6 +45,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
 - **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
+- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, which then failed
+- **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
 
 ## [0.4.1] - 2026-10-28
 
