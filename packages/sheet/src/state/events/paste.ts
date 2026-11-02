@@ -6,9 +6,9 @@
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, has, includes, isEmpty, isNil, trim } from 'es-toolkit/compat';
+import { cloneDeep, forEach, has, includes, isEmpty, isEqual, isNil, trim } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import { numberDisplay, parseCellInput, richText } from '../../engine/format';
+import { numberDisplay, parseCellInput } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
 import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
@@ -21,7 +21,7 @@ import { carriedLines, carryCells, getQKBorder, setCellValue } from '../modules/
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, copiedNumberText, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, rangeValueToClipboard, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -488,6 +488,11 @@ function readStyleRules(css: string): Map<string, Record<string, string>> {
     return rules;
 }
 
+// The text of every td in a table, in order. The browser may wrap the copied HTML, but it keeps the cells as written.
+function tableCellTexts(html: string): string[] {
+    return (html.match(/<td.*?>(.*?)<\/td>/g) ?? []).map((td) => trim(td.replace(/<td.*?>/, '').replace('</td>', '')));
+}
+
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
@@ -501,108 +506,21 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
         let txtdata = clipboardData.getData('text/html') || clipboardData.getData('text/plain');
 
-        // if the content is marked as copied from this sheet, check whether the clipboard matches what was copied from the current page
-        let isEqual = true;
-        if (
-            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
-            ctx.copyState?.copyRange != null &&
-            ctx.copyState.copyRange.length > 0
-        ) {
-            // parse clipboard content
-            const cpDataArr = [];
+        // A marked table is this tab's own copy while its cells are the ones the copy state would write now. A copy
+        // in another tab, or an edit of the copied cells since, pastes it as a table instead.
+        const { copyState } = ctx;
+        const own =
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 && copyState != null && copyState.copyRange.length > 0
+                ? rangeValueToClipboard(ctx, copyState.dataSheetId, copyState.copyRange, { cut: ctx.pasteIsCut })
+                : null;
 
-            const reg = /<tr.*?>(.*?)<\/tr>/g;
-            const reg2 = /<td.*?>(.*?)<\/td>/g;
-
-            const regArr = txtdata.match(reg) || [];
-
-            for (let i = 0; i < regArr.length; i += 1) {
-                const cpRowArr = [];
-
-                const reg2Arr = regArr[i].match(reg2);
-
-                if (!isNil(reg2Arr)) {
-                    for (let j = 0; j < reg2Arr.length; j += 1) {
-                        const cpValue = reg2Arr[j].replace(/<td.*?>/g, '').replace(/<\/td>/g, '');
-                        cpRowArr.push(cpValue);
-                    }
-                }
-
-                cpDataArr.push(cpRowArr);
-            }
-
-            // content of the copy area on the current page
-            const copy_r1 = ctx.copyState.copyRange[0].row[0];
-            const copy_r2 = ctx.copyState.copyRange[0].row[1];
-            const copy_c1 = ctx.copyState.copyRange[0].column[0];
-            const copy_c2 = ctx.copyState.copyRange[0].column[1];
-
-            const copy_index = ctx.copyState.dataSheetId;
-
-            let d: CellMatrix | null | undefined;
-            if (copy_index === ctx.currentSheetId) {
-                d = getFlowdata(ctx);
-            } else {
-                const index = getSheetIndex(ctx, copy_index);
-                if (isNil(index)) return;
-                d = ctx.sheets[index].data;
-            }
-            if (!d) return;
-
-            for (let r = copy_r1; r <= copy_r2; r += 1) {
-                if (r - copy_r1 > cpDataArr.length - 1) {
-                    break;
-                }
-
-                for (let c = copy_c1; c <= copy_c2; c += 1) {
-                    const cell = d[r][c];
-                    let isInlineStr = false;
-                    if (!isNil(cell) && !isNil(cell.mc) && isNil(cell.mc.rs)) {
-                        continue;
-                    }
-
-                    let v: Cell['v'] | undefined;
-                    if (!isNil(cell)) {
-                        if ((cell.ct?.fa?.indexOf('w') ?? -1) > -1) {
-                            v = cell.v;
-                        } else {
-                            v = copiedNumberText(cell) ?? cell.m;
-                        }
-                    } else {
-                        v = '';
-                    }
-
-                    const rich = isNil(v) ? richText(d[r]?.[c]) : undefined;
-                    if (rich !== undefined) {
-                        v = rich;
-                        isInlineStr = true;
-                    }
-                    if (isNil(v)) {
-                        v = '';
-                    }
-                    if (!isInlineStr) {
-                        if (trim(cpDataArr[r - copy_r1][c - copy_c1]) !== trim(String(v))) {
-                            isEqual = false;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (
-            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
-            ctx.copyState?.copyRange != null &&
-            ctx.copyState.copyRange.length > 0 &&
-            isEqual
-        ) {
-            // clipboard content matches what was copied from this sheet itself
+        if (own && isEqual(tableCellTexts(txtdata), tableCellTexts(own.html))) {
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
-                pasteHandlerOfCutPaste(ctx, ctx.copyState);
+                pasteHandlerOfCutPaste(ctx, copyState);
                 ctx.formulaRangeSelections = [];
             } else {
-                pasteHandlerOfCopyPaste(ctx, ctx.copyState);
+                pasteHandlerOfCopyPaste(ctx, copyState);
             }
         } else {
             if (txtdata.indexOf('table') > -1) {

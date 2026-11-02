@@ -9,12 +9,13 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { DataVerificationRule } from '@workspace/lib/sheets';
+import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
-import { handlePasteByClick } from '../../state/events/paste';
+import { handlePaste, handlePasteByClick } from '../../state/events/paste';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
-import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
+import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
 import { author, join } from './factories/collab';
@@ -22,7 +23,10 @@ import { contextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-(globalThis as any).sessionStorage = { setItem: () => {} };
+const g = globalThis as any;
+g.sessionStorage = { setItem: () => {} };
+// A paste the copy state can't serve parses the clipboard's table, so it needs a DOM.
+g.DOMParser = new Window().DOMParser;
 
 const SIZE = 12;
 const SIDE = { style: 1, color: '#000' };
@@ -119,6 +123,15 @@ function paste(ctx: Context, cut: boolean) {
     else handleCopy(ctx);
     ctx.selections = destination();
     handlePasteByClick(ctx, 'internal');
+}
+
+// ⌘V: the browser hands over the table the copy put on the clipboard.
+function pasteFromClipboard(ctx: Context) {
+    const html = consumePendingCopy()?.html ?? '';
+    ctx.selections = destination();
+    selectionCache.isPasteAction = true;
+    const clipboardData = { getData: (type: string) => (type === 'text/html' ? html : ''), files: [] };
+    handlePaste(ctx, { clipboardData } as unknown as ClipboardEvent);
 }
 
 function paint(ctx: Context) {
@@ -335,6 +348,26 @@ describe('a range with a row an active filter hides', () => {
             ['', 'r2c1', 'r2c2', 'r2c3'],
             ['r3c0', 'r3c1', 'r3c2', 'r3c3'],
         ]);
+    });
+});
+
+// The clipboard's table is the copy's own, so ⌘V serves it from the copy state, with every side table, rather than
+// as a table from another app.
+describe('a paste of the clipboard in the same tab', () => {
+    test.each([false, true])('takes the copy state, with a filter: %p', (filtered) => {
+        const ctx = makeCtx({ filtered });
+        handleCopy(ctx);
+        pasteFromClipboard(ctx);
+        expect(sheet(ctx).dataVerification?.[key(6, 6)]).toEqual(rule(0, 0));
+        expect(sheet(ctx).hyperlink?.[key(6, 6)]).toEqual(link(0, 0));
+    });
+
+    test('takes the copy state for a cut over a filter', () => {
+        const ctx = makeCtx({ filtered: true });
+        handleCut(ctx);
+        pasteFromClipboard(ctx);
+        expectValuesWhole(ctx);
+        expectSourceCleared(ctx);
     });
 });
 

@@ -1098,7 +1098,7 @@ export function moveHighlightRange(
 export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
 // General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
-export function copiedNumberText(cell: Cell): string | undefined {
+function copiedNumberText(cell: Cell): string | undefined {
     if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
     return numberText(cell.v);
 }
