@@ -535,3 +535,30 @@ describe('a log from before rules were kept per range', () => {
         expect(sheet.dataValidations).toEqual({ v1: entry });
     });
 });
+
+// A peer deletes a rule while another tab shrinks it, and the log holds the delete first. The shrink's whole-entry
+// write saw the rule, so on a sheet without it the delete wins, the same on every tab and in the replay.
+describe('a rule a peer deleted', () => {
+    test('stays deleted when a whole-entry write of it comes later in the log', () => {
+        const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+        const base: Sheet = {
+            id: 's1',
+            name: 'Sheet1',
+            order: 0,
+            celldata: [],
+            row: 5,
+            column: 2,
+            config: {},
+            dataValidations: { x: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } },
+        };
+        const shrunk = { ranges: [{ row: [0, 1], column: [0, 0] }], rule };
+        const [sheet] = replaySheetsOps(
+            [base],
+            [
+                [{ op: 'remove', id: 's1', path: ['dataValidations', 'x'] }],
+                [{ op: 'replace', id: 's1', path: ['dataValidations', 'x'], value: shrunk }],
+            ],
+        );
+        expect(sheet.dataValidations).toEqual({});
+    });
+});

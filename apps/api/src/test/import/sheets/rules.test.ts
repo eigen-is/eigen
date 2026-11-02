@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { MAX_VALIDATION_RANGES } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../lib/document/transform/protocol';
 import { cellKey } from '../../../lib/import/sheets/cells';
 import { readRules } from '../../../lib/import/sheets/rules';
@@ -587,6 +588,24 @@ describe('a data validation', () => {
                 },
             }),
         ).toThrow(refusal);
+    });
+
+    // A crafted file can repeat one reference by the thousand. The rule keeps each cell once.
+    test('a sqref that repeats or stacks its ranges reads as the fewest ranges that cover them', () => {
+        const { dataValidations } = read(dv(list(`${'B2 '.repeat(5000)}B3 B4:B6 C2:C6`, '"x"')));
+        expect(Object.values(dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [1, 5], column: [1, 2] }],
+        ]);
+    });
+
+    test('a validation over more separate ranges than a rule may hold is counted and left out', () => {
+        const lost: CountedWarningCode[] = [];
+        const apart = Array.from({ length: MAX_VALIDATION_RANGES + 1 }, (_, i) => `A${2 * i + 1}`).join(' ');
+        const { dataValidations } = read(dv(list(apart, '"x"'), list('C1', '"y"')), {
+            lost: (code) => lost.push(code),
+        });
+        expect(lost).toEqual(['validations-dropped']);
+        expect(Object.values(dataValidations ?? {}).map(({ rule }) => rule.value1)).toEqual(['y']);
     });
 });
 

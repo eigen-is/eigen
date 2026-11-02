@@ -1153,4 +1153,65 @@ describe('validation rules on two tabs and a joiner', () => {
         expect(column(s.b, 0, 10)).toEqual(restored);
         expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
     });
+
+    // Both tabs edit before either sees the other's batch, and the log holds B's batch first.
+    function race(
+        base: Context,
+        onA: readonly [(ctx: Context) => void, Parameters<typeof tabEdit>[2]],
+        onB: (ctx: Context) => void,
+    ) {
+        const a = tab(base);
+        const b = tab(base);
+        const fromB = tabEdit(b, onB);
+        const fromA = tabEdit(a, ...onA);
+        tabReceive(a, fromB);
+        tabReceive(b, fromA);
+        return { a, b, joined: join(base, [fromB, fromA])[0].dataValidations };
+    }
+
+    test("a row insert made before a peer's new rule arrived keeps that rule on both tabs and the joiner", () => {
+        const { a, b, joined } = race(ruled(), insertRows(2, 1), apply([0, 1], [3, 3], TICKS));
+        for (const validations of [rules(a), rules(b), joined]) {
+            expect(Object.values(validations ?? {}).map(({ rule }) => rule.type)).toContain('checkbox');
+        }
+        expect(joined).toEqual(rules(b));
+    });
+
+    // A inserts a row, then undoes it while B's edit is on its way, and B's batch comes first in the log.
+    function raceUndo(onB: (ctx: Context) => void, redo = false) {
+        const s = session(ruled());
+        s.edit(s.a, ...insertRows(2, 1));
+        if (redo) s.undo(s.a);
+        const fromB = tabEdit(s.b, onB);
+        const step = redo ? tabRedo(s.a) : tabUndo(s.a);
+        tabReceive(s.a, fromB);
+        tabReceive(s.b, step);
+        return { ...s, joined: join(ruled(), [...s.batches, fromB, step])[0].dataValidations };
+    }
+
+    test('an undo of a row insert keeps a rule a peer added meanwhile', () => {
+        const { a, b, joined } = raceUndo(apply([0, 1], [3, 3], TICKS));
+        for (const validations of [rules(a), rules(b), joined]) {
+            expect(Object.values(validations ?? {}).map(({ rule }) => rule.type)).toContain('checkbox');
+        }
+        expect(joined).toEqual(rules(b));
+    });
+
+    test("a row insert made before a peer's rule delete arrived leaves the rule deleted", () => {
+        const { a, b, joined } = race(ruled(), insertRows(2, 1), (ctx) =>
+            clearValidations(ctx.sheets[0], { row: [0, 9], column: [1, 1] }),
+        );
+        for (const validations of [rules(a), rules(b), joined]) expect(Object.keys(validations ?? {})).toEqual(['a']);
+        expect(joined).toEqual(rules(b));
+    });
+
+    test('an undo and a redo of a row insert leave a rule a peer deleted meanwhile deleted', () => {
+        const clearB = (ctx: Context) => clearValidations(ctx.sheets[0], { row: [0, 10], column: [1, 1] });
+        for (const redo of [false, true]) {
+            const { a, b, joined } = raceUndo(clearB, redo);
+            for (const validations of [rules(a), rules(b), joined])
+                expect(Object.keys(validations ?? {})).toEqual(['a']);
+            expect(joined).toEqual(rules(b));
+        }
+    });
 });

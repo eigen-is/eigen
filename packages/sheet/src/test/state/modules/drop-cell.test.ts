@@ -190,20 +190,12 @@ describe('drag-fill carries the source cell data validation', () => {
         return ctx;
     }
 
-    it('lands the rule on every filled cell, as one range of the same rule', () => {
+    it('lands the rule on every filled cell, joined to the range it repeats', () => {
         const [filled] = produceWithPatches(verifiedContext(), (ctx: Context) => {
             autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 2], column: [0, 0] }, 'down');
         });
 
-        expect(filled.sheets[0].dataValidations).toEqual({
-            v: {
-                ranges: [
-                    { row: [0, 0], column: [0, 0] },
-                    { row: [1, 2], column: [0, 0] },
-                ],
-                rule,
-            },
-        });
+        expect(filled.sheets[0].dataValidations).toEqual({ v: { ranges: [{ row: [0, 2], column: [0, 0] }], rule } });
     });
 
     it('and the patch that survives filterPatch carries it, so peers and undo see it', () => {

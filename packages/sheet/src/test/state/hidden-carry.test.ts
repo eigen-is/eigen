@@ -13,6 +13,7 @@ import { Window } from 'happy-dom';
 import type { Context } from '../../state/context';
 import { handleCopy, handleCut } from '../../state/events/copy';
 import { handlePaste, handlePasteByClick } from '../../state/events/paste';
+import { carriedLines, carryCells } from '../../state/modules/cell';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
@@ -20,7 +21,7 @@ import { handleFormatPainter } from '../../state/modules/toolbar';
 import { validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
 import { author, join } from './factories/collab';
-import { contextFactory } from './factories/context';
+import { contextFactory, workbookContextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
 import { validationsByCell } from './factories/validations';
 
@@ -479,6 +480,58 @@ describe('a carried rule lands as ranges', () => {
             { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
         ]);
         expect(Object.keys(sheet(ctx).dataValidations ?? {})).toEqual(['wide']);
+    });
+
+    // The lookup gives a cell two rules cover to the highest id, so the carry lands the rules in that order too.
+    test('where two source rules overlap, the landed cell takes the rule the source cell shows', () => {
+        const ctx = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    data: Array.from({ length: 4 }, () => [null, null, null, null]),
+                    dataValidations: {
+                        b: { ranges: [{ row: [0, 1], column: [0, 0] }], rule: rule(0, 0) },
+                        a: { ranges: [{ row: [1, 2], column: [0, 0] }], rule: rule(2, 0) },
+                    },
+                },
+            ],
+        });
+        const { next } = author(ctx, (draft) => {
+            const lines = carriedLines(draft, 'id_1', [{ row: [0, 2], column: [0, 0] }], true);
+            carryCells(draft, lines, [{ row: 0, column: 2, height: 3, width: 1 }], ({ source }) => source);
+        });
+        const shown = (c: number) => [0, 1, 2].map((r) => validationAt(sheet(next).dataValidations, r, c));
+        expect(shown(2)).toEqual(shown(0));
+        expect(shown(2)).toEqual([rule(0, 0), rule(0, 0), rule(2, 0)]);
+    });
+
+    // Each tile adds its landed range to the rule, so without coalescing the rule would hold 10,001 ranges.
+    test('one validated cell pasted down 10,000 rows lands as one range', () => {
+        const rows = 10_000;
+        const ctx = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    data: Array.from({ length: rows }, () => [null, null, null, null]),
+                    dataValidations: { v: { ranges: [{ row: [0, 0], column: [1, 1] }], rule: rule(0, 1) } },
+                },
+            ],
+        });
+        const tiles = Array.from({ length: rows }, (_, row) => ({ row, column: 3, height: 1, width: 1 }));
+        const { next } = author(ctx, (draft) => {
+            const lines = carriedLines(draft, 'id_1', [{ row: [0, 0], column: [1, 1] }], true);
+            carryCells(draft, lines, tiles, ({ source }) => source);
+        });
+        expect(sheet(next).dataValidations?.v.ranges).toEqual([
+            { row: [0, 0], column: [1, 1] },
+            { row: [0, rows - 1], column: [3, 3] },
+        ]);
     });
 
     test('a move takes the rule along on its sheet', () => {

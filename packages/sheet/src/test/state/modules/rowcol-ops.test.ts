@@ -101,7 +101,11 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink', 'dataValidations']));
+        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink']));
+        // Each validation rule the insert moved ships under its own id, so a rule a peer added meanwhile survives.
+        expect(metaPaths).not.toContain('dataValidations');
+        const moved = ops.filter((op) => op.path[0] === 'dataValidations').map((op) => op.path);
+        expect(moved).toEqual(Object.keys(next.sheets[0].dataValidations ?? {}).map((id) => ['dataValidations', id]));
         // Every receiver derives the sheet's size from its cells, so the size does not ship.
         expect(metaPaths).not.toContain('row');
         const configOp = ops.find((op) => op.path[0] === 'config');
@@ -281,11 +285,13 @@ describe("a row or column op racing a peer's unfreeze", () => {
         ],
     ] as const;
 
-    // The edited sheet's fields reach a peer through sheetMetadataOps; the undo entry puts each back whole.
+    // The edited sheet's fields reach a peer through sheetMetadataOps; the undo entry puts each back whole. Images,
+    // charts and validation rules are written one object at a time instead.
     test.each(cases)('%s writes every sheet field whole, in the op and in its undo entry', (_, recipe, options) => {
         const op = author(frozenContext(), recipe, options);
+        const perObject = new Set(['images', 'charts', 'dataValidations']);
         const into = [...op.patches, ...op.inverse].filter(
-            (p) => p.path.length > 3 && p.path[2] !== 'images' && p.path[2] !== 'charts',
+            (p) => p.path.length > 3 && !perObject.has(String(p.path[2])),
         );
         expect(into.map((p) => p.path)).toEqual([]);
     });

@@ -577,7 +577,7 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
 // Moves every validation rule's ranges, and drops a rule left with none. A rule whose ranges stay where they were is
 // kept as the same object, and so is the map when no rule moved.
 export function shiftValidations(
-    validations: Record<string, SheetValidation>,
+    validations: Readonly<Record<string, SheetValidation>>,
     shift: (range: SingleRange) => SingleRange | null,
 ): Record<string, SheetValidation> {
     let shifted: Record<string, SheetValidation> | null = null;

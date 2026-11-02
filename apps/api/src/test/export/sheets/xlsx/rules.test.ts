@@ -13,7 +13,7 @@ import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { readRules } from '../../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../../lib/import/sheets/styles';
 import { parseOoxml } from '../../../../lib/ooxml/ooxml';
-import { rulesByCell, validationsByCell } from '../../../fixtures/validations';
+import { ruleAt, rulesByCell, validationsByCell } from '../../../fixtures/validations';
 import { sheetXml } from '../../../fixtures/xlsx';
 
 // A sheet's conditional formats and data validations, written and read back through the reader, with the dxfs the
@@ -306,6 +306,24 @@ describe('a data validation', () => {
         const { xml, ...read } = roundTrip({ dataValidations });
         expect([...xml.matchAll(/sqref="([^"]*)"/g)].map(([, sqref]) => sqref)).toEqual(['E1:E3 E6', 'B2:C4 B5']);
         expect(rulesByCell(read.dataValidations)).toEqual(rulesByCell(dataValidations));
+    });
+
+    // Where rules overlap the highest id wins, and a file read back numbers its rules in the file's order. So the
+    // export cuts each rule out of the cells a higher id holds, and no two sqrefs overlap.
+    test('rules that overlap keep the winner of every cell through the file and back', () => {
+        const wide = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
+        const inside = validation({ type: 'dropdown', type2: '', value1: 'x,y', value2: '' });
+        const dataValidations = {
+            'validation-2': { ranges: [{ row: [0, 9], column: [0, 1] }], rule: wide },
+            'validation-1': { ranges: [{ row: [5, 6], column: [1, 2] }], rule: inside },
+        };
+        const { xml, ...read } = roundTrip({ dataValidations });
+        expect([...xml.matchAll(/sqref="([^"]*)"/g)].map(([, sqref]) => sqref)).toEqual(['A1:B10', 'C6:C7']);
+        for (let r = 0; r < 10; r += 1) {
+            for (let c = 0; c < 3; c += 1) {
+                expect(ruleAt(read.dataValidations, r, c)).toEqual(ruleAt(dataValidations, r, c));
+            }
+        }
     });
 
     test('a whole-column rule writes the whole column, and reads back as one', () => {

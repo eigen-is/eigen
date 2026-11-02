@@ -25,6 +25,7 @@ export type {
     EvaluateConditionalFormatOptions,
 } from './conditional-format';
 export {
+    cfSplitRange,
     createCfFormulaEvaluator,
     evaluateConditionalFormat,
     isWellFormedCfRule,
