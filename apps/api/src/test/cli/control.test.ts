@@ -406,7 +406,7 @@ describe('the restart notice on the control socket', () => {
             expect(notice()).toEqual({ reason: 'rollback', message: null, msLeft: 0 });
         });
 
-        test('takes whole seconds up to an hour, the two reasons, and a short line without control characters', async () => {
+        test('takes whole seconds up to an hour, the two reasons, and a short line of text without control characters', async () => {
             for (const body of [
                 { inSeconds: -1, reason: 'update' },
                 { inSeconds: 3601, reason: 'update' },
@@ -416,6 +416,9 @@ describe('the restart notice on the control socket', () => {
                 { inSeconds: 60, reason: 'update', message: 'x'.repeat(201) },
                 { inSeconds: 60, reason: 'update', message: 'Back\nin five' },
                 { inSeconds: 60, reason: 'update', message: 'Back \x1b[31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back \x9b31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back\x85in five' },
+                { inSeconds: 60, reason: 'update', message: ' \u00a0 ' },
             ]) {
                 expect({ body, status: (await post('/restart-notice', body)).status }).toEqual({ body, status: 422 });
             }
@@ -462,15 +465,20 @@ describe('the restart notice on the control socket', () => {
             expect(alice.events).toEqual([{ type: 'server:restart-notice', notice: null }]);
         });
 
+        // The stream opens before the fake clock, so the ten minutes do not idle its Home out. The last notice shows
+        // the stream still heard the Home after them.
         test('a cleared notice does not expire into a second event', async () => {
             const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
             jest.useFakeTimers();
             await post('/restart-notice', { inSeconds: 60, reason: 'update' });
             await clear();
-            const alice = await collectSSE(ctx.alice.user.id);
             jest.advanceTimersByTime(10 * 60_000);
+            await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
             alice.stop();
-            expect(alice.events).toEqual([]);
+            expect(
+                alice.events.map((event) => ('notice' in event ? (event.notice?.reason ?? null) : event.type)),
+            ).toEqual(['update', null, 'rollback']);
         });
     });
 

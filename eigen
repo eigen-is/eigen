@@ -340,6 +340,14 @@ api_cli() {
     dc exec $tty -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh "$@"
 }
 
+# columns: the width of the terminal, 80 when it cannot be read.
+columns() {
+    width=$(stty size </dev/tty 2>/dev/null || :)
+    width=${width#* }
+    case $width in '' | 0 | *[!0-9]*) width=80 ;; esac
+    printf '%s\n' "$width"
+}
+
 # step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
 # terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
 step() {
@@ -367,9 +375,7 @@ step() {
             seconds=$(($(date +%s) - started))
             elapsed=${seconds}s
             if [ "$seconds" -ge 60 ]; then elapsed="$((seconds / 60))m $((seconds % 60))s"; fi
-            width=$(stty size </dev/tty 2>/dev/null || :)
-            width=${width#* }
-            case $width in '' | 0 | *[!0-9]*) width=80 ;; esac
+            width=$(columns)
             # A wrapped line would break the redraw. BuildKit's "#12 3.45 …" loses its step number and timestamp.
             line=$(tail -n 20 "$LOG" 2>/dev/null | awk -v width=$((width - 4)) '{
                 sub(/.*\r/, ""); gsub(/\033\[[0-9;?]*[A-Za-z]/, ""); gsub(/[[:cntrl:]]/, " ")
@@ -710,19 +716,27 @@ warn_restart() {
     if [ "$IN_SECONDS" -gt 0 ]; then countdown; fi
 }
 
-# announce <seconds> <reason>: the notice of a restart in <seconds>, with IN_MESSAGE, on the running API. One with a
-# wait is a step, since the wait warns nobody when it fails. One for now is best-effort: an API that cannot take it
-# holds nothing up.
+# announce <seconds> <reason>: the notice of a restart in <seconds>, with IN_MESSAGE, on the running API. It runs in
+# this process, not as a step's job, so a hangup cannot leave a notice landing after unannounce took it back. One with
+# a wait stops the command when it fails, since the wait would warn nobody. One for now is best-effort: an API that
+# cannot take it holds nothing up.
 announce() {
-    if [ "$1" = 0 ]; then
-        api_cli restart-notice --in 0 --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
-            </dev/null >/dev/null 2>&1 || say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
-        return 0
-    fi
-    step "Telling the open tabs that Eigen restarts" "Told the open tabs" \
-        "Could not tell the open tabs; Eigen runs on as it was" \
-        api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"}
-    RESTART_AT=$(answer at "$(cat "$LOG")" | sed 's/T/ /; s/\.[0-9]*Z$/ UTC/')
+    told=$(api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
+        </dev/null 2>&1) || {
+        if [ "$1" = 0 ]; then
+            say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
+            return 0
+        fi
+        {
+            say "$RED" '■' "Could not tell the open tabs; Eigen runs on as it was"
+            printf '%s\n' "$told" | tail -n 20 | sed "s/^/${GRAY}│${RESET}  /"
+            say "$GRAY" '└' "Fix what it says, then run ./eigen $COMMAND again."
+        } >&2
+        exit 1
+    }
+    if [ "$1" = 0 ]; then return 0; fi
+    say "$GREEN" '◇' "Told the open tabs"
+    RESTART_AT=$(answer at "$told" | sed 's/^.*T//; s/\.[0-9]*Z$/ UTC/')
 }
 
 # unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
@@ -738,8 +752,10 @@ countdown() {
     while [ "$left" -gt 0 ]; do
         remaining=${left}s
         if [ "$left" -ge 60 ]; then remaining="$((left / 60))m $((left % 60))s"; fi
-        line="Eigen restarts for the $COMMAND at $RESTART_AT, in $remaining. Ctrl+C cancels."
+        line="Restarts in $remaining, at $RESTART_AT. Ctrl+C cancels."
         if [ -t 1 ]; then
+            # A line that wraps leaves a line a second: \r only goes back to the start of the last one.
+            if [ "$(columns)" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$(($(columns) - 4))"); fi
             printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
         elif [ "$left" = "$IN_SECONDS" ]; then
             say "$ACCENT" '◆' "$line"
@@ -1175,6 +1191,11 @@ restore() {
         esac
     done
     need_in_time restore
+    # After --in, an archive reads as the message: a name that ends in .tar, or one of a file that exists.
+    if [ -z "$archive" ] && { [ "${IN_MESSAGE%.tar}" != "$IN_MESSAGE" ] || [ -f "$IN_MESSAGE" ] ||
+        [ -f "backups/$IN_MESSAGE" ]; }; then
+        refuse_usage restore "Put the archive before --in: ./eigen restore $IN_MESSAGE --in $IN_TIME"
+    fi
     if [ -z "$archive" ]; then
         die "Name the archive to restore." "Pass a name in backups/, or the path of an archive: ./eigen restore <archive>"
     fi
@@ -1188,6 +1209,15 @@ restore() {
     lock
     put_back
     check_kept
+}
+
+# release_name <name>: a release ./eigen update can go to: a version, latest, or main, the only channel. A version is
+# VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
+release_name() {
+    case $1 in
+        latest | main | [0-9]*.[0-9]*.[0-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 update() {
@@ -1216,8 +1246,24 @@ update() {
     done
     need_in_time update
     if [ "$check" = 1 ] && [ -n "$IN_TIME" ]; then refuse_usage update "--check updates nothing, so it takes no --in."; fi
+    # After --in, a version reads as the message.
+    # Only a single word can be one; a sentence that mentions a version is a message.
+    if [ -z "$target" ]; then
+        case $IN_MESSAGE in
+            *' '*) ;;
+            *) if release_name "$IN_MESSAGE"; then
+                refuse_usage update "Put the version before --in: ./eigen update $IN_MESSAGE --in $IN_TIME"
+            fi ;;
+        esac
+    fi
     if [ "$MODE" = local ]; then
         die "A local build has no updates." "Pull the code and run ./eigen setup again, which builds it."
+    fi
+    # The old launcher's notice is on the tabs, and exec dropped its traps: from here a failure takes it back.
+    if [ "$pulled" = 1 ]; then
+        lock
+        AT_EXIT=unannounce
+        trap 'exit 129' HUP
     fi
     need_install
     if [ "$pulled" = 1 ]; then
@@ -1226,19 +1272,17 @@ update() {
         wordmark update
         preflight
     fi
-    if [ "$check" = 0 ]; then lock; fi
+    if [ "$check" = 0 ] && [ "$pulled" != 1 ]; then lock; fi
     if [ "$pulled" = 1 ]; then update_apply; else update_get; fi
 }
 
 # The part the launcher the operator typed runs, while Eigen runs on: get the new version, check it, and hand over to
 # the launcher that came with it.
 update_get() {
-    # main is the only channel; any other tag, such as publish.yml's candidates, is no release. A version is
-    # VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
-    case $target in
-        '' | latest | main | [0-9]*.[0-9]*.[0-9]*) ;;
-        *) die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)." ;;
-    esac
+    # Any other tag, such as publish.yml's candidates, is no release.
+    if [ -n "$target" ] && ! release_name "$target"; then
+        die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
+    fi
     follows=$(env_value EIGEN_VERSION)
     if [ -z "$follows" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
     api_here
@@ -1338,6 +1382,8 @@ update_get() {
 
 # The part the launcher of the new version runs: stop, switch and start.
 update_apply() {
+    # Up to the stop, which ends the old API and its notice, a failure or a hangup takes back the notice the old
+    # launcher gave (armed in update). The old API's CLI may have no restart-notice, which unannounce lets pass.
     # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
         die "This update was started by a launcher older than 0.3.1." \
@@ -1354,10 +1400,6 @@ update_apply() {
     old_pins=$(pinned_refs)
 
     API_IMAGE=$new_image
-    # Up to the stop, which ends the old API and its notice, a failure or a hangup takes back the notice the old
-    # launcher gave. The old API's CLI may have no restart-notice, which unannounce lets pass.
-    AT_EXIT=unannounce
-    trap 'exit 129' HUP
     before_stop
     # After the wait, which an interrupt may end: a backfill that adds a key writes .env.production anew, which the
     # running eigen-api would not read. Before the stop, so a failure leaves Eigen running.

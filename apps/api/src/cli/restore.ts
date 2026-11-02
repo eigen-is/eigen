@@ -45,7 +45,7 @@ import type { ServerArchiveFile } from '../lib/backup/restore-server';
 import { RESTORING_DATA_DIR, RESTORING_DIR, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
 import { describeFailures } from '../lib/backup/verify';
 import { readServerArchive, readServerArchiveMember } from '../lib/backup/verify-server-archive';
-import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
+import { DATA_LEASE_FILE, DATA_LOCK_FILE, liveLeaseHolder, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
     getDataRoot,
@@ -150,16 +150,20 @@ function holdLock(file: string): boolean {
     return lock !== null;
 }
 
-// Neither Eigen nor another swap reads or replaces data/ while this one does.
+// Neither Eigen nor another swap reads or replaces data/ while this one does. The lock only refuses an API it reaches.
+// An API it does not reach, such as one on the host beside the container, is refused by its lease, which the swap
+// only reads.
 function lockData(ui: Ui): void {
-    const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
-    // Root must not make one the API could not open; without one, no API ever ran on this data/.
-    if (existsSync(file) && !holdLock(file)) {
+    const lockFile = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
+    // Root must not create a lock file the API could not open. Without one, no API ever ran on this data/.
+    if (existsSync(lockFile) && !holdLock(lockFile)) {
         ui.fail(
             'data/ is in use by Eigen or by another restore.',
             'Wait for it to finish, then run ./eigen restore again.',
         );
     }
+    const holder = liveLeaseHolder(join(DATA, SERVER_DIR, DATA_LEASE_FILE), (message) => ui.warn(message, []));
+    if (holder) ui.fail(`data/ is in use by another Eigen API: ${holder}.`, 'Stop it, then run ./eigen restore again.');
 }
 
 const pathExists = (path: string) => lstatSync(path, { throwIfNoEntry: false }) !== undefined;

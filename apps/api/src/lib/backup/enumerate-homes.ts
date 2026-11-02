@@ -12,7 +12,7 @@ import { parseHomeMountSettings } from '@workspace/lib/validation';
 import { asc } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { team, user } from '../../../auth-schema';
-import { getDataRoot, getTeamDataPath, getUserHomePath, PATHS, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
+import { getDataRoot, getTeamHomePath, getUserHomePath, PATHS, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
 import { isGuest } from '../user/guest';
 import { parseSafetyCopyName } from './paths';
 
@@ -37,7 +37,7 @@ export function enumerateHomes(usersDbPath: string): { homes: ServerHome[]; orph
                 .filter((row) => !isGuest(row) && fs.existsSync(getUserHomePath(row.id)))
                 .map((row): ServerHome => ({ ownerId: row.id, kind: 'user', name: row.name })),
             ...teams
-                .filter((row) => fs.existsSync(getTeamDataPath(row.id)))
+                .filter((row) => fs.existsSync(getTeamHomePath(row.id)))
                 .map((row): ServerHome => ({ ownerId: teamOwnerId(row.id), kind: 'team', name: row.name })),
         ];
         const orphans = [

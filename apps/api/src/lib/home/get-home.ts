@@ -1,8 +1,8 @@
 // getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
 // cache, and hands every later caller that same Home until it closes. Because every request passes
-// through here, this file also remembers when a home was last asked for, keeps a home shut while a
-// restore replaces its folder or a deletion removes it, and hands a server-wide event, such as a
-// restart notice, to every loaded home.
+// through here, this file also remembers when a home was last asked for. It keeps a home shut while a
+// restore replaces its folder or a deletion removes it, and every home while the shutdown runs. It
+// also hands a server-wide event, such as a restart notice, to every loaded home.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -32,6 +32,10 @@ const restoringHomes = new Set<string>();
 // build a new home over the deleted folder. A deletion that fails after the folder is gone keeps the
 // mark until a retry of the delete or a restart. Until then the home answers 404 and a restore of it is refused.
 const deletingHomes = new Set<string>();
+
+// While shutdownAllHomes runs, openHome refuses every home, so nothing, such as an open stream's keepalive,
+// builds one again over the databases the shutdown closes. The process ends right after it.
+let shuttingDown = false;
 
 // Whether the cache holds a home for the owner, built or still being built. Never opens one.
 export function atHome(ownerId: string): boolean {
@@ -117,6 +121,7 @@ export async function openHome(ownerId: string): Promise<Home> {
 }
 
 function refuseShutHome(ownerId: string): void {
+    if (shuttingDown) throw new ApiError(503, 'Eigen is shutting down');
     if (restoringHomes.has(ownerId)) throw new ApiError(503, 'Restore in progress');
     if (deletingHomes.has(ownerId)) throw new ApiError(404, 'Home is being deleted');
 }
@@ -201,8 +206,13 @@ export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
 }
 
+export function isShuttingDown(): boolean {
+    return shuttingDown;
+}
+
+// Closes every home that is open now. A test file's teardown calls it too, and the next file opens homes again.
 export async function shutdownAllHomes(): Promise<void> {
-    // Closes every home that is open now. A request that arrives meanwhile waits for its home to close
-    // before it opens a new one, so the two never share database files.
+    shuttingDown = true;
     await Promise.allSettled([...homeFactories.values()].map(async (factory) => (await factory()).close()));
+    shuttingDown = false;
 }

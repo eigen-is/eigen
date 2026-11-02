@@ -1,8 +1,10 @@
-// The API's entry point. It runs the recoveries a restart needs, starts the HTTP server, the control
-// socket and the scheduled jobs, and on SIGTERM or SIGINT shuts them down in order, the homes last.
+// The API server, which the entry point loads once this process holds its data folder. It runs the recoveries a
+// restart needs, starts the HTTP server, the control socket and the scheduled jobs. On SIGTERM or SIGINT it shuts
+// them down in order, the homes last, and only then gives up the data folder's lease.
 
 import { MAX_REQUEST_BODY_BYTES } from '@workspace/lib/constants/mount';
 import { app } from './app';
+import { releaseInstanceLease } from './instance-lock';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { recoverBackupsAfterRestart } from './lib/backup/recovery';
 import { isProduction } from './lib/config/env';
@@ -75,6 +77,7 @@ async function gracefulShutdown(signal: string) {
     // of the close are queued and before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
     await shutdownAllHomes();
+    releaseInstanceLease();
     console.log('All homes shut down, exiting.');
     process.exit(0);
 }

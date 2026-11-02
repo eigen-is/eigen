@@ -4,7 +4,7 @@
 
 import type { BackupVerifyRecord, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { parseServerArchiveManifest } from '@workspace/lib/validation';
-import type { ArchiveMember, ArchiveMemberAt } from './archive';
+import type { ArchiveMember, ArchiveMemberLocation } from './archive';
 import { hashArchiveMembers, listArchiveMembers, readArchiveMember } from './archive';
 import { describeError } from './errors';
 import { ARCHIVE_MANIFEST_FILE } from './paths';
@@ -73,7 +73,7 @@ export async function readServerArchiveMember(
     archivePath: string,
     name: string,
 ): Promise<{ bytes: Uint8Array | null } | { failure: string }> {
-    let members: ArchiveMemberAt[];
+    let members: ArchiveMemberLocation[];
     try {
         members = await listArchiveMembers(archivePath);
     } catch (error) {
@@ -100,7 +100,7 @@ export async function readServerArchiveMember(
 }
 
 // The manifest a whole-server archive closes with, or why it has none.
-async function readClosingManifest(members: ArchiveMemberAt[]): Promise<ServerArchiveManifest | string> {
+async function readClosingManifest(members: ArchiveMemberLocation[]): Promise<ServerArchiveManifest | string> {
     const last = members.at(-1);
     if (last?.name !== ARCHIVE_MANIFEST_FILE) return `${ARCHIVE_MANIFEST_FILE} is not the last member`;
     let text: string;

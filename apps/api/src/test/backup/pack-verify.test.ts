@@ -27,11 +27,9 @@ import {
     packFolder,
     readArchiveMember,
     readArtifactManifest,
-    readSidecar,
     readUnpackedHome,
-    writeSidecar,
 } from '../../lib/backup/archive';
-import { listArtifacts } from '../../lib/backup/artifacts';
+import { listArtifacts, readSidecar, writeSidecar } from '../../lib/backup/artifacts';
 import {
     ARCHIVE_MANIFEST_FILE,
     buildArtifactName,

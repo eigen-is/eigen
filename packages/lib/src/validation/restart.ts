@@ -1,6 +1,6 @@
 // What ./eigen may tell the running API when it announces a restart, such as the one an update makes: why, how long
-// until it comes, and a line of the operator's for the open tabs. The control route checks a notice against these,
-// and the banner in the browser picks its text by the reason.
+// until it comes, and a line of the operator's for the open tabs. Whatever takes a notice checks it against these,
+// such as the control route.
 
 export const RESTART_REASONS = ['update', 'rollback'] as const;
 
@@ -9,3 +9,7 @@ export const MAX_RESTART_WAIT_SECONDS = 3600;
 
 // One line of a banner.
 export const MAX_RESTART_MESSAGE_LENGTH = 200;
+
+// Some text, and no control character, C1 included: the \p{Cc} that the CLI turns into spaces. Spelled as ranges,
+// because a TypeBox pattern is compiled without the u flag.
+export const RESTART_MESSAGE_PATTERN = '^(?!\\s*$)[^\\x00-\\x1f\\x7f-\\x9f]*$';
