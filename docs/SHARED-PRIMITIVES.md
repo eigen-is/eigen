@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2067 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2070 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -545,7 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (439)
+## Types (441)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -741,6 +741,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `RestartReason` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `S3Config` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
@@ -768,6 +769,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SSEventMail` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventNotificationChanged` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventNotificationCreated` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
+| `SSEventRestartNotice` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `SSEventTypeName` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `TeamSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `UpdateCalendarInput` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -989,7 +991,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1114)
+## Utilities & constants (1115)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1739,6 +1741,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseServerArchiveSidecar` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseStringRecord` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `PRE_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `RESTART_REASONS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `ROLE_MAILBOX_LOCAL_PARTS` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
 | `SERVER_ARCHIVE_EXTENSION` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `SERVER_ARCHIVE_PREFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
