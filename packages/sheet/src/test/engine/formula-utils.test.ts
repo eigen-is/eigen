@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    calPostfixExpression,
-    checkBracketNum,
-    formulaOperators,
-    iscelldata,
-    isFunctionRange,
-    operatorPriority,
-} from '../../engine/formula-utils';
+import { checkBracketNum, formulaOperators, iscelldata } from '../../engine/formula-utils';
 
 // ─── formulaOperators ───────────────────────────────────────────────────────
 
@@ -20,25 +13,6 @@ describe('engine/formula-utils — formulaOperators', () => {
     test("leaves out JavaScript's == and !=, which Excel has no operator for", () => {
         expect(formulaOperators.has('==')).toBe(false);
         expect(formulaOperators.has('!=')).toBe(false);
-    });
-});
-
-// ─── operatorPriority ───────────────────────────────────────────────────────
-
-describe('engine/formula-utils — operatorPriority', () => {
-    test('^ has priority 0', () => {
-        expect(operatorPriority['^']).toBe(0);
-    });
-
-    test('% * / have priority 1', () => {
-        expect(operatorPriority['%']).toBe(1);
-        expect(operatorPriority['*']).toBe(1);
-        expect(operatorPriority['/']).toBe(1);
-    });
-
-    test('+ - have priority 2', () => {
-        expect(operatorPriority['+']).toBe(2);
-        expect(operatorPriority['-']).toBe(2);
     });
 });
 
@@ -144,57 +118,5 @@ describe('engine/formula-utils — checkBracketNum', () => {
 
     test('no brackets at all', () => {
         expect(checkBracketNum('A1+B1')).toBe(true);
-    });
-});
-
-// ─── calPostfixExpression ───────────────────────────────────────────────────
-
-describe('engine/formula-utils — calPostfixExpression', () => {
-    test('returns empty string for empty array', () => {
-        expect(calPostfixExpression([])).toBe('');
-    });
-
-    test('single non-operator element returns that element', () => {
-        expect(calPostfixExpression(['A1'])).toBe('A1');
-    });
-
-    test('wraps an operator in a compareWith call', () => {
-        // Postfix ["+", "A1", "B1"] means A1 + B1 in RPN (reversed)
-        const result = calPostfixExpression(['+', 'A1', 'B1']);
-        expect(result).toContain('compareWith');
-        expect(result).toContain('A1');
-        expect(result).toContain('B1');
-        expect(result).toContain("'+'");
-    });
-
-    test('handles nested operators', () => {
-        // Represents (A1 + B1) * C1 in postfix (reversed)
-        const result = calPostfixExpression(['*', '+', 'A1', 'B1', 'C1']);
-        expect(result).toContain('compareWith');
-        expect(result).toContain("'*'");
-        expect(result).toContain("'+'");
-    });
-});
-
-// ─── isFunctionRange ────────────────────────────────────────────────────────
-
-describe('engine/formula-utils — isFunctionRange', () => {
-    const rangesOf = (formula: string) => {
-        const ranges: string[] = [];
-        isFunctionRange(formula, (range) => ranges.push(range));
-        return ranges;
-    };
-
-    test('hands the range an INDEX, OFFSET or INDIRECT call reads to the callback', () => {
-        expect(rangesOf('=INDEX(A1:B2)')).toEqual(['A1:B2']);
-        expect(rangesOf('=OFFSET(C3)')).toEqual(['C3']);
-    });
-
-    test('hands over the range a reference-to-function range ends on', () => {
-        expect(rangesOf('=SUM(A1:INDEX(B1:B5))')).toEqual(['B1:B5']);
-    });
-
-    test('ignores the range of any other function', () => {
-        expect(rangesOf('=SUM(A1:B2)')).toEqual([]);
     });
 });

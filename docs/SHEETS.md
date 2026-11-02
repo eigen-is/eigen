@@ -181,7 +181,9 @@ formulajs carries one patch, `patches/@formulajs%2Fformulajs@2.9.3.patch`, liste
 The dependency graph has two limits:
 
 - A reference cycle never errors: the visited set in `getCalculationOrder` breaks the walk, and the cycle's cells evaluate in visit order.
-- `INDEX` produces references the dependency graph can't see statically. `isFunctionRange` special-cases it, together with `INDIRECT` and `OFFSET`; keep that logic when you touch the graph. formulajs 2.9.3 has no `INDIRECT` or `OFFSET`, so both evaluate to `#NAME?`.
+- `OFFSET` and `INDIRECT` build a reference their text doesn't hold, which Excel answers by making them volatile: they recalc on every edit. formulajs 2.9.3 has neither, so both evaluate to `#NAME?` whatever their inputs, and the graph records only the references in their arguments: `=OFFSET(A1,1,1)` recalcs when A1 changes, `=INDIRECT("B2")` never. Once the engine computes them they need that recalc on every edit, which the editor has for no function yet ([SHEETS-TODO.md](SHEETS-TODO.md#formula-engine)).
+
+A formula reads every reference in its text, a function's arguments included, as Excel lists a cell's precedents (`extractDependencies` in `engine/recalc.ts`). So `INDEX` needs no special case: the reference it returns lies inside its range argument, and `=INDEX(A1:B3,2,1)` and `=SUM(A1:INDEX(A1:B3,2,2))` both read A1:B3. A whole column or row, on the formula's sheet or another (`=SUM(Data!A:A)`), ends where that sheet's matrix ends (`resolveCellRange` in `engine/formula-utils.ts`), so it costs the graph no more than the cells the sheet holds.
 
 ## The editor computes on write, the server only what nobody computed
 
@@ -195,7 +197,7 @@ The server's recalc, at import and at export, runs under a budget, `SERVER_RECAL
 
 ## Recalc keeps what it can't improve
 
-`recalcSheets` (`engine/recalc.ts`) materializes each sheet's `data`, finds formula cells by scanning it rather than trusting `calcChain`, orders them through the dependency graph and evaluates them with the shared `FormulaEngine`. The walk that finds the cells each formula reads, `extractDependencies`, is the one the editor's `setFormulaCellInfo` calls too, so the editor and the server agree on what a formula reads. The engine can't import `state/`, so the editor hands the walk its sheets and its cache of resolved references. The INDIRECT, OFFSET and INDEX walker inside it is `isFunctionRange` in `engine/formula-utils.ts`.
+`recalcSheets` (`engine/recalc.ts`) materializes each sheet's `data`, finds formula cells by scanning it rather than trusting `calcChain`, orders them through the dependency graph and evaluates them with the shared `FormulaEngine`. The walk that finds the cells each formula reads, `extractDependencies`, is the one the editor's `setFormulaCellInfo` calls too, so the editor and the server agree on what a formula reads. The engine can't import `state/`, so the editor hands the walk its sheets and its cache of resolved references. The walk splits the formula's text at its operators, a quoted sheet name or string staying whole, and resolves each reference it finds through `resolveCellRange` in `engine/formula-utils.ts`.
 
 Four rules keep a passive export honest:
 
