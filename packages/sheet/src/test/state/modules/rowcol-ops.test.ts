@@ -10,6 +10,7 @@ import type { Sheet as LibSheet, SheetWithCalcChain } from '@workspace/lib/sheet
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
+import type { ShiftedSheet } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
@@ -350,5 +351,81 @@ describe('two row ops sent at once keep the sheet size in step with its cells', 
         const onB = receive(b.next, a.ops).sheets[0];
         const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
         for (const sheet of [onA, onB, joined]) expect(size(sheet)).toEqual(grid(sheet));
+    });
+});
+
+// Every receiver's engine moves the frozen pane and the filter with the rows, so a row op sent with a peer's freeze,
+// filter or unfreeze leaves the same pane and filter on the author, the peer and a joiner. The log holds the peer's
+// batch first, and the author's tab then applies the log again in that order.
+describe("a row op sent with a peer's freeze or filter", () => {
+    const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
+    const columns = { ...rows, type: 'column' } as const;
+    const freezeAndFilter = (ctx: Context) => {
+        const [sheet] = ctx.sheets;
+        sheet.frozen = { type: 'rangeBoth', range: { row_focus: 1, column_focus: 1 } };
+        sheet.filterRange = { row: [1, 3], column: [0, 1] };
+        sheet.filter = { 0: { rowhidden: { 2: 0 }, optionstate: true, str: 1, edr: 3, cindex: 0, stc: 0, edc: 1 } };
+    };
+    function race(peer: (ctx: Context) => void, options: PatchOptions, base = richContext()) {
+        const { insertRowColOp, deleteRowColOp } = options;
+        const run = (ctx: Context) => {
+            if (insertRowColOp) insertRowCol(ctx, insertRowColOp);
+            else if (deleteRowColOp) deleteRowCol(ctx, deleteRowColOp);
+        };
+        const op = author(base, run, options);
+        const fromPeer = author(base, peer);
+        const onAuthor = receive(receive(base, fromPeer.ops), op.ops).sheets[0];
+        const onPeer = receive(fromPeer.next, op.ops).sheets[0];
+        const [joined] = join(base, [fromPeer.ops, op.ops]);
+        return [onAuthor, onPeer, joined];
+    }
+    const pane = ({ frozen, filterRange, filter }: ShiftedSheet) => ({ frozen, filterRange, filter });
+
+    test('a row insert moves the pane and the filter a peer set', () => {
+        for (const sheet of race(freezeAndFilter, { insertRowColOp: rows })) {
+            expect(pane(sheet)).toEqual({
+                frozen: { type: 'rangeBoth', range: { row_focus: 3, column_focus: 1 } },
+                filterRange: { row: [3, 5], column: [0, 1] },
+                filter: { 0: { rowhidden: { 4: 0 }, optionstate: true, str: 3, edr: 5, cindex: 0, stc: 0, edc: 1 } },
+            });
+        }
+    });
+
+    test('a column insert moves the pane and the filter a peer set', () => {
+        for (const sheet of race(freezeAndFilter, { insertRowColOp: columns })) {
+            expect(pane(sheet)).toEqual({
+                frozen: { type: 'rangeBoth', range: { row_focus: 1, column_focus: 3 } },
+                filterRange: { row: [1, 3], column: [2, 3] },
+                filter: { 0: { rowhidden: { 2: 0 }, optionstate: true, str: 1, edr: 3, cindex: 2, stc: 2, edc: 3 } },
+            });
+        }
+    });
+
+    test('a row delete moves the pane and the filter a peer set', () => {
+        const deleted = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;
+        for (const sheet of race(freezeAndFilter, { deleteRowColOp: deleted })) {
+            expect(pane(sheet)).toEqual({
+                frozen: { type: 'rangeBoth', range: { row_focus: 0, column_focus: 1 } },
+                filterRange: { row: [0, 2], column: [0, 1] },
+                filter: { 0: { rowhidden: { 1: 0 }, optionstate: true, str: 0, edr: 2, cindex: 0, stc: 0, edc: 1 } },
+            });
+        }
+    });
+
+    test('a row insert leaves a pane a peer removed removed', () => {
+        const frozen = produce(richContext(), freezeAndFilter);
+        const unfreeze = (ctx: Context) => {
+            delete ctx.sheets[0].frozen;
+        };
+        for (const sheet of race(unfreeze, { insertRowColOp: rows }, frozen)) expect(sheet.frozen).toBeUndefined();
+    });
+
+    test('a row insert moves a pane of a bare type that has a range', () => {
+        const base = produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].frozen = { type: 'both', range: { row_focus: 1, column_focus: 1 } };
+        });
+        for (const sheet of race(() => {}, { insertRowColOp: rows }, base)) {
+            expect(sheet.frozen).toEqual({ type: 'both', range: { row_focus: 3, column_focus: 1 } });
+        }
     });
 });

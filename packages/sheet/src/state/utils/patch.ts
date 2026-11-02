@@ -124,7 +124,12 @@ const ENGINE_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['data', 
 // The fields every receiver's engine moves with the op, as it moves the cells. The op itself leaves them off: the
 // author's write would overwrite the receiver's own shift of a peer's edit sent at the same time. An undo or redo
 // ships them, since the marker alone would not bring back what the entry restores.
-const SHIFTED_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['dataValidations']);
+const SHIFTED_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>([
+    'dataValidations',
+    'frozen',
+    'filterRange',
+    'filter',
+]);
 
 function sheetMetadataOps(fields: Record<string, unknown>, id: string): Op[] {
     const metaOps: Op[] = [];

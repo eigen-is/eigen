@@ -1,7 +1,7 @@
 // The types of the sheet engine: the cell and range shapes it shares with the rest of Eigen, the editor's extra
-// sheet settings, and the engine's own types for formulas, their dependencies and the parser.
+// sheet settings and filter criteria, and the engine's own types for formulas, their dependencies and the parser.
 
-import type { SheetConfig } from '@workspace/lib/sheets';
+import type { Sheet, SheetConfig } from '@workspace/lib/sheets';
 import type { DependencyIndex } from './dependency-index';
 import type { CellCoordinate } from './parser/helper/cell';
 
@@ -41,6 +41,56 @@ export type EditorSheetConfigExtras = {
 // The config shape the editor and the op replay actually operate on: the wire shape plus the
 // editor-only per-row/col flags above.
 export type ExtendedSheetConfig = SheetConfig & EditorSheetConfigExtras;
+
+// Filter-by-condition rule names. The names overlapping conditional formatting
+// reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
+// maps 1:1 onto a label in `FILTER_CONDITION_ITEMS`.
+// `values` carries the rule's operands: none for is(Not)Empty, one for
+// text/date/compare rules, two for (not)between.
+export type FilterConditionName =
+    | 'isEmpty'
+    | 'isNotEmpty'
+    | 'textContains'
+    | 'textNotContains'
+    | 'textStartsWith'
+    | 'textEndsWith'
+    | 'textEquals'
+    | 'dateEqual'
+    | 'dateBefore'
+    | 'dateAfter'
+    | 'greaterThan'
+    | 'greaterThanOrEqual'
+    | 'lessThan'
+    | 'lessThanOrEqual'
+    | 'equal'
+    | 'notEqual'
+    | 'between'
+    | 'notBetween';
+
+export type FilterCondition = {
+    conditionName: FilterConditionName;
+    values: string[];
+};
+
+// One column's filter. Every writer sets every field. `byCondition` is set when the column
+// filters by a condition instead of by values or color. Fields an older snapshot stored, which
+// nothing reads any more, pass through the index signature.
+export type FilterEntry = {
+    byCondition?: FilterCondition;
+    // Legacy data and a peer's op can leave it out on an entry that hides no rows.
+    rowhidden?: Record<string, number>;
+    optionstate: boolean;
+    str: number;
+    edr: number;
+    cindex: number;
+    stc: number;
+    edc: number;
+    [key: string]: unknown;
+};
+
+// The sheet the row and column shifter moves: the stored shape plus the editor's filter criteria, which ride the
+// ops and move with their rows.
+export type ShiftedSheet = Sheet & { filter?: Record<string, FilterEntry> };
 
 // Single cell reference resolved from a label like `A1` or `Sheet1!$A$1`.
 export type CellInfo = {
