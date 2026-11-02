@@ -1,8 +1,8 @@
 // A Home is everything one owner keeps on this server, such as a user's files, mail and calendar,
 // or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
-// builds the Home on first use. It stays loaded while it is used and closes itself, databases
-// included, after a few idle minutes. This base class owns that lifecycle; each kind of home
-// decides which parts it has.
+// builds the Home on first use. It stays loaded while it is used or held, such as by an open tab,
+// and closes itself, databases included, after a few idle minutes. This base class owns that
+// lifecycle; each kind of home decides which parts it has.
 
 import * as path from 'node:path';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
@@ -47,7 +47,10 @@ export class Home {
     private closePromise: Promise<void> | null = null;
     // Set before the close starts, so code that runs while the parts close already sees it.
     private _closing = false;
+    // Runs once the close is done, to drop this home from the cache.
     private readonly onClosed: (() => void) | undefined;
+    // What the holders asked to run when the close starts, such as ending an event stream.
+    private readonly holderCloseCallbacks = new Set<() => void>();
     private readonly managedDatabases = new Map<string, () => Promise<ManagedDatabase<SchemaType>>>();
     private readonly sseListeners = new Set<(event: SSEvent) => void>();
 
@@ -139,6 +142,16 @@ export class Home {
         if (!this.closePromise) {
             this._closing = true;
             clearTimeout(this.idleTimer);
+            // Before the parts close, so a holder such as an event stream ends and its client reconnects to the
+            // next home. One holder that fails must not stop the close or the other holders.
+            for (const callback of this.holderCloseCallbacks) {
+                try {
+                    callback();
+                } catch (err) {
+                    console.error(`[Home] A holder failed to end for ${this.user.id}:`, err);
+                }
+            }
+            this.holderCloseCallbacks.clear();
             this.closePromise = this.runClose();
         }
         return this.closePromise;
@@ -173,17 +186,24 @@ export class Home {
         return this;
     }
 
-    // Keeps the home open, however long the work takes, until the returned release is called.
-    // A holder that opened the home only for itself may ask for a shorter idle when it lets go.
-    public hold(): (idleMs?: number) => void {
+    // Keeps the home open, however long the work takes, until the returned release is called. A holder that
+    // must stop when the home closes anyway, such as for a restore, passes onClose. A holder that opened the
+    // home only for itself may ask for a shorter idle when it lets go. A closing home refuses, because its
+    // holder would never hear the close.
+    public hold(onClose?: () => void): (idleMs?: number) => void {
+        this.refuseIfClosing();
         this.holds++;
         clearTimeout(this.idleTimer);
+        // A callback of its own, so two holds that pass the same function stay two entries.
+        const callback = onClose && (() => onClose());
+        if (callback) this.holderCloseCallbacks.add(callback);
         // Releasing twice must not count as two releases.
         let released = false;
         return (idleMs = this.idleMs) => {
             if (released) return;
             released = true;
             this.holds--;
+            if (callback) this.holderCloseCallbacks.delete(callback);
             this.startIdleTimer(idleMs);
         };
     }
@@ -204,13 +224,17 @@ export class Home {
         config: DatabaseConfig<S>,
         relativePath: string,
     ): Promise<ManagedDatabase<S>> {
-        if (this._closing) throw new ApiError(503, 'Home is closing');
+        this.refuseIfClosing();
         let open = this.managedDatabases.get(relativePath);
         if (!open) {
             open = createAsyncSingleton(() => openLocalDatabase(config, path.join(this.homeDir, relativePath)));
             this.managedDatabases.set(relativePath, open);
         }
         return open() as Promise<ManagedDatabase<S>>;
+    }
+
+    private refuseIfClosing(): void {
+        if (this._closing) throw new ApiError(503, 'Home is closing');
     }
 
     public subscribeSSE(listener: (event: SSEvent) => void): void {

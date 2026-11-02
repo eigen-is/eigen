@@ -50,6 +50,11 @@ export class SharedDrive {
         return this.drive.lockManager;
     }
 
+    // Holding the owner's home needs no access check of its own: the caller checks access to what it holds it for.
+    public holdHome(): () => void {
+        return this.drive.holdHome();
+    }
+
     // ---- Access checks ----
 
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {

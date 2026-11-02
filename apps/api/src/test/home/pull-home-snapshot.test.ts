@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
-import { atHome, evictHome, getHome, touchHomeIfLoaded } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { BACKUP_RELEASE_MS, pullHomeSnapshot } from '../../lib/home/home-relay';
 import { createTestUser, getTestContext } from '../setup';
@@ -69,24 +69,24 @@ describe('pullHomeSnapshot', () => {
         expect(atHome(ownerId)).toBe(false);
     });
 
-    test('a user who opens the home mid-capture keeps it, sockets and all, as long as their keepalive ticks', async () => {
+    test('a user who opens the home mid-capture keeps it as long as their connection holds it', async () => {
         await evictHome(ownerId);
         let opened: Home | undefined;
+        let releaseConnection: (() => void) | undefined;
         captureThenFakeTimers(async () => {
             opened = await getHome(ownerId);
+            // What an event stream or a collab socket takes when it opens.
+            releaseConnection = opened.hold();
         });
         await pullHomeSnapshot(ownerId, targetDir(), {});
         expect(opened).toBeDefined();
-        expect(atHome(ownerId)).toBe(true);
-        expect(opened!.closing).toBe(false);
 
-        // The keepalive re-arms the full idle, not the release one.
-        jest.advanceTimersByTime(15_000);
-        touchHomeIfLoaded(ownerId);
-        jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
+        // The capture's release leaves the connection's hold, so no idle runs at all.
+        jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS + USER_IDLE_MS);
         expect(atHome(ownerId)).toBe(true);
         expect(opened!.closing).toBe(false);
         expect(await getHome(ownerId)).toBe(opened!);
+        releaseConnection?.();
     });
 
     test('a request that reaches the home mid-capture keeps the full idle, with no keepalive after it', async () => {

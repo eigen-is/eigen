@@ -154,6 +154,12 @@ export class Drive {
         this.lockManager.clear();
     }
 
+    // Keeps the home open, such as for a collab socket, until the returned release is called. The home refuses
+    // with a 503 once it is closing.
+    public holdHome(): () => void {
+        return this.home.hold();
+    }
+
     // ---- Mounts ----
 
     public async addMount(config: MountConfig): Promise<void> {

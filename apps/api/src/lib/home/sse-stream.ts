@@ -1,13 +1,12 @@
 // The event stream of one user's own Home, which the SSE route hands to a signed-in tab. It passes on every event
-// the Home broadcasts. A keepalive goes out when it opens and every 15 seconds, so a proxy keeps the connection and
-// the Home does not go idle under an open tab, until the server shuts down. With each keepalive it announces the data
-// epochs, and it follows the Home when an evicted one was built again. When it opens and when it follows, it also
-// sends the restart notice the server holds, or that it holds none.
+// the Home broadcasts, and it holds the Home, so the Home stays open while the tab is. When the Home closes anyway,
+// such as for a restore or the shutdown, the stream ends and the browser reconnects to the next Home. It sends the
+// restart notice the server holds, or that it holds none, and the data epochs when it opens. A keepalive goes out
+// then and every 15 seconds, so a proxy keeps the connection, and the data epochs go out with each one.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { sse } from 'elysia';
 import { buildRestartNoticeEvent } from '../config/restart-notice';
-import { getHome, isShuttingDown } from './get-home';
 import type { Home } from './home';
 import { buildDataEpochsEvent } from './sse-events';
 
@@ -17,23 +16,33 @@ const KEEPALIVE_INTERVAL_MS = 15_000;
 
 type StreamItem = SSEvent | ReturnType<typeof keepaliveItem>;
 
+// Throws the Home's 503 when it is closing, so the route answers with it and the browser retries.
 export function createSSEStream(home: Home): ReadableStream<StreamItem> {
     const userId = home.user.id;
-    let currentHome = home;
     let streamController: ReadableStreamDefaultController<StreamItem> | null = null;
     let keepalive: Timer | undefined;
+    let releaseHome: (() => void) | undefined;
     let isClosed = false;
+
+    // Runs once, whichever way the stream ends: the client leaves, the Home closes, or a send fails.
+    const teardown = () => {
+        if (isClosed) return;
+        isClosed = true;
+        clearInterval(keepalive);
+        home.unsubscribeSSE(send);
+        releaseHome?.();
+    };
 
     const send = (item: StreamItem) => {
         if (isClosed || streamController === null) return;
         try {
             streamController.enqueue(item);
         } catch {
-            isClosed = true;
+            teardown();
         }
     };
 
-    // On open and with every keepalive, so a tab hears a restore whether it stayed connected or reconnected after it.
+    // On open and with every keepalive, so a tab hears a restore of another home it reads, such as a team's.
     const announceDataEpochs = () =>
         buildDataEpochsEvent(userId)
             .then(send)
@@ -42,44 +51,23 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
     return new ReadableStream({
         start: (controller) => {
             streamController = controller;
-            currentHome.subscribeSSE(send);
+            // Elysia calls cancel only when the client leaves, never when the stream closes itself, so the
+            // teardown runs here first.
+            releaseHome = home.hold(() => {
+                teardown();
+                controller.close();
+            });
+            home.subscribeSSE(send);
             send(keepaliveItem());
             // With none too, so a tab that reconnects to a restarted server drops the notice it held.
             send(buildRestartNoticeEvent());
             announceDataEpochs();
 
-            keepalive = setInterval(async () => {
-                if (isClosed) return;
-                // No Home opens while the shutdown runs, and the process ends right after it.
-                if (isShuttingDown()) {
-                    clearInterval(keepalive);
-                    return;
-                }
-
-                // getHome also keeps the Home from going idle. When it was evicted and built again, the
-                // listener moves to the new one, or the stream would go silent.
-                try {
-                    const freshHome = await getHome(userId);
-                    if (freshHome !== currentHome) {
-                        console.log(`[SSE] Home recreated for ${userId}, re-subscribing`);
-                        currentHome.unsubscribeSSE(send);
-                        freshHome.subscribeSSE(send);
-                        currentHome = freshHome;
-                        // A notice given or taken back while no Home held this listener never reached it.
-                        send(buildRestartNoticeEvent());
-                    }
-                } catch (e) {
-                    console.error(`[SSE] Failed to get Home for ${userId}:`, e);
-                }
-
+            keepalive = setInterval(() => {
                 send(keepaliveItem());
-                if (!isClosed) announceDataEpochs();
+                announceDataEpochs();
             }, KEEPALIVE_INTERVAL_MS);
         },
-        cancel: () => {
-            isClosed = true;
-            clearInterval(keepalive);
-            currentHome.unsubscribeSSE(send);
-        },
+        cancel: teardown,
     });
 }

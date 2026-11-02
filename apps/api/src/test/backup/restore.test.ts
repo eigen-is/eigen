@@ -170,9 +170,14 @@ async function openEventStream(userId: string) {
     return {
         announced: async (): Promise<Record<string, string>> => {
             for (;;) {
-                const { value } = await reader.read();
+                const { value, done } = await reader.read();
+                if (done) throw new Error(`The stream of ${userId} ended`);
                 if (value && 'type' in value && value.type === SSEventType.HOME_DATA_EPOCHS) return value.epochs;
             }
+        },
+        // Reads on to the end, which comes when the stream's Home closes.
+        ended: async (): Promise<void> => {
+            while (!(await reader.read()).done) {}
         },
         close: () => reader.cancel(),
     };
@@ -573,9 +578,9 @@ describe('Backup restoreHome', () => {
         expect(getDataEpoch(ctx.alice.user.id)).toBe(other);
     });
 
-    // Every tab of the owner reloads, whatever app it shows: one that stayed connected on its next keepalive, one that
-    // was offline through the restore when it reconnects. Nobody else's stream names the home at all.
-    test("the owner's streams announce the new epoch, and another user's never name the home", async () => {
+    // Every tab of the owner reloads, whatever app it shows. The restore ends each open stream with the home it held,
+    // and the stream the tab opens again announces the new epoch. Nobody else's stream names the home at all.
+    test("the owner's streams end and reconnect to the new epoch, and another user's never name the home", async () => {
         jest.useFakeTimers();
         const owner = await openEventStream(target.id);
         const other = await openEventStream(ctx.alice.user.id);
@@ -585,15 +590,16 @@ describe('Backup restoreHome', () => {
             expect(Object.keys(otherBefore)).not.toContain(target.id);
 
             await restoreHome(artifact, target.id, `restore-sse-${Date.now()}`);
-            jest.advanceTimersByTime(15_000);
-
-            const after = await owner.announced();
+            await owner.ended();
+            const reconnected = await openEventStream(target.id);
+            const after = await reconnected.announced();
+            await reconnected.close();
             expect(after[target.id]).not.toBe(before[target.id]);
             expect(after[target.id]).toBe(getDataEpoch(target.id));
+
+            // A stream on a home the restore never touched stays open, and its keepalive names the same epochs.
+            jest.advanceTimersByTime(15_000);
             expect(await other.announced()).toEqual(otherBefore);
-            const reconnected = await openEventStream(target.id);
-            expect(await reconnected.announced()).toEqual(after);
-            await reconnected.close();
         } finally {
             jest.useRealTimers();
             await owner.close();

@@ -117,16 +117,51 @@ describe('getHome teardown race', () => {
         expect(atHome(ownerId)).toBe(false);
     });
 
+    // A hold taken now would never hear the close, and its holder would keep a closed home's parts.
+    test('a closing home refuses a hold', async () => {
+        const userId = await createHomeUser('closing-refuses-hold@test.eigen.is');
+        const home = await getHome(userId);
+
+        const closing = home.close();
+        let refusal: unknown;
+        try {
+            home.hold();
+        } catch (err) {
+            refusal = err;
+        }
+        expect(refusal).toMatchObject({ status: 503, message: 'Home is closing' });
+        await closing;
+    });
+
+    // An event stream ends from here, so its tab reconnects to the next home before this one's databases close.
+    test('a hold hears the close before the parts close, and a released hold never does', async () => {
+        const userId = await createHomeUser('hold-hears-close@test.eigen.is');
+        const home = await getHome(userId);
+        const destruct = spyOn(home.drive, 'destruct');
+        const heard: string[] = [];
+
+        home.hold(() => heard.push(`held, parts closed: ${destruct.mock.calls.length}`));
+        const release = home.hold(() => heard.push('released'));
+        release();
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        // One holder that throws must not stop the close or the holders after it.
+        home.hold(() => {
+            throw new Error('holder failed');
+        });
+        home.hold(() => heard.push('after the failure'));
+
+        await home.close();
+        errors.mockRestore();
+        expect(heard).toEqual(['held, parts closed: 0', 'after the failure']);
+        expect(atHome(userId)).toBe(false);
+    });
+
     // The process ends once the shutdown is done, so a Home built during it would be killed half-open.
-    test("no Home opens while shutdownAllHomes runs, not even for an open stream's keepalive", async () => {
+    test('no Home opens while shutdownAllHomes runs, and an open stream ends with its Home', async () => {
         const userId = await createHomeUser('shutdown-gate@test.eigen.is');
         const home = await getHome(userId);
-        const intervals = spyOn(globalThis, 'setInterval');
         const reader = createSSEStream(home).getReader();
-        const keepalive = intervals.mock.calls.find(([, ms]) => ms === 15_000)?.[0];
-        intervals.mockRestore();
-        if (typeof keepalive !== 'function') throw new Error('no keepalive');
-        // Holds the shutdown open until the checks below are done.
+        // Holds the shutdown open until the check below is done.
         const { promise: held, resolve: release } = Promise.withResolvers<void>();
         const close = home.close.bind(home);
         home.close = async () => {
@@ -136,13 +171,9 @@ describe('getHome teardown race', () => {
 
         const shutdown = shutdownAllHomes();
         await expect(getHome(userId)).rejects.toMatchObject({ status: 503 });
-        const errors = spyOn(console, 'error');
-        await keepalive();
-        expect(errors).not.toHaveBeenCalled();
-        errors.mockRestore();
         release();
         await shutdown;
-        await reader.cancel();
+        while (!(await reader.read()).done) {}
         expect(atHome(userId)).toBe(false);
     });
 });
