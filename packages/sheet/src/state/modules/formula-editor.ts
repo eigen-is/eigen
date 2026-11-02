@@ -290,9 +290,11 @@ export function getrangeseleciton() {
         }
         return anchorNode.parentNode;
     }
-    const anchorElement = anchorNode as HTMLElement;
-    if (anchorElement.id === 'sheet-rich-text-editor' || anchorElement.id === 'sheet-functionbox-cell') {
-        const spans = anchorElement.querySelectorAll('span');
+    if (
+        anchorNode instanceof HTMLElement &&
+        (anchorNode.id === 'sheet-rich-text-editor' || anchorNode.id === 'sheet-functionbox-cell')
+    ) {
+        const spans = anchorNode.querySelectorAll('span');
         if (trim(last(spans)?.innerText).length === 0 && spans.length > 1) {
             return spans[0];
         }
