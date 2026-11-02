@@ -687,11 +687,15 @@ wait_backup() {
 # stop would kill it, and that night would have no backup, or none in the bucket. Each step names what it waits for, so
 # when a backup ends and its upload starts, the last line names the upload. A restore and an update wait before they
 # arm the restart, and stop looks again. An API that does not answer, or stops answering, gets the stop it needs. An
-# interrupt here leaves Eigen running.
+# interrupt here leaves Eigen running. The restart notice expires a few minutes after its time, and a nightly backup
+# can take longer, so a wait gives the tabs the notice again.
 before_stop() {
     if ! api_running; then return 0; fi
     answered=1
     running=$(ask_backup 2) || answered=0
+    # A notice that warn_restart armed is given again after a wait.
+    renotice=''
+    if [ -n "$running" ]; then case $AT_EXIT in *unannounce*) renotice=1 ;; esac; fi
     STEP_GOES_ON=1
     while [ "$answered" = 1 ] && [ -n "$running" ]; do
         step "Waiting for $running to end" "Waited for $running to end" \
@@ -702,6 +706,7 @@ before_stop() {
     if [ "$answered" = 0 ]; then
         say "$YELLOW" '▲' "Eigen did not say whether a server backup runs, so the stop goes on."
     fi
+    if [ -n "$renotice" ]; then announce 0 "$RESTART_REASON"; fi
 }
 
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
@@ -1128,9 +1133,12 @@ need_in_time() {
 
 # warn_restart <reason>: when Eigen runs, tells every open tab that it restarts, for an update or a rollback, then
 # waits out --in. From here an exit, Ctrl+C or a hangup takes the notice back through AT_EXIT, so no tab warns of a
-# restart that does not come. dash runs no EXIT trap on a hangup it does not trap.
+# restart that does not come. dash runs no EXIT trap on a hangup it does not trap. RESTART_REASON keeps the reason,
+# for before_stop to give the notice again.
+RESTART_REASON=''
 warn_restart() {
     if ! api_running; then return 0; fi
+    RESTART_REASON=$1
     AT_EXIT="${AT_EXIT:+$AT_EXIT; }unannounce"
     trap 'exit 129' HUP
     announce "$IN_SECONDS" "$1"
@@ -1289,7 +1297,7 @@ update() {
     # The old launcher's notice is on the tabs, and exec dropped its traps: from here a failure takes it back.
     if [ "$pulled" = 1 ]; then
         lock
-        AT_EXIT=unannounce
+        AT_EXIT=unannounce RESTART_REASON=update
         trap 'exit 129' HUP
     fi
     need_install

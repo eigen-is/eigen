@@ -1528,6 +1528,15 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: restore --in: exit $CODE, '$(notice_steps)', '$OUT', '$ERR'"
     fi
+    # The notice expires a few minutes after its time, and a nightly backup can outlast that: the wait for it gives the
+    # tabs the notice again, right before the stop.
+    launch_during_backup "$BACKUP_RUNS" restore "$ARCHIVE" --yes
+    if [ "$CODE" = 0 ] && waited_for_backup &&
+        [ "$(notice_steps)" = 'stage|staged|restart-notice --in 0 --reason rollback|restart-notice --in 0 --reason rollback|stop|' ]; then
+        ok "$SHELL_NAME: a restore that waited for a server backup tells the open tabs again before the stop"
+    else
+        fail "$SHELL_NAME: the notice after a wait for a server backup: exit $CODE, '$(notice_steps)', '$OUT', '$ERR'"
+    fi
 
     # The first way back keeps data/: the build before the update checks it opens it, and Eigen switches to the pins the
     # update recorded. When that build cannot open it, or is too old to check, the update's Full backup goes back.
