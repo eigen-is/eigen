@@ -643,7 +643,7 @@ function ConditionalFormattingSubmenu() {
                                 });
                             }}
                         >
-                            Delete sheet rule
+                            Delete sheet rules
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
