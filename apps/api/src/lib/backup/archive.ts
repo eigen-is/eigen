@@ -46,52 +46,35 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
 }
 
 async function* tarChunks(dir: string, rootName: string, onProgress?: BackupProgress): AsyncGenerator<Uint8Array> {
-    const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
-    relPaths.sort();
-
     let written = 0;
-    // Directories get entries of their own: an empty one (a Maildir `new/`, a container's `versions/`
-    // before its first snapshot) is part of the home and has to survive the round trip.
-    function* directory(name: string, mtimeMs: number): Generator<Uint8Array> {
-        for (const chunk of headerChunks(name, 0, Math.floor(mtimeMs / 1000), '5', ARCHIVE_FOLDER_MODE)) {
-            written += chunk.length;
-            yield chunk;
-        }
-    }
-
-    yield* directory(`${rootName}/`, fs.statSync(dir).mtimeMs);
-    for (const [index, rel] of relPaths.entries()) {
-        // Packing dominates a large home's wall clock, so it reports per entry.
-        onProgress?.('pack', index + 1, relPaths.length);
-        const abs = path.join(dir, rel);
-        const stat = fs.statSync(abs);
-        if (stat.isDirectory()) {
-            yield* directory(`${rootName}/${rel}/`, stat.mtimeMs);
-            continue;
-        }
-        for await (const chunk of fileEntryChunks(
-            `${rootName}/${rel}`,
-            abs,
-            stat.size,
-            Math.floor(stat.mtimeMs / 1000),
-        )) {
-            if (chunk.length === 0) continue;
-            written += chunk.length;
-            yield chunk;
-        }
+    for await (const chunk of entryChunks(dir, rootName, onProgress)) {
+        if (chunk.length === 0) continue;
+        written += chunk.length;
+        yield chunk;
     }
     yield* archiveEnd(written);
 }
 
-async function* fileEntryChunks(
-    name: string,
-    absPath: string,
-    size: number,
-    mtime: number,
-): AsyncGenerator<Uint8Array> {
-    yield* headerChunks(name, size, mtime, '0', ARCHIVE_MODE);
-    yield* fileChunks(name, absPath, size);
-    yield padding(size);
+async function* entryChunks(dir: string, rootName: string, onProgress?: BackupProgress): AsyncGenerator<Uint8Array> {
+    const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
+    relPaths.sort();
+    // Directories get entries of their own: an empty one (a Maildir `new/`, a container's `versions/`
+    // before its first snapshot) is part of the home and has to survive the round trip.
+    yield* headerChunks(`${rootName}/`, 0, fs.statSync(dir).mtimeMs, '5', ARCHIVE_FOLDER_MODE);
+    for (const [index, rel] of relPaths.entries()) {
+        // Packing dominates a large home's wall clock, so it reports per entry.
+        onProgress?.('pack', index + 1, relPaths.length);
+        const name = `${rootName}/${rel}`;
+        const abs = path.join(dir, rel);
+        const stat = fs.statSync(abs);
+        if (stat.isDirectory()) {
+            yield* headerChunks(`${name}/`, 0, stat.mtimeMs, '5', ARCHIVE_FOLDER_MODE);
+            continue;
+        }
+        yield* headerChunks(name, stat.size, stat.mtimeMs, '0', ARCHIVE_MODE);
+        yield* fileChunks(name, abs, stat.size);
+        yield padding(stat.size);
+    }
 }
 
 export type ServerArchiveWriter = {
@@ -118,9 +101,7 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
     return {
         async appendFile(name, sourcePath) {
             const { size, mtimeMs } = fs.statSync(sourcePath);
-            for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', ARCHIVE_MODE)) {
-                await put(chunk);
-            }
+            for (const chunk of headerChunks(name, size, mtimeMs, '0', ARCHIVE_MODE)) await put(chunk);
             const hasher = new Bun.CryptoHasher('sha256');
             for await (const chunk of fileChunks(name, sourcePath, size)) {
                 hasher.update(chunk);
@@ -132,8 +113,7 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
         async finish(fields) {
             const manifest: ServerArchiveManifest = { ...fields, entries };
             const body = Buffer.from(JSON.stringify(manifest, null, 2));
-            const mtime = Math.floor(Date.now() / 1000);
-            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', ARCHIVE_MODE)) {
+            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, Date.now(), '0', ARCHIVE_MODE)) {
                 await put(chunk);
             }
             await put(body);
@@ -163,10 +143,7 @@ type ArtifactSource = string | ArchiveMemberAt;
 // The artifact's bytes, decompressed. The two streams are wired by hand rather than through
 // `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
 async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array> {
-    const file =
-        typeof source === 'string'
-            ? fs.createReadStream(source)
-            : fs.createReadStream(source.archivePath, { start: source.offset, end: source.offset + source.bytes - 1 });
+    const file = typeof source === 'string' ? fs.createReadStream(source) : memberStream(source);
     const decompressed = createZstdDecompress();
     file.on('error', (error) => decompressed.destroy(error));
     file.pipe(decompressed);
@@ -175,6 +152,10 @@ async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array
     } finally {
         file.destroy();
     }
+}
+
+function memberStream(member: ArchiveMemberAt): fs.ReadStream {
+    return fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 });
 }
 
 // Every file member of a whole-server archive in order, each hashed as it streams past: one read
@@ -247,10 +228,7 @@ export async function copyArchiveMember(member: ArchiveMemberAt, destPath: strin
         return;
     }
     try {
-        await pipeline(
-            fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 }),
-            fs.createWriteStream(destPath),
-        );
+        await pipeline(memberStream(member), fs.createWriteStream(destPath));
         // A range past the end of the file reads short without an error.
         const { size } = fs.statSync(destPath);
         if (size !== member.bytes) {
@@ -293,13 +271,12 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
 // The manifest of the archive's single home folder, without unpacking its files.
 export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
     const filter = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
-    let text: string | null = null;
+    let manifest: BackupManifest | null = null;
     for await (const entry of tarEntries(artifactBytes(artifactPath))) {
         if (!filter.match(entry.path)) continue;
-        text = new TextDecoder().decode(await collect(entry.body));
+        manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
-    const manifest = text === null ? null : parseBackupManifest(text);
     if (!manifest) throw new ApiError(400, `${path.basename(artifactPath)} is not an Eigen backup archive`);
     return manifest;
 }

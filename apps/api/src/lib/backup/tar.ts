@@ -27,10 +27,11 @@ const DECODER = new TextDecoder();
 export function* headerChunks(
     name: string,
     size: number,
-    mtime: number,
+    mtimeMs: number,
     typeflag: string,
     mode: number,
 ): Generator<Uint8Array> {
+    const mtime = Math.floor(mtimeMs / 1000);
     if (ENCODER.encode(name).length > NAME_FIELD) {
         const payload = ENCODER.encode(paxRecord('path', name));
         yield tarHeader(`PaxHeader/${truncateUtf8(path.basename(name), 80)}`, payload.length, mtime, 'x', mode);
@@ -157,14 +158,7 @@ export async function* tarEntries(
         const { done, value } = await source.next();
         if (done) return false;
         // Mostly the buffer has drained, and the chunk is taken as it is rather than copied.
-        if (buffered.length === 0) {
-            buffered = value;
-            return true;
-        }
-        const merged = new Uint8Array(buffered.length + value.length);
-        merged.set(buffered);
-        merged.set(value, buffered.length);
-        buffered = merged;
+        buffered = buffered.length === 0 ? value : Buffer.concat([buffered, value]);
         return true;
     }
     async function take(count: number): Promise<Uint8Array | null> {
