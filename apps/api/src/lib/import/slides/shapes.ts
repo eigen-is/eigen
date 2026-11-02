@@ -315,8 +315,9 @@ function readShape(walk: Walk, leaf: Leaf): void {
     // A text box grows with its text, where a rectangle lets it spill.
     const bodyPr = body && childOf(body, A_NS, 'bodyPr');
     const grows = bodyPr !== undefined && childOf(bodyPr, A_NS, 'spAutoFit') !== undefined;
-    const textBoxed = own !== undefined || marked || grows;
-    if (framed && textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
+    // An empty one marked txBox comes back too while it paints, since the export marks every text box.
+    const textBoxed = framed ? own !== undefined || marked || grows : marked && painted;
+    if (textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
         push(walk, { type: 'rectangle', autoFit: true, ...textBox, ...framed, ...paint, corners: 'straight' });
     else if (kind) shapeAndText(kind);
     else if (geometry === 'pie') shapeAndText({ type: 'pie', ...pieAngles(shaped?.geom, placed) });
