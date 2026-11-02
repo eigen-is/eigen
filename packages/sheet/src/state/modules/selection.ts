@@ -318,9 +318,11 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
             }
             if (value == null) return cell;
 
+            // The value and the link stay the destination's, so the link marker stays behind with them.
             delete value.v;
             delete value.m;
             delete value.f;
+            delete value.hl;
             if (value.ct?.t === 'inlineStr') {
                 delete value.ct;
             }

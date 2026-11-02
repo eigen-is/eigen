@@ -17,6 +17,7 @@ import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
 import type { Cell, GlobalCache, Selection } from '../../state/types';
+import { author, join } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
 
@@ -55,8 +56,12 @@ function cellAt(r: number, c: number): Cell {
     return { v: text, m: text, bg: `#${r}${c}0000` };
 }
 
+function emptyGrid(): (Cell | null)[][] {
+    return Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null));
+}
+
 function makeCtx({ filtered = false } = {}): Context {
-    const data: (Cell | null)[][] = Array.from({ length: SIZE }, () => Array.from({ length: SIZE }, () => null));
+    const data = emptyGrid();
     for (let r = 0; r < 4; r += 1) for (let c = 0; c < 4; c += 1) data[r][c] = cellAt(r, c);
     data[0][2] = { ...cellAt(0, 2), mc: { r: 0, c: 2, rs: 1, cs: 2 } };
     data[0][3] = { mc: { r: 0, c: 2 } };
@@ -221,6 +226,22 @@ describe('a range with a hidden row and column inside it', () => {
         expect(d?.[7][7]?.bg).toBe('#110000');
         expect(d?.[8][8]?.bg).toBe('#220000');
         expect(d?.[7][7]?.v).toBeUndefined();
+    });
+
+    // The other sheet has no links. A painted cell that kept the source's link marker would ship a write to a link
+    // that sheet doesn't have, and the replay would drop the whole paint.
+    test('the format painter onto another sheet replays for a reader who opens the workbook', () => {
+        const base = makeCtx();
+        base.sheets.push({ name: 'other', id: 'id_2', order: 1, data: emptyGrid(), config: {} });
+        handleFormatPainter(base);
+        const { next, ops } = author(base, (ctx) => {
+            ctx.currentSheetId = 'id_2';
+            ctx.selections = destination();
+            pasteHandlerOfPaintModel(ctx, ctx.copyState);
+        });
+        expect(next.sheets[1].data?.[7][7]?.hl).toBeUndefined();
+        const joined = join(base, [ops]).find((s) => s.id === 'id_2');
+        expect(joined?.data?.[7][7]?.bg).toBe('#110000');
     });
 
     test('the clipboard carries the hidden row and column', () => {
