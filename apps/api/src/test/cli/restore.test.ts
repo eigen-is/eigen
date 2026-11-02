@@ -1290,12 +1290,16 @@ describe('restore --stage and --swap', () => {
             heartbeat(live);
             heartbeat(stale);
             const remote = setInterval(() => heartbeat(live), 50);
-            const started = Date.now();
+            const timed = async (dir: string) => {
+                const started = Date.now();
+                const result = await swap(dir);
+                return { result, waited: Date.now() - started };
+            };
             try {
-                const [refused, delayed] = await Promise.all([
-                    swap(live),
+                const [{ result: refused }, { result: delayed, waited }] = await Promise.all([
+                    timed(live),
                     // A stopped heartbeat leaves a lease that no longer moves, so it delays the swap once, not forever.
-                    swap(stale),
+                    timed(stale),
                 ]);
                 expect(refused.code).toBe(1);
                 expect(refused.stderr).toContain('other-machine');
@@ -1304,7 +1308,10 @@ describe('restore --stage and --swap', () => {
                 expect(existsSync(join(live, SWAP_MARKER))).toBe(false);
                 expect(asideDirs(live)).toEqual([]);
                 expect(delayed.code).toBe(0);
-                expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
+                expect(waited).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
+                // A refusal leaves the staged restore usable: once the remote API stops, the same install swaps.
+                clearInterval(remote);
+                expect((await swap(live)).code).toBe(0);
             } finally {
                 clearInterval(remote);
             }
