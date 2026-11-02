@@ -13,6 +13,7 @@ import {
     rmSync,
     statSync,
     symlinkSync,
+    utimesSync,
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
@@ -1208,6 +1209,55 @@ describe('restore --check-data, which a rollback runs first with the build it go
             // Nothing it reads is staged or moved.
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
             expect(asideDirs(dir)).toEqual(aside);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'with --since, checks only the databases written since then, a -wal counting as a write',
+        async () => {
+            const dir = install();
+            await stageAndSwap(dir, basename(fullArchive));
+            const since = Date.now();
+            const past = new Date(since - 60_000);
+            const metadata = join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db');
+            const shares = join(dir, 'data/server', SERVER_DATABASES.shares);
+            const users = join(dir, 'data/server', SERVER_DATABASES.users);
+            const intact = readFileSync(users);
+            bumpSchema(metadata, 1);
+            bumpSchema(shares, 1);
+            writeFileSync(users, Buffer.alloc(intact.length, 'x'));
+            for (const file of [metadata, shares, users]) utimesSync(file, past, past);
+            const sinceArgs = ['--check-data', '--yes', '--since', String(since)];
+            // Written before the first check began, so that check passed them.
+            const unchanged = await restoreCli(dir, sinceArgs);
+            expect(unchanged.stderr).toBe('');
+            expect(unchanged.code).toBe(0);
+            expect((await restoreCli(dir, ['--check-data', '--yes'])).code).toBe(CANNOT_OPEN);
+            for (const [file, said] of [
+                [metadata, 'is at'],
+                [shares, 'is at'],
+                [users, 'is damaged'],
+            ] as const) {
+                writeFileSync(`${file}-wal`, '');
+                const changed = await restoreCli(dir, sinceArgs);
+                expect(changed.code).toBe(CANNOT_OPEN);
+                expect(changed.stderr).toContain(`${relative(dir, file)} ${said}`);
+                rmSync(`${file}-wal`);
+                if (file === users) writeFileSync(users, intact);
+                else bumpSchema(file, -1);
+                utimesSync(file, past, past);
+            }
+            expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
+            // A time that is not one, or one for another mode, is a usage error.
+            for (const args of [
+                ['--check-data', '--since', 'soon'],
+                [basename(fullArchive), '--stage', '--since', String(since)],
+            ]) {
+                const refused = await restoreCli(dir, args);
+                expect(refused.code).toBe(2);
+                expect(refused.stderr).toContain('--since');
+            }
         },
         JOB_TIMEOUT_MS,
     );

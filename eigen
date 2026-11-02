@@ -782,7 +782,9 @@ put_back() {
 stage_archive() {
     # The stage reads .env.production as the API does.
     share_env
-    AT_EXIT=$UNSTAGE
+    # What AT_EXIT held stays: after a rollback's second check, Eigen is stopped, and a no or a failure starts it.
+    held=$AT_EXIT
+    AT_EXIT="${held:+($held); }$UNSTAGE"
     tty=''
     if [ ! -t 0 ]; then tty=-T; fi
     # The CLI says how an interrupt ended it, so the launcher waits for it.
@@ -795,7 +797,7 @@ stage_archive() {
     case $staged in
         0) ;;
         "$DECLINED")
-            AT_EXIT=''
+            AT_EXIT=$held
             exit 0
             ;;
         *) exit "$staged" ;;
@@ -1523,11 +1525,12 @@ pre_update_archives() {
 }
 
 # switch_back <archive>: the first way back, which keeps data/. The build before the update, as the API's user while
-# Eigen runs, checks it opens every database here and asks; then the rollback switches back to the pins the update
-# recorded and warns the open tabs as put_back does. The archive stays for ./eigen restore. Sets switched once Eigen
-# runs on that build. Leaves it empty, and says why, when that build cannot open the data, is too old to check it, or
-# the launcher that made the update recorded no pins: the rollback then puts the archive back. A check that stopped
-# without a verdict on the data ends the rollback, which keeps today's data.
+# Eigen runs, checks it opens every database here and asks; then the rollback warns the open tabs as put_back does,
+# stops Eigen, checks again what Eigen wrote since (check_again) and switches back to the pins the update recorded.
+# The archive stays for ./eigen restore. Sets switched once Eigen runs on that build. Leaves it empty, and says why,
+# when that build cannot open the data, is too old to check it, or the launcher that made the update recorded no
+# pins: the rollback then puts the archive back. A check that stopped without a verdict on the data ends the
+# rollback, which keeps today's data.
 switch_back() {
     switched=''
     PINS=$(sed -n '2,$p' .eigen/last-update)
@@ -1543,6 +1546,8 @@ switch_back() {
     NEXT=''
     old=$(describe "$old_image")
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
+    # In ms, as check_again passes it. The margin covers a clock that differs between this host and Docker's VM.
+    since=$((($(date +%s) - 300) * 1000))
     checked=0
     with_image "$old_image" cli_as 1000:1000 restore --check-data $yes || checked=$?
     # A build older than restore --check-data refuses it as an unknown argument, with exit code 2. 130 is a Ctrl+C at
@@ -1568,9 +1573,11 @@ switch_back() {
     esac
     # After the pull, the check and its question, so the wait is the last thing before the stop.
     warn_restart rollback
+    before_stop
     # From the stop on, whatever ends the rollback starts Eigen again, on the build .env.production pins by then.
     AT_EXIT=restart
     stop
+    if ! check_again "$1"; then return; fi
     step "Switching to Eigen $old" "Switched to Eigen $old" "Could not write Eigen $old into .env.production" \
         with_image "$old_image" with_pins cli configure --backfill
     write_bundle "$old_image"
@@ -1581,6 +1588,34 @@ switch_back() {
     say "$GREEN" '◇' "Eigen $current → $old is running at https://$(env_value DOMAIN)/"
     say "$GRAY" '└' "The data stayed as it was. backups/$1 stays, for ./eigen restore."
     switched=1
+}
+
+# check_again <archive>: with Eigen stopped, the build before the update checks once more the databases written since
+# the first check began. The wait for the tabs and for a server backup ran on the new build, and a server backup opens
+# every home, so a database may have moved to a schema the build before cannot open. Returns 1 when one did: Eigen
+# stays stopped and the rollback puts the archive back. A check that stopped without a verdict ends the rollback, and
+# Eigen starts again on the build it ran.
+check_again() {
+    say "$ACCENT" '◆' "Checking again what Eigen wrote since the first check"
+    rechecked=0
+    with_image "$old_image" cli_as 1000:1000 restore --check-data --yes --since "$since" || rechecked=$?
+    case $rechecked in
+        0) return 0 ;;
+        "$CANNOT_OPEN")
+            say "$YELLOW" '▲' "Eigen $old cannot open what Eigen $current wrote since the first check."
+            return 1
+            ;;
+        # A build from before --since refuses it as an unknown argument. Taking the first verdict would leave the
+        # writes since unchecked, and putting the archive back would throw away what users did since the update.
+        2)
+            die "Eigen $old cannot check again what Eigen $current wrote since the first check; Eigen $current starts again." \
+                "./eigen restore backups/$1 puts back the backup the last update made."
+            ;;
+        *)
+            die "The second check stopped (exit $rechecked); Eigen $current starts again." \
+                "Fix what it says, then run ./eigen rollback again."
+            ;;
+    esac
 }
 
 COMMAND=${1:-}

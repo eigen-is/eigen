@@ -327,14 +327,15 @@ ARCHIVE=server-manual-full-20260101-000000.tar
 
 # steps: what of the last launch a restore, update or rollback turns on, in order, on one line: the stage (compose
 # run), stop, up, pulls, the share of .env.production, and the CLI's restore, bootstrap, configure and rm runs with the
-# image each ran in.
+# image each ran in. The time of a rollback's second check reads as --since T.
 steps() {
     printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* run --rm --no-deps -T -e TERM -e NO_COLOR \(.*\)$/stage \1/p' \
         -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' -e 's/^\(pull .*\)$/\1/p' \
         -e 's|^run --rm --user 0 --entrypoint sh .* -c chgrp 1000 /install/\.env\.production .*|share|p' \
         -e 's/^run .* \([^ ]*\) restore \(.*\)$/restore \2 (\1)/p' \
         -e 's/^run .* \([^ ]*\) bootstrap --force --out \/install$/bootstrap \1/p' \
-        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' -e 's/^run .* rm -rf \(.*\)$/rm \1/p' | tr '\n' '|'
+        -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' -e 's/^run .* rm -rf \(.*\)$/rm \1/p' |
+        sed 's/ --since [0-9]* / --since T /' | tr '\n' '|'
 }
 
 # update_steps: what of the last launch an update from 0.2.99 turns on, in order, on one line: the notes the new CLI
@@ -1589,23 +1590,60 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     fi
     # Cut off after the stop, it starts Eigen again and keeps the way back, so the next rollback below finishes it.
     STUB_RUN_FAIL=bootstrap launch release rollback --yes
-    if [ "$CODE" = 1 ] && [ "$(steps)" = "restore --check-data --yes ($old)|stop|configure $old|bootstrap $old|share|up|" ] &&
+    if [ "$CODE" = 1 ] && [ "$(steps)" = "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|configure $old|bootstrap $old|share|up|" ] &&
         [ -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: rollback on the data as it is that fails writing the files starts Eigen and keeps .eigen/last-update"
     else
         fail "$SHELL_NAME: rollback on the data as it is cut off in the files: exit $CODE, steps '$(steps)', '$ERR'"
     fi
+    started=$(date +%s)
     launch release rollback --yes
+    since=$(printf '%s\n' "$CALLS" | sed -n 's/^run .* restore --check-data --yes --since \([0-9]*\)$/\1/p')
     if [ "$CODE" = 0 ] &&
         printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to Eigen 0.2.99 (abc1234), on the data as it is' &&
-        [ "$(steps)" = "restore --check-data --yes ($old)|stop|configure $old|bootstrap $old|share|up|" ] &&
+        [ "$(steps)" = "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|configure $old|bootstrap $old|share|up|" ] &&
+        [ -n "$since" ] && [ "$since" -le "$((started * 1000))" ] &&
         printf '%s\n' "$CALLS" | grep " configure --backfill$" | grep -q ' -e EIGEN_API_IMAGE ' &&
         [ ! -e "$FIX/release/.eigen/last-update" ] && [ -e "$FIX/release/backups/$full" ] &&
         printf '%s\n' "$OUT" | grep -q "└  The data stayed as it was. backups/$full stays, for ./eigen restore."; then
-        ok "$SHELL_NAME: rollback keeps data/, and switches to the pins the update recorded once the build before checked the data"
+        ok "$SHELL_NAME: rollback keeps data/, and switches to the pins the update recorded once the build before checked the data, and checked again with Eigen stopped what was written since the first check began"
     else
-        fail "$SHELL_NAME: a rollback on the data as it is: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
+        fail "$SHELL_NAME: a rollback on the data as it is: exit $CODE, since '$since', steps '$(steps)', '$OUT', '$ERR'"
     fi
+    # The wait for the tabs and for a server backup ran on the new build, which may have moved a database to a schema
+    # the build before cannot open. The second check finds it with Eigen stopped, and the rollback puts the update's
+    # Full backup back. A check that stops without a verdict, or a build before that cannot check again, ends the
+    # rollback, and Eigen starts again on the build it ran.
+    record_pins
+    STUB_RUN_FAIL=--since STUB_RUN_CODE=4 STUB_CHECKED=$checked launch release rollback --yes
+    if [ "$CODE" = 0 ] &&
+        printf '%s\n' "$OUT" | grep -q '▲  Eigen 0.2.99 (abc1234) cannot open what Eigen 0.2.99 (abc1234) wrote since the first check.$' &&
+        [ "$(steps)" = "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|share|stage eigen-api restore $full --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|" ] &&
+        [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: rollback whose second check finds a database the build before cannot open puts the update's Full backup back"
+    else
+        fail "$SHELL_NAME: rollback after a failed second check: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
+    fi
+    rm -f "$FIX/release/.eigen/bundle"
+    reset_release
+    failed=''
+    for code in 2 1; do
+        record_pins
+        STUB_RUN_FAIL=--since STUB_RUN_CODE=$code launch release rollback --yes
+        why="The second check stopped (exit $code); Eigen 0.2.99 (abc1234) starts again."
+        if [ "$code" = 2 ]; then why="Eigen 0.2.99 (abc1234) cannot check again what Eigen 0.2.99 (abc1234) wrote since the first check; Eigen 0.2.99 (abc1234) starts again."; fi
+        if [ "$CODE" != 1 ] || [ "$(steps)" != "restore --check-data --yes ($old)|stop|restore --check-data --yes --since T ($old)|share|up|" ] ||
+            ! printf '%s\n' "$ERR" | grep -qF "■  $why" || [ ! -e "$FIX/release/.eigen/last-update" ]; then
+            failed="$failed second check exit $code (exit $CODE, steps '$(steps)', '$ERR')"
+        fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: rollback whose second check stops, or whose build before cannot check again, starts Eigen again on the build it ran and keeps the way back"
+    else
+        fail "$SHELL_NAME: rollback after a stopped second check:$failed"
+    fi
+    reset_release
+    record_pins
     # rollback --in on the data as it is waits after the check and its question, right before the stop. Cut off in the
     # wait by Ctrl+C or a lost SSH session, it takes the notice back and stops and switches nothing.
     kept_steps() {
@@ -1626,7 +1664,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     done
     launch release rollback --in 1s 'Back soon' --yes
     if [ -z "$failed" ] && [ "$CODE" = 0 ] &&
-        [ "$(kept_steps)" = 'checked|restart-notice --in 1 --reason rollback --message Back soon|stop|' ] &&
+        [ "$(kept_steps)" = 'checked|restart-notice --in 1 --reason rollback --message Back soon|stop|checked|' ] &&
         printf '%s\n' "$OUT" | grep -q '◆  Restarts in 1s, at 00:10:00 UTC. Ctrl+C cancels.$' &&
         [ ! -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: rollback --in on the data as it is warns the open tabs after the check, waits right before the stop, and cut off there takes the notice back"
