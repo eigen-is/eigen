@@ -1153,6 +1153,54 @@ describe('text boxes as boxes', () => {
         expect(bare.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 
+    // The box is aligned by its width, so the picture takes that width and keeps its shape. A 400 by 40 px picture in a
+    // 96 px box is 96 by 9.6, and in a box wider than the paper it is the paper's 793 px wide.
+    test('a picture in an unpainted box is stored at the box’s width and lands on the paper', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const wide = paragraph(picture('rId9').replaceAll('cx="381000" cy="381000"', 'cx="3810000" cy="381000"'));
+        const bare = (cx: number) =>
+            anchored({ content: wide, cx, spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>', position: toPage('right') });
+        const { json } = await importDocxBody([bare(914400), bare(7620000)].join(''), parts);
+        const figures = nodesOfType(json, 'figure');
+        expect(figures.map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']])).toEqual([
+            [96, 9.6],
+            [793, 79.3],
+        ]);
+        expect(onPaper(figures)).toEqual([
+            [698, 794],
+            [1, 794],
+        ]);
+    });
+
+    // A box the picture's own size, as Word draws one around a picture, places the picture where it would stand alone.
+    test('a picture in an unpainted box of its own size keeps its size and place', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const bare = (position?: string) =>
+            anchored({
+                content: paragraph(picture('rId9')),
+                cx: 381000,
+                cy: 381000,
+                spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>',
+                position,
+            });
+        const { json } = await importDocxBody([bare(), bare(toPage('right'))].join(''), parts);
+        const figures = nodesOfType(json, 'figure');
+        expect(figures.map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']])).toEqual([
+            [40, 40],
+            [40, 40],
+        ]);
+        expect(onPaper(figures)).toEqual([
+            [196, 236],
+            [754, 794],
+        ]);
+    });
+
     test('in a header a box keeps its paragraphs after the anchor’s', async () => {
         const { json, bands } = docxToPmJson(
             Buffer.from(

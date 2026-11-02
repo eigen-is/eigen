@@ -6,6 +6,7 @@ import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import {
+    heightAtWidth,
     isFigureFrameNode,
     mmToPx,
     pageTwips,
@@ -122,11 +123,14 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             tail.every(isCaptionLike) &&
             !(shape && paintsBox(reader, shape))
         ) {
-            // An unpainted box around a picture is the picture: its place and size are the box's.
+            // An unpainted box around a picture is the picture: its place and width are the box's, and the picture keeps
+            // its shape.
             if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
-            figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
+            const size =
+                shape && boxedFigure.type === 'figure' ? pictureAtWidth(boxedFigure, boxWidth(extent, room)) : {};
+            figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, ...size, caption } });
         } else if (shape) {
             const box = readTextBox(reader, shape, extent, layout, room, boxed);
             if (box) figures.push(box);
@@ -239,6 +243,13 @@ function pictureSize(width: number, height: number | null, columnPx: number): Pi
 }
 
 const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: null };
+
+// A figure at `width`, its height scaled to keep its shape. One of no known size takes its own height once it loads.
+function pictureAtWidth(figure: JSONContent, width: number): Pick<FigureAttrs, 'width' | 'height'> {
+    const own = { width: readFrameSide(figure.attrs?.['width']), height: readFrameSide(figure.attrs?.['height']) };
+    const height = own.width && own.height ? heightAtWidth({ width: own.width, height: own.height }, width) : null;
+    return { width, height: readFrameSide(height) };
+}
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
@@ -385,10 +396,15 @@ function drawnWidth(anchor: XmlElement, room: number): number | undefined {
     const extent = xmlChild(anchor, WP_NS, 'extent');
     const only = loneGraphic(anchor);
     if (only && hasXmlName(only, C_NS, 'chart')) return chartSize(extent, room).width * EMU_PER_PX;
-    if (loneTextBox(anchor)) return (textBoxWidth(extent, room) ?? TEXT_BOX_DEFAULT_WIDTH) * EMU_PER_PX;
+    if (loneTextBox(anchor)) return boxWidth(extent, room) * EMU_PER_PX;
     const { cx } = extentOf(extent);
     const width = cx ? pictureSize(cx / EMU_PER_PX, null, room).width : null;
     return width ? width * EMU_PER_PX : undefined;
+}
+
+// The width in px a wps box draws at, given `room` px: its stored width, else a new box's.
+function boxWidth(extent: XmlElement | undefined, room: number): number {
+    return textBoxWidth(extent, room) ?? TEXT_BOX_DEFAULT_WIDTH;
 }
 
 // The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at
