@@ -25,7 +25,7 @@ export function boxToolElement(tool: BoxTool): NewVectorElement {
     return tool === 'text' ? { type: 'rectangle', autoFit: true } : { type: tool };
 }
 
-// Axis-aligned box from two corner points (also the marquee rect); direction is dropped.
+// The axis-aligned box between two corner points, whichever way the drag went. The marquee uses it too.
 export function normalizeRect(x0: number, y0: number, x1: number, y1: number): Box {
     return { x: Math.min(x0, x1), y: Math.min(y0, y1), width: Math.abs(x1 - x0), height: Math.abs(y1 - y0), angle: 0 };
 }
@@ -44,9 +44,9 @@ export function newShapeBox(sx: number, sy: number, dx: number, dy: number, from
     return normalizeRect(sx, sy, sx + dx, sy + dy);
 }
 
-// The preview takes its paint and style from the same defaults the committed element gets (addElement reads the
-// host's own table), so the two can't drift; only the gesture's seed carries over. One branch per tool because each
-// composes its OWN element type: a union-typed `ELEMENT_KINDS[type].defaults()` spread would need a cast.
+// The preview takes its paint and style from the same defaults the committed element gets from the host's table, so
+// the two can't drift. Only the gesture's seed carries over. Each tool has a branch of its own, because each composes
+// its own element type, and a spread of the union-typed `ELEMENT_KINDS[type].defaults()` would need a cast.
 export function creatingElement(c: CreatingState, style: StyleDefaults): VectorElement {
     const { x, y, width, height } = c.box;
     const placed = { id: CREATING_ID, x, y, width, height, angle: 0, seed: c.seed, index: 'a0' };
@@ -66,9 +66,8 @@ export function creatingElement(c: CreatingState, style: StyleDefaults): VectorE
     if (c.tool === 'ellipse') return { ...base, ...ELEMENT_KINDS.ellipse.defaults(style), type: 'ellipse' };
     if (c.tool === 'diamond') return { ...base, ...ELEMENT_KINDS.diamond.defaults(style), type: 'diamond' };
     if (c.tool === 'rectangle') return { ...base, ...ELEMENT_KINDS.rectangle.defaults(style), type: 'rectangle' };
-    // Exhaustiveness guard: a new box-creation kind brings its own preview branch instead of silently
-    // previewing as a rectangle (the kinds test pins the tools to the registry). It throws rather than
-    // returning, so a type widened past the union can never reach the layer as a bare string.
+    // A new kind that a box drag creates needs a branch of its own here, or it would preview as a rectangle. This
+    // throws rather than returns, so a type widened past the union never reaches the layer as a bare string.
     const exhaustive: never = c.tool;
     throw new Error(`no drag-create preview for ${String(exhaustive)}`);
 }
