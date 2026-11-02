@@ -1,14 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { Window } from 'happy-dom';
-import { deckOwnsClick, presentStep } from '../../../components/slides/present-mode';
+import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
-// A DOM at module scope, the canvas suites' recipe: the predicate walks up from the clicked node, so
-// `instanceof Element` needs the constructor to be the global one.
-const window = new Window();
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.document = window.document;
-g.Element = window.Element;
+// The predicate walks up from the clicked node, so `instanceof Element` needs the window's Element as the global one.
+// The module comes in after the window: it pulls in React and the vector UI, which bun keeps for the next test file,
+// and those must not load without a window.
+installHappyDom();
+
+const { deckOwnsClick, presentStep } = await import('../../../components/slides/present-mode');
 
 describe('presentStep', () => {
     test('a click advances', () => {
