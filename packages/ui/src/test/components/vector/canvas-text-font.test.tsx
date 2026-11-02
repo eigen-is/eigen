@@ -120,10 +120,15 @@ beforeEach(() => {
 let unmount = async () => {};
 afterEach(() => unmount());
 
+// Takes edit rights from the rendered canvas, or gives them back, as a permission change does.
+let setCanEdit = (_canEdit: boolean) => {};
+
 async function render(canEdit = true): Promise<HTMLElement> {
     function Host() {
         const canvas = useCanvasDoc('owner', 'mount', 'drawing', VECTOR_STYLE_DEFAULTS);
         const [selectedIds, setSelectedIds] = useState<string[]>([]);
+        const [editable, setEditable] = useState(canEdit);
+        setCanEdit = setEditable;
         return createElement(CanvasEditor, {
             doc: canvas,
             viewport: 'infinite',
@@ -132,7 +137,7 @@ async function render(canEdit = true): Promise<HTMLElement> {
             setTool: () => {},
             toolLocked: false,
             setToolLocked: () => {},
-            canEdit,
+            canEdit: editable,
             ownerId: 'owner',
             mountId: 'mount',
             fileName: 'Plan',
@@ -382,6 +387,48 @@ test('a change to one label measures that label alone', async () => {
     expect({ lines: measuredLines, width: labelWidth() }).toEqual({ lines: ['gog'], width: 60 });
 });
 
+// The old text's load settles after the edit and before the new text's own load, so it must store nothing: not the
+// old text's width, and not the new text measured with one of its characters in the fallback.
+test('a label edited while its slices load is stored at the width of its new text alone', async () => {
+    doc.transact(() => {
+        storedArrow().set('text', 'tea');
+        storedArrow().set('labelWidth', 7);
+    }, 'file');
+    const stored: unknown[] = [];
+    storedArrow().observe((event) => {
+        if (event.keysChanged.has('labelWidth')) stored.push(storedArrow().get('labelWidth'));
+    });
+    await render();
+    const releaseOld = release;
+    const oldNetwork = network;
+    network = new Promise<void>((resolve) => {
+        release = resolve;
+    });
+    await act(async () => {
+        storedArrow().set('text', 'teas');
+    });
+
+    await act(async () => {
+        releaseOld();
+        await oldNetwork;
+    });
+    await loadSlices();
+    expect(stored).toEqual([80]);
+});
+
+// A width alone measures nothing, so only the new handler's fresh start sets right a width that went wrong meanwhile.
+test('a canvas that gets its edit rights back measures every label again', async () => {
+    labelGo();
+    await render();
+    await act(async () => setCanEdit(false));
+    await act(async () => {
+        doc.transact(() => storedArrow().set('labelWidth', 7), 'peer');
+    });
+
+    await act(async () => setCanEdit(true));
+    expect(labelWidth()).toBe(40);
+});
+
 test('a canvas closed before the slices of a label load writes nothing', async () => {
     doc.transact(() => storedArrow().set('text', 'tea'), 'file');
     const writes = countWrites();
@@ -530,6 +577,22 @@ test('a pasted box restyled before its slices load keeps the size it has', async
 
     await loadSlices();
     expect(textBox()).toEqual({ width: 50, height: oneLine });
+});
+
+// Each write reads the whole scene again, and a paste can carry hundreds of text items.
+test("another app's text items are written in one transaction once their slices load", async () => {
+    await render();
+    await paste((event) =>
+        writeEigenClipboard(event, {
+            version: 1,
+            items: ['茶 tea', 'tea', 'eat'].map((text) => ({ type: 'text', text, width: 1, height: 1 })),
+        }),
+    );
+    const writes = countWrites();
+
+    await loadSlices();
+    const widths = readVectorFromDoc(doc).elements.flatMap((el) => (el.type === 'rectangle' ? [el.width] : []));
+    expect({ widths, writes: writes.count }).toEqual({ widths: [100, 60, 60], writes: 1 });
 });
 
 // A fallback as wide as the face measures the same size, so the heal has nothing to correct.
