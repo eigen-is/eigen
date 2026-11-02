@@ -54,7 +54,7 @@ import { CustomBorder } from './CustomBorder';
 
 function NumberFormatSubmenu() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showFormDialog } = useDialog();
     const { currency } = settings;
     const groups = numberMenuPresets(currency);
 
@@ -96,7 +96,7 @@ function NumberFormatSubmenu() {
                 ))}
                 <DropdownMenuSeparator />
                 {customItems.map(({ text, dialog }) => (
-                    <DropdownMenuItem key={text} inset onClick={() => showDialog(dialog)}>
+                    <DropdownMenuItem key={text} inset onClick={() => showFormDialog(dialog)}>
                         {text}
                     </DropdownMenuItem>
                 ))}

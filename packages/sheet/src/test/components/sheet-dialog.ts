@@ -22,7 +22,8 @@ const refs: RefValues = {
         scrollListeners: new Set<() => void>(),
         notifyScrollListeners: () => {},
     },
-    cellInput: createRef<HTMLDivElement | null>(),
+    // The in-cell editor, which the grid always mounts: a format or a function is applied through it.
+    cellInput: { current: document.createElement('div') },
     fxInput: createRef<HTMLDivElement | null>(),
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
