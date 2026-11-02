@@ -22,7 +22,16 @@ import pkg from '../../../../../package.json' with { type: 'json' };
 import { DECLINED } from '../../cli/install';
 import { STAGE_LOCK } from '../../cli/restore-stage';
 import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
-import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
+import {
+    copyArchiveMember,
+    createServerArchiveWriter,
+    declaredUnpackBytes,
+    ENTRY_ALLOWANCE_BYTES,
+    extractArtifact,
+    packFolder,
+    readArtifactManifest,
+    withUnpackSlack,
+} from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
@@ -1318,22 +1327,26 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'the stage counts each member once at what it unpacks to, since it moves what it unpacks',
+        'the stage counts each member once at what its unpack declares, since it moves what it unpacks',
         async () => {
-            const { manifest } = await readServerManifest(fullArchive);
-            const server = manifest.entries.find((entry) => entry.path === SERVER_ARCHIVE_SERVER_MEMBER)!;
-            const home = manifest.homes.find((candidate) => candidate.member)!;
-            const member = manifest.entries.find((entry) => entry.path === home.member)!;
-            const sized = {
-                ...manifest,
-                entries: [
-                    { ...server, bytes: 1_000_000 },
-                    { ...member, bytes: 1_000 },
-                ],
-                homes: [{ ...home, bytes: 5_000_000 }],
-            };
-            // server.tar.zst at what its databases unpack to, a home at its inner count.
-            expect(stageBytesNeeded(sized)).toBe(15_000_000);
+            const read = await readServerManifest(fullArchive);
+            const { manifest } = read;
+            const members = new Map(read.members.map((member) => [member.name, member]));
+            const inner = [SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])];
+            let declared = 0;
+            let entries = 0;
+            for (const name of inner) {
+                const unpacked = await readArtifactManifest(members.get(name)!);
+                declared += declaredUnpackBytes(unpacked);
+                entries += unpacked.entries.length + (unpacked.counts.dirs ?? 0);
+            }
+            const copied = manifest.entries.filter((entry) => !inner.includes(entry.path));
+            declared += copied.reduce((sum, entry) => sum + entry.bytes, 0);
+
+            const needed = await stageBytesNeeded({ name: basename(fullArchive), manifest, members });
+            expect(needed).toBe(withUnpackSlack(declared));
+            // Every file and folder of a home takes its allowance, as each member's unpack charges it.
+            expect(needed).toBeGreaterThan(entries * ENTRY_ALLOWANCE_BYTES);
         },
         JOB_TIMEOUT_MS,
     );

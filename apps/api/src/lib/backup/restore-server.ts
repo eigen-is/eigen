@@ -14,7 +14,15 @@ import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUN
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
 import type { HashedArchiveMember } from './archive';
-import { copyArchiveMember, extractArtifact, readArtifactManifest, readUnpackedHome, unpackBound } from './archive';
+import {
+    copyArchiveMember,
+    declaredUnpackBytes,
+    extractArtifact,
+    readArtifactManifest,
+    readUnpackedHome,
+    unpackBound,
+    withUnpackSlack,
+} from './archive';
 import type { MountPathRow } from './archive-layout';
 import { flatStorageKey, insideDocument, readMountPathRows, rowArchivePath, storageKeyOf } from './archive-layout';
 import { describeError } from './errors';
@@ -72,18 +80,18 @@ type StageContext = {
     now: number;
 };
 
-// How much server.tar.zst can grow unpacked: its manifest carries no inner count, and SQLite shrinks that much.
-const SERVER_MEMBER_EXPANSION = 10;
-
-// What the stage takes on the data disk, at most: every member unpacked, a home by its inner count. Once: it
-// streams each member out of the archive and renames what it unpacked into place.
-export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
-    const homes = new Map(manifest.homes.map((home) => [home.member, home.bytes ?? 0]));
-    const unpacked = (entry: ServerArchiveManifest['entries'][number]) =>
-        entry.path === SERVER_ARCHIVE_SERVER_MEMBER
-            ? SERVER_MEMBER_EXPANSION * entry.bytes
-            : Math.max(entry.bytes, homes.get(entry.path) ?? 0);
-    return manifest.entries.reduce((sum, entry) => sum + unpacked(entry), 0);
+// What the stage takes on the data disk, at most: what each member's unpack declares, with the slack and the reserve
+// added once. The server member and each home carry a manifest of their own, so each is read up to it, and the rest
+// are copied at their size. Counted once: the stage streams each member out and renames what it unpacked into place.
+export async function stageBytesNeeded({ manifest, members }: ServerArchiveFile): Promise<number> {
+    const archives = new Set([SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])]);
+    let declared = 0;
+    for (const entry of manifest.entries) {
+        const member = members.get(entry.path);
+        declared +=
+            member && archives.has(entry.path) ? declaredUnpackBytes(await readArtifactManifest(member)) : entry.bytes;
+    }
+    return withUnpackSlack(declared);
 }
 
 // Every member of the archive into `restoringDir`/data, each verified as it lands. Throws on the first one that

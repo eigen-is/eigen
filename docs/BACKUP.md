@@ -355,7 +355,7 @@ The stage refuses:
 - one from a newer Eigen;
 - one from a release install on a local build, or the other way around (one pins images, the other builds its own);
 - `--s3-from-archive` on an archive without S3 files;
-- an archive the data disk has no room to stage: it needs the archive's unpacked size free, once, since the stage streams each member out of the archive and renames what it unpacked into place (`stageBytesNeeded` in `apps/api/src/lib/backup/restore-server.ts`).
+- an archive the data disk has no room to stage: it needs what each member's unpack declares free, once, since the stage streams each member out of the archive and renames what it unpacked into place. The server member and each home declare it in their own manifest, as a per-home restore reads it, and the tenth and the 64 MB reserve go on top once (`stageBytesNeeded` in `apps/api/src/lib/backup/restore-server.ts`). Reading those manifests decompresses each member once before the stage asks.
 
 The launcher refuses an archive path with a colon, which Docker cannot mount, and an archive uid 1000 cannot read, such as a copy root left 0600, with the `chown` that fixes it.
 

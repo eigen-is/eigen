@@ -81,14 +81,16 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
             'Leave the flag out.',
         );
     }
-    const needed = stageBytesNeeded(manifest);
-    const shortfall = roomShortfall(`Staging ${name}`, needed, dataRoot, 'data/');
-    if (shortfall) return refuse(`${shortfall}.`, 'Free space on that disk, then run ./eigen restore again.');
     const archived: ServerArchiveFile = {
         name,
         manifest,
         members: new Map(read.members.map((member) => [member.name, member])),
     };
+    const needed = await stageBytesNeeded(archived).catch((error) =>
+        refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'),
+    );
+    const shortfall = roomShortfall(`Staging ${name}`, needed, dataRoot, 'data/');
+    if (shortfall) return refuse(`${shortfall}.`, 'Free space on that disk, then run ./eigen restore again.');
 
     // An archive without .env.production keeps the one here; with neither, there is nothing to start Eigen with.
     const envMember = archived.members.get(SERVER_ARCHIVE_ENV_MEMBER);
