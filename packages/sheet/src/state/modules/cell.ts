@@ -6,7 +6,7 @@
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import { cellFontName, columnIndexToLabel, compareValidationIds, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
@@ -1103,7 +1103,9 @@ export function carryCells(
         columns.reduce(lowest),
         columns.reduce(highest),
     ]);
-    const rules = Object.entries(cloneDeep(from.dataValidations) ?? {});
+    // A rule lands over the rules before it, so they go in the lookup's order, and where two overlap the landed cell
+    // takes the rule its source cell shows.
+    const rules = Object.entries(cloneDeep(from.dataValidations) ?? {}).sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
     if (cut) {
