@@ -5,6 +5,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import { PATHS } from '../../lib/config/paths';
 import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
 import { createMountConfig, Mount, newMountSettings } from '../../lib/mount';
+import { SETTLE_BOUND_MS } from '../fault-storage-helpers';
 import { getTestContext } from '../setup';
 
 // AUDIT 11: TeamHome.updateMount only persisted the change to settings.json; the already-built Drive
@@ -31,8 +32,8 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         return home;
     }
 
-    // A gate that never opens fails the test instead of hanging the file.
-    function within<T>(promise: Promise<T>, ms = 5000): Promise<T> {
+    // A gate that never opens fails the test before bun's own timeout, so its finally still restores the spies.
+    function within<T>(promise: Promise<T>, ms = SETTLE_BOUND_MS): Promise<T> {
         return Promise.race([
             promise,
             Bun.sleep(ms).then(() => {
