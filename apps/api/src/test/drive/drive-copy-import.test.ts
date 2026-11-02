@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
+import { copyPathAcross } from '../../lib/drive/copy-across';
 import { getHome } from '../../lib/home';
+import { getUserById } from '../../lib/user';
 import {
     assertJson,
     authedRequest,
@@ -151,6 +153,65 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             }
         });
 
+        describe('a folder whose child has lost its bytes', () => {
+            let folder: DrivePath;
+
+            beforeAll(async () => {
+                const token = ctx.alice.user.sessionToken;
+                const ownerId = ctx.alice.user.id;
+                folder = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${aliceRootId}`, {
+                    folderName: `half-${crypto.randomUUID()}`,
+                });
+                await driveUpload(token, ownerId, mountId, folder.id, new File(['kept'], 'kept.txt'));
+                const gone = await driveUpload(token, ownerId, mountId, folder.id, new File(['gone'], 'gone.txt'));
+                const { mount } = await (await getHome(ownerId)).drive.resolveFile(mountId, gone.id);
+                expect(await mount.storage.delete(await mount.getStorageKey(gone.id))).toBe(true);
+            });
+
+            async function emptyFolder(): Promise<DrivePath> {
+                return drivePost<DrivePath>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    `folder/${aliceRootId}`,
+                    {
+                        folderName: `half-target-${crypto.randomUUID()}`,
+                    },
+                );
+            }
+
+            function contents(target: DrivePath): Promise<DrivePath[]> {
+                return driveGet<DrivePath[]>(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    `folder/${target.id}`,
+                );
+            }
+
+            test('a copy in one drive fails and leaves no folder in the target', async () => {
+                const target = await emptyFolder();
+                const res = await copyFile(ctx.alice.user.sessionToken, folder.ownerId, folder.mountId, folder.id, {
+                    targetOwnerId: ctx.alice.user.id,
+                    targetMountId: mountId,
+                    targetParentId: target.id,
+                });
+                expect(res.status).toBe(410);
+                expect(await contents(target)).toEqual([]);
+            });
+
+            test('a copy to another drive fails and leaves no folder in the target', async () => {
+                const target = await emptyFolder();
+                const home = await getHome(ctx.alice.user.id);
+                const user = await getUserById(ctx.alice.user.id);
+                if (!user) throw new Error('alice has no user row');
+                const copy = copyPathAcross(home.drive, folder, home.drive, mountId, target.id, folder.name, user);
+                expect(copy).rejects.toThrow();
+                await copy.catch(() => {});
+                expect(await contents(target)).toEqual([]);
+            });
+        });
+
         // The cross-mount bridge walks a container's children itself, so its versions/ skip is
         // separate from the same-mount copy's (pinned in mount-copy.test.ts).
         test('copying a container across drives starts the copy without the source versions/', async () => {
@@ -164,11 +225,9 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             });
             expect(saved.status).toBe(200);
 
-            const { copyPathAcross } = await import('../../lib/drive/copy-across');
-            const { getHome } = await import('../../lib/home');
-            const { getUserById } = await import('../../lib/user');
             const home = await getHome(ownerId);
             const user = await getUserById(ownerId);
+            if (!user) throw new Error('alice has no user row');
             const copied = await copyPathAcross(
                 home.drive,
                 doc,
@@ -176,7 +235,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 mountId,
                 aliceRootId,
                 'copy-across-versions-copy',
-                user!,
+                user,
             );
 
             const sourceNames = (await home.drive.getFolderContents(mountId, doc.id)).map((c) => c.name);
