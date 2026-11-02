@@ -1,7 +1,8 @@
-// EigenApp is the root every Eigen app renders around its router: the query client, auth, theme,
+// EigenApp is the root every Eigen app renders around its router: the hotkeys, the query client, auth, theme,
 // the server event stream, uploads, previews and the command palette. It also keeps a file dropped
 // outside a drop target from navigating the tab away, and binds Mod+P to print the open document.
 
+import type { HotkeysProviderOptions } from '@tanstack/react-hotkeys';
 import { HotkeysProvider, useHotkey } from '@tanstack/react-hotkeys';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@workspace/lib/auth';
@@ -17,6 +18,10 @@ import { LoadingScreen } from '../pages/loading-screen';
 import { CommandPaletteProvider } from './command-palette/command-palette-provider';
 import { ErrorBoundary } from './error-boundary';
 import { ThemeProvider } from './theme-provider';
+
+// Every keymap here listens on the document and gates itself with `enabled`, such as the file preview's Escape and the
+// find bar's. The hotkey library counts a disabled registration as a conflict too, and warns on every register.
+export const HOTKEY_DEFAULTS: HotkeysProviderOptions = { hotkey: { conflictBehavior: 'allow' } };
 
 type EigenAppProps = {
     children: React.ReactNode;
@@ -63,7 +68,7 @@ export function EigenApp({ children }: EigenAppProps) {
     );
 
     return (
-        <HotkeysProvider>
+        <HotkeysProvider defaultOptions={HOTKEY_DEFAULTS}>
             <QueryClientProvider client={queryClient}>
                 <AuthProvider loadingFallback={<LoadingScreen />}>
                     <ThemeProvider>
