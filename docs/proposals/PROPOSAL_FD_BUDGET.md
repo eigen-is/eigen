@@ -63,8 +63,7 @@ Per-home cost is **variable**:
 - **+3 per extra mount** (each mount opens its own `metadata.db`). Homes with many mounts cost
   more; mounts on remote storage also run an `UploadQueue`/`ContentReindexQueue` (timers plus
   transient staging-file fds during `VACUUM INTO` + upload).
-- **+3–6 per open document container** — `Mount.documentDbs` caches a `ManagedDatabase` per open
-  `data.db`, and `CollabDocument` speculatively warms the sibling `comments.db`.
+- **+3–6 per open document container**: `Mount.documentDbs` caches a `ManagedDatabase` per `data.db` and `comments.db` while a reader or an open collab document holds it, and for a minute after the last one lets go ([DATABASE.md](../DATABASE.md#a-reader-holds-a-container-database-only-while-it-runs)).
 - **TeamHome**: no mail/contacts/notifications → `calendar.db` + per-mount `metadata.db` +
   `shared.db`, ~6–12 fds. **GuestHome** ~6–9. **OrgHome** ~0 (no subsystems).
 

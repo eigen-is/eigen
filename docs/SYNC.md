@@ -61,7 +61,7 @@ The mount's startup sweep removes `tmp/` files older than an hour, but never one
 **Invariant: an empty or invalid working copy never overwrites a non-trivial stored object. The worst case is a transient 503, never a wipe.** Adopting a crash temp is only safe if it holds real data. A failed or empty GET leaves a 0-byte temp, which is itself a valid empty SQLite file, and `markDirty` would then upload that emptiness over the good object.
 
 - `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it discards the temp through `Mount.cleanupTemp`, journals included, and re-fetches. A `-wal` left beside the re-fetched file would be replayed into it.
-- `Drive.openDatabase` and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
+- An open (`Mount.openDatabase`, `holdDatabase`, `withDatabase`) and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
 - A download or a staged-copy recovery writes a `tmp/<uuid>` side file and renames it onto the working-copy path (`replaceTempFrom`). A process killed mid-GET leaves no partial temp for the next open to adopt.
 
 Which failure answers 410 and which 503 is in [STORAGE.md](STORAGE.md#a-gone-object-answers-410-an-outage-503).

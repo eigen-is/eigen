@@ -2,7 +2,7 @@
 
 This proposal makes the open and close of a Home, a collab document and a container database follow from who uses them, instead of from timers and guesses. Today a Home stays open because every getter calls `touch()`, the collab keepalive calls `touchHomeIfLoaded`, the SSE stream calls `getHome` every 15 s, a backup calls `hold()`, and `requestedSince` with `BACKUP_RELEASE_MS` guesses how long a backup still needs it. Each of those was a fix for a bug, and together they make the lifecycle hard to reason about. Six small steps replace most of them with the `hold()` that already exists, two refusals and one listener set, and no new abstraction.
 
-**Status:** steps 1 and 2 are built (step 1 by the backup-safety program); steps 3 to 6 are not. Written 2026-11-02 from two read-only audits of the lifecycle and the backup path, a design note for one generic lease primitive, and an adversarial review of that note, all checked against develop at 0ae4388a5. The owner chose this small version on 2026-11-02. File and symbol names are pointers to verify against the code at build time, not facts: the backup and SSE code was changing that day.
+**Status:** steps 1, 2 and 6 are built (step 1 by the backup-safety program); steps 3 to 5 are not. Written 2026-11-02 from two read-only audits of the lifecycle and the backup path, a design note for one generic lease primitive, and an adversarial review of that note, all checked against develop at 0ae4388a5. The owner chose this small version on 2026-11-02. File and symbol names are pointers to verify against the code at build time, not facts: the backup and SSE code was changing that day.
 
 ## Problem
 
