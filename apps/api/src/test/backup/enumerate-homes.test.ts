@@ -8,7 +8,7 @@ import { getAuthDrizzleDb } from '../../lib/auth/auth';
 import { enumerateHomes } from '../../lib/backup/enumerate-homes';
 import { buildSafetyCopyName, buildServerFolderName } from '../../lib/backup/paths';
 import { snapshotServer } from '../../lib/backup/snapshot-server';
-import { getDataRoot, getTeamDataPath, getUserHomePath, SERVER_DATABASES } from '../../lib/config/paths';
+import { getDataRoot, getTeamHomePath, getUserHomePath, SERVER_DATABASES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { createTeam, createTestUser, getTestContext, TEST_DATA_DIR } from '../setup';
@@ -45,7 +45,7 @@ describe('Backup enumerateHomes', () => {
         mkdirSync(join(getDataRoot(), 'home', orphan), { recursive: true });
         safetyCopies = [
             buildSafetyCopyName(getUserHomePath(ownerId), 'pre-restore', '20260930-020304'),
-            buildSafetyCopyName(getTeamDataPath(teamId), 'failed-restore', '20260930-020304'),
+            buildSafetyCopyName(getTeamHomePath(teamId), 'failed-restore', '20260930-020304'),
         ];
         for (const dir of safetyCopies) mkdirSync(dir, { recursive: true });
 

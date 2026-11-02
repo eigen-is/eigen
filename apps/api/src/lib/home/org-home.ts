@@ -3,7 +3,7 @@
 // any other owner.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { getOrgDataPath, PATHS } from '../config/paths';
+import { getOrgHomePath, PATHS } from '../config/paths';
 import { ApiError, JsonStore } from '../core';
 import type { User } from '../user';
 import { makeSyntheticUser } from '../user';
@@ -20,7 +20,7 @@ export function getSyntheticOrgUser(ownerId: string): User {
 
 export class OrgHome extends Home {
     public constructor(syntheticUser: User, onClosed?: () => void) {
-        super(syntheticUser, getOrgDataPath(parseOwnerId(syntheticUser.id).id), onClosed);
+        super(syntheticUser, getOrgHomePath(parseOwnerId(syntheticUser.id).id), onClosed);
         this.settings = new JsonStore<HomeSettings>(this.fs, PATHS.SETTINGS, {});
     }
 }

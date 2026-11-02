@@ -123,11 +123,11 @@ export function getUserHomePath(userId: string): string {
     return path.join(getDataRoot(), USER_HOMES_DIR, userId);
 }
 
-export function getTeamDataPath(teamId: string): string {
+export function getTeamHomePath(teamId: string): string {
     return path.join(getDataRoot(), TEAM_HOMES_DIR, teamId);
 }
 
-export function getOrgDataPath(orgId: string): string {
+export function getOrgHomePath(orgId: string): string {
     return path.join(getDataRoot(), ORG_HOMES_DIR, orgId);
 }
 
