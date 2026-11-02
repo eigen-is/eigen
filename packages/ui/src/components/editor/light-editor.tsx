@@ -7,7 +7,7 @@ import { mathAsText } from '@workspace/lib/docs/eigendoc';
 import { useEffect, useRef } from 'react';
 import { isFilesOnlyClipboard } from '../../hooks/use-file-paste-target';
 import { cn } from '../../lib/utils';
-import { LightEditorToolbar } from './light-editor-toolbar';
+import { LIGHT_EDITOR_BUBBLE_MENU, LightEditorToolbar } from './light-editor-toolbar';
 
 type LightEditorProps = {
     content: string;
@@ -106,7 +106,7 @@ export function LightEditor({
                 </div>
             )}
             {toolbar === 'floating' && (
-                <BubbleMenu editor={editor}>
+                <BubbleMenu editor={editor} pluginKey={LIGHT_EDITOR_BUBBLE_MENU}>
                     <LightEditorToolbar editor={editor} />
                 </BubbleMenu>
             )}

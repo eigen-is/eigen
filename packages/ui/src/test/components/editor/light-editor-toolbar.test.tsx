@@ -61,7 +61,7 @@ async function openLinkField() {
             .querySelector('button[aria-label="Link"]')
             ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     });
-    expect(linkField()).not.toBeNull();
+    expect(document.activeElement).toBe(linkField());
 }
 
 const type = (value: string) =>

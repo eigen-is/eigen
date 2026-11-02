@@ -4,8 +4,11 @@
 
 import type { Editor } from '@tiptap/react';
 import { Bold, Italic, Link, List, ListChecks, ListOrdered, Quote } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '../../lib/utils';
+
+// The key of the bubble menu a floating toolbar sits in, so the toolbar can ask the menu to place itself again.
+export const LIGHT_EDITOR_BUBBLE_MENU = 'lightEditorBubbleMenu';
 
 type ToolbarButtonProps = {
     icon: React.ComponentType<{ className?: string }>;
@@ -34,6 +37,15 @@ function ToolbarButton({ icon: Icon, isActive, onClick, title }: ToolbarButtonPr
 export function LightEditorToolbar({ editor }: { editor: Editor }) {
     const [linkUrl, setLinkUrl] = useState('');
     const [showLinkInput, setShowLinkInput] = useState(false);
+    const linkField = useRef<HTMLInputElement>(null);
+
+    // The field widens a floating toolbar past where its menu was placed, and in a dialog that scrolls, focusing the
+    // field would scroll the dialog sideways to show it. So the menu places itself again and the focus does not scroll.
+    useEffect(() => {
+        if (!showLinkInput) return;
+        linkField.current?.focus({ preventScroll: true });
+        editor.view.dispatch(editor.state.tr.setMeta(LIGHT_EDITOR_BUBBLE_MENU, 'updatePosition'));
+    }, [editor, showLinkInput]);
 
     const setLink = useCallback(() => {
         if (linkUrl.trim()) {
@@ -99,6 +111,7 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
             />
             {showLinkInput && (
                 <input
+                    ref={linkField}
                     type="url"
                     aria-label="Link URL"
                     // Escape closes this field only, not a dialog the editor sits in.
@@ -114,7 +127,6 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                         }
                         if (e.key === 'Escape') setShowLinkInput(false);
                     }}
-                    autoFocus
                 />
             )}
         </div>
