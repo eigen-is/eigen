@@ -95,6 +95,36 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
 
         expect(cell(ctx, 6, 1)?.v).toBe(8);
     });
+
+    // D1 = SUM(A:A) and F2 = SUM(1:1), on the 6 × 6 grid. Pasting C1 into H8 grows it to 8 × 8.
+    const withWholeSums = (ctx: Context) => {
+        const data = ctx.sheets[0].data ?? [];
+        data[0][3] = { f: '=SUM(A:A)', v: 5, m: '5' };
+        data[1][5] = { f: '=SUM(1:1)', v: 23, m: '23' };
+        ctx.sheets[0].calcChain?.push({ r: 0, c: 3, id: 'id_1' }, { r: 1, c: 5, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+        return ctx;
+    };
+
+    it('a whole column reads the rows it added, and a whole row the columns', () => {
+        let [ctx] = edit(withWholeSums(makeCtx()), pasteInternal([0, 2], [7, 7]));
+        [ctx] = edit(ctx, typed(7, 0, '100'));
+        [ctx] = edit(ctx, typed(0, 7, '1000'));
+
+        expect(cell(ctx, 0, 3)?.v).toBe(105);
+        expect(cell(ctx, 1, 5)?.v).toBe(5 + 10 + 3 + 105 + 1000);
+    });
+
+    it('redoing it, as a peer applies it, extends a whole column', () => {
+        const [pasted, history] = edit(withWholeSums(makeCtx()), pasteInternal([0, 2], [7, 7]));
+        let ctx = undo(pasted, history);
+        warmFormulaCellInfoMap(ctx);
+
+        ctx = redo(ctx, history);
+        [ctx] = edit(ctx, typed(7, 0, '100'));
+
+        expect(cell(ctx, 0, 3)?.v).toBe(105);
+    });
 });
 
 // The editor hands the dependency index each sheet's size, so a whole column of a tall sheet costs one entry, not one

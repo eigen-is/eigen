@@ -195,22 +195,21 @@ export class FormulaCache {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
             if (root !== 'sheets' || (field != null && field !== 'data')) continue;
             const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
-            if (typeof r === 'number' && typeof c === 'number') {
-                if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
-                continue;
-            }
-            // A sheet added or dropped, a whole matrix, or a shrunk row or matrix: rebuild on next use.
-            if (id == null || typeof r !== 'number' || c != null || patch.op === 'remove') {
+            // A sheet added or dropped, a whole matrix, or a row or cell added or dropped: rebuild on next use. A row or
+            // cell added or dropped resizes the grid, which moves where a whole column or row ends.
+            const resized = cellField == null && patch.op !== 'replace';
+            if (id == null || typeof r !== 'number' || (c != null && typeof c !== 'number') || resized) {
                 this.formulaCellInfoMap = null;
                 return;
             }
+            if (typeof c === 'number') {
+                if (cellField == null || cellField === 'f') setFormulaCellInfo(ctx, { r, c, id });
+                continue;
+            }
             const row: (Cell | null)[] = patch.value;
-            // An appended row has no map entries: every shrink above resets the map.
-            const added = patch.op === 'add';
             for (let col = 0; col < row.length; col += 1) {
-                if (row[col]?.f != null || (!added && map[`r${r}c${col}i${id}`] != null)) {
+                if (row[col]?.f != null || map[`r${r}c${col}i${id}`] != null)
                     setFormulaCellInfo(ctx, { r, c: col, id });
-                }
             }
         }
     }

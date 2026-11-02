@@ -8,6 +8,7 @@ import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN } from '../../engine/a1-not
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
@@ -215,7 +216,8 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
 // Grows the current grid for a paste that runs past its last row or column. The sheet's size grows with it, because a
 // stored snapshot keeps the size and a reader builds the grid at that size.
-export function expandRowsAndColumns(sheet: Sheet, rowsToAdd: number, columnsToAdd: number) {
+export function expandRowsAndColumns(ctx: Context, rowsToAdd: number, columnsToAdd: number) {
+    const sheet = getSheet(ctx);
     const { data } = sheet;
     if (!data || (rowsToAdd <= 0 && columnsToAdd <= 0)) return;
 
@@ -236,4 +238,6 @@ export function expandRowsAndColumns(sheet: Sheet, rowsToAdd: number, columnsToA
     for (let r = 0; r < rowsToAdd; r += 1) data.push(times(columns, () => null));
     sheet.row = data.length;
     sheet.column = columns;
+    // A whole column or row in the formula map still ends where the grid ended, as after a row insert.
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
