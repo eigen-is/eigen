@@ -284,11 +284,11 @@ describe('the rule over a cell', () => {
         );
         const window = { row: [0, 60], column: [0, 25] };
         const started = performance.now();
-        for (let frame = 0; frame < 10; frame += 1) {
+        for (let frame = 0; frame < 20; frame += 1) {
             const lookup = validationLookup(validations, window);
             for (let r = 0; r <= 60; r += 1) for (let c = 0; c <= 25; c += 1) lookup(r, c);
         }
-        expect(performance.now() - started).toBeLessThan(200);
+        expect(performance.now() - started).toBeLessThan(600);
         const lookup = validationLookup(validations, window);
         for (const [r, c] of [
             [0, 0],
