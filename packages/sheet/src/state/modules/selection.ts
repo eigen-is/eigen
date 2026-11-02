@@ -18,6 +18,7 @@ import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../ut
 import type { CarryTile } from './cell';
 import {
     carriedLines,
+    carriedSpan,
     carryCells,
     getCellValue,
     getDataBySelectionNoCopy,
@@ -1133,6 +1134,8 @@ export function rangeValueToClipboard(
     const cfCompute = getComputeMap(ctx);
 
     let colgroup = '';
+    // The merges whose first cell the table holds. A merge whose first row a filter left out is written as plain cells.
+    const anchors = new Set<string>();
 
     for (let i = 0; i < rowIndexArr.length; i += 1) {
         const r = rowIndexArr[i];
@@ -1171,12 +1174,15 @@ export function rangeValueToClipboard(
 
                 style += styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute));
 
-                if (cell.mc) {
-                    if (!('rs' in cell.mc)) {
-                        textRow.push('');
-                        continue;
-                    }
-                    span = `rowspan="${finiteOr(cell.mc.rs, 1)}" colspan="${finiteOr(cell.mc.cs, 1)}"`;
+                if (cell.mc?.rs != null) {
+                    // A merge closes up over the rows a filter left out, as a paste in this tab lands it.
+                    const rs = carriedSpan(rowIndexArr, i, rowIndexArr.length - i, r, finiteOr(cell.mc.rs, 1));
+                    const cs = carriedSpan(colIndexArr, j, colIndexArr.length - j, c, finiteOr(cell.mc.cs, 1));
+                    span = `rowspan="${rs}" colspan="${cs}"`;
+                    anchors.add(`${r}_${c}`);
+                } else if (cell.mc && anchors.has(`${cell.mc.r}_${cell.mc.c}`)) {
+                    textRow.push('');
+                    continue;
                 }
                 const cellBorder = borderInfoCompute[`${r}_${c}`];
                 if (cellBorder) style += cellBorderCss(cellBorder);

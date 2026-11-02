@@ -1163,9 +1163,9 @@ export function carryCells(
     }
 }
 
-// How many carried lines from index i fall inside a merge's span, so a merge closes up where a filtered copy left
-// rows out, and stops at the edge of its tile.
-function carriedSpan(lines: readonly number[], i: number, limit: number, start: number, span: number) {
+// How many carried lines from index i fall inside a merge's span, counting at most limit of them. A merge closes up
+// where a filtered copy left rows out, and stops at the edge of its tile.
+export function carriedSpan(lines: readonly number[], i: number, limit: number, start: number, span: number) {
     let n = 0;
     while (n < limit && lines[i + n] >= start && lines[i + n] < start + span) n += 1;
     return n;

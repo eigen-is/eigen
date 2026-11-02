@@ -289,4 +289,53 @@ describe('a range with a row an active filter hides', () => {
         const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
         expect(text?.split('\n')).toEqual(['r0c0\tr0c1\tr0c2\t', 'r2c0\tr2c1\tr2c2\tr2c3', '\tr3c1\tr3c2\tr3c3']);
     });
+
+    // A1:A3 has the filtered row inside it, and A2:A3 has it as its first row. Either way the table keeps its shape.
+    test.each([
+        [0, 2],
+        [1, 2],
+    ])('the clipboard table closes a merge over rows %i to %i up with the rows', (first, last) => {
+        const ctx = makeCtx({ filtered: true });
+        mergeColumnA(ctx, first, last);
+        const html = rangeValueToClipboard(ctx, 'id_1', source())?.html ?? '';
+        expect(tableGrid(html)).toEqual([
+            ['r0c0', 'r0c1', 'r0c2', ''],
+            ['', 'r2c1', 'r2c2', 'r2c3'],
+            ['r3c0', 'r3c1', 'r3c2', 'r3c3'],
+        ]);
+    });
 });
+
+// Merges column A from row first to row last, in place of A3:A4.
+function mergeColumnA(ctx: Context, first: number, last: number) {
+    const s = sheet(ctx);
+    const merge = s.config?.merge ?? {};
+    delete merge[key(2, 0)];
+    merge[key(first, 0)] = { r: first, c: 0, rs: last - first + 1, cs: 1 };
+    for (let r = 0; r < 4; r += 1) {
+        const row = s.data?.[r];
+        if (!row) continue;
+        if (r === first) row[0] = { ...cellAt(r, 0), mc: { r, c: 0, rs: last - first + 1, cs: 1 } };
+        else if (r > first && r <= last) row[0] = { mc: { r: first, c: 0 } };
+        else row[0] = cellAt(r, 0);
+    }
+}
+
+// The grid a browser lays the clipboard table out on: each td's text at its first slot, and '' where a span covers.
+function tableGrid(html: string): string[][] {
+    const grid: string[][] = [];
+    for (const [i, tr] of (html.match(/<tr>.*?<\/tr>/g) ?? []).entries()) {
+        grid[i] ??= [];
+        let j = 0;
+        for (const [, attributes, text] of tr.matchAll(/<td([^>]*)>(.*?)<\/td>/g)) {
+            while (grid[i][j] != null) j += 1;
+            const rs = Number(/rowspan="(\d+)"/.exec(attributes)?.[1] ?? 1);
+            const cs = Number(/colspan="(\d+)"/.exec(attributes)?.[1] ?? 1);
+            for (let a = 0; a < rs; a += 1) {
+                for (let b = 0; b < cs; b += 1) (grid[i + a] ??= [])[j + b] = a === 0 && b === 0 ? text : '';
+            }
+            j += cs;
+        }
+    }
+    return grid;
+}
