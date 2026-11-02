@@ -68,7 +68,6 @@ describe('driveActionsFor on one item', () => {
             'share',
             'copy-link',
             'mail-to',
-            'watch',
             'trash',
         ]);
     });
@@ -95,7 +94,6 @@ describe('driveActionsFor on one item', () => {
             'download-as',
             'copy-link',
             'mail-to',
-            'watch',
         ]);
     });
 

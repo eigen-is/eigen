@@ -7,6 +7,7 @@ import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath, ExportFormat } from '@workspace/lib/types/drive';
+import { Bell } from 'lucide-react';
 import { useMemo } from 'react';
 import { MENU_SECTIONS } from '../context-menu/menu-sections';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
@@ -43,11 +44,10 @@ function DriveActionsPalette({ items, listing, actions }: DrivePaletteSelectionP
     const rows = [
         ...actions
             .actionsFor(items)
-            .map((action) =>
-                action.id === 'watch'
-                    ? { action: { ...action, label: watch.label }, run: watch.toggle }
-                    : { action, run: (format?: ExportFormat) => actions.run(action.id, items, format) },
-            ),
+            .map((action) => ({ action, run: (format?: ExportFormat) => actions.run(action.id, items, format) })),
+        ...(single
+            ? [{ action: { id: 'watch', label: watch.label, icon: Bell, group: 'collaborate' }, run: watch.toggle }]
+            : []),
         ...runner.actions.map((action) => ({ action, run: () => runner.run(action) })),
     ];
     usePaletteSelection(

@@ -176,7 +176,6 @@ export function useDriveActionRunner({
             case 'remove-shared':
                 deletePaths(items);
                 return;
-            // Watch toggles through useWatchToggle, as the menu and the palette follow its live label.
         }
     };
 

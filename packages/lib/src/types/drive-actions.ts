@@ -16,7 +16,6 @@ export type DriveActionId =
     | 'email-collaborators'
     | 'copy-link'
     | 'mail-to'
-    | 'watch'
     | 'trash'
     | 'remove-shared';
 
