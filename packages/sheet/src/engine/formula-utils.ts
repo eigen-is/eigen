@@ -1,20 +1,11 @@
-// Plain helpers for reading formula text, shared by the editor and the server's recalc: the operators and their
-// priorities, whether a string is a cell reference, resolving a reference to a range, and the walker that finds the ranges an INDIRECT,
-// OFFSET or INDEX call reads. Nothing here reads the workbook context.
+// Plain helpers for reading formula text, shared by the editor and the server's recalc: the operators a text walker
+// stops at, whether a string is a cell reference, and the cells a reference covers. The dependency walk, the formula
+// editor and the reference shifts build on them, for example. Nothing here reads the workbook context.
 
 import type { CellMatrix, Sheet } from '@workspace/lib/sheets';
 import { columnLabelToIndex } from '@workspace/lib/sheets';
-import { SHEET_NAME_PREFIX } from './parser/helper/cell';
+import { SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 import type { FormulaDependency } from './types';
-
-export const operatorPriority: Readonly<Record<string, number>> = {
-    '^': 0,
-    '%': 1,
-    '*': 1,
-    '/': 1,
-    '+': 2,
-    '-': 2,
-};
 
 // The operators a formula's text walkers stop at. A two-character one is matched before its first character.
 export const formulaOperators: ReadonlySet<string> = new Set([
@@ -33,64 +24,31 @@ export const formulaOperators: ReadonlySet<string> = new Set([
     '^',
 ]);
 
-// Handles single cells (A1, $A$1), ranges (A1:B3), column-only ranges (A:C),
-// and sheet-qualified references (Sheet1!A1).
-export function iscelldata(txt: string) {
+// One end of a reference: a cell, a whole column or a whole row, each part with an optional `$`.
+const REFERENCE_END = '[$]?[A-Za-z]+[$]?[0-9]+|[$]?[A-Za-z]+|[$]?[0-9]+';
+const CELL = /^[$]?[A-Za-z]+[$]?[0-9]+$/;
+const RANGE_END = new RegExp(`^(?:${REFERENCE_END})$`);
+// A reference that names its sheet, and may name it again after the colon.
+const SHEET_REFERENCE = new RegExp(
+    `^(?:${SHEET_NAME_PREFIX})?(${REFERENCE_END})(?::(?:${SHEET_NAME_PREFIX})?(${REFERENCE_END}))?$`,
+);
+
+// True for a cell (A1, $A$1), a range (A1:B3) and a whole column or row (A:C, 1:2), on the formula's sheet or on
+// another (Sheet1!A1).
+export function iscelldata(txt: string): boolean {
     const val = txt.split('!');
     const rangetxt = val.length > 1 ? val[1] : val[0];
-
-    const reg_cell = /^(([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+))$/;
-
     if (rangetxt.indexOf(':') === -1) {
-        const row = parseInt(rangetxt.replace(/[^0-9]/g, ''), 10) - 1;
-        const col = columnLabelToIndex(rangetxt.replace(/[^A-Za-z]/g, ''));
-
-        return !Number.isNaN(row) && col >= 0 && reg_cell.test(rangetxt);
+        return CELL.test(rangetxt);
     }
-
-    const reg_cellRange =
-        /^(((([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+)))|((([a-zA-Z]+)|([$][a-zA-Z]+)))|((([0-9]+)|([$][0-9]+))))$/;
-
     // A reversed range (`A$3:A1`) is a ref too: Excel reads it as its sorted twin.
     const rangetxtArr = rangetxt.split(':');
-    return reg_cellRange.test(rangetxtArr[0]) && reg_cellRange.test(rangetxtArr[1]);
+    return RANGE_END.test(rangetxtArr[0]) && RANGE_END.test(rangetxtArr[1]);
 }
 
-// NaN, not columnLabelToIndex's -1, marks a missing column: the range parser reads it as a whole row.
-function columnCharToIndex(a: string): number {
-    if (a.length === 0) {
-        return NaN;
-    }
-    const str = a.toLowerCase().split('');
-    const al = str.length;
-    let numout = 0;
-    for (let i = 0; i < al; i += 1) {
-        const charnum = str[i].charCodeAt(0) - 96;
-        numout += charnum * 26 ** (al - i - 1);
-    }
-    if (numout === 0) {
-        return NaN;
-    }
-    return numout - 1;
-}
-
-const rowColumnRegexp = '[$]?[A-Za-z]+[$]?[0-9]+';
-const rowColumnWithSheetName = `(?:${SHEET_NAME_PREFIX})?(${rowColumnRegexp})`;
-const LABEL_EXTRACT_REGEXP = new RegExp(`^${rowColumnWithSheetName}(?:[:]${rowColumnWithSheetName})?$`);
-
-function addToCellIndexList(
-    cellTextToIndexList: Record<string, FormulaDependency>,
-    txt: string,
-    infoObj: FormulaDependency,
-): void {
-    if (txt.indexOf('!') > -1) {
-        cellTextToIndexList[txt.replace(/\\'/g, "'").replace(/''/g, "'")] = infoObj;
-    } else {
-        cellTextToIndexList[`${txt}_${infoObj.sheetId}`] = infoObj;
-    }
-}
-
-// `data` is sheet `formulaId`'s matrix, which bounds a whole-row or whole-column range.
+// The cells a reference covers, or null when it is none or names a sheet that isn't there. `data` is the matrix of
+// sheet `formulaId`. A whole column or row ends where its sheet's matrix ends. The answer is kept in
+// `cellTextToIndexList`: by the reference's text when it names a sheet, by `${text}_${formulaId}` when it doesn't.
 export function resolveCellRange(
     sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[],
     cellTextToIndexList: Record<string, FormulaDependency>,
@@ -101,17 +59,17 @@ export function resolveCellRange(
     if (txt.length === 0) {
         return null;
     }
+    const namesSheet = txt.indexOf('!') > -1;
+    const key = namesSheet ? txt : `${txt}_${formulaId}`;
+    if (key in cellTextToIndexList) {
+        return cellTextToIndexList[key];
+    }
 
-    let rangetxt = '';
-    let sheetId: string | undefined;
-    let sheetdata: CellMatrix | null | undefined = null;
-
-    if (txt.indexOf('!') > -1) {
-        if (txt in cellTextToIndexList) {
-            return cellTextToIndexList[txt];
-        }
-
-        const matchRes = txt.match(LABEL_EXTRACT_REGEXP);
+    let rangetxt = txt;
+    let sheetId: string | undefined = formulaId;
+    let sheetdata = data;
+    if (namesSheet) {
+        const matchRes = txt.match(SHEET_REFERENCE);
         if (matchRes == null) {
             return null;
         }
@@ -120,20 +78,11 @@ export function resolveCellRange(
             return null;
         }
         rangetxt = starttxt2 ? `${starttxt1}:${starttxt2}` : starttxt1;
-        const sheettxt = sheettxt1.replace(/^'|'$/g, '').replace(/\\'/g, "'").replace(/''/g, "'");
-        const sheet = sheets.find((s) => s.name === sheettxt);
+        const sheet = sheets.find((s) => s.name === unquoteSheetName(sheettxt1));
         sheetId = sheet?.id;
         sheetdata = sheet?.data;
-    } else {
-        if (`${txt}_${formulaId}` in cellTextToIndexList) {
-            return cellTextToIndexList[`${txt}_${formulaId}`];
-        }
-        if (!sheets.some((s) => s.id === formulaId)) {
-            return null;
-        }
-        sheetId = formulaId;
-        sheetdata = data;
-        rangetxt = txt;
+    } else if (!sheets.some((s) => s.id === formulaId)) {
+        return null;
     }
 
     if (sheetdata == null) {
@@ -146,9 +95,14 @@ export function resolveCellRange(
 
         if (!Number.isNaN(row) && !Number.isNaN(col)) {
             const item: FormulaDependency = { row: [row, row], column: [col, col], sheetId };
-            addToCellIndexList(cellTextToIndexList, txt, item);
+            cellTextToIndexList[key] = item;
             return item;
         }
+        return null;
+    }
+
+    // A sheet with no rows has no width either, so a whole row or column on it reads nothing.
+    if (sheetdata.length === 0) {
         return null;
     }
 
@@ -179,33 +133,8 @@ export function resolveCellRange(
     }
 
     const item: FormulaDependency = { row, column: col, sheetId };
-    addToCellIndexList(cellTextToIndexList, txt, item);
+    cellTextToIndexList[key] = item;
     return item;
-}
-
-// Folds a reversed-postfix expression stack into nested compareWith(left, 'op', right) calls, one per operator.
-export function calPostfixExpression(cal: string[]): string {
-    if (cal.length === 0) {
-        return '';
-    }
-    const stack: string[] = [];
-    for (let i = cal.length - 1; i >= 0; i -= 1) {
-        const c = cal[i];
-        if (formulaOperators.has(c)) {
-            const s2 = stack.pop();
-            const s1 = stack.pop();
-            const str = `compareWith(${s1},'${c}', ${s2})`;
-            stack.push(str);
-        } else {
-            stack.push(c);
-        }
-    }
-
-    if (stack.length > 0) {
-        return stack[0];
-    }
-
-    return '';
 }
 
 // Checks parentheses are balanced, ignoring brackets inside quoted strings.
@@ -221,260 +150,7 @@ export function checkBracketNum(fp: string): boolean {
     return left === right;
 }
 
-// Rewrites a formula into an internal call form, such as functions.SUM.f(getCellData('A1:B2')), and on the way
-// hands each range argument of an INDIRECT, OFFSET or INDEX call to cellRangeFunction. The dependency graph needs
-// those ranges, in the editor and on the server. Nothing evaluates the rewritten string: it only feeds the recursion.
-export function isFunctionRange(txt: string, cellRangeFunction: (str: string) => void): string {
-    if (txt.substring(0, 1) === '=') {
-        txt = txt.substring(1);
-    }
-
-    const funcstack = txt.split('');
-    let i = 0;
-    let str = '';
-    let function_str = '';
-
-    const matchConfig = {
-        squote: 0,
-        dquote: 0,
-        braces: 0,
-    };
-
-    // bracket: 0 = operator bracket, 1 = function bracket
-    const cal1: string[] = [];
-    const cal2: string[] = [];
-    const bracket: number[] = [];
-    while (i < funcstack.length) {
-        const s = funcstack[i];
-
-        if (s === '(' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
-            if (str.length > 0 && bracket.length === 0) {
-                str = str.toUpperCase();
-                if (str.indexOf(':') > -1) {
-                    // A range that ends on a function call, such as A1:INDEX(...). The marker asks the level above
-                    // for the extra `)` that closes getSpecialReference.
-                    const funcArray = str.split(':');
-                    function_str += `getSpecialReference(true,'${funcArray[0]
-                        .trim()
-                        .replace(/'/g, "\\'")}', functions.${funcArray[1]}.f(#closeReference#`;
-                } else {
-                    function_str += `functions.${str}.f(`;
-                }
-                bracket.push(1);
-                str = '';
-            } else if (bracket.length === 0) {
-                function_str += '(';
-                bracket.push(0);
-                str = '';
-            } else {
-                bracket.push(0);
-                str += s;
-            }
-        } else if (s === ')' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
-            bracket.pop();
-
-            if (bracket.length === 0) {
-                let functionS = isFunctionRange(str, cellRangeFunction);
-                if (functionS.indexOf('#closeReference#') > -1) {
-                    functionS = `${functionS.replace(/#closeReference#/g, '')})`;
-                }
-                function_str += `${functionS})`;
-                str = '';
-            } else {
-                str += s;
-            }
-        } else if (s === '{' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
-            str += '{';
-            matchConfig.braces += 1;
-        } else if (s === '}' && matchConfig.squote === 0 && matchConfig.dquote === 0) {
-            str += '}';
-            matchConfig.braces -= 1;
-        } else if (s === '"' && matchConfig.squote === 0) {
-            if (matchConfig.dquote > 0) {
-                // If "" is found, it represents an escaped quote character "
-                if (i < funcstack.length - 1 && funcstack[i + 1] === '"') {
-                    i += 1;
-                    str += '\x7F'; // Replace "" with DEL character
-                } else {
-                    matchConfig.dquote -= 1;
-                    str += '"';
-                }
-            } else {
-                matchConfig.dquote += 1;
-                str += '"';
-            }
-        } else if (s === "'" && matchConfig.dquote === 0) {
-            str += "'";
-
-            if (matchConfig.squote > 0) {
-                // If '' is found, it represents an escaped single quote character '
-                if (i < funcstack.length - 1 && funcstack[i + 1] === "'") {
-                    i += 1;
-                    str += "'";
-                } else {
-                    // If the next character is not ', the single-quoted string is ended
-                    matchConfig.squote -= 1;
-                }
-            } else {
-                matchConfig.squote += 1;
-            }
-        } else if (s === ',' && matchConfig.squote === 0 && matchConfig.dquote === 0 && matchConfig.braces === 0) {
-            if (bracket.length <= 1) {
-                let functionS = isFunctionRange(str, cellRangeFunction);
-                if (functionS.indexOf('#closeReference#') > -1) {
-                    functionS = `${functionS.replace(/#closeReference#/g, '')})`;
-                }
-                function_str += `${functionS},`;
-                str = '';
-            } else {
-                str += ',';
-            }
-        } else if (
-            formulaOperators.has(s) &&
-            matchConfig.squote === 0 &&
-            matchConfig.dquote === 0 &&
-            matchConfig.braces === 0
-        ) {
-            const s_next = funcstack[i + 1] ?? '';
-
-            if (formulaOperators.has(s + s_next)) {
-                if (bracket.length === 0) {
-                    if (str.trim().length > 0) {
-                        cal2.unshift(isFunctionRange(str.trim(), cellRangeFunction));
-                    } else if (function_str.trim().length > 0) {
-                        cal2.unshift(function_str.trim());
-                    }
-
-                    if (formulaOperators.has(cal1[0])) {
-                        let stackCeilPri = operatorPriority[cal1[0]];
-
-                        while (cal1.length > 0 && stackCeilPri != null) {
-                            cal2.unshift(...cal1.splice(0, 1));
-                            stackCeilPri = operatorPriority[cal1[0]];
-                        }
-                    }
-
-                    cal1.unshift(s + s_next);
-
-                    function_str = '';
-                    str = '';
-                } else {
-                    str += s + s_next;
-                }
-
-                i += 1;
-            } else {
-                if (bracket.length === 0) {
-                    if (str.trim().length > 0) {
-                        cal2.unshift(isFunctionRange(str.trim(), cellRangeFunction));
-                    } else if (function_str.trim().length > 0) {
-                        cal2.unshift(function_str.trim());
-                    }
-
-                    if (formulaOperators.has(cal1[0])) {
-                        let stackCeilPri = operatorPriority[cal1[0]] ?? 1000;
-
-                        const sPri = operatorPriority[s] ?? 1000;
-
-                        while (cal1.length > 0 && sPri >= stackCeilPri) {
-                            cal2.unshift(...cal1.splice(0, 1));
-
-                            stackCeilPri = operatorPriority[cal1[0]] ?? 1000;
-                        }
-                    }
-
-                    cal1.unshift(s);
-
-                    function_str = '';
-                    str = '';
-                } else {
-                    str += s;
-                }
-            }
-        } else {
-            if (matchConfig.dquote === 0 && matchConfig.squote === 0) {
-                str += s.trim();
-            } else {
-                str += s;
-            }
-        }
-
-        if (i === funcstack.length - 1) {
-            let endstr = '';
-            let str_nb = str.trim().replace(/'/g, "\\'");
-            if (iscelldata(str_nb) && str_nb.substring(0, 1) !== ':') {
-                endstr = `getCellData('${str_nb}')`;
-            } else if (str_nb.substring(0, 1) === ':') {
-                str_nb = str_nb.substring(1);
-                if (iscelldata(str_nb)) {
-                    endstr = `getSpecialReference(false,${function_str},'${str_nb}')`;
-                }
-            } else {
-                str = str.trim();
-
-                const arrayMatch = /{.*?}/.exec(str);
-                if (arrayMatch && str.substring(0, 1) !== '"' && str.substring(str.length - 1, 1) !== '"') {
-                    const [arraytxt] = arrayMatch;
-                    const arraystart = arrayMatch.index;
-
-                    if (arraystart > 0) {
-                        endstr += str.substring(0, arraystart);
-                    }
-
-                    endstr += `getArrayData('${arraytxt}')`;
-
-                    if (arraystart + arraytxt.length < str.length) {
-                        endstr += str.substring(arraystart + arraytxt.length, str.length);
-                    }
-                } else {
-                    endstr = str;
-                }
-            }
-
-            if (endstr.length > 0) {
-                cal2.unshift(endstr);
-            }
-
-            if (cal1.length > 0) {
-                if (function_str.length > 0) {
-                    cal2.unshift(function_str);
-                    function_str = '';
-                }
-
-                for (const operator of cal1.splice(0)) {
-                    cal2.unshift(operator);
-                }
-            }
-
-            if (cal2.length > 0) {
-                function_str = calPostfixExpression(cal2);
-            } else {
-                function_str += endstr;
-            }
-        }
-
-        i += 1;
-    }
-    checkSpecialFunctionRange(function_str, cellRangeFunction);
-    return function_str;
-}
-
-// Hands the quoted range argument of an INDIRECT, OFFSET or INDEX call to cellRangeFunction, once isFunctionRange
-// has rewritten the call into its internal form.
-function checkSpecialFunctionRange(function_str: string, cellRangeFunction: (str: string) => void): void {
-    if (function_str.startsWith('functions.')) {
-        const funcName = function_str.split('.')[1].toUpperCase();
-        if (funcName !== 'INDIRECT' && funcName !== 'OFFSET' && funcName !== 'INDEX') return;
-    } else if (!function_str.startsWith('getSpecialReference')) {
-        return;
-    }
-
-    const commaParts = function_str.split(',');
-    const quoted = commaParts[commaParts.length - 1].split("'");
-    if (quoted.length < 2) return;
-
-    const str_nb = quoted[1].trim();
-    if (iscelldata(str_nb)) {
-        cellRangeFunction(str_nb);
-    }
+// NaN, not columnLabelToIndex's -1, marks a missing column, which resolveCellRange reads as a whole row.
+function columnCharToIndex(letters: string): number {
+    return letters.length === 0 ? NaN : columnLabelToIndex(letters);
 }

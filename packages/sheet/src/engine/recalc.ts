@@ -12,7 +12,7 @@ import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
-import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
+import { iscelldata, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import type {
     CalcChainEntry,
@@ -208,34 +208,30 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
     return celldataToData(sheet.celldata ?? [], row, column);
 }
 
-// The ranges a formula reads, for the server's pass and the editor's formula map alike. `data` is the matrix of the
-// formula's own sheet. An INDIRECT, OFFSET or INDEX call goes through isFunctionRange, and any other formula through
-// the quote-aware tokenizer.
+// The ranges a formula reads, for the server's pass and the editor's formula map alike: every reference in its text,
+// a function's arguments included, as Excel lists a cell's precedents. `data` is the matrix of the formula's own sheet.
+// The reference INDEX returns lies inside its range argument, so that argument covers it. OFFSET and INDIRECT build a
+// reference the text doesn't hold, which only matters once the engine can compute them.
 export function extractDependencies(
     g: GraphCtx,
     formula: string,
     sheetId: string,
     data: CellMatrix | null | undefined,
 ): FormulaDependency[] {
-    const upper = formula.toUpperCase();
-    const buildsReference = upper.includes('INDIRECT(') || upper.includes('OFFSET(') || upper.includes('INDEX(');
-
     const dependencies: FormulaDependency[] = [];
-    const add = (reference: string) => {
-        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference.trim(), sheetId, data);
+    for (const token of tokenize(formula)) {
+        // A token keeps the spaces around it, as in `=A1 + B1`.
+        const reference = token.trim();
+        if (reference.length < 2 || !iscelldata(reference)) continue;
+        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference, sheetId, data);
         if (range != null) dependencies.push(range);
-    };
-    if (buildsReference) {
-        isFunctionRange(formula, add);
-    } else {
-        for (const token of tokenize(formula)) {
-            if (token.length > 1 && iscelldata(token)) add(token);
-        }
     }
     return dependencies;
 }
 
-const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]/;
+// The operators a formula splits at. A `:` that joins a reference to a function call, as in A1:INDEX(…) or
+// INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
+const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference

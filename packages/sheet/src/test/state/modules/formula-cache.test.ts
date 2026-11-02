@@ -97,8 +97,9 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
 });
 
 // The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates
-// what an export would not. Sheet1 is 6 × 4, so a whole column ends at row 6 and a whole row at column D. The empty
-// rows for OFFSET's and INDEX's range and for a whole column of another sheet are gaps of today's walk, pinned as they are.
+// what an export would not. Sheet1 is 6 × 4, so a whole column ends at row 6 and a whole row at column D. Data is
+// 3 × 3, and Empty has no rows. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
+// INDIRECT included.
 describe('setFormulaCellInfo — the cells a formula reads', () => {
     const grid = (rows: number, cols: number): (Cell | null)[][] =>
         Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -109,6 +110,8 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
     });
     const cases: [string, FormulaDependency[]][] = [
         ['=A1+B2', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
+        ['= A1 + B2', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
+        ['=SUM( A1:B3 , Data!A1 )', [on('s1', [0, 2], [0, 1]), on('s2', [0, 0], [0, 0])]],
         ['=SUM(A1:B3)', [on('s1', [0, 2], [0, 1])]],
         ['=SUM(B3:A1)', [on('s1', [0, 2], [0, 1])]],
         ['=Data!B2*2', [on('s2', [1, 1], [1, 1])]],
@@ -122,12 +125,21 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ['=""', []],
         ['=INDIRECT("B2")', []],
         ['=INDIRECT(A1)', [on('s1', [0, 0], [0, 0])]],
-        ['=OFFSET(A1,1,1)', []],
-        ['=OFFSET(A1,1,B2)', [on('s1', [1, 1], [1, 1])]],
-        ['=INDEX(A1:B3,2,1)', []],
+        ['=OFFSET(A1,0,0)', [on('s1', [0, 0], [0, 0])]],
+        ['=OFFSET(A1,1,1)', [on('s1', [0, 0], [0, 0])]],
+        ['=OFFSET(A1,1,B2)', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
+        ['=INDEX(A1:B3,2,1)', [on('s1', [0, 2], [0, 1])]],
+        ['=C1+INDEX(A1:B3,2,1)', [on('s1', [0, 0], [2, 2]), on('s1', [0, 2], [0, 1])]],
+        ['=SUM(A1:INDEX(A1:B3,2,2))', [on('s1', [0, 0], [0, 0]), on('s1', [0, 2], [0, 1])]],
+        ['=SUM(INDEX(A1:B3,1,1):B3)', [on('s1', [0, 2], [0, 1]), on('s1', [2, 2], [1, 1])]],
         ['=SUM(A:A)', [on('s1', [0, 5], [0, 0])]],
+        ['=SUM(1:1)', [on('s1', [0, 0], [0, 3])]],
         ['=SUM(1:2)', [on('s1', [0, 1], [0, 3])]],
-        ['=SUM(Data!A:A)', []],
+        ['=SUM(Data!A:A)', [on('s2', [0, 2], [0, 0])]],
+        ['=SUM(Data!$B:$C)', [on('s2', [0, 2], [1, 2])]],
+        ['=SUM(Data!2:2)', [on('s2', [1, 1], [0, 2])]],
+        ["=SUM('my sheet-1'!A:A)", [on('s3', [0, 1], [0, 0])]],
+        ['=SUM(Empty!1:1)+SUM(Empty!A:A)', []],
         ['=$A$1+B$2+$C3', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1]), on('s1', [2, 2], [2, 2])]],
         ['=IF(A1>=1,C1,D1)', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [2, 2]), on('s1', [0, 0], [3, 3])]],
         ['=A1<>B1', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [1, 1])]],
@@ -146,6 +158,7 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
                 { name: 'Data', id: 's2', order: 1, data: grid(3, 3) },
                 { name: 'my sheet-1', id: 's3', order: 2, data: grid(2, 2) },
                 { name: "it's", id: 's4', order: 3, data: grid(2, 2) },
+                { name: 'Empty', id: 's5', order: 4, data: [] },
             ],
         }) as Context;
 

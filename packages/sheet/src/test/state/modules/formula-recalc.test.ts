@@ -270,3 +270,60 @@ describe('execFunctionGroup — index-driven recalc', () => {
         expect(ctx.sheets[0].data![0][3]?.v).toBe('#NAME?');
     });
 });
+
+// A function's arguments are inputs like any other part of the formula, so INDEX's range and OFFSET's reference
+// recompute their cell, and so does a whole column or row on the formula's sheet or another. The engine has no OFFSET,
+// and reads no range that ends on a call, so those two cells show the engine's error once an input changes. A space
+// around a reference, as a person types one, changes nothing.
+describe('updateCell — the formulas that read an edited cell through a function, a whole column or a space', () => {
+    const num = (v: number): Cell => ({ v, m: String(v) });
+
+    it('recomputes each of them', () => {
+        const sheet1 = grid(6, 4);
+        sheet1[0][0] = num(1);
+        sheet1[0][1] = num(2);
+        sheet1[1][0] = num(3);
+        sheet1[1][1] = num(4);
+        sheet1[2][0] = num(5);
+        sheet1[2][1] = num(6);
+        const formulas: [number, number, string, number][] = [
+            [0, 3, '=INDEX(A1:B3,1,1)', 1],
+            [1, 3, '=SUM(A:A)', 9],
+            [2, 3, '=OFFSET(A1,0,0)', 1],
+            [3, 3, '=SUM(A1:INDEX(A1:B3,2,2))', 10],
+            [4, 3, '=SUM(1:1)', 4],
+            [5, 3, '=SUM(Data!A:A)', 6],
+            [5, 2, '=SUM(Data!1:1)', 1],
+            [0, 2, '=A1 + 1', 2],
+        ];
+        for (const [r, c, f, v] of formulas) sheet1[r][c] = { f, v, m: String(v) };
+        const data = grid(3, 3);
+        data[0][0] = num(1);
+        data[1][0] = num(2);
+        data[2][0] = num(3);
+        const ctx = contextFactory({
+            currentSheetId: 's1',
+            sheets: [
+                {
+                    name: 'Sheet1',
+                    id: 's1',
+                    order: 0,
+                    data: sheet1,
+                    calcChain: formulas.map(([r, c]) => ({ r, c, id: 's1' })),
+                },
+                { name: 'Data', id: 's2', order: 1, data },
+            ],
+        }) as Context;
+        warmFormulaCellInfoMap(ctx);
+        const shown = () => formulas.map(([r, c]) => ctx.sheets[0].data![r][c]?.m);
+
+        cellModule.updateCell(ctx, 0, 0, null, 10);
+        groupValuesRefresh(ctx);
+        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '6', '1', '11']);
+
+        ctx.currentSheetId = 's2';
+        cellModule.updateCell(ctx, 0, 0, null, 10);
+        groupValuesRefresh(ctx);
+        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '15', '10', '11']);
+    });
+});

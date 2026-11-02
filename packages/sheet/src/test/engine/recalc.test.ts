@@ -83,12 +83,30 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data?.[0][0]?.v).toBe('x6y');
     });
 
-    test('INDEX-carrying formula is parsed via the special-case branch and evaluates', () => {
-        // A formula calling INDEX, OFFSET or INDIRECT finds its ranges through isFunctionRange, not the tokenizer.
-        // A plain range argument records no dependency there, as in the editor: only a single-quoted endpoint does.
-        const sheets = [sheet('s1', 'Sheet1', [[num(10), num(20), formula('=INDEX(A1:B1,1,2)')]])];
+    test("a formula orders after the cells an INDEX's range argument reads", () => {
+        // A1 is scanned first, so only a recorded dependency makes it read C1's fresh 6 over the cached 0.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=INDEX(B1:C1,1,2)'), num(10), formula('=2*3', { v: 0 })]])];
         const out = recalcSheets(sheets);
-        expect(out[0].data![0][2]?.v).toBe(20);
+        expect(out[0].data![0][0]?.v).toBe(6);
+    });
+
+    test('a formula orders after the cells a whole column or row reads, on its sheet or another', () => {
+        // Each formula is scanned before the cell it reads, whose cached 0 is stale.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [formula('=SUM(B:B)'), formula('=2*3', { v: 0 }), formula('=SUM(Data!A:A)')],
+                [null, null, formula('=SUM(Data!2:2)')],
+                [null, null, formula('=SUM(4:4)')],
+                [formula('=4*5', { v: 0 })],
+            ]),
+            sheet('s2', 'Data', [
+                [formula('=7*1', { v: 0 }), null],
+                [num(1), formula('=8*1', { v: 0 })],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        const sheet1 = out[0].data!;
+        expect([sheet1[0][0]?.v, sheet1[0][2]?.v, sheet1[1][2]?.v, sheet1[2][2]?.v]).toEqual([6, 8, 9, 20]);
     });
 
     test('OFFSET / INDIRECT formulas are handled without crashing (error sentinel)', () => {
