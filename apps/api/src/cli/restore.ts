@@ -76,9 +76,9 @@ import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from 
 import type { Ui } from './ui';
 import { createUi, glyphLine, refuseUsage } from './ui';
 
-// --stage runs as the API's user in its container while Eigen runs, on the data root, .env.production and backups
-// folder the API sees. --swap runs as root on the install folder (-w /install) with Eigen stopped, like --staged and
-// --env.
+// --stage runs as the API's user in its container while Eigen runs, so it works on the data root, .env.production
+// and backups folder the API sees. The other modes work on the install folder (-w /install): --check-data as the
+// API's user, and --swap, --staged and --env as root.
 export const RESTORE_OPTIONS = {
     stage: { type: 'boolean' },
     staged: { type: 'boolean' },
@@ -134,12 +134,12 @@ type StagedRestore = { archive: string; level: BackupLevel; appVersion: string; 
 // Written by the swap before its first rename, read by the launcher's preflight: while it is there, a swap was cut
 // off, and --swap finishes it.
 export const SWAP_MARKER = '.eigen/restore-swap';
-// Held by a swap from before it reads the marker until it exits: .eigen/ is there all along, data/ is not.
+// Held by a swap from before it reads the marker until it exits. It lives in .eigen/, as a Full swap moves data/.
 export const SWAP_LOCK = '.eigen/restore.lock';
 // In data/.restoring, held by the stage that fills it: a second one would wipe its tree.
 export const STAGE_LOCK = 'stage.lock';
-// The copies, then the renames in order, from and to, relative to the install folder; `aside` names what the
-// operator finds after.
+// The marker: the copies to make, then the renames to run in order, each from and to, relative to the install
+// folder. `aside` names what the operator finds kept aside after the swap.
 type RestoreSwap = {
     archive: string;
     copies: [string, string][];
@@ -154,13 +154,14 @@ type LightEntry = { path: string; dir: boolean };
 // What an orphan in staged.json may name: one user's or team's folder, never a hidden one such as a restore's own.
 const ORPHAN_HOME = new RegExp(`^(${USER_HOMES_DIR}|${TEAM_HOMES_DIR})/[^/.][^/]*$`);
 
-// What unsafeEntry() looks for. Not a setgid folder, which a setgid install folder hands down to every folder in it.
+// What unsafeEntry() looks for. A setgid folder is fine: a setgid install folder hands that bit to every folder in it.
 const UNSAFE_FIND_ARGS =
     '-type b -o -type c -o -type p -o -type s -o -type f ( -perm -4000 -o -perm -2000 ) -o -type l';
 
-// Held until exit, like the API holds the data lock while it runs. False when another process holds `file`.
+// Every lock this run takes stays open until it exits, as the API holds the data lock while it runs.
 const locks: Database[] = [];
 
+// False when another process holds `file`.
 function holdLock(file: string): boolean {
     const lock = lockDataDir(file);
     if (lock) locks.push(lock);
@@ -185,7 +186,7 @@ function lockData(ui: Ui): void {
 
 const pathExists = (path: string) => lstatSync(path, { throwIfNoEntry: false }) !== undefined;
 
-// A home's light set, folders before what is in them, relative to the home.
+// What a Light archive holds of the home at `root`, relative to it, each folder before what is in it.
 function lightWalk(root: string): LightEntry[] {
     const held: LightEntry[] = [];
     const walk = (dir: string) => {
@@ -330,7 +331,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     }
     if (envMember) await copyArchiveMember(envMember, envFile);
     // A release install runs the images its .env.production pins; a local build builds its own and pins none.
-    if (envMember && current && hasCurrent) {
+    if (envMember && hasCurrent) {
         const install = (env: string) =>
             readEnvFile(env).has('EIGEN_VERSION') ? 'a release install' : 'a local build';
         const [theirs, ours] = [install(envFile), install(current)];
@@ -352,7 +353,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         `${homes.length} homes${failed.length ? `; not in it: ${failed.join(', ')}` : ''}${warned.length ? `; with warnings: ${warned.join(', ')}` : ''}`,
         envMember ? `${ENV_PATH} from the archive` : `No ${ENV_PATH}: the one here stays`,
     ];
-    // Mail off, Eigen reads neither the DKIM key nor the mail TLS certificate.
+    // With mail off, Eigen reads neither the DKIM key nor the mail TLS certificate.
     if (isMailEnabled(Object.fromEntries(readEnvFile(envFile)))) {
         lines.push(
             manifest.dkim ? 'The DKIM key from the archive' : 'No DKIM key: the one here stays, or mail needs new DNS',
@@ -481,11 +482,11 @@ async function printStaged(): Promise<void> {
     console.log([`version=${record.appVersion}`, `level=${record.level}`, ...pins].join('\n'));
 }
 
-// A Light backup is made only when no schema moved since, so the build before the update opens the data of today, and
-// a rollback keeps it. This checks that before the switch, with that build: its verdict on every home of every kind,
-// as a restore gives it, on the server's own versioned databases, and on the pages of users3.db. Safety copies are
-// left out, as no home opens them, and so are the container databases of an s3 mount, which live in the bucket.
-// The launcher says what to do when it fails.
+// A Light backup is made only when no schema changed since, so a rollback after one keeps today's data. This checks,
+// with the build the rollback goes back to and before the switch, that it opens that data. Every home of every kind
+// gets the verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips
+// the safety copies, which no home opens, and the container databases of an s3 mount, which live in the bucket. The
+// launcher says what to do when it fails.
 async function checkData(flags: Flags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
@@ -571,15 +572,15 @@ async function unsafeEntry(restoring: string): Promise<string | null> {
     return null;
 }
 
-// Light: server/, org/, dkim/ and certs/ go aside whole, and the staged ones move in. In a home here, every file of
-// its light set goes aside first, whether the archive holds it or not, because a -wal left beside another database
-// would be replayed onto it. A folder only here stays. A folder or a home only in the archive moves in whole. A home
+// Light: server/, org/, dkim/ and certs/ go aside whole, and the staged ones move in. In a home here, every file a
+// Light archive would hold goes aside first, whether this archive holds it or not, because a -wal left beside another
+// database would be replayed onto it. A folder only here stays. A folder or a home only in the archive moves in whole. A home
 // here that no account in the archive owns, such as that of a user made since, goes aside whole: nobody would sign
 // in to it. `merged` are the homes here the archive merges into, relative to data/.
 function planLight(
     staged: string,
     aside: string,
-    orphans: string[],
+    orphans: readonly string[],
 ): { renames: [string, string][]; merged: string[] } | { conflict: string } {
     const renames: [string, string][] = [];
     const merged: string[] = [];
@@ -632,8 +633,8 @@ function planLight(
     return { renames, merged };
 }
 
-// Makes the folders missing above `path`, owned like what moves in, which the stage made as the API user. Owned by
-// root, or like data/, which root may own, they would keep that user out of the homes in them.
+// Makes the missing folders above `path` and gives them to `owner`, who owns what moves in: the API's user, as the
+// stage made it. Folders owned by root, or by whoever owns data/, which may be root, would lock that user out.
 function makeParents(path: string, owner: Owner): void {
     const missing: string[] = [];
     for (let dir = dirname(path); !pathExists(dir); dir = dirname(dir)) missing.unshift(dir);
@@ -744,16 +745,18 @@ async function swap(): Promise<void> {
     }
     const restoring = join(DATA, RESTORING_DIR);
     const record = readRecord(join(restoring, STAGE_RECORD), isStagedRestore);
-    if (!record)
+    if (!record) {
         return ui.fail('Nothing is staged to swap in.', 'Run ./eigen restore <archive>, which stages it first.');
+    }
     requireRenamable(ui, record.archive);
     lockData(ui);
     const reason = await unsafeEntry(restoring);
-    if (reason)
+    if (reason) {
         return ui.fail(
             `The staged ${record.archive} cannot be swapped in: ${reason}.`,
             'Run ./eigen restore <archive> again.',
         );
+    }
     const stagedData = join(restoring, RESTORING_DATA_DIR);
 
     const asideOf = (path: string, at: Date) => buildSafetyCopyName(path, 'pre-restore', buildBackupStamp(at));
@@ -771,13 +774,15 @@ async function swap(): Promise<void> {
     let leftover = restoring;
     if (record.level === 'light') {
         const plan = planLight(stagedData, dataAside, record.orphans);
-        if ('conflict' in plan)
+        if ('conflict' in plan) {
             return ui.fail(
                 `${record.archive} cannot be swapped in: ${plan.conflict}.`,
                 'Move it out of the way, then run ./eigen restore again.',
             );
+        }
         renames.push(...plan.renames);
-        // Staged uploads stay for the restored rows naming them; reconcile sweeps the rest, so a copy goes aside.
+        // The pending uploads stay for the restored rows that name them. The next start sweeps the rest, so a copy
+        // of each goes aside.
         const uploads = new Bun.Glob(`${PATHS.DRIVE.ROOT}/*/${PATHS.DRIVE.STAGING_DIR}/*`);
         for (const home of plan.merged) {
             for (const path of uploads.scanSync({ cwd: join(DATA, home), dot: true })) {
