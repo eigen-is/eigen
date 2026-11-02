@@ -18,6 +18,7 @@ import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import {
     copySheetName,
     createDefaultSheets,
+    findSheetByName,
     iscelldata,
     mapChartRefs,
     recalcSheets,
@@ -136,7 +137,7 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         return { id: crypto.randomUUID(), name };
     });
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
-    const rename = (txt: string) => renameSheetRefs(txt, renames);
+    const rename = (txt: string) => renameSheetRefs(txt, imported, renames);
 
     const added = imported.map((sheet, i): Op => {
         const { id, name } = fresh[i];
@@ -156,8 +157,12 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
             if (rule.type === 'dropdown' && iscelldata(rule.value1)) rule.value1 = rename(rule.value1);
         }
         for (const link of Object.values(sheet.hyperlink ?? {})) {
-            if (link.linkType === 'sheet') link.linkAddress = renames.get(link.linkAddress) ?? link.linkAddress;
-            else if (link.linkType === 'cellrange') link.linkAddress = rename(link.linkAddress);
+            if (link.linkType === 'sheet') {
+                const target = findSheetByName(imported, link.linkAddress);
+                link.linkAddress = (target && renames.get(target.name)) ?? link.linkAddress;
+            } else if (link.linkType === 'cellrange') {
+                link.linkAddress = rename(link.linkAddress);
+            }
         }
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [

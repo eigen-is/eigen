@@ -19,10 +19,12 @@ export type SheetData = {
 export function createArrayResolver(sheets: SheetData[]): CellResolver {
     const byId = new Map<string, SheetData>();
     const byName = new Map<string, SheetData>();
+    const byNameKey = new Map<string, SheetData>();
     for (const sheet of sheets) {
-        // First wins — an imported doc can carry two sheets under one name.
+        // The first wins, because an imported doc can carry two sheets under one name.
         if (!byId.has(sheet.id)) byId.set(sheet.id, sheet);
-        if (!byName.has(sheetNameKey(sheet.name))) byName.set(sheetNameKey(sheet.name), sheet);
+        if (!byName.has(sheet.name)) byName.set(sheet.name, sheet);
+        if (!byNameKey.has(sheetNameKey(sheet.name))) byNameKey.set(sheetNameKey(sheet.name), sheet);
     }
 
     return {
@@ -30,7 +32,8 @@ export function createArrayResolver(sheets: SheetData[]): CellResolver {
             return byId.get(sheetId)?.data?.[row]?.[col] ?? null;
         },
         getSheetIdByName(name) {
-            return byName.get(sheetNameKey(name))?.id ?? null;
+            // As findSheetByName reads a name: its exact spelling first, so Data and data each read their own sheet.
+            return (byName.get(name) ?? byNameKey.get(sheetNameKey(name)))?.id ?? null;
         },
         getSheetData(sheetId) {
             return byId.get(sheetId)?.data ?? null;

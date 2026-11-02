@@ -860,6 +860,12 @@ describe("the reader's output budget", () => {
         expect(sheets[0].celldata?.[0].v?.f).toBe('=s!A1+1');
     });
 
+    test('a Greek name clashes in any case, its final sigma too, and ß never clashes with ss', () => {
+        const names = ['ΟΔΟΣ', 'οδος', 'Straße', 'STRASSE'];
+        const sheets = xlsxToSheets(xlsxFixture({ sheets: names.map((name) => ({ name })) }));
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['ΟΔΟΣ', 'οδος (2)', 'Straße', 'STRASSE']);
+    });
+
     // Imported, a workbook of no sheets would replace a document's with none.
     test('a workbook without a sheet it can read is no xlsx file', () => {
         const fixture = xlsxFixture({ sheets: [{ data: '<row r="1"><c r="A1"><v>1</v></c></row>' }] });

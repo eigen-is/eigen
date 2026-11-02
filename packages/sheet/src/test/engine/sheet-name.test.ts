@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { findSheetByName, sheetNameKey } from '../../engine/a1-notation';
 import { copySheetName } from '../../engine/sheet-name';
 
 describe('engine/sheet-name — copySheetName', () => {
@@ -20,5 +21,28 @@ describe('engine/sheet-name — copySheetName', () => {
         const copy = copySheetName('A name of exactly thirty-one ch', ['A name of exactly thirty-one ch']);
         expect(copy).toBe('A name of exactly thirty…(Copy)');
         expect(copy).toHaveLength(31);
+    });
+});
+
+describe('engine/sheet-name — sheetNameKey', () => {
+    test('a Greek name matches in any case, its final sigma too', () => {
+        expect(sheetNameKey('ΟΔΟΣ')).toBe(sheetNameKey('οδοσ'));
+        expect(sheetNameKey('ΟΔΟΣ')).toBe(sheetNameKey('οδος'));
+    });
+
+    test('ß matches no ss, as no character folds to two', () => {
+        expect(sheetNameKey('Straße')).not.toBe(sheetNameKey('STRASSE'));
+        expect(sheetNameKey('Straße')).toBe(sheetNameKey('STRAßE'));
+    });
+});
+
+describe('engine/sheet-name — findSheetByName', () => {
+    const sheets = [{ name: 'Data' }, { name: 'data' }];
+
+    test('a name finds the sheet of exactly that name before one in another case', () => {
+        expect(findSheetByName(sheets, 'data')).toBe(sheets[1]);
+        expect(findSheetByName(sheets, 'Data')).toBe(sheets[0]);
+        expect(findSheetByName(sheets, 'DATA')).toBe(sheets[0]);
+        expect(findSheetByName(sheets, 'Other')).toBeUndefined();
     });
 });

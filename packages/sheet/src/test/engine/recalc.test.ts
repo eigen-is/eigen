@@ -401,6 +401,16 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets)[0].data![0][0]?.v).toBe(8);
     });
 
+    // A workbook stored before a rename compared names in any case can hold both.
+    test('in a workbook holding Data and data, each name reads its own sheet', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=data!A1'), formula('=Data!A1'), formula('=DATA!A1')]]),
+            sheet('s2', 'Data', [[num(1)]]),
+            sheet('s3', 'data', [[num(2)]]),
+        ];
+        expect(recalcSheets(sheets)[0].data?.[0].map((cell) => cell?.v)).toEqual([2, 1, 1]);
+    });
+
     // A stored matrix may lack rows, its first among them, so a whole row reads as wide as the sheet's widest row.
     test('a whole row reads to the last column of a sheet whose first row is short', () => {
         const sheets = [

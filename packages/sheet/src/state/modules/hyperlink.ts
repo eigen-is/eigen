@@ -1,5 +1,10 @@
+// A cell's link: saving and removing it, the card that shows it, and following it to a web page, a sheet or a range.
+// The link card and the grid's mouse handlers call it, for example to find the cell under the mouse. A link to a
+// sheet names that sheet, and following it finds the sheet by name.
+
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { cloneDeep, omit, set } from 'es-toolkit/compat';
+import { findSheetByName } from '../../engine/a1-notation';
 import { cellValue, dropRuns } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Context } from '../context';
@@ -137,7 +142,7 @@ export function goToLink(ctx: Context, r: number, c: number, linkType: string, l
         const address = resolveWebLink(linkAddress);
         if (address != null) window.open(address, '_blank', 'noopener,noreferrer');
     } else if (linkType === 'sheet') {
-        const sheetId = ctx.sheets.find((sheet) => sheet.name === linkAddress)?.id;
+        const sheetId = findSheetByName(ctx.sheets, linkAddress)?.id;
         if (sheetId != null) changeSheet(ctx, sheetId);
     } else {
         const range = cloneDeep(getcellrange(ctx, linkAddress));

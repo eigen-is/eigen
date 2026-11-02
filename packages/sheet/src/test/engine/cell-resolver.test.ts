@@ -84,6 +84,13 @@ describe('engine/cell-resolver — getSheetIdByName', () => {
         expect(resolver.getSheetIdByName('sheet2')).toBe('sheet2');
         expect(resolver.getSheetIdByName('SHEET1')).toBe('sheet1');
     });
+
+    test('in a workbook holding Data and data, each name finds its own sheet', () => {
+        const twin = (id: string, name: string) => ({ ...sheets[0], id, name });
+        const twins = createArrayResolver([twin('upper', 'Data'), twin('lower', 'data')]);
+        expect([twins.getSheetIdByName('Data'), twins.getSheetIdByName('data')]).toEqual(['upper', 'lower']);
+        expect(twins.getSheetIdByName('DATA')).toBe('upper');
+    });
 });
 
 // ─── getSheetData ────────────────────────────────────────────────────────────

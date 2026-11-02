@@ -1,5 +1,6 @@
 // Cell labels and sheet names as the formula parser reads them: a label's row and column, the two ways a reference
-// may spell a sheet name, and the key two names are compared by. The reference patterns of the engine build on these.
+// may spell a sheet name, the key two names are compared by, and the sheet a name reads. The reference patterns of
+// the engine build on these.
 
 import {
     columnIndexToLabel,
@@ -37,10 +38,26 @@ export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
 }
 
-// What two sheet names are compared by. Excel ignores case, so `data!A1` reads the sheet named Data, and a workbook
-// can't hold Data and data side by side.
+// What two sheet names are compared by. Excel ignores case, so `data!A1` reads the sheet named Data. Each character
+// folds to its uppercase on its own, so the Greek final ς matches σ. A character whose uppercase is longer keeps its
+// case, so ß never matches ss.
 export function sheetNameKey(name: string): string {
-    return name.toLowerCase();
+    let key = '';
+    for (const char of name) {
+        const upper = char.toUpperCase();
+        key += upper.length === char.length ? upper : char;
+    }
+    return key;
+}
+
+// The sheet a name reads: the one of exactly that name, else one of that name in another case. A rename refuses a
+// name another sheet holds in any case, but a workbook can still hold Data and data, such as one stored before that
+// rule or a peer's. Then each name keeps reading its own sheet.
+export function findSheetByName<S extends { name: string }>(sheets: readonly S[], name: string): S | undefined {
+    const exact = sheets.find((sheet) => sheet.name === name);
+    if (exact) return exact;
+    const key = sheetNameKey(name);
+    return sheets.find((sheet) => sheetNameKey(sheet.name) === key);
 }
 
 // Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.

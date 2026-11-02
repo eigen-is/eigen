@@ -13,6 +13,7 @@ import { rowIndexToLabel, rowLabelToIndex, SHEET_NAME_PREFIX, unquoteSheetName }
 
 export {
     extractLabel,
+    findSheetByName,
     quoteSheetName,
     rowIndexToLabel,
     rowLabelToIndex,
