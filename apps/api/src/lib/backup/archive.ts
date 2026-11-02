@@ -85,15 +85,8 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
         async finish(fields) {
             const manifest: ServerArchiveManifest = { ...fields, entries };
             const body = Buffer.from(JSON.stringify(manifest, null, 2));
-            for (const chunk of headerChunks(
-                ARCHIVE_MANIFEST_FILE,
-                body.length,
-                Date.now(),
-                FILE_TYPEFLAG,
-                ARCHIVE_MODE,
-            )) {
-                await put(chunk);
-            }
+            const header = headerChunks(ARCHIVE_MANIFEST_FILE, body.length, Date.now(), FILE_TYPEFLAG, ARCHIVE_MODE);
+            for (const chunk of header) await put(chunk);
             await put(body);
             await put(padding(body.length));
             for (const chunk of archiveEnd(written)) await put(chunk);
