@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     chmodSync,
+    chownSync,
     copyFileSync,
     cpSync,
     existsSync,
@@ -855,6 +856,24 @@ describe('restore --stage and --swap', () => {
             expect(modeOf(join(dir, 'data/dkim/eigen.private'))).toBe(0o640);
             // A file only the archive holds keeps the mode the stage gave it.
             expect(modeOf(join(dir, 'data/dkim/eigen.txt'))).toBe(0o600);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // Docker Desktop shows every file of a bind mount as the reading container's user, root in the swap, so a file
+    // the stage wrote may not show its uid. Only root can give a file another owner to show it.
+    test.skipIf(process.getuid?.() !== 0)(
+        'a staged DKIM key that shows another owner than the stage is still swapped in',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            chownSync(join(dir, 'data/.restoring/data/dkim/eigen.txt'), 4321, 4321);
+            const swapped = await swap(dir);
+            expect(swapped.stderr).toBe('');
+            expect(swapped.code).toBe(0);
+            expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            // With no file here to take after, it keeps the owner it showed.
+            expect(statSync(join(dir, 'data/dkim/eigen.txt')).uid).toBe(4321);
         },
         JOB_TIMEOUT_MS,
     );

@@ -30,8 +30,8 @@ export const INSTALL_COPIES = '.eigen/restore-install';
 // What the swap renames before the staged tree becomes data/, and after.
 type InstallRenames = Record<'out' | 'in', [string, string][]>;
 
-// The owner and permission bits an entry root copies gets, or why it is refused.
-type CopyOwner = (rel: string, found: Stats) => (Owner & { mode: number }) | string;
+// The owner and permission bits an entry root copies gets.
+type CopyOwner = (rel: string, found: Stats) => Owner & { mode: number };
 
 // The DKIM key and the TLS certificate keep the owners and modes the mail containers gave the ones here, such as a key
 // that root owns and group 1000 reads. Returns the renames that move the archive's folder out of the staged tree,
@@ -49,9 +49,7 @@ export function copyInstallFolders(ui: Ui, archive: string, stagedData: string):
         const [staged, here, copy] = [join(stagedData, dir), join(DATA, dir), join(INSTALL_COPIES, dir)];
         const fromArchive = lstatSync(staged, { throwIfNoEntry: false }) !== undefined;
         if (!fromArchive && !lstatSync(here, { throwIfNoEntry: false })) continue;
-        const refused = fromArchive
-            ? copyFolder(staged, copy, ownedLike(here, stage))
-            : copyFolder(here, copy, ownOwner);
+        const refused = fromArchive ? copyFolder(staged, copy, ownedLike(here)) : copyFolder(here, copy, ownOwner);
         if (refused) {
             ui.fail(
                 `${archive} cannot be swapped in: ${refused}.`,
@@ -67,11 +65,10 @@ export function copyInstallFolders(ui: Ui, archive: string, stagedData: string):
 // An entry here keeps its own owner and mode.
 const ownOwner: CopyOwner = (_, found) => ({ uid: found.uid, gid: found.gid, mode: found.mode & 0o777 });
 
-// A file the stage wrote gets the owner and mode of the one it replaces here, or keeps its own when there is none.
-// Only the stage's own files are copied: one of anybody else in the staged tree was put there.
-function ownedLike(here: string, stage: Stats): CopyOwner {
+// A file from the archive gets the owner and mode of the one it replaces here, or keeps its own when there is none.
+// Its own owner says nothing of who wrote it: Docker Desktop shows every file of a bind mount as the reader's.
+function ownedLike(here: string): CopyOwner {
     return (rel, found) => {
-        if (found.uid !== stage.uid) return 'is not what the stage wrote';
         const replaced = lstatSync(join(here, rel), { throwIfNoEntry: false });
         const same = replaced && replaced.isFile() === found.isFile() && replaced.isDirectory() === found.isDirectory();
         return ownOwner(rel, same ? replaced : found);
@@ -101,7 +98,6 @@ function copyFolder(from: string, to: string, ownerOf: CopyOwner, rel = ''): str
         return `${path} is ${found.isSymbolicLink() ? 'a link' : 'not a file or a folder'}`;
     }
     const owner = ownerOf(rel, found);
-    if (typeof owner === 'string') return `${path} ${owner}`;
     ownAs(target, owner);
     // A folder's mode last, as one without write permission takes no files.
     chmodSync(target, owner.mode);
