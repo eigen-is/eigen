@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import {
     chmodSync,
+    cpSync,
     existsSync,
     mkdirSync,
     mkdtempSync,
@@ -25,7 +26,14 @@ import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } fr
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { lockDataDir } from '../../lib/config/data-lock';
-import { homeDirUnder, PATHS, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import {
+    GUEST_HOMES_DIR,
+    homeDirUnder,
+    ORG_HOMES_DIR,
+    PATHS,
+    SERVER_DATABASES,
+    SERVER_RUNTIME_FILES,
+} from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
@@ -1350,7 +1358,7 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
     }
 
     test(
-        'passes on data this build opens, and refuses a home’s or the server’s database of a newer schema',
+        'passes on data this build opens, and refuses a database of a newer schema in any kind of home or the server, and a damaged users3.db',
         async () => {
             const dir = install();
             await stageAndSwap(dir, basename(fullArchive));
@@ -1376,6 +1384,26 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
                 expect(refused.stderr).toContain('newer than this server');
                 bumpSchema(file, -1);
             }
+            // An org's and a guest's home count as a user's does.
+            for (const kind of [ORG_HOMES_DIR, GUEST_HOMES_DIR]) {
+                const home = join(dir, 'data', kind, 'copy');
+                cpSync(homeDirOf(dir, realShape.user.id), home, { recursive: true });
+                bumpSchema(join(home, 'mounts/default/metadata.db'), 1);
+                const refused = await restoreCli(dir, ['--check-data', '--yes']);
+                expect(refused.code).toBe(1);
+                expect(refused.stderr).toContain(`data/${kind}/copy/mounts/default/metadata.db is at`);
+                rmSync(home, { recursive: true });
+            }
+            // users3.db has no schema version, so a damaged one is what refuses.
+            const users = join(dir, 'data/server', SERVER_DATABASES.users);
+            const intact = readFileSync(users);
+            writeFileSync(users, Buffer.alloc(intact.length, 'x'));
+            const damaged = await restoreCli(dir, ['--check-data', '--yes']);
+            expect(damaged.code).toBe(1);
+            expect(damaged.stderr).toContain(`${relative(dir, users)} is damaged`);
+            // The launcher says what to do next, so the CLI does not.
+            expect(damaged.stderr).not.toContain('└');
+            writeFileSync(users, intact);
             // Nothing it reads is staged or moved.
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
             expect(asideDirs(dir)).toEqual(aside);
