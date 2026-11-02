@@ -277,7 +277,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     html: textToParagraphHtml(item.text),
                     fontSize,
                     fontFamily,
-                    color: typo.color,
+                    // A color the item doesn't name is left to the host's table, as for any new text box.
+                    ...(typo.color === undefined ? {} : { color: typo.color }),
                     ...typography,
                 });
             }
