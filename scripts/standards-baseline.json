@@ -119,7 +119,6 @@
     "apps/drive/src/routes/_auth.shared.$to.tsx": 1,
     "apps/drive/src/routes/_auth.trash.tsx": 1,
     "apps/drive/src/routes/_auth.watched.tsx": 1,
-    "packages/lib/src/core/admin/hooks/use-members.ts": 1,
     "packages/lib/src/core/auth/hooks/use-invite-signup.ts": 1,
     "packages/lib/src/core/command-palette/providers/doc-comment-search.ts": 1,
     "packages/lib/src/core/public/hooks/use-public.ts": 1,
