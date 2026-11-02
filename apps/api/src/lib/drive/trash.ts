@@ -3,7 +3,7 @@
 // take away sharing, tell open tabs and write the history.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { isCollabType, isContainerType } from '@workspace/lib/types/drive';
+import { isContainerType } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { ApiError } from '../core';
 import type { Mount } from '../mount';
@@ -23,20 +23,13 @@ export async function deletePath(drive: Drive, mount: Mount, item: DrivePath, us
 
     // Open documents close before trashPath closes their databases, so each one saves its last state.
     // Drive.deletePath refuses new opens until the trash is done.
-    if (isContainerType(item.type)) {
-        await closeCollabDocumentsRecursively(drive, mount, item.id);
-    }
+    await closeOpenDocumentsUnder(drive, mount, item.id);
 
     const trashedItem = await mount.trashPath(item.id);
-    // A document can move into the folder after Drive.deletePath read the paths it guards. trashPath
-    // closed its database with the rest, so the document closes now, before the slow steps below, and
-    // stops taking edits it can't save. The trash is in, so a close that fails is only logged.
-    for (const id of [item.id, ...mount.collectDescendantIds(item.id)]) {
-        if (!drive.hasCollabDocument(mount.id, id)) continue;
-        await drive
-            .closeCollabDocument(mount.id, id, { skipFinalSnapshot: true })
-            .catch((error) => console.error(`Failed to close collab document ${id}:`, error));
-    }
+    // A restore or a create can put a document in the folder after Drive.deletePath read the paths it
+    // guards, and the document can then be opened. trashPath closed its database with the rest, so the
+    // document closes now, before the slow steps below, and stops taking edits it can't save.
+    await closeOpenDocumentsUnder(drive, mount, item.id, { skipFinalSnapshot: true });
     drive.emit(SSEventType.DRIVE_PATH_TRASHED, trashedItem, { oldParentId: item.parentId, members });
     if (user) {
         mount.history.record({ pathId: item.id, eventType: 'trashed', actor: user });
@@ -113,23 +106,20 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
     return true;
 }
 
-// A deleted path gets no history row, because deleting the path deletes its rows too. The watchers only
-// get a notification. Who watches, and the folders it was trashed from, are read before the delete
-// removes them.
-async function readDeleteNotice(
+// Closes every collab document open at or below the path. The trash goes on either way, so a close
+// that fails is only logged.
+async function closeOpenDocumentsUnder(
+    drive: Drive,
     mount: Mount,
-    item: DrivePath,
-    user: User,
-): Promise<{ watcherIds: string[]; verifyAncestors: DrivePath[] }> {
-    const trashedFrom = await mount.getTrashedFrom(item.id);
-    const chain = [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item];
-    return {
-        watcherIds: mount.history.collectWatcherIds(trashedFrom ? [item.id, trashedFrom] : [item.id], user.id),
-        // The item joins the chain, so someone who watched a file shared with them directly still
-        // qualifies. The chain is checked as it was before the trash, because a path in the trash lets
-        // nobody but the owner in. The folder the item came from can be in the trash too.
-        verifyAncestors: chain.map((path) => ({ ...path, trashedAt: null })),
-    };
+    pathId: string,
+    opts?: { skipFinalSnapshot?: boolean },
+): Promise<void> {
+    for (const id of [pathId, ...mount.collectDescendantIds(pathId)]) {
+        if (!drive.hasCollabDocument(mount.id, id)) continue;
+        await drive
+            .closeCollabDocument(mount.id, id, opts)
+            .catch((error: unknown) => console.error(`Failed to close collab document ${id}:`, error));
+    }
 }
 
 // Read access comes from the whole chain of folders, so every path below the folder with an ACL of its
@@ -147,20 +137,21 @@ async function pushSharingBelow(
     }
 }
 
-async function closeCollabDocumentsRecursively(drive: Drive, mount: Mount, pathId: string): Promise<void> {
-    const path = await mount.getPath(pathId);
-    if (!path) return;
-
-    if (isCollabType(path.type)) {
-        try {
-            await drive.closeCollabDocument(mount.id, pathId);
-        } catch (error) {
-            console.error(`Failed to close collab document ${pathId}:`, error);
-        }
-    } else if (isContainerType(path.type)) {
-        const children = await mount.listFolderAll(pathId);
-        for (const child of children) {
-            await closeCollabDocumentsRecursively(drive, mount, child.id);
-        }
-    }
+// A deleted path gets no history row, because deleting the path deletes its rows too. The watchers only
+// get a notification. Who watches, and the folders it was trashed from, are read before the delete
+// removes them.
+async function readDeleteNotice(
+    mount: Mount,
+    item: DrivePath,
+    user: User,
+): Promise<{ watcherIds: string[]; verifyAncestors: DrivePath[] }> {
+    const trashedFrom = await mount.getTrashedFrom(item.id);
+    const chain = [...(trashedFrom ? await mount.getBreadcrumb(trashedFrom) : []), item];
+    return {
+        watcherIds: mount.history.collectWatcherIds(trashedFrom ? [item.id, trashedFrom] : [item.id], user.id),
+        // The item joins the chain, so someone who watched a file shared with them directly still
+        // qualifies. The chain is checked as it was before the trash, because a path in the trash lets
+        // nobody but the owner in. The folder the item came from can be in the trash too.
+        verifyAncestors: chain.map((path) => ({ ...path, trashedAt: null })),
+    };
 }

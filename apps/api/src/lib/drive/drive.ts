@@ -616,7 +616,12 @@ export class Drive {
         // Read before the move for the same reason: whoever saw the path in its old folder hears it left.
         const oldMembers = await this.getEffectiveMembers(mountId, pathId);
 
-        const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
+        // The check above can come before a trash of the folder begins, so the move asks again as it writes.
+        const movedPath = await mount.updatePath(
+            pathId,
+            { parentId: targetParentId },
+            { isTargetTrashing: () => this.documents.isTrashing(mount, targetParentId) },
+        );
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {
             oldParentId,
             members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),

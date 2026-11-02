@@ -26,9 +26,9 @@ export const IDLE_CLOSE_MS = 5 * 60_000;
 export const HOLDER_WAIT_MS = 5_000;
 
 export type DocumentDbSlot = {
-    db: ManagedDatabase<SchemaType> | null; // the live instance while open; null while a build or a close is in flight
-    tail: Promise<void>; // the lifecycle op in flight; the next op on this pathId queues behind it
-    pending: number; // queued + running ops; the slot is dropped when it reaches 0 with db null
+    db: ManagedDatabase<SchemaType> | null; // the open database, or null while one is built or closed
+    tail: Promise<void>; // the open or close that runs now, which the next one for this path waits for
+    pending: number; // the opens and closes that wait or run; at 0 with no database the slot goes
     holders: number; // the callers using db right now, such as a withDatabase reader or an open collab document
     idleTimer: ReturnType<typeof setTimeout> | null; // the close armed when the last holder let go
     lastHolderGone: (() => void) | null; // set while a close waits for the holders
@@ -77,7 +77,8 @@ export async function withDatabase<S extends SchemaType, T>(
 // every edit to its data.db. It lets go in its own close, before it closes the database. What closes
 // such a database, such as a trash, closes the document first. So this holder alone may take the
 // container path lock while it holds, as a workbook's version before its compaction does. Only a
-// document that moves into a folder while the folder is trashed makes a close wait out HOLDER_WAIT_MS.
+// document that a restore or a create puts in a folder that is being trashed, and that opens before the
+// trash closes the databases, makes a close wait out HOLDER_WAIT_MS.
 export async function holdDatabase<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -179,8 +180,8 @@ async function buildDocumentDb<S extends SchemaType>(
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
     const storageKey = await mount.getStorageKey(pathId);
-    // local-key is the only backend that skips the temp copy, and its LocalStorage always exposes
-    // getPath (optional on StorageBackend because s3 has no local file).
+    // Only `local-key` opens the stored file in place, and its storage always has getPath. Other
+    // backends may lack it, because s3 has no local file.
     let localPath: string;
     if (mount.needsTempCopy) localPath = mount.getTempPath(pathId);
     else if (mount.storage.getPath) localPath = mount.storage.getPath(storageKey);
@@ -257,8 +258,8 @@ async function buildDocumentDb<S extends SchemaType>(
                           }
                           // The open sends no HEAD: the GET itself answers a gone object (410).
                           await mount.downloadKeyToTemp(currentKey, pathId);
-                          // No empty-check here: an empty 200 is caught by ManagedDatabase's
-                          // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
+                          // An empty download needs no check here. ManagedDatabase refuses to open an
+                          // empty working copy as a new database.
                       });
                   },
                   // On s3 the sync stages a frozen copy and queues its upload, off the request and close
@@ -287,7 +288,8 @@ async function buildDocumentDb<S extends SchemaType>(
                           }
                           await markContainerContentDirty(mount, pathId);
                       }),
-                  // Re-stat only where the live file is the object; a queued row already matches its staged copy.
+                  // With an upload queue the row already has the size of the staged copy, so only a
+                  // mount without one reads the size again.
                   onClose: async (syncFailed) => {
                       if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
                       // After a failed final sync the temp is the only copy of the newest writes. It
@@ -360,7 +362,7 @@ export async function closeInSlot(
     }
     if (slot.idleTimer) clearTimeout(slot.idleTimer);
     slot.idleTimer = null;
-    // Cleared BEFORE closing: a snapshot read mid-close must not see the closing instance.
+    // Cleared before the close, so a snapshot that reads the slot meanwhile never sees the closing database.
     slot.db = null;
     await db.close(opts);
 }

@@ -714,9 +714,12 @@ export class Mount {
 
     // ---- Renaming, moving and deleting ----
 
+    // A move asks isTargetTrashing whether its target folder is on its way to the trash, which only the
+    // caller knows. It asks in the transaction that writes the row, so no trash begins in between.
     public async updatePath(
         pathId: string,
         updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>,
+        opts?: { isTargetTrashing?: () => boolean },
     ): Promise<DrivePath> {
         // Validated first, so the row and the `local` storage key both get the name's NFC form.
         if (updates.name !== undefined) {
@@ -756,7 +759,7 @@ export class Mount {
                     // One synchronous transaction, so no trash or opposite move lands between the checks
                     // and the UPDATE.
                     this.db.transaction((tx) => {
-                        this.assertMovableInTx(tx, pathId, targetParentId);
+                        this.assertMovableInTx(tx, pathId, targetParentId, opts?.isTargetTrashing);
                         const old = tx
                             .select({ parentId: paths.parentId })
                             .from(paths)
@@ -808,7 +811,9 @@ export class Mount {
                             }
                             // Checked before the bytes move. A disk rename would replace a sibling that raced
                             // in at the target, and a rename into its own subtree throws a bare EINVAL.
-                            this.db.transaction((tx) => this.assertMovableInTx(tx, pathId, updates.parentId));
+                            this.db.transaction((tx) =>
+                                this.assertMovableInTx(tx, pathId, updates.parentId, opts?.isTargetTrashing),
+                            );
                             const parentId = updates.parentId ?? (await this.getPath(pathId))?.parentId;
                             const newName = path.posix.basename(newPath);
                             const rename = renameFn.bind(this.storage);
@@ -889,11 +894,19 @@ export class Mount {
     }
 
     // Refuses to move a row that is in trash. A trash may have landed while the move waited, and on
-    // `local` the move would carry its bytes out of .trash/.
-    private assertMovableInTx(tx: Tx, pathId: string, targetParentId: string | null | undefined): void {
+    // `local` the move would carry its bytes out of .trash/. It also refuses a target folder that a trash
+    // began on while the move waited. That trash has closed the open documents in the folder already, and
+    // would close the database of one that moved in now under its editor.
+    private assertMovableInTx(
+        tx: Tx,
+        pathId: string,
+        targetParentId: string | null | undefined,
+        isTargetTrashing?: () => boolean,
+    ): void {
         const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
         if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
         if (targetParentId === undefined) return;
+        if (isTargetTrashing?.()) throw new ApiError(404, 'Folder not found');
         const error = this.targetFolderErrorInTx(tx, pathId, targetParentId);
         if (error) throw error;
     }
