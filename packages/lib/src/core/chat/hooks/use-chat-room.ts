@@ -11,9 +11,8 @@ import { toAttachmentReference } from '../../../types/drive-reference';
 import { validateEmailTarget } from '../../../validation';
 import { useAuth } from '../../auth';
 import {
-    PartialCopyError,
     useCheckPermissions,
-    useCopyPaths,
+    useCopyToMediaFolder,
     useEffectiveMembers,
     useFolderContent,
     usePathInfo,
@@ -39,7 +38,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     }, [messagesQuery.data]);
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
-    const { mutateAsync: copyPaths } = useCopyPaths();
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, mountId);
     const { data: chatPath } = usePathInfo(ownerId, mountId, chatId);
     const inviteToChat = useInviteToChat(ownerId, mountId, chatId);
     const deleteMessage = useDeleteMessage(ownerId, mountId, chatId);
@@ -113,16 +112,15 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
             }
 
             if (filesToCopy.length > 0) {
-                const target = { targetOwnerId: ownerId, targetMountId: mountId, targetParentId: mediaFolder.id };
-                const copied = await copyPaths(filesToCopy.map((source) => ({ source, ...target }))).catch((error) =>
-                    error instanceof PartialCopyError ? error.copied : [],
+                const copied = await copyToMediaFolder({ paths: filesToCopy, mediaFolderId: mediaFolder.id }).catch(
+                    () => [],
                 );
                 if (copied.length > 0) {
                     setPendingDriveAttachments((prev) => [...prev, ...copied.map((p) => p.name)]);
                 }
             }
         },
-        [mediaFolder, copyPaths, ownerId, mountId],
+        [mediaFolder, copyToMediaFolder],
     );
 
     const removeDriveAttachment = useCallback((attachment: ChatAttachment) => {
@@ -136,7 +134,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     }, []);
 
     const handleSendMessage = useCallback(
-        async (rawContent: string, files?: File[]) => {
+        async (rawContent: string, files?: readonly File[]) => {
             if (!rawContent.trim() && (!files || files.length === 0) && pendingDriveAttachments.length === 0) return;
 
             let attachments: ChatAttachment[] | undefined;
@@ -251,7 +249,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         roomMembers,
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,
-        currentUserEmail: user?.email || '',
+        currentUserEmail: user?.email ?? '',
         mediaFolderId,
         handleSendMessage,
         handleEditMessage,

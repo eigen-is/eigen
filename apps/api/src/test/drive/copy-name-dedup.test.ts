@@ -53,6 +53,41 @@ describe('copy route name dedup', () => {
         expect(((await res.json()) as DrivePath).name).toBe('café (2).txt');
     });
 
+    // Both copies read the target folder before either one creates, so both pick the same free name.
+    // The loser has to pick again instead of answering 409.
+    test('two same-named files copied into one folder at once both land, with distinct names', async () => {
+        const token = ctx.alice.user.sessionToken;
+        const ownerId = ctx.alice.user.id;
+        const sources: DrivePath[] = [];
+        for (const folderName of ['race-a', 'race-b']) {
+            const folder = await drivePost<DrivePath>(token, ownerId, MOUNT, `folder/${folderId}`, { folderName });
+            sources.push(await driveUpload(token, ownerId, MOUNT, folder.id, new File([folderName], 'same.txt')));
+        }
+        const target = await drivePost<DrivePath>(token, ownerId, MOUNT, `folder/${folderId}`, {
+            folderName: 'race-target',
+        });
+
+        for (let round = 0; round < 3; round++) {
+            const responses = await Promise.all(
+                sources.map((source) =>
+                    authedRequest(token, `/drive/${ownerId}/${MOUNT}/path/${source.id}/copy`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            targetOwnerId: ownerId,
+                            targetMountId: MOUNT,
+                            targetParentId: target.id,
+                        }),
+                    }),
+                ),
+            );
+            expect(responses.map((res) => res.status)).toEqual([200, 200]);
+        }
+        const names = (await driveGet<DrivePath[]>(token, ownerId, MOUNT, `folder/${target.id}`)).map((p) => p.name);
+        expect(names).toHaveLength(6);
+        expect(new Set(names).size).toBe(6);
+    });
+
     // A name already at the 255-byte limit still gets a copy: the dedup suffix trims the stem to fit.
     test('a max-length name copied next to itself gets a suffix that still fits 255 bytes', async () => {
         const long = `${'y'.repeat(251)}.txt`;

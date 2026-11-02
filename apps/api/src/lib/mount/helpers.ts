@@ -6,6 +6,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
@@ -48,6 +49,12 @@ export function ancestorIds(...pathIds: string[]): SQL {
 // The 409 of a create, rename, move or restore whose name a live sibling has already.
 export function nameTakenError(name: string): ApiError {
     return new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+}
+
+// Whether a create of this name failed only because a sibling took the name first, so the caller can
+// pick another name and try again.
+export function isNameTakenError(e: unknown, name: string): boolean {
+    return e instanceof ApiError && e.status === 409 && e.message === nameTakenError(name).message;
 }
 
 // What a write to a paths row throws when it raced another write. The unique index on the parent and
@@ -135,7 +142,6 @@ export function isViableRecoveryTemp(tempPath: string, knownSize: number): boole
 }
 
 const DEFAULT_MOUNT_NAME = 'My Drive';
-const DEFAULT_MOUNT_ID = 'default';
 
 export function createDefaultMountConfig(): MountConfig {
     return { id: DEFAULT_MOUNT_ID, name: DEFAULT_MOUNT_NAME, storageType: 'local', isDefault: true };

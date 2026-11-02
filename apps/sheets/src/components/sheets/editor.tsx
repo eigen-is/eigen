@@ -9,7 +9,7 @@ import { commentIndicatorColor } from '@workspace/lib/constants/comment-indicato
 import {
     isPendingMediaName,
     MediaResolverProvider,
-    useCopyPaths,
+    useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
     useZombieMediaSweep,
@@ -90,9 +90,9 @@ function SheetEditorInner({
     // is a pixel of the sheet.
     const paneRef = useRef<HTMLDivElement>(null);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
-    // The selected image or chart (surfaced from the workbook via onActiveObjectChange) drives the
-    // right-side properties panel. Its Keep aspect ratio, checked by default for an image and not for a
-    // chart, feeds BOTH the panel checkbox and the grips, so it lives here, one level above both.
+    // The workbook reports the selected image or chart through onActiveObjectChange, and the properties
+    // panel on the right shows it. Keep aspect ratio is on by default for an image and off for a chart.
+    // The panel checkbox and the grips both read it, so it lives here, one level above both.
     const [activeObject, setActiveObject] = useState<SheetFloatingItem | null>(null);
     const [aspectLocked, setAspectLocked] = useAspectLock(
         activeObject ? [activeObject.object.id] : [],
@@ -117,12 +117,12 @@ function SheetEditorInner({
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
-    const { mutateAsync: copyPaths } = useCopyPaths();
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
         useMediaResolver();
-    // Below the breakpoint the w-64 sibling squeezes the workbook to ~130px, so the pane takes the
-    // editor area over instead; the engine re-measures its canvas when the workbook is un-hidden.
+    // On a phone the side panel would squeeze the workbook to about 130px, so the panel takes the whole
+    // editor area instead. The engine measures its canvas again when the workbook shows again.
     const { isMobile } = useLayout();
     const {
         panel,
@@ -154,7 +154,7 @@ function SheetEditorInner({
         ready: synced,
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
-    // Host-owned so the filter survives panel close/reopen.
+    // The filter lives here, so it survives closing and opening the panel.
     const commentFilter = useCommentFilter();
     const commentContextMenu = useContextMenu<CommentContextMenuItem>();
 
@@ -256,7 +256,7 @@ function SheetEditorInner({
     });
 
     const handleImageFromDevice = useCallback(
-        (files: File[]) => {
+        (files: readonly File[]) => {
             const file = files[0];
             if (file) handleImageFile(file);
         },
@@ -271,18 +271,17 @@ function SheetEditorInner({
     );
 
     const handleImagePickFromDrive = useCallback(
-        async (paths: DrivePath[]) => {
+        async (paths: readonly DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
-            const target = { targetOwnerId: ownerId, targetMountId: path.mountId, targetParentId: mediaFolderId };
-            const result = await copyPaths([{ source: paths[0], ...target }]).catch(() => null);
-            if (!result?.[0]) return;
+            const copied = (await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null))?.[0];
+            if (!copied) return;
             // Measure through the copy's own path. A lookup by name reads the media listing from before
             // the copy, misses the new file, and would size the image from the default box.
-            const intrinsic = await readImageSizeFromUrl(resolveMediaUrlByPath(result[0]));
+            const intrinsic = await readImageSizeFromUrl(resolveMediaUrlByPath(copied));
             const { width, height } = fitToPane(intrinsic);
-            workbookRef.current?.insertImage(result[0].name, width, height);
+            workbookRef.current?.insertImage(copied.name, width, height);
         },
-        [mediaFolderId, copyPaths, ownerId, path.mountId, resolveMediaUrlByPath, fitToPane],
+        [mediaFolderId, copyToMediaFolder, resolveMediaUrlByPath, fitToPane],
     );
 
     const handleSaveNew = useCallback(
@@ -303,7 +302,7 @@ function SheetEditorInner({
         [addTargetCell, addInitialTitle, createCard, assignComment],
     );
 
-    // One op per edit; the workbook re-surfaces the written record via onActiveObjectChange.
+    // Each edit is one op. The workbook then reports the written object again through onActiveObjectChange.
     const handleObjectTransform = useCallback(
         (fields: TransformFields) => {
             if (activeObject) {
@@ -369,8 +368,7 @@ function SheetEditorInner({
                 />
             )}
             <div className="flex h-full w-full flex-col overflow-hidden">
-                {/* Persistent read-only signal — a decode failure leaves a blank sheet otherwise
-                    indistinguishable from data loss. */}
+                {/* A sheet that failed to decode shows blank. Without this banner it would look like lost data. */}
                 {loadFailed && (
                     <div className="flex shrink-0 items-center justify-center gap-2 border-b bg-destructive/10 app-gutter-x py-1.5 text-xs text-destructive">
                         <AlertTriangle className="h-3.5 w-3.5 shrink-0" />

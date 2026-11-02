@@ -8,11 +8,11 @@ import type { ChatAttachment } from '../../../types/chat';
 import type { CardAttachmentDraft } from '../../../types/comments';
 import { isContainerType } from '../../../types/drive';
 import { toAttachmentReference } from '../../../types/drive-reference';
-import { useCopyPaths, useUploadFile } from '../../drive';
+import { useCopyToMediaFolder, useUploadFile } from '../../drive';
 
 export function useResolveCardAttachments(ownerId: string, mountId: string, mediaFolderId: string | null) {
     const uploadFile = useUploadFile(ownerId, mountId);
-    const { mutateAsync: copyPaths } = useCopyPaths();
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, mountId);
 
     return useCallback(
         async (drafts: readonly CardAttachmentDraft[]): Promise<ChatAttachment[]> => {
@@ -28,13 +28,12 @@ export function useResolveCardAttachments(ownerId: string, mountId: string, medi
                     resolved.push(toAttachmentReference(draft));
                 } else {
                     if (!mediaFolderId) continue;
-                    const target = { targetOwnerId: ownerId, targetMountId: mountId, targetParentId: mediaFolderId };
-                    const [copied] = await copyPaths([{ source: draft, ...target }]);
+                    const [copied] = await copyToMediaFolder({ paths: [draft], mediaFolderId });
                     resolved.push(copied.name);
                 }
             }
             return resolved;
         },
-        [uploadFile.mutateAsync, copyPaths, ownerId, mountId, mediaFolderId],
+        [uploadFile.mutateAsync, copyToMediaFolder, mediaFolderId],
     );
 }
