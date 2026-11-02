@@ -1,0 +1,97 @@
+// The share summary in a Drive row and the chat toolbar shows who has access. Where a click opens Share, it is a button
+// the keyboard reaches, and its click stays off the row. Elsewhere it is no control at all. The lock on a shared link
+// says who the link lets in, in the Share dialog's words.
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
+import type { DirectAccessItem } from '@workspace/lib/types/drive';
+import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
+import { installHappyDom } from '../../happy-dom';
+import { pressKey } from '../../press-key';
+import { renderInDocument } from '../../render-in-document';
+
+installHappyDom();
+
+const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(async () => Response.json([]), { preconnect: fetch.preconnect }),
+);
+
+const OWNER: DirectAccessItem = { id: 'owner@example.com', read: true, write: true, owner: true };
+const ADA: DirectAccessItem = { id: 'ada@example.com', read: true, write: true, owner: false };
+let entries: DirectAccessItem[] = [];
+
+// Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
+const realDrive = { ...(await import('@workspace/lib/drive')) };
+const realPublic = { ...(await import('@workspace/lib/public')) };
+mock.module('@workspace/lib/drive', () => ({
+    ...realDrive,
+    useDriveAccess: () => ({ allEntries: entries }),
+}));
+mock.module('@workspace/lib/public', () => ({
+    ...realPublic,
+    useResolvedUser: ({ email }: { email?: string }) => ({
+        displayName: email ?? '',
+        resolvedEmail: email,
+        avatarSrc: undefined,
+        isLoading: false,
+    }),
+}));
+afterAll(() => {
+    fetchSpy.mockRestore();
+    mock.module('@workspace/lib/drive', () => realDrive);
+    mock.module('@workspace/lib/public', () => realPublic);
+});
+
+const { act, createElement } = await import('react');
+const { DriveShareSummary } = await import('../../../components/drive/drive-share-summary');
+
+const notes = drivePath({ id: 'notes', name: 'Notes.eigendoc', mimeType: DRIVE_MIME_DOC });
+let unmount = async () => {};
+afterEach(() => unmount());
+beforeEach(() => {
+    entries = [OWNER, ADA];
+});
+
+// The summary inside a row that listens for clicks, as a Drive row does.
+async function renderSummary(props: {
+    onClick?: () => void;
+    showIconOnHover?: boolean;
+    visibility?: 'private' | 'public-read';
+}) {
+    const onRowClick = mock(() => {});
+    const path = { ...notes, visibility: props.visibility ?? 'private' };
+    const rendered = await renderInDocument(
+        createElement(
+            'div',
+            { onClick: onRowClick },
+            createElement(DriveShareSummary, { path, onClick: props.onClick, showIconOnHover: props.showIconOnHover }),
+        ),
+    );
+    unmount = rendered.unmount;
+    return { container: rendered.container, onRowClick };
+}
+
+test('a summary that opens Share is a button the keyboard reaches, and its click stays off the row', async () => {
+    const onClick = mock(() => {});
+    const { container, onRowClick } = await renderSummary({ onClick });
+    const button = container.querySelector('button');
+    expect(button?.type).toBe('button');
+    expect(button?.getAttribute('aria-label')).toBe('Share');
+    if (!button) return;
+    await act(async () => pressKey(button, 'Enter'));
+    await act(async () => pressKey(button, ' '));
+    expect(onClick).toHaveBeenCalledTimes(2);
+    expect(onRowClick).not.toHaveBeenCalled();
+});
+
+test('a summary with nothing to open is no control', async () => {
+    const { container } = await renderSummary({});
+    expect(container.querySelector('button')).toBeNull();
+    // The two people, each an avatar with a tooltip.
+    expect(container.querySelectorAll('[data-slot="tooltip-trigger"]')).toHaveLength(2);
+});
+
+test('a summary that shows nothing is no button, so Tab does not stop on an empty spot', async () => {
+    entries = [OWNER];
+    const { container } = await renderSummary({ onClick: () => {}, showIconOnHover: false });
+    expect(container.querySelector('button')).toBeNull();
+});
