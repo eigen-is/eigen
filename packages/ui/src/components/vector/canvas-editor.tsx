@@ -109,8 +109,7 @@ import { RichTextInPlaceEditor } from './kinds/rich-text';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import type { EditingState } from './text-editing';
 import { arrowLabelEditing } from './text-editing';
-import type { HealTextSize } from './text-measure';
-import { isVectorFontLoaded, measureLoadedVectorText, measureVectorText } from './text-measure';
+import { useArrowLabelFit } from './text-fit';
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
@@ -602,8 +601,8 @@ export function CanvasEditor({
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [frozenRef, setTool, setSelectedIds]);
 
-    // Opens the label editor on an arrow's label, the one plain-text editor left on the canvas. The text-editing module
-    // shapes the session; the canvas only selects and opens.
+    // Opens the label editor on an arrow's label, the one plain-text editor on the canvas. arrowLabelEditing shapes the
+    // session, and the canvas only selects and opens.
     const openEditArrowLabel = (el: VectorArrowElement) => {
         const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
         if (!ed) return false; // a degenerate arrow (< 2 points) has no label anchor
@@ -612,9 +611,8 @@ export function CanvasEditor({
         return true;
     };
 
-    // What this canvas shows, one frame's elements in frame mode. The snap targets, the resize and move paths and the
-    // heal read it. `elementsRef` stays the whole scene, because a pending image on another frame is still this tab's
-    // to sweep.
+    // What this canvas shows, one frame's elements in frame mode. The snap targets and the resize and move paths read
+    // it. `elementsRef` stays the whole scene, because a pending image on another frame is still this tab's to sweep.
     const visibleRef = useRef(visibleElements);
     visibleRef.current = visibleElements;
     const elementsRef = useRef(elements);
@@ -690,23 +688,6 @@ export function CanvasEditor({
         },
     });
 
-    // A size measured before the slices of its text load is the fallback's. Every renderer and export draws the stored
-    // size, so a label committed early and a box pasted with ⌘V are measured again once those slices load. The write
-    // is untracked, like the text fit's: it corrects a measure, so ⌘Z takes back the edit and never the heal alone.
-    const healTextSize = useCallback<HealTextSize>(
-        (id, text, font, patch) => {
-            if (isVectorFontLoaded(text, font)) return;
-            measureLoadedVectorText(text, font)
-                .then((size) => {
-                    const el = visibleRef.current.find((x) => x.id === id);
-                    const fields = el && patch(el, size);
-                    if (fields) updateElementUntracked(id, fields);
-                })
-                .catch(() => {});
-        },
-        [updateElementUntracked],
-    );
-
     // One label session is one Yjs write, sealed so it is its own undo step. It reads the live session from a ref, not
     // a closure, so the callback stays stable and its side effects run once, never inside a state updater.
     const commitEditing = useCallback(
@@ -716,30 +697,14 @@ export function CanvasEditor({
             setEditing(null);
             if (!ed) return;
             const empty = text.trim().length === 0;
-            // The arrow already exists, so the label is written in place: its `text` and measured `labelWidth` in one
-            // sealed write. Its height follows from the line count. An emptied label clears both and never deletes the
-            // arrow, and a new label left empty writes nothing. updateElement writes nothing when a peer deleted the
-            // arrow meanwhile.
-            if (!(ed.isNew && empty)) {
-                const font = { fontSize: ed.fontSize, fontFamily: ed.fontFamily };
-                const labelWidth = empty ? 0 : measureVectorText(text, font).width;
-                sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text, labelWidth }));
-                // A newer edit of the label or its font owns the width.
-                if (!empty) {
-                    healTextSize(ed.id, text, font, (el, { width }) =>
-                        el.type === 'arrow' &&
-                        el.text === text &&
-                        el.fontSize === font.fontSize &&
-                        el.fontFamily === font.fontFamily
-                            ? { labelWidth: width }
-                            : null,
-                    );
-                }
-            }
+            // The arrow already exists, so the label's text is written in place, and useArrowLabelFit measures its
+            // width. An emptied label clears the text and never deletes the arrow, and a new label left empty writes
+            // nothing. updateElement writes nothing when a peer deleted the arrow meanwhile.
+            if (!(ed.isNew && empty)) sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text }));
             setSelectedIds([ed.id]);
             setTool('select');
         },
-        [updateElement, undoManager, setSelectedIds, setTool, healTextSize],
+        [updateElement, undoManager, setSelectedIds, setTool],
     );
 
     // Open an in-place rich-text session. Seal first, so the session's writes are their own undo step.
@@ -916,7 +881,6 @@ export function CanvasEditor({
         deleteElementsUntracked,
         undoManager,
         viewportCenterScene,
-        healTextSize,
         insertImageFiles,
         mediaFolderId,
         resolveMediaPath,
@@ -1423,6 +1387,13 @@ export function CanvasEditor({
         [updateElement, updateElementUntracked],
     );
     const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
+    // An arrow label's width follows its text and font, so it is no step of the user's and stays untracked. The user's
+    // own step is the text or font change that caused it, and ⌘Z on that change measures the label it brings back.
+    const fitLabelWidth = useCallback(
+        (id: string, labelWidth: number) => updateElementUntracked(id, { labelWidth }),
+        [updateElementUntracked],
+    );
+    useArrowLabelFit(elements, canEdit ? fitLabelWidth : undefined);
 
     // One scene node. Every render path goes through here, so `byId`, an elbow arrow's route context, is passed in one
     // place.

@@ -20,7 +20,15 @@ Object.defineProperty(document, 'fonts', {
     },
 });
 
-const { isVectorFontLoaded, loadVectorFont } = await import('../../../components/vector/text-measure');
+// Every character measures 10 px.
+Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
+    configurable: true,
+    value: () => ({ font: '', measureText: (line: string) => ({ width: 10 * [...line].length }) }),
+});
+
+const { isVectorFontLoaded, loadVectorFont, measureVectorText } = await import(
+    '../../../components/vector/text-measure'
+);
 
 test('the font set loads and checks the slices of the text the label measures', async () => {
     calls.length = 0;
@@ -31,4 +39,10 @@ test('the font set loads and checks the slices of the text the label measures', 
         ['check', '茶 tea 😀'],
         ['load', '茶 tea 😀'],
     ]);
+});
+
+// A forged clipboard item can carry any letter spacing, and a large negative one would pull a line below zero width.
+test('a line never measures narrower than nothing', () => {
+    const { width } = measureVectorText('tea\nt', { fontSize: 20, fontFamily: 'sans', letterSpacing: -200 });
+    expect(width).toBe(0);
 });

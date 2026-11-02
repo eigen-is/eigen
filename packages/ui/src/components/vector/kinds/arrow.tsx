@@ -19,10 +19,7 @@ import {
     MergedSelect,
     PropertyRow,
     PropertySection,
-    useHeldGesture,
 } from '@workspace/ui/components/properties-panel';
-import { useRef } from 'react';
-import { measureLoadedVectorText } from '../text-measure';
 import type { KindPanelSectionProps } from './index';
 
 // Derived from the canonical ARROW_SHAPES vocabulary so the row and the model never drift.
@@ -40,8 +37,6 @@ const ARROWHEAD_OPTIONS: { value: Arrowhead; label: string }[] = [
 ];
 
 export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onChangeEach }: KindPanelSectionProps) {
-    const { hold, end: endGesture } = useHeldGesture();
-    const pendingFontWrites = useRef(0);
     // The panel mounts a kind's section only when every selected element is of that kind, so this only narrows.
     const arrows = elements.filter((el): el is VectorArrowElement => el.type === 'arrow');
     const allElbow = arrows.length > 0 && arrows.every((el) => el.elbow);
@@ -71,51 +66,19 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
         });
     };
 
-    // A font family or size change measures each arrow's own label again and writes its `labelWidth` in the
-    // same transact as the font, so it is one undo step. The height follows from the line count. It measures
-    // once the slices of the label's text have loaded, or measureText reads the fallback's metrics.
-    //
-    // The Size field holds its own undo gesture only while it is focused. When the font has not loaded yet,
-    // the write lands after the blur has released that gesture, so each digit would be its own undo step.
-    // So the write takes the gesture back itself and keeps it until the last pending load has landed.
-    const applyFont = async (fields: (el: VectorArrowElement) => { fontSize?: number; fontFamily?: string }) => {
-        pendingFontWrites.current += 1;
-        try {
-            const patches = new Map(
-                await Promise.all(
-                    arrows.map(async (el) => {
-                        const patch = fields(el);
-                        const font = { fontSize: el.fontSize, fontFamily: el.fontFamily, ...patch };
-                        const { width } = await measureLoadedVectorText(el.text, font);
-                        return [el.id, { ...patch, labelWidth: width }] as const;
-                    }),
-                ),
-            );
-            hold();
-            onChangeEach((el) => patches.get(el.id) ?? {});
-        } finally {
-            pendingFontWrites.current -= 1;
-            if (pendingFontWrites.current === 0) endGesture();
-        }
-    };
-
     return (
         <>
             {allLabeled && (
-                /* Only the font and size: the label is always centered, and its color comes from Stroke. */
+                /* Only the font and size: the label is always centered, and its color comes from Stroke. The canvas
+                    measures the label's width in the new font. */
                 <PropertySection title="Text">
-                    <FontRow
-                        value={fontFamily}
-                        onChange={(f) => {
-                            applyFont(() => ({ fontFamily: f })).catch(() => {});
-                        }}
-                    />
+                    <FontRow value={fontFamily} onChange={(f) => onChange({ fontFamily: f })} />
                     <FontSizeRow
                         sizes={arrows.map((el) => el.fontSize)}
                         slideWidth={slideWidth}
-                        onChange={(size) => {
-                            applyFont((el) => ({ fontSize: size(el.fontSize) })).catch(() => {});
-                        }}
+                        onChange={(size) =>
+                            onChangeEach((el) => (el.type === 'arrow' ? { fontSize: size(el.fontSize) } : {}))
+                        }
                     />
                 </PropertySection>
             )}

@@ -121,7 +121,6 @@ describe("⌘V of another app's items", () => {
                 deleteElementsUntracked: noop,
                 undoManager: null,
                 viewportCenterScene: () => ({ x: 960, y: 540 }),
-                healTextSize: noop,
                 insertImageFiles: async () => {},
                 mediaFolderId: null,
                 resolveMediaPath: () => undefined,
