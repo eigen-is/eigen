@@ -3,7 +3,7 @@
 // label of an arrow that already exists, so the commit writes its text only and never deletes the arrow. Rich text has
 // an editor of its own, inside the element's layer.
 
-import type { Point, TextAlign, VectorArrowElement } from '@workspace/lib/vector';
+import type { Point, VectorArrowElement } from '@workspace/lib/vector';
 import { arrowLabelBox, arrowLabelCenter, linearLocalToScene } from '@workspace/lib/vector';
 
 export type EditingState = {
@@ -17,7 +17,6 @@ export type EditingState = {
     text: string;
     fontSize: number;
     fontFamily: string;
-    textAlign: TextAlign;
     strokeColor: string;
 };
 
@@ -43,7 +42,6 @@ export function arrowLabelEditing(el: VectorArrowElement, route?: Point[]): Edit
         text: el.text,
         fontSize: el.fontSize,
         fontFamily: el.fontFamily,
-        textAlign: 'center',
         strokeColor: el.strokeColor,
     };
 }

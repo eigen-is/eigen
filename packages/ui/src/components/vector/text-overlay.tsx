@@ -4,7 +4,7 @@
 // Enter inserts a newline, and the textarea's own undo covers the session.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import type { Box, TextAlign } from '@workspace/lib/vector';
+import type { Box } from '@workspace/lib/vector';
 import { getLineHeightPx, labelText, MAX_ARROW_LABEL_BYTES } from '@workspace/lib/vector';
 import { useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { loadVectorFont } from './text-measure';
@@ -26,7 +26,6 @@ type TextOverlayProps = {
     initialText: string;
     fontSize: number;
     fontFamily: string;
-    textAlign: TextAlign;
     color: string;
     // Fires exactly once with the final text. The host decides what it becomes and measures it.
     onCommit: (text: string) => void;
@@ -44,7 +43,6 @@ export function TextOverlay({
     initialText,
     fontSize,
     fontFamily,
-    textAlign,
     color,
     onCommit,
 }: TextOverlayProps) {
@@ -156,7 +154,7 @@ export function TextOverlay({
                 fontSize: `${fontSize * zoom}px`,
                 lineHeight: `${lineHeightPx}px`,
                 fontWeight: 400,
-                textAlign,
+                textAlign: 'center',
                 minWidth: '1px',
             }}
             onInput={(e) => {

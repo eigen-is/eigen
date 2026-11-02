@@ -1662,7 +1662,6 @@ export function CanvasEditor({
                         initialText={editing.text}
                         fontSize={editing.fontSize}
                         fontFamily={editing.fontFamily}
-                        textAlign={editing.textAlign}
                         color={editing.strokeColor}
                         onCommit={commitEditing}
                     />
