@@ -76,14 +76,23 @@ export async function renderSheetDialog(
         [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
             (b) => b.textContent === label,
         );
+    // A field by its name: its aria-label, or the text of the label element that points at it.
     const field = (label: string) => {
-        const input = document.querySelector<HTMLInputElement>(`[role="dialog"] input[aria-label="${label}"]`);
-        if (!input) throw new Error(`no field ${label}`);
+        const labelled = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === label);
+        const input =
+            document.querySelector<HTMLInputElement>(`[role="dialog"] input[aria-label="${label}"]`) ??
+            (labelled instanceof HTMLLabelElement ? labelled.control : null);
+        if (!(input instanceof HTMLInputElement)) throw new Error(`no field ${label}`);
         return input;
     };
 
     return {
         context: () => harness.context,
+        // The text in the in-cell editor, where Insert function writes its pick.
+        editorText: () => refs.cellInput.current?.textContent,
+        setEditorText: (text: string) => {
+            if (refs.cellInput.current) refs.cellInput.current.textContent = text;
+        },
         // Every dialog in the document: one, unless a shell wraps another.
         dialogs: () => [...document.querySelectorAll('[role="dialog"]')],
         title: () => document.querySelector('[role="dialog"] h2')?.textContent,

@@ -1,17 +1,18 @@
-// The Insert function dialog of the spreadsheet: function categories as tabs, a search, and the list of matching
-// functions. The pick goes into the cell being edited.
+// The Insert function dialog of the spreadsheet, opened from the Insert menu: a search and a category dropdown over the
+// list of functions, with one highlighted. OK opens the in-cell editor on the focus cell with that function's name and
+// an open bracket, so the user types its arguments next.
 
-import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
-import { useCallback, useContext, useMemo, useState } from 'react';
+import { useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { cancelNormalSelected, FUNCTION_LIST, setCaretPosition } from '../../state';
+import { useDialogProps } from '../../hooks/useDialog';
+import { FUNCTION_LIST, setCaretPosition } from '../../state';
 
-// Function-category tabs; the ids are FUNCTION_LIST's `t`.
+// The categories of the dropdown. Their ids are FUNCTION_LIST's `t`.
 export const FUNCTION_CATEGORIES = [
     { t: 0, n: 'Math' },
     { t: 1, n: 'Statistical' },
@@ -30,138 +31,105 @@ export const FUNCTION_CATEGORIES = [
     { t: -1, n: 'Other' },
 ];
 
-export function InsertFunctionDialog({ onCancel: _onCancel }: { onCancel: () => void }) {
+export function InsertFunctionDialog() {
     const {
-        context,
         setContext,
         refs: { cellInput, globalCache },
     } = useContext(WorkbookContext);
-    const [selectedType, setSelectedType] = useState(0);
-    const [selectedFuncIndex, setSelectedFuncIndex] = useState(0);
+    const dialogProps = useDialogProps();
+    const [category, setCategory] = useState(0);
+    const [highlight, setHighlight] = useState(0);
     const [searchText, setSearchText] = useState('');
 
-    const filteredFunctionList = useMemo(() => {
+    const functions = useMemo(() => {
         if (searchText) {
             const text = searchText.toUpperCase();
             const isAlpha = /^[a-zA-Z]+$/.test(text);
             return FUNCTION_LIST.filter((fn) => (isAlpha ? fn.n.includes(text) : fn.a.includes(text)));
         }
-        return FUNCTION_LIST.filter((v) => v.t === selectedType);
-    }, [selectedType, searchText]);
+        return FUNCTION_LIST.filter((fn) => fn.t === category);
+    }, [category, searchText]);
 
-    const onConfirm = useCallback(() => {
-        const last = context.selections?.[context.selections.length - 1];
-        let row_index = last?.row_focus;
-        let col_index = last?.column_focus;
-        if (!last) {
-            row_index = 0;
-            col_index = 0;
-        } else {
-            if (row_index == null) {
-                [row_index] = last.row;
-            }
-            if (col_index == null) {
-                [col_index] = last.column;
-            }
-        }
-        const formulaTxt = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${filteredFunctionList[
-            selectedFuncIndex
-        ].n.toUpperCase()}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
+    // The caret goes after the bracket, and the function's hint shows. An edit already open in the cell is replaced.
+    const insert = () => {
+        const name = functions[highlight].n;
         setContext((ctx) => {
-            if (cellInput.current != null) {
-                ctx.editingCellPosition = [row_index, col_index];
-                globalCache.doNotUpdateCell = true;
-                cellInput.current.innerHTML = formulaTxt;
-                const spans = cellInput.current.childNodes;
-                if (spans.length > 0) {
-                    setCaretPosition(ctx, spans[spans.length - 1] as HTMLSpanElement, 0, 1);
+            const input = cellInput.current;
+            if (!input) return;
+            const last = ctx.selections?.at(-1);
+            ctx.editingCellPosition = [
+                last?.row_focus ?? last?.row[0] ?? 0,
+                last?.column_focus ?? last?.column[0] ?? 0,
+            ];
+            globalCache.doNotUpdateCell = true;
+            input.innerHTML = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${name}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
+            const bracket = input.lastElementChild;
+            if (bracket instanceof HTMLElement) setCaretPosition(ctx, bracket, 0, 1);
+            ctx.functionHint = name;
+            ctx.functionCandidates = [];
+            if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
+                for (const fn of FUNCTION_LIST) {
+                    ctx.formulaCache.functionlistMap[fn.n] = fn;
                 }
-                ctx.functionHint = filteredFunctionList[selectedFuncIndex].n.toUpperCase();
-                ctx.functionCandidates = [];
-                if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
-                    for (const fn of FUNCTION_LIST) {
-                        ctx.formulaCache.functionlistMap[fn.n] = fn;
-                    }
-                }
-                _onCancel();
             }
         });
-    }, [cellInput, context.selections, filteredFunctionList, globalCache, selectedFuncIndex, setContext, _onCancel]);
-
-    const onCancel = useCallback(() => {
-        setContext((ctx) => {
-            cancelNormalSelected(ctx);
-            if (cellInput.current) {
-                cellInput.current.innerHTML = '';
-            }
-        });
-        _onCancel();
-    }, [_onCancel, cellInput, setContext]);
+    };
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4">
-            <DialogHeader>
-                <DialogTitle>Select a function</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-[1fr_auto] gap-3 shrink-0 items-end">
-                <div className="space-y-1.5">
-                    <Label htmlFor="searchFormulaListInput">Search function</Label>
-                    <Input
-                        id="searchFormulaListInput"
-                        placeholder="Function name or brief description of function"
-                        spellCheck={false}
-                        onChange={(e) => {
-                            setSearchText(e.target.value);
-                            setSelectedFuncIndex(0);
-                        }}
-                    />
+        <FormDialog {...dialogProps} title="Select a function" size="md">
+            <FormDialogForm submitLabel="OK" canSubmit={functions.length > 0} onSubmit={insert}>
+                <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                    <div className="space-y-1.5">
+                        <Label htmlFor="searchFormulaListInput">Search function</Label>
+                        <Input
+                            id="searchFormulaListInput"
+                            placeholder="Function name or brief description of function"
+                            spellCheck={false}
+                            onChange={(e) => {
+                                setSearchText(e.target.value);
+                                setHighlight(0);
+                            }}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="insertFunctionCategory">Or select a category</Label>
+                        <Select
+                            value={String(category)}
+                            onValueChange={(value) => {
+                                setCategory(parseInt(value, 10));
+                                setHighlight(0);
+                            }}
+                        >
+                            <SelectTrigger id="insertFunctionCategory" className="w-[160px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {FUNCTION_CATEGORIES.map(({ t, n }) => (
+                                    <SelectItem key={t} value={String(t)}>
+                                        {n}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
                 </div>
-                <div className="space-y-1.5">
-                    <Label>Or select a category</Label>
-                    <Select
-                        value={String(selectedType)}
-                        onValueChange={(v) => {
-                            setSelectedType(parseInt(v, 10));
-                            setSelectedFuncIndex(0);
-                        }}
-                    >
-                        <SelectTrigger className="w-[160px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {FUNCTION_CATEGORIES.map((v) => (
-                                <SelectItem key={v.t} value={String(v.t)}>
-                                    {v.n}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
+                    {functions.map((fn, index) => (
+                        <button
+                            type="button"
+                            className={cn(
+                                'block w-full text-left px-3 py-2 border-b border-border text-sm eigen-list-item',
+                                index === highlight && 'eigen-list-item-active',
+                            )}
+                            key={fn.n}
+                            onClick={() => setHighlight(index)}
+                        >
+                            <div className="font-medium">{fn.n}</div>
+                            <div className="text-xs text-muted-foreground">{fn.a}</div>
+                        </button>
+                    ))}
                 </div>
-            </div>
-            <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
-                {filteredFunctionList.map((v, index) => (
-                    <button
-                        type="button"
-                        className={cn(
-                            'block w-full text-left px-3 py-2 border-b border-border text-sm eigen-list-item',
-                            index === selectedFuncIndex && 'eigen-list-item-active',
-                        )}
-                        key={v.n}
-                        onClick={() => setSelectedFuncIndex(index)}
-                    >
-                        <div className="font-medium">{v.n}</div>
-                        <div className="text-xs text-muted-foreground">{v.a}</div>
-                    </button>
-                ))}
-            </div>
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button size="sm" onClick={onConfirm} disabled={filteredFunctionList.length === 0}>
-                    OK
-                </Button>
-            </DialogFooter>
-        </div>
+            </FormDialogForm>
+        </FormDialog>
     );
 }
