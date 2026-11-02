@@ -11,8 +11,6 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
 import { getAvatarsDir } from '../config/paths';
-import { isNewerBuild } from '../config/release';
-import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { rotateHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
@@ -22,6 +20,7 @@ import { getUserById } from '../user/user';
 import { extractArtifact, readUnpackedHome } from './archive';
 import { requireArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
+import { describeError } from './errors';
 import { resolveHomeDir } from './home-dir';
 import {
     checkRestoredDatabases,
@@ -74,21 +73,18 @@ export async function restoreHome(
             // A member of a whole-server archive that left out what only a restore of that archive puts back.
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
-            // The rule of the whole-server stage, whose database check never reads the documents of an s3 mount
-            // that stays on its bucket.
-            const { version } = getPublicConfig();
-            if (isNewerBuild(manifest.appVersion, version)) {
-                throw new ApiError(
-                    400,
-                    `${artifactName} was made by Eigen ${manifest.appVersion}, newer than this server (${version}): ` +
-                        'restore it on a server at least as new',
-                );
-            }
             requireVerified(await verifyFolder(folder, onProgress), artifactName);
             // A mount the backup skipped carries nothing. It stays disabled in the restored settings.json, and
             // snapshotHome left its folder out.
             const carried = manifest.mounts.filter((summary) => !summary.skipped);
-            await checkUnpackedHome(path.join(folder, ARCHIVE_HOME_DIR), carried);
+            const unpackedHome = path.join(folder, ARCHIVE_HOME_DIR);
+            await checkUnpackedHome(unpackedHome, carried);
+            // Here, so a failure refuses while the home still serves. materializeMount leaves every trash date alone.
+            redateRestoredTrash(
+                ownerId,
+                unpackedHome,
+                carried.map((summary) => summary.id),
+            );
             // Read before the first write, since nothing takes an auth row back: a shares.json that does not read
             // would otherwise leave a deleted user signed in to an empty home.
             const shares = readShares(folder);
@@ -98,19 +94,12 @@ export async function restoreHome(
             return async (stamp) => {
                 // The archive's `home/` is the home folder, one for one.
                 onProgress?.('home files', 0, 1);
-                await movePathAsync(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
+                await movePathAsync(unpackedHome, homeDir);
                 onProgress?.('home files', 1, 1);
                 for (const [index, summary] of carried.entries()) {
                     materializeMount(homeDir, summary, stamp);
                     onProgress?.('mounts', index + 1, carried.length);
                 }
-                // Before the identity write: a failure up to here only puts the folders back, and nothing takes a
-                // users3.db row back.
-                redateTrash(
-                    homeDir,
-                    carried.map((summary) => summary.id),
-                    Math.floor(Date.now() / 1000),
-                );
 
                 // The rows that live outside the home folder (users only).
                 restoreAuthRows(ownerId, manifest, folder);
@@ -126,7 +115,7 @@ export async function restoreHome(
 }
 
 // Puts a `.pre-restore-` copy back where it came from: the home as it stands becomes a safety copy
-// of its own and the chosen folder takes its place. No bytes are written and none are deleted. A remote
+// of its own and the chosen folder takes its place. No file is copied and none is deleted. A remote
 // mount needs no work either, because the copy still points at the objects it was restored away from:
 // materializeMount gives every restore fresh keys. A `.failed-restore-` copy is refused, because it is
 // the half-written folder of a restore that never finished, not a home.
@@ -140,6 +129,7 @@ export async function restoreSafetyCopy(
     if (kind !== 'pre-restore') throw new ApiError(400, `${name} is not a pre-restore copy of this home`);
     if (!fs.existsSync(folder)) throw new ApiError(404, `${name} is not beside this home`);
     await requireOwnerExists(ownerId);
+    const mountIds = mountIdsIn(folder);
 
     const install: InstallHome = async () => {
         onProgress?.('home files', 0, 1);
@@ -148,25 +138,35 @@ export async function restoreSafetyCopy(
         // stamp has one-second steps, and it would then list the size measured for this folder.
         forgetSafetyCopySize(folder);
         onProgress?.('home files', 1, 1);
-        // The verdict a restore from an archive ends on: SQLite's on the bytes, and this build's on
-        // every schema stamp. A copy this server made passes both; one carried over from a newer
-        // server does not, and that has to surface here rather than on the next load.
-        const mountIds = mountIdsIn(homeDir);
-        await checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
-        redateTrash(homeDir, mountIds, Math.floor(Date.now() / 1000));
+        // Only once the copy is in place, so a refused restore leaves its trash dated as it was.
+        redateRestoredTrash(ownerId, homeDir, mountIds);
     };
 
     await replaceHomeFolder(
         ownerId,
         homeDir,
         jobId,
-        // Nothing to unpack or judge: the folder is right there, and resolveSafetyCopy vouched for it.
-        async () => install,
+        // Nothing to unpack: the folder is right there. It gets the verdict a restore from an archive ends on, while
+        // the home still serves: SQLite's on the bytes, and this build's on every schema stamp. A copy this server
+        // made passes both, and one carried over from a newer server does not.
+        async () => {
+            await checkRestoredDatabases(folder, mountIds, containerDatabasesIn(folder, mountIds));
+            return install;
+        },
         // Back under the name it came from, here and at boot after a kill. A `.failed-restore-` name would make a
         // pristine home unrestorable, and the only action left on one deletes its bytes.
         () => folder,
     );
     onProgress?.('done', 1, 1);
+}
+
+// Every restore starts the restored trash over. A metadata.db that cannot take the write refuses the restore by name.
+function redateRestoredTrash(ownerId: string, homeDir: string, mountIds: readonly string[]): void {
+    try {
+        redateTrash(homeDir, mountIds, Math.floor(Date.now() / 1000));
+    } catch (error) {
+        throw new ApiError(400, `the trash of ${ownerId}'s home cannot be dated: ${describeError(error)}`);
+    }
 }
 
 // The share-registry rows the archive holds: none for a team, which has no shares.json.

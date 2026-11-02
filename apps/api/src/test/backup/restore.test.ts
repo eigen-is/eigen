@@ -163,6 +163,12 @@ function safetyCopies(userId: string, suffix: string): string[] {
     return readdirSync(join(TEST_DATA_DIR, 'home')).filter((name) => name.startsWith(`${userId}${suffix}`));
 }
 
+function removeSafetyCopies(userId: string): void {
+    for (const name of safetyCopies(userId, '.')) {
+        rmSync(join(TEST_DATA_DIR, 'home', name), { recursive: true, force: true });
+    }
+}
+
 // What a restore refused before it takes the home leaves as it was: the loaded home, every safety copy beside it, and
 // the data epoch its tabs reload on.
 async function untakenState(userId: string) {
@@ -719,8 +725,8 @@ describe('Backup restoreHome', () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const epoch = getDataEpoch(target.id);
         const failedBefore = safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length;
-        // The last step of the install, so the whole new folder is in place when it throws.
-        const spy = spyOn(materializeModule, 'redateTrash').mockImplementation(() => {
+        // After the home folder moved in, so a new folder is in place when it throws.
+        const spy = spyOn(materializeModule, 'materializeMount').mockImplementation(() => {
             throw new ApiError(500, 'failed by the test');
         });
         try {
@@ -1594,18 +1600,56 @@ describe('Backup restore of one home judges, then takes the home', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
-    test('an archive of a newer Eigen is refused before the home is taken', async () => {
+    // Every database of it is checked against this build, so a newer release whose schemas did not move restores.
+    test('an archive of a newer Eigen whose databases this server opens restores', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest) => {
             manifest.appVersion = '999.0.0';
         });
+
+        await restoreHome(artifact, user.id, `restore-newer-app-${Date.now()}`);
+
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toHaveLength(1);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+
+    test('a trash that cannot be dated refuses the restore before the home is taken', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 90_000));
+        const before = await untakenState(user.id);
+        const spy = spyOn(materializeModule, 'redateTrash').mockImplementation(() => {
+            throw new Error('failed by the test');
+        });
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-redate-${Date.now()}`)).rejects.toThrow(
+                `the trash of ${user.id}'s home cannot be dated: failed by the test`,
+            );
+        } finally {
+            spy.mockRestore();
+        }
+
+        await expectNotTaken(user.id, before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    test('a safety copy from a newer server is refused while the home still serves', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 100_000));
+        await restoreHome(artifact, user.id, `restore-copy-newer-${Date.now()}`);
+        const [copy] = safetyCopies(user.id, PRE_RESTORE_SUFFIX);
+        const db = openMountMetadata(join(TEST_DATA_DIR, 'home', copy, 'mounts', mountId, 'metadata.db'));
+        try {
+            db.run('UPDATE __schema_version SET version = 999 WHERE id = 1');
+        } finally {
+            db.close();
+        }
         const before = await untakenState(user.id);
 
-        await expect(restoreHome(artifact, user.id, `restore-newer-app-${Date.now()}`)).rejects.toThrow(
-            `${artifact} was made by Eigen 999.0.0`,
+        await expect(restoreSafetyCopy(user.id, copy, `restore-copy-newer-${Date.now()}`)).rejects.toThrow(
+            /metadata schema v999, newer than this server/,
         );
 
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
     });
 
     test('a restore, and a restore of the copy it left, start the trash over', async () => {
@@ -1623,8 +1667,6 @@ describe('Backup restore of one home judges, then takes the home', () => {
         expect(trashedAtIn(homeDir)).toBeGreaterThanOrEqual(putBackAt);
 
         rmSync(join(getBackupsDir(), artifact), { force: true });
-        for (const name of safetyCopies(user.id, PRE_RESTORE_SUFFIX)) {
-            rmSync(join(TEST_DATA_DIR, 'home', name), { recursive: true, force: true });
-        }
+        removeSafetyCopies(user.id);
     });
 });

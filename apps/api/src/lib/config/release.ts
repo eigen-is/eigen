@@ -9,8 +9,9 @@ export const PIN_KEYS = ['EIGEN_REGISTRY', 'EIGEN_VERSION', ...IMAGE_NAMES.map(i
 export const API_IMAGE_KEY = imageKey('api');
 
 // Whether Eigen `appVersion`, such as the build an archive was made by, is newer than `version`. Its databases may then
-// carry a schema that `version` cannot open, which a restore does not check file by file everywhere, so every restore
-// refuses it. What is not a version counts as newer: Bun.semver.order throws on it.
+// carry a schema that `version` cannot open. A whole-server restore does not check every one of them, as the documents
+// of an s3 mount that stays on its bucket are never read, so it refuses such an archive. What is not a version counts
+// as newer: Bun.semver.order throws on it.
 export function isNewerBuild(appVersion: string, version: string): boolean {
     try {
         return Bun.semver.order(appVersion, version) > 0;
