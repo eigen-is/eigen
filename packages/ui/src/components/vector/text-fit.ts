@@ -74,10 +74,13 @@ export function useArrowLabelFit(
         if (!onFit) return;
         let stale = false;
         // A load can outlast a newer change, so the fit reads the label as it is now.
-        const fit = (id: string, text: string, font: VectorTextFont) => {
+        const fit = (id: string, text: string, font: VectorTextFont, failed = false) => {
             const el = latest.current.find((x) => x.id === id);
             if (stale || el?.type !== 'arrow' || el.text !== text) return;
             if (el.fontSize !== font.fontSize || el.fontFamily !== font.fontFamily) return;
+            // A slice that failed to load leaves this client measuring in the fallback, such as when it is offline.
+            // A width it stored would be wrong for everyone else, so only a new label, which has none, takes it.
+            if (failed && el.labelWidth !== 0) return;
             const { width } = measureVectorText(text, font);
             if (Math.abs(width - el.labelWidth) >= LABEL_WIDTH_TOLERANCE) onFit(id, width);
         };
@@ -86,11 +89,11 @@ export function useArrowLabelFit(
             const { id, text } = el;
             const font = { fontSize: el.fontSize, fontFamily: el.fontFamily };
             if (isVectorFontLoaded(text, font)) fit(id, text, font);
-            // A slice that fails to load leaves the text in the fallback, so the fallback's width is then the true one.
             else
-                loadVectorFont(text, font)
-                    .catch(() => {})
-                    .then(() => fit(id, text, font));
+                loadVectorFont(text, font).then(
+                    () => fit(id, text, font),
+                    () => fit(id, text, font, true),
+                );
         }
         return () => {
             stale = true;

@@ -10,8 +10,9 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 // The font set as a sliced face behaves: a load fetches the slices of its text, and a check without text tests a
-// space. Nothing loads until the test releases the network, which each test starts cold.
+// space. Nothing loads until the test releases the network, or fails it, which each test starts cold.
 let release = () => {};
+let fail = () => {};
 let network = Promise.resolve();
 const loaded = new Set<string>();
 const fontCalls: string[] = [];
@@ -100,8 +101,9 @@ beforeEach(() => {
     undoManager = new Y.UndoManager(doc.getMap('elements'));
     loaded.clear();
     fallbackAdvance = 10;
-    network = new Promise<void>((resolve) => {
+    network = new Promise<void>((resolve, reject) => {
         release = resolve;
+        fail = () => reject(new Error('offline'));
     });
     writeElementInDoc(
         doc,
@@ -156,6 +158,13 @@ async function loadSlices(): Promise<void> {
     await act(async () => {
         release();
         await network;
+    });
+}
+
+async function failSlices(): Promise<void> {
+    await act(async () => {
+        fail();
+        await network.catch(() => {});
     });
 }
 
@@ -296,6 +305,26 @@ test('a label at its measured width is never written', async () => {
     });
     await loadSlices();
     expect(writes.count).toBe(0);
+});
+
+// An editor that is offline, or that blocks the font, would store the fallback's width for everyone, and its peers
+// measure nothing on a change to the width alone, so they would never set it right.
+test('a label whose slices fail to load keeps the width it has', async () => {
+    doc.transact(() => {
+        storedArrow().set('text', '茶 tea');
+        storedArrow().set('labelWidth', 100);
+    }, 'file');
+    const writes = countWrites();
+    await render();
+    await failSlices();
+    expect({ width: labelWidth(), writes: writes.count }).toEqual({ width: 100, writes: 0 });
+});
+
+test("a new label whose slices fail to load gets the fallback's width, which beats none", async () => {
+    doc.transact(() => storedArrow().set('text', '茶 tea'), 'file');
+    await render();
+    await failSlices();
+    expect(labelWidth()).toBe(50);
 });
 
 test('a canvas that may not edit never writes a label width', async () => {
