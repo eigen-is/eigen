@@ -25,12 +25,13 @@ mock.module('../../../../routes/_auth.$filterType.$filterId', () => ({
     Route: { fullPath: realRoute.Route.fullPath, useParams: () => params },
 }));
 
-// The server deletes every message but m2.
+// The server deletes every message but m2, which fails, and m3, which is already gone.
 const realFetch = globalThis.fetch;
 globalThis.fetch = Object.assign(
     async (input: string | URL | Request, init?: RequestInit) => {
         const url = String(input);
         if (init?.method !== 'DELETE' || !url.includes('/message/')) throw new TypeError('A hook test has no network');
+        if (url.endsWith('/message/m3')) return new Response('Gone', { status: 404 });
         return url.endsWith('/message/m2') ? new Response('Boom', { status: 500 }) : new Response('{}');
     },
     { preconnect: () => {} },
@@ -110,17 +111,17 @@ function trashed(id: string): Email {
     };
 }
 
-test('a permanent delete that fails for one email keeps the dialog open on that email, quietly', async () => {
+test('a permanent delete that fails for one email keeps the dialog open on what failed, quietly, though another was refused', async () => {
     const onOpenChange = mock((_open: boolean) => {});
     const seen: { pending: Email[] } = { pending: [] };
     function Route() {
         const actions = useMailActions();
-        const [pending, setPending] = useState([trashed('m1'), trashed('m2')]);
+        const [pending, setPending] = useState([trashed('m3'), trashed('m1'), trashed('m2')]);
         seen.pending = pending;
         return createElement(DeleteDialog, {
             open: true,
             onOpenChange,
-            title: 'Delete 2 emails',
+            title: 'Delete 3 emails',
             description: 'Are you sure',
             onDelete: () => actions.confirmDeleteEmails(pending, setPending),
         });
@@ -134,6 +135,6 @@ test('a permanent delete that fails for one email keeps the dialog open on that 
         del.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(seen.pending.map((e) => e.id)).toEqual(['m2']);
+    expect(seen.pending.map((e) => e.id)).toEqual(['m3', 'm2']);
     expect(onOpenChange).not.toHaveBeenCalled();
 });

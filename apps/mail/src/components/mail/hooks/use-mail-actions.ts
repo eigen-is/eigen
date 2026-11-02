@@ -3,6 +3,7 @@
 // The route and its keyboard shortcuts both call them, so a button and a key do the same thing.
 
 import { useNavigate } from '@tanstack/react-router';
+import { isRefusal } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import { MAILBOX_ARCHIVE, MAILBOX_JUNK, MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
@@ -204,10 +205,11 @@ export function useMailActions() {
     const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
-        const failure = results.find((r) => r.status === 'rejected');
-        if (!failure) return;
+        const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failures.length === 0) return;
         keepFailed(pendingEmails.filter((_, i) => results[i].status === 'rejected'));
-        throw failure.reason;
+        // A refusal closes the dialog, so it is thrown only when no failure is worth another try.
+        throw (failures.find((f) => !isRefusal(f.reason)) ?? failures[0]).reason;
     };
 
     // Fan-out batch: build the success toast, Undo slot and navigation from the FULFILLED results only.
