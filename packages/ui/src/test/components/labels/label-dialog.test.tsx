@@ -1,6 +1,6 @@
-// Add label and Edit label: a missing name is named and keeps the dialog open, Save hands the name and color on and
-// closes, and a save that fails stays open. Delete asks first, on top of the open dialog, so a cancelled delete keeps
-// the edits. The label header's pencil edits its label, and a failed save there stays open too.
+// Add label and Edit label: Save and Enter wait for a name with more than spaces, Save hands the trimmed name and the
+// color on and closes, and a save that fails stays open. Delete asks first, on top of the open dialog, so a cancelled
+// delete keeps the edits. The label header's pencil edits its label, and a failed save there stays open too.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
 import type { Label } from '@workspace/lib/types/label';
@@ -90,23 +90,37 @@ const click = (target: HTMLButtonElement | undefined) =>
     });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-test('Add label names a missing name and stays open, then hands the label on and closes', async () => {
+test('Add label waits for a name with more than spaces, then hands the trimmed label on and closes', async () => {
     await open(null);
     const dialog = dialogTitled('Add label');
     expect(dialog?.textContent).toContain('Add a new label to your collection.');
     expect(button(dialog, 'Delete')).toBeUndefined();
+    expect(button(dialog, 'Save')?.disabled).toBe(true);
 
-    await click(button(dialog, 'Save'));
+    await type('   ');
+    expect(button(dialog, 'Save')?.disabled).toBe(true);
+    await act(async () => pressEnter(nameField()));
     await settle();
-    expect(dialog?.textContent).toContain('Label name is required.');
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    await type('Family');
+    await type(' Family ');
+    expect(button(dialog, 'Save')?.disabled).toBe(false);
     await act(async () => pressEnter(nameField()));
     await settle();
     expect(onSubmit.mock.calls).toEqual([[{ name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].value }]]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('Edit label refuses a name emptied to spaces', async () => {
+    await open(urgent);
+    const dialog = dialogTitled('Edit label');
+    expect(button(dialog, 'Save')?.disabled).toBe(false);
+    await type('  ');
+    expect(button(dialog, 'Save')?.disabled).toBe(true);
+    await act(async () => pressEnter(nameField()));
+    await settle();
+    expect(onSubmit).not.toHaveBeenCalled();
 });
 
 test('a save that fails keeps the dialog open', async () => {

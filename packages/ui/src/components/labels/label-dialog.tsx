@@ -1,5 +1,5 @@
-// The dialog that adds or edits a label: its name and color, and deleting it after a confirmation. Contacts
-// opens it from its label list.
+// The dialog that adds or edits a label: its name and color, and deleting it after a confirmation. Save waits for a
+// name that is more than spaces, and the name is saved trimmed. Contacts opens it from its label list.
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { EIGEN_ACCENT_COLORS_SHUFFLED, LABEL_NAME_MAX_LENGTH } from '@workspace/lib/constants';
@@ -16,7 +16,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 const labelFormSchema = z.object({
-    name: z.string().min(1, 'Label name is required.'),
+    name: z.string().trim().min(1, 'Label name is required.'),
     color: z.string().min(1, 'Color is required.'),
 });
 
@@ -92,10 +92,12 @@ function LabelForm({
             ? { name: selectedLabel.name, color: selectedLabel.color }
             : { name: '', color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value },
     });
+    const name = form.watch('name');
 
     return (
         <Form {...form}>
             <FormDialogForm
+                canSubmit={name.trim() !== ''}
                 submitLabel="Save"
                 // A failed check resolves without calling onSubmit, and returning false keeps its messages in view.
                 onSubmit={async () => {
