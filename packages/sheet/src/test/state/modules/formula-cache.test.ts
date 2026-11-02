@@ -128,7 +128,7 @@ describe('warmFormulaCellInfoMap — lookups into whole columns', () => {
 
 // The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates
 // what an export would not. Sheet1 is 6 × 4, so a whole column ends at row 6 and a whole row at column D. Data is
-// 3 × 3, and Empty has no rows. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
+// 3 × 3, Empty has no rows, and Holey's first row is missing, as a matrix from a stored file's rows can be. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
 // INDIRECT included.
 describe('setFormulaCellInfo — the cells a formula reads', () => {
     const grid = (rows: number, cols: number): (Cell | null)[][] =>
@@ -170,6 +170,9 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ['=SUM(Data!2:2)', [on('s2', [1, 1], [0, 2])]],
         ["=SUM('my sheet-1'!A:A)", [on('s3', [0, 1], [0, 0])]],
         ['=SUM(Empty!1:1)+SUM(Empty!A:A)', []],
+        ['=SUM(Empty!A1:B2)', [on('s5', [0, 1], [0, 1])]],
+        ['=SUM(Holey!1:1)+A1', [on('s1', [0, 0], [0, 0])]],
+        ['=SUM(Holey!A:A)', [on('s6', [0, 1], [0, 0])]],
         ['=$A$1+B$2+$C3', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1]), on('s1', [2, 2], [2, 2])]],
         ['=IF(A1>=1,C1,D1)', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [2, 2]), on('s1', [0, 0], [3, 3])]],
         ['=A1<>B1', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [1, 1])]],
@@ -189,6 +192,7 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
                 { name: 'my sheet-1', id: 's3', order: 2, data: grid(2, 2) },
                 { name: "it's", id: 's4', order: 3, data: grid(2, 2) },
                 { name: 'Empty', id: 's5', order: 4, data: [] },
+                { name: 'Holey', id: 's6', order: 5, data: JSON.parse('[null, [null, null]]') },
             ],
         }) as Context;
 

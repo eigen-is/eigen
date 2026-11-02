@@ -101,11 +101,6 @@ export function resolveCellRange(
         return null;
     }
 
-    // A sheet with no rows has no width either, so a whole row or column on it reads nothing.
-    if (sheetdata.length === 0) {
-        return null;
-    }
-
     const rangetxtArr = rangetxt.split(':');
     const row: [number, number] = [-1, -1];
     const col: [number, number] = [-1, -1];
@@ -114,7 +109,9 @@ export function resolveCellRange(
     if (Number.isNaN(row[0])) {
         row[0] = 0;
     }
+    // A whole column ends at the sheet's last row, and on a sheet with no rows it reads nothing.
     if (Number.isNaN(row[1])) {
+        if (sheetdata.length === 0) return null;
         row[1] = sheetdata.length - 1;
     }
     if (row[0] > row[1]) {
@@ -125,8 +122,12 @@ export function resolveCellRange(
     if (Number.isNaN(col[0])) {
         col[0] = 0;
     }
+    // A whole row ends at the first row's last column. A stored sheet's matrix may lack that row, and then the sheet
+    // has no width a whole row could read.
     if (Number.isNaN(col[1])) {
-        col[1] = sheetdata[0].length - 1;
+        const width = sheetdata[0]?.length ?? 0;
+        if (width === 0) return null;
+        col[1] = width - 1;
     }
     if (col[0] > col[1]) {
         col.reverse();
