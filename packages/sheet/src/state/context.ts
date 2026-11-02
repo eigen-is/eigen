@@ -18,7 +18,6 @@ import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
     ConditionRulesProps,
-    DataRegulationProps,
     FilterEntry,
     FilterOptions,
     GlobalCache,
@@ -70,8 +69,6 @@ export type Context = {
     // warning dialog
     warnDialog?: string;
     currency?: string;
-    // The rule the data-validation dialog edits, before it is applied.
-    validationDraft: DataRegulationProps;
     // Whether a list cell's drop-down is open.
     validationListOpen?: boolean;
     conditionRules: ConditionRulesProps; // conditional formatting
@@ -231,19 +228,6 @@ export function defaultContext(refs: RefValues): Context {
             rangeTxt: '',
             type: '',
             singleSelect: false,
-        },
-
-        validationDraft: {
-            type: '',
-            type2: '',
-            rangeTxt: '',
-            value1: '',
-            value2: '',
-            validity: '',
-            remote: false,
-            prohibitInput: false,
-            hintShow: false,
-            hintValue: '',
         },
 
         validationListOpen: false,

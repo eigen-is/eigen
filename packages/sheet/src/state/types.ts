@@ -186,11 +186,8 @@ export type RangeDialogProps = {
     singleSelect: boolean;
 };
 
-// Editor-form draft of a single data-validation rule. Producers (the default
-// initializer in context.ts and the dialog `confirm` handler) set every field
-// with a sentinel default (`''` / `false`), then spread the draft into the
-// stored `DataVerificationRule`. `rangeTxt` is dialog-only — carries the
-// user-typed target range expression.
+// The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it
+// into the stored DataVerificationRule. `rangeTxt` is the range the user typed or picked for the rule.
 export type DataRegulationProps = {
     type: string;
     type2: string;

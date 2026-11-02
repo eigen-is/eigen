@@ -27,7 +27,7 @@ import {
     setCellValue,
 } from '..';
 import { getSheet } from '../api/common';
-import type { Rect } from '../types';
+import type { DataRegulationProps, Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
 import { addValidation, validationAt } from './validation-rules';
 
@@ -656,84 +656,39 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     jfrefreshgrid(ctx, null, undefined);
 }
 
-// Checks the dialog's draft before it applies, and says what is wrong through the warning dialog.
-export function confirmMessage(ctx: Context): boolean {
-    if (getRangeByTxt(ctx, ctx.validationDraft.rangeTxt).length === 0) {
-        ctx.warnDialog = 'The selection operation has not been performed yet';
-        return false;
-    }
-    if (!getFlowdata(ctx)) return false;
-    const { type, value1, value2, type2 } = ctx.validationDraft;
+// What is wrong with the values a data-validation draft compares against, such as a list with no options or a
+// range that ends below its start, or undefined when the rule can be applied. The dialog shows it before OK applies.
+export function validationValueProblem({ type, type2, value1, value2 }: DataRegulationProps): string | undefined {
     const v1 = parseFloat(value1).toString() !== 'NaN';
     const v2 = parseFloat(value2).toString() !== 'NaN';
     if (type === 'dropdown') {
-        if (!value1) {
-            ctx.warnDialog = 'The drop-down list option cannot be empty';
-            return false;
-        }
+        if (!value1) return 'The drop-down list option cannot be empty';
     } else if (type === 'checkbox') {
-        if (!value1 || !value2) {
-            ctx.warnDialog = 'Checkbox content cannot be empty';
-            return false;
-        }
+        if (!value1 || !value2) return 'Checkbox content cannot be empty';
     } else if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
-        if (!v1) {
-            ctx.warnDialog = 'The value entered is not a numeric type';
-            return false;
-        }
+        if (!v1) return 'The value entered is not a numeric type';
         if (type2 === 'between' || type2 === 'notBetween') {
-            if (!v2) {
-                ctx.warnDialog = 'The value entered is not a numeric type';
-                return false;
-            }
-            if (Number(value2) < Number(value1)) {
-                ctx.warnDialog = 'The value 2 cannot be less than the value 1';
-                return false;
-            }
+            if (!v2) return 'The value entered is not a numeric type';
+            if (Number(value2) < Number(value1)) return 'The value 2 cannot be less than the value 1';
         }
     } else if (type === 'text_content') {
-        if (!value1) {
-            ctx.warnDialog = 'The text content cannot be empty';
-            return false;
-        }
+        if (!value1) return 'The text content cannot be empty';
     } else if (type === 'text_length') {
-        if (!v1) {
-            ctx.warnDialog = 'The value entered is not a numeric type';
-            return false;
-        }
-        if (!Number.isInteger(Number(value1)) || Number(value1) < 0) {
-            ctx.warnDialog = 'Text length must be an integer greater than or equal to 0';
-            return false;
-        }
+        if (!v1) return 'The value entered is not a numeric type';
+        if (!Number.isInteger(Number(value1)) || Number(value1) < 0)
+            return 'Text length must be an integer greater than or equal to 0';
         if (type2 === 'between' || type2 === 'notBetween') {
-            if (!v2) {
-                ctx.warnDialog = 'The value entered is not a numeric type';
-                return false;
-            }
-            if (!Number.isInteger(Number(value2)) || Number(value2) < 0) {
-                ctx.warnDialog = 'Text length must be an integer greater than or equal to 0';
-                return false;
-            }
-            if (Number(value2) < Number(value1)) {
-                ctx.warnDialog = 'The value 2 cannot be less than the value 1';
-                return false;
-            }
+            if (!v2) return 'The value entered is not a numeric type';
+            if (!Number.isInteger(Number(value2)) || Number(value2) < 0)
+                return 'Text length must be an integer greater than or equal to 0';
+            if (Number(value2) < Number(value1)) return 'The value 2 cannot be less than the value 1';
         }
     } else if (type === 'date') {
-        if (!isdatetime(value1)) {
-            ctx.warnDialog = 'The value entered is not a date type';
-            return false;
-        }
+        if (!isdatetime(value1)) return 'The value entered is not a date type';
         if (type2 === 'between' || type2 === 'notBetween') {
-            if (!isdatetime(value2)) {
-                ctx.warnDialog = 'The value entered is not a date type';
-                return false;
-            }
-            if (diff(value1, value2) > 0) {
-                ctx.warnDialog = 'Date 2 cannot be less than date 1';
-                return false;
-            }
+            if (!isdatetime(value2)) return 'The value entered is not a date type';
+            if (diff(value1, value2) > 0) return 'Date 2 cannot be less than date 1';
         }
     }
-    return true;
+    return undefined;
 }

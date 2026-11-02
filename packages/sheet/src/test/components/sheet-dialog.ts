@@ -1,9 +1,11 @@
 // Mounts a sheet dialog the way the app opens one: under the workbook's context and the modal host, opened through
-// useDialog by the test's `open`. Import it after installHappyDom. The test reads the workbook back after a submit, and finds the dialog,
-// its fields and its buttons in the document.
+// useDialog by the test's `open`. A dialog the grid draws itself, such as the link editor, goes in `grid` instead.
+// Import it after installHappyDom. The test reads the workbook back after a submit, and finds the dialog, its fields
+// and its buttons in the document.
 
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { produce } from 'immer';
+import type { ReactNode } from 'react';
 import { act, createElement, createRef, useState } from 'react';
 import type { RefValues } from '../../context';
 import { WorkbookContext } from '../../context';
@@ -31,8 +33,9 @@ const refs: RefValues = {
 
 type Dialogs = ReturnType<typeof useDialog>;
 
-// What the test reads back: the workbook as the last write left it, and the opener the host handed out.
-type Harness = { context: Context; dialogs?: Dialogs };
+// What the test reads back: the workbook as the last write left it, and the opener the host handed out. `grid` draws
+// what the workbook draws under the host from its context.
+type Harness = { context: Context; dialogs?: Dialogs; grid?: (context: Context) => ReactNode };
 
 function Opener({ harness }: { harness: Harness }) {
     harness.dialogs = useDialog();
@@ -56,15 +59,16 @@ function Workbook({ harness }: { harness: Harness }) {
     return createElement(
         WorkbookContext.Provider,
         { value },
-        createElement(ModalProvider, null, createElement(Opener, { harness })),
+        createElement(ModalProvider, null, createElement(Opener, { harness }), harness.grid?.(rendered)),
     );
 }
 
 export async function renderSheetDialog(
     open: (dialogs: Dialogs) => void,
     params: Partial<Context> & { config?: SheetConfig } = {},
+    grid?: (context: Context) => ReactNode,
 ) {
-    const harness: Harness = { context: workbookContextFactory(params) };
+    const harness: Harness = { context: workbookContextFactory(params), grid };
     await renderInDocument(createElement(Workbook, { harness }));
     await act(async () => {
         if (!harness.dialogs) throw new Error('the host did not render');
@@ -75,8 +79,14 @@ export async function renderSheetDialog(
         [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
             (b) => b.textContent === label,
         );
+    // A field named by its aria-label, or by the text of the label that points at it.
     const field = (label: string) => {
-        const input = document.querySelector<HTMLInputElement>(`[role="dialog"] input[aria-label="${label}"]`);
+        const labelled = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')].find(
+            (l) => l.textContent === label,
+        );
+        const input =
+            document.querySelector<HTMLInputElement>(`[role="dialog"] input[aria-label="${label}"]`) ??
+            document.querySelector<HTMLInputElement>(`[role="dialog"] input[id="${labelled?.htmlFor}"]`);
         if (!input) throw new Error(`no field ${label}`);
         return input;
     };
