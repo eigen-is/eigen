@@ -207,7 +207,7 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
 // each rule loses the cells a higher id holds, and no two rules overlap in the file. A rule left with no cell goes,
 // and loses nothing: it held no cell. A rule the cuts leave with more ranges than a rule may hold is dropped and
 // counted, since the importer would drop it.
-function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
+export function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
     const kept: Record<string, SheetValidation> = {};
     // Every rule's ranges in one lookup, each with its rule's place from the highest id down, so a range finds the
     // ranges of the higher rules that overlap it.

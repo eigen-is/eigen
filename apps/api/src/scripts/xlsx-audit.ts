@@ -31,11 +31,13 @@ import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/export-image';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
+import { withoutOverlaps } from '../lib/export/sheets/xlsx/rules';
+import { cut } from '../lib/export/sheets/xlsx/strings';
 import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
 import { uriReference } from '../lib/ooxml/opc';
-import { MAX_FORMULA_STRING_LENGTH, SPREADSHEETML } from '../lib/ooxml/spreadsheetml';
+import { MAX_FORMULA_STRING_LENGTH, MAX_PROMPT_LENGTH, SPREADSHEETML } from '../lib/ooxml/spreadsheetml';
 import type { ZipWriteEntry } from '../lib/ooxml/zip';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../lib/ooxml/zip';
 import type {
@@ -1017,10 +1019,12 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
     return differences;
 }
 
-// A sheet's validation rules keyed by the ranges they cover, as an import numbers the rules afresh.
+// A sheet's validation rules keyed by the ranges they cover, as an import numbers the rules afresh. Where rules
+// overlap, the highest id wins a cell, and the writer cuts that cell out of the others. So each rule is keyed by the
+// cells it decides.
 function rulesByRanges(validations: Sheet['dataValidations']): Record<string, DataVerificationRule> {
     return Object.fromEntries(
-        Object.values(validations ?? {}).map(({ ranges, rule }) => [
+        Object.values(withoutOverlaps(validations ?? {}, () => {})).map(({ ranges, rule }) => [
             ranges
                 .map((range) => rangeToA1(range))
                 .sort()
@@ -1151,6 +1155,18 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
             a['type'] === 'dropdown' &&
             typeof a['value1'] === 'string' &&
             a['value1'].length > MAX_FORMULA_STRING_LENGTH,
+    },
+    {
+        kind: 'validation prompts cut',
+        why: 'Excel holds a validation prompt of at most 255 characters; a longer one is cut and counted (validation-prompts-cut)',
+        matches: ({ feature, a, b }, { warnings }) =>
+            feature === 'dataValidations' &&
+            warnings.has('validation-prompts-cut') &&
+            isRecord(a) &&
+            isRecord(b) &&
+            typeof a['hintValue'] === 'string' &&
+            a['hintValue'].length > MAX_PROMPT_LENGTH &&
+            canonical(b) === canonical({ ...a, hintValue: cut(a['hintValue'], MAX_PROMPT_LENGTH) }),
     },
     {
         kind: 'sheet names repaired',
