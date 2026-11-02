@@ -41,7 +41,7 @@ trap 'rm -rf "$FIX"' EXIT
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
 # info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that
 # fail, and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not
-# pulled; STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
+# pulled; STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any image names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
 # digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, with STUB_RUN_CODE or 1, one
@@ -1339,13 +1339,16 @@ for SHELL_NAME in dash busybox host; do
         checked="$checked
 $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     done
-    STUB_IMAGE=1 STUB_CHECKED=$checked launch release restore "$ARCHIVE" --yes
+    # The pull names the build the registry says the archive's api image is, not the channel it follows.
+    STUB_IMAGE=1 STUB_CHECKED=$checked STUB_LATEST=0.2.98 STUB_REVISION=bbb1234 launch release restore "$ARCHIVE" --yes
     if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$CALLS" | grep -m 1 '^pull ')" = 'pull ghcr.io/eigen-is/eigen/api:local' ] &&
+        printf '%s\n' "$CALLS" | grep -qx 'manifest inspect -v ghcr.io/eigen-is/eigen/api@sha256:bbb' &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.98 (bbb1234) is here$' &&
         printf '%s\n' "$(steps)" | grep -q 'pull ghcr.io/eigen-is/eigen/unbound@sha256:bbb|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|$' &&
         [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api@sha256:bbb ]; then
-        ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the archive pins while Eigen runs, then writes the files of its api image"
+        ok "$SHELL_NAME: a release restore gets the api image it runs, pulls the images the archive pins while Eigen runs, named by their build, then writes the files of its api image"
     else
-        fail "$SHELL_NAME: a release restore to other images: exit $CODE, steps '$(steps)'"
+        fail "$SHELL_NAME: a release restore to other images: exit $CODE, steps '$(steps)', '$OUT'"
     fi
     # Files that cannot be written after the swap stay those of the build before, which the restart the failure points
     # at writes anew.
@@ -1353,7 +1356,9 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     echo ghcr.io/eigen-is/eigen/api:local >"$FIX/release/.eigen/bundle"
     STUB_IMAGE=1 STUB_CHECKED=$checked STUB_RUN_FAIL=bootstrap launch release restore "$ARCHIVE" --yes
     outcome="exit $CODE, bundle $(cat "$FIX/release/.eigen/bundle"), '$ERR'"
+    # Without the registry's annotations, the pull is named by the archive's EIGEN_VERSION.
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q 'The data is restored. Fix what it says, then run ./eigen restart.' &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen main is here$' &&
         [ "$(cat "$FIX/release/.eigen/bundle")" = ghcr.io/eigen-is/eigen/api:local ]; then
         launch release restart
         if [ "$CODE" = 0 ] && [ "$(steps)" = 'bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&

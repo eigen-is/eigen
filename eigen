@@ -451,10 +451,10 @@ cli_help() {
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
 
-# release_labels <tag>: the org.opencontainers.image annotations of the registry's api:<tag>, such as version and
-# revision, as key=value lines for answer; without a pull, and none without annotations.
+# release_labels <image>: its org.opencontainers.image annotations in the registry, such as version and revision, as
+# key=value lines for answer; without a pull, and none without annotations.
 release_labels() {
-    docker manifest inspect -v "$REGISTRY/api:$1" 2>/dev/null |
+    docker manifest inspect -v "$1" 2>/dev/null |
         sed -n 's/.*"org\.opencontainers\.image\.\([a-z]*\)": *"\([^"]*\)".*/\1=\2/p'
 }
 
@@ -809,7 +809,9 @@ stage_archive() {
     esac
 }
 
-# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on.
+# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on. They are named
+# by the build the registry says the api image is, since EIGEN_VERSION may be a channel, such as main. Without those
+# annotations they are named by EIGEN_VERSION.
 pull_pinned() {
     refs=''
     for name in $IMAGES; do
@@ -819,8 +821,10 @@ pull_pinned() {
         fi
         refs="$refs $ref"
     done
-    version=$(answer EIGEN_VERSION "$1")
-    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
+    labels=$(release_labels "$(answer EIGEN_API_IMAGE "$1")")
+    build=$(answer version "$labels")
+    if [ -n "$build" ]; then build="$build ($(answer revision "$labels"))"; else build=$(answer EIGEN_VERSION "$1"); fi
+    step "Getting Eigen $build" "Eigen $build is here" "Could not get Eigen $build; Eigen runs on as it was" \
         pull_refs $refs
 }
 
@@ -1027,9 +1031,9 @@ status() {
     newer=''
     if [ "$MODE" = release ]; then
         if [ "$(env_value EIGEN_VERSION)" = main ]; then
-            newer="--latest=$(answer revision "$(release_labels main)")"
+            newer="--latest=$(answer revision "$(release_labels "$REGISTRY/api:main")")"
         else
-            newer="--latest=$(answer version "$(release_labels latest)")"
+            newer="--latest=$(answer version "$(release_labels "$REGISTRY/api:latest")")"
         fi
     fi
     tab=$(printf '\t')
@@ -1338,7 +1342,7 @@ update_get() {
     old_version=$(image_label "$(image api)" version)
     tag=${target:-latest}
     if [ -z "$target" ] && [ "$follows" = main ]; then tag=main; fi
-    labels=$(release_labels "$tag")
+    labels=$(release_labels "$REGISTRY/api:$tag")
     version=$(answer version "$labels") revision=$(answer revision "$labels")
     if [ -z "$version" ]; then
         # Without the annotations, the image's labels name the build.
