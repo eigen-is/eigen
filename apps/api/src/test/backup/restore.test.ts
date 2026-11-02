@@ -833,8 +833,9 @@ describe('Backup restoreHome', () => {
             rename(from, to);
         });
         try {
+            // The admin sees only the job's error, so it says why the home answers 503 and what puts it back.
             await expect(restoreHome(artifact, target.id, `restore-left-aside-${Date.now()}`)).rejects.toThrow(
-                'failed by the test',
+                'failed by the test, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen restart',
             );
         } finally {
             epochSpy.mockRestore();
@@ -2083,7 +2084,12 @@ describe('Backup restore killed at any point', () => {
             }),
         ];
         try {
-            await expect(restoreHome(artifact, user.id, `restore-killed-${Date.now()}`)).rejects.toBe(KILLED);
+            const failed = await restoreHome(artifact, user.id, `restore-killed-${Date.now()}`).catch(
+                (error: unknown) => error,
+            );
+            // A kill that lands in the rollback reaches the caller as the cause of the error that says the account is
+            // shut.
+            expect(failed instanceof Error && failed.cause === KILLED ? failed.cause : failed).toBe(KILLED);
         } finally {
             for (const spy of spies) spy.mockRestore();
             // The marks are the process's own, so the one a kill leaves set is gone at the restart.

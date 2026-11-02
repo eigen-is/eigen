@@ -285,6 +285,12 @@ async function replaceHomeFolder<Judged>(
                         `[backup] could not put ${ownerId}'s home back after a failed restore:`,
                         rollbackError,
                     );
+                    // The job's error is all an admin learns of it, beside a 503 and a second restore refused as running.
+                    throw new ApiError(
+                        500,
+                        `${describeError(error)}, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen restart`,
+                        { cause: error },
+                    );
                 }
                 throw error;
             }
