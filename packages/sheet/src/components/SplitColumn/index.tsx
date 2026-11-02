@@ -108,21 +108,15 @@ export function SplitColumn() {
             <div className="border p-1.5 my-1.5 h-[100px] overflow-y-auto">
                 <table>
                     <tbody>
-                        {tableData.map((row, index) =>
-                            row.length >= 1 ? (
-                                // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
-                                <tr key={index}>
-                                    {row.map((cell) => (
-                                        <td key={row + cell}>{cell}</td>
-                                    ))}
-                                </tr>
-                            ) : (
-                                // biome-ignore lint/suspicious/noArrayIndexKey: preview rows rendered in a stable order
-                                <tr key={index}>
+                        {Array.from(tableData.entries(), ([rowIndex, row]) => (
+                            <tr key={rowIndex}>
+                                {row.length === 0 ? (
                                     <td />
-                                </tr>
-                            ),
-                        )}
+                                ) : (
+                                    Array.from(row.entries(), ([column, cell]) => <td key={column}>{cell}</td>)
+                                )}
+                            </tr>
+                        ))}
                     </tbody>
                 </table>
             </div>
