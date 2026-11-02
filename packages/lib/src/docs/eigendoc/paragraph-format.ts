@@ -1,7 +1,8 @@
 // A paragraph's format, as Word and Google Docs set it: its line spacing, the space before and after it, and its
 // indents, each with its bounds, its HTML attribute and its CSS. readParagraphFormat is the one reader of a stored
-// format, which callers such as the paragraph extension and the docx reader and writer go through. Nothing here loads
-// an editor, so a page that only draws a doc's Normal stays light.
+// format, which callers such as the paragraph format extension and the docx reader and writer go through. That
+// extension, which loads an editor, lives apart among the doc's nodes, so a page that only draws a doc's Normal stays
+// light.
 
 import type { Node } from '@tiptap/pm/model';
 import type { EditorState } from '@tiptap/pm/state';

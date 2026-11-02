@@ -51,9 +51,7 @@ const DEFAULT_TOC_LEVELS = 3;
 // The deepest heading level a table of contents lists. Any peer writes the attribute, so a number is held to the
 // heading levels, and anything else lists the default.
 export function readTocLevels(value: unknown): number {
-    return (
-        readNumberIn(typeof value === 'number' ? Math.round(value) : value, 1, MAX_HEADING_LEVEL) ?? DEFAULT_TOC_LEVELS
-    );
+    return Math.round(readNumberIn(value, 1, MAX_HEADING_LEVEL) ?? DEFAULT_TOC_LEVELS);
 }
 
 // One level's look as a peer, a paste or the import wrote it: the font and size are held to what a font and a size mark

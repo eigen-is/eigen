@@ -608,7 +608,8 @@ function justification(node: JSONContent): string | undefined {
     return typeof textAlign === 'string' ? JUSTIFICATION.get(textAlign) : undefined;
 }
 
-// A stored whole number, such as a heading level or a cell's span: rounded, then held to its range.
+// A stored whole number, such as a heading level or a cell's span: held to its range, then rounded. The bounds and the
+// fallback are whole numbers, so rounding after the range gives what rounding before it would.
 export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-    return readNumberIn(typeof value === 'number' ? Math.round(value) : value, min, max) ?? fallback;
+    return Math.round(readNumberIn(value, min, max) ?? fallback);
 }
