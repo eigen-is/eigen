@@ -11,6 +11,7 @@ import type { Lost } from '../../document/transform/protocol';
 import type { Budget } from '../../ooxml/budget';
 import { budget, CHARS_PER_UNIT } from '../../ooxml/budget';
 import {
+    A_NS,
     alternativeFor,
     EMU_PER_PX,
     emu,
@@ -194,6 +195,14 @@ export function extentOf(ext: XmlElement | undefined): { cx: number; cy: number 
         return value && value.length > MAX_MEASURE_CHARS ? 0 : Math.max(0, roundedInt(value) ?? 0);
     };
     return { cx: side('cx'), cy: side('cy') };
+}
+
+// What a drawing's graphic holds, when it holds one thing alone, such as a picture, a chart or a wps shape.
+export function loneGraphic(frame: XmlElement): XmlElement | undefined {
+    const graphic = xmlChild(frame, A_NS, 'graphic');
+    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+    const [first, ...others] = data ? xmlElements(data) : [];
+    return others.length === 0 ? first : undefined;
 }
 
 export function twipsOf(value: string | undefined): number | undefined {

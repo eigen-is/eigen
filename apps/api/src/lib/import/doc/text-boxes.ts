@@ -28,7 +28,7 @@ import {
 import { A_NS, EMU_PER_PX, V_NS, W10_NS, WPS_NS } from '../../ooxml/ooxml';
 import type { Item } from './assemble';
 import { buildBlocks } from './assemble';
-import { descendants, extentOf, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, loneGraphic, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { storyParagraphs } from './paragraphs';
 
@@ -52,10 +52,8 @@ export const textBoxScope = (scope: Scope): Scope => ({ ...scope, box: true, onF
 // The wps shape a drawing's graphic holds alone, when it holds text: a text box. A group, a canvas or a picture is no
 // box.
 export function loneTextBox(frame: XmlElement): XmlElement | undefined {
-    const graphic = xmlChild(frame, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [only, ...others] = data ? xmlElements(data) : [];
-    if (!only || others.length > 0 || !hasXmlName(only, WPS_NS, 'wsp')) return undefined;
+    const only = loneGraphic(frame);
+    if (!only || !hasXmlName(only, WPS_NS, 'wsp')) return undefined;
     return xmlChild(only, WPS_NS, 'txbx') || xmlChild(only, WPS_NS, 'linkedTxbx') ? only : undefined;
 }
 

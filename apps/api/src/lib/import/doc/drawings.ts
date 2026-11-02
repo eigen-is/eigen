@@ -30,7 +30,7 @@ import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, ParagraphItem } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
-import { descendants, extentOf, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, loneGraphic, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
@@ -58,8 +58,9 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const pictures = descendants(frame, PIC_NS, 'pic');
         const charts = chartsIn(frame, extent);
         // A picture in front of or behind the text may span the paper.
-        const room = anchored && overText(frame, context) ? Math.floor(mmToPx(reader.page.width)) : reader.columnPx;
-        const layout = anchored ? anchorPlacement(frame, reader, context, room) : {};
+        const over = anchored && overText(frame, context);
+        const room = over ? Math.floor(mmToPx(reader.page.width)) : reader.columnPx;
+        const layout = anchored ? anchorPlacement(frame, reader, context, over, room) : {};
         // Only the body holds a chart or a text box: a band's schema has neither and a note's Insert leaves both out, so
         // there a chart keeps its title and a box its paragraphs.
         const inBody = context.scope.story === 'body';
@@ -340,10 +341,16 @@ function onShapeFill(scope: Scope): Scope {
 }
 
 // Where Word places an anchor, as the doc holds it, `room` being the px its drawing may take. Wrapped beside the text,
-// it sits on the side its alignment or its offset puts it. In front of or behind the text, it is at its offsets from the
-// text column and from the paragraph's first line, which placeAnchors counts from the paragraph's box. Any other is a
-// block, aligned if Word aligns it.
-function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext, room: number): FigureFrameAttrs {
+// it sits on the side its alignment or its offset puts it. In front of or behind the text, as `over` says, it is at its
+// offsets from the text column and from the paragraph's first line, which placeAnchors counts from the paragraph's box.
+// Any other is a block, aligned if Word aligns it.
+function anchorPlacement(
+    anchor: XmlElement,
+    reader: Reader,
+    context: RunContext,
+    over: boolean,
+    room: number,
+): FigureFrameAttrs {
     const { story } = context.scope;
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
@@ -357,7 +364,7 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const marginLeft = margin.left * EMU_PER_TWIP;
     const cx = drawn ?? 0;
     const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
-    if (overText(anchor, context)) {
+    if (over) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
     }
@@ -379,14 +386,6 @@ function overText(anchor: XmlElement, context: RunContext): boolean {
         !!only &&
         (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
     return !!xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !box;
-}
-
-// What an anchor's graphic holds, when it holds one thing alone.
-function loneGraphic(anchor: XmlElement): XmlElement | undefined {
-    const graphic = xmlChild(anchor, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [first, ...others] = data ? xmlElements(data) : [];
-    return others.length === 0 ? first : undefined;
 }
 
 // The width in EMU an anchor's drawing is stored at, given `room` px. Each kind's width comes from the function that
