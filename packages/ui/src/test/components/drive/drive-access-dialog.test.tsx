@@ -1,7 +1,7 @@
 // The Share dialog lists who has access and saves only what changed, then closes. Save waits for a change, Enter in
 // the contact field adds that person and saves nothing, and a save that fails stays open with the edits kept. Cancel
-// waits while a save runs. The lock is a button the keyboard reaches. The owner gets the Share with team menu, and a
-// viewer who may only look gets Close alone.
+// waits while a save runs. The lock and the read-only list's header are buttons the keyboard reaches. The owner gets
+// the Share with team menu, and a viewer who may only look gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DirectAccessItem, DrivePath, InheritedAccessItem } from '@workspace/lib/types/drive';
@@ -377,6 +377,15 @@ test('a viewer who may only look sees the list and Close alone', async () => {
     expect(dialog()?.textContent).toContain('Sharing is restricted by the owner.');
     expect(dialog()?.querySelector('input[placeholder="Enter email addresses"]')).toBeNull();
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
+
+    // Four people collapse the list under a header the keyboard opens.
+    const header = dialog()?.querySelector('button[aria-expanded]');
+    if (!header) throw new Error('the list has no header button');
+    expect(header.textContent).toBe('4 people with access');
+    expect(header.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => pressKey(header, 'Enter'));
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+
     await click(button('Close'));
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
