@@ -80,7 +80,7 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 - `docker-compose.override.yml`, if you made one.
 - A way into the backup bucket. Its keys are inside the backups, which are in that bucket, so keep a copy of them yourself.
 - Guests' workspaces. After a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves guests' workspaces as they are.
-- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore it is only in `data.pre-restore-<date>-<time>`.
+- A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. Only the server's own user can read that file, so open it with `sudo cat backups/server-scheduled-full-<date>-<time>.tar.json`. After a restore it is only in `data.pre-restore-<date>-<time>`.
 
 ## Drives in an S3 bucket
 

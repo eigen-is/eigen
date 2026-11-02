@@ -309,7 +309,8 @@ duration() {
 }
 
 # step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
-# terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
+# terminal. set -m gives the job its own process group, so Ctrl-C stops all of it. A failure ends the launcher, or with
+# STEP_GOES_ON set returns 1 after its output, leaving the next line to the caller.
 step() {
     step_running=$1 step_done=$2 step_failed=$3
     shift 3
@@ -356,6 +357,7 @@ step() {
     {
         say "$RED" '■' "$step_failed"
         tail -n 20 "$LOG" | sed "s/^/${GRAY}│${RESET}  /"
+        if [ -n "${STEP_GOES_ON:-}" ]; then return 1; fi
         say "$GRAY" '└' "Full output: $LOG. ${NEXT:-Fix what it says, then run ./eigen $COMMAND again.}"
     } >&2
     exit 1
@@ -542,9 +544,9 @@ api_here() {
 
 # The API, uid 1000, reads .env.production for the server backup: group 1000 may, others not. Each command that writes it
 # starts Eigen after, so start does this. Docker Desktop shows the file as the container user's, readable at 0600 already.
-# backups/ gets the group backups_group names, with setgid and mode 2750: the operator lists it and reads a server
-# backup's record, and other users of the host do not. A folder uid 1000 does not own is left as it is, since 2750 could
-# lock the API out of it.
+# backups/ gets the group backups_group names, with setgid and mode 2750: the operator lists it, and other users of the
+# host do not. Its archives and their records are uid 1000's alone (0600), so the launcher asks the API what
+# runs. A folder uid 1000 does not own is left as it is, since 2750 could lock the API out of it.
 share_env() {
     if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
     share_file='chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
@@ -645,33 +647,61 @@ stop() {
 # running_backup: what the running API says runs of a server backup, such as "the server backup <archive>", on one
 # line, or nothing. It fails when the API does not answer. The new launcher stops the old API in an update, and an API
 # of 0.4.1 or before refuses --running (exit 2). For it the records in backups/ are read, as its own launcher did: one
-# says running at the top or in its upload, and one that has said so for over a day lost its end. Drop that fallback
-# once no update starts from 0.4.1.
+# says running at the top, or for its upload a level deeper, and one that has said so for over a day lost its end.
+# Drop the fallback when update_apply's floor, a launcher older than 0.3.1, rises past 0.4.1: then no update stops such
+# an API.
 running_backup() {
     asked=0
     running=$(api_cli status --running </dev/null 2>/dev/null) || asked=$?
     case $asked in
         0) printf '%s\n' "$running" ;;
         2)
-            find backups -maxdepth 1 -name 'server-*.json' ! -mmin +1440 -exec grep -lE '^  (  )?"state": "running"' {} + \
-                2>/dev/null | sed -n '1s|^backups/\(.*\)\.json$|the server backup \1|p'
+            find backups -maxdepth 1 -name 'server-*.json' ! -mmin +1440 -exec grep -HE '^  (  )?"state": "running"' {} + \
+                2>/dev/null | sed -n -e '1s|^backups/\(.*\)\.json:    .*|the upload of \1|p' \
+                -e '1s|^backups/\(.*\)\.json:  .*|the server backup \1|p'
             ;;
         *) return 1 ;;
     esac
 }
 
-wait_backup() { while running=$(running_backup) && [ -n "$running" ]; do sleep 2; done; }
+# ask_backup <tries>: running_backup, asked again 2 s later while the API does not answer, <tries> times in all. One
+# docker compose exec can fail on a busy host while the API and its backup run on.
+ask_backup() {
+    tries=$1
+    until running_backup; do
+        tries=$((tries - 1))
+        if [ "$tries" = 0 ]; then return 1; fi
+        sleep 2
+    done
+}
+
+# wait_backup <what runs>: until the API names something else, or nothing. It fails after three failed asks in a row.
+wait_backup() {
+    while now=$(ask_backup 3); do
+        if [ "$now" != "$1" ]; then return 0; fi
+        sleep 2
+    done
+    return 1
+}
 
 # before_stop: a stop, and a restart that stops eigen-api, first waits for a running server backup or its upload. The
-# stop would kill it, and that night would have no backup, or none in the bucket. A restore and an update wait before
-# they arm the restart, and stop looks again. An API that does not answer gets the stop it needs. An interrupt here
-# leaves Eigen running.
+# stop would kill it, and that night would have no backup, or none in the bucket. Each step names what it waits for, so
+# when a backup ends and its upload starts, the last line names the upload. A restore and an update wait before they
+# arm the restart, and stop looks again. An API that does not answer, or stops answering, gets the stop it needs. An
+# interrupt here leaves Eigen running.
 before_stop() {
     if ! api_running; then return 0; fi
-    if ! running=$(running_backup); then
+    answered=1
+    running=$(ask_backup 2) || answered=0
+    STEP_GOES_ON=1
+    while [ "$answered" = 1 ] && [ -n "$running" ]; do
+        step "Waiting for $running to end" "Waited for $running to end" \
+            "Eigen stopped answering whether $running ended" wait_backup "$running" &&
+            running=$(ask_backup 3) || answered=0
+    done
+    STEP_GOES_ON=''
+    if [ "$answered" = 0 ]; then
         say "$YELLOW" '▲' "Eigen did not say whether a server backup runs, so the stop does not wait for one."
-    elif [ -n "$running" ]; then
-        step "Waiting for $running to end" "Waited for $running to end" "Could not wait for the server backup" wait_backup
     fi
 }
 

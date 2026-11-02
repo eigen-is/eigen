@@ -521,10 +521,12 @@ header "./eigen stop, and with Eigen stopped"
 eigen stop
 show
 running=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT")
-if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ]; then
-    ok "./eigen stop stops every container of the project"
+# The API of this build answers status --running, so the stop does not go on blind.
+if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ] &&
+    ! says 'did not say whether a server backup runs'; then
+    ok "./eigen stop asks the API whether a server backup runs, and stops every container of the project"
 else
-    fail "./eigen stop: exit $CODE, still running: $running"
+    fail "./eigen stop: exit $CODE, still running: $running, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen status
 show
