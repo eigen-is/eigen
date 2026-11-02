@@ -503,6 +503,15 @@ describe('size', () => {
             [40, null],
         ]);
     });
+
+    test('an extent that is not positive gives no size on that side', async () => {
+        const { json } = await importDocxBody([sized(-40, 40), sized(40, -40), sized(0, 40)].map(paragraph).join(''));
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+            [40, null],
+            [null, null],
+        ]);
+    });
 });
 
 // VML's office attributes are read by their namespace, whatever prefix binds it.
@@ -709,10 +718,11 @@ describe('text boxes as boxes', () => {
         const right =
             '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV>';
         const { boxes } = await boxesOf(
-            `${anchored({ position: right, cx: Number.NaN })}${anchored({ position: right, cx: 0 })}`,
+            [Number.NaN, -1905000, 0].map((cx) => anchored({ position: right, cx })).join(''),
         );
-        const [unread, zero] = boxes.map((box) => box.attrs?.['offsetX']);
+        const [unread, negative, zero] = boxes.map((box) => box.attrs?.['offsetX']);
         expect(unread).toBe(zero);
+        expect(negative).toBe(zero);
         expect(typeof unread).toBe('number');
     });
 

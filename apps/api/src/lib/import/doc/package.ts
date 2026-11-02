@@ -185,10 +185,11 @@ export function roundedInt(value: string | undefined): number | undefined {
     return Number.isFinite(number) ? Math.round(number) : undefined;
 }
 
-// A drawing's size, a wp:extent's or an a:ext's, in whole EMU. A side that is missing or no number is 0, which every
-// caller reads as no size.
+// A drawing's size, a wp:extent's or an a:ext's, in whole EMU. A side that is missing, no number or not positive is 0,
+// which every caller reads as no size.
 export function extentOf(ext: XmlElement | undefined): { cx: number; cy: number } {
-    return { cx: roundedInt(ext && xmlAttr(ext, '', 'cx')) ?? 0, cy: roundedInt(ext && xmlAttr(ext, '', 'cy')) ?? 0 };
+    const side = (name: string) => Math.max(0, roundedInt(ext && xmlAttr(ext, '', name)) ?? 0);
+    return { cx: side('cx'), cy: side('cy') };
 }
 
 export function twipsOf(value: string | undefined): number | undefined {

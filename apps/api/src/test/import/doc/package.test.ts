@@ -16,7 +16,7 @@ describe('extentOf', () => {
         expect(extentOf(extent('cx="wide" cy="1e400"'))).toEqual({ cx: 0, cy: 0 });
     });
 
-    test('a negative side reads as it is, for the caller to refuse', () => {
-        expect(extentOf(extent('cx="-952500" cy="0"'))).toEqual({ cx: -952500, cy: 0 });
+    test('a side that is not positive is 0', () => {
+        expect(extentOf(extent('cx="-952500" cy="0"'))).toEqual({ cx: 0, cy: 0 });
     });
 });
