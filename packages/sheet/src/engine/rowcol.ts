@@ -307,6 +307,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 count,
                 targetName,
                 sheetIndex === targetIndex,
+                sheets,
             );
 
         let newSheet = sheet;

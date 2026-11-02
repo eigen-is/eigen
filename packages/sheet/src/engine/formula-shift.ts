@@ -73,8 +73,7 @@ export function inlineNames(
 // alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
 // `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
 // whether the formula lives on it. Only refs to that sheet move. `sheets` are the workbook's sheets, which a ref's
-// name is read against, so in a workbook holding Data and data an op on one moves only its own refs. Without them a
-// name reads the target in any case.
+// name is read against, so in a workbook holding Data and data an op on one moves only its own refs.
 export function functionStrChange(
     txt: string,
     type: 'add' | 'del',
@@ -84,7 +83,7 @@ export function functionStrChange(
     step: number,
     targetSheet: string,
     onTargetSheet: boolean,
-    sheets: readonly { name: string }[] = [{ name: targetSheet }],
+    sheets: readonly { name: string }[],
 ): string {
     if (!txt) {
         return '';
