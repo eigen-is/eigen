@@ -134,6 +134,12 @@ const openMenuEntries = () =>
         ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim())),
     );
 
+// The rows of the open choices that are checked.
+const checkedItems = () =>
+    [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
+        item.textContent?.trim(),
+    );
+
 // A menu trigger by its text, or by its name when it is an icon.
 const menuTrigger = (label: string) =>
     [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
@@ -599,11 +605,7 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
 
     await openMenu('Align');
     expect(openMenuEntries()).toEqual(['Left', 'Center', 'Right', 'Justified']);
-    const checked = () =>
-        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
-            item.textContent?.trim(),
-        );
-    expect(checked()).toEqual(['Left']);
+    expect(checkedItems()).toEqual(['Left']);
 
     const justified = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
         (item) => item.textContent?.trim() === 'Justified',
@@ -613,7 +615,7 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
     expect(alignIcon()).toMatch(/text-align-justify/);
 
     await openMenu('Align');
-    expect(checked()).toEqual(['Justified']);
+    expect(checkedItems()).toEqual(['Justified']);
 });
 
 test('a range of mixed alignments checks no Align item and draws Left', async () => {
@@ -769,11 +771,7 @@ test('Format › Image › In front of text places the selected image and checks
     await render(390, true);
     await openMenu('Format');
     await openSubmenu('Image');
-    const checked = () =>
-        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
-            item.textContent?.trim(),
-        );
-    expect(checked()).toEqual(['In line']);
+    expect(checkedItems()).toEqual(['In line']);
 
     const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
         (item) => item.textContent?.trim() === 'In front of text',
@@ -813,6 +811,47 @@ test('in a table cell, Format › Image offers no place in front of or behind th
     await openMenu('Format');
     await openSubmenu('Image');
     expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+});
+
+// A phone has no Text box panel either, so Format › Text box holds the box's layouts, its own checked, and its fill.
+test("Format › Text box checks the box's layout among the layouts, then Fill, and In front of text places it", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'a' },
+                    {
+                        type: 'textBox',
+                        attrs: { id: 'b', width: 200 },
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Box' }] }],
+                    },
+                ],
+            },
+        ],
+    });
+    editor.commands.setNodeSelection(2);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Text box');
+    expect(openMenuEntries()).toEqual([
+        'In line',
+        'Wrap left',
+        'Wrap right',
+        'Behind text',
+        'In front of text',
+        '—',
+        'Fill',
+    ]);
+    expect(checkedItems()).toEqual(['In line']);
+
+    const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'In front of text',
+    );
+    await act(async () => front?.click());
+    // A positioned box leads its paragraph.
+    expect(editor.state.doc.nodeAt(1)?.attrs['layout']).toBe('front');
 });
 
 test('Format › Headers and footers puts the caret in the header', async () => {

@@ -1,7 +1,7 @@
 // The Docs Format menu: text, paragraph styles, alignment and spacing, lists, headers and page numbers, the switch
 // between pages and page-less, and the table, image and text box submenus that a phone, which has no properties panel,
 // reaches those options through. Every item acts on the editor the toolbar follows: the body's, a band's being edited
-// or the open story's.
+// or the open story's. The icon row's Align dropdown draws its options from here too.
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
@@ -81,13 +81,28 @@ import { PageNumberItems } from './page-numbers';
 import { paragraphStylesIn } from './paragraph-styles';
 import { tableMenuSections } from './table-menu-sections';
 
+// How a menu row draws an option: its icon, then its name.
+type MenuLook = { label: string; icon: LucideIcon };
+
 // Format › Align and indent and the icon row's Align dropdown name each alignment alike.
-export const ALIGNMENT_LOOK: Record<TextAlign, { label: string; icon: LucideIcon }> = {
+export const ALIGNMENT_LOOK: Record<TextAlign, MenuLook> = {
     left: { label: 'Left', icon: AlignLeft },
     center: { label: 'Center', icon: AlignCenter },
     right: { label: 'Right', icon: AlignRight },
     justify: { label: 'Justified', icon: AlignJustify },
 };
+
+// One option of a choice, drawn in its look, such as an alignment in the Align dropdown or a layout in Format › Image.
+export function lookOption<T>(value: T, { label, icon: Icon }: MenuLook) {
+    return {
+        value,
+        label: (
+            <>
+                <Icon className="h-4 w-4" /> {label}
+            </>
+        ),
+    };
+}
 
 // Format › Bullets and numbering › Numbered list: Google's single-level styles, by the type a list stores.
 const NUMBERED_LIST_STYLES = [
@@ -106,7 +121,7 @@ const LINE_SPACINGS = [
     { value: 2, label: 'Double' },
 ] as const;
 
-// What Add space before or after paragraph sets, in pt: Word's amount, as Google's is unchecked.
+// What Add space before or after paragraph sets, in pt. It is Word's amount, as Google's has not been checked.
 const ADDED_SPACE = 12;
 
 type FormatMenuProps = {
@@ -415,22 +430,16 @@ export const FormatMenu = ({
                 <DropdownMenuItem onClick={onReplaceImage}>
                     <ImagePlus className="h-4 w-4" /> Replace image
                 </DropdownMenuItem>
-                {/* The Image panel's layouts, which a phone has no panel for: none in a band, as the band's panel
-                    offers none, and those in the flow alone where the image draws in line, in a note or a cell. */}
+                {/* The Image panel's layouts, for a phone, which has no panel. A band's panel offers none, so
+                    neither does the menu. Where the image draws in line, in a note or a cell, only the layouts in the
+                    flow are offered. */}
                 {!inBand(editor) && (
                     <>
                         <DropdownMenuSeparator />
                         <ChoiceMenuItems<FigureLayout>
                             value={active.figureLayout}
-                            options={figureLayoutLooks(selectionDrawsInLine(editor)).map(
-                                ({ layout, label, icon: Icon }) => ({
-                                    value: layout,
-                                    label: (
-                                        <>
-                                            <Icon className="h-4 w-4" /> {label}
-                                        </>
-                                    ),
-                                }),
+                            options={figureLayoutLooks(selectionDrawsInLine(editor)).map((look) =>
+                                lookOption(look.layout, look),
                             )}
                             onChange={(layout) => setImageLayout(editor, { layout })}
                         />
@@ -446,14 +455,9 @@ export const FormatMenu = ({
                 {/* The Text box panel's layouts and fill, which a phone has no panel for. */}
                 <ChoiceMenuItems<FigureLayout>
                     value={active.textBox?.layout}
-                    options={figureLayoutLooks(selectionDrawsInLine(editor)).map(({ layout, label, icon: Icon }) => ({
-                        value: layout,
-                        label: (
-                            <>
-                                <Icon className="h-4 w-4" /> {label}
-                            </>
-                        ),
-                    }))}
+                    options={figureLayoutLooks(selectionDrawsInLine(editor)).map((look) =>
+                        lookOption(look.layout, look),
+                    )}
                     onChange={(layout) => setTextBoxLayout(editor, { layout })}
                 />
                 <DropdownMenuSeparator />

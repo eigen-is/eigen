@@ -64,7 +64,7 @@ import {
 import { useState } from 'react';
 import { runClipboardCommand } from './clipboard';
 import { CustomSpacingDialog } from './custom-spacing-dialog';
-import { ALIGNMENT_LOOK, FormatMenu } from './format-menu';
+import { ALIGNMENT_LOOK, FormatMenu, lookOption } from './format-menu';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { IndentationOptionsDialog } from './indentation-options-dialog';
 import { InsertMenu } from './insert-menu';
@@ -75,12 +75,12 @@ import { StylePicker } from './style-picker';
 import { ShowOutlineItem, ToolsMenu, WORD_COUNT_HOTKEY, WordCountItem } from './tools-menu';
 import { WordCountDialog } from './word-count-dialog';
 
-// A closing menu hands focus to the editor the caret is in, after a pick or Esc, rather than back to its trigger, which
-// would swallow the next keystrokes; a pick's own command focuses it a frame later. Whatever took the focus as the menu
-// closed keeps it: an input a press outside landed on, a dialog the pick opened or the next menu, which would close at
-// once without it. A viewer's menu returns it to the trigger, as the editor can't take it. Radix hands focus back a
-// tick after the menu unmounts, when Tiptap has destroyed the editors of a document that closed with it, which still
-// read as editable.
+// After a pick or Esc, a closing menu hands the focus to the editor the caret is in. Its trigger would swallow the next
+// keystrokes. A pick's own command focuses the editor a frame later. Whatever took the focus as the menu closed keeps
+// it: an input a press outside landed on, a dialog the pick opened, or the next menu, which would close at once without
+// it. A viewer's menu gives the focus back to the trigger, as the editor can't take it. Radix hands the focus back a
+// tick after the menu unmounts. By then Tiptap may have destroyed the editors of a document that closed with the menu,
+// and those still read as editable.
 export const keepEditorFocus = (editor: Editor) => (e: Event) => {
     if (editor.isDestroyed || !editor.isEditable) return;
     e.preventDefault();
@@ -117,7 +117,7 @@ type EditorToolbarProps = {
     onImageUpload?: (file: File) => void;
     onImagePickFromDrive?: (paths: DrivePath[]) => void;
     onReplaceImage: () => void;
-    // Threaded only when the doc can hold comments (chatFolderId present); gates the Insert-menu item.
+    // Only when the doc can hold comments. Insert offers its comment item only then.
     onAddComment?: () => void;
     onInsertEquation?: () => void;
     // Inserts a footnote and opens its note; a writer's on a desktop or a tablet only.
@@ -200,8 +200,8 @@ export const EditorToolbar = ({
     const { printPdf } = usePrintPdf(printDocument);
     const print = () => printPdf(path.ownerId, path.mountId, path.id, !offline && !unsyncedEdits);
 
-    // On <html>, which the key reaches before the document: this handler stops it there, so EigenApp's ⌘P, browser
-    // print for every other app, never sees it.
+    // On <html>, which the key reaches before the document. This handler stops it there, so EigenApp's ⌘P, which is
+    // browser print for every other app, never sees it.
     useHotkey(
         'Mod+P',
         (e) => {
@@ -383,12 +383,10 @@ export const EditorToolbar = ({
                         <div className="flex" role="toolbar" aria-label="Formatting">
                             <ToolbarSeparator />
 
-                            {/* Heading / paragraph selector */}
                             <StylePicker editor={editor} active={active} keepEditorFocus={keepActiveEditorFocus} />
 
                             <ToolbarSeparator />
 
-                            {/* Font family selector */}
                             <FontPicker
                                 value={active.fontName}
                                 onChange={(f) => editor.chain().focus().setFontFamily(f).run()}
@@ -405,7 +403,6 @@ export const EditorToolbar = ({
 
                             <ToolbarSeparator />
 
-                            {/* Text formatting toggle group */}
                             <div className="flex items-center gap-0.5">
                                 <TooltipButton
                                     icon={Bold}
@@ -453,7 +450,6 @@ export const EditorToolbar = ({
 
                                     <ToolbarSeparator />
 
-                                    {/* Insert actions */}
                                     <div className="flex items-center gap-0.5">
                                         <TooltipButton
                                             icon={Link}
@@ -507,17 +503,9 @@ export const EditorToolbar = ({
                                         <DropdownMenuContent onCloseAutoFocus={keepActiveEditorFocus}>
                                             <ChoiceMenuItems
                                                 value={active.alignment}
-                                                options={TEXT_ALIGNS.map((alignment) => {
-                                                    const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
-                                                    return {
-                                                        value: alignment,
-                                                        label: (
-                                                            <>
-                                                                <Icon className="h-4 w-4" /> {label}
-                                                            </>
-                                                        ),
-                                                    };
-                                                })}
+                                                options={TEXT_ALIGNS.map((alignment) =>
+                                                    lookOption(alignment, ALIGNMENT_LOOK[alignment]),
+                                                )}
                                                 onChange={(alignment) =>
                                                     editor.chain().focus().setTextAlign(alignment).run()
                                                 }
@@ -527,7 +515,6 @@ export const EditorToolbar = ({
 
                                     <ToolbarSeparator />
 
-                                    {/* Lists toggle group */}
                                     <div className="flex items-center gap-0.5">
                                         <TooltipButton
                                             icon={List}
