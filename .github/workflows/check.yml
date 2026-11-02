@@ -141,7 +141,8 @@ jobs:
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
   launcher:
     runs-on: ubuntu-26.04
-    timeout-minutes: 5
+    # Each shell runs about 136 tests: dash and BusyBox took 5 minutes on the runner, so the three take about 8.
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
 
