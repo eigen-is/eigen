@@ -1,12 +1,12 @@
 // The editor's formula bookkeeping: FormulaCache, the per-workbook state of the formula engine and the reference
-// picker, the map of which cells hold formulas, and the resolver that lets the engine read cells from the live
-// context. setFormulaCellInfo keeps the map in step with each write, and an undo or redo replays its patches.
+// picker, the map of which cells hold formulas and which cells each one reads, and the resolver that lets the engine
+// read cells from the live context. setFormulaCellInfo keeps the map in step with each write, through the dependency
+// walk the server's recalc uses too, and an undo or redo replays its patches.
 
-import { isNil } from 'es-toolkit/compat';
 import { current, isDraft } from 'immer';
 import type { DependencyIndex } from '../../engine/dependency-index';
 import { FormulaEngine } from '../../engine/formula-engine';
-import { iscelldata, isFunctionRange } from '../../engine/formula-utils';
+import { extractDependencies } from '../../engine/recalc';
 import type {
     CalcChainEntry,
     Cell,
@@ -21,13 +21,13 @@ import { getFlowdata } from '../context';
 import type { FormulaCell, History, Selection } from '../types';
 import { getSheetIdByName } from '../utils';
 import { getcellFormula } from './cell';
-import { execfunction, getcellrange, warmFormulaCellInfoMap } from './formula-exec';
+import { execfunction, warmFormulaCellInfoMap } from './formula-exec';
 
 // The formula editor's hint and range state, which several modules of the formula editor share. It sits in an object,
 // so a write in one module is seen by the others.
-export const formulaUIState = {
+export const formulaUIState: { functionHTMLIndex: number; rangeIndexes: number[] } = {
     functionHTMLIndex: 0,
-    rangeIndexes: [] as number[],
+    rangeIndexes: [],
 };
 
 export function setFunctionHTMLIndex(value: number) {
@@ -46,19 +46,16 @@ export function resetRangeIndexes() {
     formulaUIState.rangeIndexes = [];
 }
 
-// Plain (non-draft) view of the context. Formula evaluation reads cells one
-// at a time; going through immer draft proxies makes each read several times
-// slower and creates child drafts that the finalize pass must then walk.
+// A plain copy of the context, not an immer draft. Evaluation reads cells one at a time. Each read through a draft is
+// several times slower, and it makes child drafts that immer must walk when the recipe ends.
 export function snapshotContext(ctx: Context): Context {
-    return isDraft(ctx) ? (current(ctx) as Context) : ctx;
+    return isDraft(ctx) ? current(ctx) : ctx;
 }
 
-// Adapts Context to the CellResolver interface expected by FormulaEngine.
-// Reads exactly the context it is handed: pass `snapshotContext(ctx)` for a
-// stable plain snapshot (correct for one dependency-ordered evaluation pass —
-// freshly computed values travel via execFunctionGlobalData, which the engine
-// checks before cell data), or the live ctx when interleaving writes with
-// evaluations that must see them, e.g. calculateFormula's cell-order sweep.
+// The CellResolver through which the FormulaEngine reads the editor's cells. It reads the context it is handed. A pass
+// in dependency order takes `snapshotContext(ctx)`: the values it computes reach the next formula through
+// execFunctionGlobalData, which the engine reads before the cells. A sweep that writes between evaluations, such as
+// calculateFormula's, takes the live ctx, so each evaluation sees the writes before it.
 export function createContextResolver(source: Context): CellResolver {
     const matrices = new Map<string, CellMatrix | null>();
     const dataFor = (sheetId: string) => {
@@ -82,7 +79,7 @@ export function createContextResolver(source: Context): CellResolver {
         },
         getSheets() {
             return source.sheets.map((f) => ({
-                id: f.id ?? '',
+                id: f.id,
                 name: f.name,
                 calculationChain: f.calcChain ?? [],
                 dynamicArrayCompute: f.dynamicArray_compute ?? [],
@@ -137,9 +134,8 @@ export class FormulaCache {
 
     public execFunctionExist?: CalcChainEntry[];
 
-    // Cells an edit actually changed (set by deleteSelectedCellText). When present,
-    // runExecFunction recomputes only these instead of every cell in the selection
-    // rectangle — so clearing a huge, mostly-empty selection stays cheap.
+    // The cells an edit changed, which deleteSelectedCellText sets. runExecFunction then recomputes only these, not
+    // every cell of the selection, so clearing a large and mostly empty selection stays cheap.
     public pendingChangedCells?: CalcChainEntry[];
 
     public engine: FormulaEngine;
@@ -224,112 +220,24 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
     const formulaCellInfoMap = warmFormulaCellInfoMap(ctx, dataSheet === ctx.currentSheetId ? data : undefined);
     const key = `r${formulaCell.r}c${formulaCell.c}i${formulaCell.id}`;
     const cellData = formulaCell.id === dataSheet ? data : undefined;
-    const calc_funcStr = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
-    if (isNil(calc_funcStr)) {
+    const formula = getcellFormula(ctx, formulaCell.r, formulaCell.c, formulaCell.id, cellData);
+    if (formula == null) {
         delete formulaCellInfoMap[key];
         ctx.formulaCache.dependencyIndex.delete(key);
         return;
     }
-    const txt1 = calc_funcStr.toUpperCase();
-    const isOffsetFunc = txt1.indexOf('INDIRECT(') > -1 || txt1.indexOf('OFFSET(') > -1 || txt1.indexOf('INDEX(') > -1;
+    // The server's recalc finds the cells a formula reads with this same walk. The editor keeps its cache of resolved
+    // references from one edit to the next.
+    const formulaDependency = extractDependencies(
+        { sheets: ctx.sheets, cellTextToIndexList: ctx.formulaCache.cellTextToIndexList },
+        formula,
+        formulaCell.id,
+        cellData ?? getFlowdata(ctx, formulaCell.id),
+    );
 
-    const formulaDependency: FormulaDependency[] = [];
-    if (isOffsetFunc) {
-        isFunctionRange(calc_funcStr, (str_nb: string) => {
-            const range = getcellrange(ctx, str_nb.trim(), formulaCell.id, cellData);
-            if (!isNil(range)) {
-                formulaDependency.push(range);
-            }
-        });
-    } else if (!(calc_funcStr.substring(0, 2) === '="' && calc_funcStr.substring(calc_funcStr.length - 1, 1) === '"')) {
-        // The formula splits at its operators, but never inside quotes: a sheet named '1-2' in ='1-2'!A1 must stay one
-        // reference, or a change to that cell would not recalculate the formula.
-        let segmentStart = 0;
-        let singleQuoteAt = -1;
-        let doubleQuoteAt = -1;
-        const formulaTextArray = [];
-        // Where each quoted sheet name sits in formulaTextArray.
-        const quotedSheetIndexes = [];
-        const calc_funcStr_length = calc_funcStr.length;
-        for (let j = 0; j < calc_funcStr_length; j += 1) {
-            const char = calc_funcStr.charAt(j);
-            if (char === "'" && doubleQuoteAt === -1) {
-                if (singleQuoteAt === -1) {
-                    if (segmentStart !== j) {
-                        formulaTextArray.push(
-                            ...calc_funcStr.substring(segmentStart, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-                        );
-                    }
-                    singleQuoteAt = j;
-                    segmentStart = j;
-                } else {
-                    // Two quotes in a row are one quote inside the name, not its end.
-                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === "'") {
-                        j += 1;
-                    } else {
-                        segmentStart = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(singleQuoteAt, segmentStart));
-                        quotedSheetIndexes.push(formulaTextArray.length - 1);
-                        singleQuoteAt = -1;
-                    }
-                }
-            } else if (char === '"' && singleQuoteAt === -1) {
-                if (doubleQuoteAt === -1) {
-                    if (segmentStart !== j) {
-                        formulaTextArray.push(
-                            ...calc_funcStr.substring(segmentStart, j).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-                        );
-                    }
-                    doubleQuoteAt = j;
-                    segmentStart = j;
-                } else {
-                    // Two quotes in a row are one quote inside the text, not its end.
-                    if (j < calc_funcStr_length - 1 && calc_funcStr.charAt(j + 1) === '"') {
-                        j += 1;
-                    } else {
-                        segmentStart = j + 1;
-                        formulaTextArray.push(calc_funcStr.substring(doubleQuoteAt, segmentStart));
-                        doubleQuoteAt = -1;
-                    }
-                }
-            }
-        }
-        if (segmentStart !== calc_funcStr_length) {
-            formulaTextArray.push(
-                ...calc_funcStr.substring(segmentStart, calc_funcStr_length).split(/==|!=|<>|<=|>=|[,()=+-/*%&^><]/),
-            );
-        }
-        // A quoted sheet name and the reference after it, such as '1-2' and !A1, join into one reference.
-        for (let j = quotedSheetIndexes.length - 1; j >= 0; j -= 1) {
-            if (quotedSheetIndexes[j] !== formulaTextArray.length - 1) {
-                formulaTextArray[quotedSheetIndexes[j]] += formulaTextArray[quotedSheetIndexes[j] + 1];
-                formulaTextArray.splice(quotedSheetIndexes[j] + 1, 1);
-            }
-        }
-
-        for (let j = 0; j < formulaTextArray.length; j += 1) {
-            const t = formulaTextArray[j];
-            if (t.length <= 1) {
-                continue;
-            }
-
-            if ((t.substring(0, 1) === '"' && t.substring(t.length - 1, 1) === '"') || !iscelldata(t)) {
-                continue;
-            }
-
-            const range = getcellrange(ctx, t.trim(), formulaCell.id, cellData);
-
-            if (isNil(range)) {
-                continue;
-            }
-
-            formulaDependency.push(range);
-        }
-    }
-
-    const item: FormulaCellInfo = {
+    formulaCellInfoMap[key] = {
         formulaDependency,
-        calc_funcStr,
+        calc_funcStr: formula,
         key,
         r: formulaCell.r,
         c: formulaCell.c,
@@ -338,8 +246,6 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         children: {},
         color: 'w',
     };
-
-    formulaCellInfoMap[key] = item;
     ctx.formulaCache.dependencyIndex.set(key, formulaDependency);
 }
 
@@ -370,8 +276,8 @@ export function executeAffectedFormulas(
         calcChainSet.add(`${item.r}_${item.c}_${item.id}`);
     }
 
-    // Collected locally and assigned once: ctx is usually an immer draft, and
-    // per-result pushes through the proxy each record a patch.
+    // The results are collected here and assigned once. ctx is usually an immer draft, and each push through it would
+    // record a patch.
     const refreshed: Context['groupValuesRefreshData'] = [];
 
     for (let i = 0; i < formulaRunList.length; i += 1) {

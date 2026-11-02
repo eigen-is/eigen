@@ -195,7 +195,7 @@ The server's recalc, at import and at export, runs under a budget, `SERVER_RECAL
 
 ## Recalc keeps what it can't improve
 
-`recalcSheets` (`engine/recalc.ts`) materializes each sheet's `data`, finds formula cells by scanning it rather than trusting `calcChain`, orders them through the dependency graph and evaluates them with the shared `FormulaEngine`. Its graph builder is a port of the state layer's `setFormulaCellInfo`, because the engine can't import `state/` ([SHEETS-TODO.md](SHEETS-TODO.md#code-debt) tracks removing the copy). The INDIRECT, OFFSET and INDEX walker inside it, `isFunctionRange`, is one function in `engine/formula-utils.ts` that both call.
+`recalcSheets` (`engine/recalc.ts`) materializes each sheet's `data`, finds formula cells by scanning it rather than trusting `calcChain`, orders them through the dependency graph and evaluates them with the shared `FormulaEngine`. The walk that finds the cells each formula reads, `extractDependencies`, is the one the editor's `setFormulaCellInfo` calls too, so the editor and the server agree on what a formula reads. The engine can't import `state/`, so the editor hands the walk its sheets and its cache of resolved references. The INDIRECT, OFFSET and INDEX walker inside it is `isFunctionRange` in `engine/formula-utils.ts`.
 
 Four rules keep a passive export honest:
 
