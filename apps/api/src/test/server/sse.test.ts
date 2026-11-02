@@ -1,7 +1,9 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { announceRestart, clearRestartNotice } from '../../lib/config/restart-notice';
 import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
+import { createSSEStream, getHome } from '../../lib/home';
 import { authedRequest, collectSSE, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -203,6 +205,60 @@ describe('SSE', () => {
             expect(Object.keys(bobSSE.events.find(isShared)?.path ?? {}).sort()).toEqual(
                 ['id', 'mimeType', 'mountId', 'ownerId', 'parentId'].sort(),
             );
+        });
+    });
+
+    describe('The restart notice', () => {
+        afterEach(() => clearRestartNotice());
+
+        // One open tab's stream, read on to the next restart notice it sends.
+        async function openStream(userId: string) {
+            const reader = createSSEStream(await getHome(userId)).getReader();
+            return {
+                notice: async () => {
+                    for (;;) {
+                        const { value } = await reader.read();
+                        if (value && 'type' in value && value.type === SSEventType.SERVER_RESTART_NOTICE)
+                            return value.notice;
+                    }
+                },
+                close: () => reader.cancel(),
+            };
+        }
+
+        // Sent with null too, so a tab that reconnects to the restarted server drops the banner it held.
+        test('a stream opens with the keepalive, then the notice, null when there is none', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken, `/sse/${ctx.alice.user.id}/events`);
+            const reader = res.body?.getReader();
+            const chunks: unknown[] = [];
+            for (let i = 0; i < 2; i++) chunks.push((await reader?.read())?.value);
+            await reader?.cancel();
+            expect(chunks).toEqual([
+                'event: keepalive\n\n',
+                `data: ${JSON.stringify({ type: SSEventType.SERVER_RESTART_NOTICE, notice: null })}\n\n`,
+            ]);
+        });
+
+        test('a stream opened during a notice sends it with the time left', async () => {
+            announceRestart(600, 'update', 'Back in five');
+            const stream = await openStream(ctx.alice.user.id);
+            const notice = await stream.notice();
+            await stream.close();
+            expect(notice).toEqual({ reason: 'update', message: 'Back in five', msLeft: expect.any(Number) });
+            expect(notice?.msLeft).toBeGreaterThan(590_000);
+        });
+
+        test("every user's open stream hears a notice and its clear", async () => {
+            const alice = await openStream(ctx.alice.user.id);
+            const bob = await openStream(ctx.bob.user.id);
+            expect([await alice.notice(), await bob.notice()]).toEqual([null, null]);
+            announceRestart(0, 'rollback', null);
+            const told = { reason: 'rollback', message: null, msLeft: 0 } as const;
+            expect([await alice.notice(), await bob.notice()]).toEqual([told, told]);
+            clearRestartNotice();
+            expect([await alice.notice(), await bob.notice()]).toEqual([null, null]);
+            await alice.close();
+            await bob.close();
         });
     });
 });

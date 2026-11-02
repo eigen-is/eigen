@@ -35,6 +35,6 @@ export type { ParsedContactInput } from './contact-input';
 export { parseContactInput } from './contact-input';
 export { EMAIL_FIND_REGEX, MAX_EMAIL_LENGTH, validateEmailAddress, validateEmailTarget } from './email';
 export { MIN_PASSWORD_LENGTH, validatePasswordStrength } from './password';
-export { RESTART_REASONS } from './restart';
+export { MAX_RESTART_MESSAGE_LENGTH, MAX_RESTART_WAIT_SECONDS, RESTART_REASONS } from './restart';
 export { CONTROL_CHARS, NO_CONTROL_PATTERN } from './text';
 export { ROLE_MAILBOX_LOCAL_PARTS, validateUsername } from './username';

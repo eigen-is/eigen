@@ -8,6 +8,7 @@ import { BACKUP_OPTIONS, BACKUP_USAGE, backup } from './backup';
 import { BOOTSTRAP_OPTIONS, BOOTSTRAP_USAGE, bootstrap } from './bootstrap';
 import { CONFIGURE_OPTIONS, CONFIGURE_USAGE, configure } from './configure';
 import { RESET_PASSWORD_OPTIONS, RESET_PASSWORD_USAGE, resetPassword } from './reset-password';
+import { RESTART_NOTICE_OPTIONS, RESTART_NOTICE_USAGE, restartNotice } from './restart-notice';
 import { RESTORE_OPTIONS, RESTORE_USAGE, restore } from './restore';
 import { setupLink } from './setup-link';
 import { STATUS_OPTIONS, STATUS_USAGE, status } from './status';
@@ -62,6 +63,7 @@ const COMMANDS = new Map<string, (args: string[]) => Promise<void>>([
         },
     ],
     ['update-check', (args) => updateCheck(parseFlags(args, UPDATE_CHECK_OPTIONS, UPDATE_CHECK_USAGE).values)],
+    ['restart-notice', (args) => restartNotice(parseFlags(args, RESTART_NOTICE_OPTIONS, RESTART_NOTICE_USAGE).values)],
 ]);
 
 const USAGE = `Usage: eigen <command> [flags]
@@ -74,7 +76,8 @@ Commands:
   setup-link       Print a fresh one-time setup link, or where to sign in once set up
   backup           Back up the whole server into backups/ while Eigen runs
   restore          Put a whole-server archive back (run by ./eigen restore)
-  update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)`;
+  update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)
+  restart-notice   Tell every open tab that Eigen restarts soon, or take that back (run by ./eigen update)`;
 
 const [command = '', ...args] = process.argv.slice(2);
 const run = COMMANDS.get(command);
