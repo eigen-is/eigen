@@ -15,6 +15,8 @@ export const A_NS = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export const PIC_NS = 'http://schemas.openxmlformats.org/drawingml/2006/picture';
 // Word 2010's shapes, a text box among them.
 export const WPS_NS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+// Word 2010's groups of shapes and pictures.
+export const WPG_NS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
 export const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
 export const DGM_NS = 'http://schemas.openxmlformats.org/drawingml/2006/diagram';
 export const TBL_NS = 'http://schemas.openxmlformats.org/drawingml/2006/table';

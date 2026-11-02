@@ -614,18 +614,26 @@ describe('size', () => {
             `<pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4">${LOCAL_DPI}</a:blip></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></pic:spPr></pic:pic>`;
         const box = (cx: number, cy: number) =>
             `<wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Beside it</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>`;
-        const group = (cx: number, cy: number, shapes: string) =>
-            `<w:r><w:drawing><wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9" name="Group 9"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}">${shapes}</wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
-        const sizesOf = async (body: string) =>
-            nodesOfType((await importDocxBody(body)).json, 'figure').map((node) => [
+        // A group lays its shapes out in its a:chExt and draws them at its a:ext. One with no chExt draws them as they are.
+        const grpSpPr = (cx: number, cy: number, chExt?: [number, number]) =>
+            `<wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/>${chExt ? `<a:chOff x="0" y="0"/><a:chExt cx="${chExt[0]}" cy="${chExt[1]}"/>` : ''}</a:xfrm></wpg:grpSpPr>`;
+        const group = (cx: number, cy: number, shapes: string, chExt?: [number, number]) =>
+            `<w:r><w:drawing><wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9" name="Group 9"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}">${grpSpPr(cx, cy, chExt)}${shapes}</wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const sizesOf = async (body: string, parts?: Parameters<typeof importDocxBody>[1]) =>
+            nodesOfType((await importDocxBody(body, parts)).json, 'figure').map((node) => [
                 node.attrs?.['width'],
                 node.attrs?.['height'],
+                ...(node.attrs?.['caption'] ? [node.attrs['caption']] : []),
             ]);
 
         test("a picture beside a text box keeps its own size, not the group's", async () => {
             expect(
                 await sizesOf(paragraph(group(6000000, 571500, `${pic(381000, 381000)}${box(5000000, 381000)}`))),
             ).toEqual([[40, 40]]);
+        });
+
+        test('a group with an empty chExt draws its picture as it is', async () => {
+            expect(await sizesOf(paragraph(group(190500, 190500, pic(381000, 381000), [0, 0])))).toEqual([[40, 40]]);
         });
 
         test('each of two pictures keeps its own size', async () => {
@@ -637,14 +645,37 @@ describe('size', () => {
             ]);
         });
 
-        // govuk-Shigellosis_interim_enhanced_surveil.docx: a 153 by 104 px logo grouped with a 484 px title box, the
-        // group 630 by 92 px.
-        test("the GOV.UK form's logo keeps its shape beside its title", async () => {
-            const [[width, height] = []] = await sizesOf(
-                paragraph(group(6000751, 878205, `${pic(1454376, 992778)}${box(4612074, 863566)}`)),
-            );
-            expect([width, height]).toEqual([153, 104]);
-            expect(Number(width) / Number(height)).toBeCloseTo(1.46, 1);
+        // govuk-Shigellosis_interim_enhanced_surveil.docx: a 153 by 104 px logo grouped with a 484 px title box, laid out
+        // 641 by 104 px and drawn 630 by 92 px, so Word draws the logo 150 by 92 px.
+        test("the GOV.UK form's logo is drawn at its group's scale", async () => {
+            expect(
+                await sizesOf(
+                    paragraph(
+                        group(6000751, 878205, `${pic(1454376, 992778)}${box(4612074, 863566)}`, [6108380, 992778]),
+                    ),
+                ),
+            ).toEqual([[150, 92]]);
+        });
+
+        test('a picture in a group shrunk to half is drawn at half its size, with its caption', async () => {
+            const caption =
+                '<wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="762000"/><a:ext cx="762000" cy="190500"/></a:xfrm></wps:spPr><wps:txbx><w:txbxContent><w:p><w:pPr><w:pStyle w:val="Caption"/></w:pPr><w:r><w:t>Figure 1</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>';
+            const half = group(381000, 476250, `${pic(762000, 762000)}${caption}`, [762000, 952500]);
+            const styles = '<w:style w:type="paragraph" w:styleId="Caption"><w:name w:val="caption"/></w:style>';
+            expect(await sizesOf(paragraph(half), { styles })).toEqual([[40, 40, 'Figure 1']]);
+        });
+
+        // The outer group halves the width, the inner one both sides, so the 160 px picture is drawn 40 by 80 px.
+        test('a picture in a group in a group takes the scale of both', async () => {
+            const inner = `<wpg:grpSp><wpg:cNvGrpSpPr/>${grpSpPr(762000, 762000, [1524000, 1524000])}${pic(1524000, 1524000)}</wpg:grpSp>`;
+            expect(await sizesOf(paragraph(group(381000, 762000, inner, [762000, 762000])))).toEqual([[40, 80]]);
+        });
+
+        // A canvas places its shapes in plain EMU, whatever its own extent.
+        test('a picture in a canvas keeps its own size', async () => {
+            const WPC = 'http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas';
+            const canvas = `<w:r><w:drawing><wp:inline><wp:extent cx="381000" cy="381000"/><wp:docPr id="9" name="Canvas 9"/><a:graphic><a:graphicData uri="${WPC}"><wpc:wpc xmlns:wpc="${WPC}"><wpc:bg/><wpc:whole/>${pic(762000, 762000)}</wpc:wpc></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+            expect(await sizesOf(paragraph(canvas))).toEqual([[80, 80]]);
         });
     });
 });
@@ -1586,6 +1617,14 @@ describe('charts', () => {
             charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height'], chart.attrs?.['caption']]),
         ).toEqual([[480, 288, 'Figure 1 Sales']]);
         expect(lines(json)).toEqual([]);
+    });
+
+    // A group laid out at twice the size it is drawn at draws its 480 by 288 px chart at 240 by 144 px.
+    test("a chart in a resized group is drawn at the group's scale", async () => {
+        const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+        const group = `<w:r><w:drawing><wp:inline><wp:extent cx="2286000" cy="1371600"/><wp:docPr id="11" name="Group 11"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}"><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2286000" cy="1371600"/><a:chOff x="0" y="0"/><a:chExt cx="4572000" cy="2743200"/></a:xfrm></wpg:grpSpPr><wpg:graphicFrame><wpg:xfrm><a:off x="0" y="0"/><a:ext cx="4572000" cy="2743200"/></wpg:xfrm><a:graphic><a:graphicData uri="${C_NS}"><c:chart xmlns:c="${C_NS}" r:id="rId20"/></a:graphicData></a:graphic></wpg:graphicFrame></wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const { json } = await imported(paragraph(group), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([[240, 144]]);
     });
 
     test("a chart the reader can't draw is a paragraph naming its kind with its title, a missing part one saying a chart", async () => {

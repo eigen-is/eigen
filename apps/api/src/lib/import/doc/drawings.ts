@@ -10,7 +10,22 @@ import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { blipEmbeds, diagramDrawingId, diagramTextBodies, IMAGE_MIME_BY_EXTENSION } from '../../ooxml/drawingml';
-import { A_NS, C_NS, DGM_NS, DSP_NS, EMU_PER_PX, isOn, O_NS, PIC_NS, R_NS, V_NS, W_NS, WP_NS } from '../../ooxml/ooxml';
+import {
+    A_NS,
+    C_NS,
+    DGM_NS,
+    DSP_NS,
+    EMU_PER_PX,
+    isAlternateContent,
+    isOn,
+    O_NS,
+    PIC_NS,
+    R_NS,
+    V_NS,
+    W_NS,
+    WP_NS,
+    WPG_NS,
+} from '../../ooxml/ooxml';
 import {
     CHART_NOT_IMPORTED,
     chartCost,
@@ -23,7 +38,7 @@ import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, ParagraphItem } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
-import { descendants, extentOf, floatSide, loneGraphic, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, loneGraphic, roundedInt, vmlPx, vmlStyle, wordAlternative } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
@@ -48,8 +63,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             continue;
         }
         const extent = xmlChild(frame, WP_NS, 'extent');
-        const pictures = descendants(frame, PIC_NS, 'pic');
-        const charts = chartsIn(frame, extent);
+        const { pictures, charts } = graphicsIn(frame, extent);
         // A picture in front of or behind the text may span the paper.
         const over = anchored && overText(frame, context);
         const room = over ? paperPx(reader) : reader.columnPx;
@@ -60,8 +74,7 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const figures: JSONContent[] = [];
-        const lone = loneGraphic(frame);
-        for (const picture of pictures) {
+        for (const { element: picture, ext, scale } of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg, raster] = blipEmbeds(blip);
             const name =
@@ -77,20 +90,15 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 if (svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
                 continue;
             }
-            // A picture alone in its drawing is drawn at the drawing's extent. One in a group or a canvas has its own,
-            // in its spPr: the blip's extLst holds an a:ext too, before it.
-            const spPr = xmlChild(picture, PIC_NS, 'spPr');
-            const xfrm = spPr && xmlChild(spPr, A_NS, 'xfrm');
-            const ext = picture === lone ? extent : xfrm && xmlChild(xfrm, A_NS, 'ext');
-            const { cx, cy } = extentOf(ext);
+            const { cx, cy } = drawnExtent(ext, scale);
             const size = cx ? pictureSize(cx / EMU_PER_PX, cy ? cy / EMU_PER_PX : null, room) : NO_SIZE;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, ...size, ...layout } });
             if (anchored && inBand) reader.lost('band-images-unanchored');
         }
-        for (const [reference, ext] of charts) {
+        for (const { element: reference, ext, scale } of charts) {
             const chart = readDocxChart(reader, reference, context.scope);
             if (inBody && 'parts' in chart) {
-                const { emuPerPx, ...size } = chartSize(ext, room);
+                const { emuPerPx, ...size } = chartSize(drawnExtent(ext, scale), room);
                 const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx, host: 'docx' });
                 figures.push({ type: 'chart', attrs: { ...chart.parts, ...look, ...size, ...layout } });
                 continue;
@@ -256,22 +264,59 @@ const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: nu
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
-// Each chart a drawing shows with the a:ext it is drawn at: alone, the drawing's extent; in a group or a canvas, its own
-// graphicFrame's. A text box's content is its own paragraphs', read with them.
-function chartsIn(frame: XmlElement, extent: XmlElement | undefined): [XmlElement, XmlElement | undefined][] {
-    const charts: [XmlElement, XmlElement | undefined][] = [];
-    const stack: [XmlElement, XmlElement | undefined][] = [[frame, extent]];
+// How much a drawing's groups scale what they hold, on each axis.
+type Scale = { x: number; y: number };
+
+// A picture or a chart a drawing shows, with the a:ext it is laid out at and the scale its groups draw that at.
+type Graphic = { element: XmlElement; ext: XmlElement | undefined; scale: Scale };
+
+// The pictures and the charts a drawing shows, in document order. A graphic alone in its drawing is drawn at the
+// drawing's extent. One in a group or a canvas has its own a:ext: a picture's is in its spPr, because the blip's extLst
+// holds an a:ext too, and a chart's is in its graphicFrame. A text box's content is its own paragraphs', read with them,
+// and of an mc:AlternateContent only the branch Word reads counts.
+function graphicsIn(frame: XmlElement, extent: XmlElement | undefined): { pictures: Graphic[]; charts: Graphic[] } {
+    const lone = loneGraphic(frame);
+    const pictures: Graphic[] = [];
+    const charts: Graphic[] = [];
+    const stack: Graphic[] = [{ element: frame, ext: extent, scale: { x: 1, y: 1 } }];
     for (let next = stack.pop(); next; next = stack.pop()) {
-        const [element, ext] = next;
-        if (hasXmlName(element, C_NS, 'chart')) charts.push(next);
+        const { element, ext, scale } = next;
+        if (hasXmlName(element, PIC_NS, 'pic')) {
+            const spPr = xmlChild(element, PIC_NS, 'spPr');
+            const xfrm = spPr && xmlChild(spPr, A_NS, 'xfrm');
+            pictures.push({ element, ext: element === lone ? extent : xfrm && xmlChild(xfrm, A_NS, 'ext'), scale });
+        } else if (hasXmlName(element, C_NS, 'chart')) charts.push(next);
         else if (!hasXmlName(element, W_NS, 'txbxContent')) {
             const xfrm =
                 element.local === 'graphicFrame' && xmlElements(element).find((child) => child.local === 'xfrm');
             const own = xfrm ? xmlChild(xfrm, A_NS, 'ext') : ext;
-            for (const child of xmlElements(element).reverse()) stack.push([child, own]);
+            const inner = groupScale(element, scale);
+            const children = isAlternateContent(element) ? wordAlternative(element) : xmlElements(element);
+            for (const child of children.reverse()) stack.push({ element: child, ext: own, scale: inner });
         }
     }
-    return charts;
+    return { pictures, charts };
+}
+
+// A group lays out what it holds in its a:chExt and draws that at its a:ext, so each axis scales by ext over chExt, as
+// Word draws a resized group. A group inside another multiplies its scale by the outer one's. A group that gives no
+// size on an axis scales nothing on it. A canvas is no group: it places what it holds in plain EMU.
+function groupScale(element: XmlElement, outer: Scale): Scale {
+    const spPr = xmlChild(element, WPG_NS, 'grpSpPr');
+    const xfrm = spPr && xmlChild(spPr, A_NS, 'xfrm');
+    if (!xfrm) return outer;
+    const drawn = extentOf(xmlChild(xfrm, A_NS, 'ext'));
+    const laid = extentOf(xmlChild(xfrm, A_NS, 'chExt'));
+    const ratio = (side: number, child: number) => (side > 0 && child > 0 ? side / child : 1);
+    return { x: outer.x * ratio(drawn.cx, laid.cx), y: outer.y * ratio(drawn.cy, laid.cy) };
+}
+
+// The size in whole EMU a graphic is drawn at: its a:ext times its groups' scale. Nested groups in a hostile file can
+// multiply a side past what a number holds. Such a side is 0, which every caller reads as no size.
+function drawnExtent(ext: XmlElement | undefined, scale: Scale): { cx: number; cy: number } {
+    const { cx, cy } = extentOf(ext);
+    const side = (emu: number, by: number) => (Number.isFinite(emu * by) ? Math.round(emu * by) : 0);
+    return { cx: side(cx, scale.x), cy: side(cy, scale.y) };
 }
 
 // The chart a c:chart names, read once per part: its spec, or the words for a chart the reader can't draw, a part
@@ -293,8 +338,10 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
 
 // Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
 // that size is drawn at in the file.
-function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
-    const { cx, cy } = extentOf(ext);
+function chartSize(
+    { cx, cy }: { cx: number; cy: number },
+    columnPx: number,
+): { width: number; height: number; emuPerPx: number } {
     const drawn = cx > 0 && cy > 0;
     const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
     const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
@@ -403,7 +450,7 @@ function overText(anchor: XmlElement, context: RunContext): boolean {
 function drawnWidth(anchor: XmlElement, room: number): number | undefined {
     const extent = xmlChild(anchor, WP_NS, 'extent');
     const only = loneGraphic(anchor);
-    if (only && hasXmlName(only, C_NS, 'chart')) return chartSize(extent, room).width * EMU_PER_PX;
+    if (only && hasXmlName(only, C_NS, 'chart')) return chartSize(extentOf(extent), room).width * EMU_PER_PX;
     if (loneTextBox(anchor)) return textBoxWidth(extent, room) * EMU_PER_PX;
     const { cx } = extentOf(extent);
     const width = cx ? pictureSize(cx / EMU_PER_PX, null, room).width : null;
