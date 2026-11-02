@@ -125,8 +125,8 @@ describe('Server backup job', () => {
             const sidecar = await readServerSidecar(archivePath);
             expect(sidecar?.state).toBe('done');
             expect(sidecar?.verify?.status).toBe('verified');
-            // ./eigen reads it on the host as the operator, who need not be the API's user, to see a backup run.
-            expect(statSync(serverSidecarPath(archivePath)).mode & 0o777).toBe(0o666 & ~process.umask());
+            // For the API's user alone, like the archive it describes.
+            expect(statSync(serverSidecarPath(archivePath)).mode & 0o777).toBe(0o600);
             expect(alertTitlesTo(relay, ctx.alice.user.id)).toEqual([]);
 
             // A member copied into the backups folder is an ordinary artifact of its home.

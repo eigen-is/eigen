@@ -201,9 +201,8 @@ export function serverSidecarPath(archivePath: string): string {
 }
 
 // Writes the JSON record beside an archive, its sidecar. It is written in the staging folder and renamed into
-// place, so a reader never sees half of one. The two-space indent matters: ./eigen finds a server sidecar's
-// top-level "state" line by it. Without a `mode` the file keeps the umask's mode.
-export async function writeRecord(target: string, value: unknown, mode?: number): Promise<void> {
+// place, so a reader never sees half of one.
+export async function writeRecord(target: string, value: unknown, mode: number): Promise<void> {
     const tempPath = getBackupTempPath('.json');
     try {
         await fsp.writeFile(tempPath, JSON.stringify(value, null, 2), { mode });

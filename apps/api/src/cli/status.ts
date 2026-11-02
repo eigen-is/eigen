@@ -1,6 +1,7 @@
 // ./eigen status: one report on the install, from what the launcher gathers on the host (the services, the mail
 // queue, the newest release) and what the running API answers on its control socket (such as backups, disk and the
-// certificate). With Eigen stopped it still reports, reading the backup names in backups/.
+// certificate). With Eigen stopped it still reports, reading the backup names in backups/. With --running it only
+// says what runs of a server backup, which the launcher asks before it stops Eigen.
 
 import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
@@ -27,6 +28,7 @@ const CERT_WARN_DAYS = 14;
 // - --files is the build the launcher and Compose files were last written from. The launcher passes it only when it
 //   differs from the build .env.production pins, which means an update stopped halfway.
 // - --backups lists the backups folder, for the Backup row while the API does not run.
+// - --running prints no report, only what runs of a server backup, which the launcher waits for before a stop.
 export const STATUS_OPTIONS = {
     install: { type: 'string' },
     services: { type: 'string' },
@@ -34,11 +36,14 @@ export const STATUS_OPTIONS = {
     'mail-queue': { type: 'string' },
     backups: { type: 'string' },
     files: { type: 'string' },
+    running: { type: 'boolean' },
 } as const;
 export const STATUS_USAGE = `Usage: status [--install=…] [--services=…] [--latest=…] [--mail-queue=…] [--backups=…]
               [--files=…]
+       status --running
 
-Reports on the running server with what ./eigen status gathers from Docker and the host.`;
+Reports on the running server with what ./eigen status gathers from Docker and the host.
+--running prints the server backup and the uploads that run on one line, and nothing when none does.`;
 
 type StatusFlags = ReturnType<typeof parseArgs<{ options: typeof STATUS_OPTIONS }>>['values'];
 
@@ -46,6 +51,7 @@ const NO_BACKUP_YET = 'none yet; ./eigen backup makes one';
 
 // The launcher runs this in the API container while eigen-api runs, and on its own when it does not.
 export async function status(flags: StatusFlags): Promise<void> {
+    if (flags.running) return printRunning();
     const services = (flags.services ?? '')
         .split('\n')
         .filter(Boolean)
@@ -69,6 +75,18 @@ export async function status(flags: StatusFlags): Promise<void> {
         ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
     }
     printReport(flags, services, await res.json());
+}
+
+// One line, such as "the server backup <archive> and the upload of <archive>", that the launcher puts in its wait.
+async function printRunning(): Promise<void> {
+    const ui = await createUi(true);
+    const res = await callControl('/status', ui.fail);
+    if (!res.ok) ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
+    const { backup }: ControlStatus = await res.json();
+    const running = backup.running.map(({ kind, archive }) =>
+        kind === 'upload' ? `the upload of ${archive}` : `the server backup ${archive}`,
+    );
+    if (running.length > 0) console.log(running.join(' and '));
 }
 
 // Without the API, the report holds what the launcher knows.

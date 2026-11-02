@@ -132,7 +132,7 @@ export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => 
 
 // A server backup and an archive's upload are the owner's alone: they name a server archive, which holds every
 // home's mail, password hashes and mount keys.
-export function isServerJob(kind: BackupJob['kind']): boolean {
+export function isServerJob(kind: BackupJob['kind']): kind is 'server-backup' | 'upload' {
     return kind === 'server-backup' || kind === 'upload';
 }
 
