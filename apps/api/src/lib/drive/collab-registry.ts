@@ -10,7 +10,7 @@ import type { Mount } from '../mount';
 import type { Drive } from './drive';
 
 export class CollabRegistry {
-    private documents = new Map<string, () => Promise<CollabDocument>>();
+    private readonly documents = new Map<string, () => Promise<CollabDocument>>();
     // Set by destructAll. A document opened after it would never be destructed, and closing the mount
     // next would close its database under it.
     private destructed = false;
@@ -22,11 +22,7 @@ export class CollabRegistry {
     // key counts the trashes that guard it, because two trashes of nested paths can overlap.
     private readonly trashing = new Map<string, number>();
 
-    public constructor(private ownerId: string) {}
-
-    private key(mountId: string, pathId: string): string {
-        return `${this.ownerId}.${mountId}.${pathId}`;
-    }
+    public constructor(private readonly ownerId: string) {}
 
     public has(mountId: string, pathId: string): boolean {
         return this.documents.has(this.key(mountId, pathId));
@@ -150,5 +146,9 @@ export class CollabRegistry {
                 console.error(`Failed to close document ${key}:`, error);
             }
         }
+    }
+
+    private key(mountId: string, pathId: string): string {
+        return `${this.ownerId}.${mountId}.${pathId}`;
     }
 }
