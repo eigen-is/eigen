@@ -123,7 +123,7 @@ function CalendarConfigForm({
                 footerStart={
                     calendar &&
                     !calendar.isDefault && (
-                        <Button type="button" variant="destructive" onClick={onDelete}>
+                        <Button variant="destructive" onClick={onDelete}>
                             Delete
                         </Button>
                     )

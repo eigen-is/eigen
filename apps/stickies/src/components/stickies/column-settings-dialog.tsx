@@ -79,7 +79,7 @@ export function ColumnSettingsDialog({
                     submitLabel="Save changes"
                     onSubmit={handleSubmit}
                     footerStart={
-                        <Button type="button" variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
+                        <Button variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
                             Delete column
                         </Button>
                     }
