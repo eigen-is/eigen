@@ -198,15 +198,16 @@ export function useMailActions() {
         return { needsConfirmation: false as const };
     };
 
-    // Permanent-delete fan-out: navigate on any success, and return the still-FAILED emails so the
-    // route can narrow the retained set and keep the promise-aware DeleteDialog open on exactly those
-    // (retry then re-hits only the failed ids, not the already-deleted ones). Each mutation reports its
-    // own failure via onMutationError.
-    const confirmDeleteEmails = async (pendingEmails: Email[]): Promise<Email[]> => {
-        if (pendingEmails.length === 0) return [];
+    // The permanent-delete DeleteDialog's action. It navigates on any success. On a failure, `keepFailed` narrows the
+    // dialog to the emails still there, so a retry asks only for those, and the first failure is rethrown. Its mutation
+    // already toasted it, so the dialog stays open without a second message, or closes if the server refused it.
+    const confirmDeleteEmails = async (pendingEmails: Email[], keepFailed: (failed: Email[]) => void) => {
         const results = await Promise.allSettled(pendingEmails.map((mail) => deleteMail.mutateAsync(mail)));
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
-        return pendingEmails.filter((_, i) => results[i].status === 'rejected');
+        const failure = results.find((r) => r.status === 'rejected');
+        if (!failure) return;
+        keepFailed(pendingEmails.filter((_, i) => results[i].status === 'rejected'));
+        throw failure.reason;
     };
 
     // Fan-out batch: build the success toast, Undo slot and navigation from the FULFILLED results only.

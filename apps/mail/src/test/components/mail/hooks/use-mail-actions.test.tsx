@@ -1,14 +1,16 @@
 // A forward's parts ride in history state until a saved draft holds them all. The first save can run while one
-// still uploads, so its URL rewrite keeps them, and a reload before the next save attaches them again.
+// still uploads, so its URL rewrite keeps them, and a reload before the next save attaches them again. A permanent
+// delete that fails for some emails keeps the dialog open on exactly those, beside the toasts their failures showed.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { NavigateOptions } from '@tanstack/react-router';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
+import type { Email } from '@workspace/lib/types/mail';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
 
-const { createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
 const realRouter = await import('@tanstack/react-router');
 const realRoute = await import('../../../../routes/_auth.$filterType.$filterId');
 
@@ -23,13 +25,26 @@ mock.module('../../../../routes/_auth.$filterType.$filterId', () => ({
     Route: { fullPath: realRoute.Route.fullPath, useParams: () => params },
 }));
 
+// The server deletes every message but m2.
+const realFetch = globalThis.fetch;
+globalThis.fetch = Object.assign(
+    async (input: string | URL | Request, init?: RequestInit) => {
+        const url = String(input);
+        if (init?.method !== 'DELETE' || !url.includes('/message/')) throw new TypeError('A hook test has no network');
+        return url.endsWith('/message/m2') ? new Response('Boom', { status: 500 }) : new Response('{}');
+    },
+    { preconnect: () => {} },
+);
+
 afterAll(() => {
+    globalThis.fetch = realFetch;
     mock.module('@tanstack/react-router', () => realRouter);
     mock.module('../../../../routes/_auth.$filterType.$filterId', () => realRoute);
 });
 
 const { AuthProvider } = await import('@workspace/lib/auth');
 const { useMailActions } = await import('../../../../components/mail/hooks/use-mail-actions');
+const { DeleteDialog } = await import('@workspace/ui/components/delete/delete-dialog');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -69,4 +84,56 @@ test('a saved draft that holds the forwarded parts drops them and keeps the comp
     const after = state({ __TSR_index: 0, forwardedParts: [part], composeSessionKey: 'session-1' });
     expect(after.forwardedParts).toBeUndefined();
     expect(after.composeSessionKey).toBe('session-1');
+});
+
+function trashed(id: string): Email {
+    return {
+        id,
+        filename: `${id}.eml`,
+        subject: id,
+        fromShort: 'Alice',
+        fromAddress: 'alice@test.eigen.is',
+        toShort: 'Bob',
+        toAddress: 'bob@test.eigen.is',
+        recipientsAll: 'bob@test.eigen.is',
+        textShort: '',
+        date: new Date('2026-09-15T10:00:00Z'),
+        isRead: true,
+        isFlagged: false,
+        isDraft: false,
+        isReplied: false,
+        hasAttachments: false,
+        mailbox: 'Trash',
+        size: 100,
+        attachments: [],
+        html: null,
+    };
+}
+
+test('a permanent delete that fails for one email keeps the dialog open on that email, quietly', async () => {
+    const onOpenChange = mock((_open: boolean) => {});
+    const seen: { pending: Email[] } = { pending: [] };
+    function Route() {
+        const actions = useMailActions();
+        const [pending, setPending] = useState([trashed('m1'), trashed('m2')]);
+        seen.pending = pending;
+        return createElement(DeleteDialog, {
+            open: true,
+            onOpenChange,
+            title: 'Delete 2 emails',
+            description: 'Are you sure',
+            onDelete: () => actions.confirmDeleteEmails(pending, setPending),
+        });
+    }
+    ({ unmount } = await renderInDocument(createElement(AuthProvider, null, createElement(Route))));
+    const del = [...document.querySelectorAll('[role="dialog"] button')].find((b) => b.textContent === 'Delete');
+    if (!del) throw new Error('no Delete button');
+
+    // bun fails a test on an unhandled rejection, which is what a click leaves when the dialog rethrows its error.
+    await act(async () => {
+        del.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+
+    expect(seen.pending.map((e) => e.id)).toEqual(['m2']);
+    expect(onOpenChange).not.toHaveBeenCalled();
 });
