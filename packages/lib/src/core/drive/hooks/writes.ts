@@ -1,6 +1,7 @@
 // The hooks that change Drive, such as create, upload, copy, move, rename and delete. Each one sends its
 // request per item and then calls the invalidators for the listings the change makes stale. When only part
-// of a batch goes through, the hook throws an error that says which items did, so a dialog can retry the rest.
+// of a batch goes through, the hook says which items did, so a dialog can retry the rest and an editor can
+// keep what landed.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -92,7 +93,7 @@ export function useDeletePaths() {
     const queryClient = useQueryClient();
     const { user } = useAuth();
     return useMutation({
-        mutationFn: async (paths: DrivePath[]) => {
+        mutationFn: async (paths: readonly DrivePath[]) => {
             const results = await Promise.allSettled(
                 paths.map(async (path) => {
                     const response = await driveApi({ ownerId: path.ownerId })({ mountId: path.mountId })
@@ -198,6 +199,27 @@ export function useCopyToFolder() {
                         window.location.href = getDriveAppUrl(`fs/${targetOwnerId}/${targetMountId}/${targetParentId}`);
                     },
                 },
+            });
+        },
+        onError: onMutationError,
+    });
+}
+
+// Copies files into the media folder of a document or a chat. When only part of the batch copies, the
+// toast says so and the copies that landed come back, so the caller can still use them. When nothing
+// copies it throws, so a caller such as a card's Save can stop.
+export function useCopyToMediaFolder(ownerId: string, mountId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: ({ paths, mediaFolderId }: { paths: readonly DrivePath[]; mediaFolderId: string }) => {
+            const target = { targetOwnerId: ownerId, targetMountId: mountId, targetParentId: mediaFolderId };
+            return copyEach(
+                queryClient,
+                paths.map((source) => ({ source, ...target })),
+            ).catch((error: unknown) => {
+                if (!(error instanceof PartialCopyError)) throw error;
+                onMutationError(error);
+                return error.copied;
             });
         },
         onError: onMutationError,

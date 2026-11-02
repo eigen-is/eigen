@@ -9,7 +9,7 @@ import { commentIndicatorColor } from '@workspace/lib/constants/comment-indicato
 import {
     isPendingMediaName,
     MediaResolverProvider,
-    useCopyPaths,
+    useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
     useZombieMediaSweep,
@@ -117,7 +117,7 @@ function SheetEditorInner({
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
-    const { mutateAsync: copyPaths } = useCopyPaths();
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
         useMediaResolver();
@@ -273,8 +273,7 @@ function SheetEditorInner({
     const handleImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
-            const target = { targetOwnerId: ownerId, targetMountId: path.mountId, targetParentId: mediaFolderId };
-            const result = await copyPaths([{ source: paths[0], ...target }]).catch(() => null);
+            const result = await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null);
             if (!result?.[0]) return;
             // Measure through the copy's own path. A lookup by name reads the media listing from before
             // the copy, misses the new file, and would size the image from the default box.
@@ -282,7 +281,7 @@ function SheetEditorInner({
             const { width, height } = fitToPane(intrinsic);
             workbookRef.current?.insertImage(result[0].name, width, height);
         },
-        [mediaFolderId, copyPaths, ownerId, path.mountId, resolveMediaUrlByPath, fitToPane],
+        [mediaFolderId, copyToMediaFolder, resolveMediaUrlByPath, fitToPane],
     );
 
     const handleSaveNew = useCallback(

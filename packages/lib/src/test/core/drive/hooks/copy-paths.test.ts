@@ -1,5 +1,6 @@
 // A batch copy keeps what copied when part of it fails, and says which sources failed and why, so a retry sends
-// only those and nothing lands twice. Copy to… and Save to Drive also say how many items copied.
+// only those and nothing lands twice. Copy to… and Save to Drive also say how many items copied, and a media
+// insert uses what copied.
 import { beforeEach, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '../../../../types/drive';
 import { renderHook } from '../../../render-hook';
@@ -51,15 +52,15 @@ beforeEach(() => {
 
 // useCopyPaths sends each source to targetOf(source), which is the media folder unless a test says otherwise.
 async function copy(
-    hook: 'paths' | 'folder',
+    hook: 'paths' | 'folder' | 'media',
     sources: DrivePath[],
     targetOf: (source: DrivePath) => typeof TARGET = () => TARGET,
 ): Promise<{ result: DrivePath[] | null; error: unknown; invalidated: readonly unknown[][] }> {
     const { act } = await import('react');
-    const { useCopyPaths, useCopyToFolder } = await import('../../../../core/drive/hooks/writes');
+    const { useCopyPaths, useCopyToFolder, useCopyToMediaFolder } = await import('../../../../core/drive/hooks/writes');
     const { queryClient, invalidated } = trackingClient();
     const { latest, unmount } = await renderHook(
-        () => ({ paths: useCopyPaths(), folder: useCopyToFolder() }),
+        () => ({ paths: useCopyPaths(), folder: useCopyToFolder(), media: useCopyToMediaFolder(OWNER, 'm1') }),
         queryClient,
     );
     const outcome: { result: DrivePath[] | null; error: unknown } = { result: null, error: null };
@@ -67,7 +68,9 @@ async function copy(
         const done =
             hook === 'paths'
                 ? latest.paths.mutateAsync(sources.map((source) => ({ source, ...targetOf(source) })))
-                : latest.folder.mutateAsync({ items: sources, ...TARGET });
+                : hook === 'folder'
+                  ? latest.folder.mutateAsync({ items: sources, ...TARGET })
+                  : latest.media.mutateAsync({ paths: sources, mediaFolderId: TARGET.targetParentId });
         await done.then(
             (result) => {
                 outcome.result = result;
@@ -142,5 +145,22 @@ describe('useCopyToFolder', () => {
         const { error } = await copy('folder', [GOOD, BAD]);
         expect(error).toBeInstanceOf(PartialCopyError);
         expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
+    });
+});
+
+describe('useCopyToMediaFolder', () => {
+    test('a partial failure says why and still returns the copies that landed', async () => {
+        const { result, error } = await copy('media', [GOOD, BAD]);
+        expect(error).toBeNull();
+        expect(result?.map((p) => p.id)).toEqual(['copy-of-good']);
+        expect(toasts).toEqual(['error: Failed to copy 1 of 2 items: Server error (500)']);
+    });
+
+    // A card's Save stops when its attachment did not copy.
+    test('a total failure rejects with the server error', async () => {
+        const { AppError } = await import('../../../../core/api-error');
+        const { error } = await copy('media', [BAD]);
+        expect(error).toBeInstanceOf(AppError);
+        expect(toasts).toEqual(['error: Server error (500)']);
     });
 });

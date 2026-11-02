@@ -41,8 +41,7 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import {
     isPendingMediaName,
-    PartialCopyError,
-    useCopyPaths,
+    useCopyToMediaFolder,
     useMediaResolver,
     useUploadFile,
     useZombieMediaSweep,
@@ -141,7 +140,7 @@ function normalizeFontFamilyMarks(editor: Editor) {
 // settles: the body's editor is built anew when its handlers change, so the name swaps in whichever holds the doc then.
 export function useDocMedia(path: DrivePath) {
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
-    const { mutateAsync: copyPaths } = useCopyPaths();
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(path.ownerId, path.mountId);
     const { mediaFolderId, startUpload, resolveMediaPath } = useMediaResolver();
 
     // `settle` holds the doc's fragment once the upload lands: for an image put in a note, the body, which holds every
@@ -170,10 +169,7 @@ export function useDocMedia(path: DrivePath) {
         },
         insertFromDrive: async (editor: () => Editor | null, paths: DrivePath[]) => {
             if (!mediaFolderId) return;
-            const target = { targetOwnerId: path.ownerId, targetMountId: path.mountId, targetParentId: mediaFolderId };
-            const results = await copyPaths(paths.map((source) => ({ source, ...target }))).catch((error) =>
-                error instanceof PartialCopyError ? error.copied : null,
-            );
+            const results = await copyToMediaFolder({ paths, mediaFolderId }).catch(() => null);
             const settled = editor();
             if (!results || !settled || settled.isDestroyed) return;
             for (const result of results) {
@@ -194,12 +190,7 @@ export function useDocMedia(path: DrivePath) {
             const target = editor();
             if (!mediaFolderId || !target || paths.length === 0) return;
             const replaced = target.getAttributes('figure').mediaName;
-            const destination = {
-                targetOwnerId: path.ownerId,
-                targetMountId: path.mountId,
-                targetParentId: mediaFolderId,
-            };
-            const result = await copyPaths([{ source: paths[0], ...destination }]).catch(() => null);
+            const result = await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null);
             const settled = editor();
             // The selection may have left the figure during the copy. The copied file then stays in media/, unused.
             if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {
