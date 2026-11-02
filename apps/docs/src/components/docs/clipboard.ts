@@ -5,7 +5,7 @@
 import type { Editor, JSONContent } from '@tiptap/core';
 import type { Node as ProseMirrorNode } from '@tiptap/pm/model';
 import type { EditorView } from '@tiptap/pm/view';
-import { CHART_DEFAULT_SIZE, newChartSpecParts } from '@workspace/lib/charts';
+import { newChartSpecParts } from '@workspace/lib/charts';
 import type { ClipboardBox } from '@workspace/lib/clipboard';
 import {
     buildChartClipboardItem,
@@ -19,6 +19,7 @@ import {
 import { getFontName, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { FigureAttrs, TitleType } from '@workspace/lib/docs/eigendoc';
 import {
+    chartBox,
     ITALIC_HEADING_LEVELS,
     ITALIC_HEADING_SELECTOR,
     isStoryNode,
@@ -72,9 +73,7 @@ function textRunBox(view: EditorView, from: number, to: number): ClipboardBox {
 // A chart node as another app reads it, its look included: what a copy writes and Download image draws.
 export function chartClipboardItem(node: ProseMirrorNode): EigenClipboardChartItem | null {
     const attrs = readChartAttrs(node.attrs);
-    const { width, height } = attrs;
-    const box = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
-    return buildChartClipboardItem({ chart: node.attrs, box, look: attrs });
+    return buildChartClipboardItem({ chart: node.attrs, box: chartBox(attrs), look: attrs });
 }
 
 // The eigen items a copy of `from`..`to` writes, in document order: an image item per figure whose file

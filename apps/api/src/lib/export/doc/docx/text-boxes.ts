@@ -5,10 +5,10 @@
 // does in Eigen.
 
 import type { JSONContent } from '@tiptap/core';
-import { CHART_DEFAULT_SIZE } from '@workspace/lib/charts';
 import { DOCUMENT_LINE_RATIO, readFontSize } from '@workspace/lib/constants/fonts';
 import type { TextBoxAttrs } from '@workspace/lib/docs/eigendoc';
 import {
+    chartBox,
     flattenNestedStories,
     isPositioned,
     ptToPx,
@@ -138,9 +138,8 @@ function largestRun(node: JSONContent): number {
 // drawing writer sizes them. A picture with no media to draw adds nothing, as the writer drops it.
 function figuresHeight(node: JSONContent, column: number, pkg: Package): number {
     if (node.type === 'chart') {
-        const { width, height } = readChartAttrs(node.attrs ?? {});
-        const natural = width ?? CHART_DEFAULT_SIZE.width;
-        return (Math.min(natural, column) * (height ?? CHART_DEFAULT_SIZE.height)) / natural;
+        const { width, height } = chartBox(readChartAttrs(node.attrs ?? {}));
+        return (Math.min(width, column) * height) / width;
     }
     if (node.type === 'figure') {
         const attrs = readFigureAttrs(node.attrs ?? {});

@@ -4,8 +4,8 @@
 
 import type { NodeViewProps } from '@tiptap/react';
 import { ReactNodeViewRenderer } from '@tiptap/react';
-import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
-import { ChartNode, chartSvg, readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { readChartSpec } from '@workspace/lib/charts';
+import { ChartNode, chartBox, chartSvg, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import type { Box } from '@workspace/lib/vector';
 import { useCallback, useMemo } from 'react';
 import type { FigureFrameOptions, FigureSize } from './figure-frame';
@@ -36,11 +36,11 @@ function ChartView(props: NodeViewProps) {
     const { onEditData }: ChartOptions = extension.options;
     // node.attrs is a new object only when an attribute changes, a part's and the look's among them.
     const attrs = useMemo(() => readChartAttrs(node.attrs), [node.attrs]);
-    const { width, height, layout } = attrs;
+    const { layout } = attrs;
     const isEditable = editor.isEditable;
 
     const locked = aspectLockedIn(decorations, 'chart');
-    const stored = { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
+    const stored = chartBox(attrs);
     const ratio = locked ? stored.width / stored.height : null;
 
     const getMaxWidth = useCallback(() => figureMaxWidth(editor, layout), [editor, layout]);

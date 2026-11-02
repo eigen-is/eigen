@@ -14,7 +14,7 @@ export type { Border, BorderStyle } from './nodes/border';
 export { BORDER_STYLES, borderValue, fitBorderPx, MAX_BORDER_PX, MIN_BORDER_PX, readBorder } from './nodes/border';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
-export { ChartNode, chartSvg, readChartAttrs } from './nodes/chart';
+export { ChartNode, chartBox, chartSvg, readChartAttrs } from './nodes/chart';
 export { CommentMarkSchema } from './nodes/comment-mark';
 export { EquationNode, equationMath, parseMathml, readEquation } from './nodes/equation';
 export type { Equation } from './nodes/equation-paste';
