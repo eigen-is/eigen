@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, tick boxes, checkboxes, data-validation]
 related: [sheets/data-validation, sheets/enter-and-edit-data]
 order: 55
-updated: 2026-09-13
+updated: 2026-11-02
 ---
 
 A tick box turns a cell into a box you click instead of a cell you type `TRUE` or `FALSE` into. Use them for checklists, or for a column that marks which rows are done.
@@ -37,12 +37,12 @@ If a cell in the range holds something else, such as a word, the box appears and
 
 ## Use your own values instead
 
-**Insert → Tick box** is a shortcut for the **Checkbox** validation rule with `TRUE` and `FALSE` as its two values. To use a different pair, such as `Yes` and `No`, set the rule up in **Data → Data verification** instead and fill in the **Selected** and **Not selected** values. A box with custom values shows its value next to the box, so you can tell one state from the other. See [Set up data validation](/support/sheets/data-validation).
+**Insert → Tick box** is a shortcut for the **Checkbox** validation rule with `TRUE` and `FALSE` as its two values. To use a different pair, such as `Yes` and `No`, set the rule up in **Data → Data validation** instead and fill in the **Selected** and **Not selected** values. A box with custom values shows its value next to the box, so you can tell one state from the other. See [Set up data validation](/support/sheets/data-validation).
 
 ## Remove tick boxes
 
 1. Select the cells.
-2. Open **Data → Data verification**.
-3. Click **Delete verification**.
+2. Open **Data → Data validation**.
+3. Click **Delete validation**.
 
 The boxes go away, and the values stay: a cell that was ticked now reads `TRUE`. To clear those as well, keep the cells selected and press Delete.
