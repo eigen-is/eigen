@@ -1,31 +1,38 @@
+// How the sheet opens its dialogs in the one slot ModalProvider holds: a notice or a yes or no, such as a refused edit
+// or a delete confirm, a dialog on FormDialog such as Custom sort, a dialog in the shared shell, or the range picker
+// that leaves the grid usable. A dialog on FormDialog takes its open and close from useDialogProps.
+
 import { Button } from '@workspace/ui/components/button';
-import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogDescription, DialogFooter } from '@workspace/ui/components/dialog';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import type { ModalOptions } from '../context/modal';
-import { ModalContext } from '../context/modal';
+import type { DialogProps, ModalOptions } from '../context/modal';
+import { DialogPropsContext, ModalContext } from '../context/modal';
 
 export function useDialog() {
     const { showModal, hideModal } = useContext(ModalContext);
 
+    // With a type, the content is the message of a notice, and onOk runs before the notice closes.
     const showDialog = useCallback(
-        (
-            content: string | React.ReactNode,
-            type?: 'ok' | 'yesno',
-            onOk: () => void = hideModal,
-            onCancel: () => void = hideModal,
-        ) => {
+        (content: React.ReactNode, type?: 'ok' | 'yesno', onOk?: () => void) => {
             if (type) {
                 showModal(
-                    <DialogWrapper type={type} onOk={onOk} onCancel={onCancel}>
+                    <NoticeDialog type={type} onOk={onOk}>
                         {content}
-                    </DialogWrapper>,
+                    </NoticeDialog>,
+                    { ownsDialog: true },
                 );
             } else {
                 showModal(content);
             }
         },
-        [hideModal, showModal],
+        [showModal],
+    );
+
+    const showFormDialog = useCallback(
+        (content: React.ReactNode) => showModal(content, { ownsDialog: true }),
+        [showModal],
     );
 
     const showNonModalDialog = useCallback(
@@ -35,36 +42,44 @@ export function useDialog() {
         [showModal],
     );
 
-    return { showDialog, showNonModalDialog, hideDialog: hideModal };
+    return { showDialog, showFormDialog, showNonModalDialog, hideDialog: hideModal };
 }
 
-function DialogWrapper({
+// The open and close of the dialog in the slot, for its FormDialog to spread.
+export function useDialogProps(): DialogProps {
+    return useContext(DialogPropsContext);
+}
+
+function NoticeDialog({
     type,
     onOk,
-    onCancel,
     children,
 }: {
     type: 'ok' | 'yesno';
     onOk?: () => void;
-    onCancel?: () => void;
-    children?: React.ReactNode;
+    children: React.ReactNode;
 }) {
+    const dialogProps = useDialogProps();
+    const close = () => dialogProps.onOpenChange(false);
+
     return (
-        <>
-            <DialogHeader>
-                <DialogTitle className="text-base">Notice</DialogTitle>
-            </DialogHeader>
+        <FormDialog {...dialogProps} title="Notice" size="md">
             <DialogDescription className="text-foreground">{children}</DialogDescription>
             <DialogFooter>
                 {type === 'yesno' && (
-                    <Button variant="outline" size="sm" onClick={onCancel}>
+                    <Button variant="outline" onClick={close}>
                         Cancel
                     </Button>
                 )}
-                <Button size="sm" onClick={onOk}>
+                <Button
+                    onClick={() => {
+                        onOk?.();
+                        close();
+                    }}
+                >
                     OK
                 </Button>
             </DialogFooter>
-        </>
+        </FormDialog>
     );
 }

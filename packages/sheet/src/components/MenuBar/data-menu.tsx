@@ -1,3 +1,6 @@
+// The menu bar's Data menu: sorting the selection, a filter, data verification and splitting text into columns. Each
+// item runs its action on the workbook or opens its dialog.
+
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -17,7 +20,7 @@ import { SplitColumn } from '../SplitColumn';
 
 export function DataMenu() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showDialog, showFormDialog } = useDialog();
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
@@ -33,7 +36,7 @@ export function DataMenu() {
                         Descending
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showDialog(<CustomSort />)}>Custom sort</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => showFormDialog(<CustomSort />)}>Custom sort</DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
@@ -46,7 +49,7 @@ export function DataMenu() {
             <DropdownMenuSeparator />
 
             <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showFormDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
         </>
     );
 }

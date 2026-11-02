@@ -208,10 +208,10 @@ function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
 }
 
 function ResizeItem({ type, label }: { type: RowColType; label: string }) {
-    const { showDialog } = useDialog();
+    const { showFormDialog } = useDialog();
     const Icon = type === 'row' ? MoveVertical : MoveHorizontal;
     return (
-        <DropdownMenuItem onClick={() => showDialog(<ResizeDialog mode={type} />)}>
+        <DropdownMenuItem onClick={() => showFormDialog(<ResizeDialog mode={type} />)}>
             <Icon className="size-4" />
             {label}
         </DropdownMenuItem>
@@ -279,8 +279,8 @@ function ImageItem() {
     );
 }
 
-// Insert -> Tick box reads as a create verb; the first instinct for turning an
-// existing TRUE/FALSE column into tick boxes is the cell menu. Same action.
+// The same action as Insert › Tick box. Someone who wants to turn a column of TRUE and FALSE into tick boxes looks
+// in the cell's menu first, not under a menu that reads as creating something.
 function TickBoxItem() {
     const { context, setContext } = useContext(WorkbookContext);
     return (
@@ -410,12 +410,11 @@ function ColumnMenu() {
 
 export type SheetMenuArea = 'cell' | 'row' | 'column';
 
-// The state layer names right-click regions by surface, the menus by axis.
+// The state layer names the right-click areas by the surface clicked, and the menus by the axis.
 const STATE_AREA = { cell: 'cell', row: 'rowHeader', column: 'columnHeader' } as const;
 
-// One menu instance per area, reused for every right-click in that region. The
-// returned onContextMenu runs the selection logic and anchors the menu at the
-// cursor (shared ContextMenuAnchor → DropdownMenu).
+// One menu per area, reused for every right click in it. The onContextMenu it returns selects what was clicked and
+// opens the shared ContextMenuAnchor at the pointer.
 export function useSheetContextMenu(area: SheetMenuArea) {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const contextMenu = useContextMenu<boolean>();
@@ -434,8 +433,8 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         [allowEdit, setContext, refs.cellArea, area, openMenu],
     );
 
-    // Long-press (touch) entry: same select-then-open flow, positioned at viewport coords. The state
-    // layer works in page coords, so add the scroll offset back on.
+    // A long press on touch selects and opens the same way, at a point on screen. The state layer works in page
+    // coordinates, so the scroll offset is added back.
     const openAtPoint = useCallback(
         (x: number, y: number) => {
             if (!allowEdit) return;
@@ -458,9 +457,8 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         anchor: (
             <ContextMenuAnchor
                 contextMenu={contextMenu}
-                // Return focus to the sheet's cell input, not whatever was focused
-                // before the menu opened — Ctrl-Z and the other grid shortcuts read
-                // keydown from the Workbook container around it.
+                // The focus goes back to the sheet's cell input, not to what had it before the menu opened. Undo
+                // and the other grid shortcuts read their keys on the Workbook container around that input.
                 onCloseAutoFocus={(e) => {
                     e.preventDefault();
                     refs.cellInput.current?.focus();

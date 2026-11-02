@@ -1,22 +1,27 @@
+// The sheet's one dialog slot, which useDialog opens and closes. A dialog on FormDialog draws its own shell and takes
+// its open and close from the slot's DialogPropsContext. The others get the shared shell drawn here, such as the
+// range picker, which leaves the grid usable and opens at a point on screen. Either way the slot keeps a dialog's mouse
+// events from the React handlers above it.
+
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ViewportPoint } from '../state';
 
 export type ModalOptions = {
-    // When false, no backdrop and the rest of the page stays interactive (e.g. range picker).
+    // When false, the shell draws no backdrop and the rest of the page stays usable, as the range picker needs.
     modal?: boolean;
-    // Dialog width in px — forms want the default, a small picker overrides it.
+    // The shell's width in pixels. A small picker sets its own.
     width?: number;
-    // Viewport point the dialog's top-left opens at, clamped on screen. Centered when absent.
+    // The point on screen where the shell's top-left corner opens, kept on screen. Centered when absent.
     anchor?: ViewportPoint;
-    // Runs on every close route — a Cancel button, Escape, anything Radix adds later — so
-    // callers holding state for an open dialog (the range picker's grid-select flag) can
-    // reset it from one place. Replacing the content via showModal drops it unrun, by
-    // design: DataVerification's confirm path commits the picked range and immediately
-    // re-shows its own dialog, and a late onClose would run that teardown a second time
-    // over the dialog it just opened. Cancel and Escape go through hideModal instead, so
-    // they get exactly one run.
+    // The content is a FormDialog, so the slot draws no shell around it and the options above don't apply. The
+    // dialogs not yet on FormDialog leave it off and get the shell.
+    ownsDialog?: boolean;
+    // Runs once on every way the dialog closes, such as Cancel or Escape, so a caller that holds state for the open
+    // dialog, like the range picker's grid-select flag, resets it in one place. Opening another dialog in the slot
+    // drops it unrun. Data verification's confirm commits the picked range and opens its own dialog again, and a late
+    // onClose would run the teardown a second time over the dialog it just opened.
     onClose?: () => void;
 };
 
@@ -25,8 +30,8 @@ const DEFAULT_WIDTH = 500;
 // Distance a clamped dialog keeps from the viewport edges.
 export const VIEWPORT_MARGIN = 8;
 
-// Shift a dialog of this size back on screen. Math.max last: one larger than the
-// viewport pins to the top-left margin rather than off the opposite edge.
+// Shifts a dialog of this size back on screen. Math.max runs last, so a dialog larger than the viewport pins to the
+// top-left margin rather than off the opposite edge.
 export function clampToViewport(
     point: ViewportPoint,
     size: { width: number; height: number },
@@ -40,9 +45,25 @@ export function clampToViewport(
 }
 
 type ModalState = {
+    // A new number for each opening, so a close from an opening the slot no longer holds is ignored.
+    id: number;
     content: React.ReactNode;
     options: ModalOptions;
 };
+
+// What a FormDialog in the slot spreads on itself. Its close does nothing once another dialog holds the slot, so a
+// submit that opened a confirm doesn't close the confirm as it finishes.
+export type DialogProps = {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+};
+
+export const DialogPropsContext = React.createContext<DialogProps>({ open: false, onOpenChange: () => {} });
+
+// React passes a portaled dialog's mouse events up the component tree, past the slot to the handlers of the
+// workbook's ancestors, so the slot stops them. Native listeners on the document still hear them.
+const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+const STOP_MOUSE_EVENTS = { onMouseDown: stop, onMouseMove: stop, onMouseUp: stop, onContextMenu: stop };
 
 type ModalContextType = {
     showModal: (c: React.ReactNode, options?: ModalOptions) => void;
@@ -58,24 +79,38 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [state, setState] = useState<ModalState | null>(null);
     const [placement, setPlacement] = useState<ViewportPoint | null>(null);
     const contentRef = useRef<HTMLDivElement>(null);
+    const lastId = useRef(0);
     const open = state !== null;
     const isModal = state?.options.modal !== false;
     const anchor = state?.options.anchor;
 
-    // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it
-    // has to see the options of whatever is open right now.
-    const onCloseRef = useRef<ModalOptions['onClose']>(undefined);
+    // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it has to see the opening that
+    // holds the slot right now.
+    const openingRef = useRef<{ id: number; onClose?: () => void } | null>(null);
 
-    const showModal = useCallback((c: React.ReactNode, options: ModalOptions = {}) => {
-        onCloseRef.current = options.onClose;
-        setState({ content: c, options });
+    const showModal = useCallback((content: React.ReactNode, options: ModalOptions = {}) => {
+        lastId.current += 1;
+        const id = lastId.current;
+        openingRef.current = { id, onClose: options.onClose };
+        setState({ id, content, options });
     }, []);
     const hideModal = useCallback(() => {
-        const { current: onClose } = onCloseRef;
-        onCloseRef.current = undefined;
+        const opening = openingRef.current;
+        openingRef.current = null;
         setState(null);
-        onClose?.();
+        opening?.onClose?.();
     }, []);
+
+    const openId = state?.id;
+    const dialogProps = useMemo<DialogProps>(
+        () => ({
+            open: true,
+            onOpenChange: (o) => {
+                if (!o && openingRef.current?.id === openId) hideModal();
+            },
+        }),
+        [hideModal, openId],
+    );
 
     // useLayoutEffect, not useEffect: the clamp needs the dialog's rendered height, so it
     // renders once at the raw anchor and is corrected before the browser paints either frame.
@@ -100,44 +135,48 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
     return (
         <ModalContext.Provider value={providerValue}>
             {children}
-            <Dialog
-                open={open}
-                modal={isModal}
-                onOpenChange={(o) => {
-                    if (!o) hideModal();
-                }}
-            >
-                <DialogContent
-                    ref={contentRef}
-                    aria-describedby={undefined}
-                    showCloseButton={false}
-                    onPointerDownOutside={(e) => e.preventDefault()}
-                    onInteractOutside={(e) => e.preventDefault()}
-                    // An anchored dialog drops DialogContent's centering translate; the pair of
-                    // left/top below places it instead.
-                    className={cn('max-w-[90vw]', position && 'translate-x-0 translate-y-0')}
-                    style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        maxHeight: '75vh',
-                        overflow: 'hidden',
-                        width: state?.options.width ?? DEFAULT_WIDTH,
-                        ...(position && { left: position.left, top: position.top }),
+            {state?.options.ownsDialog ? (
+                // Keyed by the opening, so each one mounts its fields fresh, even the same dialog opened twice.
+                <div key={state.id} className="contents" {...STOP_MOUSE_EVENTS}>
+                    <DialogPropsContext.Provider value={dialogProps}>{state.content}</DialogPropsContext.Provider>
+                </div>
+            ) : (
+                <Dialog
+                    open={open}
+                    modal={isModal}
+                    onOpenChange={(o) => {
+                        if (!o) hideModal();
                     }}
                 >
-                    <div
-                        // gap-4 reproduces DialogContent's own rhythm: the inline display:flex above
-                        // overrides its grid, and this wrapper is the real parent of header/body/footer.
-                        className="flex flex-col gap-4 min-h-0 flex-1"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onMouseMove={(e) => e.stopPropagation()}
-                        onMouseUp={(e) => e.stopPropagation()}
-                        onContextMenu={(e) => e.stopPropagation()}
+                    <DialogContent
+                        ref={contentRef}
+                        aria-describedby={undefined}
+                        showCloseButton={false}
+                        onPointerDownOutside={(e) => e.preventDefault()}
+                        onInteractOutside={(e) => e.preventDefault()}
+                        // An anchored dialog drops DialogContent's centering translate. The left and top below
+                        // place it instead.
+                        className={cn('max-w-[90vw]', position && 'translate-x-0 translate-y-0')}
+                        style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            maxHeight: '75vh',
+                            overflow: 'hidden',
+                            width: state?.options.width ?? DEFAULT_WIDTH,
+                            ...(position && { left: position.left, top: position.top }),
+                        }}
                     >
-                        {state?.content}
-                    </div>
-                </DialogContent>
-            </Dialog>
+                        <div
+                            // The inline flex above overrides DialogContent's grid, so gap-4 gives back its rhythm.
+                            // This wrapper is the real parent of the header, the body and the footer.
+                            className="flex flex-col gap-4 min-h-0 flex-1"
+                            {...STOP_MOUSE_EVENTS}
+                        >
+                            {state?.content}
+                        </div>
+                    </DialogContent>
+                </Dialog>
+            )}
         </ModalContext.Provider>
     );
 }
