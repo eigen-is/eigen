@@ -126,7 +126,8 @@ export async function handlePut(args: {
             enforceMaxUploadSize(bytes);
             if (bytes > room) throw new ApiError(507, 'Insufficient Storage');
         };
-        // Content-Length refuses before a byte moves; a chunked body (Finder's) has none, so the stream is counted too.
+        // A Content-Length refuses before a byte moves. A chunked body, such as Finder's, has none, so the
+        // stream is counted too.
         if (contentLength !== null) withinLimits(contentLength);
         let received = 0;
         // Finder (WebDAVFS/3.0.0) reserves a name with a 0-byte PUT before the content, so no body is an empty file.

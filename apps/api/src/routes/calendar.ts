@@ -127,7 +127,8 @@ const ImportFromDriveIcsSchema = t.Object({
 
 const ImportQuerySchema = t.Object({ calendarId: t.String({ ...TEXT, minLength: 1 }) });
 
-// A team home is the only foreign Home a transfer may touch — only the relay crosses homes — and free-busy is no read here.
+// A team home is the only foreign Home a transfer may touch, because only the relay crosses homes. Free-busy counts
+// as no read here.
 async function resolveTransferCalendar(user: User, ownerId: string, calendarId: string, need: 'read' | 'write') {
     if (parseOwnerId(ownerId).type !== 'team') requireSelf(ownerId, user.id);
     const { permission } = await checkCalendarAccess(user, ownerId, calendarId);
@@ -145,7 +146,8 @@ async function resolveAdministeredCalendar(user: User, ownerId: string) {
     return (await getHome(ownerId)).calendar;
 }
 
-// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too; the events stay on membership.
+// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too. The events
+// stay on membership.
 async function resolveListedCalendar(user: User, ownerId: string) {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
@@ -226,7 +228,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 new Date(params.to * 1000),
             );
             if (permission === 'free-busy') {
-                // A cancelled event's existence must not leak into a free/busy view, and dropping it makes the cast valid.
+                // A cancelled event's existence must not leak into a free/busy view. Dropping it also makes the
+                // cast valid.
                 return events
                     .filter((e) => e.status !== 'cancelled')
                     .map(
@@ -293,7 +296,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         { auth: true },
     )
 
-    // Server-owned so the move keeps the organizer link, timezone and data a client cannot re-send, and declines nothing.
+    // The server moves the event, so the move keeps the organizer link, the timezone and the data a client cannot
+    // send again, and it declines nothing.
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id/move',
         async ({ params, body, user }): Promise<CalendarEvent> => {
@@ -395,7 +399,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, body.calendarId, 'read');
             const text = await cal.exportEvents(body.calendarId, body.ids);
-            // The clamp keeps one absurd title out of the header; contentDisposition strips path and control characters.
+            // The clamp keeps one absurd title out of the header. contentDisposition strips path and control
+            // characters.
             const only = body.ids?.length === 1 ? await cal.getEventById(body.calendarId, body.ids[0]) : null;
             const name = only?.title || (cal.calendarRow(body.calendarId)?.name ?? '');
             set.headers['Content-Type'] = ICS_CONTENT_TYPE;

@@ -376,7 +376,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy: content is a view over the whole parsed message, which would all cross to the transform process.
+                    // A copy, because content is a view over the whole parsed message, and all of it would cross
+                    // to the transform process.
                     return getBytesVCardPreview(new Uint8Array(att.content).buffer);
                 },
                 VCARD_FORMAT,
