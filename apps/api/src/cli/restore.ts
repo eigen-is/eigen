@@ -1,7 +1,8 @@
 // The restore command of the eigen launcher: it puts a whole-server archive back. The stage unpacks and checks the
 // archive while Eigen runs, and the swap, with Eigen stopped, moves the staged tree in and keeps what it replaces
 // aside. Between them the launcher asks which images the staged archive pins, and on a fresh machine it first takes
-// the archive's .env.production. Every refusal comes before anything in the data folder moves.
+// the archive's .env.production. Every refusal comes before anything in the data folder moves. A rollback after a
+// Light backup restores nothing: the build it goes back to only checks here that it opens the data as it is.
 
 import type { Database } from 'bun:sqlite';
 import {
@@ -33,10 +34,17 @@ import { isLightSkipped } from '../lib/backup/archive-layout';
 import { enumerateHomes } from '../lib/backup/enumerate-homes';
 import { describeError } from '../lib/backup/errors';
 import {
+    checkDatabases,
+    checkRestoredDatabases,
+    containerDatabasesIn,
+    mountIdsIn,
+} from '../lib/backup/materialize-mount';
+import {
     backupsDirPath,
     buildSafetyCopyName,
     INSTALL_FOLDERS,
     nextFreeTime,
+    parseSafetyCopyName,
     roomShortfall,
     SERVER_ARCHIVE_ENV_MEMBER,
     STAGING_DIR,
@@ -58,6 +66,8 @@ import {
     USER_HOMES_DIR,
 } from '../lib/config/paths';
 import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
+import { SHARE_REGISTRY_DB_CONFIG } from '../lib/share/db-config';
+import { WAITLIST_DB_CONFIG } from '../lib/waitlist/db-config';
 import { readEnvFile } from './env-file';
 import type { Owner } from './install';
 import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
@@ -72,6 +82,7 @@ export const RESTORE_OPTIONS = {
     staged: { type: 'boolean' },
     swap: { type: 'boolean' },
     env: { type: 'boolean' },
+    'check-data': { type: 'boolean' },
     yes: { type: 'boolean' },
     's3-from-archive': { type: 'boolean' },
 } as const;
@@ -79,6 +90,7 @@ export const RESTORE_USAGE = `Usage: restore <archive> --stage [--yes] [--s3-fro
        restore --staged
        restore --swap
        restore <archive> --env
+       restore --check-data
 
 Puts a whole-server archive back in two steps, run by ./eigen restore.
 
@@ -91,19 +103,22 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
   --swap             With Eigen stopped: swap the staged tree in and keep what it replaces aside. Finishes a swap
                      that was cut off
   --env              On a fresh machine, before the stage: write the ${ENV_PATH} of <archive> here, which pins
-                     the build that restores it`;
+                     the build that restores it
+  --check-data       While Eigen runs, as the API's user: check that this build opens every database in data/ as
+                     it is. ./eigen rollback runs it with the build it goes back to`;
 
 type Flags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
 export async function restore(archive: string | undefined, flags: Flags): Promise<void> {
-    const modes = [flags.stage, flags.staged, flags.swap, flags.env].filter(Boolean).length;
+    const modes = [flags.stage, flags.staged, flags.swap, flags.env, flags['check-data']].filter(Boolean).length;
     if (modes !== 1 || (!flags.stage && !flags.env && archive !== undefined)) {
         return refuseUsage(
-            'Pass one of --stage, --staged, --swap or --env; only --stage and --env take an archive.',
+            'Pass one of --stage, --staged, --swap, --env or --check-data; only --stage and --env take an archive.',
             RESTORE_USAGE,
         );
     }
     if (flags.env) return writeArchiveEnv(archive);
+    if (flags['check-data']) return checkData();
     if (flags.stage) return stage(archive, flags);
     if (flags.staged) return printStaged();
     return swap();
@@ -442,6 +457,31 @@ async function printStaged(): Promise<void> {
     const env = readEnvFile(join(restoring, ENV_PATH));
     const pins = PIN_KEYS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
     console.log([`version=${record.appVersion}`, `level=${record.level}`, ...pins].join('\n'));
+}
+
+// A Light backup is made only when no schema moved since, so the build before the update opens the data of today, and
+// a rollback keeps it. This checks that before the switch, with that build: its verdict on every home, as a restore
+// gives it, and on the server's own versioned databases. Safety copies are left out, as no home opens them.
+async function checkData(): Promise<void> {
+    const ui = await createUi(true);
+    const server = join(DATA, SERVER_DIR);
+    try {
+        checkDatabases([
+            { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
+            { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
+        ]);
+        for (const homes of [USER_HOMES_DIR, TEAM_HOMES_DIR].map((dir) => join(DATA, dir)).filter(existsSync)) {
+            for (const entry of readdirSync(homes, { withFileTypes: true })) {
+                if (!entry.isDirectory() || parseSafetyCopyName(entry.name)) continue;
+                const homeDir = join(homes, entry.name);
+                const mountIds = mountIdsIn(homeDir);
+                checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+            }
+        }
+    } catch (error) {
+        return ui.fail(`${describeError(error)}.`, 'Go back with ./eigen restore and the backup the update made.');
+    }
+    console.log(glyphLine('ok', 'This build opens every database in data/'));
 }
 
 // Why root must not swap the staged tree in, or null. It drops the fifos and sockets. The stage writes files and

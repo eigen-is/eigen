@@ -10,7 +10,7 @@ import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
-import { getAvatarsDir, PATHS } from '../config/paths';
+import { getAvatarsDir } from '../config/paths';
 import { ApiError } from '../core';
 import { rotateHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
@@ -22,7 +22,13 @@ import { requireArtifact } from './artifacts';
 import { restoreAuthRows } from './auth-rows';
 import { resolveHomeDir } from './home-dir';
 import type { VersionedDatabase } from './materialize-mount';
-import { checkRestoredDatabases, containerDatabasesIn, materializeMount, movePathAsync } from './materialize-mount';
+import {
+    checkRestoredDatabases,
+    containerDatabasesIn,
+    materializeMount,
+    mountIdsIn,
+    movePathAsync,
+} from './materialize-mount';
 import {
     ARCHIVE_AVATAR_DIR,
     ARCHIVE_HOME_DIR,
@@ -132,13 +138,7 @@ export async function restoreSafetyCopy(
         // The verdict a restore from an archive ends on: SQLite's on the bytes, and this build's on
         // every schema stamp. A copy this server made passes both; one carried over from a newer
         // server does not, and that has to surface here rather than on the next load.
-        const mountsDir = path.join(homeDir, PATHS.DRIVE.ROOT);
-        const mountIds = fs.existsSync(mountsDir)
-            ? fs
-                  .readdirSync(mountsDir, { withFileTypes: true })
-                  .filter((entry) => entry.isDirectory())
-                  .map((entry) => entry.name)
-            : [];
+        const mountIds = mountIdsIn(homeDir);
         checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
     };
 

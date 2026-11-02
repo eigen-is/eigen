@@ -13,7 +13,7 @@ import {
     symlinkSync,
     writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -1311,6 +1311,47 @@ describe('restore --stage and --swap', () => {
         expect(result.code).toBe(1);
         expectUntouched(dir);
     });
+});
+
+describe('restore --check-data, which a rollback after a Light backup runs with the build it goes back to', () => {
+    function bumpSchema(file: string, by: number): void {
+        const db = new Database(file, { readwrite: true, create: false });
+        try {
+            db.run('UPDATE __schema_version SET version = version + ? WHERE id = 1', [by]);
+        } finally {
+            db.close();
+        }
+    }
+
+    test(
+        'passes on data this build opens, and refuses a home’s or the server’s database of a newer schema',
+        async () => {
+            const dir = install();
+            await stageAndSwap(dir, basename(fullArchive));
+            const aside = asideDirs(dir);
+            const passed = await restoreCli(dir, ['--check-data']);
+            expect(passed.stderr).toBe('');
+            expect(passed.code).toBe(0);
+            expect(passed.stdout).toContain('This build opens every database in data/');
+
+            for (const file of [
+                join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db'),
+                join(homeDirOf(dir, teamOwner), PATHS.DRIVE.SHARED_DB),
+                join(dir, 'data/server', SERVER_DATABASES.shares),
+            ]) {
+                bumpSchema(file, 1);
+                const refused = await restoreCli(dir, ['--check-data']);
+                expect(refused.code).toBe(1);
+                expect(refused.stderr).toContain(`${relative(dir, file)} is at`);
+                expect(refused.stderr).toContain('newer than this server');
+                bumpSchema(file, -1);
+            }
+            // Nothing it reads is staged or moved.
+            expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
+            expect(asideDirs(dir)).toEqual(aside);
+        },
+        JOB_TIMEOUT_MS,
+    );
 });
 
 describe('restore --env, the first step on a fresh machine', () => {

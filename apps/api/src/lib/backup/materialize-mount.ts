@@ -152,7 +152,11 @@ export function checkRestoredDatabases(
     // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
     // knowable path; verify read every one of them in the folder this restore unpacked minutes ago.
     targets.push(...containerDatabases);
+    checkDatabases(targets);
+}
 
+// The same verdict on any databases, such as the server's own. One that is not there is skipped.
+export function checkDatabases(targets: VersionedDatabase[]): void {
     for (const target of targets) {
         if (!fs.existsSync(target.filePath)) continue;
         const version = schemaVersionOf(target.filePath);
@@ -176,6 +180,16 @@ export function checkRestoredDatabases(
             db.close();
         }
     }
+}
+
+// The mounts a home folder holds, by their folders, for a check with no manifest to name them.
+export function mountIdsIn(homeDir: string): string[] {
+    const mountsDir = path.join(homeDir, PATHS.DRIVE.ROOT);
+    if (!fs.existsSync(mountsDir)) return [];
+    return fs
+        .readdirSync(mountsDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
 }
 
 // The managed databases a home folder holds, for a restore with no manifest to enumerate them
