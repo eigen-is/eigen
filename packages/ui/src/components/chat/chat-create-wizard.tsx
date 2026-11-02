@@ -101,7 +101,6 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const pickedKey = pickedEmails.join(',');
     const debouncedKey = useDebouncedValue(pickedKey, MATCH_DEBOUNCE_MS);
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
-    // A closed or team-mode wizard runs no by-members lookup.
     const { data: fetchedMatches = [], isPending: matchesPending } = useFindChatByMembers(
         myOwnerId,
         open && !teamMode ? debouncedEmails : [],
