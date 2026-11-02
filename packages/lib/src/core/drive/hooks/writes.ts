@@ -79,8 +79,8 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 // rest. A path sent again after it is in the trash answers 404.
 export class PartialDeleteError extends Error {
     public constructor(
-        public readonly succeeded: DrivePath[],
-        public readonly failed: DrivePath[],
+        public readonly succeeded: readonly DrivePath[],
+        public readonly failed: readonly DrivePath[],
     ) {
         super(`Failed to delete ${failed.length} of ${succeeded.length + failed.length} items`);
         this.name = 'PartialDeleteError';

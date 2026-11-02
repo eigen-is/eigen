@@ -37,7 +37,7 @@ export function DriveDeleteItem({ paths, open, onOpenChange, onAfterAction }: Dr
     const handleDelete = async () => {
         if (targets.length === 0) return;
         try {
-            const succeeded = await deletePathsMutation.mutateAsync([...targets]);
+            const succeeded = await deletePathsMutation.mutateAsync(targets);
             for (const path of succeeded) onAfterAction?.('delete', path);
         } catch (error) {
             if (error instanceof PartialDeleteError) {

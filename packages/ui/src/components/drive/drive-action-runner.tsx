@@ -3,9 +3,9 @@
 // column and the toolbar. Which rows apply comes from driveActionsFor, read through the view's
 // capabilities: the item menu and the command palette draw those rows, and run refuses any other.
 
-import { getDriveItemUrl, openMailComposeWith } from '@workspace/lib/api';
+import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import {
-    copyDriveLink,
     PartialCopyError,
     useCopyPaths,
     useCopyToFolder,
@@ -83,7 +83,7 @@ export function useDriveActionRunner({
             dialogs.delete.openDialog(paths);
             return;
         }
-        deletePathsMutation.mutate([...paths], {
+        deletePathsMutation.mutate(paths, {
             onSuccess: () => {
                 for (const path of paths) onAfterAction?.('delete', path);
             },
@@ -166,7 +166,7 @@ export function useDriveActionRunner({
                 dialogs.email.openDialog(item);
                 return;
             case 'copy-link':
-                copyDriveLink(item);
+                copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
                 return;
             case 'mail-to':
                 openMailComposeWith({ attachments: items });

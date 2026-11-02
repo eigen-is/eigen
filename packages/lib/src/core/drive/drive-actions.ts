@@ -18,11 +18,9 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import { DELETE_HOTKEY } from '../../constants/hotkeys';
-import type { DrivePath } from '../../types/drive';
 import { exportFormatsFor, isOpenable } from '../../types/drive';
 import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
-import { getDriveItemUrl, getDriveShareUrl } from '../api';
-import { copyToClipboard } from '../clipboard/clipboard';
+import { getDriveItemUrl } from '../api';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;
 
@@ -134,11 +132,6 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
 export function driveActionsFor(subject: DriveActionSubject): DriveAction[] {
     if (subject.items.length === 0) return [];
     return DRIVE_ACTIONS.filter((action) => action.applies(subject));
-}
-
-// Copy link needs no dialog, so every host that offers it runs this.
-export function copyDriveLink(item: DrivePath): Promise<void> {
-    return copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
 }
 
 // A row's label for the items it acts on: a multi-selection reads the plural label, its {n} the count.

@@ -5,10 +5,9 @@
 
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Fragment } from 'react';
 import { ContextMenuAnchor } from '../context-menu';
-import { inMenuOrder } from '../context-menu/menu-sections';
-import { DropdownMenuSeparator } from '../dropdown-menu';
+import type { MenuSectionsProps } from '../context-menu/menu-sections';
+import { MenuSections } from '../context-menu/menu-sections';
 import { DriveActionMenuItem } from './drive-action-menu-item';
 import type { DriveActionRunner } from './drive-action-runner';
 import { DriveItemMenuItems } from './drive-item-menu';
@@ -33,22 +32,24 @@ export function DriveItemContextMenu({ controller, items, actions, ownActions }:
     if (actions) return <DriveItemActionsMenu controller={controller} items={items} actions={actions} />;
     const { contextMenu } = controller;
     const contextItems = contextItemsOf(controller);
-    const rows = contextItems.length > 0 ? inMenuOrder(ownActions?.(contextItems) ?? []) : [];
+    const rows = contextItems.length > 0 ? (ownActions?.(contextItems) ?? []) : [];
+    const sections: MenuSectionsProps = {};
+    for (const [group, groupRows] of Map.groupBy(rows, ({ action }) => action.group)) {
+        sections[group] = groupRows.map(({ action, run }) => (
+            <DriveActionMenuItem
+                key={action.id}
+                action={action}
+                count={contextItems.length}
+                onClick={() => {
+                    run();
+                    contextMenu.close();
+                }}
+            />
+        ));
+    }
     return (
         <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
-            {rows.map(({ action, run }, index) => (
-                <Fragment key={action.id}>
-                    {index > 0 && action.group !== rows[index - 1].action.group && <DropdownMenuSeparator />}
-                    <DriveActionMenuItem
-                        action={action}
-                        count={contextItems.length}
-                        onClick={() => {
-                            run();
-                            contextMenu.close();
-                        }}
-                    />
-                </Fragment>
-            ))}
+            <MenuSections {...sections} />
         </ContextMenuAnchor>
     );
 }
