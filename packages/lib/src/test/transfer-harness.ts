@@ -20,9 +20,9 @@ export const fetchCalls: { url: string; body: BodyInit | null | undefined }[] = 
 // The JSON the recorded fetch answers with: an import route's counts, or the bytes step's body.
 export const served: { importResponse: unknown } = { importResponse: null };
 
-// Captured once, before any file has mocked anything, so a later file restores the real modules.
-const realAuthContextModule = await import('../core/auth/auth-context');
-const realSonnerModule = await import('sonner');
+// Copies taken before the file mocks anything. mock.module rewrites a loaded module in place, so only a copy restores.
+const realAuthContextModule = { ...(await import('../core/auth/auth-context')) };
+const realSonnerModule = { ...(await import('sonner')) };
 
 export function installTransferHarness(): void {
     // react-dom needs a DOM to render the hooks into.

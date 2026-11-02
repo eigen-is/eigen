@@ -7,7 +7,7 @@
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
     "typecheck": "bun check --no-script",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "dependencies": {
     "@tanstack/history": "1.162.2",
