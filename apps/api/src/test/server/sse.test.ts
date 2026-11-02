@@ -1,10 +1,11 @@
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { announceRestart, clearRestartNotice } from '../../lib/config/restart-notice';
 import { drainACLFanOuts } from '../../lib/drive/acl-propagation';
 import { createSSEStream, getHome } from '../../lib/home';
-import { authedRequest, collectSSE, getTestContext } from '../setup';
+import { evictHome } from '../../lib/home/get-home';
+import { authedRequest, collectSSE, createTestUser, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -259,6 +260,27 @@ describe('SSE', () => {
             expect([await alice.notice(), await bob.notice()]).toEqual([null, null]);
             await alice.close();
             await bob.close();
+        });
+
+        // A notice given while the stream's Home was closed reached no listener of it, so the keepalive that moves the
+        // stream to the rebuilt Home sends what there is.
+        test('a stream that follows its Home to a rebuilt one sends the notice it missed', async () => {
+            const user = await createTestUser(`sse-notice-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'N');
+            const intervals = spyOn(globalThis, 'setInterval');
+            const stream = await openStream(user.id);
+            const keepalive = intervals.mock.calls.find(([, ms]) => ms === 15_000)?.[0];
+            intervals.mockRestore();
+            if (typeof keepalive !== 'function') throw new Error('no keepalive');
+            expect(await stream.notice()).toBeNull();
+
+            await evictHome(user.id);
+            announceRestart(600, 'update', null);
+            await keepalive();
+            // Heard by the rebuilt Home's listeners, so it comes first only when the keepalive sent the missed one.
+            announceRestart(0, 'rollback', null);
+            const notice = await stream.notice();
+            await stream.close();
+            expect(notice).toEqual({ reason: 'update', message: null, msLeft: expect.any(Number) });
         });
     });
 });

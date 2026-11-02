@@ -1,8 +1,8 @@
 // The event stream of one user's own Home, which the SSE route hands to a signed-in tab. It passes on
 // every event the Home broadcasts. It also sends a keepalive when it opens and every 15 seconds, so a
 // proxy keeps the connection and the Home does not go idle under an open tab. With each keepalive it
-// announces the data epochs, and it follows the Home when an evicted one was built again. On open it
-// also sends the restart notice the server holds, or that it holds none.
+// announces the data epochs, and it follows the Home when an evicted one was built again. When it opens
+// and when it follows, it also sends the restart notice the server holds, or that it holds none.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { sse } from 'elysia';
@@ -60,6 +60,8 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
                         currentHome.unsubscribeSSE(send);
                         freshHome.subscribeSSE(send);
                         currentHome = freshHome;
+                        // A notice given or taken back while no Home held this listener never reached it.
+                        send(buildRestartNoticeEvent());
                     }
                 } catch (e) {
                     console.error(`[SSE] Failed to get Home for ${userId}:`, e);
