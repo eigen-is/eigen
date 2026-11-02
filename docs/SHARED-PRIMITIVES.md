@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2069 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2072 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -238,7 +238,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (302)
+## Hooks (303)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -483,6 +483,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
 | `useTheme` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-theme.ts |
 | `useUpdateSpaceSettings` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-space-settings.ts |
+| `useRestartNotice` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-restart-notice.ts |
 | `useSSE` | `@workspace/lib/sse` | packages/lib/src/core/sse/hooks/use-sse.ts |
 | `useAddTeamMount` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-mounts.ts |
 | `useRemoveTeamAvatar` | `@workspace/lib/team` | packages/lib/src/core/team/hooks/use-team-avatar.ts |
@@ -545,7 +546,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (438)
+## Types (440)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -707,6 +708,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FileEventRecord` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FreeBusyBlock` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `HeldRestartNotice` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `HelpSearchDoc` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -738,6 +740,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
+| `RestartNoticeState` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RestartReason` | `@workspace/lib/types` | packages/lib/src/types/sse.ts |
 | `RoomMember` | `@workspace/lib/types` | packages/lib/src/types/chat.ts |
 | `S3CheckResult` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |

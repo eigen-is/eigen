@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, commands, logs, status, files]
 related: [self-hosting/troubleshooting, self-hosting/update, self-hosting/back-up-and-restore]
 order: 110
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Everything you do with Eigen on the server goes through `./eigen` in the install folder. `./eigen help` lists the commands, and `./eigen <command> --help` tells more about one.
@@ -20,10 +20,10 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 | `./eigen logs [service]` | Follows the logs of every service, or of one. Ctrl-C stops it. |
 | `./eigen restart` | Starts Eigen, and any part of it that stopped |
 | `./eigen stop` | Stops Eigen. When a server backup or its upload to your backup bucket is running, it waits for that to end first. `./eigen restart` starts it again. |
-| `./eigen update` | Installs a new release. See [Update Eigen](/support/self-hosting/update). |
-| `./eigen rollback` | Goes back to the version before the last update |
+| `./eigen update` | Installs a new release. `--in 10m` warns everyone who has Eigen open, then waits. See [Update Eigen](/support/self-hosting/update). |
+| `./eigen rollback` | Goes back to the version before the last update. `--in 10m` warns everyone first, then waits. |
 | `./eigen backup` | Backs up the whole server into `backups/` while Eigen runs. Its exit code tells a script whether the backup verified and reached the bucket. Eigen keeps these backups until you delete them; for a backup every night, turn on the nightly backup instead. See [Back up now](/support/self-hosting/back-up-and-restore#back-up-now). |
-| `./eigen restore <backup>` | Puts a whole-server backup back, on this server or a new one |
+| `./eigen restore <backup>` | Puts a whole-server backup back, on this server or a new one. `--in 10m` warns everyone first, then waits. |
 | `./eigen reset-password <email>` | Sets a new password for an account. See [Reset a password from the server](/support/self-hosting/reset-a-password). |
 
 `./eigen` runs one command that changes Eigen at a time, like an update, a rollback, or a restore. A second one stops with "Another ./eigen command is running." `./eigen backup` does not count: it changes nothing, and runs on the running server.
