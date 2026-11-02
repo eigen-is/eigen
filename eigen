@@ -102,9 +102,9 @@ EOF
 Usage: ./eigen update [version] [--check] [--accept-breaking] [--full | --no-backup]
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
-the backup ./eigen rollback goes back to: a light one, of the accounts, settings and
-databases, unless the new version lists breaking changes or marks a change (full backup),
-when it is full. ./eigen update main follows the main channel instead of releases.
+a backup: a light one, of the accounts, settings and databases, unless the new version
+lists breaking changes or marks a change (full backup), when it is full and ./eigen
+rollback puts it back. ./eigen update main follows the main channel instead of releases.
 
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
@@ -117,11 +117,10 @@ EOF
             cat <<EOF
 Usage: ./eigen rollback [--yes]
 
-Goes back to the version before the last ./eigen update, with the backup it made first. After
-a light one, the accounts, settings and databases are as they were then, and mail as it is now.
-Files and documents made since drop out of Drive, though they stay on disk; files renamed, moved
-or trashed since are listed where they were and, on drives that store files by their names, do
-not open. The current data is kept aside.
+Goes back to the version before the last ./eigen update. After a light backup, the usual kind,
+nothing in the data changed its form, so the data stays as it is: that version checks it opens
+every database here, then starts on it. The backup stays in backups/ for ./eigen restore. After
+a full backup, the rollback puts it back, and the current data is kept aside.
 
 To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:
 ${kept:-  none}
@@ -496,6 +495,12 @@ with_image() (
 
 # The images .env.production pins, a line each.
 pinned_refs() { for name in $IMAGES; do image "$name"; done; }
+
+# What .env.production pins, as PINS spells it: an update records it for a rollback that keeps the data.
+current_pins() {
+    printf 'EIGEN_REGISTRY=%s\nEIGEN_VERSION=%s\n' "$REGISTRY" "$(env_value EIGEN_VERSION)"
+    for name in $IMAGES; do printf '%s=%s\n' "$(image_key "$name")" "$(image "$name")"; done
+}
 
 # The api image .env.production pins, downloaded when it is not here: a pull that moves main leaves the build it
 # replaced without a local name.
@@ -1195,7 +1200,7 @@ update_apply() {
     old=$(describe "$old_image")
     new=$(describe "$new_image")
     # What .env.production pins before the switch is what the rollback goes back to.
-    old_pins=$(pinned_refs)
+    old_pins=$(current_pins)
 
     API_IMAGE=$new_image
     before_stop
@@ -1208,8 +1213,9 @@ update_apply() {
     stop
     step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
         with_pins cli configure --backfill
-    # Only a switch makes the backup the way back; an update without one leaves none to an older build.
-    if [ -n "$saved" ]; then echo "$saved" >.eigen/last-update; else rm -f .eigen/last-update; fi
+    # Only a switch makes the backup the way back; an update without one leaves none to an older build. Its pins
+    # follow, for a rollback after a Light backup, which keeps the data.
+    if [ -n "$saved" ]; then printf '%s\n%s\n' "$saved" "$old_pins" >.eigen/last-update; else rm -f .eigen/last-update; fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
@@ -1270,12 +1276,57 @@ rollback() {
     lock
     api_here
     current=$(describe "$(image api)")
+    case $archive in server-pre-update-light-*)
+        switch_back "$archive"
+        return
+        ;;
+    esac
     say "$ACCENT" '◆' "Back from Eigen $current to the backup the last update made"
     s3=''
     where_archive "$archive"
     put_back
     say "$GREEN" '◇' "Eigen $current → $(describe "$API_IMAGE") is running at https://$(env_value DOMAIN)/"
     check_kept
+}
+
+# switch_back <archive>: an update makes a Light backup only when no database changed its form since, so the build
+# before it opens the data of today. A rollback after one keeps data/ and switches back to the pins the update
+# recorded, once that build, as the API's user while Eigen runs, has checked it opens every database here and the
+# operator said yes. The archive stays for ./eigen restore, the way back when the check fails.
+switch_back() {
+    PINS=$(sed -n '2,$p' .eigen/last-update)
+    old_image=$(answer EIGEN_API_IMAGE "$PINS")
+    if [ -z "$old_image" ]; then
+        die "The launcher that made the last update kept no note of the build before it." \
+            "Put its backup back instead: ./eigen restore $1"
+    fi
+    step "Getting the build before the update" "The build before the update is here" \
+        "Could not get the build before the update; Eigen runs on as it was" \
+        pull_refs $(printf '%s\n' "$PINS" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p')
+    old=$(describe "$old_image")
+    say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
+    checked=0
+    with_image "$old_image" cli_as 1000:1000 restore --check-data $yes || checked=$?
+    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2.
+    case $checked in
+        0) ;;
+        "$DECLINED") exit 0 ;;
+        2) die "Eigen $old is too old to check the data here, and Eigen $current runs on as it was." \
+            "Put the backup the update made back instead: ./eigen restore $1" ;;
+        *) die "Eigen $old cannot open the data here, and Eigen $current runs on as it was." \
+            "Put the backup the update made back instead: ./eigen restore $1" ;;
+    esac
+    # From the stop on, whatever ends the rollback starts Eigen again, on the build .env.production pins by then.
+    AT_EXIT=restart
+    stop
+    step "Switching to Eigen $old" "Switched to Eigen $old" "Could not write Eigen $old into .env.production" \
+        with_image "$old_image" with_pins cli configure --backfill
+    rm -f .eigen/last-update
+    write_bundle "$old_image"
+    AT_EXIT=''
+    restart
+    say "$GREEN" '◇' "Eigen $current → $old is running at https://$(env_value DOMAIN)/"
+    say "$GRAY" '└' "The data stayed as it was. backups/$1 stays, for ./eigen restore."
 }
 
 COMMAND=${1:-}

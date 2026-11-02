@@ -1329,10 +1329,14 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
             const dir = install();
             await stageAndSwap(dir, basename(fullArchive));
             const aside = asideDirs(dir);
-            const passed = await restoreCli(dir, ['--check-data']);
+            const passed = await restoreCli(dir, ['--check-data', '--yes']);
             expect(passed.stderr).toBe('');
             expect(passed.code).toBe(0);
             expect(passed.stdout).toContain('This build opens every database in data/');
+            // Without --yes it asks, and a no is the launcher's sign to change nothing.
+            const declined = await restoreCli(dir, ['--check-data'], { input: 'n\n' });
+            expect(declined.code).toBe(DECLINED);
+            expect(declined.stdout).toContain('keeping the data as it is?');
 
             for (const file of [
                 join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db'),
@@ -1340,7 +1344,7 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
                 join(dir, 'data/server', SERVER_DATABASES.shares),
             ]) {
                 bumpSchema(file, 1);
-                const refused = await restoreCli(dir, ['--check-data']);
+                const refused = await restoreCli(dir, ['--check-data', '--yes']);
                 expect(refused.code).toBe(1);
                 expect(refused.stderr).toContain(`${relative(dir, file)} is at`);
                 expect(refused.stderr).toContain('newer than this server');

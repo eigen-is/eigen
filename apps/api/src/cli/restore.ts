@@ -90,7 +90,7 @@ export const RESTORE_USAGE = `Usage: restore <archive> --stage [--yes] [--s3-fro
        restore --staged
        restore --swap
        restore <archive> --env
-       restore --check-data
+       restore --check-data [--yes]
 
 Puts a whole-server archive back in two steps, run by ./eigen restore.
 
@@ -105,7 +105,7 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
   --env              On a fresh machine, before the stage: write the ${ENV_PATH} of <archive> here, which pins
                      the build that restores it
   --check-data       While Eigen runs, as the API's user: check that this build opens every database in data/ as
-                     it is. ./eigen rollback runs it with the build it goes back to`;
+                     it is, then ask to go back to it. ./eigen rollback runs it with the build it goes back to`;
 
 type Flags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
@@ -118,7 +118,7 @@ export async function restore(archive: string | undefined, flags: Flags): Promis
         );
     }
     if (flags.env) return writeArchiveEnv(archive);
-    if (flags['check-data']) return checkData();
+    if (flags['check-data']) return checkData(flags);
     if (flags.stage) return stage(archive, flags);
     if (flags.staged) return printStaged();
     return swap();
@@ -462,8 +462,8 @@ async function printStaged(): Promise<void> {
 // A Light backup is made only when no schema moved since, so the build before the update opens the data of today, and
 // a rollback keeps it. This checks that before the switch, with that build: its verdict on every home, as a restore
 // gives it, and on the server's own versioned databases. Safety copies are left out, as no home opens them.
-async function checkData(): Promise<void> {
-    const ui = await createUi(true);
+async function checkData(flags: Flags): Promise<void> {
+    const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
     try {
         checkDatabases([
@@ -482,6 +482,16 @@ async function checkData(): Promise<void> {
         return ui.fail(`${describeError(error)}.`, 'Go back with ./eigen restore and the backup the update made.');
     }
     console.log(glyphLine('ok', 'This build opens every database in data/'));
+    if (flags.yes) return;
+    const go = await ui.confirm({
+        message: `Go back to Eigen ${VERSION}, keeping the data as it is? Eigen stops for the switch.`,
+        initial: false,
+        flag: '--yes',
+    });
+    if (!go) {
+        ui.outro('Nothing was changed.');
+        process.exit(DECLINED);
+    }
 }
 
 // Why root must not swap the staged tree in, or null. It drops the fifos and sockets. The stage writes files and
