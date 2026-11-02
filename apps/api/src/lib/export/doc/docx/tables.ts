@@ -6,8 +6,8 @@ import {
     CELL_BORDER_SIDES,
     columnFit,
     MIN_TABLE_COLUMN_PX,
+    readBorder,
     readCellBackground,
-    readCellBorder,
 } from '@workspace/lib/docs/eigendoc';
 import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
@@ -98,7 +98,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     if (cut) context.pkg.lost('tables-simplified');
     // Word resolves a cell's own side against the table's, so a table whose cells store sides writes every cell's.
     const ownSides = grid.some((cells) =>
-        cells.some((cell) => CELL_BORDER_SIDES.some(([name]) => readCellBorder(cell.node.attrs?.[name]))),
+        cells.some((cell) => CELL_BORDER_SIDES.some(([name]) => readBorder(cell.node.attrs?.[name]))),
     );
 
     // A page-less doc's table in the body, outside a list or a quote, keeps its widths, as the editor draws it past the
@@ -170,7 +170,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
 // A cell's four sides, in tcBorders' order: a side it stores none of is Eigen's gray, and none is nil.
 function tcBorders(node: JSONContent): string {
     const sideXml = (side: (typeof BORDER_SIDES)[number], value: unknown) => {
-        const border = readCellBorder(value);
+        const border = readBorder(value);
         if (border === 'none') return `<w:${side} w:val="nil"/>`;
         if (!border) return bordersXml([side], { [side]: TABLE_LOOK.border });
         const [val] = WORD_BORDER_STYLES[border.style];

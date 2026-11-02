@@ -6,8 +6,8 @@
 import type { JSONContent } from '@tiptap/core';
 import type { CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
 import {
+    borderValue,
     CELL_BORDER_SIDES,
-    cellBorderValue,
     isFigureFrameNode,
     MIN_TABLE_COLUMN_PX,
     mmToPx,
@@ -42,7 +42,7 @@ export const MAX_MERGED_ROWS = 2000;
 export const MAX_TABLE_DEPTH = 8;
 
 // A side in Eigen's own look is the side a cell draws without one, so the writer's tables read back with none stored.
-const EIGEN_SIDE = cellBorderValue({
+const EIGEN_SIDE = borderValue({
     width: CELL_BORDER.sz / BORDER_EIGHTHS_PER_PX,
     style: 'solid',
     color: markColor(CELL_BORDER.color),
@@ -93,7 +93,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             tableBorders[at] ??
             tableLook?.borders[at] ??
             'none';
-        const value = cellBorderValue(border);
+        const value = borderValue(border);
         return value === EIGEN_SIDE ? undefined : value;
     };
     // The fill a cell draws: its own, else its table style's first row's, else the table's.

@@ -4,13 +4,13 @@
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
-import type { CellBorderStyle, TextBoxEdit, TextBoxVerticalAlign } from '@workspace/lib/docs/eigendoc';
+import type { Border, BorderStyle, TextBoxEdit, TextBoxVerticalAlign } from '@workspace/lib/docs/eigendoc';
 import {
-    CELL_BORDER_STYLES,
-    cellBorderValue,
+    BORDER_STYLES,
+    borderValue,
     figurePlacement,
-    MAX_CELL_BORDER_PX,
-    MIN_CELL_BORDER_PX,
+    MAX_BORDER_PX,
+    MIN_BORDER_PX,
     readCellBackground,
     readTextBoxAttrs,
     TEXT_BOX_DEFAULT_OUTLINE,
@@ -39,7 +39,7 @@ const VERTICAL_ALIGN_LOOK: { align: TextBoxVerticalAlign; label: string; icon: L
     { align: 'bottom', label: 'Bottom', icon: AlignVerticalJustifyEnd },
 ];
 
-const OUTLINE_STYLE_LABELS: Record<CellBorderStyle, string> = {
+const OUTLINE_STYLE_LABELS: Record<BorderStyle, string> = {
     solid: 'Solid',
     dashed: 'Dashed',
     dotted: 'Dotted',
@@ -90,8 +90,8 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
     const height = look.height ?? drawnHeight;
     const write = (attributes: TextBoxEdit) => editor.commands.updateTextBox(attributes);
     // A box with no line takes the line a new box has, with the change.
-    const outline = (change: Partial<{ width: number; style: CellBorderStyle; color: string }>) =>
-        write({ outline: cellBorderValue({ ...(look.pen ?? TEXT_BOX_DEFAULT_OUTLINE), ...change }) });
+    const outline = (change: Partial<Exclude<Border, 'none'>>) =>
+        write({ outline: borderValue({ ...(look.pen ?? TEXT_BOX_DEFAULT_OUTLINE), ...change }) });
 
     return (
         <PropertiesPanel title="Text box">
@@ -144,15 +144,15 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                         <PropertyRow label="Weight">
                             <PropertyNumberInput
                                 value={look.pen.width}
-                                min={MIN_CELL_BORDER_PX}
-                                max={MAX_CELL_BORDER_PX}
+                                min={MIN_BORDER_PX}
+                                max={MAX_BORDER_PX}
                                 step={0.5}
                                 onChange={(width) => outline({ width })}
                             />
                         </PropertyRow>
                         <PropertyRow label="Style">
                             <div className="flex flex-wrap items-center gap-1">
-                                {CELL_BORDER_STYLES.map((style) => (
+                                {BORDER_STYLES.map((style) => (
                                     <PropertyToggle
                                         key={style}
                                         className="w-auto px-2 text-xs"

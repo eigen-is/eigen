@@ -8,11 +8,12 @@ import type { Schema } from '@tiptap/pm/model';
 import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { MAX_PAPER_PX, mmToPx } from '../page';
+import type { Border } from './border';
+import { borderValue, readBorder } from './border';
 import type { FigureFrameAttrs } from './figure-frame';
 import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 import { flattenNestedStories, insertStory, newStoryId, readStoryId, STORY_ID_ATTRIBUTE } from './stories';
-import type { CellBorder } from './table-cell';
-import { cellBorderValue, readCellBackground, readCellBorder } from './table-cell';
+import { readCellBackground } from './table-cell';
 
 const NAME = 'textBox';
 
@@ -46,7 +47,7 @@ export type TextBoxAttrs = FigureFrameAttrs & {
     width: number;
     height: number | null;
     fill: string | null;
-    outline: CellBorder | null;
+    outline: Border | null;
     paddingX: number | null;
     paddingY: number | null;
     verticalAlign: TextBoxVerticalAlign | null;
@@ -90,7 +91,7 @@ export function readTextBoxAttrs(attrs: Record<string, unknown>): TextBoxAttrs {
         width: readTextBoxSide(attrs['width']) ?? TEXT_BOX_DEFAULT_WIDTH,
         height: readTextBoxSide(attrs['height']),
         fill: readCellBackground(attrs['fill']),
-        outline: readCellBorder(attrs['outline']),
+        outline: readBorder(attrs['outline']),
         paddingX: readPadding(attrs['paddingX']),
         paddingY: readPadding(attrs['paddingY']),
         verticalAlign: TEXT_BOX_VERTICAL_ALIGNS.find((align) => align === attrs['verticalAlign']) ?? null,
@@ -113,7 +114,7 @@ export function textBoxHTMLAttributes(attrs: TextBoxAttrs): Record<string, strin
         `width: ${width}px`,
         height !== null && `min-height: ${height}px`,
         fill && `background-color: ${fill}`,
-        outline && outline !== 'none' && `border: ${cellBorderValue(outline)}`,
+        outline && outline !== 'none' && `border: ${borderValue(outline)}`,
         `padding: ${padding.y}px ${padding.x}px`,
         rounded && `border-radius: ${TEXT_BOX_RADIUS}px`,
     ];
@@ -124,7 +125,7 @@ export function textBoxHTMLAttributes(attrs: TextBoxAttrs): Record<string, strin
         'data-width': String(width),
         ...(height !== null && { 'data-height': String(height) }),
         ...(fill && { 'data-fill': fill }),
-        ...(outline && { 'data-outline': cellBorderValue(outline) }),
+        ...(outline && { 'data-outline': borderValue(outline) }),
         ...(paddingX !== null && { 'data-padding-x': String(paddingX) }),
         ...(paddingY !== null && { 'data-padding-y': String(paddingY) }),
         ...(verticalAlign && { 'data-vertical-align': verticalAlign }),
@@ -168,7 +169,7 @@ function boxContent(dom: globalThis.Node, schema: Schema): Fragment {
 }
 
 // A new box's line, Word's black one, which the panel's first line starts from too.
-export const TEXT_BOX_DEFAULT_OUTLINE = { width: 1, style: 'solid', color: '#000000' } as const satisfies CellBorder;
+export const TEXT_BOX_DEFAULT_OUTLINE = { width: 1, style: 'solid', color: '#000000' } as const satisfies Border;
 
 // A box after the selection, where insertStory puts a story: in the flow and aligned left, with Word's white fill and
 // black line, holding one empty paragraph.
@@ -178,7 +179,7 @@ export function insertTextBox(tr: Transaction): number | null {
         alignment: 'left',
         width: TEXT_BOX_DEFAULT_WIDTH,
         fill: '#ffffff',
-        outline: cellBorderValue(TEXT_BOX_DEFAULT_OUTLINE),
+        outline: borderValue(TEXT_BOX_DEFAULT_OUTLINE),
     });
     return insertStory(tr, box);
 }
@@ -213,8 +214,8 @@ export const TextBoxNode = Node.create({
             height: boxAttribute('data-height', (value) => readTextBoxSide(Number(value))),
             fill: boxAttribute('data-fill', readCellBackground),
             outline: boxAttribute('data-outline', (value) => {
-                const border = readCellBorder(value);
-                return border && cellBorderValue(border);
+                const border = readBorder(value);
+                return border && borderValue(border);
             }),
             paddingX: boxAttribute('data-padding-x', (value) => readPadding(Number(value))),
             paddingY: boxAttribute('data-padding-y', (value) => readPadding(Number(value))),

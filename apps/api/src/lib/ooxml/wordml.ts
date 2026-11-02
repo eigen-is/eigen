@@ -3,7 +3,7 @@
 // The OOXML every format shares sits in its own module.
 
 import type { EigenFont } from '@workspace/lib/constants/fonts';
-import type { CellBorderStyle, PageNumberKind } from '@workspace/lib/docs/eigendoc';
+import type { BorderStyle, PageNumberKind } from '@workspace/lib/docs/eigendoc';
 import { MAX_HEADING_LEVEL, ptToTwips, pxToPt, readTocLevels } from '@workspace/lib/docs/eigendoc';
 
 // The prefix of WordprocessingML's content types.
@@ -263,7 +263,7 @@ export const BORDER_EIGHTHS_PER_PX = pxToPt(1) * 8;
 
 // Word's border styles, by the style the editor draws each as. The writer writes a style's first. The reader reads
 // every listed one as its style, and any other, such as a 3-D or an art border, as solid.
-export const WORD_BORDER_STYLES: Record<CellBorderStyle, readonly [string, ...string[]]> = {
+export const WORD_BORDER_STYLES: Record<BorderStyle, readonly [string, ...string[]]> = {
     solid: ['single'],
     dashed: ['dashed', 'dashSmallGap', 'dashDotStroked', 'dotDash', 'dotDotDash'],
     dotted: ['dotted'],

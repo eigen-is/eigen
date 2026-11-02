@@ -2,8 +2,8 @@
 // its basedOn parents, docDefaults and the table's conditional looks. Readers such as the paragraph and run readers
 // read their properties through it.
 
-import type { CellBorder } from '@workspace/lib/docs/eigendoc';
-import { CELL_BORDER_STYLES, MAX_CELL_BORDER_PX, MIN_CELL_BORDER_PX } from '@workspace/lib/docs/eigendoc';
+import type { Border } from '@workspace/lib/docs/eigendoc';
+import { BORDER_STYLES, MAX_BORDER_PX, MIN_BORDER_PX } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
@@ -120,7 +120,7 @@ export function shadingOf(shd: XmlElement | undefined): string | undefined {
 type TableBorderSide = 'top' | 'left' | 'bottom' | 'right' | 'insideH' | 'insideV';
 
 // A table's or a cell's sides as the editor stores them, by the side of a table each holds.
-export type TableBorders = Partial<Record<TableBorderSide, CellBorder>>;
+export type TableBorders = Partial<Record<TableBorderSide, Border>>;
 
 // start and end are the strict names of left and right.
 const TABLE_BORDER_SIDE = new Map<string, TableBorderSide>([
@@ -143,19 +143,19 @@ export function tableBordersOf(borders: XmlElement | undefined): TableBorders {
     return sides;
 }
 
-function cellBorderOf(border: XmlElement): CellBorder {
+function cellBorderOf(border: XmlElement): Border {
     const val = w(border, 'val');
     if (!val || val === 'nil' || val === 'none') return 'none';
     const px = (roundedInt(w(border, 'sz')) ?? 0) / BORDER_EIGHTHS_PER_PX;
     return {
         width: Number(fitBorderPx(px).toFixed(2)),
-        style: CELL_BORDER_STYLES.find((style) => WORD_BORDER_STYLES[style].includes(val)) ?? 'solid',
+        style: BORDER_STYLES.find((style) => WORD_BORDER_STYLES[style].includes(val)) ?? 'solid',
         color: markColor(hexColor(w(border, 'color')) || '000000'),
     };
 }
 
-// A line's width in px within the widths a cell border draws at, such as a cell's side or a text box's outline.
-export const fitBorderPx = (px: number) => Math.min(Math.max(px, MIN_CELL_BORDER_PX), MAX_CELL_BORDER_PX);
+// A line's width in px within the widths a border draws at, such as a cell's side or a text box's outline.
+export const fitBorderPx = (px: number) => Math.min(Math.max(px, MIN_BORDER_PX), MAX_BORDER_PX);
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
     const props: DocxRunProps = {};

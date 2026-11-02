@@ -1,8 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { createDocument, generateHTML, getSchema } from '@tiptap/core';
-import type { CellBorder } from '../../../../docs/eigendoc';
-import { cellBorderValue, getDocExtensions, readCellBackground, readCellBorder } from '../../../../docs/eigendoc';
+import { getDocExtensions, readCellBackground } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
@@ -74,33 +73,6 @@ describe('cell background HTML', () => {
                 '<table><tr><td style="background-color: rgba(207, 226, 243, 0.5)">a</td><td style="background-color: rgba(0, 0, 0, 0)">b</td><td style="background-color: rgb(300, 0, 0)">c</td></tr></table>',
             ),
         ).toEqual([null, null, null]);
-    });
-});
-
-describe('readCellBorder', () => {
-    test.each<[unknown, CellBorder | null]>([
-        ['0.67px solid #000000', { width: 0.67, style: 'solid', color: '#000000' }],
-        ['1PX DASHED #CFE2F3', { width: 1, style: 'dashed', color: '#cfe2f3' }],
-        ['8px double #1f3864', { width: 8, style: 'double', color: '#1f3864' }],
-        ['0.5px dotted #ffffff', { width: 0.5, style: 'dotted', color: '#ffffff' }],
-        ['none', 'none'],
-        ['0.4px solid #000000', null],
-        ['9px solid #000000', null],
-        ['1e9px solid #000000', null],
-        ['1px solid red', null],
-        ['1px groove #000000', null],
-        ['1px solid #000000; background: url(x)', null],
-        ['<script>', null],
-        ['inherit', null],
-        [3, null],
-        [null, null],
-    ])('%p reads as %p', (value, border) => {
-        expect(readCellBorder(value)).toEqual(border);
-    });
-
-    test('a border writes back as the value it was read from', () => {
-        expect(cellBorderValue({ width: 0.67, style: 'solid', color: '#000000' })).toBe('0.67px solid #000000');
-        expect(cellBorderValue('none')).toBe('none');
     });
 });
 

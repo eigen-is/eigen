@@ -4,9 +4,9 @@
 // A box elsewhere, such as in a band, a note or a group, keeps its paragraphs after its anchor's.
 
 import type { JSONContent } from '@tiptap/core';
-import type { CellBorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
+import type { BorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
 import {
-    cellBorderValue,
+    borderValue,
     flattenNestedStories,
     isStoryNode,
     MAX_TEXT_BOX_PADDING,
@@ -155,7 +155,7 @@ export function readVmlTextBox(
         fill: filled ? readCellBackground(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
-                ? cellBorderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
+                ? borderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
                 : null,
         paddingX: meanPadding(insetLeft ?? null, insetRight ?? null, TEXT_BOX_INSET.x),
         paddingY: meanPadding(insetTop ?? null, insetBottom ?? null, TEXT_BOX_INSET.y),
@@ -223,9 +223,9 @@ function shapeOutline(reader: Reader, spPr: XmlElement | undefined, style: XmlEl
     if (!color) return null;
     const width = (lineWidthEmu(line ? xmlAttr(line, '', 'w') : undefined) ?? DEFAULT_LINE_WIDTH_EMU) / EMU_PER_PX;
     const dash = line && xmlChild(line, A_NS, 'prstDash');
-    const kind: CellBorderStyle =
+    const kind: BorderStyle =
         line && xmlAttr(line, '', 'cmpd') === 'dbl' ? 'double' : strokeStyleOf(dash && xmlAttr(dash, '', 'val'));
-    return cellBorderValue({ width: fitBorderPx(width), style: kind, color });
+    return borderValue({ width: fitBorderPx(width), style: kind, color });
 }
 
 // A bodyPr anchor as the box's vertical alignment: DrawingML's center is the box's middle, and the top is its default.

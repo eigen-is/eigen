@@ -64,8 +64,6 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **A text box's rotation and vertical text** (S–M): The docx reader counts a rotated or vertical-text box as `text-simplified` and draws it upright and horizontal. Needs `rotation` and `textDirection` attributes, the CSS `transform` and `writing-mode`, and the writer's `a:xfrm rot` and `bodyPr vert`.
 
-- **The cell-border reader is named for cells** (XS): A text box reads its outline with `readCellBorder`, `cellBorderValue` and `CellBorder` from `nodes/table-cell.ts`. Move them to a shared `nodes/border.ts` under border names and update the callers.
-
 - **An IME composition across a text box's remount types twice** (S): A peer's re-anchor of the box being typed in remounts its editor mid-composition; in Chrome the pre-edit text stays and the IME's commit adds it again. Rare. Hold the remount's forward until `compositionend`.
 
 - **An open text box keeps the body's selection ring** (XS): A press on a selected box's text opens it while the body's node selection stays, so `FigureFrame` draws its `eigen-selection-ring` around the open box. Move the body's selection to a caret beside the box as it opens, or hide the ring while it is open.
