@@ -74,8 +74,8 @@ async function mount(popoverOpen: boolean) {
                     createElement(
                         Popover,
                         { open: popoverOpen },
-                        createElement(PopoverTrigger, null, 'to: Ada'),
-                        createElement(PopoverContent, null, 'from: ada@example.com'),
+                        createElement(PopoverTrigger, null, 'To: Ada'),
+                        createElement(PopoverContent, null, 'From: ada@example.com'),
                     ),
                 ),
             ),
