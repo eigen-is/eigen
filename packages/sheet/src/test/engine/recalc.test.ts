@@ -405,12 +405,21 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('past its dependency budget a recalc throws before it computes', () => {
-        // On a sheet 128 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
-        const rows = Array.from({ length: 128 }, (): (Cell | null)[] => [null, null, null, null]);
+        // On a sheet 129 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
+        const rows = Array.from({ length: 129 }, (): (Cell | null)[] => [null, null, null, null]);
         rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
         const sheets = [sheet('s1', 'Sheet1', rows)];
         expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
         expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+    });
+
+    test('a range down every row of its sheet costs the budget one per column', () => {
+        // Data is 6,400 rows deep, so each Data!A:A would meet 100 blocks of 64 × 16.
+        const data = Array.from({ length: 6_400 }, (): (Cell | null)[] => [num(1), null]);
+        const report = Array.from({ length: 10 }, (): (Cell | null)[] => [formula('=SUM(Data!A:A)')]);
+        const sheets = [sheet('d', 'Data', data), sheet('r', 'Report', report)];
+        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 9 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 10 })[1].data![9][0]?.v).toBe(6_400);
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {

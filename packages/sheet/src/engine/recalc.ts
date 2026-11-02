@@ -8,6 +8,7 @@ import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
+import type { SheetExtent } from './dependency-index';
 import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
@@ -32,8 +33,6 @@ type GraphCtx = {
     // sheet, by `${text}_${sheetId}` for one into the formula's own.
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
-
-type Extent = { rows: number; columns: number };
 
 // A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
 // recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
@@ -90,12 +89,13 @@ export function recalcSheets(
     }
 
     const g: GraphCtx = { sheets: working, cellTextToIndexList: {} };
-    const extents = new Map<string, Extent>();
+    const extents = new Map<string, SheetExtent>();
     for (const w of working) {
         let columns = 0;
         for (const row of w.data) columns = Math.max(columns, row?.length ?? 0);
         extents.set(w.id, { rows: w.data.length, columns });
     }
+    const extentOf = (sheetId: string) => extents.get(sheetId);
 
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
@@ -132,9 +132,9 @@ export function recalcSheets(
                     color: 'w',
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
-                blocks += dependencyBlocks(indexed);
+                blocks += dependencyBlocks(indexed, extentOf);
                 if (blocks > maxDependencyBlocks) throw new RangeError('Formula ranges past the dependency budget');
-                depIndex.set(key, indexed);
+                depIndex.set(key, indexed, extentOf);
             }
         }
     }
@@ -298,7 +298,7 @@ function tokenize(formula: string): string[] {
 
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
 // index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
-function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
+function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetExtent>): FormulaDependency | null {
     const cells = cellsOf(dep);
     const extent = cells && extents.get(cells.sheetId);
     if (!cells || extent == null) return null;

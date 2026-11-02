@@ -231,7 +231,10 @@ export function setFormulaCellInfo(ctx: Context, formulaCell: FormulaCell, data?
         children: {},
         color: 'w',
     };
-    ctx.formulaCache.dependencyIndex.set(key, formulaDependency);
+    ctx.formulaCache.dependencyIndex.set(key, formulaDependency, (sheetId) => {
+        const matrix = getFlowdata(ctx, sheetId);
+        return matrix ? { rows: matrix.length, columns: matrix[0]?.length ?? 0 } : undefined;
+    });
 }
 
 // A sheet arriving whole carries no cell patches; an unbuilt map reads it when it builds.

@@ -96,6 +96,36 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
     });
 });
 
+// A whole column of a tall sheet is indexed once per column, not once per block of 64 rows: before that, this map took
+// three seconds and 490 MB to build.
+describe('warmFormulaCellInfoMap — lookups into whole columns', () => {
+    it('builds the map of 20,000 lookups over 64,000 rows in well under a second', () => {
+        const data: (Cell | null)[][] = Array.from({ length: 64_000 }, (_, r) => [{ v: r }, { v: r * 2 }]);
+        const report: (Cell | null)[][] = Array.from({ length: 20_000 }, (_, r) => [
+            { v: r },
+            { f: `=INDEX(Data!B:B,MATCH(A${r + 1},Data!A:A,0))` },
+        ]);
+        const ctx = contextFactory({
+            currentSheetId: 'r',
+            sheets: [
+                { name: 'Data', id: 'd', order: 0, data },
+                {
+                    name: 'Report',
+                    id: 'r',
+                    order: 1,
+                    data: report,
+                    calcChain: report.map((_, r) => ({ r, c: 1, id: 'r' })),
+                },
+            ],
+        }) as Context;
+
+        const start = performance.now();
+        warmFormulaCellInfoMap(ctx);
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(ctx.formulaCache.dependencyIndex.dependentsOf('d', 63_999, 0)).toHaveLength(20_000);
+    });
+});
+
 // The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates
 // what an export would not. Sheet1 is 6 × 4, so a whole column ends at row 6 and a whole row at column D. Data is
 // 3 × 3, and Empty has no rows. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
