@@ -32,8 +32,6 @@ test('the search text of a chat keeps every message of a second that spans a pag
     const { mount, path } = await home.drive.resolveFile(mountId, chat.id);
     const dataDb = await mount.getChildByName(path.id, 'data.db');
     if (!dataDb) throw new Error('chat has no data.db');
-    const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id);
-
     const createdAt = new Date('2026-10-05T12:00:00Z');
     const rows = Array.from({ length: 600 }, (_, i) => ({
         id: crypto.randomUUID(),
@@ -42,7 +40,9 @@ test('the search text of a chat keeps every message of a second that spans a pag
         content: `message ${i}`,
         createdAt,
     }));
-    managedDb.db.insert(messages).values(rows).run();
+    await mount.withDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id, async (managedDb) => {
+        managedDb.db.insert(messages).values(rows).run();
+    });
 
     const text = await readChatContent(mount, path, 1_000_000);
     expect(text.trim().split('\n')).toHaveLength(600);

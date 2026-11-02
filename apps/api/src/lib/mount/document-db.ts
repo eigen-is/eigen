@@ -40,14 +40,6 @@ export type DatabaseHold<S extends SchemaType> = {
     release: () => void;
 };
 
-export async function openDatabase<S extends SchemaType>(
-    mount: Mount,
-    config: DatabaseConfig<S>,
-    pathId: string,
-): Promise<ManagedDatabase<S>> {
-    return openDocumentDb(mount, config, pathId, 'open');
-}
-
 export async function createDatabase<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -137,15 +129,6 @@ export async function withDocumentDb<T>(
     }
 }
 
-async function openDocumentDb<S extends SchemaType>(
-    mount: Mount,
-    config: DatabaseConfig<S>,
-    pathId: string,
-    mode: 'open' | 'create',
-): Promise<ManagedDatabase<S>> {
-    return withDocumentDb(mount, pathId, (slot) => openInSlot(mount, slot, config, pathId, mode));
-}
-
 async function openInSlot<S extends SchemaType>(
     mount: Mount,
     slot: DocumentDbSlot,
@@ -156,8 +139,8 @@ async function openInSlot<S extends SchemaType>(
     if (mount.closing) throw new ApiError(503, 'Mount is closing');
     if (slot.db) {
         if (mode === 'create') throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
-        // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
-        // schema S can only be re-attached here — the config that built the entry carries it.
+        // documentDbs holds every schema as ManagedDatabase<SchemaType>. The config that built this
+        // entry carries the caller's schema S, so it is put back here.
         return slot.db as ManagedDatabase<S>;
     }
     const db = await buildDocumentDb(mount, config, pathId, mode);
@@ -334,10 +317,9 @@ async function buildDocumentDb<S extends SchemaType>(
         managed.markDirty();
     }
 
-    // For temp-copy backends (s3, path-based local), push the freshly-created schema to storage before
-    // returning. Local-key writes go straight to the backing file so no flush is needed. Without this, the
-    // storage object only appears on the next 30s sync — and an API restart in that window would make
-    // subsequent strict openDatabase calls throw.
+    // On a mount that works on a temp copy, such as s3, the new empty schema goes to storage before
+    // this returns. Otherwise the stored object appears only with the next 30 s sync, and a restart in
+    // that window makes every later open answer 410. On local-key the database is the stored file.
     if (mode === 'create' && mount.needsTempCopy) {
         try {
             await managed.flush();
@@ -428,7 +410,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // swept close is refused by the gate.
     for (const pathId of mount.documentDbs.keys()) {
         try {
-            await closeDatabase(mount, pathId); // isRemote: onClose-time sync stages + enqueues the final state
+            // On s3 the final sync of the close stages the last state and queues its upload.
+            await closeDatabase(mount, pathId);
         } catch (err) {
             console.error(`[Mount] closeAllDatabases close failed for ${pathId}:`, err);
         }

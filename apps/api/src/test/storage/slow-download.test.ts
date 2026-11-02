@@ -103,7 +103,7 @@ describe('Stalled S3 reads', () => {
         setStorageTimeoutMs(SHRUNK_STORAGE_TIMEOUT_MS);
         const { dataDbId, dataKey } = await storedDoc(mount);
         fake.faults.set(dataKey, 'stall-body');
-        const failure = mount.openDatabase(docConfig, dataDbId).catch((error: unknown) => error);
+        const failure = mount.withDatabase(docConfig, dataDbId, async () => {}).catch((error: unknown) => error);
         expect(await settlesWithin([failure], STALL_BOUND_MS)).toBe(true);
         expect(await failure).toMatchObject({ status: 503 });
     });
@@ -130,7 +130,7 @@ describe('Stalled S3 reads', () => {
         const { dataDbId, dataKey } = await storedDoc(mount, 64);
         const before = new Set(readdirSync(mount.tmpDir));
         fake.faults.set(dataKey, 'stall-body');
-        const open = mount.openDatabase(docConfig, dataDbId);
+        const open = mount.withDatabase(docConfig, dataDbId, async () => {});
         try {
             // The first half of the body is on disk, wherever the download writes it.
             await waitFor(() =>
@@ -222,11 +222,13 @@ describe('A stalled DELETE', () => {
         for (const version of await mount.listFolder(versions.id)) {
             fake.faults.set(await mount.getStorageKey(version.id), 'stall');
         }
-        const managed = await mount.openDatabase(
+        await mount.withDatabase(
             { ...docConfig, snapshot: { policy, writesPerSnapshot: 1_000 } },
             dataDbId,
+            async (managed) => {
+                managed.db.insert(docSchema.items).values({ id: 2, data: 'y' }).run();
+            },
         );
-        managed.db.insert(docSchema.items).values({ id: 2, data: 'y' }).run();
         setShutdownDrainDeadline(Date.now() + SETTLE_BOUND_MS);
         try {
             expect(await settlesWithin([mount.closeAllDatabases()], SETTLE_BOUND_MS)).toBe(true);

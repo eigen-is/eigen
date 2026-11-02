@@ -36,6 +36,11 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
+// The rows of a document database, read inside one withDatabase call.
+async function readItems(mount: Mount, config: DatabaseConfig<typeof docSchema>, dataDbId: string) {
+    return mount.withDatabase(config, dataDbId, async (managed) => managed.db.select().from(docSchema.items).all());
+}
+
 const createdMounts: Mount[] = [];
 
 function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
@@ -179,8 +184,7 @@ describe('corrupted staged copy', () => {
         // The object is left stale-good: the {2} tail edit is lost with its corrupt staged copy,
         // but the good {1} object survives and the doc reopens cleanly.
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
-        const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
+        expect(await readItems(m2.mount, docConfig, dataDbId)).toHaveLength(1);
     });
 });
 
@@ -234,8 +238,7 @@ describe('orphaned PUT past the client-side timeout (performUpload / trackOrphan
         const m2 = createS3Mount('orphan-regression');
         await m2.mount.init();
         await m2.mount.uploadQueue?.drain({ flushNow: true });
-        const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);
+        expect(await readItems(m2.mount, docConfig, dataDbId)).toHaveLength(2);
     });
 
     // A restore stages plain files too (lib/backup/restore.ts), and the repair above re-stages the

@@ -254,7 +254,7 @@ Consequences, stated plainly:
 
 ### Lazy migrate-on-open
 
-`ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**: `CollabDocument.init` (after `Drive.holdDatabase` resolves, before `DbProvider` hydrates or any client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into `Mount.openDatabase`/`buildDocumentDb`: that seam is config-generic (the same factory serves `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and the blocking snapshot paths enter the data.db's `documentDbs` slot (`takeSnapshot` with `awaitSlot`, `stageManagedDbCopy(…, 'open-handle-first')`), so a pre-migration snapshot taken from inside a still-unresolved open of the same document would queue behind its own slot op and never run. It must run once the open has resolved, outside it, never inside the factory; only the tick/close path reads the slot's `db` without waiting, because it runs inside that very close. Also: never wrap the helper in `withPathLock` — `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
+`ensureCollabFormat` is a plain helper in `lib/collab/migrations.ts` with **exactly two callers**: `CollabDocument.init` (after `Drive.holdDatabase` resolves, before `DbProvider` hydrates or any client subscribes) and the dormant-doc sweep. It is deliberately *not* wired into `buildDocumentDb`: that seam is config-generic (the same factory serves `comments.db` and chat's `data.db`) and doesn't know the container's `EigenDocType`; and the blocking snapshot paths enter the data.db's `documentDbs` slot (`takeSnapshot` with `awaitSlot`, `stageManagedDbCopy(…, 'open-handle-first')`), so a pre-migration snapshot taken from inside a still-unresolved open of the same document would queue behind its own slot op and never run. It must run once the open has resolved, outside it, never inside the factory; only the tick/close path reads the slot's `db` without waiting, because it runs inside that very close. Also: never wrap the helper in `withPathLock` — `snapshotContainerDataDb` self-locks there and the lock is not reentrant. The sequence:
 
 1. Read `doc_format` (missing ⇒ 1). If equal to `EIGEN_DOC_TYPE_INFO[type].collabFormatVersion`,
    continue as today — one cheap SELECT on the hot path.
@@ -397,12 +397,11 @@ initial answer.
 teams), opens each home's mounts, and per mount queries
 `type IN (collab types) AND (collabFormat IS NULL OR collabFormat < current)`. Containers with a
 live `CollabDocument` are skipped outright (`Drive.hasCollabDocument` — their open already migrated
-them and stamped the cache). For each remaining hit the sweep opens `data.db` via
-`Mount.openDatabase` (SQLite migrations run there), calls the same `ensureCollabFormat` helper
-`CollabDocument.init` uses, records the resulting stamp into `paths.collabFormat`, and closes the
-handle **only if it opened it cold** — a handle found already cached belongs to another consumer
-and is left to the mount lifecycle (`readEigendocContent`'s stated rule); yanking it would pull the
-db out from under a live session. The CAS makes the residual sweep-vs-open race on a dormant doc
+them and stamped the cache). For each remaining hit the sweep reads `data.db` inside
+`Mount.withDatabase` (SQLite migrations run there), calls the same `ensureCollabFormat` helper
+`CollabDocument.init` uses, records the resulting stamp into `paths.collabFormat`, and lets go. It
+never closes the handle itself: the idle close does that once no holder is left, so a live session
+that holds the db keeps it. The CAS makes the residual sweep-vs-open race on a dormant doc
 safe either way. Pacing copies `ContentReindexQueue`'s discipline: a fixed batch
 budget per mount per pass (its `REINDEX_BATCH`-style constant; start ~25, since each S3 container
 is a full download+upload), strictly serial within a mount, and stop-on-teardown. **Resumability is

@@ -1305,18 +1305,9 @@ export class Mount {
 
     // ---- Document databases and versions ----
 
-    // Opens an existing document database. A missing storage object is a 410, never a fresh empty
-    // database. createDatabase makes a new one.
-    public async openDatabase<S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return documentDb.openDatabase(this, config, pathId);
-    }
-
     // Makes a new document database at a row touchFile created. It refuses when the storage object
-    // exists already. It writes the empty schema to storage before it returns, so a later openDatabase
-    // finds it, even after a restart.
+    // exists already. It writes the empty schema to storage before it returns, so a later open finds
+    // it, even after a restart. Nobody holds it, so it closes after a few idle minutes.
     public async createDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         pathId: string,
@@ -1324,8 +1315,8 @@ export class Mount {
         return documentDb.createDatabase(this, config, pathId);
     }
 
-    // Runs fn with the database open, which then closes after a few idle minutes. A reader uses this
-    // rather than openDatabase, so no close runs under it.
+    // Runs fn with the database open, which then closes after a few idle minutes. A close that comes
+    // meanwhile waits for fn. A missing storage object is a 410, never a fresh empty database.
     public async withDatabase<S extends SchemaType, T>(
         config: DatabaseConfig<S>,
         pathId: string,
