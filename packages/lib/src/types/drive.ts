@@ -66,7 +66,7 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 
 // Every download format the export route can produce. A type's own list is below and keeps this order,
 // so ⌘K's per-format rows read like that type's Download menu.
-export const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
+const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // What the convert route turns an office file into: the one format each target reads, by its extension alone, and the

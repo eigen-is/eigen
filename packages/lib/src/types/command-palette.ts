@@ -16,7 +16,7 @@ import type { HelpSearchDoc } from './search';
 
 export type PaletteScope = 'mail' | 'file' | 'doc' | 'actions' | 'contacts' | 'help';
 
-export type ResultGroup =
+type ResultGroup =
     | 'top-hit'
     | 'suggested'
     | 'smart'
