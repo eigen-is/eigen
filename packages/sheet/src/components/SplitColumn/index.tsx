@@ -11,8 +11,13 @@ import { cellValue } from '../../engine/format';
 import { useDialog, useDialogProps } from '../../hooks/useDialog';
 import { getDataArr, getFlowdata, getRegStr, updateMoreCell } from '../../state';
 
-// Each is its own label and the id getRegStr reads.
-const SEPARATORS = ['Tab', 'semicolon', 'comma', 'space'];
+// Each id is the one getRegStr reads.
+const SEPARATORS = [
+    { id: 'Tab', label: 'Tab' },
+    { id: 'semicolon', label: 'Semicolon' },
+    { id: 'comma', label: 'Comma' },
+    { id: 'space', label: 'Space' },
+];
 
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
@@ -60,13 +65,10 @@ export function SplitColumn() {
                 <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
                     <div>Delimiters</div>
                     <div className="border p-1.5 my-1.5 space-y-1 text-sm">
-                        {SEPARATORS.map((separator) => (
-                            <Label key={separator} className="flex items-center gap-1.5">
-                                <Checkbox
-                                    checked={selected.has(separator)}
-                                    onCheckedChange={(c) => toggle(separator, c === true)}
-                                />
-                                {separator}
+                        {SEPARATORS.map(({ id, label }) => (
+                            <Label key={id} className="flex items-center gap-1.5">
+                                <Checkbox checked={selected.has(id)} onCheckedChange={(c) => toggle(id, c === true)} />
+                                {label}
                             </Label>
                         ))}
                         <Label className="flex items-center gap-1.5">
@@ -87,7 +89,7 @@ export function SplitColumn() {
                                 checked={selected.has('splitsimple')}
                                 onCheckedChange={(c) => toggle('splitsimple', c === true)}
                             />
-                            Consecutive separators are treated as a single
+                            Treat consecutive separators as one
                         </Label>
                     </div>
                     <div className="text-sm mt-6">Preview</div>

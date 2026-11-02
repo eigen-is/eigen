@@ -1,5 +1,5 @@
-// The Split text dialog previews the selected column cut at the ticked separators. OK, or Enter in the Other field,
-// writes the pieces across the row and closes. When the cells to the right hold data, OK asks first and the question
+// The Split text dialog previews the selected column cut at the ticked separators, each named in sentence case. OK, or
+// Enter in the Other field, writes the pieces across the row and closes. When the cells to the right hold data, OK asks first and the question
 // stays open: only a yes overwrites them.
 
 import { afterEach, expect, spyOn, test } from 'bun:test';
@@ -41,13 +41,33 @@ test('a row whose pieces repeat previews every piece', async () => {
         [cell('x,x'), null],
         [cell('y,z'), null],
     ]);
-    await tick('comma');
+    await tick('Comma');
     expect(preview()).toEqual([
         ['x', 'x'],
         ['y', 'z'],
     ]);
     const duplicateKeys = consoleError.mock.calls.filter((call) => String(call[0]).includes('same key'));
     expect(duplicateKeys).toEqual([]);
+});
+
+test('it names each separator in sentence case, and two separators in a row can count as one', async () => {
+    const dialog = await openSplitText([
+        [cell('Ada,,Lovelace'), null],
+        [cell('Alan,Turing'), null],
+    ]);
+    expect([...document.querySelectorAll('[role="dialog"] label')].map((l) => l.textContent)).toEqual([
+        'Tab',
+        'Semicolon',
+        'Comma',
+        'Space',
+        'Other',
+        'Treat consecutive separators as one',
+    ]);
+    await tick('Comma');
+    expect(preview()[0]).toEqual(['Ada', '', 'Lovelace']);
+    await tick('Treat consecutive separators as one');
+    await dialog.click('OK');
+    expect(row(dialog.context(), 0)).toEqual(['Ada', 'Lovelace']);
 });
 
 const row = (context: import('../../../state').Context, r: number) =>
@@ -62,7 +82,7 @@ test('OK writes the pieces across the row and closes', async () => {
     expect(dialog.footer()).toEqual(['Cancel', 'OK']);
     expect(dialog.button('OK')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
-    await tick('comma');
+    await tick('Comma');
     await dialog.click('OK');
     expect(row(dialog.context(), 0)).toEqual(['Ada', 'Lovelace']);
     expect(row(dialog.context(), 1)).toEqual(['Alan', 'Turing']);
@@ -86,7 +106,7 @@ test('with data to the right, OK asks first, and the question stays open until a
         [cell('Ada,Lovelace'), cell('keep')],
         [cell('Alan,Turing'), null],
     ]);
-    await tick('comma');
+    await tick('Comma');
     await dialog.click('OK');
     expect(dialog.title()).toBe('Notice');
     expect(dialog.dialogs()).toHaveLength(1);
@@ -101,7 +121,7 @@ test('Cancel on the question leaves the data to the right', async () => {
         [cell('Ada,Lovelace'), cell('keep')],
         [cell('Alan,Turing'), null],
     ]);
-    await tick('comma');
+    await tick('Comma');
     await dialog.click('OK');
     await dialog.click('Cancel');
     expect(row(dialog.context(), 0)).toEqual(['Ada,Lovelace', 'keep']);
