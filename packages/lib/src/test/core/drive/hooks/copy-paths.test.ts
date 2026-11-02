@@ -111,6 +111,48 @@ describe('useCopyPaths', () => {
         expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'right'])).toBe(true);
     });
 
+    // The server picks a free name per copy, so two copies into one folder at once could pick the same one.
+    test('copies into one folder go one at a time, and copies into two folders overlap', async () => {
+        const inFlight = new Map<string, number>();
+        const most = new Map<string, number>();
+        let mostOverall = 0;
+        g.fetch = async (_url: string, init?: RequestInit) => {
+            const { targetParentId } = JSON.parse(String(init?.body));
+            inFlight.set(targetParentId, (inFlight.get(targetParentId) ?? 0) + 1);
+            most.set(targetParentId, Math.max(most.get(targetParentId) ?? 0, inFlight.get(targetParentId) ?? 0));
+            mostOverall = Math.max(
+                mostOverall,
+                [...inFlight.values()].reduce((sum, n) => sum + n, 0),
+            );
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            inFlight.set(targetParentId, (inFlight.get(targetParentId) ?? 0) - 1);
+            return Response.json(path(`copy-${targetParentId}`, targetParentId));
+        };
+        const sources = [
+            path('a', 'left'),
+            path('b', 'left'),
+            path('c', 'left'),
+            path('d', 'right'),
+            path('e', 'right'),
+        ];
+        const { result } = await copy('paths', sources, (source) => ({
+            ...TARGET,
+            targetParentId: source.parentId ?? '',
+        }));
+        expect(result?.length).toBe(5);
+        expect(Object.fromEntries(most)).toEqual({ left: 1, right: 1 });
+        expect(mostOverall).toBe(2);
+    });
+
+    test('a failed copy does not stop the next one into the same folder', async () => {
+        const { error } = await copy('paths', [BAD, GOOD]);
+        expect(posted).toEqual(['bad', 'good']);
+        const { PartialCopyError } = await import('../../../../core/drive/hooks/writes');
+        if (!(error instanceof PartialCopyError)) throw error;
+        expect(error.copied.map((p) => p.id)).toEqual(['copy-of-good']);
+        expect(error.failed).toEqual([BAD]);
+    });
+
     test('a retry with the failed sources posts only those', async () => {
         const first = await copy('paths', [GOOD, BAD]);
         posted.length = 0;
