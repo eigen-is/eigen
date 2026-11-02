@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import type { DataLease } from '../lib/config/data-lock';
 import {
     DATA_LEASE_FILE,
     LEASE_HEARTBEAT_MS,
@@ -14,12 +15,22 @@ import { TEST_DATA_DIR } from './setup';
 
 const DATA_ROOT = join(TEST_DATA_DIR, 'instance-lock');
 const LOCK_MODULE = resolve(import.meta.dir, '../instance-lock.ts');
+const DATA_LOCK_MODULE = resolve(import.meta.dir, '../lib/config/data-lock.ts');
 
 // What index.ts runs first, in a process of its own: the lock is per process, so only a second process can contend.
 const HOLDER_SCRIPT = `
 import ${JSON.stringify(LOCK_MODULE)};
 console.log('held');
 if (process.env.HOLD) setInterval(() => {}, 1000);
+`;
+
+// A holder that exits on its own releases its lease, so this one says which lease it held first.
+const LEASE_SCRIPT = `
+import { join } from 'node:path';
+import ${JSON.stringify(LOCK_MODULE)};
+import { DATA_LEASE_FILE, readLease } from ${JSON.stringify(DATA_LOCK_MODULE)};
+console.log(JSON.stringify(readLease(join(process.env.EIGEN_DATA_ROOT, 'server', DATA_LEASE_FILE))));
+if (process.env.EXIT) process.exit(Number(process.env.EXIT));
 `;
 
 // What the graceful shutdown does last, before process.exit, on a data/server it can no longer write.
@@ -32,12 +43,20 @@ releaseInstanceLease();
 console.log('released');
 `;
 
-function spawnHolder(hold: boolean, dataRoot = DATA_ROOT, script = HOLDER_SCRIPT) {
+function spawnHolder(hold: boolean, dataRoot = DATA_ROOT, script = HOLDER_SCRIPT, env: Record<string, string> = {}) {
     return Bun.spawn([process.execPath, '-e', script], {
-        env: { ...process.env, EIGEN_DATA_ROOT: dataRoot, ...(hold ? { HOLD: '1' } : {}) },
+        env: { ...process.env, EIGEN_DATA_ROOT: dataRoot, ...(hold ? { HOLD: '1' } : {}), ...env },
         stdout: 'pipe',
         stderr: 'pipe',
     });
+}
+
+// The lease a holder that booted on `dataRoot` held, once it exited 0.
+async function heldLease(dataRoot: string): Promise<DataLease | null> {
+    const holder = spawnHolder(false, dataRoot, LEASE_SCRIPT);
+    const [code, stdout] = await Promise.all([holder.exited, new Response(holder.stdout).text()]);
+    expect(code).toBe(0);
+    return JSON.parse(stdout);
 }
 
 // Every wait below is the real one: a foreign lease costs a boot LEASE_WAIT_MS, and the scenarios that wait run side
@@ -247,10 +266,8 @@ setInterval(() => {}, 1000);
                 return stderr;
             };
             const takeOver = async (dataRoot: string) => {
-                const holder = spawnHolder(false, dataRoot);
-                expect(await holder.exited).toBe(0);
+                const lease = await heldLease(dataRoot);
                 expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
-                const lease = readLease(leaseFileOf(dataRoot));
                 expect(lease).toMatchObject(localScope(dataRoot));
                 expect(lease?.id).not.toBe('remote-id');
             };
@@ -281,10 +298,20 @@ setInterval(() => {}, 1000);
         const dataRoot = join(DATA_ROOT, 'lease-crashed');
         writeForeignLease(dataRoot, localScope(dataRoot));
         const started = Date.now();
-        const holder = spawnHolder(false, dataRoot);
-        expect(await holder.exited).toBe(0);
+        const lease = await heldLease(dataRoot);
         expect(Date.now() - started).toBeLessThan(LEASE_WAIT_MS / 2);
-        expect(readLease(leaseFileOf(dataRoot))?.id).not.toBe('remote-id');
+        expect(lease).toMatchObject(localScope(dataRoot));
+        expect(lease?.id).not.toBe('remote-id');
+    });
+
+    // Such as a boot that refuses its mail domain: it exits before any graceful shutdown could release the lease.
+    test('a holder that exits through process.exit leaves no lease', async () => {
+        const dataRoot = join(DATA_ROOT, 'lease-exit');
+        const holder = spawnHolder(false, dataRoot, LEASE_SCRIPT, { EXIT: '1' });
+        const [code, stdout] = await Promise.all([holder.exited, new Response(holder.stdout).text()]);
+        expect(code).toBe(1);
+        expect(JSON.parse(stdout)).toMatchObject(localScope(dataRoot));
+        expect(readLease(leaseFileOf(dataRoot))).toBeNull();
     });
 
     // The swap of ./eigen restore reads the lease as root, so a FIFO, a device or a symlink in its place must not hang
@@ -314,7 +341,7 @@ setInterval(() => {}, 1000);
                 }),
             ];
             const started = Date.now();
-            const holders = roots.map((dataRoot) => spawnHolder(false, dataRoot));
+            const holders = roots.map((dataRoot) => spawnHolder(false, dataRoot, LEASE_SCRIPT));
             // A read of a FIFO blocks for good, so a holder that hangs is killed and fails the exit code.
             const hung = setTimeout(() => {
                 for (const holder of holders) holder.kill('SIGKILL');
@@ -325,7 +352,10 @@ setInterval(() => {}, 1000);
                 clearTimeout(hung);
             }
             expect(Date.now() - started).toBeLessThan(LEASE_WAIT_MS / 2);
-            for (const dataRoot of roots) expect(readLease(leaseFileOf(dataRoot))).toMatchObject(localScope(dataRoot));
+            for (const [index, dataRoot] of roots.entries()) {
+                const held = await new Response(holders[index].stdout).text();
+                expect(JSON.parse(held)).toMatchObject(localScope(dataRoot));
+            }
         },
         LEASE_TEST_TIMEOUT_MS,
     );

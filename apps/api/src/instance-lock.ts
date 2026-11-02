@@ -1,7 +1,7 @@
 // Makes this API process the only one on its data folder, because two of them corrupt its databases. The entry
 // point imports it before anything opens a database. It takes the file lock, which refuses a second process on this
-// kernel, and then the lease, which refuses one the lock does not reach and is kept alive by a heartbeat until the
-// graceful shutdown releases it.
+// kernel, and then the lease, which refuses one the lock does not reach. A heartbeat keeps the lease alive until the
+// graceful shutdown releases it, or until the process exits some other way.
 
 import { rmSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -27,13 +27,19 @@ const leaseFile = getServerDataPath(DATA_LEASE_FILE);
 const instanceLock = holdInstanceLock();
 const lease = holdInstanceLease();
 let beatFailed = false;
+let released = false;
 // Unref'd, so a process that has nothing else to do still exits.
 const heartbeat = setInterval(beat, LEASE_HEARTBEAT_MS).unref();
+// Any process.exit releases the lease too, such as a boot that exits on a setting it refuses. Only a kill or a crash
+// leaves it behind.
+process.on('exit', releaseInstanceLease);
 
-// Called once the homes are closed by the graceful shutdown, so the heartbeat runs through the whole drain, and before
-// a boot that exits on a setting it refuses. A lease it cannot remove only costs the next boot elsewhere one wait, so
-// it never keeps the exit from happening.
+// Called once the homes are closed by the graceful shutdown, so the heartbeat runs through the whole drain, and again
+// by the exit, where it does nothing. A lease it cannot remove only costs the next boot elsewhere one wait, so it
+// never keeps the exit from happening.
 export function releaseInstanceLease(): void {
+    if (released) return;
+    released = true;
     clearInterval(heartbeat);
     try {
         if (readLease(leaseFile)?.id === lease.id) rmSync(leaseFile, { force: true });

@@ -105,8 +105,6 @@ export async function assertMailDomainUnchanged(): Promise<void> {
         if (isProduction()) {
             console.error(mismatch);
             console.error(`Set MAIL_DOMAIN=${recorded} in .env.production and run ./eigen restart.`);
-            // The entry point loaded the module first, so the import takes no lock of its own.
-            (await import('../../instance-lock')).releaseInstanceLease();
             process.exit(1);
         }
         console.warn(mismatch);
