@@ -24,7 +24,7 @@ import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
 import { copyPathAcross, copySize } from '../lib/drive/copy-across';
-import { withFreeName } from '../lib/drive/naming';
+import { folderIn, withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -199,36 +199,24 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
-            // The copy gets a free name in the target folder here and not in Drive.copyPath, because a
-            // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
-            // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
             const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
-            const copy = (name: string): Promise<DrivePath> =>
+            const copyAcross = (name: string): Promise<DrivePath> =>
+                copyPathAcross(sourceDrive, source, targetDrive, body.targetMountId, body.targetParentId, name, user);
+            // A file copied to another mount is uploaded there, and the upload picks its free name.
+            if (!sameMount && !isContainerType(source.type)) return copyAcross(desired);
+            const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
+            if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
+
+            // Any other copy gets a free name in the target folder here and not in Drive.copyPath, because a
+            // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
+            // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
+            return withFreeName(folderIn(target.mount, body.targetParentId), desired, (name) =>
                 sameMount
                     ? sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user)
-                    : copyPathAcross(
-                          sourceDrive,
-                          source,
-                          targetDrive,
-                          body.targetMountId,
-                          body.targetParentId,
-                          name,
-                          user,
-                      );
-            // A file copied to another mount is uploaded there, and the upload picks its own free name.
-            if (!sameMount && !isContainerType(source.type)) return copy(desired);
-            const folder = {
-                ownerId: body.targetOwnerId,
-                mountId: body.targetMountId,
-                parentId: body.targetParentId,
-                isTaken: async (name: string) =>
-                    (await targetDrive.getChildByName(body.targetMountId, body.targetParentId, name)) !== null,
-                childNames: async () =>
-                    (await targetDrive.getFolderContents(body.targetMountId, body.targetParentId)).map((s) => s.name),
-            };
-            return withFreeName(folder, desired, copy);
+                    : copyAcross(name),
+            );
         },
         {
             body: t.Object({

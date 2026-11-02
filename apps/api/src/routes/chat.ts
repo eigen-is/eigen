@@ -13,7 +13,7 @@ import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { ApiError } from '../lib/core/errors';
 import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';
-import { withFreeName } from '../lib/drive/naming';
+import { folderIn, withFreeName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
@@ -89,19 +89,16 @@ export const chatRouter = new Elysia({ name: 'chat' })
             // 409 on a clash. The free name is picked with the extension on, because Drive.create adds it
             // again.
             const create = (name: string) => drive.create(params.mountId, parentId, name, DRIVE_TYPE_CHAT, user);
-            const folder = {
-                ownerId: params.ownerId,
-                mountId: params.mountId,
-                parentId,
-                isTaken: async (name: string) => (await drive.getChildByName(params.mountId, parentId, name)) !== null,
-                childNames: async () =>
-                    (await drive.getFolderContents(params.mountId, parentId)).map((child) => child.name),
-            };
-            const chat = body.dedupeName
-                ? await withFreeName(folder, withEigenExtension(fileName, DRIVE_TYPE_CHAT), (name) =>
-                      create(stripEigenExtension(name)),
-                  )
-                : await create(fileName);
+            let chat: DrivePath;
+            if (body.dedupeName) {
+                const { mount } = await drive.resolveFile(params.mountId, parentId);
+                const desired = withEigenExtension(fileName, DRIVE_TYPE_CHAT);
+                chat = await withFreeName(folderIn(mount, parentId), desired, (name) =>
+                    create(stripEigenExtension(name)),
+                );
+            } else {
+                chat = await create(fileName);
+            }
 
             // A wizard chat is shared from the start. When the share fails, the new chat goes again
             // instead of staying unshared. No share email goes out, but the notification and the event

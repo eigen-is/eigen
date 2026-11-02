@@ -8,7 +8,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
-import { withFreeName } from '../drive/naming';
+import { folderIn, withFreeName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
 import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
@@ -119,12 +119,8 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
             // A row named `.trash` from before the name rule counts as taken too, because restoring it under
             // that name would alias the real trash folder. The row is still trashed, so it never matches itself.
             const folder = {
-                ownerId: mount.history.ownerId,
-                mountId: mount.id,
-                parentId: targetParentId,
-                isTaken: async (name: string) =>
-                    isReservedName(name) || (await mount.getChildByName(targetParentId, name)) !== null,
-                childNames: async () => (await mount.listFolder(targetParentId)).map((child) => child.name),
+                ...folderIn(mount, targetParentId),
+                isTaken: (name: string) => isReservedName(name) || mount.hasLiveChild(targetParentId, name),
             };
             const now = new Date();
             await withFreeName(folder, row.name, async (restoreName) => {

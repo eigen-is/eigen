@@ -8,7 +8,7 @@ import type { Mount } from '../mount';
 import { saveThumbnail } from '../shared/thumbnails';
 import type { User } from '../user';
 import type { Drive } from './drive';
-import { withFreeName } from './naming';
+import { folderIn, withFreeName } from './naming';
 
 // The caller tells the watchers, so an upload of many files notifies them once. When this throws, the
 // caller removes the temp file.
@@ -27,14 +27,7 @@ export async function finalizeUpload(
 ): Promise<DrivePath> {
     // The store keeps names in NFC, so the name is compared with its siblings in that form too.
     const originalName = args.name.replace(/[/\\]/g, '_').normalize('NFC');
-    const folder = {
-        ownerId: mount.history.ownerId,
-        mountId: mount.id,
-        parentId: args.parentId,
-        isTaken: async (name: string) => (await mount.getChildByName(args.parentId, name)) !== null,
-        childNames: async () => (await mount.listFolder(args.parentId)).map((child) => child.name),
-    };
-    const pathId = await withFreeName(folder, originalName, (name) =>
+    const pathId = await withFreeName(folderIn(mount, args.parentId), originalName, (name) =>
         mount.createFileFromTemp(args.parentId, name, args.mimeType, args.size, args.hash, args.tempId),
     );
     const uploadedFile = originalName

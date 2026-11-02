@@ -359,18 +359,23 @@ export class Mount {
     }
 
     public async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
-        name = name.normalize('NFC');
-        const result = await this.db
-            .select()
-            .from(paths)
-            .where(
-                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
-            )
-            .get();
-        if (result) return this.toDrivePath(result);
+        const row = this.findLiveChild(parentId, name.normalize('NFC'));
+        return row ? this.toDrivePath(row) : null;
+    }
 
-        const folded = await this.findCaseFoldedChild(parentId, name);
-        return folded ? this.getPath(folded.id) : null;
+    // These two read synchronously, so withFreeName can check a name and reserve it with no await in
+    // between.
+    public hasLiveChild(parentId: string, name: string): boolean {
+        return this.findLiveChild(parentId, name.normalize('NFC')) !== null;
+    }
+
+    public liveChildNames(parentId: string): string[] {
+        return this.db
+            .select({ name: paths.name })
+            .from(paths)
+            .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
+            .all()
+            .map((row) => row.name);
     }
 
     public async resolvePath(pathStr: string): Promise<DrivePath | null> {
@@ -501,21 +506,28 @@ export class Mount {
         };
     }
 
-    // SQLite's LOWER() folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII
-    // case pairs as one file, so on `local` those names must match too (foldName).
-    // It runs only for a non-ASCII name on `local`. Every other lookup keeps SQLite's fold, and the
-    // unique index stays the safety net for races. An ASCII name whose stored twin is not ASCII still
-    // passes, such as strasse beside straße. On `local` the disk check of a create, rename, move or
-    // restore catches those (trash.renameTarget).
-    private async findCaseFoldedChild(parentId: string, name: string): Promise<{ id: string } | null> {
+    // The live child with this name, compared the way the unique index compares: SQLite's LOWER(),
+    // which folds ASCII only. A case-insensitive disk such as APFS also treats non-ASCII case pairs as one
+    // file, so on `local` a non-ASCII name is also compared folded (foldName). An ASCII name whose stored
+    // twin is not ASCII still passes, such as strasse beside straße. On `local` the disk check of a create,
+    // rename, move or restore catches those (trash.renameTarget).
+    private findLiveChild(parentId: string, name: string): typeof paths.$inferSelect | null {
+        const row = this.db
+            .select()
+            .from(paths)
+            .where(
+                and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`, isNull(paths.trashedAt)),
+            )
+            .get();
+        if (row) return row;
         if (!this.isPathBased || !/\P{ASCII}/u.test(name)) return null;
         const folded = foldName(name);
-        const siblings = await this.db
-            .select({ id: paths.id, name: paths.name })
+        const siblings = this.db
+            .select()
             .from(paths)
             .where(and(eq(paths.parentId, parentId), isNull(paths.trashedAt)))
             .all();
-        return siblings.find((s) => foldName(s.name) === folded) ?? null;
+        return siblings.find((sibling) => foldName(sibling.name) === folded) ?? null;
     }
 
     // ---- Creating ----
@@ -532,7 +544,7 @@ export class Mount {
             this.assertLiveFolder(folderId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
-            await this.assertUniqueName(parentId, name);
+            this.assertUniqueName(parentId, name);
             if (this.isPathBased && this.storage.mkdir) {
                 const key = await this.resolveWriteKey(parentId, fileValue);
                 await this.claimCreateKey(parentId, key, folderId, name);
@@ -605,7 +617,7 @@ export class Mount {
             this.assertLiveFolder(fileId, parentId);
             // Checked under the lock, because on `local` a rename that took the lock first owns the
             // key this create would replace.
-            await this.assertUniqueName(parentId, name);
+            this.assertUniqueName(parentId, name);
             const storageKey = await this.resolveWriteKey(parentId, fileValue);
             await this.claimCreateKey(parentId, storageKey, fileId, name);
             // The bytes land before the row. After a crash, bytes no row owns do less harm than a row
@@ -645,23 +657,9 @@ export class Mount {
         return fileId;
     }
 
-    private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
-        const existing =
-            (await this.db
-                .select({ id: paths.id })
-                .from(paths)
-                .where(
-                    and(
-                        eq(paths.parentId, parentId),
-                        sql`LOWER(${paths.name}) = LOWER(${name})`,
-                        isNull(paths.trashedAt),
-                    ),
-                )
-                .get()) ?? (await this.findCaseFoldedChild(parentId, name));
-
-        if (existing && existing.id !== excludeId) {
-            throw nameTakenError(name);
-        }
+    private assertUniqueName(parentId: string, name: string, excludeId?: string): void {
+        const existing = this.findLiveChild(parentId, name);
+        if (existing && existing.id !== excludeId) throw nameTakenError(name);
     }
 
     // A create checks its folder before it writes any bytes. A folder that went to the trash while the
@@ -790,7 +788,7 @@ export class Mount {
                     throw new ApiError(400, `"${targetName}" is a reserved name`);
                 }
                 if (targetParent) {
-                    await this.assertUniqueName(targetParent, targetName, pathId);
+                    this.assertUniqueName(targetParent, targetName, pathId);
                 }
 
                 const renameFn = this.storage.rename;
@@ -819,7 +817,7 @@ export class Mount {
                             const newName = path.posix.basename(newPath);
                             const rename = renameFn.bind(this.storage);
                             if (parentId) {
-                                await this.assertUniqueName(parentId, newName, pathId);
+                                this.assertUniqueName(parentId, newName, pathId);
                                 const occupant = await trash.renameTarget(this, parentId, newPath, oldPath);
                                 if (occupant === 'live') {
                                     throw new ApiError(409, `"${newName}" is taken on disk by another item`);

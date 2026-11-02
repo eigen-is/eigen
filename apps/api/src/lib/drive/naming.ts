@@ -1,25 +1,37 @@
 // Picks a free name beside existing ones by adding a number, such as `photo (2).jpg`, for an upload, a
-// copy or a restore that would collide with a sibling. Creates into one folder run at once, so a name that
-// a running create picked counts as taken until that create ends. The API is one process, which holds the
+// copy or a restore that would collide with a sibling. Creates into one folder run at once, so the name a
+// running create picked counts as taken until that create ends. The API is one process, which holds the
 // data dir's instance lock, so this one map sees every create.
 
+import type { Mount } from '../mount';
 import { foldName, MAX_NAME_BYTES } from '../mount/names';
 
-// The folder a create puts its item in, and how to read the names already in it.
+// The folder a create puts its item in, and how to read the names already in it. Both reads are
+// synchronous, so no other create can land between a read and the reservation that follows it.
 export type NameFolder = {
     ownerId: string;
     mountId: string;
     parentId: string;
     // Whether a live child has this name. It reads one row, so a create into a big folder stays quick.
-    isTaken: (name: string) => Promise<boolean>;
+    isTaken: (name: string) => boolean;
     // The name of every live child, read only when the wanted name is taken.
-    childNames: () => Promise<readonly string[]>;
+    childNames: () => readonly string[];
 };
 
-// The folded names that creates picked, by folder. An entry lives while any create in its folder runs, and
-// a name a create took stays in it after that create ends. Another create may have read the folder before
-// that name's row landed, and it still has to see the name.
-const busyFolders = new Map<string, { creates: number; names: Set<string> }>();
+// A folder of a mount, read through the mount's synchronous lookups.
+export function folderIn(mount: Mount, parentId: string): NameFolder {
+    return {
+        ownerId: mount.history.ownerId,
+        mountId: mount.id,
+        parentId,
+        isTaken: (name) => mount.hasLiveChild(parentId, name),
+        childNames: () => mount.liveChildNames(parentId),
+    };
+}
+
+// The folded names of the creates still running, by folder. A finished create's row is in the folder,
+// so its name no longer needs an entry here.
+const namesInFlight = new Map<string, Set<string>>();
 
 // Calls create with a name no sibling has and no other running create picked. Nothing waits: two creates
 // of one name at once each get their own name, however many there are.
@@ -29,30 +41,24 @@ export async function withFreeName<T>(
     create: (name: string) => Promise<T>,
 ): Promise<T> {
     const key = `${folder.ownerId}/${folder.mountId}/${folder.parentId}`;
-    const busy = busyFolders.get(key) ?? { creates: 0, names: new Set<string>() };
-    busyFolders.set(key, busy);
-    busy.creates++;
+    const inFlight = namesInFlight.get(key) ?? new Set<string>();
+    namesInFlight.set(key, inFlight);
+
+    // No await from here to the add, so the pick and the reservation are one step.
+    let name = desired;
+    if (folder.isTaken(desired) || inFlight.has(foldName(desired))) {
+        const used = new Set([...folder.childNames().map(foldName), ...inFlight]);
+        name = getUniqueFileName(desired, used);
+    }
+    const folded = foldName(name);
+    inFlight.add(folded);
+
     try {
-        // The picked names are checked after the folder is read. No await sits between that check and
-        // the add below, so no other create can pick the same name in between.
-        let name = desired;
-        if ((await folder.isTaken(desired)) || busy.names.has(foldName(desired))) {
-            const used = new Set((await folder.childNames()).map(foldName));
-            for (const picked of busy.names) used.add(picked);
-            name = getUniqueFileName(desired, used);
-        }
-        const folded = foldName(name);
-        busy.names.add(folded);
-        try {
-            return await create(name);
-        } catch (e) {
-            // A failed create leaves no live item behind, so its name is free again.
-            busy.names.delete(folded);
-            throw e;
-        }
+        return await create(name);
     } finally {
-        busy.creates--;
-        if (busy.creates === 0) busyFolders.delete(key);
+        // Whatever the create left in the folder has its row there by now, so the folder read covers it.
+        inFlight.delete(folded);
+        if (inFlight.size === 0) namesInFlight.delete(key);
     }
 }
 
