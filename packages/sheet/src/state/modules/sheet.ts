@@ -180,6 +180,8 @@ export function shiftSheetOrders(sheets: Sheet[], at: number, by: 1 | -1) {
     }
 }
 
+// Renames the current sheet to the text its tab holds. A name it refuses puts the old text back in the tab and throws
+// the reason, which the tab shows in a notice.
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (ctx.allowEdit === false) {
@@ -209,7 +211,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     if (ctx.sheets.some((sheet, i) => i !== index && sheetNameKey(sheet.name) === sheetNameKey(txt))) {
         editable.innerText = oldtxt;
-        return;
+        throw new Error('Another sheet already has this name');
     }
 
     ctx.sheets[index].name = txt;

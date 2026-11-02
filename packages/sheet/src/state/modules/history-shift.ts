@@ -36,7 +36,7 @@ type RowColMove = {
     to: (index: number) => number | null;
     // Where an index the op left was before it, or null for a row or column the op inserts.
     from: (index: number) => number | null;
-    formula: (text: string, sheetName: string, onTargetSheet: boolean) => string;
+    formula: (text: string, sheetName: string, onTargetSheet: boolean, sheets: readonly Sheet[]) => string;
     merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
     keyed: (map: Record<string, number>) => Record<string, number>;
     cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
@@ -60,8 +60,8 @@ function insertMove(op: InsertRowColOp): RowColMove {
         type,
         to: (i) => (i < at ? i : i + count),
         from: (i) => (i < at ? i : i < at + count ? null : i - count),
-        formula: (text, name, onTargetSheet) =>
-            functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet),
+        formula: (text, name, onTargetSheet, sheets) =>
+            functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, sheets),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
         keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
         cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
@@ -78,8 +78,8 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
         type,
         to: (i) => (i < start ? i : i > end ? i - count : null),
         from: (i) => (i < start ? i : i + count),
-        formula: (text, name, onTargetSheet) =>
-            functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet),
+        formula: (text, name, onTargetSheet, sheets) =>
+            functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, sheets),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
         keyed: (map) => shiftKeyedMapForDelete(map, start, end),
         cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
@@ -410,7 +410,7 @@ class Shifter {
 
     private formula(f: string, onTargetSheet: boolean): string {
         const text = f.startsWith('=') ? f.slice(1) : f;
-        const shifted = `=${this.move.formula(text, this.name, onTargetSheet)}`;
+        const shifted = `=${this.move.formula(text, this.name, onTargetSheet, this.sheets)}`;
         return shifted === f ? f : shifted;
     }
 

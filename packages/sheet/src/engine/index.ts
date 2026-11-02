@@ -1,4 +1,5 @@
 export {
+    findSheetByName,
     MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     quoteSheetName,

@@ -897,6 +897,14 @@ describe('document/sheets — appendSheetsToYjs', () => {
         expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'DATA(Copy)']);
     });
 
+    test('a link to a renamed sheet that spells its name in another case follows the new name', () => {
+        const doc = workbook();
+        const link = { linkType: 'sheet', linkAddress: 'DATA' };
+        append(doc, encodeSheetsSnapshot([{ ...file[0], hyperlink: { '0_1': link } }], { computed: true }));
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        expect(sheets[1].hyperlink).toEqual({ '0_1': { linkType: 'sheet', linkAddress: 'Data(Copy)' } });
+    });
+
     test('a workbook never compacted takes the file beside the default sheet the editor opens on', () => {
         const doc = new Y.Doc();
         append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));

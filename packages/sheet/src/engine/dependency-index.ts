@@ -183,8 +183,17 @@ export class DependencyIndex {
         return result;
     }
 
+    // How many entries dependentsOf visits for (r, c): each formula listed at the cell, and each range listed near it,
+    // whether the range covers the cell or not. They are counted without a scan, so recalc can weigh what weighing the
+    // links will cost before it scans for them.
+    public lookupVisits(sheetId: string, r: number, c: number): number {
+        let visits = this.points.get(sheetId)?.get(r * CELL_PACK + c)?.length ?? 0;
+        for (const entries of this.nearby(sheetId, r, c)) visits += entries?.length ?? 0;
+        return visits;
+    }
+
     // How many formulas read (r, c), a formula that reads the cell through two of its ranges counted twice. It builds
-    // nothing, so recalc can weigh the whole graph before it links it.
+    // nothing, so recalc can weigh the whole graph before it links it. It scans what lookupVisits counts.
     public countDependents(sheetId: string, r: number, c: number): number {
         let count = this.points.get(sheetId)?.get(r * CELL_PACK + c)?.length ?? 0;
         for (const entries of this.nearby(sheetId, r, c)) {

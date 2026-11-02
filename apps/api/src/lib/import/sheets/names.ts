@@ -3,7 +3,7 @@
 // reader builds one inliner per workbook and hands it every formula, rule formula and list source with the sheet it
 // sits on. A name that can't be written into a formula, such as one into another workbook, stays as written and counts.
 
-import { functionCopy, inlineNames, iscelldata } from '@workspace/sheet/engine';
+import { functionCopy, inlineNames, iscelldata, sheetNameKey } from '@workspace/sheet/engine';
 import type { LossCounter } from '../../document/transform/protocol';
 import { MAX_FORMULA_LENGTH, withoutFuturePrefixes } from '../../ooxml/spreadsheetml';
 import type { DefinedName } from './package';
@@ -46,7 +46,7 @@ export function nameInliner(
     const inlined = new Map<string, string | null>();
     const resolve = (name: DefinedName, sheet: string, depth: number): string | null => {
         const on = name.sheet ?? sheet;
-        const key = `${nameKey(name.name, name.sheet)}\n${on.toLowerCase()}`;
+        const key = `${nameKey(name.name, name.sheet)}\n${sheetNameKey(on)}`;
         const known = inlined.get(key);
         if (known !== undefined) return known;
         if (depth > MAX_NAME_DEPTH) return null;
@@ -89,7 +89,7 @@ export function nameInliner(
 const TOKEN = /[^\s"'(),&!:=<>+\-*/%^]+/gu;
 
 function nameKey(name: string, sheet: string | undefined): string {
-    return `${sheet?.toLowerCase() ?? ''}!${name.toLowerCase()}`;
+    return `${sheet === undefined ? '' : sheetNameKey(sheet)}!${name.toLowerCase()}`;
 }
 
 const REF_ERROR = /^(?:.+!)?#REF!$/;

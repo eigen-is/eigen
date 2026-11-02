@@ -223,11 +223,23 @@ test('Enter that ends a tab rename sends no keypress on to the notice', async ()
     const { container } = await mountWorkbook();
     const name = tab(container, 'One').querySelector('span');
     if (!name) throw new Error('tab One has no name');
+    await act(async () => {
+        name.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    name.focus();
+    name.innerText = 'a/b';
     const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
     await act(async () => {
         name.dispatchEvent(enter);
     });
-    expect(enter.defaultPrevented).toBe(true);
+    const notice = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
+    expect(notice()?.textContent).toContain('A sheet name has at most 31 characters');
+    // The browser sends the keydown's keypress to what has the focus, and on a button that is a click.
+    const focused = document.activeElement;
+    if (!enter.defaultPrevented && focused instanceof HTMLButtonElement) {
+        await act(async () => focused.click());
+    }
+    expect(notice()).not.toBeNull();
 });
 
 // The column menu's arrow shows on a hovered column a user may edit. A read-only column beside it must not hide it.

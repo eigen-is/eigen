@@ -6,8 +6,8 @@
 import {
     a1RangeRef,
     extractLabel,
+    findSheetByName,
     parseA1Range,
-    sheetNameKey,
     sheetRefName,
     toLabel,
     unquoteSheetName,
@@ -23,13 +23,18 @@ export function functionCopy(txt: string, rowOffset: number, colOffset: number):
 }
 
 // Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
-// imported tab whose name the workbook holds. A leading `=` is kept.
-export function renameSheetRefs(txt: string, renames: ReadonlyMap<string, string>): string {
+// imported tab whose name the workbook holds. `sheets` are the sheets the formula's workbook holds, which a ref's name
+// is read against, and `renames` maps the name of each renamed one to its new name. A leading `=` is kept.
+export function renameSheetRefs(
+    txt: string,
+    sheets: readonly { name: string }[],
+    renames: ReadonlyMap<string, string>,
+): string {
     if (renames.size === 0 || !txt.includes('!')) return txt;
-    const byKey = new Map([...renames].map(([from, to]) => [sheetNameKey(from), to]));
     const renamed = walkFormulaRefs(txt, (ref) => {
         const sheetEnd = ref.lastIndexOf('!');
-        const name = sheetEnd > 0 ? byKey.get(sheetNameKey(unquoteSheetName(ref.slice(0, sheetEnd)))) : undefined;
+        const sheet = sheetEnd > 0 ? findSheetByName(sheets, unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+        const name = sheet && renames.get(sheet.name);
         return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
     });
     return txt.startsWith('=') ? `=${renamed}` : renamed;
@@ -67,7 +72,9 @@ export function inlineNames(
 // Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
 // alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
 // `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
-// whether the formula lives on it. Only refs to that sheet move.
+// whether the formula lives on it. Only refs to that sheet move. `sheets` are the workbook's sheets, which a ref's
+// name is read against, so in a workbook holding Data and data an op on one moves only its own refs. Without them a
+// name reads the target in any case.
 export function functionStrChange(
     txt: string,
     type: 'add' | 'del',
@@ -77,13 +84,19 @@ export function functionStrChange(
     step: number,
     targetSheet: string,
     onTargetSheet: boolean,
+    sheets: readonly { name: string }[] = [{ name: targetSheet }],
 ): string {
     if (!txt) {
         return '';
     }
-    return walkFormulaRefs(txt, (ref) =>
-        shiftRefForRowCol(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
-    );
+    return walkFormulaRefs(txt, (ref) => {
+        const sheetEnd = ref.lastIndexOf('!') + 1;
+        const onSheet =
+            sheetEnd > 0
+                ? findSheetByName(sheets, unquoteSheetName(ref.slice(0, sheetEnd - 1)))?.name === targetSheet
+                : onTargetSheet;
+        return onSheet ? shiftRefForRowCol(ref, sheetEnd, type, rc, orient, stindex, step) : ref;
+    });
 }
 
 // Returns [rowAbsolute, colAbsolute] for a single ref like "$A$1" → [true, true].
@@ -283,24 +296,18 @@ function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
     return `${prefix + toLabel(rowStart, colStart)}:${toLabel(rowEnd, colEnd)}`;
 }
 
-// Moves one cell or range ref for functionStrChange.
+// Moves one cell or range ref on the op's sheet for functionStrChange. Its sheet's name, if it has one, ends before
+// `sheetEnd`.
 function shiftRefForRowCol(
     txt: string,
+    sheetEnd: number,
     type: 'add' | 'del',
     rc: 'row' | 'col',
     orient: 'lefttop' | 'rightbottom' | null,
     stindex: number,
     step: number,
-    targetSheet: string,
-    onTargetSheet: boolean,
 ): string {
-    const sheetEnd = txt.lastIndexOf('!') + 1;
     const prefix = txt.slice(0, sheetEnd);
-    const onSheet =
-        sheetEnd > 0
-            ? sheetNameKey(unquoteSheetName(prefix.slice(0, -1))) === sheetNameKey(targetSheet)
-            : onTargetSheet;
-    if (!onSheet) return txt;
 
     const [startTxt, endTxt = startTxt] = txt.slice(sheetEnd).split(':');
     // As in shiftRef: every token walkFormulaRefs hands over parses.

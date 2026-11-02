@@ -9,6 +9,7 @@ import {
     rangeToA1,
     SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
+    sheetNameKey,
 } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
@@ -55,10 +56,10 @@ export function workbookXml(sheets: Sheet[], names: string[], ids: string[], act
 // clashes it is numbered as Excel numbers a copy, past every name the workbook holds. Formulas naming a repaired sheet
 // keep the name they had.
 export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] {
-    const taken = new Set(['history']);
+    const taken = new Set([sheetNameKey('History')]);
     const kept = sheets.map(({ name }) => {
-        if (name !== legalName(name) || taken.has(name.toLowerCase())) return undefined;
-        taken.add(name.toLowerCase());
+        if (name !== legalName(name) || taken.has(sheetNameKey(name))) return undefined;
+        taken.add(sheetNameKey(name));
         return name;
     });
     return kept.map((name, index) => {
@@ -66,11 +67,11 @@ export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] 
         lost('sheet-names-changed');
         const base = legalName(sheets[index].name) || `Sheet${index + 1}`;
         let candidate = base;
-        for (let copy = 2; taken.has(candidate.toLowerCase()); copy++) {
+        for (let copy = 2; taken.has(sheetNameKey(candidate)); copy++) {
             const suffix = ` (${copy})`;
             candidate = `${cut(base, MAX_SHEET_NAME_LENGTH - suffix.length)}${suffix}`;
         }
-        taken.add(candidate.toLowerCase());
+        taken.add(sheetNameKey(candidate));
         return candidate;
     });
 }

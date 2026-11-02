@@ -14,6 +14,7 @@ import {
 import type { ChartSpec, SheetChartSpecParts } from '@workspace/lib/types/chart';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { generateKeyBetween, normalizeAngle } from '@workspace/lib/vector';
+import { sheetNameKey } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlTrimmedText } from '../../core/xml';
 import type { Lost } from '../../document/transform/protocol';
@@ -148,7 +149,7 @@ export function placeDrawings(drawings: Drawing[], context: DrawingContext): voi
     // By the cells it names, else by its caches.
     function specOf(root: XmlElement): ChartSpec | undefined {
         if (specs.has(root)) return specs.get(root);
-        const ranges = (name: string) => context.sheetIds.get(name.toLowerCase());
+        const ranges = (name: string) => context.sheetIds.get(sheetNameKey(name));
         const read = readChart(root, { theme: context.theme, data: { ranges } });
         const spec = 'spec' in read ? read.spec : undefined;
         specs.set(root, spec);

@@ -227,6 +227,17 @@ describe('functionStrChange — sheet names on both legs', () => {
         expect(once).not.toBe("'Sheet 1'!A1:B2");
     });
 
+    test('in a workbook holding Data and data, an op on one moves only its own refs', () => {
+        const twins = [{ name: 'Data' }, { name: 'data' }];
+        const formula = '=Data!A1+data!A1+DATA!A1';
+        expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'data', false, twins)).toBe(
+            'Data!A1+data!A2+DATA!A1',
+        );
+        expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'Data', false, twins)).toBe(
+            'Data!A2+data!A1+DATA!A2',
+        );
+    });
+
     test('moves a ref that spells its sheet name in another case, as Excel reads it', () => {
         expect(functionStrChange('=sheet1!A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', false)).toBe('sheet1!A2');
         expect(functionStrChange("='sheet 1'!A1", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false)).toBe(
@@ -466,27 +477,34 @@ describe('engine/formula-shift — functionCopy functions in a range and structu
 });
 
 describe('engine/formula-shift — renameSheetRefs', () => {
+    const sheets = [{ name: 'Data' }, { name: 'My data' }, { name: 'Other' }];
     const renames = new Map([
         ['Data', 'Data(Copy)'],
         ['My data', 'Totals'],
     ]);
 
     test('a ref naming a renamed sheet names its new name, quoted when it must be', () => {
-        expect(renameSheetRefs('=Data!A1*2', renames)).toBe("='Data(Copy)'!A1*2");
-        expect(renameSheetRefs("=SUM('My data'!A1:B2)+1", renames)).toBe('=SUM(Totals!A1:B2)+1');
+        expect(renameSheetRefs('=Data!A1*2', sheets, renames)).toBe("='Data(Copy)'!A1*2");
+        expect(renameSheetRefs("=SUM('My data'!A1:B2)+1", sheets, renames)).toBe('=SUM(Totals!A1:B2)+1');
     });
 
     test('a ref to any other sheet, an own-sheet ref and a string stay as written', () => {
-        expect(renameSheetRefs('=Other!A1+A1&"Data!A1"', renames)).toBe('=Other!A1+A1&"Data!A1"');
-        expect(renameSheetRefs('=A1+B2', renames)).toBe('=A1+B2');
+        expect(renameSheetRefs('=Other!A1+A1&"Data!A1"', sheets, renames)).toBe('=Other!A1+A1&"Data!A1"');
+        expect(renameSheetRefs('=A1+B2', sheets, renames)).toBe('=A1+B2');
     });
 
     test('a ref without its `=` comes back without one', () => {
-        expect(renameSheetRefs('Data!$A$1:$A$5', renames)).toBe("'Data(Copy)'!$A$1:$A$5");
+        expect(renameSheetRefs('Data!$A$1:$A$5', sheets, renames)).toBe("'Data(Copy)'!$A$1:$A$5");
     });
 
     test('a ref spelling the name in another case is renamed too, as Excel reads it', () => {
-        expect(renameSheetRefs("=data!A1+'MY DATA'!B2", renames)).toBe("='Data(Copy)'!A1+Totals!B2");
+        expect(renameSheetRefs("=data!A1+'MY DATA'!B2", sheets, renames)).toBe("='Data(Copy)'!A1+Totals!B2");
+    });
+
+    test('in a workbook holding Data and data, each name renames only its own sheet', () => {
+        const twins = [{ name: 'Data' }, { name: 'data' }];
+        const renamed = renameSheetRefs('=Data!A1+data!A1+DATA!A1', twins, new Map([['data', 'data(Copy)']]));
+        expect(renamed).toBe("=Data!A1+'data(Copy)'!A1+DATA!A1");
     });
 });
 

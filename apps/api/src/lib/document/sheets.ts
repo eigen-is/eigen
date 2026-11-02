@@ -18,6 +18,7 @@ import { DRIVE_TYPE_SHEETS } from '@workspace/lib/types/drive';
 import {
     copySheetName,
     createDefaultSheets,
+    findSheetByName,
     iscelldata,
     mapChartRefs,
     recalcSheets,
@@ -37,10 +38,16 @@ export const SERVER_RECALC_BUDGET = {
     // column instead. A range across every column, such as a whole row, takes one slot per row. No workbook of the
     // 1,062-file corpus needs more than 68.8 million (3.3 s), and this is four times that.
     maxDependencySlots: 280_000_000,
-    // The links between formulas, one for each formula and each formula cell it reads. The slots don't bound them: a
-    // whole column costs one slot, but 20,000 `=COUNT(A:A)` in that column make 400 million links. The largest corpus
-    // workbook that recalcs needs 19.9 million (11 s), and this is twice that. The two corpus workbooks past it need
-    // 79.6 and 141.9 million and fail the cell budget below after a minute and 8 GB, so this stops them in 2 s.
+    // The entries the lookups of the formula cells visit in the index, whether each range covers the cell or not. They
+    // bound the time the links take to count and to make. A range near many formula cells that covers none makes no
+    // link, so without this a crafted workbook of no links spent 20 s counting them. The largest corpus workbook that
+    // recalcs needs 43.2 million, and this is twice that. The two past it need 121 and 285 million. The first failed
+    // the cell budget below after 16 s, the second the edge budget, and both now fail before any link is counted.
+    maxDependencyVisits: 90_000_000,
+    // The links between formulas, one for each formula and each formula cell it reads. They bound the graph's memory:
+    // 43 million links took 7 GB. The slots don't bound them, because a whole column costs one slot, but 20,000
+    // `=COUNT(A:A)` in that column make 400 million links. The largest corpus workbook that recalcs needs 21 million,
+    // and this is twice that.
     maxDependencyEdges: 40_000_000,
     // The cells the evaluation of its ranges reads. The most a corpus workbook reads that recalcs in under 10 s is
     // 30 million (9.9 s), just under this. 2,000 COUNTIFs over A1:Z1048576 fail at it in 17 s, well inside an export's
@@ -136,7 +143,7 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
         return { id: crypto.randomUUID(), name };
     });
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
-    const rename = (txt: string) => renameSheetRefs(txt, renames);
+    const rename = (txt: string) => renameSheetRefs(txt, imported, renames);
 
     const added = imported.map((sheet, i): Op => {
         const { id, name } = fresh[i];
@@ -156,8 +163,12 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
             if (rule.type === 'dropdown' && iscelldata(rule.value1)) rule.value1 = rename(rule.value1);
         }
         for (const link of Object.values(sheet.hyperlink ?? {})) {
-            if (link.linkType === 'sheet') link.linkAddress = renames.get(link.linkAddress) ?? link.linkAddress;
-            else if (link.linkType === 'cellrange') link.linkAddress = rename(link.linkAddress);
+            if (link.linkType === 'sheet') {
+                const target = findSheetByName(imported, link.linkAddress);
+                link.linkAddress = (target && renames.get(target.name)) ?? link.linkAddress;
+            } else if (link.linkType === 'cellrange') {
+                link.linkAddress = rename(link.linkAddress);
+            }
         }
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [

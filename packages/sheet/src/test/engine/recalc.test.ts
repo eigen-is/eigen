@@ -401,6 +401,16 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets)[0].data![0][0]?.v).toBe(8);
     });
 
+    // A workbook stored before a rename compared names in any case can hold both.
+    test('in a workbook holding Data and data, each name reads its own sheet', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=data!A1'), formula('=Data!A1'), formula('=DATA!A1')]]),
+            sheet('s2', 'Data', [[num(1)]]),
+            sheet('s3', 'data', [[num(2)]]),
+        ];
+        expect(recalcSheets(sheets)[0].data?.[0].map((cell) => cell?.v)).toEqual([2, 1, 1]);
+    });
+
     // A stored matrix may lack rows, its first among them, so a whole row reads as wide as the sheet's widest row.
     test('a whole row reads to the last column of a sheet whose first row is short', () => {
         const sheets = [
@@ -452,13 +462,25 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets, { maxDependencySlots: 10 })[1].data?.[9][0]?.v).toBe(6_400);
     });
 
-    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 edges, though the
+    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 links, though the
     // index lists the column once per formula.
     test('past its edge budget a recalc throws before it links the formulas', () => {
         const rows = Array.from({ length: 4 }, (): (Cell | null)[] => [formula('=COUNT(A:A)')]);
         const sheets = [sheet('s1', 'Sheet1', rows)];
         expect(() => recalcSheets(sheets, { maxDependencyEdges: 15 })).toThrow(RangeError);
         expect(() => recalcSheets(sheets, { maxDependencyEdges: 16 })).not.toThrow();
+    });
+
+    // The 32 formulas in A1:A32 read B41:B42, which lies in their 64 × 16 block. So the lookup of each formula cell
+    // visits all 32 ranges and finds none covering it: 1,024 visits that make no link.
+    test('past its visit budget a recalc throws, though the ranges near the formula cells make no link', () => {
+        const rows = Array.from({ length: 64 }, (_, r): (Cell | null)[] => [
+            r < 32 ? formula('=SUM(B41:B42)') : null,
+            null,
+        ]);
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyVisits: 1_023 })).toThrow(RangeError);
+        expect(() => recalcSheets(sheets, { maxDependencyVisits: 1_024, maxDependencyEdges: 0 })).not.toThrow();
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {
@@ -557,5 +579,27 @@ describe('engine/recalc — extractDependencies', () => {
         expect(performance.now() - start).toBeLessThan(1_000);
         expect(deps).toHaveLength(160_000);
         expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
+    });
+
+    // A function's name is matched only where a word starts, so a long run of letters with no bracket after it is
+    // read once, not once per letter.
+    test('walks a 1 MB run of letters in well under a second', () => {
+        const g = { sheets: [{ id: 's1', name: 'Sheet1', data: [[num(1)]] }], cellTextToIndexList: {} };
+        const start = performance.now();
+        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
+        expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    test("a function's name reads as no cell, after an operator or a colon", () => {
+        const data = [[num(1), num(2)]];
+        const g = { sheets: [{ id: 's1', name: 'Sheet1', data }], cellTextToIndexList: {} };
+        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1', data)).toEqual([
+            { row: [0, 0], column: [0, 0], sheetId: 's1' },
+            { row: [1, 1], column: [1, 1], sheetId: 's1' },
+        ]);
+        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1', data)).toEqual([
+            { row: [0, 0], column: [0, 0], sheetId: 's1' },
+            { row: [0, 0], column: [1, 1], sheetId: 's1' },
+        ]);
     });
 });
