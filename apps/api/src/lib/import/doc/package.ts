@@ -180,20 +180,19 @@ export function onOff(element: XmlElement | undefined): boolean | undefined {
     return isOnElement(element, W_NS);
 }
 
-// A number attribute rounded to a whole one. Word writes integers, but a generator may write a fraction.
+// A number attribute rounded to a whole one. Word writes integers, but a generator may write a fraction. A value longer
+// than any real number is none, unread, as emu() refuses one, so a drawing's offset or size has the bound every other
+// length has.
 export function roundedInt(value: string | undefined): number | undefined {
-    if (value === undefined) return undefined;
+    if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
 }
 
 // A drawing's size, a wp:extent's or an a:ext's, in whole EMU. A side that is missing, no number or not positive is 0,
-// which every caller reads as no size. So is one longer than any real length, unread, as emu() refuses one.
+// which every caller reads as no size.
 export function extentOf(ext: XmlElement | undefined): { cx: number; cy: number } {
-    const side = (name: string) => {
-        const value = ext && xmlAttr(ext, '', name);
-        return value && value.length > MAX_MEASURE_CHARS ? 0 : Math.max(0, roundedInt(value) ?? 0);
-    };
+    const side = (name: string) => Math.max(0, roundedInt(ext && xmlAttr(ext, '', name)) ?? 0);
     return { cx: side('cx'), cy: side('cy') };
 }
 

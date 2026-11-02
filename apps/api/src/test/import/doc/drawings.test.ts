@@ -310,6 +310,15 @@ describe('placement', () => {
             ]);
         });
 
+        // An offset longer than any real length is not read, as an extent's side isn't. The cap is on its length, so a
+        // 100 px offset padded with zeros past 64 characters reads as none.
+        test('an offset past 64 characters reads as no offset', async () => {
+            const padded = `${'0'.repeat(59)}${100 * EMU}`;
+            const forged = `<wp:positionH relativeFrom="column"><wp:posOffset>${padded}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>${padded}</wp:posOffset></wp:positionV><wp:wrapNone/>`;
+            const { json } = await importDocxBody(paragraph(`${placed(forged)}${text('x')}`));
+            expect(placesOf(json)).toEqual([['front', 0, 0]]);
+        });
+
         // A page-relative offset counts from the paper's edge, 96 px left of the column; an aligned one sits where the
         // alignment puts it in its area, the 40 px picture centred in the 601.7 px column.
         test('a horizontal offset from another area or an alignment is an offset from the text column', async () => {
