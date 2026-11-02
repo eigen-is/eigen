@@ -1,7 +1,8 @@
-// Writes and reads Eigen's archive files. A home archive is a tar of one home folder through zstd, so
-// `tar --zstd -xf` unpacks one anywhere. A whole-server archive is a plain tar of compressed members with
-// its manifest last. This file packs, extracts and lists them and keeps their sidecars, on top of the tar
-// format of headerChunks and tarEntries. Backups, verifies and restores go through it, ./eigen restore too.
+// Packs, lists and unpacks Eigen's backup archives. A home archive is one home folder as a tar through zstd,
+// so `tar --zstd -xf` unpacks it anywhere. A whole-server archive is a plain tar of members that are compressed
+// already, and its manifest is always the last member. It also writes the JSON record that sits beside an archive.
+// The backup, verify and restore code calls it, ./eigen restore included. The tar bytes themselves come from
+// headerChunks and tarEntries.
 
 /// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';
@@ -10,28 +11,31 @@ import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
-import type {
-    BackupEntry,
-    BackupManifest,
-    BackupProgress,
-    BackupVerifyRecord,
-    ServerArchiveManifest,
-} from '@workspace/lib/types/backup';
-import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
+import type { BackupEntry, BackupManifest, BackupProgress, ServerArchiveManifest } from '@workspace/lib/types/backup';
+import { parseBackupManifest } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
-import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
-import { archiveEnd, BLOCK, collect, fileChunks, headerChunks, padding, tarEntries } from './tar';
+import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath } from './paths';
+import {
+    archiveEnd,
+    BLOCK,
+    collect,
+    DIRECTORY_TYPEFLAG,
+    FILE_TYPEFLAG,
+    fileChunks,
+    headerChunks,
+    padding,
+    tarEntries,
+} from './tar';
 
-// An archive holds password hashes, keys and every file of a home, so only the API's own user may read it. Every
-// file inside an archive has this mode too, a home's files and a whole-server archive's members alike, so a
-// `tar -xf` hands them to that user alone. A folder inside one is for that user alone as well.
+// An archive holds password hashes, keys and every file of a home, so only the API's own user may read it.
+// The files inside an archive get the same mode and its folders get ARCHIVE_FOLDER_MODE. A `tar -xf` by hand
+// then unpacks them for that user alone too.
 export const ARCHIVE_MODE = 0o600;
 const ARCHIVE_FOLDER_MODE = 0o700;
 
-// Packs `dir` into a `.tar.zst` whose single root folder is `dir`'s basename. Memory stays flat:
-// the tar is generated entry by entry into the zstd stream, and the compressed bytes go straight to
-// disk. It is built in the staging folder and renamed into place, so an interrupted pack never
-// leaves a short archive under a name the artifact list would offer for restore.
+// Packs `dir` into a `.tar.zst` with `dir`'s name as its one root folder. The tar is made entry by entry and
+// streamed through zstd to disk, so memory use stays flat. The archive is written in the staging folder and then
+// renamed into place, so an interrupted pack never leaves a short archive that the list would offer for restore.
 export async function packFolder(dir: string, artifactPath: string, onProgress?: BackupProgress): Promise<void> {
     fs.mkdirSync(path.dirname(artifactPath), { recursive: true });
     const tempPath = getBackupTempPath('.tar.zst');
@@ -45,66 +49,16 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
     fs.renameSync(tempPath, artifactPath);
 }
 
-async function* tarChunks(dir: string, rootName: string, onProgress?: BackupProgress): AsyncGenerator<Uint8Array> {
-    const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
-    relPaths.sort();
-
-    let written = 0;
-    // Directories get entries of their own: an empty one (a Maildir `new/`, a container's `versions/`
-    // before its first snapshot) is part of the home and has to survive the round trip.
-    function* directory(name: string, mtimeMs: number): Generator<Uint8Array> {
-        for (const chunk of headerChunks(name, 0, Math.floor(mtimeMs / 1000), '5', ARCHIVE_FOLDER_MODE)) {
-            written += chunk.length;
-            yield chunk;
-        }
-    }
-
-    yield* directory(`${rootName}/`, fs.statSync(dir).mtimeMs);
-    for (const [index, rel] of relPaths.entries()) {
-        // Packing dominates a large home's wall clock, so it reports per entry.
-        onProgress?.('pack', index + 1, relPaths.length);
-        const abs = path.join(dir, rel);
-        const stat = fs.statSync(abs);
-        if (stat.isDirectory()) {
-            yield* directory(`${rootName}/${rel}/`, stat.mtimeMs);
-            continue;
-        }
-        for await (const chunk of fileEntryChunks(
-            `${rootName}/${rel}`,
-            abs,
-            stat.size,
-            Math.floor(stat.mtimeMs / 1000),
-        )) {
-            if (chunk.length === 0) continue;
-            written += chunk.length;
-            yield chunk;
-        }
-    }
-    yield* archiveEnd(written);
-}
-
-async function* fileEntryChunks(
-    name: string,
-    absPath: string,
-    size: number,
-    mtime: number,
-): AsyncGenerator<Uint8Array> {
-    yield* headerChunks(name, size, mtime, '0', ARCHIVE_MODE);
-    yield* fileChunks(name, absPath, size);
-    yield padding(size);
-}
-
 export type ServerArchiveWriter = {
     appendFile(name: string, sourcePath: string): Promise<void>;
-    finish(manifest: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
+    finish(fields: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
     abort(): Promise<void>;
 };
 
-// A whole-server archive is a plain tar: its members are compressed already, and a plain tar can be
-// read member by member. Each member is hashed as it is copied in, and finish() closes the archive
-// with manifest.json listing them all, so the manifest is always the last member. The file is
-// written where the caller says; the caller writes to a temp name and renames it into place, and
-// calls abort() in a finally, which takes back an archive finish() never closed.
+// Writes a whole-server archive. It is a plain tar because its members are compressed already, and a plain tar
+// can be read one member at a time. Each member is hashed while it is copied in. finish() then adds the manifest
+// that lists them all, so the manifest is always the last member. The caller writes to a temp name and renames
+// the file into place. It calls abort() in a finally, which removes an archive that finish() never closed.
 export async function createServerArchiveWriter(archivePath: string): Promise<ServerArchiveWriter> {
     const handle = await fsp.open(archivePath, 'w', ARCHIVE_MODE);
     const entries: BackupEntry[] = [];
@@ -118,9 +72,7 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
     return {
         async appendFile(name, sourcePath) {
             const { size, mtimeMs } = fs.statSync(sourcePath);
-            for (const chunk of headerChunks(name, size, Math.floor(mtimeMs / 1000), '0', ARCHIVE_MODE)) {
-                await put(chunk);
-            }
+            for (const chunk of headerChunks(name, size, mtimeMs, FILE_TYPEFLAG, ARCHIVE_MODE)) await put(chunk);
             const hasher = new Bun.CryptoHasher('sha256');
             for await (const chunk of fileChunks(name, sourcePath, size)) {
                 hasher.update(chunk);
@@ -132,10 +84,8 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
         async finish(fields) {
             const manifest: ServerArchiveManifest = { ...fields, entries };
             const body = Buffer.from(JSON.stringify(manifest, null, 2));
-            const mtime = Math.floor(Date.now() / 1000);
-            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, mtime, '0', ARCHIVE_MODE)) {
-                await put(chunk);
-            }
+            const header = headerChunks(ARCHIVE_MANIFEST_FILE, body.length, Date.now(), FILE_TYPEFLAG, ARCHIVE_MODE);
+            for (const chunk of header) await put(chunk);
             await put(body);
             await put(padding(body.length));
             for (const chunk of archiveEnd(written)) await put(chunk);
@@ -152,37 +102,16 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
     };
 }
 
-// One member of a whole-server archive: where its bytes sit in the outer tar, and their sha256 once read through.
-export type ArchiveMemberAt = { archivePath: string; name: string; offset: number; bytes: number };
-export type ArchiveMember = ArchiveMemberAt & { sha256: string };
+// Where one member's bytes sit inside a whole-server archive. ArchiveMember adds their sha256 once they are read.
+export type ArchiveMemberLocation = { archivePath: string; name: string; offset: number; bytes: number };
+export type ArchiveMember = ArchiveMemberLocation & { sha256: string };
 
-// Where an artifact's compressed bytes are read from: a file of its own, or a member of a
-// whole-server archive, read in place.
-type ArtifactSource = string | ArchiveMemberAt;
-
-// The artifact's bytes, decompressed. The two streams are wired by hand rather than through
-// `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
-async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array> {
-    const file =
-        typeof source === 'string'
-            ? fs.createReadStream(source)
-            : fs.createReadStream(source.archivePath, { start: source.offset, end: source.offset + source.bytes - 1 });
-    const decompressed = createZstdDecompress();
-    file.on('error', (error) => decompressed.destroy(error));
-    file.pipe(decompressed);
-    try {
-        yield* decompressed;
-    } finally {
-        file.destroy();
-    }
-}
-
-// Every file member of a whole-server archive in order, each hashed as it streams past: one read
-// says what the archive holds, where each member sits, and whether its bytes are the ones named.
+// Every file member of a whole-server archive in order, each hashed as it streams past. One read tells what
+// the archive holds, where each member sits and what its bytes hash to.
 export async function hashArchiveMembers(archivePath: string): Promise<ArchiveMember[]> {
     const members: ArchiveMember[] = [];
     for await (const entry of tarEntries(fs.createReadStream(archivePath))) {
-        if (entry.typeflag === '5') continue;
+        if (entry.typeflag === DIRECTORY_TYPEFLAG) continue;
         const hasher = new Bun.CryptoHasher('sha256');
         for await (const chunk of entry.body) hasher.update(chunk);
         members.push({
@@ -196,8 +125,8 @@ export async function hashArchiveMembers(archivePath: string): Promise<ArchiveMe
     return members;
 }
 
-// Every file member of a whole-server archive in order, from the headers alone: a body is seeked past, not read.
-export async function listArchiveMembers(archivePath: string): Promise<ArchiveMemberAt[]> {
+// The same members without their hashes, from the headers alone. It seeks past each body instead of reading it.
+export async function listArchiveMembers(archivePath: string): Promise<ArchiveMemberLocation[]> {
     const handle = await fsp.open(archivePath, 'r');
     try {
         const { size } = await handle.stat();
@@ -214,9 +143,9 @@ export async function listArchiveMembers(archivePath: string): Promise<ArchiveMe
             if (at + count > size) throw new Error('backup archive: the tar ends mid-entry');
             at += count;
         };
-        const members: ArchiveMemberAt[] = [];
+        const members: ArchiveMemberLocation[] = [];
         for await (const entry of tarEntries(blocks(), seek)) {
-            if (entry.typeflag === '5') continue;
+            if (entry.typeflag === DIRECTORY_TYPEFLAG) continue;
             members.push({ archivePath, name: entry.path, offset: entry.offset, bytes: entry.size });
         }
         return members;
@@ -225,12 +154,12 @@ export async function listArchiveMembers(archivePath: string): Promise<ArchiveMe
     }
 }
 
-// What readArchiveMember holds in memory at most: a manifest fits many times over, a home does not.
+// The most readArchiveMember holds in memory. A manifest fits many times over, but a home member does not.
 const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
 
-// A member's bytes in memory, for the manifest and .env.production. A member that has to land on disk goes through
-// copyArchiveMember, and a home member is unpacked in place by extractArtifact.
-export async function readArchiveMember(member: ArchiveMemberAt): Promise<Uint8Array> {
+// A small member's bytes in memory, such as the manifest. A member that has to land on disk goes through
+// copyArchiveMember, and extractArtifact unpacks a home member in place.
+export async function readArchiveMember(member: ArchiveMemberLocation): Promise<Uint8Array> {
     if (member.bytes > MAX_MEMBER_READ_BYTES) {
         throw new Error(`backup archive: ${member.name} is ${member.bytes} bytes, too big to read into memory`);
     }
@@ -239,18 +168,16 @@ export async function readArchiveMember(member: ArchiveMemberAt): Promise<Uint8A
         .bytes();
 }
 
-// Not Bun.write(dest, a sliced BunFile): Bun 1.4.2 ignores the slice there and writes the whole archive.
-export async function copyArchiveMember(member: ArchiveMemberAt, destPath: string): Promise<void> {
-    // A read stream refuses an `end` before its `start`, which is what an empty member's range is.
+// This streams the byte range rather than passing a sliced BunFile to Bun.write. Bun ignores the slice there and
+// writes the whole archive, still in Bun 1.4.4.
+export async function copyArchiveMember(member: ArchiveMemberLocation, destPath: string): Promise<void> {
+    // A read stream refuses an `end` before its `start`, and an empty member's range is exactly that.
     if (member.bytes === 0) {
         fs.writeFileSync(destPath, '');
         return;
     }
     try {
-        await pipeline(
-            fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 }),
-            fs.createWriteStream(destPath),
-        );
+        await pipeline(memberStream(member), fs.createWriteStream(destPath));
         // A range past the end of the file reads short without an error.
         const { size } = fs.statSync(destPath);
         if (size !== member.bytes) {
@@ -262,9 +189,13 @@ export async function copyArchiveMember(member: ArchiveMemberAt, destPath: strin
     }
 }
 
-// Every folder an extract makes is 0700 and every file 0600, whatever the header says. Only the API's user reads a
-// restored home, so an older archive's 0644 entries restore as private as a new one's. A crafted archive cannot ask
-// for a setuid bit, which root would then swap into data/, or for a folder its own extract cannot enter.
+// An artifact's compressed bytes are a file of their own, or a member read in place from a whole-server archive.
+type ArtifactSource = string | ArchiveMemberLocation;
+
+// Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
+// says. Only the API's user reads a restored home, so an older archive with 0644 files restores as private as a
+// new one. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
+// for a folder that its own extract cannot enter either.
 export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
     const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     const existed = fs.existsSync(targetDir);
@@ -272,19 +203,19 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
-            if (entry.typeflag === '5') {
+            if (entry.typeflag === DIRECTORY_TYPEFLAG) {
                 makeFolder(target);
                 continue;
             }
             // A foreign archive may name a file before the directory entry it sits in.
             makeFolder(path.dirname(target));
             await pipeline(Readable.from(entry.body), fs.createWriteStream(target, { mode: ARCHIVE_MODE }));
-            // As `tar -x` does: Dovecot dates a Maildir message by its file's mtime.
+            // Keep the mtime, as `tar -x` does, because Dovecot dates a Maildir message by its file's mtime.
             await fsp.utimes(target, entry.mtime, entry.mtime);
         }
     } catch (error) {
         // Half an unpacked archive is worse than none, because nothing downstream can tell the two apart.
-        // A folder the caller already had is left alone; only the tree this call made is taken back.
+        // Only a folder this call made is removed. A folder the caller already had is left alone.
         if (!existed) await fsp.rm(targetDir, { recursive: true, force: true });
         throw error;
     }
@@ -292,21 +223,19 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
 
 // The manifest of the archive's single home folder, without unpacking its files.
 export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
-    const filter = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
-    let text: string | null = null;
+    const manifestGlob = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
+    let manifest: BackupManifest | null = null;
     for await (const entry of tarEntries(artifactBytes(artifactPath))) {
-        if (!filter.match(entry.path)) continue;
-        text = new TextDecoder().decode(await collect(entry.body));
+        if (!manifestGlob.match(entry.path)) continue;
+        manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
-    const manifest = text === null ? null : parseBackupManifest(text);
     if (!manifest) throw new ApiError(400, `${path.basename(artifactPath)} is not an Eigen backup archive`);
     return manifest;
 }
 
-// The home folder inside an unpacked archive, with the manifest that describes it. Every caller judges
-// an extract it just made, and says the same thing about an archive that turns out to be another
-// home's or to carry no manifest this build reads.
+// The home folder inside an unpacked archive, with the manifest that describes it. Every caller gets the same
+// error when the archive is another home's, or has no manifest this build can read.
 export function readUnpackedHome(
     unpackDir: string,
     ownerId: string,
@@ -323,11 +252,9 @@ export function readUnpackedHome(
     return { folder, manifest };
 }
 
-// A sidecar is written in the staging folder and renamed into place, so a reader never sees half of one.
-// The JSON is indented by two spaces: ./eigen finds a server sidecar's top-level "state" line by that indent.
-// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. 0640 would shut the
-// operator out: the rename keeps the group the file got in the staging folder, which is the API's, not the operator's.
-// The backups folder is what keeps other users away from it. A caller that passes a mode makes a private one.
+// Writes the JSON record beside an archive, its sidecar. It is written in the staging folder and renamed into
+// place, so a reader never sees half of one. The two-space indent matters: ./eigen finds a server sidecar's
+// top-level "state" line by it. Without a `mode` the file keeps the umask's mode.
 export async function writeRecord(target: string, value: unknown, mode?: number): Promise<void> {
     const tempPath = getBackupTempPath('.json');
     try {
@@ -339,22 +266,52 @@ export async function writeRecord(target: string, value: unknown, mode?: number)
     fs.renameSync(tempPath, target);
 }
 
-export async function writeSidecar(
-    artifactPath: string,
-    manifest: BackupManifest,
-    verify: BackupVerifyRecord,
-): Promise<void> {
-    // It names every file of the home, and ./eigen never reads it.
-    await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
+async function* tarChunks(dir: string, rootName: string, onProgress?: BackupProgress): AsyncGenerator<Uint8Array> {
+    let written = 0;
+    for await (const chunk of entryChunks(dir, rootName, onProgress)) {
+        if (chunk.length === 0) continue;
+        written += chunk.length;
+        yield chunk;
+    }
+    yield* archiveEnd(written);
 }
 
-// Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
-// it as unverified until a verify job writes one.
-export async function readSidecar(
-    artifactPath: string,
-): Promise<{ manifest: BackupManifest; verify: BackupVerifyRecord } | null> {
-    const text = await Bun.file(sidecarPath(artifactPath))
-        .text()
-        .catch(() => null);
-    return text === null ? null : parseBackupSidecar(text);
+async function* entryChunks(dir: string, rootName: string, onProgress?: BackupProgress): AsyncGenerator<Uint8Array> {
+    const relPaths = await Array.fromAsync(new Bun.Glob('**/*').scan({ cwd: dir, onlyFiles: false, dot: true }));
+    relPaths.sort();
+    // Directories get entries of their own. An empty one, such as a Maildir `new/`, is part of the home and has to
+    // survive the round trip.
+    yield* headerChunks(`${rootName}/`, 0, fs.statSync(dir).mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
+    for (const [index, rel] of relPaths.entries()) {
+        // Packing takes most of a large home's backup time, so it reports progress for every entry.
+        onProgress?.('pack', index + 1, relPaths.length);
+        const name = `${rootName}/${rel}`;
+        const abs = path.join(dir, rel);
+        const stat = fs.statSync(abs);
+        if (stat.isDirectory()) {
+            yield* headerChunks(`${name}/`, 0, stat.mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
+            continue;
+        }
+        yield* headerChunks(name, stat.size, stat.mtimeMs, FILE_TYPEFLAG, ARCHIVE_MODE);
+        yield* fileChunks(name, abs, stat.size);
+        yield padding(stat.size);
+    }
+}
+
+// The artifact's bytes, decompressed. The two streams are piped by hand rather than through `pipeline`. A reader
+// may stop at the entry it wanted, and `pipeline` would then fail with an AbortError.
+async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array> {
+    const file = typeof source === 'string' ? fs.createReadStream(source) : memberStream(source);
+    const decompressed = createZstdDecompress();
+    file.on('error', (error) => decompressed.destroy(error));
+    file.pipe(decompressed);
+    try {
+        yield* decompressed;
+    } finally {
+        file.destroy();
+    }
+}
+
+function memberStream(member: ArchiveMemberLocation): fs.ReadStream {
+    return fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 });
 }
