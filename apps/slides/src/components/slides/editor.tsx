@@ -296,14 +296,8 @@ function SlideEditorInner({
     const pickBackgroundImage = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0 || !frame) return;
-            const copied = await copyPaths([
-                {
-                    source: paths[0],
-                    targetOwnerId: ownerId,
-                    targetMountId: path.mountId,
-                    targetParentId: mediaFolderId,
-                },
-            ]).catch(() => null);
+            const target = { targetOwnerId: ownerId, targetMountId: path.mountId, targetParentId: mediaFolderId };
+            const copied = await copyPaths([{ source: paths[0], ...target }]).catch(() => null);
             const name = copied?.[0]?.name;
             if (name) {
                 updateFrame(frame.id, {

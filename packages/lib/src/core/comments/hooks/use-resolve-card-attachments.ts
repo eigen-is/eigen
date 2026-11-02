@@ -15,7 +15,7 @@ export function useResolveCardAttachments(ownerId: string, mountId: string, medi
     const { mutateAsync: copyPaths } = useCopyPaths();
 
     return useCallback(
-        async (drafts: CardAttachmentDraft[]): Promise<ChatAttachment[]> => {
+        async (drafts: readonly CardAttachmentDraft[]): Promise<ChatAttachment[]> => {
             const resolved: ChatAttachment[] = [];
             for (const draft of drafts) {
                 if (draft instanceof File) {
@@ -28,14 +28,8 @@ export function useResolveCardAttachments(ownerId: string, mountId: string, medi
                     resolved.push(toAttachmentReference(draft));
                 } else {
                     if (!mediaFolderId) continue;
-                    const [copied] = await copyPaths([
-                        {
-                            source: draft,
-                            targetOwnerId: ownerId,
-                            targetMountId: mountId,
-                            targetParentId: mediaFolderId,
-                        },
-                    ]);
+                    const target = { targetOwnerId: ownerId, targetMountId: mountId, targetParentId: mediaFolderId };
+                    const [copied] = await copyPaths([{ source: draft, ...target }]);
                     resolved.push(copied.name);
                 }
             }

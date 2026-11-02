@@ -32,12 +32,11 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     const { user } = useAuth();
 
     const messagesQuery = useMessages(ownerId, mountId, chatId);
-    // Pages are [latest, older, oldest...] — reverse then flatten for chronological order
+    // The pages come newest first, so they are reversed before flattening to read oldest first.
     const messages = useMemo(() => {
         const pages = messagesQuery.data?.pages ?? [];
         return [...pages].reverse().flat();
     }, [messagesQuery.data]);
-    const isLoading = messagesQuery.isLoading;
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
     const { mutateAsync: copyPaths } = useCopyPaths();
@@ -105,33 +104,19 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     const mediaFolder = useMemo(() => chatContents.find((item) => item.name === 'media') ?? null, [chatContents]);
 
     const addDriveAttachments = useCallback(
-        async (paths: DrivePath[]) => {
+        async (paths: readonly DrivePath[]) => {
             if (!mediaFolder) return;
-
-            const refs: ChatAttachment[] = [];
-            const filesToCopy: DrivePath[] = [];
-
-            for (const path of paths) {
-                if (isContainerType(path.type)) {
-                    refs.push(toAttachmentReference(path));
-                } else {
-                    filesToCopy.push(path);
-                }
-            }
-
+            const refs = paths.filter((path) => isContainerType(path.type)).map(toAttachmentReference);
+            const filesToCopy = paths.filter((path) => !isContainerType(path.type));
             if (refs.length > 0) {
                 setPendingDriveAttachments((prev) => [...prev, ...refs]);
             }
 
             if (filesToCopy.length > 0) {
-                const copied = await copyPaths(
-                    filesToCopy.map((source) => ({
-                        source,
-                        targetOwnerId: ownerId,
-                        targetMountId: mountId,
-                        targetParentId: mediaFolder.id,
-                    })),
-                ).catch((error) => (error instanceof PartialCopyError ? error.copied : []));
+                const target = { targetOwnerId: ownerId, targetMountId: mountId, targetParentId: mediaFolder.id };
+                const copied = await copyPaths(filesToCopy.map((source) => ({ source, ...target }))).catch((error) =>
+                    error instanceof PartialCopyError ? error.copied : [],
+                );
                 if (copied.length > 0) {
                     setPendingDriveAttachments((prev) => [...prev, ...copied.map((p) => p.name)]);
                 }
@@ -241,9 +226,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         ],
     );
 
-    const allMessages = useMemo(() => {
-        return [...messages, ...localMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
-    }, [messages, localMessages]);
+    const allMessages = useMemo(
+        () => [...messages, ...localMessages].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()),
+        [messages, localMessages],
+    );
 
     const mediaFolderId = mediaFolder?.id ?? null;
 
@@ -259,7 +245,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
 
     return {
         messages: allMessages,
-        isLoading,
+        isLoading: messagesQuery.isLoading,
         chatName,
         chatPath,
         roomMembers,

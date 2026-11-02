@@ -868,14 +868,10 @@ export function CanvasEditor({
     const insertDrivePaths = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId) return;
-            const results = await copyPaths(
-                paths.map((source) => ({
-                    source,
-                    targetOwnerId: ownerId,
-                    targetMountId: mountId,
-                    targetParentId: mediaFolderId,
-                })),
-            ).catch((error) => (error instanceof PartialCopyError ? error.copied : null));
+            const target = { targetOwnerId: ownerId, targetMountId: mountId, targetParentId: mediaFolderId };
+            const results = await copyPaths(paths.map((source) => ({ source, ...target }))).catch((error) =>
+                error instanceof PartialCopyError ? error.copied : null,
+            );
             if (!results?.length) return;
             const measured = await Promise.all(
                 results.map(async (result) => ({
