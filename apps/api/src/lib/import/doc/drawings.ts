@@ -33,7 +33,7 @@ import { descendants, extentOf, floatSide, roundedInt, vmlPx, vmlStyle } from '.
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
-import { loneTextBox, paintsBox, readTextBox, readVmlTextBox, textBoxScope } from './text-boxes';
+import { loneTextBox, paintsBox, readTextBox, readVmlTextBox, textBoxScope, textBoxWidth } from './text-boxes';
 
 // A chart part as the doc holds it: the parts of the spec the node stores, with the part its look is read from at each
 // drawing's size, or the lines a chart left out leaves in its place; and its title, which a band or a note keeps.
@@ -56,9 +56,9 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
         const extent = xmlChild(frame, WP_NS, 'extent');
         const pictures = descendants(frame, PIC_NS, 'pic');
         const charts = chartsIn(frame, extent);
-        const layout = anchored ? anchorPlacement(frame, reader, context) : {};
         // A picture in front of or behind the text may span the paper.
-        const room = layout.offsetX === undefined ? reader.columnPx : Math.floor(mmToPx(reader.page.width));
+        const room = anchored && overText(frame, context) ? Math.floor(mmToPx(reader.page.width)) : reader.columnPx;
+        const layout = anchored ? anchorPlacement(frame, reader, context, room) : {};
         // Only the body holds a chart or a text box: a band's schema has neither and a note's Insert leaves both out, so
         // there a chart keeps its title and a box its paragraphs.
         const inBody = context.scope.story === 'body';
@@ -280,19 +280,12 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
 // Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
 // that size is drawn at in the file.
 function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
-    const drawn = chartExtent(ext);
-    const { width, height } = drawn
-        ? { width: drawn.cx / EMU_PER_PX, height: drawn.cy / EMU_PER_PX }
-        : CHART_DEFAULT_SIZE;
+    const { cx, cy } = extentOf(ext);
+    const drawn = cx > 0 && cy > 0;
+    const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
     const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
     const size = { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
-    return { ...size, emuPerPx: drawn ? drawn.cx / size.width : EMU_PER_PX };
-}
-
-// The extent a chart is drawn at, when both its sides are readable. Else it draws at the default size.
-function chartExtent(ext: XmlElement | undefined): { cx: number; cy: number } | undefined {
-    const { cx, cy } = extentOf(ext);
-    return cx > 0 && cy > 0 ? { cx, cy } : undefined;
+    return { ...size, emuPerPx: drawn ? cx / size.width : EMU_PER_PX };
 }
 
 // SmartArt's text is the document's: its drawing's shapes in order, else its data model's points; the schema holds no
@@ -335,21 +328,17 @@ function onShapeFill(scope: Scope): Scope {
     return { ...scope, onFill: true, inShape: true };
 }
 
-// Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its
-// offset puts it. Over or under the text, alone in its anchor and in the body outside a table, it is in front of or
-// behind the text, at its offsets from the text column and from the paragraph's first line, which placeAnchors counts
-// from the paragraph's box. Any other is a block, aligned if Word aligns it.
-function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext): FigureFrameAttrs {
-    const { story, tables } = context.scope;
+// Where Word places an anchor, as the doc holds it, `room` being the px its drawing may take. Wrapped beside the text,
+// it sits on the side its alignment or its offset puts it. In front of or behind the text, it is at its offsets from the
+// text column and from the paragraph's first line, which placeAnchors counts from the paragraph's box. Any other is a
+// block, aligned if Word aligns it.
+function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext, room: number): FigureFrameAttrs {
+    const { story } = context.scope;
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
-    const graphic = xmlChild(anchor, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [first, ...others] = data ? xmlElements(data) : [];
-    const only = others.length === 0 ? first : undefined;
-    const drawn = drawnWidth(anchor, only);
+    const drawn = drawnWidth(anchor, room);
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
     const placed = align ? alignedIn(xmlText(align).trim(), area.width, drawn) : roundedInt(offset && xmlText(offset));
     // The offset from the text column's left edge, kept on the paper.
@@ -357,12 +346,7 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const marginLeft = margin.left * EMU_PER_TWIP;
     const cx = drawn ?? 0;
     const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
-    // One anchor has one place, so only a lone picture, chart or text box can take it. A group's or a canvas's pictures
-    // would stack there, and its text boxes and shapes would draw elsewhere.
-    const lone =
-        !!only &&
-        (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
-    if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !context.scope.box) {
+    if (overText(anchor, context)) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
     }
@@ -374,16 +358,37 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     return named === undefined || named === side ? { alignment: side } : {};
 }
 
-// The width in EMU an anchor's drawing draws at, `only` being what its graphic holds alone: a chart's, else its
-// extent's, else a text box's default width. A picture with no extent takes its own size once it loads, so its width
-// is unknown here.
-function drawnWidth(anchor: XmlElement, only: XmlElement | undefined): number | undefined {
+// Whether an anchor is in front of or behind the text: over or under it, alone in its anchor, and in the body outside a
+// table. One anchor has one place, so only a lone picture, chart or text box can take it. A group's or a canvas's
+// pictures would stack there, and its text boxes and shapes would draw elsewhere.
+function overText(anchor: XmlElement, context: RunContext): boolean {
+    const { story, tables, box } = context.scope;
+    const only = loneGraphic(anchor);
+    const lone =
+        !!only &&
+        (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
+    return !!xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !box;
+}
+
+// What an anchor's graphic holds, when it holds one thing alone.
+function loneGraphic(anchor: XmlElement): XmlElement | undefined {
+    const graphic = xmlChild(anchor, A_NS, 'graphic');
+    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+    const [first, ...others] = data ? xmlElements(data) : [];
+    return others.length === 0 ? first : undefined;
+}
+
+// The width in EMU an anchor's drawing is stored at, given `room` px. Each kind's width comes from the function that
+// sizes its node, so the anchor is aligned and kept on the paper by the width it draws at. A picture with no extent
+// takes its own size once it loads, so its width is unknown here.
+function drawnWidth(anchor: XmlElement, room: number): number | undefined {
     const extent = xmlChild(anchor, WP_NS, 'extent');
-    if (only && hasXmlName(only, C_NS, 'chart'))
-        return chartExtent(extent)?.cx ?? CHART_DEFAULT_SIZE.width * EMU_PER_PX;
+    const only = loneGraphic(anchor);
+    if (only && hasXmlName(only, C_NS, 'chart')) return chartSize(extent, room).width * EMU_PER_PX;
+    if (loneTextBox(anchor)) return (textBoxWidth(extent, room) ?? TEXT_BOX_DEFAULT_WIDTH) * EMU_PER_PX;
     const { cx } = extentOf(extent);
-    if (cx > 0) return cx;
-    return loneTextBox(anchor) ? TEXT_BOX_DEFAULT_WIDTH * EMU_PER_PX : undefined;
+    const width = cx ? pictureSize(cx / EMU_PER_PX, null, room).width : null;
+    return width ? width * EMU_PER_PX : undefined;
 }
 
 // The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at

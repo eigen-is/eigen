@@ -44,6 +44,14 @@ const lines = (json: JSONContent) =>
             (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
         )
         .filter(Boolean);
+// Where each node in front of the text lands on the golden paper: its start and its end in px from the paper's left
+// edge. The paper is 11906 twips wide, 793.7 px, and its column runs from 96 px to 697.7 px. An offset is a whole px.
+const onPaper = (nodes: JSONContent[]) =>
+    nodes.map((node) => {
+        const start = Number(node.attrs?.['offsetX']) + 96;
+        return [start, start + Number(node.attrs?.['width'])];
+    });
+const ALIGNS = ['left', 'center', 'right'];
 
 describe('media', () => {
     // Decision 1: kept under its real name, though no browser draws it; the import logs it.
@@ -363,6 +371,33 @@ describe('placement', () => {
             const wide = (run: string) => run.replaceAll('cx="381000"', `cx="${1000 * EMU}"`);
             const { json } = await importDocxBody(paragraph(wide(front())) + paragraph(wide(GOLDEN_DOCX_IMAGE_RUN)));
             expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['width'])).toEqual([793, 601]);
+        });
+
+        const toPage = (align: string) =>
+            `<wp:positionH relativeFrom="page"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>`;
+        const alignedWide = (cx: string) =>
+            ALIGNS.map((align) =>
+                paragraph(`${placed(toPage(align)).replaceAll('cx="381000"', `cx="${cx}"`)}${text('x')}`),
+            );
+
+        // Word allows a picture up to 22 in wide. It is stored at the paper's width, so it is aligned by that width.
+        test('a picture wider than the paper lands on it, aligned left, centred or right to the page', async () => {
+            const { json } = await importDocxBody([...alignedWide('9144000'), ...alignedWide('20116800')].join(''));
+            const paper = [
+                [0, 793],
+                [0, 793],
+                [1, 794],
+            ];
+            expect(onPaper(nodesOfType(json, 'figure'))).toEqual([...paper, ...paper]);
+        });
+
+        test('a picture of a crafted width of 1e308 EMU lands on the paper as one the paper wide does', async () => {
+            const { json } = await importDocxBody(alignedWide('1e308').join(''));
+            expect(onPaper(nodesOfType(json, 'figure'))).toEqual([
+                [0, 793],
+                [0, 793],
+                [1, 794],
+            ]);
         });
 
         test('in a table cell or a note it is a block, where a wrapped one stays wrapped', async () => {
@@ -781,6 +816,30 @@ describe('text boxes as boxes', () => {
         const [sized, ...unsized] = ends;
         expect(boxes.map((box) => box.attrs?.['width'])).toEqual([200, ...unsized.map(() => TEXT_BOX_DEFAULT_WIDTH)]);
         expect(unsized).toEqual(unsized.map(() => sized));
+    });
+
+    const toPage = (align: string) =>
+        `<wp:positionH relativeFrom="page"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV>`;
+
+    test('a box wider than the paper is stored at its width and lands on it, aligned left, centred or right', async () => {
+        const { boxes } = await boxesOf(
+            ALIGNS.map((align) => anchored({ position: toPage(align), cx: 9144000 })).join(''),
+        );
+        expect(onPaper(boxes)).toEqual([
+            [0, 793],
+            [0, 793],
+            [1, 794],
+        ]);
+    });
+
+    // A box is never narrower than TEXT_BOX_MIN_SIDE, 24 px, so it is aligned by that side, not by its extent.
+    test('a box narrower than the least side is aligned by that side and lands on the paper', async () => {
+        const { boxes } = await boxesOf(ALIGNS.map((align) => anchored({ position: toPage(align), cx: 1 })).join(''));
+        expect(onPaper(boxes)).toEqual([
+            [0, 24],
+            [385, 409],
+            [770, 794],
+        ]);
     });
 
     test('its fill, outline, insets, vertical alignment and rounded corners are its look', async () => {
@@ -1341,6 +1400,23 @@ describe('charts', () => {
             CHART_DEFAULT_SIZE.width,
         ]);
         expect(ends).toEqual(ends.map(() => Math.round(9026 / 15)));
+    });
+
+    // A chart taller than the largest side is drawn narrower to keep its shape, 203 px for 480 by 5000, so it is aligned
+    // by that width.
+    test('a chart drawn narrower than its extent lands in the column, aligned left, centred or right', async () => {
+        const runs = ALIGNS.map((align) =>
+            chartRun('rId20', {
+                extent: 'cx="4572000" cy="47625000"',
+                anchor: `<wp:positionH relativeFrom="column"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>`,
+            }),
+        );
+        const { json } = await imported(runs.map(paragraph).join(''), [chartSpace(COLUMNS)]);
+        expect(onPaper(charts(json))).toEqual([
+            [96, 299],
+            [295, 498],
+            [495, 698],
+        ]);
     });
 
     // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.

@@ -79,7 +79,7 @@ export function readTextBox(
     const spPr = xmlChild(shape, WPS_NS, 'spPr');
     const style = xmlChild(shape, WPS_NS, 'style');
     const bodyPr = xmlChild(shape, WPS_NS, 'bodyPr');
-    const { cx, cy } = extentOf(extent);
+    const { cy } = extentOf(extent);
     const grows = !!bodyPr && xmlElements(bodyPr).some((child) => child.local === 'spAutoFit');
     const geometry = spPr && xmlChild(spPr, A_NS, 'prstGeom');
     const preset = geometry ? xmlAttr(geometry, '', 'prst') : 'rect';
@@ -92,7 +92,7 @@ export function readTextBox(
         (!!spPr && Number(xmlAttr(xmlChild(spPr, A_NS, 'xfrm') ?? spPr, '', 'rot') ?? 0) !== 0) ||
         !xmlChild(shape, WPS_NS, 'txbx');
     const look: BoxLook = {
-        width: cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null,
+        width: textBoxWidth(extent, room),
         height: grows || cy <= 0 ? null : cy / EMU_PER_PX,
         fill: shapeFill(reader, spPr, style),
         outline: shapeOutline(reader, spPr, style),
@@ -101,6 +101,13 @@ export function readTextBox(
         rounded: preset === 'roundRect',
     };
     return textBoxNode(reader, items, look, layout, simplified);
+}
+
+// The width a wps box is stored at: its extent's, capped at `room` and held between a box's least and largest side.
+// None where the extent gives none, and the box then draws at a new box's width.
+export function textBoxWidth(extent: XmlElement | undefined, room: number): number | null {
+    const { cx } = extentOf(extent);
+    return readTextBoxSide(cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null);
 }
 
 // A VML shape holding a v:textbox outside a Fallback: its CSS style places and sizes it, its w10:wrap says how the text
