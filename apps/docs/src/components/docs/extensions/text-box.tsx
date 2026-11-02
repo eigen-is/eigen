@@ -122,11 +122,8 @@ function TextBoxView(props: NodeViewProps) {
         <FigureFrame
             {...props}
             box={box}
-            shift={resize.preview?.shift}
+            resize={resize}
             resizeMode="free"
-            onTransform={resize.onTransform}
-            onCommit={resize.onCommit}
-            onGestureEnd={resize.onGestureEnd}
             label="Resize text box"
             dragSurface={{ onInsidePress: open || !isEditable ? null : openAt, text: boxRef }}
         >

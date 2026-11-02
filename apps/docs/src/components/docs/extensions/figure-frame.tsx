@@ -165,6 +165,14 @@ function keptOnPaper(next: Box, start: Box, room: PaperRoom | null): Box {
     return { ...next, x: left, y: top, width: right - left, height: next.y + next.height - top };
 }
 
+// A grip's gesture on a figure: its preview, which the view draws while it runs, and the transform's handlers.
+export type FigureResize<T extends FigureSize = FigureSize> = {
+    preview: { size: T; shift: FigureShift } | null;
+    onTransform: (next: Box) => void;
+    onCommit: (next: Box, start: Box) => void;
+    onGestureEnd: () => void;
+};
+
 // A resize previews locally and writes once, at the commit. `fit` turns a dragged box into the fitted size, and `stored`
 // picks what the node keeps of it, which the commit writes with the offsets a west or a north grip moved.
 export function useFigureResize<T extends FigureSize>({
@@ -178,12 +186,7 @@ export function useFigureResize<T extends FigureSize>({
     getMaxWidth: () => number;
     fit: (box: Box, maxWidth: number) => T;
     stored: (size: T) => Partial<FigureSize>;
-}): {
-    preview: { size: T; shift: FigureShift } | null;
-    onTransform: (next: Box) => void;
-    onCommit: (next: Box, start: Box) => void;
-    onGestureEnd: () => void;
-} {
+}): FigureResize<T> {
     const [preview, setPreview] = useState<{ size: T; shift: FigureShift } | null>(null);
     // ObjectTransform has no onStart, so the first onTransform of a gesture, the box as pressed, latches the start, the
     // max width and a positioned figure's room on the paper: a forced layout per move costs too much.
@@ -301,12 +304,9 @@ function useFigureMove({ editor, getPos, selected }: Pick<NodeViewProps, 'editor
 type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'extension' | 'getPos' | 'decorations'> & {
     // The box the transform chrome resizes; none shows the plain ring on a selected figure.
     box: Box | null;
-    // The edges a grip has moved so far, which a positioned box draws at.
-    shift?: FigureShift;
+    // The grips' gesture. A positioned box draws at its preview's shift, as a west or a north grip moves its edges.
+    resize: FigureResize;
     resizeMode: 'aspect' | 'free';
-    onTransform: (next: Box) => void;
-    onCommit: (next: Box, start: Box) => void;
-    onGestureEnd: () => void;
     label: string;
     keyShortcuts?: string;
     className?: string;
@@ -347,11 +347,8 @@ export function FigureFrame({
     getPos,
     decorations,
     box,
-    shift,
+    resize,
     resizeMode,
-    onTransform,
-    onCommit,
-    onGestureEnd,
     label,
     keyShortcuts,
     className,
@@ -381,6 +378,7 @@ export function FigureFrame({
     };
 
     const { travel, startMove } = useFigureMove({ editor, getPos, selected });
+    const shift = resize.preview?.shift;
     // Where a positioned box draws; none for a figure in the flow.
     const place = figureLayoutStyle({
         ...frame,
@@ -400,9 +398,9 @@ export function FigureFrame({
             formatSize={figureSize}
             // The default minSize of 1 stays: in aspect mode the component floors both sides, so a floor of
             // 100 would force a 4:1 banner to 400 px wide. The host's fit clamps the size instead.
-            onTransform={onTransform}
-            onCommit={onCommit}
-            onGestureEnd={onGestureEnd}
+            onTransform={resize.onTransform}
+            onCommit={resize.onCommit}
+            onGestureEnd={resize.onGestureEnd}
         />
     );
     // The mark comes after the transform, so the transform's top-right grip never covers it. It is a button, so

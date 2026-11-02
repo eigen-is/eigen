@@ -54,16 +54,7 @@ function ChartView(props: NodeViewProps) {
     const box: Box | null = selected && isEditable ? { x: 0, y: 0, ...size, angle: 0 } : null;
 
     return (
-        <FigureFrame
-            {...props}
-            box={box}
-            shift={resize.preview?.shift}
-            resizeMode={locked ? 'aspect' : 'free'}
-            onTransform={resize.onTransform}
-            onCommit={resize.onCommit}
-            onGestureEnd={resize.onGestureEnd}
-            label="Resize chart"
-        >
+        <FigureFrame {...props} box={box} resize={resize} resizeMode={locked ? 'aspect' : 'free'} label="Resize chart">
             <span
                 className="block"
                 // The painter's own SVG: its labels are escaped where they are written.

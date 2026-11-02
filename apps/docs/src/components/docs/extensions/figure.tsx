@@ -150,11 +150,8 @@ function FigureView(props: NodeViewProps) {
         <FigureFrame
             {...props}
             box={box}
-            shift={resize.preview?.shift}
+            resize={resize}
             resizeMode={locked ? 'aspect' : 'free'}
-            onTransform={resize.onTransform}
-            onCommit={resize.onCommit}
-            onGestureEnd={resize.onGestureEnd}
             label="Resize image"
             keyShortcuts={FIGURE_RESIZE_KEYS}
             className={cn(failed && 'min-w-[min(10rem,100%)]')}
