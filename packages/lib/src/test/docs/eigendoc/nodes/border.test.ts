@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Border } from '../../../../docs/eigendoc';
-import { borderValue, readBorder } from '../../../../docs/eigendoc';
+import { borderValue, fitBorderPx, readBorder } from '../../../../docs/eigendoc';
 
 describe('readBorder', () => {
     test.each<[unknown, Border | null]>([
@@ -26,5 +26,18 @@ describe('readBorder', () => {
     test('a border writes back as the value it was read from', () => {
         expect(borderValue({ width: 0.67, style: 'solid', color: '#000000' })).toBe('0.67px solid #000000');
         expect(borderValue('none')).toBe('none');
+    });
+});
+
+describe('fitBorderPx', () => {
+    test.each([
+        [0.1, 0.5],
+        [0.5, 0.5],
+        [4 / 3, 1.33],
+        [2.346, 2.35],
+        [8, 8],
+        [12, 8],
+    ])('%p px draws at %p px', (px, fitted) => {
+        expect(fitBorderPx(px)).toBe(fitted);
     });
 });

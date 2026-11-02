@@ -8,6 +8,7 @@ import { readHexColor } from '@workspace/lib/constants/colors';
 import type { BorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
 import {
     borderValue,
+    fitBorderPx,
     flattenNestedStories,
     isStoryNode,
     MAX_TEXT_BOX_PADDING,
@@ -30,7 +31,6 @@ import { buildBlocks } from './assemble';
 import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { storyParagraphs } from './paragraphs';
-import { fitBorderPx } from './styles';
 
 // The look a box draws in, read off a wps shape or a VML one. A width is null where the shape gives none.
 type BoxLook = Required<

@@ -11,7 +11,7 @@ export {
 export { getDocExtensions } from './extensions';
 export { ITALIC_HEADING_LEVELS, ITALIC_HEADING_SELECTOR, MAX_HEADING_LEVEL } from './heading';
 export type { Border, BorderStyle } from './nodes/border';
-export { BORDER_STYLES, borderValue, MAX_BORDER_PX, MIN_BORDER_PX, readBorder } from './nodes/border';
+export { BORDER_STYLES, borderValue, fitBorderPx, MAX_BORDER_PX, MIN_BORDER_PX, readBorder } from './nodes/border';
 export type { Caps } from './nodes/caps';
 export type { ChartAttrs } from './nodes/chart';
 export { ChartNode, chartSvg, readChartAttrs } from './nodes/chart';

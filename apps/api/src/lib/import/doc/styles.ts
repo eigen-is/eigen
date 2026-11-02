@@ -3,7 +3,7 @@
 // read their properties through it.
 
 import type { Border } from '@workspace/lib/docs/eigendoc';
-import { BORDER_STYLES, MAX_BORDER_PX, MIN_BORDER_PX } from '@workspace/lib/docs/eigendoc';
+import { BORDER_STYLES, fitBorderPx } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
 import { lowlight } from '../../document/lowlight';
@@ -148,14 +148,11 @@ function cellBorderOf(border: XmlElement): Border {
     if (!val || val === 'nil' || val === 'none') return 'none';
     const px = (roundedInt(w(border, 'sz')) ?? 0) / BORDER_EIGHTHS_PER_PX;
     return {
-        width: Number(fitBorderPx(px).toFixed(2)),
+        width: fitBorderPx(px),
         style: BORDER_STYLES.find((style) => WORD_BORDER_STYLES[style].includes(val)) ?? 'solid',
         color: markColor(hexColor(w(border, 'color')) || '000000'),
     };
 }
-
-// A line's width in px within the widths a border draws at, such as a cell's side or a text box's outline.
-export const fitBorderPx = (px: number) => Math.min(Math.max(px, MIN_BORDER_PX), MAX_BORDER_PX);
 
 export function readRunProps(rPr: XmlElement | undefined, theme: Theme): DocxRunProps {
     const props: DocxRunProps = {};

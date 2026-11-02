@@ -5,7 +5,7 @@
 
 import { TableCell, TableHeader } from '@tiptap/extension-table';
 import { parseRgb, readHexColor } from '../../../constants/colors';
-import { BORDER_STYLES, borderValue, MAX_BORDER_PX, MIN_BORDER_PX, readBorder } from './border';
+import { BORDER_STYLES, borderValue, fitBorderPx, readBorder } from './border';
 
 // Each side's attribute, in CSS's clockwise order.
 export const CELL_BORDER_SIDES = [
@@ -33,9 +33,7 @@ function parseCellBorder(element: HTMLElement, side: string): string | null {
     const color = hexOf(element.style.getPropertyValue(`border-${side}-color`));
     if (!width || !color || !BORDER_STYLES.some((known) => known === style)) return null;
     const px = Number(width[1]) * (width[2] === 'pt' ? 4 / 3 : 1);
-    const border = readBorder(
-        `${Number(Math.min(Math.max(px, MIN_BORDER_PX), MAX_BORDER_PX).toFixed(2))}px ${style} ${color}`,
-    );
+    const border = readBorder(`${fitBorderPx(px)}px ${style} ${color}`);
     return border && borderValue(border);
 }
 
