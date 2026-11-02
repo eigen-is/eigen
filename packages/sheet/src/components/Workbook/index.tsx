@@ -40,6 +40,7 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
+    endPointerDrag,
     ensureSheetIndex,
     filterPatch,
     getFlowdata,
@@ -193,13 +194,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                 // An edit that would make a validation rule too complex is refused whole: nothing of it applies, and
                 // the user sees why. A formula it evaluated may have reached the engine's map, which learns the sheets
-                // again.
+                // again. A mouse-up's edit still ends its drag.
                 const refuse = (e: unknown) => {
                     if (!(e instanceof ValidationLimitError)) throw e;
                     base.formulaCache.resetEngine();
                     warmFormulaCellInfoMapOnIdle(getContext);
                     commit(
-                        produce(base, (ctx) => {
+                        produce(base, (ctx: Context) => {
+                            endPointerDrag(ctx);
                             ctx.warnDialog = e.message;
                         }),
                     );
