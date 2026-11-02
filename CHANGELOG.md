@@ -32,6 +32,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 
 ## [0.4.1] - 2026-10-28
 
