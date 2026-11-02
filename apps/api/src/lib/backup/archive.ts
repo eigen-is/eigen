@@ -149,12 +149,12 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
 }
 
 // One member of a whole-server archive: where its bytes sit in the outer tar, and their sha256 once read through.
-export type ArchiveMemberAt = { archivePath: string; name: string; offset: number; bytes: number };
-export type ArchiveMember = ArchiveMemberAt & { sha256: string };
+export type ArchiveMemberLocation = { archivePath: string; name: string; offset: number; bytes: number };
+export type ArchiveMember = ArchiveMemberLocation & { sha256: string };
 
 // Where an artifact's compressed bytes are read from: a file of its own, or a member of a
 // whole-server archive, read in place.
-type ArtifactSource = string | ArchiveMemberAt;
+type ArtifactSource = string | ArchiveMemberLocation;
 
 // The artifact's bytes, decompressed. The two streams are wired by hand rather than through
 // `pipeline`, because a read that stops at the entry it wanted ends as an AbortError there.
@@ -170,7 +170,7 @@ async function* artifactBytes(source: ArtifactSource): AsyncGenerator<Uint8Array
     }
 }
 
-function memberStream(member: ArchiveMemberAt): fs.ReadStream {
+function memberStream(member: ArchiveMemberLocation): fs.ReadStream {
     return fs.createReadStream(member.archivePath, { start: member.offset, end: member.offset + member.bytes - 1 });
 }
 
@@ -194,7 +194,7 @@ export async function hashArchiveMembers(archivePath: string): Promise<ArchiveMe
 }
 
 // Every file member of a whole-server archive in order, from the headers alone: a body is seeked past, not read.
-export async function listArchiveMembers(archivePath: string): Promise<ArchiveMemberAt[]> {
+export async function listArchiveMembers(archivePath: string): Promise<ArchiveMemberLocation[]> {
     const handle = await fsp.open(archivePath, 'r');
     try {
         const { size } = await handle.stat();
@@ -211,7 +211,7 @@ export async function listArchiveMembers(archivePath: string): Promise<ArchiveMe
             if (at + count > size) throw new Error('backup archive: the tar ends mid-entry');
             at += count;
         };
-        const members: ArchiveMemberAt[] = [];
+        const members: ArchiveMemberLocation[] = [];
         for await (const entry of tarEntries(blocks(), seek)) {
             if (entry.typeflag === DIRECTORY_TYPEFLAG) continue;
             members.push({ archivePath, name: entry.path, offset: entry.offset, bytes: entry.size });
@@ -227,7 +227,7 @@ const MAX_MEMBER_READ_BYTES = 16 * 1024 * 1024;
 
 // A member's bytes in memory, for the manifest and .env.production. A member that has to land on disk goes through
 // copyArchiveMember, and a home member is unpacked in place by extractArtifact.
-export async function readArchiveMember(member: ArchiveMemberAt): Promise<Uint8Array> {
+export async function readArchiveMember(member: ArchiveMemberLocation): Promise<Uint8Array> {
     if (member.bytes > MAX_MEMBER_READ_BYTES) {
         throw new Error(`backup archive: ${member.name} is ${member.bytes} bytes, too big to read into memory`);
     }
@@ -237,7 +237,7 @@ export async function readArchiveMember(member: ArchiveMemberAt): Promise<Uint8A
 }
 
 // Not Bun.write(dest, a sliced BunFile): Bun 1.4.2 ignores the slice there and writes the whole archive.
-export async function copyArchiveMember(member: ArchiveMemberAt, destPath: string): Promise<void> {
+export async function copyArchiveMember(member: ArchiveMemberLocation, destPath: string): Promise<void> {
     // A read stream refuses an `end` before its `start`, which is what an empty member's range is.
     if (member.bytes === 0) {
         fs.writeFileSync(destPath, '');
