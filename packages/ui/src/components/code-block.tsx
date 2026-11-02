@@ -1,7 +1,8 @@
 // A block of code, a shell command or a log: shadcn's Code Block, without its Shiki highlighter. A header can carry a
 // title and actions; CodeBlockActions as a direct child floats in the top corner on hover instead. Content scrolls or
 // wraps, with optional line numbers, and a line can mark itself added, removed or highlighted. The copy button goes
-// through copyToClipboard, so it toasts like CopyInput. Admin's restore commands and the S3 setup commands use it.
+// through copyToClipboard, so it toasts like CopyInput, and it never submits a form it sits in. It shows commands
+// such as Admin's restore steps and the S3 bucket settings.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { cn } from '@workspace/ui/lib/utils';
@@ -95,6 +96,7 @@ function CodeBlockCopyButton({
             data-slot="code-block-copy-button"
             variant={variant}
             size={size}
+            type="button"
             aria-label="Copy"
             title="Copy to clipboard"
             onClick={(event) => {

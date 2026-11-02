@@ -1,13 +1,14 @@
-// The form for a Drive mount: its name, its storage type and its maximum size, with the S3 fields when a bucket is
-// picked. The admin's mount dialogs show it.
+// The fields of a Drive mount's dialog: its name, its storage type and its maximum size, with the S3 fields when a
+// bucket is picked. It renders inside a FormDialog, such as the admin's Add mount and Edit mount, and mounts with it,
+// so each opening starts from the saved or default values. Its submit hands the values on, and the dialog waits for the
+// save.
 
 import { isStorageType, STORAGE_TYPE_HINTS, STORAGE_TYPE_LABELS } from '@workspace/lib/constants/mount';
 import type { MountStorageType, S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid } from '@workspace/lib/types/mount';
 import type { S3CheckResult, S3HardenResult } from '@workspace/lib/types/settings';
 import { useState } from 'react';
-import { Button } from '../button';
-import { DialogFooter } from '../dialog';
+import { FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
 import { Label } from '../label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../select';
@@ -21,15 +22,14 @@ export type MountFormValues = {
 };
 
 type MountFormProps = {
-    defaultStorageType?: MountFormValues['storageType'];
+    defaultStorageType?: MountStorageType;
     defaultMaxSizeMB?: number;
     defaultS3Config?: S3Config;
     initialValues?: Partial<MountFormValues>;
-    onSubmit: (values: MountFormValues) => void | Promise<void>;
-    onCancel?: () => void;
+    onSubmit: (values: MountFormValues) => Promise<void>;
     onS3Check: (config: S3Config) => Promise<S3CheckResult>;
     onS3Harden: (config: S3Config, noncurrentDays: number) => Promise<S3HardenResult>;
-    submitLabel?: string;
+    submitLabel: string;
     isEdit?: boolean;
 };
 
@@ -39,45 +39,30 @@ export function MountForm({
     defaultS3Config,
     initialValues,
     onSubmit,
-    onCancel,
     onS3Check,
     onS3Harden,
-    submitLabel = 'Create mount',
+    submitLabel,
     isEdit = false,
 }: MountFormProps) {
     const [name, setName] = useState(initialValues?.name ?? '');
-    const [storageType, setStorageType] = useState<MountFormValues['storageType']>(
-        initialValues?.storageType ?? defaultStorageType,
-    );
+    const [storageType, setStorageType] = useState<MountStorageType>(initialValues?.storageType ?? defaultStorageType);
     const [maxSizeMB, setMaxSizeMB] = useState(initialValues?.maxSizeMB ?? defaultMaxSizeMB);
-    const [s3Config, setS3Config] = useState<S3Config>(
-        initialValues?.s3Config ?? (defaultS3Config ? { ...defaultS3Config } : { ...EMPTY_S3 }),
-    );
-    const [submitting, setSubmitting] = useState(false);
+    const [s3Config, setS3Config] = useState(initialValues?.s3Config ?? defaultS3Config ?? EMPTY_S3);
 
     const isS3 = storageType === 's3';
-    const canSubmit = name.trim() && maxSizeMB >= 10 && (!isS3 || isS3ConfigValid(s3Config));
-
-    const handleSubmit = async () => {
-        if (!canSubmit) return;
-        setSubmitting(true);
-        try {
-            await onSubmit({
-                name: name.trim(),
-                storageType,
-                maxSizeMB,
-                s3Config: isS3 ? s3Config : undefined,
-            });
-        } finally {
-            setSubmitting(false);
-        }
-    };
 
     return (
-        <div className="space-y-4">
+        <FormDialogForm
+            canSubmit={name.trim() !== '' && maxSizeMB >= 10 && (!isS3 || isS3ConfigValid(s3Config))}
+            submitLabel={submitLabel}
+            onSubmit={() =>
+                onSubmit({ name: name.trim(), storageType, maxSizeMB, s3Config: isS3 ? s3Config : undefined })
+            }
+        >
             <div className="space-y-1.5">
-                <Label>Name</Label>
+                <Label htmlFor="mount-name">Name</Label>
                 <Input
+                    id="mount-name"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. shared files"
@@ -86,13 +71,13 @@ export function MountForm({
             </div>
 
             <div className="space-y-1.5">
-                <Label>Storage type</Label>
+                <Label htmlFor="mount-storage-type">Storage type</Label>
                 <Select
                     value={storageType}
                     onValueChange={(value) => isStorageType(value) && setStorageType(value)}
                     disabled={isEdit}
                 >
-                    <SelectTrigger>
+                    <SelectTrigger id="mount-storage-type">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -107,8 +92,9 @@ export function MountForm({
             </div>
 
             <div className="space-y-1.5">
-                <Label>Max size (MB)</Label>
+                <Label htmlFor="mount-max-size">Max size (MB)</Label>
                 <Input
+                    id="mount-max-size"
                     type="number"
                     min={10}
                     value={maxSizeMB}
@@ -125,17 +111,6 @@ export function MountForm({
                     isEdit={isEdit}
                 />
             )}
-
-            <DialogFooter>
-                {onCancel && (
-                    <Button variant="outline" onClick={onCancel}>
-                        Cancel
-                    </Button>
-                )}
-                <Button onClick={handleSubmit} disabled={!canSubmit || submitting}>
-                    {submitting ? 'Saving...' : submitLabel}
-                </Button>
-            </DialogFooter>
-        </div>
+        </FormDialogForm>
     );
 }
