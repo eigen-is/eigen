@@ -156,8 +156,8 @@ export class Drive {
 
     // ---- Mounts ----
 
-    // A closing home only closes the mounts this Drive already holds, so a closing home gets no new
-    // mount. When the close begins while a new mount starts, the mount is closed here instead of added.
+    // The home's close only closes the mounts this Drive holds. So a closing home gets no new mount,
+    // and a mount that finishes starting after the close began is closed here instead of added.
     public async addMount(config: MountConfig): Promise<void> {
         if (!this.home.closing) {
             // The mount gets the text extractor from here, so the document loaders stay out of the mount code.

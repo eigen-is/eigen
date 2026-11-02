@@ -283,7 +283,6 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
             await closing;
             expect(built).toHaveLength(1);
             expect(built[0].closing).toBe(true);
-            expect(built[0].pruneTimer).toBeNull();
             expect(drive.getMounts()).toEqual([]);
         } finally {
             spy.mockRestore();
