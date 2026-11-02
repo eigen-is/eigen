@@ -10,6 +10,7 @@ import type {
     MergeCell,
     Op,
     SheetChart,
+    SheetValidation,
 } from '@workspace/lib/sheets';
 import type { ChartSpecTexts } from '@workspace/lib/types/chart';
 import type { Patch as ImmerPatch } from 'immer';
@@ -20,20 +21,17 @@ import type {
     CellMatrix,
     CellWithRowAndCol,
     EditorSheetConfigExtras,
+    FilterCondition,
+    FilterConditionName,
+    FilterEntry,
     Range,
     SingleRange,
 } from '../engine/types';
 import type { PatchOptions } from './utils';
 
-// Types surfaced here so state-side consumers don't have to know the canonical
-// home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
-// Range) live in @workspace/lib/sheets and re-export through ../engine/types;
-// Op / ConditionalFormatRule / DataVerificationRule live in lib directly (the BE
-// document reader replays ops without the engine, the HTML export reads CF rules,
-// and data-validation rules are touched by the editor + canvas painter — none is
-// engine-conceptual).
-// AncestorFormulaCell and CalcChainEntry are engine-only (formula dep graph +
-// calc-chain node).
+// Re-exported so state code needn't know where each type lives. The cell and range shapes
+// are lib's and reach this file through the engine's types. Op and the conditional-format and
+// validation rules come from lib directly, because the server reads them without the engine.
 export type {
     AncestorFormulaCell,
     CalcChainEntry,
@@ -42,9 +40,13 @@ export type {
     CellWithRowAndCol,
     ConditionalFormatRule,
     DataVerificationRule,
+    FilterCondition,
+    FilterConditionName,
+    FilterEntry,
     MergeCell,
     Op,
     Range,
+    SheetValidation,
     SingleRange,
 };
 
@@ -119,53 +121,6 @@ export type SheetConfig = LibSheetConfig &
         authority?: SheetAuthority;
     };
 
-// Filter-by-condition rule names. The names overlapping conditional formatting
-// reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
-// maps 1:1 onto a label in `FILTER_CONDITION_ITEMS` (`state/modules/filter.ts`).
-// `values` carries the rule's operands: none for is(Not)Empty, one for
-// text/date/compare rules, two for (not)between.
-export type FilterConditionName =
-    | 'isEmpty'
-    | 'isNotEmpty'
-    | 'textContains'
-    | 'textNotContains'
-    | 'textStartsWith'
-    | 'textEndsWith'
-    | 'textEquals'
-    | 'dateEqual'
-    | 'dateBefore'
-    | 'dateAfter'
-    | 'greaterThan'
-    | 'greaterThanOrEqual'
-    | 'lessThan'
-    | 'lessThanOrEqual'
-    | 'equal'
-    | 'notEqual'
-    | 'between'
-    | 'notBetween';
-
-export type FilterCondition = {
-    conditionName: FilterConditionName;
-    values: string[];
-};
-
-// Per-column filter rule state. Producers in state/modules/filter.ts /
-// rowcol.ts set every field. `byCondition` is set when the column filters by
-// condition instead of by values/color. Legacy snapshot fields (e.g. the
-// retired `caljs`) flow through the `[key]: unknown` overflow.
-export type FilterEntry = {
-    byCondition?: FilterCondition;
-    // Legacy data and a peer's op can leave it out on an entry that hides no rows.
-    rowhidden?: Record<string, number>;
-    optionstate: boolean;
-    str: number;
-    edr: number;
-    cindex: number;
-    stc: number;
-    edc: number;
-    [key: string]: unknown;
-};
-
 // Alternate-format placeholder entry. The feature never landed; rowcol shifts
 // the cellrange but nothing ever reads the entries.
 export type AlternateFormatEntry = {
@@ -184,9 +139,7 @@ export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     status?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
-    // Pivot-table config — currently unreferenced in active code (only commented-
-    // out callers in toolbar.ts / merge.ts); kept on the type for upstream
-    // workbook-import compatibility.
+    // A pivot table's config, which workbooks from the upstream fork may carry. Nothing reads it.
     pivotTable?: unknown;
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
@@ -271,11 +224,8 @@ export type FilterOptions = {
     top: number;
     width: number;
     height: number;
-    items: {
-        col: number;
-        left: number;
-        top: number;
-    }[];
+    // One button per visible column, in the rect the canvas paints and the mousedown hit test reads.
+    items: (Rect & { col: number })[];
 };
 
 // One undo step: the edit's patches and their inverse. A cell or field path names its sheet by id,
@@ -338,7 +288,6 @@ export type GlobalCache = {
     pressClosedMenu?: boolean;
 };
 
-// FORMULA
 export type FormulaCell = {
     r: number;
     c: number;

@@ -16,6 +16,7 @@ import { cellGlyphAtPointer, handleCellAreaMouseDown } from '../../../state/even
 import { cellTextBox, checkboxAlign, checkboxRect } from '../../../state/modules/data-verification';
 import type { DataVerificationRule, GlobalCache } from '../../../state/types';
 import { contextFactory } from '../factories/context';
+import { validationsByCell } from '../factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -23,6 +24,7 @@ const win = new Window();
 g.window = win;
 g.document = win.document;
 g.HTMLElement = win.HTMLElement;
+g.DOMParser = win.DOMParser;
 
 const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
@@ -35,7 +37,7 @@ function tickBoxContext(): Context {
         [null, null, null, null],
         [null, null, null, null],
     ];
-    ctx.sheets[0].dataVerification = { '1_0': TICK_BOX };
+    ctx.sheets[0].dataValidations = validationsByCell({ '1_0': TICK_BOX });
     ctx.editingCellPosition = [];
     return ctx;
 }
@@ -110,6 +112,38 @@ describe('handleCellAreaMouseDown — tick box', () => {
     });
 });
 
+// A Ctrl-click while composing adds another reference, after a comma unless the formula already ends in one, an `=`
+// or an opening bracket.
+describe('handleCellAreaMouseDown — a Ctrl-click while composing a formula', () => {
+    function ctrlClickA2(text: string): string {
+        const ctx = tickBoxContext();
+        ctx.editingCellPosition = [0, 0];
+        ctx.formulaCache.rangestart = true;
+        ctx.formulaRangeHighlight = [];
+        const container = win.document.createElement('div') as unknown as HTMLDivElement;
+        container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
+        const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
+        cellInput.innerText = text;
+        const event = {
+            button: 0,
+            pageX: 30,
+            pageY: 30,
+            ctrlKey: true,
+            preventDefault: () => {},
+        } as unknown as MouseEvent;
+        handleCellAreaMouseDown(ctx, quietCache(), event, cellInput, container);
+        return cellInput.innerText;
+    }
+
+    test('adds no comma after an opening bracket', () => {
+        expect(ctrlClickA2('=SUM(')).toBe('=SUM(A2');
+    });
+
+    test('adds a comma after a reference', () => {
+        expect(ctrlClickA2('=SUM(A1')).toStartWith('=SUM(A1,');
+    });
+});
+
 // The menu bar's menus leave the page live, so the press that closes one reaches the grid too.
 describe('handleCellAreaMouseDown — a press that closes a menu', () => {
     // The browser would move the focus out of the editor, and its caret to the start, as a reference press never does.
@@ -173,11 +207,11 @@ describe('cell glyphs over the selection drag handles', () => {
 
     test('the list chevron at the fill corner opens the list, no fill drag', () => {
         const ctx = selectedA1();
-        ctx.sheets[0].dataVerification = { '0_0': LIST_RULE };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': LIST_RULE });
         // Inside the 8px glyph (x 62..70, y 6..14) and inside the fill grab.
         expect(glyphAt(ctx, 68, 13)).toBe('dropdown');
         mouseDownAt(ctx, 68, 13);
-        expect(ctx.dataVerificationDropDownList).toBe(true);
+        expect(ctx.validationListOpen).toBe(true);
         expect(ctx.cellSelectExtending).toBeFalsy();
         expect(ctx.cellSelectMoving).toBeFalsy();
     });
@@ -195,7 +229,9 @@ describe('cell glyphs over the selection drag handles', () => {
     test('the invalid-value triangle under the move band selects the cell, no move drag', () => {
         const ctx = selectedA1();
         ctx.sheets[0].data![0][0] = { v: 1, m: '1' };
-        ctx.sheets[0].dataVerification = { '0_0': { type: 'number', type2: 'moreThanThe', value1: '3', value2: '' } };
+        ctx.sheets[0].dataValidations = validationsByCell({
+            '0_0': { type: 'number', type2: 'moreThanThe', value1: '3', value2: '' },
+        });
         ctx.selections![0].column = [1, 1];
         expect(glyphAt(ctx, 1, 5)).toBe('invalid');
         mouseDownAt(ctx, 1, 5);
@@ -205,7 +241,7 @@ describe('cell glyphs over the selection drag handles', () => {
 
     test('outside the cell area nothing answers', () => {
         const ctx = selectedA1();
-        ctx.sheets[0].dataVerification = { '0_0': LIST_RULE };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': LIST_RULE });
         expect(glyphAt(ctx, -1, 13)).toBeUndefined();
     });
 });

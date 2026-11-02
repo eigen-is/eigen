@@ -4,7 +4,7 @@
 
 import { escapeHtml, unescapeHtml } from '@workspace/lib/html';
 import { indexOf, isEmpty, isNil, last, startsWith, trim } from 'es-toolkit/compat';
-import { iscelldata, operatorjson } from '../../engine/formula-utils';
+import { formulaOperators, iscelldata } from '../../engine/formula-utils';
 import type { Context } from '../context';
 
 import { cancelFunctionrangeSelected } from '.';
@@ -97,7 +97,7 @@ function functionHTML(txt: string) {
                 function_str += '<span dir="auto" class="sheet-formula-text-calc">&amp;</span>';
             }
         } else if (
-            s in operatorjson &&
+            formulaOperators.has(s) &&
             matchConfig.squote === 0 &&
             matchConfig.dquote === 0 &&
             matchConfig.braces === 0
@@ -116,7 +116,7 @@ function functionHTML(txt: string) {
                 } while (p >= 0 && s_pre === ' ');
             }
 
-            if (s + s_next in operatorjson) {
+            if (formulaOperators.has(s + s_next)) {
                 if (str.length > 0) {
                     function_str += `${functionHTML(
                         str,
@@ -130,7 +130,7 @@ function functionHTML(txt: string) {
             } else if (
                 !/[^0-9]/.test(s_next) &&
                 s === '-' &&
-                (s_pre === '(' || isNil(s_pre) || s_pre === ',' || s_pre === ' ' || s_pre in operatorjson)
+                (s_pre === '(' || isNil(s_pre) || s_pre === ',' || s_pre === ' ' || formulaOperators.has(s_pre))
             ) {
                 str += s;
             } else {
@@ -285,24 +285,20 @@ export function getrangeseleciton() {
     if (!anchorNode) return null;
 
     if (anchorNode.parentNode?.nodeName?.toLowerCase() === 'span' && anchorOffset !== 0) {
-        let txt = trim(anchorNode.textContent || '');
-        if (txt.length === 0 && anchorNode.parentNode.previousSibling) {
-            const ahr = anchorNode.parentNode.previousSibling;
-            txt = trim(ahr.textContent || '');
-            return ahr;
+        if (trim(anchorNode.textContent || '').length === 0 && anchorNode.parentNode.previousSibling) {
+            return anchorNode.parentNode.previousSibling;
         }
         return anchorNode.parentNode;
     }
-    const anchorElement = anchorNode as HTMLElement;
-    if (anchorElement.id === 'sheet-rich-text-editor' || anchorElement.id === 'sheet-functionbox-cell') {
-        let txt = trim(last(anchorElement.querySelectorAll('span'))?.innerText);
-
-        if (txt.length === 0 && anchorElement.querySelectorAll('span').length > 1) {
-            const ahr = anchorElement.querySelectorAll('span');
-            txt = trim(ahr[ahr.length - 2].innerText);
-            return ahr?.[0];
+    if (
+        anchorNode instanceof HTMLElement &&
+        (anchorNode.id === 'sheet-rich-text-editor' || anchorNode.id === 'sheet-functionbox-cell')
+    ) {
+        const spans = anchorNode.querySelectorAll('span');
+        if (trim(last(spans)?.innerText).length === 0 && spans.length > 1) {
+            return spans[0];
         }
-        return last(anchorElement.querySelectorAll('span'));
+        return last(spans);
     }
     if (
         anchorNode?.parentElement?.id === 'sheet-rich-text-editor' ||
@@ -407,7 +403,11 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         if (
             (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
             (!istooltip &&
-                (lasttxt === '(' || lasttxt === ',' || lasttxt === '=' || lasttxt in operatorjson || lasttxt === '&'))
+                (lasttxt === '(' ||
+                    lasttxt === ',' ||
+                    lasttxt === '=' ||
+                    formulaOperators.has(lasttxt) ||
+                    lasttxt === '&'))
         ) {
             return true;
         }
@@ -428,7 +428,11 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
         if (
             (istooltip && (lasttxt === '(' || lasttxt === ',')) ||
             (!istooltip &&
-                (lasttxt === '(' || lasttxt === ',' || lasttxt === '=' || lasttxt in operatorjson || lasttxt === '&'))
+                (lasttxt === '(' ||
+                    lasttxt === ',' ||
+                    lasttxt === '=' ||
+                    formulaOperators.has(lasttxt) ||
+                    lasttxt === '&'))
         ) {
             return true;
         }
@@ -454,7 +458,7 @@ export function israngeseleciton(ctx: Context, istooltip?: boolean) {
                     (lasttxt === '(' ||
                         lasttxt === ',' ||
                         lasttxt === '=' ||
-                        lasttxt in operatorjson ||
+                        formulaOperators.has(lasttxt) ||
                         lasttxt === '&'))
             ) {
                 return true;

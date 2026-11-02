@@ -1,16 +1,15 @@
+// The reverse dependency index: for a cell, the formulas that read it. The editor's formula map and the server's
+// recalc both fill one, through set, and ask it dependentsOf for each cell that changed or holds a formula. A single
+// cell gets an exact bucket. A range is listed in each 64 × 16 block it meets, so a lookup scans only the ranges near
+// its cell. A range down every row of its sheet, such as a whole column, is listed once per column instead, and one
+// across every column once per row.
+
 import type { FormulaDependency } from './types';
 
-// Reverse dependency index: which formulas read a given cell. Single-cell
-// dependencies (the vast majority — fill-down formulas like =D8*E8) get an
-// exact per-cell bucket; multi-cell ranges are bucketed into fixed-size
-// row/column blocks so a point query scans only the ranges near that cell
-// instead of every formula in the workbook.
-const ROW_BLOCK = 64;
-const COL_BLOCK = 16;
+// A sheet's size, which tells set whether a range runs down every row or across every column.
+export type SheetExtent = { rows: number; columns: number };
 
-// Cells pack into one number: fine for any r < 2^33 since c < 2^20 in practice.
-const CELL_PACK = 1 << 20;
-const BLOCK_PACK = 1 << 16;
+type ExtentOf = (sheetId: string) => SheetExtent | undefined;
 
 type RangeEntry = {
     r0: number;
@@ -20,7 +19,22 @@ type RangeEntry = {
     key: string;
 };
 
-type KeyedEntry = { sheetId: string; point: number } | { sheetId: string; entry: RangeEntry };
+// Where set lists a range: in the blocks it meets, in its columns, or in its rows.
+type Layout = 'blocks' | 'columns' | 'rows';
+
+type KeyedEntry = { sheetId: string; point: number } | { sheetId: string; entry: RangeEntry; layout: Layout };
+
+// Per sheet, the ranges listed under each block, column or row number.
+type Buckets = Map<string, Map<number, RangeEntry[]>>;
+
+const ROW_BLOCK = 64;
+const COL_BLOCK = 16;
+
+// Cells pack into one number: fine for any r < 2^33 since c < 2^20 in practice.
+const CELL_PACK = 1 << 20;
+const BLOCK_PACK = 1 << 16;
+
+const EMPTY: readonly string[] = [];
 
 // A dependency's sheet and cells, its corners in order and none below 0; null when it names no sheet.
 export function cellsOf(
@@ -36,37 +50,25 @@ export function cellsOf(
     };
 }
 
-// The blocks `set` lists a formula's ranges in, a single cell costing none: what recalc charges an untrusted
-// workbook's formulas before the index holds them.
-export function dependencyBlocks(deps: FormulaDependency[]): number {
-    let blocks = 0;
+// The slots set lists a formula's ranges in, a single cell costing none: what recalc charges an untrusted workbook's
+// formulas before the index holds them.
+export function dependencySlots(deps: readonly FormulaDependency[], extentOf: ExtentOf): number {
+    let slots = 0;
     for (const dep of deps) {
         const cells = cellsOf(dep);
         if (cells == null || (cells.r0 === cells.r1 && cells.c0 === cells.c1)) continue;
-        blocks +=
-            (Math.floor(cells.r1 / ROW_BLOCK) - Math.floor(cells.r0 / ROW_BLOCK) + 1) *
-            (Math.floor(cells.c1 / COL_BLOCK) - Math.floor(cells.c0 / COL_BLOCK) + 1);
+        slots += layoutOf(cells, extentOf(cells.sheetId)).slots;
     }
-    return blocks;
+    return slots;
 }
-
-function forEachBlock(entry: RangeEntry, fn: (block: number) => void): void {
-    for (let rb = Math.floor(entry.r0 / ROW_BLOCK); rb <= Math.floor(entry.r1 / ROW_BLOCK); rb += 1) {
-        for (let cb = Math.floor(entry.c0 / COL_BLOCK); cb <= Math.floor(entry.c1 / COL_BLOCK); cb += 1) {
-            fn(rb * BLOCK_PACK + cb);
-        }
-    }
-}
-
-const EMPTY: readonly string[] = [];
 
 export class DependencyIndex {
     private points = new Map<string, Map<number, string[]>>();
-    private ranges = new Map<string, Map<number, RangeEntry[]>>();
+    private buckets: Record<Layout, Buckets> = { blocks: new Map(), columns: new Map(), rows: new Map() };
     private byKey = new Map<string, KeyedEntry[]>();
     private queryCache = new Map<string, Map<number, readonly string[]>>();
 
-    public set(key: string, deps: FormulaDependency[]): void {
+    public set(key: string, deps: readonly FormulaDependency[], extentOf: ExtentOf): void {
         this.delete(key);
 
         const stored: KeyedEntry[] = [];
@@ -83,25 +85,26 @@ export class DependencyIndex {
                     this.points.set(sheetId, sheetPoints);
                 }
                 const keys = sheetPoints.get(point);
-                // One entry per formula: `delete` splices a single occurrence, so a
-                // formula reading the same cell twice (`=A1+A1`) must not be listed twice.
+                // One entry per formula: `delete` splices a single occurrence, so a formula reading the same cell
+                // twice (`=A1+A1`) must not be listed twice.
                 if (keys == null) sheetPoints.set(point, [key]);
                 else if (!keys.includes(key)) keys.push(key);
                 stored.push({ sheetId, point });
             } else {
                 const entry: RangeEntry = { r0, r1, c0, c1, key };
-                let sheetRanges = this.ranges.get(sheetId);
-                if (sheetRanges == null) {
-                    sheetRanges = new Map();
-                    this.ranges.set(sheetId, sheetRanges);
+                const { layout } = layoutOf(cells, extentOf(sheetId));
+                let sheetBuckets = this.buckets[layout].get(sheetId);
+                if (sheetBuckets == null) {
+                    sheetBuckets = new Map();
+                    this.buckets[layout].set(sheetId, sheetBuckets);
                 }
-                const ranges = sheetRanges;
-                forEachBlock(entry, (block) => {
-                    const entries = ranges.get(block);
-                    if (entries == null) ranges.set(block, [entry]);
+                const ranges = sheetBuckets;
+                forEachSlot(entry, layout, (slot) => {
+                    const entries = ranges.get(slot);
+                    if (entries == null) ranges.set(slot, [entry]);
                     else entries.push(entry);
                 });
-                stored.push({ sheetId, entry });
+                stored.push({ sheetId, entry, layout });
             }
         }
 
@@ -126,14 +129,14 @@ export class DependencyIndex {
                     if (at !== -1) keys.splice(at, 1);
                 }
             } else {
-                const sheetRanges = this.ranges.get(item.sheetId);
-                if (sheetRanges == null) continue;
-                forEachBlock(item.entry, (block) => {
-                    const entries = sheetRanges.get(block);
+                const sheetBuckets = this.buckets[item.layout].get(item.sheetId);
+                if (sheetBuckets == null) continue;
+                forEachSlot(item.entry, item.layout, (slot) => {
+                    const entries = sheetBuckets.get(slot);
                     if (entries == null) return;
                     const at = entries.indexOf(item.entry);
                     if (at === -1) return;
-                    if (entries.length === 1) sheetRanges.delete(block);
+                    if (entries.length === 1) sheetBuckets.delete(slot);
                     else entries.splice(at, 1);
                 });
             }
@@ -143,13 +146,13 @@ export class DependencyIndex {
 
     public clear(): void {
         this.points.clear();
-        this.ranges.clear();
+        for (const buckets of Object.values(this.buckets)) buckets.clear();
         this.byKey.clear();
         this.queryCache.clear();
     }
 
-    // Keys of formulas whose dependency ranges cover (r, c). Results are cached
-    // until the next mutation; callers must not mutate the returned array.
+    // Keys of formulas whose dependency ranges cover (r, c). Results are cached until the next mutation, so callers
+    // must not change the returned array.
     public dependentsOf(sheetId: string, r: number, c: number): readonly string[] {
         const packed = r * CELL_PACK + c;
         let sheetCache = this.queryCache.get(sheetId);
@@ -157,20 +160,16 @@ export class DependencyIndex {
         if (cached != null) return cached;
 
         const pointKeys = this.points.get(sheetId)?.get(packed);
-        const blockEntries = this.ranges
-            .get(sheetId)
-            ?.get(Math.floor(r / ROW_BLOCK) * BLOCK_PACK + Math.floor(c / COL_BLOCK));
+        const nearby = this.nearby(sheetId, r, c);
 
-        let result: readonly string[];
-        if (blockEntries == null) {
-            // Point bucket only — return it directly (read-only contract, and the
-            // query cache is cleared on every mutation of the bucket).
-            result = pointKeys ?? EMPTY;
-        } else {
+        // With no range nearby the point bucket is the answer. It is safe to hand out, because every change to it
+        // clears the query cache.
+        let result = pointKeys ?? EMPTY;
+        if (nearby.some((entries) => entries != null)) {
             const found = new Set<string>(pointKeys);
-            for (const entry of blockEntries) {
-                if (r >= entry.r0 && r <= entry.r1 && c >= entry.c0 && c <= entry.c1) {
-                    found.add(entry.key);
+            for (const entries of nearby) {
+                for (const entry of entries ?? []) {
+                    if (r >= entry.r0 && r <= entry.r1 && c >= entry.c0 && c <= entry.c1) found.add(entry.key);
                 }
             }
             result = found.size === 0 ? EMPTY : [...found];
@@ -182,5 +181,73 @@ export class DependencyIndex {
         }
         sheetCache.set(packed, result);
         return result;
+    }
+
+    // How many entries dependentsOf visits for (r, c): each formula listed at the cell, and each range listed near it,
+    // whether the range covers the cell or not. They are counted without a scan, so recalc can weigh what weighing the
+    // links will cost before it scans for them.
+    public lookupVisits(sheetId: string, r: number, c: number): number {
+        let visits = this.points.get(sheetId)?.get(r * CELL_PACK + c)?.length ?? 0;
+        for (const entries of this.nearby(sheetId, r, c)) visits += entries?.length ?? 0;
+        return visits;
+    }
+
+    // How many formulas read (r, c), a formula that reads the cell through two of its ranges counted twice. It builds
+    // nothing, so recalc can weigh the whole graph before it links it. It scans what lookupVisits counts.
+    public countDependents(sheetId: string, r: number, c: number): number {
+        let count = this.points.get(sheetId)?.get(r * CELL_PACK + c)?.length ?? 0;
+        for (const entries of this.nearby(sheetId, r, c)) {
+            for (const entry of entries ?? []) {
+                if (r >= entry.r0 && r <= entry.r1 && c >= entry.c0 && c <= entry.c1) count += 1;
+            }
+        }
+        return count;
+    }
+
+    // The ranges listed in the block, the column and the row of (r, c).
+    private nearby(sheetId: string, r: number, c: number): (RangeEntry[] | undefined)[] {
+        return [
+            this.buckets.blocks.get(sheetId)?.get(Math.floor(r / ROW_BLOCK) * BLOCK_PACK + Math.floor(c / COL_BLOCK)),
+            this.buckets.columns.get(sheetId)?.get(c),
+            this.buckets.rows.get(sheetId)?.get(r),
+        ];
+    }
+}
+
+// The cheapest of the layouts that fit a range, and the slots it takes there. Only a range down every row of its
+// sheet may go in its columns, and only one across every column in its rows. A lookup in such a column or row then
+// finds every range listed there, so it scans nothing it doesn't return.
+function layoutOf(
+    cells: { r0: number; r1: number; c0: number; c1: number },
+    extent: SheetExtent | undefined,
+): { layout: Layout; slots: number } {
+    const { r0, r1, c0, c1 } = cells;
+    let best: { layout: Layout; slots: number } = {
+        layout: 'blocks',
+        slots:
+            (Math.floor(r1 / ROW_BLOCK) - Math.floor(r0 / ROW_BLOCK) + 1) *
+            (Math.floor(c1 / COL_BLOCK) - Math.floor(c0 / COL_BLOCK) + 1),
+    };
+    if (extent == null) return best;
+    if (r0 === 0 && r1 >= extent.rows - 1 && c1 - c0 + 1 < best.slots) {
+        best = { layout: 'columns', slots: c1 - c0 + 1 };
+    }
+    if (c0 === 0 && c1 >= extent.columns - 1 && r1 - r0 + 1 < best.slots) {
+        best = { layout: 'rows', slots: r1 - r0 + 1 };
+    }
+    return best;
+}
+
+function forEachSlot(entry: RangeEntry, layout: Layout, fn: (slot: number) => void): void {
+    if (layout === 'columns') {
+        for (let c = entry.c0; c <= entry.c1; c += 1) fn(c);
+    } else if (layout === 'rows') {
+        for (let r = entry.r0; r <= entry.r1; r += 1) fn(r);
+    } else {
+        for (let rb = Math.floor(entry.r0 / ROW_BLOCK); rb <= Math.floor(entry.r1 / ROW_BLOCK); rb += 1) {
+            for (let cb = Math.floor(entry.c0 / COL_BLOCK); cb <= Math.floor(entry.c1 / COL_BLOCK); cb += 1) {
+                fn(rb * BLOCK_PACK + cb);
+            }
+        }
     }
 }

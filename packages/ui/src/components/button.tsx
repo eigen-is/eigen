@@ -1,3 +1,7 @@
+// shadcn's Button, in the variants and sizes every app shares. It is a plain button unless the caller says otherwise,
+// so inside a form only a Button with type="submit" submits it. asChild renders the button's look on its child
+// instead, such as a link, and puts no button type on it.
+
 import { cn } from '@workspace/ui/lib/utils';
 import type { VariantProps } from 'class-variance-authority';
 import { cva } from 'class-variance-authority';
@@ -41,6 +45,7 @@ function Button({
     variant = 'default',
     size = 'default',
     asChild = false,
+    type = asChild ? undefined : 'button',
     ...props
 }: React.ComponentProps<'button'> &
     VariantProps<typeof buttonVariants> & {
@@ -54,6 +59,7 @@ function Button({
             data-variant={variant}
             data-size={size}
             className={cn(buttonVariants({ variant, size, className }))}
+            type={type}
             {...props}
         />
     );

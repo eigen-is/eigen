@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, spreadsheet, create, edit, cells, data]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 20
-updated: 2026-10-27
+updated: 2026-11-02
 ---
 
 You can create a spreadsheet directly in Drive or from inside Sheets, then enter data and edit it using the toolbar menus and keyboard shortcuts.
@@ -59,7 +59,11 @@ Use the standard keyboard shortcuts:
 
 You can also use **Edit → Copy**, **Edit → Cut**, and **Edit → Paste** from the menu bar.
 
-Copied cells paste into other apps as rows and columns, for example into a text editor or a chart's **Edit data** grid.
+A copy takes hidden rows and columns along, as in Excel. The one exception is a filter: a copy leaves out the rows a filter hides, and a cut moves them too. The rows and columns you paste over stay hidden or shown as they were.
+
+When you paste in the same browser tab, the pasted cells bring their dropdowns, other data validation, and links. They replace the ones on the cells they land on, so a copied cell without a link or a rule removes the destination's.
+
+Copied cells paste into other apps as rows and columns, the same ones a paste in Sheets gets, for example into a text editor or a chart's **Edit data** grid.
 
 ## Undo and redo
 
@@ -81,7 +85,7 @@ The **Format** menu covers all formatting options:
 - **Merge cells**: combine a selection into one cell.
 - **Clear formatting**: remove all formatting from the selected cells without deleting their values.
 
-On wider screens, quick buttons for **Text color**, **Fill color**, and horizontal alignment also appear in the center of the menu bar.
+Quick buttons for the font, font size, **Bold**, **Italic**, **Text color**, **Fill color**, and horizontal alignment sit in the center of the menu bar. As the bar gets narrower, for example when a side panel is open, they fold away from the right, alignment first, until none are left. Everything they do stays in the **Format** menu.
 
 ## Find and replace
 

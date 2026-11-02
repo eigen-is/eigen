@@ -1,15 +1,12 @@
+// The Import… picker docs, sheets and slides share: pick a file from Drive or the device, then say how it comes in,
+// and only then does either import mutation run. The choice stays open, under the progress dialog, until the import
+// is done, and a failed import leaves it open for another try. A Drive file is offered by its extension, as Convert
+// takes it: Drive stores the type its upload claimed, which for an Office file can be application/octet-stream.
+
 import { useImportDocument, useImportFromDrive } from '@workspace/lib/drive';
 import type { ConvertTarget, DrivePath, ImportMode } from '@workspace/lib/types/drive';
 import { CONVERT_SOURCES, isConvertSource } from '@workspace/lib/types/drive';
-import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { useState } from 'react';
@@ -46,29 +43,26 @@ const IMPORT_CHOICES: Record<ConvertTarget, { mode: ImportMode; label: string; d
     eigendoc: [],
 };
 
-// The import picker docs, sheets and slides share: pick a file from Drive or the device, then say how it comes in, and
-// only then does either import mutation run. The toolbar keeps only the open state so its File menu can trigger it. A
-// Drive file is offered by its extension, as Convert takes it: Drive stores the type its upload claimed, which for an
-// Office file can be application/octet-stream.
 export function DocumentImportPicker({ path, open, onOpenChange, target, afterFrameId }: DocumentImportPickerProps) {
     const importMutation = useImportDocument(path.ownerId, path.mountId);
     const importFromDriveMutation = useImportFromDrive(path.ownerId, path.mountId);
     const [source, setSource] = useState<ImportSource | null>(null);
     const { format } = CONVERT_SOURCES[target];
+    const title = `Import ${format} file`;
 
-    const runImport = (mode: ImportMode) => {
-        if (!source) return;
+    const runImport = async (from: ImportSource, mode: ImportMode) => {
         const options = { mode, afterFrameId };
-        if ('file' in source) importMutation.mutate({ pathId: path.id, file: source.file, options });
-        else
-            importFromDriveMutation.mutate({
+        if ('file' in from) {
+            await importMutation.mutateAsync({ pathId: path.id, file: from.file, options });
+        } else {
+            await importFromDriveMutation.mutateAsync({
                 pathId: path.id,
-                sourceOwnerId: source.drive.ownerId,
-                sourceMountId: source.drive.mountId,
-                sourcePathId: source.drive.id,
+                sourceOwnerId: from.drive.ownerId,
+                sourceMountId: from.drive.mountId,
+                sourcePathId: from.drive.id,
                 options,
             });
-        setSource(null);
+        }
     };
 
     return (
@@ -76,7 +70,7 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
             <FileImportPicker
                 open={open}
                 onOpenChange={onOpenChange}
-                title={`Import ${format} file`}
+                title={title}
                 accept={`.${format}`}
                 canPick={(item) => isConvertSource(item.name, target)}
                 onDeviceFile={(file) => setSource({ name: file.name, file })}
@@ -84,52 +78,36 @@ export function DocumentImportPicker({ path, open, onOpenChange, target, afterFr
                 pending={importMutation.isPending || importFromDriveMutation.isPending}
                 progressTitle={`Importing ${format} file`}
             />
-            <Dialog open={source !== null} onOpenChange={(next) => !next && setSource(null)}>
-                <DialogContent size="sm">
-                    {source && (
-                        <ImportModeForm
-                            title={`Import ${format} file`}
-                            fileName={source.name}
-                            target={target}
-                            onCancel={() => setSource(null)}
-                            onImport={runImport}
-                        />
-                    )}
-                </DialogContent>
-            </Dialog>
+            <FormDialog
+                open={source !== null}
+                onOpenChange={(next) => !next && setSource(null)}
+                title={title}
+                description={
+                    source && IMPORT_CHOICES[target].length === 0
+                        ? `${source.name} replaces this whole document: its text, headers and footers, and page setup. ${VERSION_NOTE}`
+                        : source?.name
+                }
+                size="sm"
+            >
+                {source && <ImportModeForm target={target} onImport={(mode) => runImport(source, mode)} />}
+            </FormDialog>
         </>
     );
 }
 
-type ImportModeFormProps = {
-    title: string;
-    fileName: string;
-    target: ConvertTarget;
-    onCancel: () => void;
-    onImport: (mode: ImportMode) => void;
-};
-
 // Mounted per pick, so each one starts on the default.
-function ImportModeForm({ title, fileName, target, onCancel, onImport }: ImportModeFormProps) {
+function ImportModeForm({
+    target,
+    onImport,
+}: {
+    target: ConvertTarget;
+    onImport: (mode: ImportMode) => Promise<void>;
+}) {
     const choices = IMPORT_CHOICES[target];
     const [mode, setMode] = useState<ImportMode>(choices[0]?.mode ?? 'replace');
 
     return (
-        <form
-            className="flex flex-col gap-6"
-            onSubmit={(e) => {
-                e.preventDefault();
-                onImport(mode);
-            }}
-        >
-            <DialogHeader>
-                <DialogTitle>{title}</DialogTitle>
-                <DialogDescription className="break-words">
-                    {choices.length === 0
-                        ? `${fileName} replaces this whole document: its text, headers and footers, and page setup. ${VERSION_NOTE}`
-                        : fileName}
-                </DialogDescription>
-            </DialogHeader>
+        <FormDialogForm submitLabel="Import" onSubmit={() => onImport(mode)}>
             {choices.length > 0 && (
                 <RadioGroup
                     value={mode}
@@ -146,12 +124,6 @@ function ImportModeForm({ title, fileName, target, onCancel, onImport }: ImportM
                     ))}
                 </RadioGroup>
             )}
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button type="submit">Import</Button>
-            </DialogFooter>
-        </form>
+        </FormDialogForm>
     );
 }

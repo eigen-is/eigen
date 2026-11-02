@@ -73,17 +73,7 @@ export function ChartDataDialog({ spec, stored, open, onOpenChange, onSave }: Ch
     const readOnly = unknown || exceedsInlineGridLimits(spec.data);
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="lg"
-                showCloseButton={false}
-                // Escape while a cell is open cancels the edit, not the dialog. Radix hears Escape on the
-                // document before the cell editor's own keydown does.
-                onEscapeKeyDown={(e) => {
-                    if (e.target instanceof Element && e.target.matches('[data-cell-editor][data-editing]')) {
-                        e.preventDefault();
-                    }
-                }}
-            >
+            <DialogContent size="lg" showCloseButton={false}>
                 <DialogHeader>
                     <DialogTitle>Edit data</DialogTitle>
                     <DialogDescription>
@@ -504,7 +494,8 @@ function EditableGrid({
                 <input
                     ref={input}
                     data-cell-editor
-                    data-editing={editing ? '' : undefined}
+                    // Escape while a cell is open cancels the edit, not the dialog.
+                    data-owns-escape={editing ? '' : undefined}
                     aria-label={label}
                     autoComplete="off"
                     spellCheck={false}

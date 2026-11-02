@@ -23,18 +23,32 @@ import {
     recalcSheets,
     renameSheetRefs,
     replaySheetsOps,
+    sheetFinder,
+    sheetNameKey,
     sheetsNeedRecalc,
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 
-// What the server's recalc lets an untrusted workbook's formulas cost. Past either bound the recalc fails like any
-// other, and the sheets keep the values they hold.
+// What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
+// and the sheets keep the values they hold.
 export const SERVER_RECALC_BUDGET = {
-    // Counted in the dependency index's 64 × 16 blocks (dependencyBlocks), each range cut to its sheet. The most a
-    // workbook of the 1,062-file corpus needs is 68.8 million (3.3 s), and this is four times that. An 81 KB file of
-    // whole-column sums reaches it in 9.9 s at 3.2 GB.
-    maxDependencyBlocks: 280_000_000,
+    // The slots the dependency index lists each range in (dependencySlots), the range cut to its sheet. A range lies in
+    // the 64 × 16 blocks it meets. A range down every row of its sheet, such as a whole column, takes one slot per
+    // column instead. A range across every column, such as a whole row, takes one slot per row. No workbook of the
+    // 1,062-file corpus needs more than 68.8 million (3.3 s), and this is four times that.
+    maxDependencySlots: 280_000_000,
+    // The entries the lookups of the formula cells visit in the index, whether each range covers the cell or not. They
+    // bound the time the links take to count and to make. A range near many formula cells that covers none makes no
+    // link, so without this a crafted workbook of no links spent 20 s counting them. The largest corpus workbook that
+    // recalcs needs 43.2 million, and this is twice that. The two past it need 121 and 285 million. The first failed
+    // the cell budget below after 16 s, the second the edge budget, and both now fail before any link is counted.
+    maxDependencyVisits: 90_000_000,
+    // The links between formulas, one for each formula and each formula cell it reads. They bound the graph's memory:
+    // 43 million links took 7 GB. The slots don't bound them, because a whole column costs one slot, but 20,000
+    // `=COUNT(A:A)` in that column make 400 million links. The largest corpus workbook that recalcs needs 21 million,
+    // and this is twice that.
+    maxDependencyEdges: 40_000_000,
     // The cells the evaluation of its ranges reads. The most a corpus workbook reads that recalcs in under 10 s is
     // 30 million (9.9 s), just under this. 2,000 COUNTIFs over A1:Z1048576 fail at it in 17 s, well inside an export's
     // deadline.
@@ -122,13 +136,15 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
     const fresh = imported.map((sheet) => {
-        const name = taken.includes(sheet.name) ? copySheetName(sheet.name, taken) : sheet.name;
+        const clashes = taken.some((other) => sheetNameKey(other) === sheetNameKey(sheet.name));
+        const name = clashes ? copySheetName(sheet.name, taken) : sheet.name;
         if (name !== sheet.name) renames.set(sheet.name, name);
         taken.push(name);
         return { id: crypto.randomUUID(), name };
     });
     const ids = new Map(imported.map((sheet, i) => [sheet.id, fresh[i].id]));
-    const rename = (txt: string) => renameSheetRefs(txt, renames);
+    const findImported = sheetFinder(imported);
+    const rename = (txt: string) => renameSheetRefs(txt, findImported, renames);
 
     const added = imported.map((sheet, i): Op => {
         const { id, name } = fresh[i];
@@ -144,12 +160,16 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
                 );
             }
         }
-        for (const rule of Object.values(sheet.dataVerification ?? {})) {
+        for (const { rule } of Object.values(sheet.dataValidations ?? {})) {
             if (rule.type === 'dropdown' && iscelldata(rule.value1)) rule.value1 = rename(rule.value1);
         }
         for (const link of Object.values(sheet.hyperlink ?? {})) {
-            if (link.linkType === 'sheet') link.linkAddress = renames.get(link.linkAddress) ?? link.linkAddress;
-            else if (link.linkType === 'cellrange') link.linkAddress = rename(link.linkAddress);
+            if (link.linkType === 'sheet') {
+                const target = findImported(link.linkAddress);
+                link.linkAddress = (target && renames.get(target.name)) ?? link.linkAddress;
+            } else if (link.linkType === 'cellrange') {
+                link.linkAddress = rename(link.linkAddress);
+            }
         }
         const charts = Object.fromEntries(
             Object.entries(sheet.charts ?? {}).map(([key, chart]) => [

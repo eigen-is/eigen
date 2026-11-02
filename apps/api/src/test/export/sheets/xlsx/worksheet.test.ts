@@ -10,7 +10,7 @@ function partOf(sheet: Sheet, options: { selected?: boolean; names?: Map<string,
     const record = (code: CountedWarningCode) => lost.push(code);
     const part = worksheetPart(sheet, {
         name: options.names?.get(sheet.name) ?? sheet.name,
-        names: options.names ?? new Map(),
+        writtenName: (name) => options.names?.get(name),
         selected: options.selected ?? false,
         drawing: options.drawing,
         styles: styleRegistry(record),
@@ -113,6 +113,24 @@ describe('a worksheet part', () => {
         expect(view({ frozen: { type: 'rangeColumn', range: { row_focus: 0, column_focus: 0 } } })).toContain(
             '<pane xSplit="1" topLeftCell="B1" activePane="topRight" state="frozen"/><selection pane="topRight"/>',
         );
+    });
+
+    test('a bare frozen type splits the same axes as its range form', () => {
+        const pane = (type: NonNullable<Sheet['frozen']>['type']) =>
+            partOf({
+                name: 'Sheet1',
+                celldata: [],
+                frozen: { type, range: { row_focus: 1, column_focus: 2 } },
+            }).xml.match(/<pane[^>]*>/)?.[0];
+        const rows = '<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>';
+        const columns = '<pane xSplit="3" topLeftCell="D1" activePane="topRight" state="frozen"/>';
+        const both = '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/>';
+        expect(pane('row')).toBe(rows);
+        expect(pane('rangeRow')).toBe(rows);
+        expect(pane('column')).toBe(columns);
+        expect(pane('rangeColumn')).toBe(columns);
+        expect(pane('both')).toBe(both);
+        expect(pane('rangeBoth')).toBe(both);
     });
 
     test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept; one it cannot write is counted', () => {

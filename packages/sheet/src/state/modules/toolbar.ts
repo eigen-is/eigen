@@ -179,8 +179,7 @@ export function updateFormat(
     foucsStatus: string | number,
     canvas?: CanvasRenderingContext2D,
 ) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
         const [r, c] = ctx.editingCellPosition;
@@ -537,8 +536,7 @@ export function autoSelectionFormula(
     formula: string,
     cache: GlobalCache,
 ) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
     let isfalse = true;
@@ -689,8 +687,6 @@ export function cancelPaintModel(ctx: Context) {
     ctx.copyState = {
         dataSheetId: '',
         copyRange: [{ row: [0], column: [0] }],
-        RowlChange: false,
-        HasMC: false,
     };
 
     ctx.formatPainterOn = false;
@@ -898,73 +894,19 @@ export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, val
 }
 
 export function handleFormatPainter(ctx: Context) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
-    if (ctx.selections == null || ctx.selections.length === 0) {
-        return;
-    }
-    if (ctx.selections.length > 1) {
-        return;
-    }
-
-    // *Added a check for whether the selection contains partial merged cells; if so, block the next step of format painter
-    // TODO Could also be changed to: when a partial merge is detected, delete the mc value of range cells after format painter pastes the format
-
-    let has_PartMC = false;
-
-    const r1 = ctx.selections[0].row[0];
-    const r2 = ctx.selections[0].row[1];
-
-    const c1 = ctx.selections[0].column[0];
-    const c2 = ctx.selections[0].column[1];
-
-    has_PartMC = hasPartMC(ctx, r1, r2, c1, c2);
-
-    if (has_PartMC) {
+    if (!isAllowEdit(ctx)) return;
+    // The painter takes one range, and never one that cuts through a merge.
+    const selection = ctx.selections?.length === 1 ? ctx.selections[0] : undefined;
+    if (!selection || hasPartMC(ctx, selection.row[0], selection.row[1], selection.column[0], selection.column[1])) {
         return;
     }
 
     cancelPaintModel(ctx);
 
-    ctx.formulaRangeSelections = [
-        {
-            row: ctx.selections[0].row,
-            column: ctx.selections[0].column,
-        },
-    ];
-
-    let RowlChange = false;
-    let HasMC = false;
-
-    const cfg = getSheetConfig(ctx);
-    for (let r = ctx.selections[0].row[0]; r <= ctx.selections[0].row[1]; r += 1) {
-        if (cfg?.rowhidden?.[r] != null) {
-            continue;
-        }
-
-        if (cfg?.rowlen != null && r in cfg.rowlen) {
-            RowlChange = true;
-        }
-
-        for (let c = ctx.selections[0].column[0]; c <= ctx.selections[0].column[1]; c += 1) {
-            const flowdata = getFlowdata(ctx);
-            if (!flowdata) return;
-            const cell = flowdata[r][c];
-            if (cell != null && cell.mc != null && cell.mc.rs != null) {
-                HasMC = true;
-            }
-        }
-    }
+    ctx.formulaRangeSelections = [{ row: selection.row, column: selection.column }];
     ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
-        copyRange: [
-            {
-                row: ctx.selections[0].row,
-                column: ctx.selections[0].column,
-            },
-        ],
-        RowlChange,
-        HasMC,
+        copyRange: [{ row: selection.row, column: selection.column }],
     };
 
     ctx.formatPainterOn = true;
@@ -1004,8 +946,7 @@ export function handleTextBackground(ctx: Context, cellInput: HTMLDivElement, co
 }
 
 export function handleBorder(ctx: Context, type: BorderType, borderColor?: string, borderStyle?: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -1018,8 +959,7 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
 }
 
 export function handleMerge(ctx: Context, type: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     if (selectIsOverlap(ctx)) {
         return;
@@ -1060,8 +1000,7 @@ export function handleSort(ctx: Context, isAsc: boolean) {
 }
 
 export function handleFreeze(ctx: Context, type: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     if (!file) return;
@@ -1100,18 +1039,8 @@ export function handleTextSize(
     setAttr(ctx, cellInput, 'fs', size, canvas);
 }
 
-export function handleSum(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    cache?: GlobalCache,
-) {
-    autoSelectionFormula(ctx, cellInput, fxInput, 'SUM', cache!);
-}
-
 export function handleLink(ctx: Context) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
     const selection = ctx.selections?.[0];
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && selection != null) {

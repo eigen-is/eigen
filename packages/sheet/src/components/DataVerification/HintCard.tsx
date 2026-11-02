@@ -1,18 +1,18 @@
+// The data-validation card beside the focus cell: the prompt a validated cell carries, or the reason the value in it
+// was refused. It renders from the focus cell, so arrowing onto a cell shows it and arrowing away clears it. The
+// selection overlay mounts it, and getValidationHint says what it shows and where.
+
 import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
 import { getValidationHint } from '../../state';
 
-// The data-validation card: the prompt a validated cell carries, or the reason
-// the value in it was rejected. Rendered from the focus cell, so arrowing onto
-// a cell shows it and arrowing away clears it — it used to be a singleton div
-// that a mousedown handler wrote with innerHTML and positioned in raw pixels.
 export function ValidationHintCard() {
     const { context } = useContext(WorkbookContext);
 
     const hint = useMemo(() => {
         // The open list hangs over the same corner the card does.
-        if (context.dataVerificationDropDownList) return undefined;
+        if (context.validationListOpen) return undefined;
         const last = context.selections?.[context.selections.length - 1];
         const r = last?.row_focus;
         const c = last?.column_focus;

@@ -142,14 +142,13 @@ export function nullCellRender(
         cfCompute,
         offsetLeft,
         offsetTop,
-        dataVerification,
+        validationAt,
         cellOverflowMap,
         colEnd,
         flowdata,
         drawGridLines,
     } = pass;
-    // A sheet with no rules at all short-circuits here, key never built.
-    const rule = dataVerification?.[`${r}_${c}`];
+    const rule = validationAt(r, c);
     const checksCF = checkCF(r, c, cfCompute);
 
     // Background color
@@ -232,14 +231,14 @@ export function cellRender(
         cfCompute,
         offsetLeft,
         offsetTop,
-        dataVerification,
+        validationAt,
         cellOverflowMap,
         colEnd,
         flowdata,
         drawGridLines,
     } = pass;
     const cell = flowdata[r][c];
-    const rule = dataVerification?.[`${r}_${c}`];
+    const rule = validationAt(r, c);
     const box = cellTextBox(startX + offsetLeft, startY + offsetTop, endX + offsetLeft, endY + offsetTop);
     const { width: cellWidth, height: cellHeight } = box;
     const space_width = 2;

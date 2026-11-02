@@ -216,3 +216,41 @@ test("a cell's right-click menu puts Delete row and Delete column last, alone an
         [...document.querySelectorAll('[data-variant="destructive"]')].map((row) => row.textContent?.trim()),
     ).toEqual(['Delete row', 'Delete column']);
 });
+
+// Enter ends a tab rename, and a refused name opens a notice whose OK button takes the focus at once. The browser then
+// sends the same Enter's keypress to that button, which clicks it, so the notice vanished before anyone saw it.
+test('Enter that ends a tab rename sends no keypress on to the notice', async () => {
+    const { container } = await mountWorkbook();
+    const name = tab(container, 'One').querySelector('span');
+    if (!name) throw new Error('tab One has no name');
+    await act(async () => {
+        name.dispatchEvent(new MouseEvent('dblclick', { bubbles: true }));
+    });
+    name.focus();
+    name.innerText = 'a/b';
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => {
+        name.dispatchEvent(enter);
+    });
+    const notice = () => document.querySelector('[role="alertdialog"], [role="dialog"]');
+    expect(notice()?.textContent).toContain('A sheet name has at most 31 characters');
+    // The browser sends the keydown's keypress to what has the focus, and on a button that is a click.
+    const focused = document.activeElement;
+    if (!enter.defaultPrevented && focused instanceof HTMLButtonElement) {
+        await act(async () => focused.click());
+    }
+    expect(notice()).not.toBeNull();
+});
+
+// The column menu's arrow shows on a hovered column a user may edit. A read-only column beside it must not hide it.
+test("a column header's menu arrow asks only about the hovered column", async () => {
+    const data = sheets();
+    data[1].config = { colReadOnly: { 1: 1 } };
+    const { container } = await mountWorkbook({ data, showToolbar: false });
+    const header = container.querySelector('.sheet-col-header');
+    if (!header) throw new Error('no column header');
+    await act(async () => {
+        header.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 5 }));
+    });
+    expect(container.querySelector('[aria-label="Column options"]')).not.toBeNull();
+});

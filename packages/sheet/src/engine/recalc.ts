@@ -1,18 +1,23 @@
 // The server's recalc of a workbook nobody computed, such as an xlsx import whose recalc failed. recalcSheets takes
 // the replayed sheets, orders their formula cells through the dependency graph and writes each cell's computed value
 // and display string. A workbook the editor computed is marked computed, and sheetsNeedRecalc lets it skip this.
+// extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
+import { escapeRegExp } from 'es-toolkit';
 import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
-import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
+import type { SheetExtent } from './dependency-index';
+import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
-import { iscelldata, isFunctionRange, resolveCellRange } from './formula-utils';
+import type { WalkContext } from './formula-utils';
+import { formulaOperators, iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
+import { sheetFinder } from './parser/helper/cell';
 import type {
     CalcChainEntry,
     EvaluationResult,
@@ -21,23 +26,13 @@ import type {
     SheetWithCalcChain,
 } from './types';
 
-// A sheet's dense `data`, by id, which the ported graph builder reads where the editor reads its Context.
-type WorkingSheet = { sheet: Sheet; id: string; name: string; data: CellMatrix };
-
-type GraphCtx = {
-    sheets: WorkingSheet[];
-    indexById: Map<string, number>;
-    // Resolved references, as the editor's formulaCache keeps them: by the reference's text for one into another
-    // sheet, by `${text}_${sheetId}` for one into the formula's own.
-    cellTextToIndexList: Record<string, FormulaDependency>;
-};
-
-type Extent = { rows: number; columns: number };
+// A sheet's dense `data`, by id, which the pass reads and writes.
+type WorkingSheet = { id: string; name: string; data: CellMatrix };
 
 // A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
 // recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
 // write a calcChain, so a computed workbook's read path pays nothing.
-export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {
+export function sheetsNeedRecalc(sheets: readonly SheetWithCalcChain[]): boolean {
     for (const sheet of sheets) {
         // recalcSheets skips a sheet without an id, so one must not arm the gate, or every read runs the pass for nothing.
         if (!sheet.id) continue;
@@ -71,35 +66,41 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks), and
-// `maxCellsRead` what their evaluation reads (each range read, cut to its sheet, costs its cells): past either the
-// recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
-// both for an untrusted workbook; without them there is no bound.
+// Four budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
+// work. `maxDependencySlots` bounds the slots the dependency index lists the formulas' ranges in (dependencySlots).
+// `maxDependencyVisits` bounds the entries a lookup of each formula cell visits in the index (lookupVisits), which is
+// the time the links take to weigh and to make. `maxDependencyEdges` bounds the links between the formulas, one for
+// each formula and formula cell it reads, which is their memory. `maxCellsRead` bounds the cells their evaluation
+// reads, each range read cut to its sheet. So many ranges over a large sheet can't cost minutes and gigabytes. The
+// server passes all four, and without them there is no bound.
 export function recalcSheets(
-    sheets: Sheet[],
-    { maxDependencyBlocks = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
+    sheets: readonly Sheet[],
+    {
+        maxDependencySlots = Number.POSITIVE_INFINITY,
+        maxDependencyVisits = Number.POSITIVE_INFINITY,
+        maxDependencyEdges = Number.POSITIVE_INFINITY,
+        maxCellsRead = Number.POSITIVE_INFINITY,
+    } = {},
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
-    const indexById = new Map<string, number>();
+    const byId = new Map<string, WorkingSheet>();
     for (const sheet of sheets) {
         if (!sheet.id) continue;
-        indexById.set(sheet.id, working.length);
-        working.push({ sheet, id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) });
+        const w = { id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) };
+        byId.set(w.id, w);
+        working.push(w);
     }
 
-    const g: GraphCtx = { sheets: working, indexById, cellTextToIndexList: {} };
-    const extents = new Map<string, Extent>();
-    for (const w of working) {
-        let columns = 0;
-        for (const row of w.data) columns = Math.max(columns, row?.length ?? 0);
-        extents.set(w.id, { rows: w.data.length, columns });
-    }
+    const walk: WalkContext = { sheets: working, findSheet: sheetFinder(working), cellTextToIndexList: {} };
+    const extents = new Map<string, SheetExtent>();
+    for (const w of working) extents.set(w.id, { rows: w.data.length, columns: matrixWidth(w.data) });
+    const extentOf = (sheetId: string) => extents.get(sheetId);
 
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
-    let blocks = 0;
+    let slots = 0;
     const calcChainBySheet = new Map<string, CalcChainEntry[]>();
     for (const w of working) {
         const chain: CalcChainEntry[] = [];
@@ -114,7 +115,7 @@ export function recalcSheets(
                 const key = `r${r}c${c}i${w.id}`;
                 let deps: FormulaDependency[];
                 try {
-                    deps = extractDependencies(g, f, w.id, w.data);
+                    deps = extractDependencies(walk, f, w.id, w.data);
                 } catch {
                     // A malformed formula must not stop the scan. It reads nothing here and still evaluates below.
                     deps = [];
@@ -131,9 +132,9 @@ export function recalcSheets(
                     color: 'w',
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
-                blocks += dependencyBlocks(indexed);
-                if (blocks > maxDependencyBlocks) throw new RangeError('Formula ranges past the dependency budget');
-                depIndex.set(key, indexed);
+                slots += dependencySlots(indexed, extentOf);
+                if (slots > maxDependencySlots) throw new RangeError('Formula ranges past the dependency budget');
+                depIndex.set(key, indexed, extentOf);
             }
         }
     }
@@ -141,20 +142,35 @@ export function recalcSheets(
     const allInfos = Object.values(infoMap);
     if (allInfos.length === 0) {
         // No formulas: still write celldata and an empty calcChain, so the read gate sees the doc as computed.
-        return finalize(working, sheets, calcChainBySheet);
+        return finalize(byId, sheets, calcChainBySheet);
     }
 
-    // 3. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
+    // 3. Weigh the links before making them. A whole column read by every formula in it costs the index one slot per
+    //    formula, but the formulas square: 20,000 `=COUNT(A:A)` make 400 million links, minutes and gigabytes to build.
+    //    The visits come first and cost nothing to count. A range near many formula cells that covers none makes no
+    //    link but costs each of them a visit, so without them counting the links could take as long as making them.
+    let visits = 0;
+    for (const info of allInfos) {
+        visits += depIndex.lookupVisits(info.id, info.r, info.c);
+        if (visits > maxDependencyVisits) throw new RangeError('Formula references past the visit budget');
+    }
+    let edges = 0;
+    for (const info of allInfos) {
+        edges += depIndex.countDependents(info.id, info.r, info.c);
+        if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
+    }
+
+    // 4. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
     for (const info of allInfos) {
         for (const depKey of depIndex.dependentsOf(info.id, info.r, info.c)) {
             info.parents[depKey] = 1;
         }
     }
 
-    // 4. Order them. A cycle neither throws nor hangs.
+    // 5. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
 
-    // 5. Evaluate in order. A computed value reaches the formulas downstream through the engine's
+    // 6. Evaluate in order. A computed value reaches the formulas downstream through the engine's
     //    execFunctionGlobalData, which it reads before the resolver, and the resolver reads the matrices the pass writes.
     //    Volatiles keep their value. Each cell is guarded, so one poisoned formula never stops the pass.
     const engine = new FormulaEngine({ maxCellsRead });
@@ -167,12 +183,10 @@ export function recalcSheets(
     };
     for (const info of order) {
         overRead();
-        if (isVolatileFormula(info.calc_funcStr)) continue;
+        if (VOLATILE_RE.test(info.calc_funcStr)) continue;
         try {
             const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
-            const idx = indexById.get(info.id);
-            if (idx == null) continue;
-            const rowArr = working[idx].data[info.r];
+            const rowArr = byId.get(info.id)?.data[info.r];
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
@@ -193,8 +207,8 @@ export function recalcSheets(
     }
     overRead();
 
-    // 6. Write celldata from the computed data, and stamp each sheet's calcChain.
-    return finalize(working, sheets, calcChainBySheet);
+    // 7. Write celldata from the computed data, and stamp each sheet's calcChain.
+    return finalize(byId, sheets, calcChainBySheet);
 }
 
 // A sheet's dense `data`, built from `celldata` when it has none, as the editor's initSheetData does: a resolver over
@@ -207,110 +221,99 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
     return celldataToData(sheet.celldata ?? [], row, column);
 }
 
-// The ranges a formula reads, as setFormulaCellInfo finds them in the editor. An INDIRECT, OFFSET or INDEX call goes
-// through isFunctionRange; any other formula runs the same quote-aware tokenizer.
-function extractDependencies(g: GraphCtx, formula: string, sheetId: string, data: CellMatrix): FormulaDependency[] {
-    const upper = formula.toUpperCase();
-    const buildsReference = upper.includes('INDIRECT(') || upper.includes('OFFSET(') || upper.includes('INDEX(');
-
+// The ranges a formula reads, for the server's pass and the editor's formula map alike: every reference in its text,
+// a function's arguments included, as Excel lists a cell's precedents. `data` is the matrix of the formula's own sheet.
+// The reference INDEX returns lies inside its range argument, so that argument covers it. OFFSET and INDIRECT build a
+// reference the text doesn't hold, which only matters once the engine can compute them.
+export function extractDependencies(
+    walk: WalkContext,
+    formula: string,
+    sheetId: string,
+    data: CellMatrix | null | undefined,
+): FormulaDependency[] {
     const dependencies: FormulaDependency[] = [];
-    if (buildsReference) {
-        isFunctionRange(formula, (reference: string) => {
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference.trim(), sheetId, data);
-            if (range != null) {
-                dependencies.push(range);
-            }
-        });
-    } else {
-        for (const token of tokenize(formula)) {
-            if (token.length <= 1) {
-                continue;
-            }
-
-            if (!iscelldata(token)) {
-                continue;
-            }
-
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, token.trim(), sheetId, data);
-            if (range == null) {
-                continue;
-            }
-
-            dependencies.push(range);
-        }
+    for (const token of tokenize(formula)) {
+        // A token keeps the spaces around it, as in `=A1 + B1`.
+        const reference = token.trim();
+        // resolveCellRange checks a reference that names a sheet with its own pattern, which also reads a quoted name
+        // on both ends of a range, as in 'My Data'!A1:'My Data'!B2.
+        if (reference.length < 2 || (!reference.includes('!') && !iscelldata(reference))) continue;
+        const range = resolveCellRange(walk, reference, sheetId, data);
+        if (range != null) dependencies.push(range);
     }
-
     return dependencies;
 }
 
-const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]/;
+// What a formula splits at: its operators, commas and brackets, and the name of a function it calls, so the LOG10 of
+// LOG10(A1) reads as no cell. A name is tried only where a word starts. Tried at every letter, a long run of letters
+// with no bracket after it would be read once per letter. A `:` that joins a reference to a function call, as in
+// A1:INDEX(…) or INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
+const OPERATORS = new RegExp(
+    [
+        ...[...formulaOperators].map(escapeRegExp),
+        '[,()]',
+        '(?<![\\w.])[A-Za-z_][\\w.]*(?=\\s*\\()',
+        ':(?=[A-Za-z_][\\w.]*\\()',
+        '(?<=\\)):',
+    ].join('|'),
+);
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
-// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5.
+// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5. A name that ends a range joins its start, as in '1-2'!A1:'1-2'!B2.
 function tokenize(formula: string): string[] {
     let tokenStart = 0;
     let singleQuoteStart = -1;
     let doubleQuoteStart = -1;
     const tokens: string[] = [];
-    // The index in tokens of each single-quoted sheet name.
-    const sheetNameTokens: number[] = [];
+    // A single-quoted sheet name waits here for the token after it, its `!A1`.
+    let sheetName: string | null = null;
+    const push = (parts: string[]) => {
+        if (sheetName != null) {
+            parts[0] = sheetName + parts[0];
+            sheetName = null;
+        }
+        for (const part of parts) tokens.push(part);
+    };
     for (let j = 0; j < formula.length; j += 1) {
         const char = formula.charAt(j);
         if (char === "'" && doubleQuoteStart === -1) {
             if (singleQuoteStart === -1) {
-                if (tokenStart !== j) {
-                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
-                }
+                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
                 singleQuoteStart = j;
                 tokenStart = j;
-            } else {
+            } else if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
                 // Two quotes in a row are an escaped quote inside the name.
-                if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
-                    j += 1;
-                } else {
-                    tokenStart = j + 1;
-                    tokens.push(formula.substring(singleQuoteStart, tokenStart));
-                    sheetNameTokens.push(tokens.length - 1);
-                    singleQuoteStart = -1;
-                }
+                j += 1;
+            } else {
+                const name = formula.substring(singleQuoteStart, j + 1);
+                const rangeStart = formula.charAt(singleQuoteStart - 1) === ':' && tokens.at(-1)?.endsWith(':');
+                sheetName = rangeStart ? `${tokens.pop()}${name}` : name;
+                tokenStart = j + 1;
+                singleQuoteStart = -1;
             }
         } else if (char === '"' && singleQuoteStart === -1) {
             if (doubleQuoteStart === -1) {
-                if (tokenStart !== j) {
-                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
-                }
+                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
                 doubleQuoteStart = j;
                 tokenStart = j;
+            } else if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
+                j += 1;
             } else {
-                if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
-                    j += 1;
-                } else {
-                    tokenStart = j + 1;
-                    tokens.push(formula.substring(doubleQuoteStart, tokenStart));
-                    doubleQuoteStart = -1;
-                }
+                tokenStart = j + 1;
+                push([formula.substring(doubleQuoteStart, tokenStart)]);
+                doubleQuoteStart = -1;
             }
         }
     }
-    if (tokenStart !== formula.length) {
-        tokens.push(...formula.substring(tokenStart).split(OPERATORS));
-    }
-    // Glue each sheet name to the token after it, its `!A1`. Back to front, so the splices don't move the indexes
-    // still to come.
-    for (let k = sheetNameTokens.length - 1; k >= 0; k -= 1) {
-        const index = sheetNameTokens[k];
-        if (index !== tokens.length - 1) {
-            tokens[index] += tokens[index + 1];
-            tokens.splice(index + 1, 1);
-        }
-    }
+    if (tokenStart !== formula.length) push(formula.substring(tokenStart).split(OPERATORS));
+    if (sheetName != null) tokens.push(sheetName);
     return tokens;
 }
 
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
 // index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
-function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
+function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetExtent>): FormulaDependency | null {
     const cells = cellsOf(dep);
     const extent = cells && extents.get(cells.sheetId);
     if (!cells || extent == null) return null;
@@ -325,10 +328,6 @@ function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): Form
 // matches too, which only keeps a value that could have been recomputed. RANDBETWEEN comes before RAND, so the longer
 // name wins.
 const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
-
-function isVolatileFormula(formula: string): boolean {
-    return VOLATILE_RE.test(formula);
-}
 
 // A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
 const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
@@ -377,10 +376,11 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     cell.m = result.value == null ? '' : String(result.value);
 }
 
-function finalize(working: WorkingSheet[], sheets: Sheet[], calcChainBySheet: Map<string, CalcChainEntry[]>): Sheet[] {
-    const byId = new Map<string, WorkingSheet>();
-    for (const w of working) byId.set(w.id, w);
-
+function finalize(
+    byId: ReadonlyMap<string, WorkingSheet>,
+    sheets: readonly Sheet[],
+    calcChainBySheet: ReadonlyMap<string, CalcChainEntry[]>,
+): Sheet[] {
     return sheets.map((sheet) => {
         if (!sheet.id) return sheet;
         const w = byId.get(sheet.id);

@@ -106,6 +106,8 @@ Three things keep the bar from closing under the user:
 
 A bar trigger is a `role="menuitem"` inside the `role="menubar"`, so a test that looks for a menu's rows looks inside `[role="menu"]`.
 
+The bar of Docs, Sheets, Slides, Vector and Stickies is a `CenteredToolbar`: the menus on the left, the icon row at the bar's true center and the share cluster on the right. The menu row never scrolls. The icon row folds into the menus as the bar narrows, so every icon it folds away is a row of a menu; Docs' and Sheets' fold from the right end, so their order is their priority order. Each breakpoint is where a part of the row fits beside the menus, with the widest font name in the font picker. The other editors read the viewport's width. Sheets reads the bar's own width, through a container query on `WorkbookMenuBar`, as a panel beside the workbook narrows the bar.
+
 ## A row that deletes is red and last
 
 **A row that deletes, trashes or removes is `variant="destructive"`**, red with its icon, and sits alone in the last group. Move to trash is red even though Trash restores it, and a Sheets row's or a table's Delete row goes there too, apart from its Insert. Google draws none of these red and puts Delete in the middle of a menu; Eigen follows iOS and Material instead, so the one row that loses work is the one a user finds last and sees coloured. Log out is last but plain, since it loses nothing, and Clear contents is an object action.

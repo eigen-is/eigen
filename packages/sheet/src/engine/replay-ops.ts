@@ -5,19 +5,21 @@
 
 import { isRecord } from '@workspace/lib/guards';
 import type { Op, Sheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
 import { applyPatches, enablePatches } from 'immer';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
-import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from './rowcol';
+import type { DeleteRowColOp, InsertRowColOp } from './rowcol';
+import { applySheetsDeleteRowCol, applySheetsInsertRowCol } from './rowcol';
 import { normalizeSheetConfig } from './sheet-config';
 
 // immer's patch plugin is global, and enabling it twice is harmless. Enabling it here means every caller of
 // replaySheetsOps has it without a setup step of its own.
 enablePatches();
 
-type InsertValue = { type: 'row' | 'column'; index: number; count: number; direction: 'lefttop' | 'rightbottom' };
-type DeleteValue = { type: 'row' | 'column'; start: number; end: number };
+type InsertValue = Omit<InsertRowColOp, 'id'>;
+type DeleteValue = Omit<DeleteRowColOp, 'id'>;
 
 // A batch the replay can't apply is reported to `onDropped`, which a caller that wants a count of its own passes. By
 // default each one is logged as a warning.
@@ -50,32 +52,10 @@ export function replaySheetsOps(
                     result = [...result, dataOpIds?.has(op.value.id) ? withMaterializedData(added) : added];
                 } else if (op.op === 'deleteSheet' && op.id) {
                     result = result.filter((s) => s.id !== op.id);
-                } else if (op.op === 'insertRowCol' && op.id) {
-                    const v = asInsertValue(op.value);
-                    if (!v) {
-                        console.warn('[sheets] insertRowCol op has malformed value', op.value);
-                        continue;
-                    }
-                    // A RowColError, such as a sheet past its maximum size, alerts the user in the editor. A replay
-                    // has no user to alert, so it skips the op.
-                    try {
-                        result = applySheetsInsertRowCol(result, { ...v, id: op.id });
-                    } catch (e) {
-                        if (!(e instanceof RowColError)) throw e;
-                        console.warn('[sheets] insertRowCol op skipped:', e.code);
-                    }
-                } else if (op.op === 'deleteRowCol' && op.id) {
-                    const v = asDeleteValue(op.value);
-                    if (!v) {
-                        console.warn('[sheets] deleteRowCol op has malformed value', op.value);
-                        continue;
-                    }
-                    try {
-                        result = applySheetsDeleteRowCol(result, { ...v, id: op.id });
-                    } catch (e) {
-                        if (!(e instanceof RowColError)) throw e;
-                        console.warn('[sheets] deleteRowCol op skipped:', e.code);
-                    }
+                } else if (op.op === 'insertRowCol') {
+                    result = applySheetsInsertRowCol(result, insertRowColOf(op));
+                } else if (op.op === 'deleteRowCol') {
+                    result = applySheetsDeleteRowCol(result, deleteRowColOf(op));
                 }
             }
             const normalOps = batch.filter((op) => op.op === 'add' || op.op === 'remove' || op.op === 'replace');
@@ -97,23 +77,42 @@ export function withMaterializedData(s: Sheet): Sheet {
     return { ...s, data: celldataToData(s.celldata ?? [], row, column) };
 }
 
-// An op's value is untyped, and a buggy or hostile client may send any shape. These read the shape a row, column or
-// sheet op must have, and return null for anything else. The op is then skipped, here and in a live client.
-export function asInsertValue(v: unknown): InsertValue | null {
+// The insert a row op names. An op's value is untyped, and a buggy or hostile client may send any shape, so a value
+// that is not whole rows or columns on the grid, at least one of them, throws. The sheet throws too where it refuses
+// the op, such as an insert into a read-only row. Either way the op's whole batch rolls back, here and in a live
+// client, since its other ops were written for the rows the op would have moved.
+export function insertRowColOf(op: Op): InsertRowColOp {
+    const value = asInsertValue(op.value);
+    if (!value || !op.id) throw new Error('insertRowCol op has a malformed value');
+    return { ...value, id: op.id };
+}
+
+export function deleteRowColOf(op: Op): DeleteRowColOp {
+    const value = asDeleteValue(op.value);
+    if (!value || !op.id) throw new Error('deleteRowCol op has a malformed value');
+    return { ...value, id: op.id };
+}
+
+function asInsertValue(v: unknown): InsertValue | null {
     if (!isRecord(v)) return null;
     const { type, index, count, direction } = v;
     if (type !== 'row' && type !== 'column') return null;
-    if (typeof index !== 'number' || typeof count !== 'number') return null;
+    if (!isLine(index, type) || !isLine(count, type) || count < 1) return null;
     if (direction !== 'lefttop' && direction !== 'rightbottom') return null;
     return { type, index, count, direction };
 }
 
-export function asDeleteValue(v: unknown): DeleteValue | null {
+function asDeleteValue(v: unknown): DeleteValue | null {
     if (!isRecord(v)) return null;
     const { type, start, end } = v;
     if (type !== 'row' && type !== 'column') return null;
-    if (typeof start !== 'number' || typeof end !== 'number') return null;
+    if (!isLine(start, type) || !isLine(end, type) || start > end) return null;
     return { type, start, end };
+}
+
+function isLine(value: unknown, type: 'row' | 'column'): value is number {
+    const count = type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT;
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value < count;
 }
 
 // A new sheet needs an id, because every later op names its sheet by id. The id must be one no sheet has yet, or those

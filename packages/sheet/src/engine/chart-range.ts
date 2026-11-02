@@ -9,7 +9,7 @@ import type {
     RangeChartData,
     RangeChartSeries,
 } from '@workspace/lib/types/chart';
-import { a1RangeRef, parseA1Range, rangeToA1, sheetRefName } from './a1-notation';
+import { a1RangeRef, findSheetByName, parseA1Range, rangeToA1, sheetRefName } from './a1-notation';
 import { cellLabel, resolveRangeChartData, seriesName } from './chart-data';
 import type { Cell, CellResolver } from './types';
 
@@ -166,7 +166,7 @@ export function chartRangeText(range: CellRangeRef, sheets: SheetName[], ownShee
 export function parseChartRangeText(text: string, sheets: SheetName[], ownSheetId: string): CellRangeRef | null {
     const range = parseA1Range(text.trim());
     if (!range) return null;
-    const sheetId = range.sheet === undefined ? ownSheetId : sheets.find((sheet) => sheet.name === range.sheet)?.id;
+    const sheetId = range.sheet === undefined ? ownSheetId : findSheetByName(sheets, range.sheet)?.id;
     const ref = a1RangeRef(range);
     return sheetId && ref ? { sheetId, ...ref } : null;
 }

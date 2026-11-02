@@ -20,6 +20,7 @@ import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
+import { addValidation, validationEntryAt } from './validation-rules';
 
 function toPx(v: number) {
     return `${v}px`;
@@ -1897,10 +1898,11 @@ export function updateDropCell(ctx: Context) {
 
     const cfg = (file.config ??= {});
     cfg.borderInfo ??= {};
-    // Live map, not a clone: the copy and apply ranges are disjoint, so reading a source
-    // rule while writing the filled ones is safe — and the write has to land on the sheet
-    // to sync and undo (Excel and Google both carry validation on a fill).
-    const { dataVerification } = file;
+    // The cells each validation rule fills, by the rule's id: a filled cell takes the rule of the cell it repeats, as
+    // in Excel and Google. They land once the fill is done, one write per rule.
+    const filledRules = new Map<string, SingleRange[]>();
+    // The rule of each source cell, looked up once: a long fill repeats a few source cells many times.
+    const sourceRules = new Map<string, string | undefined>();
 
     // Null only at module init, never on a real fill.
     const direction = dropCellCache.direction ?? 'down';
@@ -1987,11 +1989,21 @@ export function updateDropCell(ctx: Context) {
 
             carrySides(cfg.borderInfo, row, col, borderInfoCompute[`${bd_r}_${bd_c}`]);
 
-            // data validation
-            if (dataVerification?.[`${bd_r}_${bd_c}`]) {
-                dataVerification[`${row}_${col}`] = dataVerification[`${bd_r}_${bd_c}`];
+            const sourceKey = `${bd_r}_${bd_c}`;
+            if (!sourceRules.has(sourceKey)) {
+                sourceRules.set(sourceKey, validationEntryAt(file.dataValidations, bd_r, bd_c)?.[0]);
+            }
+            const ruleId = sourceRules.get(sourceKey);
+            if (ruleId) {
+                const cells = filledRules.get(ruleId) ?? [];
+                cells.push({ row: [row, row], column: [col, col] });
+                filledRules.set(ruleId, cells);
             }
         }
+    }
+    for (const [id, cells] of filledRules) {
+        const rule = file.dataValidations?.[id]?.rule;
+        if (rule) addValidation(file, id, rule, cells);
     }
 
     // conditional format

@@ -13,6 +13,7 @@ import { handleGlobalKeyDown } from '../../../state/events/keyboard';
 import { selectionCache } from '../../../state/modules/selection';
 import type { Cell, DataVerificationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
+import { validationsByCell } from '../factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -22,7 +23,7 @@ g.document = win.document;
 g.sessionStorage = win.sessionStorage;
 
 const anchor = win.document.createElement('div');
-anchor.id = 'sheet-dataVerification-dropdown-btn';
+anchor.id = 'sheet-validation-list-anchor';
 win.document.body.appendChild(anchor);
 
 const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
@@ -32,7 +33,7 @@ function listContext(rule: DataVerificationRule | null = LIST) {
     ctx.sheetFocused = true;
     ctx.editingCellPosition = [];
     ctx.selections = [{ row: [1, 1], column: [1, 1], row_focus: 1, column_focus: 1 }];
-    if (rule) ctx.sheets[0].dataVerification = { '1_1': rule };
+    if (rule) ctx.sheets[0].dataValidations = validationsByCell({ '1_1': rule });
     return ctx;
 }
 
@@ -78,7 +79,7 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
     test('opens the list', () => {
         const ctx = listContext();
         expect(keyDown(ctx, 'ArrowDown', { altKey: true })).toBe(true);
-        expect(ctx.dataVerificationDropDownList).toBe(true);
+        expect(ctx.validationListOpen).toBe(true);
     });
 
     test('positions the anchor on the cell', () => {
@@ -92,13 +93,13 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
     test('a plain Down still moves the selection', () => {
         const ctx = listContext();
         keyDown(ctx, 'ArrowDown');
-        expect(ctx.dataVerificationDropDownList).toBeFalsy();
+        expect(ctx.validationListOpen).toBeFalsy();
     });
 
     test('a cell with no list rule falls through to the normal arrow handling', () => {
         const ctx = listContext(null);
         keyDown(ctx, 'ArrowDown', { altKey: true });
-        expect(ctx.dataVerificationDropDownList).toBeFalsy();
+        expect(ctx.validationListOpen).toBeFalsy();
     });
 
     test('a read-only viewer gets no list', () => {
@@ -106,7 +107,7 @@ describe('handleGlobalKeyDown — Alt+Down over a list cell', () => {
         const ctx = listContext();
         ctx.allowEdit = false;
         keyDown(ctx, 'ArrowDown', { altKey: true });
-        expect(ctx.dataVerificationDropDownList).toBeFalsy();
+        expect(ctx.validationListOpen).toBeFalsy();
     });
 });
 

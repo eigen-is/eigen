@@ -40,6 +40,15 @@ describe("a sheet's name in the workbook", () => {
         ]);
     });
 
+    test('a Greek name clashes in any case, its final sigma too, and ß never clashes with ss', () => {
+        expect(namesOf(['ΟΔΟΣ', 'οδοσ', 'Straße', 'STRASSE']).written).toEqual([
+            'ΟΔΟΣ',
+            'οδοσ (2)',
+            'Straße',
+            'STRASSE',
+        ]);
+    });
+
     test('is cut to 31 characters, and a clash the cut makes is numbered within them', () => {
         const long = 'Quarterly revenue by region and product';
         const { written, changed } = namesOf([`${long} A`, `${long} B`, 'x'.repeat(31)]);

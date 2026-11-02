@@ -1,17 +1,14 @@
 // Dragging a selection by its border to move the cells: onCellsMoveStart grabs it, onCellsMove draws where it
-// would land, and onCellsMoveEnd moves the values, merges, borders, links and conditional-format ranges there.
-// The overlay's mouse handlers call all three.
+// would land, and onCellsMoveEnd moves the cells there, hidden ones too, with their borders, validation, links,
+// merges and conditional-format ranges. The overlay's mouse handlers call all three.
 
-import { cloneDeep, set } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
-import type { Cell, SingleRange } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import type { GlobalCache } from '../types';
-import { getSheetIndex, isAllowEdit } from '../utils';
-import { carrySides, clearSides, getBorderInfoCompute } from './border';
-import { getdatabyselection } from './cell';
+import { isAllowEdit } from '../utils';
+import { carriedLines, carryCells } from './cell';
 import { colLocation, colLocationByIndex, mousePosition, rowLocation, rowLocationByIndex } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
@@ -203,11 +200,6 @@ export function onCellsMoveEnd(
     if (d == null || ctx.selections == null) return;
     const last = ctx.selections[ctx.selections.length - 1];
 
-    const data = cloneDeep(getdatabyselection(ctx, last, ctx.currentSheetId));
-
-    const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
-    if (sheetIndex == null) return;
-
     // Selection contains partial cells
     if (hasPartMC(ctx, last.row[0], last.row[1], last.column[0], last.column[1])) {
         ctx.warnDialog = 'Cannot perform this operation on merged cells';
@@ -245,129 +237,32 @@ export function onCellsMoveEnd(
         return;
     }
 
-    // Seeded only once the move is certain: every config write is syncable now that the
-    // mirror is gone, so seeding above the guards would ship an op and burn an undo entry
-    // for a move the user was told could not happen.
-    const cfg = (ctx.sheets[sheetIndex].config ??= {});
-    cfg.merge ??= {};
-    cfg.borderInfo ??= {};
+    carryCells(
+        ctx,
+        carriedLines(ctx, ctx.currentSheetId, [last], false),
+        [{ row: row_s, column: col_s, height: row_e - row_s + 1, width: col_e - col_s + 1 }],
+        ({ source }) => source,
+        { cut: true },
+    );
 
-    const borderInfoCompute = getBorderInfoCompute(ctx, ctx.currentSheetId, [
-        last.row[0],
-        last.row[1],
-        last.column[0],
-        last.column[1],
-    ]);
-
-    const hyperLinkList: Record<
-        string,
-        {
-            linkType: string;
-            linkAddress: string;
-        }
-    > = {};
-    // Delete data from original position
-    const sheet = getSheet(ctx);
-    for (let r = last.row[0]; r <= last.row[1]; r += 1) {
-        for (let c = last.column[0]; c <= last.column[1]; c += 1) {
-            const cellData: Cell | null = d[r][c];
-
-            if (cellData?.mc != null) {
-                const mergeKey = `${cellData.mc.r}_${c}`;
-                if (cfg.merge[mergeKey] != null) {
-                    delete cfg.merge[mergeKey];
-                }
-            }
-
-            d[r][c] = null;
-            const link = sheet.hyperlink?.[`${r}_${c}`];
-            if (link) {
-                hyperLinkList[`${r}_${c}`] = link;
-                delete sheet.hyperlink?.[`${r}_${c}`];
-            }
-        }
-    }
-    clearSides(cfg.borderInfo, last.row[0], last.row[1], last.column[0], last.column[1]);
-    // Replacement position data update
-    const offsetMC: Record<string, [number, number]> = {};
-    for (let r = 0; r < data.length; r += 1) {
-        for (let c = 0; c < data[0].length; c += 1) {
-            carrySides(
-                cfg.borderInfo,
-                r + row_s,
-                c + col_s,
-                borderInfoCompute[`${r + last.row[0]}_${c + last.column[0]}`],
-            );
-
-            let value = null;
-            if (data[r] != null && data[r][c] != null) {
-                value = data[r][c];
-            }
-
-            if (value?.mc != null) {
-                const mc = Object.assign({}, value.mc);
-                if ('rs' in value.mc) {
-                    set(offsetMC, `${mc.r}_${mc.c}`, [r + row_s, c + col_s]);
-
-                    value.mc.r = r + row_s;
-                    value.mc.c = c + col_s;
-
-                    set(cfg.merge, `${r + row_s}_${c + col_s}`, value.mc);
-                } else {
-                    set(value.mc, 'r', offsetMC[`${mc.r}_${mc.c}`][0]);
-                    set(value.mc, 'c', offsetMC[`${mc.r}_${mc.c}`][1]);
-                }
-            }
-            d[r + row_s][c + col_s] = value;
-            const link = hyperLinkList[`${r + last.row[0]}_${c + last.column[0]}`];
-            if (link) {
-                (sheet.hyperlink ??= {})[`${r + row_s}_${c + col_s}`] = link;
-            }
-        }
+    // A conditional format over the moved cells moves with them.
+    const rules = getSheet(ctx).conditionalFormatRules ?? [];
+    for (let i = 0; i < rules.length; i += 1) {
+        const cellrange = rules[i].cellrange.flatMap((range) =>
+            cfSplitRange(range, last, { row: [row_s, row_e], column: [col_s, col_e] }, 'allPart'),
+        );
+        rules[i] = withCfRanges(rules[i], cellrange);
     }
 
-    // Conditional format
-    const cdformat = sheet.conditionalFormatRules ?? [];
-    if (cdformat != null && cdformat.length > 0) {
-        for (let i = 0; i < cdformat.length; i += 1) {
-            const cdformat_cellrange = cdformat[i].cellrange;
-            const emptyRange: SingleRange[] = [];
-            for (let j = 0; j < cdformat_cellrange.length; j += 1) {
-                emptyRange.push(
-                    ...cfSplitRange(
-                        cdformat_cellrange[j],
-                        { row: last.row, column: last.column },
-                        { row: [row_s, row_e], column: [col_s, col_e] },
-                        'allPart',
-                    ),
-                );
-            }
-            cdformat[i] = withCfRanges(cdformat[i], emptyRange);
-        }
-    }
+    const range = [
+        { row: last.row, column: last.column },
+        { row: [row_s, row_e], column: [col_s, col_e] },
+    ];
 
-    let rf: number;
-    if (ctx.selections[0].row_focus === ctx.selections[0].row[0]) {
-        rf = row_s;
-    } else {
-        rf = row_e;
-    }
-
-    let cf: number;
-    if (ctx.selections[0].column_focus === ctx.selections[0].column[0]) {
-        cf = col_s;
-    } else {
-        cf = col_e;
-    }
-
-    const range = [];
-    range.push({ row: last.row, column: last.column });
-    range.push({ row: [row_s, row_e], column: [col_s, col_e] });
-
+    last.row_focus = ctx.selections[0].row_focus === ctx.selections[0].row[0] ? row_s : row_e;
+    last.column_focus = ctx.selections[0].column_focus === ctx.selections[0].column[0] ? col_s : col_e;
     last.row = [row_s, row_e];
     last.column = [col_s, col_e];
-    last.row_focus = rf;
-    last.column_focus = cf;
     ctx.selections = normalizeSelection(ctx, [last]);
 
     jfrefreshgrid(ctx, d, range);

@@ -71,7 +71,12 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     }, [setContext, showAlert]);
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
-        if (e.key === 'Enter') editable.current?.blur();
+        // The blur may open a notice whose OK button takes the focus at once, and the browser would send this Enter's
+        // keypress on to that button and close the notice.
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            editable.current?.blur();
+        }
         e.stopPropagation();
     }, []);
 

@@ -1,17 +1,14 @@
-// Public surface of the sheet engine — pure, DOM-free, framework-free.
-// BE consumers (document/sheets reader, exporters, previews) import from
-// `@workspace/sheet/engine` rather than the package root so they don't
-// pull React or any state-layer modules. Keep this barrel restricted to symbols
-// safe for Node/server use; anything that reaches into `state/` belongs in the
-// package-root export instead.
-
 export {
+    findSheetByName,
     MAX_SHEET_NAME_LENGTH,
     parseA1Range,
     quoteSheetName,
     rangeToA1,
     rowIndexToLabel,
+    SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
+    sheetFinder,
+    sheetNameKey,
     toA1,
     unquoteSheetName,
 } from './a1-notation';
@@ -25,6 +22,7 @@ export type {
     EvaluateConditionalFormatOptions,
 } from './conditional-format';
 export {
+    cfSplitRange,
     createCfFormulaEvaluator,
     evaluateConditionalFormat,
     isWellFormedCfRule,

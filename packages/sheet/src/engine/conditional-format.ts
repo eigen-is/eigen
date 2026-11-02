@@ -8,6 +8,7 @@ import { isNil } from 'es-toolkit/compat';
 import { cellValue, parseCellInput } from './format';
 import type { FormulaEngine } from './formula-engine';
 import { functionCopy } from './formula-shift';
+import { matrixWidth } from './formula-utils';
 import type { CellMatrix, CellResolver, CompiledFormula, ConditionalFormatRule, SingleRange } from './types';
 import { isRealNull } from './validation';
 
@@ -82,11 +83,7 @@ function applyCellStyle(map: ComputeMap, r: number, c: number, style: CellFormat
 // rule as A1:A1048576) and every visit costs a map entry; holes inside the matrix are still visited.
 function forEachCellInRanges(data: CellMatrix, ranges: SingleRange[], cb: (r: number, c: number) => void) {
     const lastRow = data.length - 1;
-    // The widest row, not row 0: the preview hands over a matrix whose leading rows are holes.
-    let lastColumn = -1;
-    for (const row of data) {
-        if (row && row.length - 1 > lastColumn) lastColumn = row.length - 1;
-    }
+    const lastColumn = matrixWidth(data) - 1;
     for (const range of ranges) {
         const rowEnd = Math.min(range.row[1], lastRow);
         const columnEnd = Math.min(range.column[1], lastColumn);

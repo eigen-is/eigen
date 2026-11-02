@@ -16,7 +16,8 @@ import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../tran
 import { invalidateEventList } from './keys';
 import { useCreateCalendar, useDeleteCalendar } from './use-calendar';
 
-// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is refused.
+// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is
+// refused.
 export function isTransferableCalendarHome(ownerId: string, viewerId: string): boolean {
     return ownerId === viewerId || parseOwnerId(ownerId).type === 'team';
 }
@@ -63,7 +64,8 @@ export function useImportCalendarFromDevice() {
     });
 }
 
-// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts them.
+// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts
+// them.
 export function useImportCalendar() {
     const queryClient = useQueryClient();
 
@@ -92,39 +94,62 @@ type ImportCalendarTarget =
     | { kind: 'existing'; ownerId: string; calendarId: string }
     | { kind: 'new'; name: string; color: string };
 
-// A new calendar that took no events is deleted again, and a failed attempt's calendar is remembered so a retry reuses it.
+type LeftoverCalendar = { id: string; name: string; color: string };
+
+// A new calendar is made in the viewer's own home and the file imported into it. When the import fails or takes no
+// events, the calendar is deleted again at once. When that delete fails too, the calendar is remembered. A retry with
+// the same name and color fills it instead of making a second one, and so does a retry that picks it from the list.
+// Any other retry first tries once more to delete it, so no events land under a name the user did not ask for.
 export function useImportToCalendar(ownerId: string): {
     importToCalendar: (source: FileImportSource, target: ImportCalendarTarget) => Promise<void>;
-    forgetNewCalendar: () => void;
 } {
     const createCalendar = useCreateCalendar(ownerId);
     const deleteCalendar = useDeleteCalendar(ownerId);
     const importCalendar = useImportCalendar();
-    const createdCalendarId = useRef<string | null>(null);
+    const leftoverCalendar = useRef<LeftoverCalendar | null>(null);
 
     const importToCalendar = useCallback(
         async (source: FileImportSource, target: ImportCalendarTarget) => {
+            const leftover = leftoverCalendar.current;
+            const reused =
+                leftover &&
+                (target.kind === 'existing'
+                    ? target.calendarId === leftover.id
+                    : target.name === leftover.name && target.color === leftover.color)
+                    ? leftover
+                    : null;
+            if (leftover && !reused) {
+                // The delete's hook toasts its own failure. The import goes on either way, and the next try deletes
+                // it again.
+                await deleteCalendar.mutateAsync(leftover.id).then(
+                    () => {
+                        leftoverCalendar.current = null;
+                    },
+                    () => {},
+                );
+            }
             if (target.kind === 'existing') {
+                if (reused) leftoverCalendar.current = null;
                 await importCalendar.mutateAsync({ ...source, ownerId: target.ownerId, calendarId: target.calendarId });
                 return;
             }
-            if (!createdCalendarId.current) {
-                const created = await createCalendar.mutateAsync({ name: target.name, color: target.color });
-                createdCalendarId.current = created.id;
-            }
-            const calendarId = createdCalendarId.current;
-            const result = await importCalendar.mutateAsync({ ...source, ownerId, calendarId });
-            if (result.imported === 0) {
+            const { name, color } = target;
+            const calendarId = reused?.id ?? (await createCalendar.mutateAsync({ name, color })).id;
+            const discard = async () => {
+                leftoverCalendar.current = { id: calendarId, name, color };
                 await deleteCalendar.mutateAsync(calendarId);
-                createdCalendarId.current = null;
-            }
+                leftoverCalendar.current = null;
+            };
+            const result = await importCalendar.mutateAsync({ ...source, ownerId, calendarId }).catch(async (error) => {
+                // The delete's hook toasts its own failure, and the caller must still see why the import failed.
+                await discard().catch(() => {});
+                throw error;
+            });
+            if (result.imported === 0) await discard();
+            else if (reused) leftoverCalendar.current = null;
         },
         [createCalendar, deleteCalendar, importCalendar, ownerId],
     );
 
-    const forgetNewCalendar = useCallback(() => {
-        createdCalendarId.current = null;
-    }, []);
-
-    return { importToCalendar, forgetNewCalendar };
+    return { importToCalendar };
 }

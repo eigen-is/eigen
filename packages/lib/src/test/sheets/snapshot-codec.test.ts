@@ -63,7 +63,12 @@ const WORKBOOK: Sheet[] = [
         },
         frozen: { type: 'rangeBoth', range: { row_focus: 0, column_focus: 0 } },
         filterRange: { row: [0, 7], column: [0, 4] },
-        dataVerification: { '2_2': { type: 'dropdown', type2: '', value1: 'a,b,c', value2: '' } },
+        dataValidations: {
+            v1: {
+                ranges: [{ row: [2, 2], column: [2, 2] }],
+                rule: { type: 'dropdown', type2: '', value1: 'a,b,c', value2: '' },
+            },
+        },
         hyperlink: { '5_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
         conditionalFormatRules: [
             {
@@ -103,12 +108,12 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect((JSON.parse(encoded) as Envelope).computed).toBe(true);
     });
 
-    test('round-trips every cell, border and sheet branch (only calcChain, images and charts are added)', () => {
+    test('round-trips every cell, border and sheet branch (only calcChain and empty maps are added)', () => {
         const decoded = decodeSheetsSnapshot(
             encodeSheetsSnapshot(WORKBOOK, { computed: true }),
         ) as SheetWithCalcChain[];
         expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
-            WORKBOOK,
+            WORKBOOK.map((sheet) => ({ dataValidations: {}, ...sheet })),
         );
         expect(decoded[0].calcChain).toEqual([
             { r: 1, c: 0, id: 'sheet-1' },
@@ -148,7 +153,9 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(BULK, { computed: true });
         expect(encoded.split('#a1b2c3')).toHaveLength(2);
         const decoded = decodeSheetsSnapshot(encoded) as SheetWithCalcChain[];
-        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(BULK);
+        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
+            BULK.map((sheet) => ({ dataValidations: {}, ...sheet })),
+        );
     });
 
     test('dictionary encoding shrinks a style-heavy workbook at least 5x', () => {
@@ -171,8 +178,16 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
             calcChain: [],
             images: {},
             charts: {},
+            dataValidations: {},
         });
-        expect(decoded[1]).toEqual({ id: 'sheet-2', name: 'Sheet2', order: 1, images: {}, charts: {} });
+        expect(decoded[1]).toEqual({
+            id: 'sheet-2',
+            name: 'Sheet2',
+            order: 1,
+            images: {},
+            charts: {},
+            dataValidations: {},
+        });
     });
 
     test('an empty config survives the round-trip so config ops still resolve', () => {
@@ -180,7 +195,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         // `config.merge.0_0` op unreplayable.
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: {} }];
         expect(decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: false }))).toEqual(
-            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {} })),
+            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {}, dataValidations: {} })),
         );
     });
 
@@ -231,7 +246,9 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         // turn a present-but-empty map into an absent key (or the reverse).
         const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], config: { borderInfo: {} } }];
         const encoded = encodeSheetsSnapshot(sheets, { computed: false });
-        expect(decodeSheetsSnapshot(encoded)).toEqual(sheets.map((sheet) => ({ ...sheet, images: {}, charts: {} })));
+        expect(decodeSheetsSnapshot(encoded)).toEqual(
+            sheets.map((sheet) => ({ ...sheet, images: {}, charts: {}, dataValidations: {} })),
+        );
     });
 
     test('floating images round-trip on the wire as a map keyed by id', () => {
@@ -290,6 +307,60 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         envelope.sheets[1]!['charts'] = ['forged'];
         const decoded = decodeSheetsSnapshot(JSON.stringify(envelope));
         expect(decoded.map((sheet) => sheet.charts)).toEqual([{}, {}]);
+    });
+
+    test('validation rules round-trip on the wire as a map keyed by id', () => {
+        const dataValidations = {
+            v1: {
+                ranges: [
+                    { row: [0, 1048575], column: [1, 1] },
+                    { row: [2, 4], column: [3, 5] },
+                ],
+                rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
+            },
+            v2: {
+                ranges: [{ row: [0, 0], column: [0, 0] }],
+                rule: { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' },
+            },
+        };
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], dataValidations }];
+        const encoded = encodeSheetsSnapshot(sheets, { computed: true });
+        expect((JSON.parse(encoded) as Envelope).sheets[0]!['dataValidations']).toEqual(dataValidations);
+        expect(decodeSheetsSnapshot(encoded)[0].dataValidations).toEqual(dataValidations);
+    });
+
+    test('a snapshot without validation rules decodes to an empty map, and an empty map is not stored', () => {
+        const sheets: Sheet[] = [{ id: 'sheet-1', name: 'Sheet1', order: 0, celldata: [], dataValidations: {} }];
+        const encoded = encodeSheetsSnapshot(sheets, { computed: true });
+        expect(encoded).not.toContain('"dataValidations":');
+        expect(decodeSheetsSnapshot(encoded)[0].dataValidations).toEqual({});
+    });
+
+    test('a validation rule that is not well formed is left out', () => {
+        const rule = { type: 'dropdown', type2: '', value1: 'a', value2: '' };
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['dataValidations'] = {
+            kept: { ranges: [{ row: [0, 0], column: [0, 0] }], rule },
+            noRanges: { ranges: [], rule },
+            pastTheGrid: { ranges: [{ row: [0, 1048576], column: [0, 0] }], rule },
+            backwards: { ranges: [{ row: [3, 2], column: [0, 0] }], rule },
+            noRule: { ranges: [{ row: [0, 0], column: [0, 0] }] },
+            badValue: { ranges: [{ row: [0, 0], column: [0, 0] }], rule: { ...rule, value1: 1 } },
+        };
+        envelope.sheets[1]!['dataValidations'] = ['forged'];
+        const decoded = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect(decoded.map((sheet) => Object.keys(sheet.dataValidations ?? {}))).toEqual([['kept'], []]);
+    });
+
+    // Sheets keep no backward compatibility: the per-cell rules of a workbook saved before rules were kept per range
+    // are dropped, and the snapshot written next holds none of them.
+    test("an older snapshot's per-cell validation rules are dropped", () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['dataVerification'] = { '2_2': { type: 'dropdown', type2: '', value1: 'a,b', value2: '' } };
+        const [decoded] = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect('dataVerification' in decoded).toBe(false);
+        expect(decoded.celldata).toEqual(WORKBOOK[0].celldata);
+        expect(encodeSheetsSnapshot([decoded], { computed: true })).not.toContain('dataVerification');
     });
 
     test("a sheet's default column width and row height round-trip", () => {
@@ -355,7 +426,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(WORKBOOK, { computed: true });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded));
         const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-        expect(hex).toBe('5c106a392d5cb1103e0a83b5a6117489da13dea5908d15345f91709767ae3728');
+        expect(hex).toBe('0e352cbab7206951a95446a0374d3c34a169e0595ed19631b7b1d0773b66f2b7');
     });
 
     test('data and selections never reach the snapshot', () => {

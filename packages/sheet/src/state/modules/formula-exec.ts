@@ -3,6 +3,7 @@
 // in the state layer, while the parsing and evaluating they call into is the engine's.
 
 import { current, isDraft } from 'immer';
+import { findSheetByName } from '../../engine/a1-notation';
 import { getCalculationOrder } from '../../engine/dependency-graph';
 import { checkBracketNum, resolveCellRange } from '../../engine/formula-utils';
 import type {
@@ -29,8 +30,11 @@ export function getcellrange(
     data?: CellMatrix,
 ): FormulaDependency | null {
     return resolveCellRange(
-        ctx.sheets,
-        ctx.formulaCache.cellTextToIndexList,
+        {
+            sheets: ctx.sheets,
+            findSheet: (name) => findSheetByName(ctx.sheets, name),
+            cellTextToIndexList: ctx.formulaCache.cellTextToIndexList,
+        },
         txt,
         formulaId ?? ctx.currentSheetId,
         data || getFlowdata(ctx, formulaId),

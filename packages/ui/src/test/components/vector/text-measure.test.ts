@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { stubCanvasMeasure } from '../../canvas-measure';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -21,10 +22,7 @@ Object.defineProperty(document, 'fonts', {
 });
 
 // Every character measures 10 px.
-Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    configurable: true,
-    value: () => ({ font: '', measureText: (line: string) => ({ width: 10 * [...line].length }) }),
-});
+stubCanvasMeasure((line) => 10 * [...line].length);
 
 const { isVectorFontLoaded, loadVectorFont, measureVectorText } = await import(
     '../../../components/vector/text-measure'

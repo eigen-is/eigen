@@ -37,7 +37,7 @@ function DriveRoute() {
     const { user } = useAuth();
     const unreadChatIds = useUnreadChatIds(user?.id ?? '');
 
-    // If pathId is "root", navigate to the actual root folder ID when available
+    // "root" in the URL is an alias: once the root folder is known, the page moves to its real id.
     useEffect(() => {
         if (pathId === 'root' && rootPath) {
             navigate({
@@ -47,14 +47,11 @@ function DriveRoute() {
         }
     }, [pathId, rootPath, navigate, ownerId]);
 
-    // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
-
-    // Fetch folder content and path information
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError,
+        error: folderContentError,
     } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
     const { data: selectedPath = null, isLoading: isSelectedPathLoading } = usePathInfo(ownerId, mountId, pid);
     const { data: currentPath = null } = usePathInfo(ownerId, mountId, pathId);
@@ -62,7 +59,7 @@ function DriveRoute() {
     const shareDialogOpen = !!sharePathId && !!shareTargetPath;
 
     // This listing needs the parent folder; a viewer shared only ?pid= can still open that item.
-    const isForbidden = isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403;
+    const isForbidden = folderContentError instanceof AppError && folderContentError.status === 403;
     const selectedItemUrl = isForbidden && selectedPath ? getDriveShareUrl(selectedPath) : undefined;
     useEffect(() => {
         if (selectedItemUrl) window.location.replace(selectedItemUrl);
@@ -109,7 +106,7 @@ function DriveRoute() {
         }
     };
 
-    // Handle back navigation (mainly for mobile)
+    // The back button a narrow screen shows over an open item.
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
@@ -118,24 +115,22 @@ function DriveRoute() {
         });
     };
 
-    // Callback called by DriveLayout after actions
+    // A deleted item that was open closes with it.
     const handleAfterAction = (actionType: string, data: Record<string, unknown>) => {
-        // Navigate away from deleted item if it was selected
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,
-                params: { ownerId, mountId, pathId: pathId },
+                params: { ownerId, mountId, pathId },
                 search: { pid: undefined },
             });
         }
     };
 
-    // Show loading state while resolving root folder ID
     if (pathId === 'root' && !rootPath) {
         return <LoadingState />;
     }
 
-    if (isFolderContentLoadingError) {
+    if (folderContentError) {
         if (isForbidden) {
             if (isSelectedPathLoading || selectedPath) return <LoadingState />;
             return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId} />;
@@ -151,7 +146,7 @@ function DriveRoute() {
                 pathId={pathId}
                 folderContents={folderContents}
                 isLoading={isFolderContentLoading}
-                error={isFolderContentLoadingError}
+                error={folderContentError}
                 selectedPath={selectedPath}
                 currentPath={currentPath}
                 onRowSelect={onRowSelect}
@@ -164,14 +159,13 @@ function DriveRoute() {
                 pid={pid}
                 unreadPathIds={unreadChatIds}
             />
-            {shareTargetPath && (
-                <DriveAccessDialog
-                    open={shareDialogOpen}
-                    onOpenChange={handleShareDialogClose}
-                    path={shareTargetPath}
-                    prefillEmail={shareEmail}
-                />
-            )}
+            {/* Mounted with no path too, so Email collaborators, opened from Share, outlives the closed Share. */}
+            <DriveAccessDialog
+                open={shareDialogOpen}
+                onOpenChange={handleShareDialogClose}
+                path={shareTargetPath}
+                prefillEmail={shareEmail}
+            />
         </>
     );
 }

@@ -410,6 +410,128 @@ describe('round trip', () => {
         ]);
     });
 
+    // A file's later rule wins a cell two rules name, and the writer cuts that cell out of the earlier rule. So the
+    // rules compare by the cells each one decides, and a cell that changed its rule still differs.
+    test('overlapping validation rules compare by the cells each one decides', () => {
+        const list = (value1: string) => ({ type: 'dropdown', type2: '', value1, value2: '' });
+        const cell = (row: number, column: number) => ({ row: [row, row], column: [column, column] });
+        const column = { row: [55, 61], column: [4, 4] };
+        const rules = (...entries: { ranges: { row: number[]; column: number[] }[]; value: string }[]): Sheet[] => [
+            {
+                name: 'S',
+                dataValidations: Object.fromEntries(
+                    entries.map(({ ranges, value }, i) => [`validation-${i + 1}`, { ranges, rule: list(value) }]),
+                ),
+            },
+        ];
+        const classify = (b: Sheet[]) =>
+            classifyDifferences({
+                warnings: new Map(),
+                a: rules(
+                    { ranges: [cell(54, 2), column], value: 'yes,no' },
+                    { ranges: [cell(50, 4), cell(54, 2)], value: 'wall' },
+                ),
+                b,
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        expect(
+            classify(
+                rules({ ranges: [cell(50, 4), cell(54, 2)], value: 'wall' }, { ranges: [column], value: 'yes,no' }),
+            ),
+        ).toEqual([]);
+        expect(
+            classify(
+                rules({ ranges: [cell(50, 4)], value: 'wall' }, { ranges: [cell(54, 2), column], value: 'yes,no' }),
+            ),
+        ).toEqual([['dataValidations', false, 1]]);
+    });
+
+    // The audit reads which rule decides each cell on each side by itself, never through the writer's cut, so a cut
+    // that gives a cell to the wrong rule, or drops a rule, shows.
+    test("a cut that gives a cell to the wrong rule, or drops a rule the cap didn't count, differs", () => {
+        const list = (value1: string) => ({ type: 'dropdown', type2: '', value1, value2: '' });
+        const range = (row: number[], column: number[]) => ({ row, column });
+        const classify = (warnings: Map<string, number>, a: Sheet['dataValidations'], b: Sheet['dataValidations']) =>
+            classifyDifferences({
+                warnings,
+                a: [{ name: 'S', dataValidations: a }],
+                b: [{ name: 'S', dataValidations: b }],
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        // A cut that lets the lower rule keep the cell the higher one holds.
+        const overlapping = {
+            'validation-1': { ranges: [range([0, 9], [0, 0])], rule: list('a') },
+            'validation-2': { ranges: [range([4, 4], [0, 0])], rule: list('b') },
+        };
+        const reversed = {
+            'validation-1': { ranges: [range([4, 4], [0, 0])], rule: list('b') },
+            'validation-2': { ranges: [range([0, 9], [0, 0])], rule: list('a') },
+        };
+        expect(classify(new Map(), overlapping, reversed)).toEqual([['dataValidations', false, 1]]);
+        // A rule the cuts leave past the range cap is dropped, which only the counted warning lists.
+        const rows = Array.from({ length: 8192 }, (_, r) => range([r, r], [0, 9]));
+        const cells = Array.from({ length: 8192 }, (_, i) => range([2 * i, 2 * i], [4, 4]));
+        const capped = {
+            'validation-1': { ranges: rows, rule: list('a') },
+            'validation-2': { ranges: cells, rule: list('b') },
+        };
+        const written = { 'validation-1': { ranges: cells, rule: list('b') } };
+        expect(classify(new Map(), capped, written)).toEqual([['dataValidations', false, 1]]);
+        expect(classify(new Map([['validations-dropped', 1]]), capped, written)).toEqual([
+            ['validations dropped', true, 1],
+        ]);
+    });
+
+    // A rule over the whole sheet under many scattered cells. A cut of the whole grid at every range's edges makes
+    // millions of blocks, which took most of a minute and gigabytes.
+    test('a sheet-wide rule under many scattered cells compares in a moment', () => {
+        const list = (value1: string) => ({ type: 'dropdown', type2: '', value1, value2: '' });
+        const scattered = Array.from({ length: 2000 }, (_, i) => ({ row: [3 * i, 3 * i], column: [3 * i, 3 * i] }));
+        const sheet = (value1: string): Sheet[] => [
+            {
+                name: 'S',
+                dataValidations: {
+                    'validation-1': { ranges: [{ row: [0, 1048575], column: [0, 16383] }], rule: list(value1) },
+                    'validation-2': { ranges: scattered, rule: list('b') },
+                },
+            },
+        ];
+        const started = performance.now();
+        const groups = classifyDifferences({
+            warnings: new Map(),
+            a: sheet('a'),
+            b: sheet('c'),
+            media: { a: new Map(), b: new Map() },
+        });
+        expect(performance.now() - started).toBeLessThan(3000);
+        expect(groups.map(({ kind, listed, count }) => [kind, listed, count])).toEqual([['dataValidations', false, 1]]);
+    });
+
+    test('a prompt cut to the length Excel holds is listed when the cut is counted', () => {
+        const prompt = (hintValue: string): Sheet[] => [
+            {
+                name: 'S',
+                dataValidations: {
+                    v: {
+                        ranges: [{ row: [0, 9], column: [0, 0] }],
+                        rule: { type: 'number', type2: 'equal', value1: '1', value2: '', hintShow: true, hintValue },
+                    },
+                },
+            },
+        ];
+        const classify = (warnings: Map<string, number>, b: string) =>
+            classifyDifferences({
+                warnings,
+                a: prompt('p'.repeat(300)),
+                b: prompt(b),
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        const counted = new Map([['validation-prompts-cut', 1]]);
+        expect(classify(counted, 'p'.repeat(255))).toEqual([['validation prompts cut', true, 1]]);
+        expect(classify(new Map(), 'p'.repeat(255))).toEqual([['dataValidations', false, 1]]);
+        expect(classify(counted, 'p'.repeat(254))).toEqual([['dataValidations', false, 1]]);
+    });
+
     test("a picture over the same box whose media changed its type or its pixels differs, whatever it's named", () => {
         const image = (mediaName: string): Sheet[] => [
             { name: 'S', images: { i: { id: 'i', index: 'a0', x: 0, y: 0, width: 10, height: 10, mediaName } } },

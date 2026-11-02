@@ -1,7 +1,8 @@
 // The import endpoint answers only once the file is transformed into the document, and the picker has
 // closed by then. What is pinned here is that the blocking progress dialog covers that wait, for an
 // upload from the device and a pick from Drive alike, which Drive rows the picker offers, and that a pick
-// runs no import until the dialog after it says how the file comes in.
+// runs no import until the dialog after it says how the file comes in. That dialog waits for the import, and a failed
+// one leaves it open for another try.
 import { expect, mock, test } from 'bun:test';
 import { PPTX_MIME } from '@workspace/lib/constants/mime';
 import type { ConvertTarget, DrivePath } from '@workspace/lib/types/drive';
@@ -13,13 +14,21 @@ installHappyDom();
 
 const pending = { device: false, drive: false };
 const fromDrive: unknown[] = [];
+// How the next import from Drive ends, once it has been recorded.
+let importEnds: () => Promise<void> = async () => {};
 
 const realDrive = await import('@workspace/lib/drive');
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
     useDriveViewPreferences: () => ({ sortKey: 'name', sortDir: 'asc' }),
-    useImportDocument: () => ({ mutate: () => {}, isPending: pending.device }),
-    useImportFromDrive: () => ({ mutate: (variables: unknown) => fromDrive.push(variables), isPending: pending.drive }),
+    useImportDocument: () => ({ mutateAsync: async () => {}, isPending: pending.device }),
+    useImportFromDrive: () => ({
+        mutateAsync: async (variables: unknown) => {
+            fromDrive.push(variables);
+            await importEnds();
+        },
+        isPending: pending.drive,
+    }),
 }));
 const session = { user: { id: 'owner-1' } };
 const realAuth = await import('@workspace/lib/auth');
@@ -35,6 +44,7 @@ mock.module('../../../components/drive/drive-browser', () => ({
 
 const { act, createElement, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { onMutationError } = await import('@workspace/lib/api-error');
 const { DocumentImportPicker } = await import('../../../components/drive/document-import-picker');
 
 const path = drivePath({ name: 'Budget.eigensheets', mimeType: DRIVE_MIME_SHEETS });
@@ -112,6 +122,7 @@ function Host({ target, file }: { target: ConvertTarget; file: string }) {
 
 async function pickFromDrive(target: ConvertTarget, name: string): Promise<() => Promise<void>> {
     fromDrive.length = 0;
+    importEnds = async () => {};
     Object.assign(pending, { device: false, drive: false });
     const container = document.createElement('div');
     document.body.append(container);
@@ -152,7 +163,7 @@ test('a pick runs nothing until Import, and a deck inserts after the current sli
 test('a spreadsheet can replace instead, and Cancel imports nothing', async () => {
     let unmount = await pickFromDrive('eigensheets', 'Budget.xlsx');
     expect(dialog()?.textContent).toContain('Insert as new sheets');
-    await act(async () => (document.querySelectorAll('[role="radio"]')[1] as HTMLElement).click());
+    await act(async () => document.querySelectorAll<HTMLElement>('[role="radio"]')[1]?.click());
     await click('Import');
     expect(fromDrive).toEqual([expect.objectContaining({ options: expect.objectContaining({ mode: 'replace' }) })]);
     await unmount();
@@ -171,5 +182,45 @@ test('a doc offers no choice: it warns that the file replaces the document, a ve
     expect(dialog()?.textContent).toContain('version history');
     await click('Import');
     expect(fromDrive).toEqual([expect.objectContaining({ options: expect.objectContaining({ mode: 'replace' }) })]);
+    await unmount();
+});
+
+const button = (text: string) => [...document.querySelectorAll('button')].find((b) => b.textContent === text);
+
+test('the choice waits while the import runs, then closes', async () => {
+    const unmount = await pickFromDrive('eigensheets', 'Budget.xlsx');
+    let finish = () => {};
+    importEnds = () => new Promise<void>((resolve) => (finish = resolve));
+    await click('Import');
+    expect(fromDrive).toHaveLength(1);
+    expect(button('Import')?.disabled).toBe(true);
+    expect(button('Cancel')?.disabled).toBe(true);
+    await act(async () => finish());
+    expect(dialog()).toBeNull();
+    await unmount();
+});
+
+test('an import that fails keeps the choice open for another try', async () => {
+    const unmount = await pickFromDrive('eigensheets', 'Budget.xlsx');
+    importEnds = async () => {
+        // The mutation hook toasts its failure before the dialog sees it.
+        const failure = new Error('offline');
+        onMutationError(failure);
+        throw failure;
+    };
+    await act(async () => document.querySelectorAll<HTMLElement>('[role="radio"]')[1]?.click());
+    await click('Import');
+    expect(fromDrive).toHaveLength(1);
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Import xlsx file');
+    expect(radios()).toEqual(['false', 'true']);
+    expect(button('Import')?.disabled).toBe(false);
+
+    importEnds = async () => {};
+    await click('Import');
+    expect(fromDrive).toEqual([
+        expect.objectContaining({ options: expect.objectContaining({ mode: 'replace' }) }),
+        expect.objectContaining({ options: expect.objectContaining({ mode: 'replace' }) }),
+    ]);
+    expect(dialog()).toBeNull();
     await unmount();
 });

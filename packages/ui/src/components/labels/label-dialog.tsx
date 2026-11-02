@@ -107,7 +107,7 @@ function LabelForm({
                 }}
                 footerStart={
                     selectedLabel && (
-                        <Button type="button" variant="destructive" onClick={onDelete}>
+                        <Button variant="destructive" onClick={onDelete}>
                             Delete
                         </Button>
                     )

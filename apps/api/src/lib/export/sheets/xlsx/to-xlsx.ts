@@ -7,6 +7,7 @@
 import type { Sheet } from '@workspace/lib/sheets';
 import { SHEET_DEFAULT_FONT } from '@workspace/lib/sheets';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
+import { sheetFinder } from '@workspace/sheet/engine';
 import type { LossCounter } from '../../../document/transform/protocol';
 import { THEME_TYPE, themeXml } from '../../../ooxml/drawingml';
 import type { PackagePart } from '../../../ooxml/opc';
@@ -26,8 +27,7 @@ export function writeXlsx(
 ): Uint8Array {
     const names = sheetNames(sheets, lost);
     const active = activeTabOf(sheets);
-    const written = new Map<string, string>();
-    for (const [index, { name }] of sheets.entries()) if (!written.has(name)) written.set(name, names[index]);
+    const written = sheetFinder(sheets.map(({ name }, index) => ({ name, written: names[index] })));
     // A chart's refs name its sheets as the workbook writes them.
     const named = sheets.map((sheet, index) =>
         sheet.name === names[index] ? sheet : { ...sheet, name: names[index] },
@@ -41,7 +41,7 @@ export function writeXlsx(
         const drawing = drawingOf(named[index], index + 1, named, pictures, lost);
         const part = worksheetPart(sheet, {
             name: names[index],
-            names: written,
+            writtenName: (name) => written(name)?.written,
             selected: index === active,
             // The drawing's part name, as the sheet's relationship targets it from xl/worksheets/.
             drawing: drawing?.path.replace(/^xl\//, '../'),

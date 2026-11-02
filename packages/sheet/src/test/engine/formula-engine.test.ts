@@ -173,6 +173,15 @@ describe('engine/formula-engine — range bounds', () => {
     test('a range starting past the grid is empty, not a throw', () => {
         expect(engine.evaluate('=SUM(A9:B12)', 'sheet1', resolver).value).toBe(0);
     });
+
+    // The engine keeps each sheet's width for the resolver it reads, so a new resolver over a wider sheet of the same
+    // id must not read the old width.
+    test('a whole row reads the width of the resolver it is given, not of the one before', () => {
+        const fresh = new FormulaEngine();
+        expect(fresh.evaluate('=COLUMNS(1:1)', 'sheet1', resolver).value).toBe(3);
+        const wider = createArrayResolver([{ ...sheets[0], data: [[null, null, null, null, null]] }]);
+        expect(fresh.evaluate('=COLUMNS(1:1)', 'sheet1', wider).value).toBe(5);
+    });
 });
 
 describe('engine/formula-engine — compiled formula at an offset', () => {

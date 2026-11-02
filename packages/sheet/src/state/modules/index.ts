@@ -42,3 +42,4 @@ export * from './split-column';
 export * from './text';
 export * from './toolbar';
 export * from './validation';
+export * from './validation-rules';

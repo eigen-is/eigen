@@ -2,7 +2,7 @@
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
 // target a peer changed since. A sheet, row or column entry builds ops and applies exactly those, through
 // applyOpBatch, as its peers will. A cell, field, row or column step recalculates the formulas it writes back. The
-// Workbook keeps the stacks and calls these from, for example, handleUndo.
+// Workbook keeps the stacks, and stepNewestEntry runs an entry and moves it from one stack to the other.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell } from '@workspace/lib/sheets';
@@ -33,10 +33,12 @@ import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
 import { createContextResolver, FormulaCache, snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
-import { rowColMove } from './history-shift';
+import { rowColMove, shiftEntries } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
-type Step = { ctx: Context; ops: Op[] };
+// A row or column step the sheet refused sends nothing, names the stack it was refused from, and its entry leaves the
+// stacks.
+type Step = { ctx: Context; ops: Op[]; refused?: 'undo' | 'redo' };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
 // adds the deleted sheet, and keeps only that: its undo and redo are ops, and its patches would hold the whole sheet
@@ -87,6 +89,31 @@ function holdsWholeMatrices({ patches, inversePatches, options }: History): bool
     return options?.deletedSheet != null || patches.some(whole) || inversePatches.some(whole);
 }
 
+// Runs the newest entry of `from` and moves it onto `to`: an undo takes it from the undo stack to the redo stack, and a
+// redo back. A step the sheet refused says so once and leaves `from` for neither stack, so the next press steps the
+// entry before it, rather than meeting the same refusal until a peer lifts its cause.
+//
+// The entries left on `from` fit the grid the refused step would have made. A refused undo leaves its row op in the
+// grid, so they take that op's move, and a refused redo leaves it out, so they take its inverse.
+export function stepNewestEntry(
+    ctx: Context,
+    from: History[],
+    to: History[],
+    step: (ctx: Context, entry: History) => Step,
+): Step | undefined {
+    const entry = from.at(-1);
+    if (!entry) return undefined;
+    const next = step(ctx, entry);
+    from.pop();
+    if (!next.refused) {
+        to.push(entry);
+        return next;
+    }
+    const kept = rowColMarker((next.refused === 'undo' ? entry.options : inverseRowColOptions(entry.options)) ?? {});
+    if (kept) from.splice(0, from.length, ...shiftEntries(from, kept, next.ctx.sheets, next.refused));
+    return next;
+}
+
 export function undoEntry(ctx: Context, entry: History): Step {
     const { options } = entry;
     if (options?.deleteSheetOp) {
@@ -100,7 +127,7 @@ export function undoEntry(ctx: Context, entry: History): Step {
         return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {});
+        return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {}, 'undo');
     }
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
@@ -125,7 +152,7 @@ export function redoEntry(ctx: Context, entry: History): Step {
         return sheetStep(ctx, (sheets) => addSheetOps(added, sheets));
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.inversePatches, entry.patches, options);
+        return rowColStep(ctx, entry.inversePatches, entry.patches, options, 'redo');
     }
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
@@ -250,7 +277,7 @@ function recalculate(ctx: Context, patches: Patch[]) {
 // repair of the cells. The fields are what the marker makes of the live sheet, so a peer's edit since survives, with
 // what the entry restores beyond that. The live context gets only the ops. The repaired cells hold the values the
 // entry recorded, so the step then recalculates them and their dependents, as a cell undo does, and sends those too.
-function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions): Step {
+function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions, stack: 'undo' | 'redo'): Step {
     const marker = rowColMarker(options);
     const index = marker?.id == null ? undefined : getSheetIndex(ctx, marker.id);
     if (!marker || index == null) return { ctx, ops: [] };
@@ -262,14 +289,24 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const trial = (start: Context) => applyOpBatch({ ...start, formulaCache: new FormulaCache() }, [marker]);
     const made = trial(applyPatches(ctx, left));
     const live = trial(ctx);
-    if (!made || !live) return { ctx, ops: [] };
+    if (!made || !live) return refusedStep(ctx, stack);
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };
-    const applied = applyBatch(ctx, patchToOp(restored, target, options, step));
-    if (applied.ops.length === 0) return applied;
+    const writes = restoredRuleWrites(index, target, restored, made.ctx, live.ctx);
+    const applied = applyBatch(ctx, patchToOp(restored, writes, options, step));
+    if (applied.ops.length === 0) return refusedStep(ctx, stack);
     const [repaired] = opToPatch(applied.ctx, step.repair);
     const [next, recalculated] = produceWithPatches(applied.ctx, (draft: Context) => recalculate(draft, repaired));
     return { ctx: next, ops: [...applied.ops, ...patchToOp(next, filterPatch(recalculated))] };
+}
+
+// The sheet refuses a row or column op that would change a read-only row or column, or grow past its size limit. A peer
+// can make that true of a step after the step was recorded.
+function refusedStep(ctx: Context, stack: 'undo' | 'redo'): Step {
+    const next = produce(ctx, (draft: Context) => {
+        draft.warnDialog = `Sorry, this change can't be ${stack === 'undo' ? 'undone' : 'redone'} anymore.`;
+    });
+    return { ctx: next, ops: [], refused: stack };
 }
 
 // The edited sheet's fields as a row or column step leaves them: each as the marker makes it of the live sheet, but a
@@ -291,10 +328,28 @@ function restoredFields(index: number, recorded: Patch[], restored: Context, mad
             );
             continue;
         }
-        const depth = field === 'config' ? 2 : field === 'hyperlink' || field === 'dataVerification' ? 1 : 0;
+        const depth = field === 'config' ? 2 : field === 'hyperlink' ? 1 : 0;
         fields[field] = restoredValue(wanted[field], marked[field], fields[field], depth);
     }
     return fields;
+}
+
+// The entry's writes with each validation rule it wrote merged as restoredValue merges a field. A rule a peer changed
+// since keeps the peer's value. A write the marker already makes is left out, so a receiver keeps its own shift.
+function restoredRuleWrites(index: number, recorded: Patch[], restored: Context, made: Context, live: Context) {
+    const wanted = restored.sheets[index].dataValidations ?? {};
+    const marked = made.sheets[index].dataValidations ?? {};
+    const now = live.sheets[index].dataValidations ?? {};
+    return recorded.flatMap((patch): Patch[] => {
+        const [, sheet, field, id] = patch.path;
+        if (patch.path.length !== 4 || sheet !== index || field !== 'dataValidations' || typeof id !== 'string') {
+            return [patch];
+        }
+        const value = restoredValue(wanted[id], marked[id], now[id], 0);
+        if (isEqual(value, now[id])) return [];
+        if (value === undefined) return [{ op: 'remove', path: patch.path }];
+        return [{ op: now[id] ? 'replace' : 'add', path: patch.path, value }];
+    });
 }
 
 // `wanted` is the entry's value, `made` what the marker makes of the value the op left, and `live` what it makes of

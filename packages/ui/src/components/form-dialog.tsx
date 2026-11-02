@@ -18,6 +18,9 @@ type FormDialogProps = {
     description?: string;
     size?: ComponentProps<typeof DialogContent>['size'];
     onCloseAutoFocus?: (event: Event) => void;
+    // Lifts the dialog above an open file preview, as a file action's picker needs. Escape and a click outside it then
+    // close only the dialog, and the preview stays open.
+    abovePreview?: boolean;
     children: ReactNode;
 };
 
@@ -26,8 +29,8 @@ type FormDialogFormProps = {
     onSubmit: DialogAction;
     canSubmit?: boolean;
     submitLabel: string;
-    // A button on the left of the footer, such as Delete, which waits while a submit runs. It comes first in the form,
-    // so it needs type="button", or Enter in a field would click it instead of submitting.
+    // A button on the left of the footer, such as Delete, which waits while a submit runs. A raw <button> there needs
+    // type="button": it comes before the submit button, so Enter in a field would click it.
     footerStart?: ReactNode;
     // A Close button alone, for someone who may only look.
     readOnly?: boolean;
@@ -50,6 +53,7 @@ export function FormDialog({
     description,
     size,
     onCloseAutoFocus,
+    abovePreview,
     children,
 }: FormDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
@@ -61,7 +65,7 @@ export function FormDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent size={size} onCloseAutoFocus={onCloseAutoFocus}>
+            <DialogContent size={size} onCloseAutoFocus={onCloseAutoFocus} abovePreview={abovePreview}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     {description && <DialogDescription>{description}</DialogDescription>}
@@ -93,6 +97,8 @@ export function FormDialogForm({
             noValidate
             onSubmit={(e) => {
                 e.preventDefault();
+                // React passes a portaled submit up to a form that holds the dialog, and that form must not submit too.
+                e.stopPropagation();
                 if (canSubmit && !readOnly) submit(onSubmit);
             }}
         >
@@ -106,7 +112,7 @@ export function FormDialogForm({
                             {footerStart}
                         </fieldset>
                     )}
-                    <Button type="button" variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
+                    <Button variant="outline" onClick={() => handleOpenChange(false)} disabled={pending}>
                         Cancel
                     </Button>
                     <Button type="submit" disabled={!canSubmit || pending}>
