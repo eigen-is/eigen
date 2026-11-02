@@ -195,21 +195,19 @@ export function DriveBrowser({
         onFolderChange?.(path, activeMountId);
     };
 
-    const handleCreateFolder = (folderName: string) => {
-        createFolder.mutate(
-            { ownerId: activeOwnerId, mountId: activeMountId, parentId: folderId, folderName },
-            {
-                onSuccess: (newFolder) => {
-                    setCreateFolderOpen(false);
-                    if (newFolder) {
-                        navigateToFolder(newFolder);
-                        if (mode === 'folder') {
-                            onSelect?.(newFolder);
-                        }
-                    }
-                },
-            },
-        );
+    const handleCreateFolder = async (folderName: string) => {
+        const newFolder = await createFolder.mutateAsync({
+            ownerId: activeOwnerId,
+            mountId: activeMountId,
+            parentId: folderId,
+            folderName,
+        });
+        if (newFolder) {
+            navigateToFolder(newFolder);
+            if (mode === 'folder') {
+                onSelect?.(newFolder);
+            }
+        }
     };
 
     const isItemDisabled = useCallback(

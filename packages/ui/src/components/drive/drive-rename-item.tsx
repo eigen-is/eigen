@@ -43,7 +43,6 @@ export function DriveRenameItem({ path, open, onOpenChange, onSave, onCancel, on
             pathId: path.id,
             newName,
         });
-        onOpenChange(false);
 
         // Call onAfterAction if provided
         if (onAfterAction) {
@@ -67,7 +66,6 @@ export function DriveRenameItem({ path, open, onOpenChange, onSave, onCancel, on
             open={open}
             onOpenChange={handleOpenChange}
             onCreateItem={handleRename}
-            isPending={renamePathMutation.isPending}
             type="Rename"
             path={path}
             title={`Rename ${defaultValue}`}

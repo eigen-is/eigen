@@ -1,15 +1,21 @@
+// The small dialog that asks for one name, such as a new folder's in a Drive picker or the new name Rename gives an
+// item. It shows the folder it works in under the field. Create waits for a name with more than spaces and hands the
+// name on as typed. The caller's promise decides the rest: a save closes the dialog, and a failure keeps it open with
+// the typed name, beside the mutation's toast.
+
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 type DriveCreateItemDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    onCreateItem: (itemName: string) => void;
+    // Rejects when the save fails, which keeps the dialog open.
+    onCreateItem: (itemName: string) => Promise<unknown>;
+    // Not read: the dialog waits on onCreateItem's promise instead.
     isPending?: boolean;
     type: string;
     path: DrivePath;
@@ -22,73 +28,68 @@ export function DriveCreateItemDialog({
     open,
     onOpenChange,
     onCreateItem,
-    isPending = false,
     type,
     path,
     title,
     defaultValue = '',
-    confirmLabel,
+    confirmLabel = 'Create',
 }: DriveCreateItemDialogProps) {
-    const [itemName, setItemName] = useState(defaultValue);
     const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
 
-    // Reset input value when dialog opens/closes or defaultValue changes
-    useEffect(() => {
-        setItemName(defaultValue);
-    }, [open, defaultValue]);
+    return (
+        <FormDialog open={open} onOpenChange={onOpenChange} title={title || `New ${type.toLowerCase()}`}>
+            <ItemNameForm
+                type={type}
+                defaultValue={defaultValue}
+                submitLabel={confirmLabel}
+                location={breadcrumbPaths.map((crumb) => crumb.name || 'Drive').join(' > ')}
+                onCreateItem={onCreateItem}
+            />
+        </FormDialog>
+    );
+}
 
-    const handleCreateItem = () => {
-        if (itemName.trim() && !isPending) {
-            onCreateItem(itemName);
-            setItemName('');
-        }
-    };
-
-    const handleCancel = () => {
-        onOpenChange(false);
-        setItemName(defaultValue);
-    };
+// Mounted with the dialog, so each opening starts from the default name.
+function ItemNameForm({
+    type,
+    defaultValue,
+    submitLabel,
+    location,
+    onCreateItem,
+}: {
+    type: string;
+    defaultValue: string;
+    submitLabel: string;
+    location: string;
+    onCreateItem: (itemName: string) => Promise<unknown>;
+}) {
+    const [itemName, setItemName] = useState(defaultValue);
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent aria-describedby={undefined}>
-                <DialogHeader>
-                    <DialogTitle>{title || `New ${type.toLowerCase()}`}</DialogTitle>
-                </DialogHeader>
-                <div className="py-4">
-                    <Label htmlFor="itemName" className="mb-3">
-                        {type} name
-                    </Label>
-                    <Input
-                        id="itemName"
-                        value={itemName}
-                        onChange={(e) => setItemName(e.target.value)}
-                        placeholder={`Enter ${type.toLowerCase()} name`}
-                        className="mt-2"
-                        autoFocus
-                        onKeyDown={(e) => {
-                            if (e.key === 'Enter' && itemName.trim() && !isPending) {
-                                e.preventDefault();
-                                handleCreateItem();
-                            }
-                        }}
-                    />
-                    <div className="mt-4 mb-4">
-                        <Label className="mb-1">Location</Label>
-                        <span className="text-sm text-muted-foreground truncate block">
-                            {breadcrumbPaths.map((path) => path.name || 'Drive').join(' > ')}
-                        </span>
-                    </div>
+        <FormDialogForm
+            canSubmit={itemName.trim() !== ''}
+            submitLabel={submitLabel}
+            onSubmit={async () => {
+                await onCreateItem(itemName);
+            }}
+        >
+            <div className="py-4">
+                <Label htmlFor="itemName" className="mb-3">
+                    {type} name
+                </Label>
+                <Input
+                    id="itemName"
+                    value={itemName}
+                    onChange={(e) => setItemName(e.target.value)}
+                    placeholder={`Enter ${type.toLowerCase()} name`}
+                    className="mt-2"
+                    autoFocus
+                />
+                <div className="mt-4 mb-4">
+                    <Label className="mb-1">Location</Label>
+                    <span className="text-sm text-muted-foreground truncate block">{location}</span>
                 </div>
-                <DialogFooter>
-                    <Button variant="outline" onClick={handleCancel}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleCreateItem} disabled={!itemName.trim() || isPending}>
-                        {isPending ? (confirmLabel ? `${confirmLabel}...` : 'Creating...') : confirmLabel || 'Create'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            </div>
+        </FormDialogForm>
     );
 }
