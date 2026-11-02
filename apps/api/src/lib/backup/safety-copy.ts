@@ -30,9 +30,9 @@ const MAX_REFUSED_DELETES_IN_A_ROW = 10;
 
 type FolderSize = { bytes: number; truncated: boolean };
 
-// A safety copy never changes after the restore that made it, so it is measured once per process.
-// The artifact list is refetched on every job poke — up to twice a second while a job runs — and
-// walking a whole home on each of those would stall the event loop for every user on the server.
+// A safety copy never changes after the restore that made it, so it is measured once per process. Every admin with
+// the backup pane open refetches the list of copies whenever a job starts or ends. Walking a whole home each time would stall the event
+// loop for every user on the server.
 const measuredBytes = new Map<string, FolderSize>();
 
 // The folders a restore left beside this home, as the admin pane lists them: with their size and the delete.
