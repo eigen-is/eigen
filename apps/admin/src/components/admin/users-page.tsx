@@ -35,14 +35,7 @@ export function AdminUsersPage({ users, isLoading, userId, usage, guests }: Admi
         return <LoadingState />;
     }
 
-    const listToolbar = (
-        <AdminUsersToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            organizationId={config?.orgId}
-            guests={guests}
-        />
-    );
+    const listToolbar = <AdminUsersToolbar searchQuery={searchQuery} onSearchChange={setSearchQuery} guests={guests} />;
 
     const detailToolbar = selected ? <UserDetailToolbar user={selected} guest={guests} /> : null;
 

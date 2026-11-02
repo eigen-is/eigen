@@ -2,15 +2,7 @@
 // toolbar. The new team joins the list, where the admin opens it to add members and drives.
 
 import { useCreateTeam } from '@workspace/lib/admin';
-import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 
@@ -21,42 +13,26 @@ type CreateTeamDialogProps = {
 };
 
 export function CreateTeamDialog({ open, onOpenChange, organizationId }: CreateTeamDialogProps) {
+    return (
+        <FormDialog open={open} onOpenChange={onOpenChange} title="Create team">
+            <CreateTeamForm organizationId={organizationId} />
+        </FormDialog>
+    );
+}
+
+// Mounted with the dialog, so each opening starts with an empty name.
+function CreateTeamForm({ organizationId }: { organizationId?: string }) {
     const [name, setName] = useState('');
     const createTeam = useCreateTeam(organizationId);
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!name.trim()) return;
-        await createTeam.mutateAsync(name.trim());
-        setName('');
-        onOpenChange(false);
-    };
+    const trimmed = name.trim();
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent>
-                <DialogHeader>
-                    <DialogTitle>Create team</DialogTitle>
-                    <DialogDescription className="sr-only">Name the new team.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <Input
-                        placeholder="Team name"
-                        value={name}
-                        onChange={(e) => setName(e.target.value)}
-                        autoFocus
-                        required
-                    />
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={createTeam.isPending}>
-                            {createTeam.isPending ? 'Creating...' : 'Create'}
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
-        </Dialog>
+        <FormDialogForm
+            canSubmit={trimmed !== ''}
+            submitLabel="Create"
+            onSubmit={() => createTeam.mutateAsync(trimmed)}
+        >
+            <Input placeholder="Team name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+        </FormDialogForm>
     );
 }

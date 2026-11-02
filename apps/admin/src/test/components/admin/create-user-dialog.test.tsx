@@ -1,6 +1,9 @@
 // Create user turns the username into an address on the server's mail domain: lowercase, and anything an
-// admin pastes after an @ dropped. A username the rules refuse is named and nothing is created.
+// admin pastes after an @ dropped. A username the rules refuse is named and nothing is created. A create the server
+// refuses keeps the dialog open beside the hook's toast, with no unhandled rejection. Create waits for every field
+// and a password of the minimum length.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { MIN_PASSWORD_LENGTH } from '@workspace/lib/validation';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
@@ -19,6 +22,14 @@ afterAll(() => {
     mock.module('@workspace/lib/public', () => realPublic);
 });
 
+// A rejected create the dialog leaves unhandled would surface here, after the toast the hook already showed.
+const unhandled: unknown[] = [];
+const onUnhandled = (reason: unknown) => unhandled.push(reason);
+process.on('unhandledRejection', onUnhandled);
+afterAll(() => {
+    process.off('unhandledRejection', onUnhandled);
+});
+
 const { act, createElement } = await import('react');
 const { CreateUserDialog } = await import('../../../components/admin/create-user-dialog');
 
@@ -26,8 +37,10 @@ const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
 afterEach(() => unmount());
 beforeEach(() => {
-    createUser.mutateAsync.mockClear();
+    createUser.mutateAsync.mockReset();
+    createUser.mutateAsync.mockImplementation(async () => {});
     onOpenChange.mockClear();
+    unhandled.length = 0;
 });
 
 async function fillAndSubmit(fields: { name: string; username: string; password: string }) {
@@ -58,4 +71,25 @@ test('a username the rules refuse is named, and nothing is created', async () =>
     expect(document.body.textContent).toContain('Username must be 2-30 characters');
     expect(createUser.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('Create waits for a password of the minimum length', async () => {
+    await fillAndSubmit({ name: 'Ada', username: 'ada', password: 'x'.repeat(MIN_PASSWORD_LENGTH - 1) });
+    const create = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+        (b) => b.textContent === 'Create',
+    );
+    expect(create?.disabled).toBe(true);
+    expect(createUser.mutateAsync).not.toHaveBeenCalled();
+});
+
+test('a create the server refuses keeps the dialog open, with no unhandled rejection', async () => {
+    createUser.mutateAsync.mockImplementation(async () => {
+        throw new Error('User already exists');
+    });
+    await fillAndSubmit({ name: 'Ada Lovelace', username: 'ada', password: 'correct horse' });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(createUser.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(unhandled).toEqual([]);
 });
