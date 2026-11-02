@@ -1117,6 +1117,26 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
+        './eigen restore --stage reads each member manifest once',
+        async () => {
+            const read = await readServerManifest(fullArchive);
+            const inner = 1 + read.manifest.homes.filter((home) => home.member).length;
+            const archive = join(import.meta.dir, '../../lib/backup/archive.ts');
+            const result = await restoreCli(install(), [basename(fullArchive), '--stage', '--yes'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `const archive = await import(${JSON.stringify(archive)});`,
+                    `const spy = spyOn(archive, 'readArtifactManifest');`,
+                    `process.on('exit', () => console.log('manifest reads: ' + spy.mock.calls.length));`,
+                ],
+            });
+            expect(result.code).toBe(0);
+            expect(result.stdout).toContain(`manifest reads: ${inner}`);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
         'a stage while another stages is refused and leaves its tree alone',
         async () => {
             const dir = install();
