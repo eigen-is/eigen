@@ -156,20 +156,29 @@ export class Drive {
 
     // ---- Mounts ----
 
+    // A closing home only closes the mounts this Drive already holds, so a closing home gets no new
+    // mount. When the close begins while a new mount starts, the mount is closed here instead of added.
     public async addMount(config: MountConfig): Promise<void> {
-        // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
-        const mount = new Mount(
-            this.owner.id,
-            this.home.homeDir,
-            config,
-            this.home.getLocalDatabase.bind(this.home),
-            extractText,
-        );
-        await mount.init();
-        this.mounts.set(config.id, mount);
-        if (config.isDefault) {
-            this.defaultMountId = config.id;
+        if (!this.home.closing) {
+            // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
+            const mount = new Mount(
+                this.owner.id,
+                this.home.homeDir,
+                config,
+                this.home.getLocalDatabase.bind(this.home),
+                extractText,
+            );
+            await mount.init();
+            if (!this.home.closing) {
+                this.mounts.set(config.id, mount);
+                if (config.isDefault) {
+                    this.defaultMountId = config.id;
+                }
+                return;
+            }
+            await mount.closeAllDatabases();
         }
+        throw new ApiError(503, 'Home is closing');
     }
 
     // Applies saved mount settings to the live mount, so a change takes effect without reloading the home.
