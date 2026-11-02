@@ -74,8 +74,12 @@ check_install() {
     fi
 }
 
-# The distinct owners under data/.
-data_owners() { scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '; }
+# The distinct owners under data/, seen from a fresh box, as owner_mode sees them: a box that kept the folder mounted
+# sees a file another uid wrote without a chown as root's on Docker Desktop.
+data_owners() {
+    scratch_box
+    scratch_run sh -c 'find "$1" -exec stat -c "%u:%g" {} + | sort -u' sh "$INSTALL/data" | tr '\n' ' '
+}
 
 # tab <kept> <edit>: collab_tab on $COLLAB_DOC through Caddy.
 tab() { collab_tab caddy wss://localhost "$COLLAB_DOC" "$@"; }

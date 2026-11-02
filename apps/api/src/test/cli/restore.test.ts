@@ -164,6 +164,10 @@ async function stageAndSwap(dir: string, archive: string): Promise<string> {
     return `${staged.stdout}${swapped.stdout}`;
 }
 
+function modeOf(path: string): number {
+    return statSync(path).mode & 0o7777;
+}
+
 function asideDirs(dir: string): string[] {
     return readdirSync(dir).filter((name) => ASIDE.test(name));
 }
@@ -813,9 +817,73 @@ describe('restore --stage and --swap', () => {
                 drop: (name) => name.startsWith('certs/'),
                 manifest: (m) => ({ ...m, certs: false }),
             });
+            chmodSync(join(dir, 'data/certs/cert.pem'), 0o644);
+            chmodSync(join(dir, 'data/certs/key.pem'), 0o640);
+            chmodSync(join(dir, 'data/certs'), 0o755);
             await stageAndSwap(dir, crafted);
             expect(readFileSync(join(dir, 'data/certs/cert.pem'), 'utf8')).toBe('the certificate here');
             expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe('the key here');
+            // As the mail containers left them, owners too, which only a run as root can show.
+            expect(modeOf(join(dir, 'data/certs/cert.pem'))).toBe(0o644);
+            expect(modeOf(join(dir, 'data/certs/key.pem'))).toBe(0o640);
+            expect(modeOf(join(dir, 'data/certs'))).toBe(0o755);
+            expect(existsSync(join(dir, '.eigen/restore-install'))).toBe(false);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'the DKIM key and TLS certificate an archive brings keep the modes the mail containers gave the ones here',
+        async () => {
+            const dir = install();
+            mkdirSync(join(dir, 'data/certs'), { mode: 0o755 });
+            writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here', { mode: 0o644 });
+            writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here', { mode: 0o640 });
+            mkdirSync(join(dir, 'data/dkim'), { mode: 0o755 });
+            writeFileSync(join(dir, 'data/dkim/eigen.private'), 'the key here', { mode: 0o640 });
+            // A setuid bit here is not carried over.
+            chmodSync(join(dir, 'data/certs/cert.pem'), 0o4644);
+            await stageAndSwap(dir, basename(fullArchive));
+            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
+            expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            expect(modeOf(join(dir, 'data/certs/cert.pem'))).toBe(0o644);
+            expect(modeOf(join(dir, 'data/certs/key.pem'))).toBe(0o640);
+            expect(modeOf(join(dir, 'data/dkim/eigen.private'))).toBe(0o640);
+            // A file only the archive holds keeps the mode the stage gave it.
+            expect(modeOf(join(dir, 'data/dkim/eigen.txt'))).toBe(0o600);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file or link',
+        async () => {
+            const crafted = await craft(fullArchive, {
+                drop: (name) => name.startsWith('certs/'),
+                manifest: (m) => ({ ...m, certs: false }),
+            });
+            for (const [plant, said] of [
+                [
+                    (certs: string) => {
+                        writeFileSync(join(certs, 'key.pem'), 'run me');
+                        chmodSync(join(certs, 'key.pem'), 0o4755);
+                    },
+                    'is setuid',
+                ],
+                [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'is a link'],
+            ] as const) {
+                const dir = install();
+                mkdirSync(join(dir, 'data/certs'));
+                writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here');
+                plant(join(dir, 'data/certs'));
+                expect((await stage(dir, crafted)).code).toBe(0);
+                const result = await swap(dir);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(`data/certs/key.pem ${said}`);
+                expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(dir)).toEqual([]);
+            }
         },
         JOB_TIMEOUT_MS,
     );

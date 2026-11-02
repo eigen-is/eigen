@@ -1,13 +1,13 @@
 // The swap of ./eigen restore, which runs as root with Eigen stopped and moves a staged archive into data/: the
-// archive replaces data/ whole, and what it replaces is kept aside. The renames go into a marker on disk before the
-// first one runs, so a swap cut off anywhere is finished by the next run. It also answers --staged, which the
-// launcher asks before it stops Eigen.
+// archive replaces data/ whole, and what it replaces is kept aside. The DKIM key and the TLS certificate go in as
+// root's copies, with the owners the ones here have. The renames go into a marker on disk before the first one runs,
+// so a swap cut off anywhere is finished by the next run. It also answers --staged, which the launcher asks before it
+// stops Eigen.
 
 import type { Database } from 'bun:sqlite';
 import {
     chmodSync,
     closeSync,
-    cpSync,
     existsSync,
     fsyncSync,
     lstatSync,
@@ -21,15 +21,16 @@ import {
     writeSync,
 } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
-import { buildBackupStamp } from '@workspace/lib/validation';
+import { buildBackupStamp, isStringList, parseJson } from '@workspace/lib/validation';
 import { describeError } from '../lib/backup/errors';
-import { buildSafetyCopyName, INSTALL_FOLDERS, nextFreeTime, STAGING_DIR } from '../lib/backup/paths';
+import { buildSafetyCopyName, nextFreeTime, STAGING_DIR } from '../lib/backup/paths';
 import { RESTORING_DATA_DIR, RESTORING_DIR } from '../lib/backup/restore-server';
 import { DATA_LEASE_FILE, DATA_LOCK_FILE, liveLeaseHolder, lockDataDir } from '../lib/config/data-lock';
 import { SERVER_DIR } from '../lib/config/paths';
 import { PIN_KEYS } from '../lib/config/release';
 import { readEnvFile } from './env-file';
 import { BACKUPS, DATA, ENV_PATH, installOwner, ownAs } from './install';
+import { copyInstallFolders, INSTALL_COPIES } from './restore-install-copy';
 import type { Ui } from './ui';
 import { createUi, glyphLine } from './ui';
 
@@ -47,7 +48,7 @@ export type StagedRestore = { archive: string; appVersion: string };
 type RestoreSwap = {
     archive: string;
     renames: [string, string][];
-    aside: string[];
+    aside: [data: string, env: string];
     leftover: string;
     env: boolean;
 };
@@ -103,14 +104,9 @@ export async function swap(): Promise<void> {
     const renames: [string, string][] = [];
     if (env && pathExists(ENV_PATH)) renames.push([ENV_PATH, envAside]);
     if (env) renames.push([stagedEnv, ENV_PATH]);
-    // An archive without the DKIM key or the TLS certificate keeps the one here: mail would sign with a key DNS does
-    // not publish, and serve IMAP and SMTP with a self-signed certificate.
-    for (const { dir: top } of INSTALL_FOLDERS) {
-        if (!existsSync(join(stagedData, top)) && existsSync(join(DATA, top))) {
-            cpSync(join(DATA, top), join(stagedData, top), { recursive: true });
-        }
-    }
-    renames.push([DATA, dataAside], [join(dataAside, RESTORING_DIR, RESTORING_DATA_DIR), DATA]);
+    const copies = copyInstallFolders(ui, record.archive, stagedData);
+    renames.push(...copies.out, [DATA, dataAside], [join(dataAside, RESTORING_DIR, RESTORING_DATA_DIR), DATA]);
+    renames.push(...copies.in);
     const marker: RestoreSwap = {
         archive: record.archive,
         renames,
@@ -261,9 +257,12 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
     // A per-home restore's notes in there name homes of the data/ that went aside: the boot must not act on them.
     rmSync(join(BACKUPS, STAGING_DIR), { recursive: true, force: true });
     rmSync(SWAP_MARKER);
+    // The archive's own install folders went in there, and a rerun skips the renames that took them out only while
+    // they are there. So the folder goes once the marker is gone, and the next swap clears what a cut left.
+    rmSync(INSTALL_COPIES, { recursive: true, force: true });
     // An aside that keeps nothing goes: a new machine's empty data/, and the .env.production the archive's replaced
     // there. Only once the marker is gone: a rerun would find the restored ones with no aside and move them again.
-    const [dataAside = '', envAside = ''] = swap.aside;
+    const [dataAside, envAside] = swap.aside;
     if (lstatSync(dataAside, { throwIfNoEntry: false })?.isDirectory() && readdirSync(dataAside).length === 0) {
         rmSync(dataAside, { recursive: true });
     }
@@ -278,12 +277,13 @@ function runSwap(ui: Ui, swap: RestoreSwap): void {
 // Records this CLI wrote. A stage cut off mid-write leaves a torn staged.json, which is nothing staged; the marker is
 // written whole or not at all, and one that does not read stops the swap. One of another shape reads as neither.
 function readRecord<T>(file: string, is: (value: unknown) => value is T): T | null {
-    let value: unknown;
+    let text: string;
     try {
-        value = JSON.parse(readFileSync(file, 'utf8'));
+        text = readFileSync(file, 'utf8');
     } catch {
         return null;
     }
+    const value = parseJson(text);
     return is(value) ? value : null;
 }
 
@@ -298,12 +298,12 @@ function isStagedRestore(value: unknown): value is StagedRestore {
     );
 }
 
-function isPaths(value: unknown): value is string[] {
-    return Array.isArray(value) && value.every((path) => typeof path === 'string');
+function isPair(value: unknown): value is [string, string] {
+    return isStringList(value) && value.length === 2;
 }
 
 function isMoves(value: unknown): value is [string, string][] {
-    return Array.isArray(value) && value.every((move) => isPaths(move) && move.length === 2);
+    return Array.isArray(value) && value.every(isPair);
 }
 
 function isRestoreSwap(value: unknown): value is RestoreSwap {
@@ -315,7 +315,7 @@ function isRestoreSwap(value: unknown): value is RestoreSwap {
         'renames' in value &&
         isMoves(value.renames) &&
         'aside' in value &&
-        isPaths(value.aside) &&
+        isPair(value.aside) &&
         'leftover' in value &&
         typeof value.leftover === 'string' &&
         'env' in value &&
