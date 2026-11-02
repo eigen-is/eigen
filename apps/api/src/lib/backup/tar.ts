@@ -134,7 +134,6 @@ function padLength(size: number): number {
 type TarEntry = {
     path: string;
     typeflag: string;
-    mode: number;
     // Seconds since the epoch.
     mtime: number;
     size: number;
@@ -239,9 +238,8 @@ export async function* tarEntries(
                 throw new Error(`backup archive: refusing tar entry "${entryPath}", a link or a device`);
             }
             if (typeflag === '' || typeflag === '0' || typeflag === '5') {
-                const mode = headerNumber(header, 100, 8);
                 const mtime = headerNumber(header, 136, 12);
-                yield { path: entryPath, typeflag, mode, mtime, size, offset: position, body: body() };
+                yield { path: entryPath, typeflag, mtime, size, offset: position, body: body() };
             }
             await skip(bodyLeft + padLength(size));
         }

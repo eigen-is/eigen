@@ -105,6 +105,20 @@ async function sha256Of(filePath: string): Promise<string> {
     return hasher.digest('hex');
 }
 
+// Every header of a plain tar, pax headers included, read off the bytes rather than through the reader under test.
+function tarHeaderModes(tar: Uint8Array): { name: string; typeflag: string; mode: number }[] {
+    const headers: { name: string; typeflag: string; mode: number }[] = [];
+    let at = 0;
+    while (at + 512 <= tar.length && tar.subarray(at, at + 512).some((byte) => byte !== 0)) {
+        const field = (offset: number, length: number) =>
+            new TextDecoder().decode(tar.subarray(at + offset, at + offset + length)).split('\0')[0];
+        const size = Number.parseInt(field(124, 12), 8);
+        headers.push({ name: field(0, 100), typeflag: field(156, 1), mode: Number.parseInt(field(100, 8), 8) });
+        at += 512 + Math.ceil(size / 512) * 512;
+    }
+    return headers;
+}
+
 // Stage 3 samples the ten largest data.db files plus ten more; padding a doctored one past every
 // other data.db in the folder is what makes a test of it independent of what else the home holds.
 function padPastEveryDataDb(db: Database, manifest: BackupManifest): void {
@@ -251,6 +265,29 @@ describe('Backup pack and verify', () => {
             expect(record.failures).toEqual([]);
             expect(record.status).toBe('verified');
             expect(record.checkedAt).toBeTruthy();
+        },
+        PACK_TIMEOUT_MS,
+    );
+
+    test(
+        "a home archive's entries and a fresh extract of it are for the API's user alone",
+        async () => {
+            const headers = tarHeaderModes(Bun.zstdDecompressSync(await Bun.file(artifact).bytes()));
+            expect(headers.some((header) => header.typeflag === 'x')).toBe(true);
+            expect(headers.some((header) => header.name === `${folderName}/${EMPTY_DIR}/`)).toBe(true);
+            const privateMode = (typeflag: string) => (typeflag === '5' ? 0o700 : 0o600);
+            expect(headers.filter((header) => header.mode !== privateMode(header.typeflag))).toEqual([]);
+
+            const root = join(await extractFresh('extract-modes-'), folderName);
+            const modes = ['', ...new Bun.Glob('**/*').scanSync({ cwd: root, onlyFiles: false, dot: true })].map(
+                (rel) => {
+                    const stat = fs.statSync(join(root, rel));
+                    return { rel, mode: stat.mode & 0o7777, expected: stat.isDirectory() ? 0o700 : 0o600 };
+                },
+            );
+            expect(modes.some(({ rel }) => rel === EMPTY_DIR)).toBe(true);
+            expect(modes.some(({ rel }) => rel === docDataDb)).toBe(true);
+            expect(modes.filter(({ mode, expected }) => mode !== expected)).toEqual([]);
         },
         PACK_TIMEOUT_MS,
     );

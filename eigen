@@ -506,10 +506,35 @@ api_here() {
 
 # The API, uid 1000, reads .env.production for the server backup: group 1000 may, others not. Each command that writes it
 # starts Eigen after, so start does this. Docker Desktop shows the file as the container user's, readable at 0600 already.
+# backups/ gets the group backups_group names, with setgid and mode 2750: the operator lists it and reads a server
+# backup's record, and other users of the host do not. A folder uid 1000 does not own is left as it is, since 2750 could
+# lock the API out of it.
 share_env() {
     if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
-    docker run --rm --user 0 --entrypoint sh -v "$PWD:/install" "$API_IMAGE" \
-        -c 'chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+    share_file='chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+    share_folder='if [ -n "$1" ] && [ "$(stat -c %u /install/backups 2>/dev/null)" = 1000 ]; then chgrp "$1" /install/backups && chmod 2750 /install/backups; fi'
+    docker run --rm --user 0 --entrypoint sh -v "$PWD:/install" "$API_IMAGE" -c "$share_file && $share_folder" sh "$(backups_group)"
+}
+
+# backups_group: the group of the install folder, which is the operator's, or nothing when other users of the host share
+# it. A gid below 1000 other than root's is a system's shared group, such as users. So is one that lists another member,
+# or that another user has as primary group.
+backups_group() {
+    gid=${EIGEN_OWNER#*:}
+    if [ "$gid" != 0 ] && [ "$gid" -lt 1000 ]; then return 0; fi
+    owner=$(ls -ld . | awk '{ print $3 }')
+    members=$({ getent group "$gid" || grep "^[^:]*:[^:]*:$gid:" /etc/group; } 2>/dev/null | cut -d: -f4)
+    if printf '%s\n' "$members" | tr ',' '\n' | grep -qvx -e "$owner" -e ''; then return 0; fi
+    primary=$({ getent passwd || cat /etc/passwd; } 2>/dev/null | awk -F: -v gid="$gid" '$4 == gid { print $1 }')
+    if printf '%s\n' "$primary" | grep -qvx -e "$owner" -e ''; then return 0; fi
+    printf '%s\n' "$gid"
+}
+
+# shared_backups: a yellow line when share_env leaves backups/ open. The start runs share_env under step, whose output
+# only the log gets, so restart says it before.
+shared_backups() {
+    if [ "$docker_os" = 'Docker Desktop' ] || [ -n "$(backups_group)" ]; then return 0; fi
+    say "$YELLOW" '▲' "Other users of this host share this folder's group, ${EIGEN_OWNER#*:}, so backups/ stays open to them. Give the folder a group only you are in, then run ./eigen restart."
 }
 
 # Also removes this project's containers whose service the current profiles leave out, so a rerun that switches web
@@ -559,6 +584,7 @@ restart() {
         step "Stopping eigen-api, which reads an older .env.production" "eigen-api stopped" "Could not stop eigen-api" \
             dc stop eigen-api
     fi
+    shared_backups
     step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
     if [ "$(mail_containers)" != "$mail" ]; then refresh_fail2ban; fi
 }
