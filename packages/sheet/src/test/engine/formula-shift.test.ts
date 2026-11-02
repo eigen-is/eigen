@@ -7,6 +7,9 @@ import {
     renameSheetRefs,
 } from '../../engine/formula-shift';
 
+// The sheets a row or column op's workbook holds, which functionStrChange reads each ref's sheet name against.
+const workbook = [{ name: 'Sheet1' }, { name: 'Sheet2' }, { name: 'Sheet 1' }, { name: 'My Sheet' }];
+
 describe('engine/formula-shift — functionCopy single-cell refs', () => {
     test('shifts a relative ref down', () => {
         expect(functionCopy('=A1', 1, 0)).toBe('A2');
@@ -196,7 +199,9 @@ describe('engine/formula-shift — functionCopy sheet names, intersections and c
     test('a ref naming more sheets than legs is kept as written', () => {
         for (const formula of ['=a!b!A1:B2', '=a!!A1:B2', "='x'!'y'!A1:B2"]) {
             expect(functionCopy(formula, 1, 1)).toBe(formula.slice(1));
-            expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'a', false)).toBe(formula.slice(1));
+            expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'a', false, workbook)).toBe(
+                formula.slice(1),
+            );
         }
     });
 
@@ -220,10 +225,10 @@ describe('engine/formula-shift — functionCopy sheet names, intersections and c
 
 describe('functionStrChange — sheet names on both legs', () => {
     test('moves the range as the one naming its sheet once does', () => {
-        const once = functionStrChange("='Sheet 1'!A1:B2", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false);
-        expect(functionStrChange("='Sheet 1'!A1:'Sheet 1'!B2", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false)).toBe(
-            once.replace(':', ":'Sheet 1'!"),
-        );
+        const once = functionStrChange("='Sheet 1'!A1:B2", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false, workbook);
+        expect(
+            functionStrChange("='Sheet 1'!A1:'Sheet 1'!B2", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false, workbook),
+        ).toBe(once.replace(':', ":'Sheet 1'!"));
         expect(once).not.toBe("'Sheet 1'!A1:B2");
     });
 
@@ -239,8 +244,10 @@ describe('functionStrChange — sheet names on both legs', () => {
     });
 
     test('moves a ref that spells its sheet name in another case, as Excel reads it', () => {
-        expect(functionStrChange('=sheet1!A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', false)).toBe('sheet1!A2');
-        expect(functionStrChange("='sheet 1'!A1", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false)).toBe(
+        expect(functionStrChange('=sheet1!A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', false, workbook)).toBe(
+            'sheet1!A2',
+        );
+        expect(functionStrChange("='sheet 1'!A1", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false, workbook)).toBe(
             "'sheet 1'!A2",
         );
     });
@@ -270,170 +277,194 @@ describe('engine/formula-shift — detectAbsolute', () => {
 
 describe('functionStrChange — row insert/delete', () => {
     test('shifts a standard range when a row is inserted at top', () => {
-        expect(functionStrChange('A1:B3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A2:B4');
+        expect(functionStrChange('A1:B3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('A2:B4');
     });
 
     test('shifts a single cell when a row is inserted at top', () => {
-        expect(functionStrChange('A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A2');
+        expect(functionStrChange('A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('A2');
     });
 
     test('shifts a row-only range when a row is inserted at top', () => {
-        expect(functionStrChange('1:3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('2:4');
+        expect(functionStrChange('1:3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('2:4');
     });
 
     test('leaves a column-only range unchanged when a row is inserted', () => {
-        expect(functionStrChange('A:C', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A:C');
+        expect(functionStrChange('A:C', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('A:C');
     });
 
     test('collapses a standard range when its first row is deleted', () => {
-        expect(functionStrChange('A1:B3', 'del', 'row', null, 0, 1, 'Sheet1', true)).toBe('A1:B2');
+        expect(functionStrChange('A1:B3', 'del', 'row', null, 0, 1, 'Sheet1', true, workbook)).toBe('A1:B2');
     });
 
     test('leaves a column-only range unchanged when a row is deleted', () => {
-        expect(functionStrChange('A:C', 'del', 'row', null, 0, 1, 'Sheet1', true)).toBe('A:C');
+        expect(functionStrChange('A:C', 'del', 'row', null, 0, 1, 'Sheet1', true, workbook)).toBe('A:C');
     });
 });
 
 describe('functionStrChange — column insert/delete', () => {
     test('shifts a standard range when a column is inserted at the left', () => {
-        expect(functionStrChange('A1:B3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('B1:C3');
+        expect(functionStrChange('A1:B3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('B1:C3');
     });
 
     test('shifts a column-only range when a column is inserted at the left', () => {
-        expect(functionStrChange('A:C', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('B:D');
+        expect(functionStrChange('A:C', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('B:D');
     });
 
     test('leaves a row-only range unchanged when a column is inserted', () => {
-        expect(functionStrChange('1:3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('1:3');
+        expect(functionStrChange('1:3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('1:3');
     });
 
     test('leaves a row-only range unchanged when a column is deleted', () => {
         // Regression: with engine's columnLabelToIndex returning -1 (not NaN),
         // the `c1 < 0` clamp in the del branch would coerce -1 → 0 without an
         // explicit colsMissing flag, corrupting "1:3" into "A1:A3".
-        expect(functionStrChange('1:3', 'del', 'col', null, 0, 1, 'Sheet1', true)).toBe('1:3');
+        expect(functionStrChange('1:3', 'del', 'col', null, 0, 1, 'Sheet1', true, workbook)).toBe('1:3');
     });
 
     test('collapses a standard range when its first column is deleted', () => {
-        expect(functionStrChange('A1:B3', 'del', 'col', null, 0, 1, 'Sheet1', true)).toBe('A1:A3');
+        expect(functionStrChange('A1:B3', 'del', 'col', null, 0, 1, 'Sheet1', true, workbook)).toBe('A1:A3');
     });
 });
 
 describe('functionStrChange — sheet-qualified ranges', () => {
     test('preserves the sheet prefix on a standard range', () => {
-        expect(functionStrChange('Sheet1!A1:B3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('Sheet1!A2:B4');
+        expect(functionStrChange('Sheet1!A1:B3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            'Sheet1!A2:B4',
+        );
     });
 
     test('preserves the sheet prefix on a row-only range', () => {
-        expect(functionStrChange('Sheet1!1:3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('Sheet1!2:4');
+        expect(functionStrChange('Sheet1!1:3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            'Sheet1!2:4',
+        );
     });
 
     test('preserves the sheet prefix on a column-only range', () => {
-        expect(functionStrChange('Sheet1!A:C', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('Sheet1!B:D');
+        expect(functionStrChange('Sheet1!A:C', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            'Sheet1!B:D',
+        );
     });
 
     test('collapses a sheet-qualified range when its first row is deleted', () => {
-        expect(functionStrChange('Sheet1!A1:B3', 'del', 'row', null, 0, 1, 'Sheet1', true)).toBe('Sheet1!A1:B2');
+        expect(functionStrChange('Sheet1!A1:B3', 'del', 'row', null, 0, 1, 'Sheet1', true, workbook)).toBe(
+            'Sheet1!A1:B2',
+        );
     });
 });
 
 describe('functionStrChange — target sheet', () => {
     test('shifts an unqualified ref only when the formula lives on the target sheet', () => {
-        expect(functionStrChange('A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', true)).toBe('A4');
-        expect(functionStrChange('A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', false)).toBe('A3');
+        expect(functionStrChange('A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', true, workbook)).toBe('A4');
+        expect(functionStrChange('A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', false, workbook)).toBe('A3');
     });
 
     test('shifts a ref qualified with the target sheet from any sheet', () => {
-        expect(functionStrChange('Sheet2!A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', false)).toBe('Sheet2!A4');
-        expect(functionStrChange("'Sheet2'!A3", 'del', 'row', null, 0, 1, 'Sheet2', true)).toBe("'Sheet2'!A2");
+        expect(functionStrChange('Sheet2!A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', false, workbook)).toBe(
+            'Sheet2!A4',
+        );
+        expect(functionStrChange("'Sheet2'!A3", 'del', 'row', null, 0, 1, 'Sheet2', true, workbook)).toBe(
+            "'Sheet2'!A2",
+        );
     });
 
     test('leaves a ref qualified with another sheet alone', () => {
-        expect(functionStrChange('Sheet1!A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', false)).toBe('Sheet1!A3');
-        expect(functionStrChange("'Sheet2'!A3", 'del', 'row', null, 0, 1, 'Sheet1', true)).toBe("'Sheet2'!A3");
+        expect(functionStrChange('Sheet1!A3', 'add', 'row', 'lefttop', 0, 1, 'Sheet2', false, workbook)).toBe(
+            'Sheet1!A3',
+        );
+        expect(functionStrChange("'Sheet2'!A3", 'del', 'row', null, 0, 1, 'Sheet1', true, workbook)).toBe(
+            "'Sheet2'!A3",
+        );
     });
 
     test('matches a quoted qualifier against the unquoted target name', () => {
-        expect(functionStrChange("'My Sheet'!A3", 'add', 'row', 'lefttop', 0, 1, 'My Sheet', false)).toBe(
+        expect(functionStrChange("'My Sheet'!A3", 'add', 'row', 'lefttop', 0, 1, 'My Sheet', false, workbook)).toBe(
             "'My Sheet'!A4",
         );
-        expect(functionStrChange("'My Sheet'!A3", 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe("'My Sheet'!A3");
+        expect(functionStrChange("'My Sheet'!A3", 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            "'My Sheet'!A3",
+        );
     });
 });
 
 describe('functionStrChange — whole-column and whole-row ranges', () => {
     test('keeps both legs of a whole-column range through a row op', () => {
-        expect(functionStrChange('SUM(A:A)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('SUM(A:A)');
+        expect(functionStrChange('SUM(A:A)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('SUM(A:A)');
     });
 
     test('shifts both legs of a whole-row range', () => {
-        expect(functionStrChange('SUM(1:1)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('SUM(2:2)');
+        expect(functionStrChange('SUM(1:1)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('SUM(2:2)');
     });
 
     test('narrows a two-column range to a whole-column range when one column goes', () => {
-        expect(functionStrChange('SUM(A:B)', 'del', 'col', null, 0, 1, 'Sheet1', true)).toBe('SUM(A:A)');
+        expect(functionStrChange('SUM(A:B)', 'del', 'col', null, 0, 1, 'Sheet1', true, workbook)).toBe('SUM(A:A)');
     });
 
     test('returns #REF! when the whole-column range is deleted outright', () => {
-        expect(functionStrChange('A:A', 'del', 'col', null, 0, 1, 'Sheet1', true)).toBe('#REF!');
+        expect(functionStrChange('A:A', 'del', 'col', null, 0, 1, 'Sheet1', true, workbook)).toBe('#REF!');
     });
 
     test('still collapses a range whose legs both carry a row and a column', () => {
-        expect(functionStrChange('A1:B1', 'del', 'col', null, 0, 1, 'Sheet1', true)).toBe('A1');
+        expect(functionStrChange('A1:B1', 'del', 'col', null, 0, 1, 'Sheet1', true, workbook)).toBe('A1');
     });
 });
 
 describe('functionStrChange — orientation + clamp paths', () => {
     test('rightbottom orient leaves r1 at stindex but shifts r2 past it', () => {
         // lefttop uses >=, rightbottom uses > — r1 = stindex stays in rightbottom but shifts in lefttop
-        expect(functionStrChange('A1:B3', 'add', 'row', 'rightbottom', 0, 1, 'Sheet1', true)).toBe('A1:B4');
-        expect(functionStrChange('A1:B3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A2:B4');
+        expect(functionStrChange('A1:B3', 'add', 'row', 'rightbottom', 0, 1, 'Sheet1', true, workbook)).toBe('A1:B4');
+        expect(functionStrChange('A1:B3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('A2:B4');
     });
 
     test('returns #REF! when the entire range falls inside the deletion span', () => {
-        expect(functionStrChange('A1:B3', 'del', 'row', null, 0, 3, 'Sheet1', true)).toBe('#REF!');
-        expect(functionStrChange('A1:C2', 'del', 'col', null, 0, 3, 'Sheet1', true)).toBe('#REF!');
+        expect(functionStrChange('A1:B3', 'del', 'row', null, 0, 3, 'Sheet1', true, workbook)).toBe('#REF!');
+        expect(functionStrChange('A1:C2', 'del', 'col', null, 0, 3, 'Sheet1', true, workbook)).toBe('#REF!');
     });
 
     test('clamps r1 to stindex when the range starts inside the deletion span', () => {
         // A2:B5 del rows 1-2: r1=1 hits the clamp (stays at stindex=1), r2=4 shifts -2 → 2
-        expect(functionStrChange('A2:B5', 'del', 'row', null, 1, 2, 'Sheet1', true)).toBe('A2:B3');
+        expect(functionStrChange('A2:B5', 'del', 'row', null, 1, 2, 'Sheet1', true, workbook)).toBe('A2:B3');
     });
 
     test('adjusts a reversed range as its sorted twin', () => {
-        expect(functionStrChange('B3:A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A2:B4');
-        expect(functionStrChange('C1:A3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('B1:D3');
-        expect(functionStrChange('SUM(A$3:A1)', 'del', 'row', null, 0, 1, 'Sheet1', true)).toBe('SUM(A1:A$2)');
+        expect(functionStrChange('B3:A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('A2:B4');
+        expect(functionStrChange('C1:A3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('B1:D3');
+        expect(functionStrChange('SUM(A$3:A1)', 'del', 'row', null, 0, 1, 'Sheet1', true, workbook)).toBe(
+            'SUM(A1:A$2)',
+        );
     });
 });
 
 describe('functionStrChange — absolute refs', () => {
     test('preserves $ anchors and shifts the index on insert', () => {
         // Insert/delete shifts every ref including absolute — `$` is purely formatting
-        expect(functionStrChange('$A$1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('$A$2');
-        expect(functionStrChange('$A$1:$B$3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('$A$2:$B$4');
+        expect(functionStrChange('$A$1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('$A$2');
+        expect(functionStrChange('$A$1:$B$3', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            '$A$2:$B$4',
+        );
     });
 
     test('preserves mixed $ anchors through both axes', () => {
-        expect(functionStrChange('$A1:B$3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('$B1:C$3');
+        expect(functionStrChange('$A1:B$3', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('$B1:C$3');
     });
 });
 
 describe('functionStrChange — formulas', () => {
     test('shifts refs inside arithmetic expressions', () => {
-        expect(functionStrChange('A1+B1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('A2+B2');
+        expect(functionStrChange('A1+B1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('A2+B2');
     });
 
     test('shifts refs inside SUM(range)', () => {
-        expect(functionStrChange('SUM(A1:B3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('SUM(A2:B4)');
+        expect(functionStrChange('SUM(A1:B3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            'SUM(A2:B4)',
+        );
     });
 
     test('shifts refs inside SUM with a row-only range', () => {
-        expect(functionStrChange('SUM(1:3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('SUM(2:4)');
+        expect(functionStrChange('SUM(1:3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('SUM(2:4)');
     });
 
     test('does not corrupt SUM with a row-only range when columns change', () => {
-        expect(functionStrChange('SUM(1:3)', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true)).toBe('SUM(1:3)');
+        expect(functionStrChange('SUM(1:3)', 'add', 'col', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe('SUM(1:3)');
     });
 });
 
@@ -444,8 +475,10 @@ describe('functionStrChange — unary-minus predecessor scan', () => {
     // decrement-then-read scan skipped it, read the function-name char, misclassified `-` as
     // binary and shifted the trailing range (`CONCAT(-1:3)` → `CONCAT(-2:4)`).
     test('treats `-` after `(` as a unary sign and leaves the glued token unshifted', () => {
-        expect(functionStrChange('CONCAT(-1:3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe('CONCAT(-1:3)');
-        expect(functionStrChange('CONCAT(-3:A10)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true)).toBe(
+        expect(functionStrChange('CONCAT(-1:3)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
+            'CONCAT(-1:3)',
+        );
+        expect(functionStrChange('CONCAT(-3:A10)', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', true, workbook)).toBe(
             'CONCAT(-3:A10)',
         );
     });

@@ -533,3 +533,23 @@ describe("a row op sent with a peer's freeze or filter", () => {
         }
     });
 });
+
+// A workbook can hold two names that differ only in case, such as one stored before a rename refused that. A ref reads
+// the sheet of exactly its name first, so a row op on one of the two moves only that sheet's refs, in the editor and
+// in the replay alike.
+test('a row insert on Data moves =Data!A1 and leaves =data!A1 alone', () => {
+    const cell = { v: 0, f: '=Data!A1+data!A1' };
+    const base = contextFactory({
+        sheets: [
+            { name: 'Data', id: 'id_1', order: 0, data: [[null, cell]] },
+            { name: 'data', id: 'id_2', order: 1, data: [[null, cell]] },
+        ],
+    }) as Context;
+    const inserted = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+    const { next, ops } = author(base, (ctx) => insertRowCol(ctx, inserted), { insertRowColOp: inserted });
+    const [onData, ondata] = join(base, [ops]).map(withMaterializedData);
+    for (const [data, other] of [next.sheets, [onData, ondata]]) {
+        expect(data.data?.[1]?.[1]?.f).toBe('=Data!A2+data!A1');
+        expect(other.data?.[0]?.[1]?.f).toBe('=Data!A2+data!A1');
+    }
+});
