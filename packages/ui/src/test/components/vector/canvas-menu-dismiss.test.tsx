@@ -160,7 +160,7 @@ test('a press with the eraser that closes File leaves the shape under it', async
 });
 
 test('a press with the text tool that closes File places no text box', async () => {
-    await render('richtext');
+    await render('text');
     await openFile();
     await clickCanvas();
     expect(document.querySelectorAll('[role="menu"]').length).toBe(0);
@@ -174,7 +174,7 @@ test('a press with the text tool that closes File places no text box', async () 
 // The press that closes the menu is still the first finger of a pinch: the touch handler sees it, so the second
 // finger, which lands with the menu gone, makes two and the lift of both places nothing, as a single tap would.
 test('a finger that closes File still counts toward a pinch', async () => {
-    await render('richtext');
+    await render('text');
     await openFile();
     const surface = container.querySelector('.origin-top-left')?.parentElement;
     if (!surface) throw new Error('no canvas');

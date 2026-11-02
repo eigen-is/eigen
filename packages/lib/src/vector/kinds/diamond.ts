@@ -6,26 +6,15 @@ import { hitTestDiamond } from '../geometry';
 import { cornerRadius, diamondOutline } from '../outline';
 import type { VectorDiamondElement } from '../types';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_SHAPE_TEXT_PROPS } from '../types';
-import { defineKind } from './kind';
-import { fillField, oneOf } from './read-fields';
+import { BOX_CAPABILITIES, defineKind, readBoxShape } from './kind';
+import { oneOf } from './read-fields';
 import { renderRoughShape } from './render-utils';
-import { hasText, plainText, readTextual, textRender, textualDefaults } from './textual';
+import { hasText, plainText, textRender, textualDefaults } from './textual';
 
 export const diamondKind = defineKind<VectorDiamondElement>({
     type: 'diamond',
     is: (el): el is VectorDiamondElement => el.type === 'diamond',
-    capabilities: {
-        fill: true,
-        fillStyle: true,
-        strokeStyle: true,
-        corners: true,
-        edges: false,
-        strokeOptional: true,
-        bindable: true,
-        text: true,
-        silhouette: 'diamond',
-        creation: 'box',
-    },
+    capabilities: { ...BOX_CAPABILITIES, silhouette: 'diamond' },
     defaults: (style) => ({
         fill: style.fill,
         corners: style.corners,
@@ -34,9 +23,8 @@ export const diamondKind = defineKind<VectorDiamondElement>({
     read: (src, base) => ({
         ...base,
         type: 'diamond',
-        fill: fillField(src.get('fill')),
+        ...readBoxShape(src),
         corners: oneOf(src.get('corners'), CORNERS, DEFAULT_CORNERS),
-        ...readTextual(src, DEFAULT_SHAPE_TEXT_PROPS),
     }),
     hitTest: (el, point) => hitTestDiamond(el, point),
     outline: (el, inflate) =>

@@ -11,9 +11,9 @@ import {
 import { solidFill } from '../../vector/fill';
 import { DUPLICATE_OFFSET } from '../../vector/geometry';
 import { VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
-import { DEFAULT_RICHTEXT_PROPS } from '../../vector/types';
+import { DEFAULT_TEXT_BOX_PROPS } from '../../vector/types';
 import { writeElementInDoc } from '../../vector/write-vector';
-import { arrow, chart, ellipse, image, linear, richtext, shape } from './element-factories';
+import { arrow, chart, ellipse, image, linear, shape, textBox } from './element-factories';
 
 describe('the elements clipboard item', () => {
     test('round-trips every kind through the reader', () => {
@@ -22,7 +22,7 @@ describe('the elements clipboard item', () => {
             shape({ id: 'd', type: 'diamond' }),
             ellipse({ id: 'e' }),
             image({ id: 'i', mediaName: 'pic.png' }),
-            richtext({ id: 't', html: '<p>hi</p>' }),
+            textBox({ id: 't', html: '<p>hi</p>' }),
             linear({ id: 'f', type: 'freedraw' }),
             linear({ id: 'l', type: 'line' }),
             arrow({ id: 'a' }),
@@ -46,7 +46,7 @@ describe('the elements clipboard item', () => {
     });
 
     test('rich text carries its own colour, html and padding', () => {
-        const el = richtext({ id: 't', color: '#ff0080', html: '<p>x</p>', padding: 16, fill: solidFill('#eeeeee') });
+        const el = textBox({ id: 't', color: '#ff0080', html: '<p>x</p>', padding: 16, fill: solidFill('#eeeeee') });
         const item = buildElementsClipboardItem([el], '');
         expect(readElementsClipboardItem([item as EigenClipboardElementsItem])?.elements[0]).toEqual(el);
     });
@@ -216,13 +216,13 @@ describe('readClipboardTypography', () => {
 
     test('falls back to the rich-text defaults for an unknown or missing value', () => {
         expect(readClipboardTypography({ textAlign: 'justify-all', lineHeight: Number.NaN })).toEqual({
-            textAlign: DEFAULT_RICHTEXT_PROPS.textAlign,
-            fontWeight: DEFAULT_RICHTEXT_PROPS.fontWeight,
-            fontStyle: DEFAULT_RICHTEXT_PROPS.fontStyle,
-            textDecoration: DEFAULT_RICHTEXT_PROPS.textDecoration,
-            verticalAlign: DEFAULT_RICHTEXT_PROPS.verticalAlign,
-            letterSpacing: DEFAULT_RICHTEXT_PROPS.letterSpacing,
-            lineHeight: DEFAULT_RICHTEXT_PROPS.lineHeight,
+            textAlign: DEFAULT_TEXT_BOX_PROPS.textAlign,
+            fontWeight: DEFAULT_TEXT_BOX_PROPS.fontWeight,
+            fontStyle: DEFAULT_TEXT_BOX_PROPS.fontStyle,
+            textDecoration: DEFAULT_TEXT_BOX_PROPS.textDecoration,
+            verticalAlign: DEFAULT_TEXT_BOX_PROPS.verticalAlign,
+            letterSpacing: DEFAULT_TEXT_BOX_PROPS.letterSpacing,
+            lineHeight: DEFAULT_TEXT_BOX_PROPS.lineHeight,
         });
     });
 });

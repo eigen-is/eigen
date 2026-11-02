@@ -43,6 +43,7 @@ export function rectangle(
         type: 'rectangle',
         fill,
         corners: 'straight',
+        autoFit: false,
     };
 }
 

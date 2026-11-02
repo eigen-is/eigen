@@ -27,6 +27,7 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     roughness: 1,
     id: 'r1',
     type: 'rectangle',
+    autoFit: false,
     fill: solidFill('#dddddd'),
     x: 0,
     y: 0,

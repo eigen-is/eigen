@@ -93,7 +93,7 @@ describe('export sanitize — SSRF surface', () => {
         seedDeckDoc(doc, {
             ...scene,
             elements: scene.elements.map((el) =>
-                el.type === 'richtext' && el.id === 'el-1' ? { ...el, type: 'rectangle' as const, html } : el,
+                el.type === 'rectangle' && el.autoFit && el.id === 'el-1' ? { ...el, autoFit: false, html } : el,
             ),
         });
         const out = Buffer.from((await renderEigenslidesHtml(doc, 'pdf-html', 'Deck', async () => [])).data).toString();
@@ -103,8 +103,8 @@ describe('export sanitize — SSRF surface', () => {
 
     test("a shape's text is filtered to the text box's tags, and an element with no text skips the filter", () => {
         const scene = buildGoldenDeckScene();
-        const [first, second] = scene.elements.filter((el) => el.type === 'richtext');
-        const shape = { ...first, type: 'rectangle' as const, html: '<p>Shape</p><table><tr><td>x</td></tr></table>' };
+        const [first, second] = scene.elements.filter((el) => el.type === 'rectangle' && el.autoFit);
+        const shape = { ...first, autoFit: false, html: '<p>Shape</p><table><tr><td>x</td></tr></table>' };
         const empty = { ...second, html: '' };
         const [kept, skipped] = sanitizeSceneHtml({ ...scene, elements: [shape, empty] }).elements;
         expect(kept).toMatchObject({ type: 'rectangle', html: '<p>Shape</p>x' });

@@ -45,7 +45,6 @@
     "packages/lib/src/sheets/yjs-ops.ts": 1,
     "packages/lib/src/types/chart.ts": 1,
     "packages/lib/src/types/file-history.ts": 1,
-    "packages/lib/src/vector/elbow-pins.ts": 4,
     "packages/sheet/src/components/ContextMenu/FilterMenu.tsx": 3,
     "packages/sheet/src/components/FormatDialogs/CustomCurrencies.tsx": 1,
     "packages/sheet/src/components/InsertFunctionDialog/index.tsx": 1,

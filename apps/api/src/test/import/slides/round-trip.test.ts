@@ -29,6 +29,9 @@ import { box, buildPptx, cxn, dspSp, PIXEL_PNG, para, scheme, smartArt, solid, s
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
+// A text box, a rectangle that fits its text, reads as 'text', so a list of kinds tells it from a rectangle.
+const kindOf = (found: NewVectorElement) => (found.type === 'rectangle' && found.autoFit ? 'text' : found.type);
+
 const FRAME = { width: 1920, height: 1080 };
 
 const gradient = (from: string, to: string, angle: number) =>
@@ -68,7 +71,8 @@ const ELEMENTS: NewVectorElement[] = [
     },
     { type: 'pie', x: 1500, y: 40, width: 240, height: 160, angle: 20, startAngle: 30, sweepAngle: 120 },
     {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: 100,
         y: 500,
         width: 600,
@@ -82,7 +86,8 @@ const ELEMENTS: NewVectorElement[] = [
         verticalAlign: 'center',
     },
     {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: 1000,
         y: 800,
         width: 500,
@@ -126,7 +131,15 @@ function roundTrip(elements = ELEMENTS, name = '') {
     for (const [i, element] of elements.entries())
         writeElementInDoc(doc, { ...element, frameId: 'f1' }, keys[i], SLIDES_STYLE_DEFAULTS, `el-${i}`);
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
-    const media = [{ name: 'pic.png', contentType: 'image/png', data: toTransferableBuffer(PIXEL_PNG.slice()) }];
+    const media = [
+        {
+            name: 'pic.png',
+            contentType: 'image/png',
+            data: toTransferableBuffer(PIXEL_PNG.slice()),
+            width: 1,
+            height: 1,
+        },
+    ];
     const bytes = writePptx(scene, { title: 'Round trip.eigenslides', media, lost: () => {} });
     return { sent: scene.elements, deck: readPptx(bytes, { deck: scene.meta, maxMediaBytes: 1024 * 1024 }) };
 }
@@ -158,7 +171,9 @@ describe('a deck exported and read back', () => {
             expectPx(found.width, element.width);
             expectPx(found.height, element.height);
             expectDegrees(found.angle, element.angle);
-            if (element.type === 'rectangle' || element.type === 'diamond' || element.type === 'image')
+            // An unpainted text box shows no corners, so it is written, and read back, straight.
+            const plainRectangle = element.type === 'rectangle' && !element.autoFit;
+            if (plainRectangle || element.type === 'diamond' || element.type === 'image')
                 expect(found.corners).toBe(element.corners);
         }
     });
@@ -195,9 +210,60 @@ describe('a deck exported and read back', () => {
         }
     });
 
+    test('keeps which rectangles fit their text', () => {
+        const fits = pairs.flatMap(([element, found]) =>
+            element.type === 'rectangle' ? [[element.autoFit, found.autoFit === true]] : [],
+        );
+        expect(fits).toEqual([
+            [false, false],
+            [false, false],
+            [false, false],
+            [false, false],
+            [true, true],
+            [true, true],
+        ]);
+    });
+
+    test('keeps a bottom-aligned text box a text box at its height, though its body does not grow the shape', () => {
+        const title: NewVectorElement = {
+            type: 'rectangle',
+            autoFit: true,
+            x: 40,
+            y: 600,
+            width: 800,
+            height: 300,
+            angle: 0,
+            html: '<p>Title</p>',
+            verticalAlign: 'bottom',
+        };
+        const [back] = roundTrip([title]).deck.slides[0].elements;
+        expect(back).toMatchObject({ type: 'rectangle', autoFit: true, verticalAlign: 'bottom' });
+        expectPx(back.height, 300);
+    });
+
+    test('keeps an empty painted text box a text box, and leaves out an empty one that paints nothing', () => {
+        const empty = (fill: string): NewVectorElement => ({
+            type: 'rectangle',
+            autoFit: true,
+            x: 40,
+            y: 40,
+            width: 400,
+            height: 100,
+            angle: 0,
+            html: '',
+            fill,
+            corners: 'straight',
+        });
+        const back = roundTrip([empty(solidFill('#ffcc00')), empty(serializeFill(TRANSPARENT_FILL))]).deck.slides[0]
+            .elements;
+        expect(back).toHaveLength(1);
+        expect(back[0]).toMatchObject({ type: 'rectangle', autoFit: true, fill: solidFill('#ffcc00') });
+        expectPx(back[0].height, 100);
+    });
+
     test('keeps rich text: its html, typography and box fields', () => {
         for (const [element, found] of pairs) {
-            if (element.type !== 'richtext') continue;
+            if (element.type !== 'rectangle' || !element.autoFit) continue;
             expect(found).toMatchObject({
                 html: element.html,
                 fontFamily: element.fontFamily,
@@ -230,7 +296,8 @@ describe('a deck exported and read back', () => {
 
     test("keeps a bordered text box's text inside its border, where the canvas draws it", () => {
         const bordered: NewVectorElement = {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 100,
             y: 100,
             width: 400,
@@ -434,7 +501,8 @@ describe('paths exported and read back', () => {
     const ROUNDED: NewVectorElement[] = [
         { type: 'diamond', x: 100, y: 600, width: 300, height: 200, angle: 0, corners: 'curved', fill: solid },
         {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 600,
             y: 600,
             width: 400,
@@ -479,7 +547,7 @@ describe('paths exported and read back', () => {
         // The writer marks the text box txBox, so its text comes back in a text box on top of its path.
         expect(box).toMatchObject({ type: 'path', closed: true, fill: solid });
         expect(box.html).toBeUndefined();
-        expect(text).toMatchObject({ type: 'richtext', html: '<p>Rounded</p>' });
+        expect(text).toMatchObject({ type: 'rectangle', autoFit: true, html: '<p>Rounded</p>' });
         for (const [found, element] of [
             [diamond, ROUNDED[0]],
             [box, ROUNDED[1]],
@@ -492,7 +560,8 @@ describe('paths exported and read back', () => {
 
     test("a painted text box with the deck's default corners keeps its text in a text box", () => {
         const painted: NewVectorElement = {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 100,
             y: 100,
             width: 600,
@@ -502,9 +571,9 @@ describe('paths exported and read back', () => {
         };
         const { sent, deck } = roundTrip([painted]);
         expect(sent[0]).toMatchObject({ corners: 'curved' });
-        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), found.html])).toEqual([
             ['path', undefined],
-            ['richtext', '<p>Hello</p>'],
+            ['text', '<p>Hello</p>'],
         ]);
     });
 });
@@ -611,7 +680,7 @@ describe('a SmartArt graphic imported, exported and read back', () => {
             found.width,
             found.height,
         ];
-        expect(imported.map((found) => found.type)).toEqual(['rectangle', 'richtext', 'path']);
+        expect(imported.map(kindOf)).toEqual(['rectangle', 'text', 'path']);
         expect(back.map(shape)).toEqual(imported.map(shape));
     });
 });
@@ -666,6 +735,63 @@ describe('a bordered picture exported and read back', () => {
         expect(read('1e300')?.strokeWidth).toBe(automatic);
         expect(read('99999999')?.strokeWidth).toBe(automatic);
         expect(read('12700')?.strokeWidth).not.toBe(automatic);
+    });
+});
+
+// A fitted picture is one picture in its own box, cropped with a centered srcRect: negative past the picture to contain
+// it, positive into it to cover. So it reads back as one picture with its fit.
+describe('a contained or covered picture exported and read back', () => {
+    const fitted: NewVectorElement = {
+        type: 'image',
+        x: 100,
+        y: 100,
+        width: 320,
+        height: 180,
+        angle: 0,
+        mediaName: 'pic.png',
+        objectFit: 'contain',
+    };
+
+    test('is one picture in its box, contained, with its border', () => {
+        const sent: NewVectorElement[] = [
+            fitted,
+            { ...fitted, x: 600, strokeColor: '#c0504d', strokeWidth: 4, strokeStyle: 'solid' },
+        ];
+        const back = roundTrip(sent).deck.slides[0].elements;
+        expect(back.map((found) => [found.type, found.objectFit, found.strokeColor])).toEqual([
+            ['image', 'contain', 'transparent'],
+            ['image', 'contain', '#c0504d'],
+        ]);
+        for (const [i, found] of back.entries()) {
+            expectPx(found.x, Number(sent[i].x));
+            expectPx(found.y, 100);
+            expectPx(found.width, 320);
+            expectPx(found.height, 180);
+        }
+    });
+
+    // The square picture is narrower than a wide box and wider than a tall one, so each fit crops both axes in turn.
+    test('keeps contain and cover on either axis', () => {
+        const tall = { width: 180, height: 320 };
+        const sent: NewVectorElement[] = [
+            fitted,
+            { ...fitted, ...tall, x: 500 },
+            { ...fitted, x: 800, objectFit: 'cover' },
+            { ...fitted, ...tall, x: 1200, objectFit: 'cover' },
+        ];
+        const back = roundTrip(sent).deck.slides[0].elements;
+        expect(back.map((found) => found.objectFit)).toEqual(['contain', 'contain', 'cover', 'cover']);
+        for (const [i, found] of back.entries()) {
+            expectPx(found.width, Number(sent[i].width));
+            expectPx(found.height, Number(sent[i].height));
+        }
+    });
+
+    // A picture that already has its box's aspect draws the same stretched, so the export writes no crop to read.
+    test('whose aspect matches its box comes back as fill', () => {
+        const back = roundTrip([{ ...fitted, width: 200, height: 200 }]).deck;
+        expect(back.slides[0].elements.map((found) => found.objectFit)).toEqual(['fill']);
+        expect(back.warnings).toEqual([]);
     });
 });
 

@@ -12,7 +12,7 @@ import {
 } from '../../vector/scene-layers';
 import type { VectorArrowElement, VectorElement, VectorImageElement } from '../../vector/types';
 import { DEFAULT_ARROW_PROPS, DEFAULT_ELEMENT_PROPS } from '../../vector/types';
-import { arrow, chart, ellipse, image, linear, path, pie, richtext, scene, shape } from './element-factories';
+import { arrow, chart, ellipse, image, linear, path, pie, scene, shape, textBox } from './element-factories';
 
 describe('sceneLayers', () => {
     test('orders by fractional index and carries the element box and opacity', () => {
@@ -35,7 +35,7 @@ describe('sceneLayers', () => {
     });
 
     test('rich text is the only html content, with its box style', () => {
-        const layers = sceneLayers(scene([richtext({ id: 't', html: '<p>hi</p>' })]));
+        const layers = sceneLayers(scene([textBox({ id: 't', html: '<p>hi</p>' })]));
         const content = layers[0].content;
         expect('html' in content && content.html).toBe('<p>hi</p>');
         expect('html' in content && content.style).toContain('font-family');
@@ -44,9 +44,9 @@ describe('sceneLayers', () => {
     test('the inset rides the box style, and only when the box has one', () => {
         // Unbordered, so the inset is the user's padding alone (a drawn border adds its width to it).
         const box = { id: 't', html: '<p>hi</p>', strokeColor: 'transparent' };
-        const padded = sceneLayers(scene([richtext({ ...box, padding: 12 })]))[0].content;
+        const padded = sceneLayers(scene([textBox({ ...box, padding: 12 })]))[0].content;
         expect('html' in padded && padded.style).toContain('padding:12px;box-sizing:border-box');
-        const plain = sceneLayers(scene([richtext(box)]))[0].content;
+        const plain = sceneLayers(scene([textBox(box)]))[0].content;
         expect('html' in plain && plain.style).not.toContain('padding');
     });
 
@@ -157,7 +157,7 @@ describe('elementLayer', () => {
             pie({ id: 'p' }),
             chart({ id: 'c' }),
             image({ id: 'i', mediaName: 'a.png' }),
-            richtext({ id: 't', html: '<p>hi</p>' }),
+            textBox({ id: 't', html: '<p>hi</p>' }),
             linear({ id: 'f', type: 'freedraw' }),
             linear({ id: 'l', type: 'line' }),
             arrow({ id: 'a' }),
@@ -210,7 +210,7 @@ describe('elementLayer', () => {
     });
 
     test('a rich-text body carries the shared class, so lists and quotes are styled', () => {
-        const layer = elementLayer(richtext({ id: 't', html: '<ul><li>one</li></ul>' }));
+        const layer = elementLayer(textBox({ id: 't', html: '<ul><li>one</li></ul>' }));
         expect(layer).not.toBeNull();
         const html = layer === null ? '' : layerInnerHtml(layer.content);
         expect(html).toContain(`<div class="${RICH_TEXT_CLASS}" style="`);

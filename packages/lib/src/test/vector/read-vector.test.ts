@@ -72,10 +72,11 @@ describe('readVectorFromDoc', () => {
         expect(Object.keys(el)).not.toContain('style');
     });
 
-    test('materializes richtext and image type-specific fields', () => {
+    test('materializes text box and image type-specific fields', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 't', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a0',
                 html: '<p>hello</p>',
                 fontSize: 24,
@@ -84,9 +85,10 @@ describe('readVectorFromDoc', () => {
             });
             writeElement(elements, 'i', { type: 'image', index: 'a1', mediaName: 'pic.png', objectFit: 'cover' });
         });
-        const [richtext, image] = readVectorFromDoc(doc).elements;
-        expect(richtext).toMatchObject({
-            type: 'richtext',
+        const [textBox, image] = readVectorFromDoc(doc).elements;
+        expect(textBox).toMatchObject({
+            type: 'rectangle',
+            autoFit: true,
             html: '<p>hello</p>',
             fontSize: 24,
             fontFamily: 'Inter',
@@ -274,7 +276,8 @@ describe('readVectorFromDoc', () => {
         const [nonChar, loneHigh] = [String.fromCharCode(0xfffe), String.fromCharCode(0xd800)];
         const doc = docWith((elements) => {
             writeElement(elements, 't', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a0',
                 html: `a\u0000b\u0007c\td\ne${nonChar}f${loneHigh}g`,
                 fontFamily: `Ex\u001Fcalifont`,
@@ -287,10 +290,10 @@ describe('readVectorFromDoc', () => {
     test('caps html at 64 KiB, truncating on a code-point boundary', () => {
         const doc = docWith((elements) => {
             // 3-byte characters, so the cap lands mid-character and must step back.
-            writeElement(elements, 't', { type: 'richtext', index: 'a0', html: '☃'.repeat(30_000) });
+            writeElement(elements, 't', { type: 'rectangle', autoFit: true, index: 'a0', html: '☃'.repeat(30_000) });
         });
         const [el] = readVectorFromDoc(doc).elements;
-        const html = el.type === 'richtext' ? el.html : '';
+        const html = el.type === 'rectangle' ? el.html : '';
         expect(new TextEncoder().encode(html).length).toBeLessThanOrEqual(64 * 1024);
         expect(html).toBe('☃'.repeat(Math.floor((64 * 1024) / 3)));
     });
@@ -298,9 +301,11 @@ describe('readVectorFromDoc', () => {
     describe('html nesting', () => {
         const readHtml = (html: string): string => {
             const [el] = readVectorFromDoc(
-                docWith((elements) => writeElement(elements, 't', { type: 'richtext', index: 'a0', html })),
+                docWith((elements) =>
+                    writeElement(elements, 't', { type: 'rectangle', autoFit: true, index: 'a0', html }),
+                ),
             ).elements;
-            return el.type === 'richtext' ? el.html : '';
+            return el.type === 'rectangle' ? el.html : '';
         };
         // What a DOM parse of the body builds: jsdom pays per element for every ancestor it has.
         const parse = (html: string) => new new Window().DOMParser().parseFromString(html, 'text/html').body;
@@ -501,7 +506,13 @@ describe('readVectorFromDoc', () => {
                 text: 'x',
                 fontSize: 1e12,
             });
-            writeElement(elements, 'txt', { type: 'richtext', index: 'a1', html: 'x', fontSize: 0.001 });
+            writeElement(elements, 'txt', {
+                type: 'rectangle',
+                autoFit: true,
+                index: 'a1',
+                html: 'x',
+                fontSize: 0.001,
+            });
         });
         const [ar, txt] = readVectorFromDoc(doc).elements;
         expect(ar).toMatchObject({ fontSize: MAX_FONT_SIZE_PX });
@@ -518,56 +529,72 @@ describe('readVectorFromDoc', () => {
 
     test('a fontSize in range reads to the bit, however many decimals it has', () => {
         const doc = docWith((elements) => {
-            writeElement(elements, 'txt', { type: 'richtext', index: 'a0', html: 'x', fontSize: 117.33333333333334 });
+            writeElement(elements, 'txt', {
+                type: 'rectangle',
+                autoFit: true,
+                index: 'a0',
+                html: 'x',
+                fontSize: 117.33333333333334,
+            });
         });
         expect(readVectorFromDoc(doc).elements[0]).toMatchObject({ fontSize: 117.33333333333334 });
     });
 
-    test('clamps richtext padding to the box range', () => {
+    test('clamps text box padding to the box range', () => {
         const doc = docWith((elements) => {
-            writeElement(elements, 'ok', { type: 'richtext', index: 'a0', html: 'x', padding: 12 });
-            writeElement(elements, 'neg', { type: 'richtext', index: 'a1', html: 'x', padding: -5 });
-            writeElement(elements, 'huge', { type: 'richtext', index: 'a2', html: 'x', padding: 1e9 });
+            writeElement(elements, 'ok', { type: 'rectangle', autoFit: true, index: 'a0', html: 'x', padding: 12 });
+            writeElement(elements, 'neg', { type: 'rectangle', autoFit: true, index: 'a1', html: 'x', padding: -5 });
+            writeElement(elements, 'huge', { type: 'rectangle', autoFit: true, index: 'a2', html: 'x', padding: 1e9 });
         });
-        const padding = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.padding);
+        const padding = readVectorFromDoc(doc).elements.map((el) => el.type === 'rectangle' && el.padding);
         expect(padding).toEqual([12, 0, 200]);
     });
 
-    test('clamps richtext letter-spacing and line-height to their layout ranges', () => {
+    test('clamps text box letter-spacing and line-height to their layout ranges', () => {
         const doc = docWith((elements) => {
             writeElement(elements, 'ok', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a0',
                 html: 'x',
                 letterSpacing: 12,
                 lineHeight: 2,
             });
             writeElement(elements, 'low', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a1',
                 html: 'x',
                 letterSpacing: -1e9,
                 lineHeight: 0,
             });
             writeElement(elements, 'high', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a2',
                 html: 'x',
                 letterSpacing: 1e9,
                 lineHeight: 1e9,
             });
         });
-        const spacing = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.letterSpacing);
-        const leading = readVectorFromDoc(doc).elements.map((el) => el.type === 'richtext' && el.lineHeight);
+        const spacing = readVectorFromDoc(doc).elements.map((el) => el.type === 'rectangle' && el.letterSpacing);
+        const leading = readVectorFromDoc(doc).elements.map((el) => el.type === 'rectangle' && el.lineHeight);
         expect(spacing).toEqual([12, -200, 200]);
         expect(leading).toEqual([2, 0.5, 10]);
     });
 
     test('a fontFamily outside the font registry falls back, so it can never carry CSS', () => {
         const doc = docWith((elements) => {
-            writeElement(elements, 'ok', { type: 'richtext', index: 'a0', html: 'x', fontFamily: 'Inter' });
+            writeElement(elements, 'ok', {
+                type: 'rectangle',
+                autoFit: true,
+                index: 'a0',
+                html: 'x',
+                fontFamily: 'Inter',
+            });
             writeElement(elements, 'evil', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a1',
                 html: 'x',
                 fontFamily: "x', sans-serif; background:url(https://attacker.example/p)",
@@ -760,9 +787,10 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
         color: '#0a0b0c',
         seriesStrokeWidth: 3,
     });
-    const richtext = base({
+    const textBox = base({
         id: 'rich1',
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         fill: paint.fill,
         html: '<p>hello</p>',
         corners: 'straight',
@@ -846,12 +874,13 @@ describe('readVectorFromDoc — ELEMENT_FIELDS drift guard', () => {
             ],
         },
         {
-            record: richtext,
+            record: textBox,
             fields: [
                 ...BASE_FIELDS,
                 'fill',
                 'html',
                 'corners',
+                'autoFit',
                 'fontFamily',
                 'fontSize',
                 'fontWeight',
@@ -926,7 +955,12 @@ describe('readVectorFromDoc — rich text', () => {
     // TipTap mark inside `html`. A value left in a document written by an older build is dropped.
     test('a stored highlightColor is not read back onto the element', () => {
         const doc = docWith((elements) =>
-            writeElement(elements, 'rich1', { type: 'richtext', html: '<p>hi</p>', highlightColor: '#ffff00' }),
+            writeElement(elements, 'rich1', {
+                type: 'rectangle',
+                autoFit: true,
+                html: '<p>hi</p>',
+                highlightColor: '#ffff00',
+            }),
         );
         const [el] = readVectorFromDoc(doc).elements;
         expect(el).not.toHaveProperty('highlightColor');
@@ -1012,7 +1046,7 @@ describe('readVectorFromDoc — pinned elbow validation', () => {
 });
 
 describe('readVectorFromDoc — the canvas model', () => {
-    test('materializes the new base fields, a richtext element and the frames root', () => {
+    test('materializes the new base fields, a text box and the frames root', () => {
         const doc = new Y.Doc();
         doc.transact(() => {
             const frames = doc.getMap('frames');
@@ -1023,7 +1057,8 @@ describe('readVectorFromDoc — the canvas model', () => {
             f.set('background', '{"type":"solid","color":"#ffffff"}');
             frames.set('f1', f);
             writeElement(doc.getMap('elements'), 'r', {
-                type: 'richtext',
+                type: 'rectangle',
+                autoFit: true,
                 index: 'a0',
                 frameId: 'f1',
                 commentCardIds: '["c1","c2"]',
@@ -1045,7 +1080,8 @@ describe('readVectorFromDoc — the canvas model', () => {
             },
         ]);
         expect(scene.elements[0]).toMatchObject({
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             frameId: 'f1',
             commentCardIds: '["c1","c2"]',
             html: '<p>hello</p>',
@@ -1263,7 +1299,9 @@ describe('readVectorFromDoc — a document stored before shapes held text', () =
     });
 
     test('a text box that stores no typography still reads top left and flush, unlike a shape', () => {
-        const doc = docWith((elements) => writeElement(elements, 't', { ...paint, type: 'richtext', index: 'a0' }));
+        const doc = docWith((elements) =>
+            writeElement(elements, 't', { ...paint, type: 'rectangle', autoFit: true, index: 'a0' }),
+        );
         expect(readVectorFromDoc(doc).elements[0]).toMatchObject({
             textAlign: 'left',
             verticalAlign: 'top',

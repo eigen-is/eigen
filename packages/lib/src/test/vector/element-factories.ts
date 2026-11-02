@@ -3,7 +3,7 @@
 
 import { newChartSpecParts } from '../../charts/spec';
 import type { ChartSpec } from '../../types/chart';
-import { ELEMENT_KINDS, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
+import { ELEMENT_KINDS, textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { serializePoints } from '../../vector/points';
 import type {
     VectorArrowElement,
@@ -15,11 +15,10 @@ import type {
     VectorPathElement,
     VectorPieElement,
     VectorRectangleElement,
-    VectorRichTextElement,
     VectorScene,
     VectorShapeElement,
 } from '../../vector/types';
-import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META } from '../../vector/types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SCENE_META, DEFAULT_TEXT_BOX_PROPS } from '../../vector/types';
 
 // A fixed seed and the host's roughness, since the shared table's are the reader's fallbacks (0/0).
 const BASE = {
@@ -41,21 +40,27 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
 };
 
-const RICHTEXT_BASE: Omit<VectorRichTextElement, 'id' | 'type'> = {
-    ...BASE,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
+// A text box: a rectangle that fits its text, with its text at the top left. It keeps BASE's border, so a case
+// about a box with none says so.
+const TEXT_BOX_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
+    ...SHAPE_BASE,
+    ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_TEXT_BOX_PROPS),
+    autoFit: true,
 };
 
 export function shape(over: Partial<VectorElement> & Pick<VectorElement, 'id' | 'type'>): VectorShapeElement {
     const el = { ...SHAPE_BASE, ...over };
-    if (el.type === 'rectangle' || el.type === 'diamond' || el.type === 'ellipse') return el;
+    if (el.type === 'rectangle') return el;
+    // Only a rectangle fits its text, so the others leave the flag out.
+    const { autoFit: _, ...rest } = el;
+    if (rest.type === 'diamond' || rest.type === 'ellipse') return rest;
     throw new Error('shape() expects a shape type');
 }
 
-export function richtext(
-    over: Partial<VectorRichTextElement> & Pick<VectorRichTextElement, 'id'>,
-): VectorRichTextElement {
-    return { ...RICHTEXT_BASE, type: 'richtext', ...over };
+export function textBox(
+    over: Partial<VectorRectangleElement> & Pick<VectorRectangleElement, 'id'>,
+): VectorRectangleElement {
+    return { ...TEXT_BOX_BASE, type: 'rectangle', ...over };
 }
 
 // The ellipse has no `corners`, so it cannot ride SHAPE_BASE (whose rectangle typing carries one) —

@@ -1,5 +1,5 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import type { VectorArrowElement, VectorRichTextElement, VectorShapeElement } from '@workspace/lib/vector';
+import type { VectorArrowElement, VectorRectangleElement, VectorShapeElement } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
     DEFAULT_SHAPE_TEXT_PROPS,
@@ -8,6 +8,7 @@ import {
     serializeBinding,
     serializePoints,
     solidFill,
+    textBoxDefaults,
     textualDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
@@ -34,6 +35,7 @@ const rect = (over: Partial<VectorShapeElement> = {}): VectorShapeElement => ({
     roughness: 1,
     id: 'r1',
     type: 'rectangle',
+    autoFit: false,
     fill: solidFill('#dddddd'),
     x: 0,
     y: 0,
@@ -68,11 +70,11 @@ const elbow = (): VectorArrowElement => ({
     startBinding: serializeBinding({ elementId: 'r1', fixedPoint: [1, 0.5] }),
 });
 
-const richtext = (html: string): VectorRichTextElement => ({
+const textBox = (html: string): VectorRectangleElement => ({
+    ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
     ...DEFAULT_ELEMENT_PROPS,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id: 't1',
-    type: 'richtext',
+    type: 'rectangle',
     x: 0,
     y: 0,
     width: 100,
@@ -217,14 +219,14 @@ describe('the layer body', () => {
     });
 
     test('a painted text box draws its backdrop before the text div', () => {
-        const html = renderToStaticMarkup(<ElementLayer el={richtext('<p>one</p>')} />);
+        const html = renderToStaticMarkup(<ElementLayer el={textBox('<p>one</p>')} />);
         expect(html.indexOf('<svg')).toBeGreaterThan(-1);
         expect(html.indexOf('<svg')).toBeLessThan(html.indexOf('eigen-canvas-text'));
     });
 
     test('the in-place editor is drawn over the box paint, not instead of it', () => {
         const html = renderToStaticMarkup(
-            <ElementLayer el={richtext('<p>one</p>')}>
+            <ElementLayer el={textBox('<p>one</p>')}>
                 <p>editing</p>
             </ElementLayer>,
         );
@@ -266,9 +268,7 @@ describe('rich text is sanitized at the mount seam', () => {
     test('script tags and event handlers are stripped, structure and marks kept', () => {
         const html = renderToStaticMarkup(
             <ElementLayer
-                el={richtext(
-                    '<p>hello <strong>world</strong></p><script>alert(1)</script><img src=x onerror=alert(1)>',
-                )}
+                el={textBox('<p>hello <strong>world</strong></p><script>alert(1)</script><img src=x onerror=alert(1)>')}
             />,
         );
         expect(html).not.toContain('script');
@@ -279,7 +279,7 @@ describe('rich text is sanitized at the mount seam', () => {
 
     test('a javascript: link is unwrapped to its text', () => {
         const html = renderToStaticMarkup(
-            <ElementLayer el={richtext('<p><a href="javascript:alert(1)">click</a></p>')} />,
+            <ElementLayer el={textBox('<p><a href="javascript:alert(1)">click</a></p>')} />,
         );
         expect(html).not.toContain('javascript:');
         expect(html).toContain('click');
@@ -287,7 +287,7 @@ describe('rich text is sanitized at the mount seam', () => {
 
     test('a list a peer nested 3,000 deep mounts flattened to a paragraph, every x kept', () => {
         const deep = `${'<ul><li>x'.repeat(3_000)}${'</li></ul>'.repeat(3_000)}`;
-        const el = readElementFromFields(new Map(Object.entries(richtext(deep))));
+        const el = readElementFromFields(new Map(Object.entries(textBox(deep))));
         if (!el) throw new Error('the reader dropped the text box');
         const html = renderToStaticMarkup(<ElementLayer el={el} />);
         expect(html).not.toContain('<ul>');
@@ -304,7 +304,7 @@ describe('the rich-text auto-fit', () => {
         const container = document.createElement('div');
         document.body.append(container);
         const root = createRoot(container);
-        const el = richtext('<p>one</p>');
+        const el = textBox('<p>one</p>');
         await act(async () => {
             root.render(
                 <ElementLayer el={el} onFitHeight={(id, height, typing) => calls.push([id, height, typing])}>
