@@ -53,7 +53,7 @@ import { ApiError } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import * as dataEpochModule from '../../lib/home/data-epoch';
 import { getDataEpoch } from '../../lib/home/data-epoch';
-import { getHome, loadedHome } from '../../lib/home/get-home';
+import { clearHomeRestoring, getHome, loadedHome, markHomeRestoring } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -602,7 +602,6 @@ describe('Backup restoreHome', () => {
     });
 
     test('a socket that connects while the mark is set is closed with the retry close, never 1012', async () => {
-        const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
         const epoch = getDataEpoch(target.id);
         markHomeRestoring(target.id);
         try {
@@ -617,7 +616,6 @@ describe('Backup restoreHome', () => {
     });
 
     test('a second restore of one home is refused and touches nothing', async () => {
-        const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
         const before = safetyCopies(target.id, PRE_RESTORE_SUFFIX).length;
         markHomeRestoring(target.id);
         try {
@@ -677,7 +675,6 @@ describe('Backup restoreHome', () => {
     });
 
     test('the home is refused while the mark is set and served again once it clears', async () => {
-        const { markHomeRestoring, clearHomeRestoring } = await import('../../lib/home/get-home');
         markHomeRestoring(target.id);
         try {
             await expect(getHome(target.id)).rejects.toThrow('Restore in progress');
@@ -815,6 +812,39 @@ describe('Backup restoreHome', () => {
         expect(existsSync(join(staging, 'restoring.json'))).toBe(true);
         await recoverBackupsAfterRestart();
         expect(restoreStagingFolders()).toEqual([]);
+        // The restart that ran the recovery starts with no home marked.
+        clearHomeRestoring(target.id);
+        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
+
+    // The rollback parked the new folder and then could not put the home back, so the home's path is empty. A
+    // request that opened the home there would make a new, empty home folder, and the boot could then not park it
+    // under the name the rollback already took. So the home answers 503 until the restart puts it back.
+    test('a home the rollback left out of place serves nothing until the boot puts it back', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const homeDir = join(TEST_DATA_DIR, 'home', target.id);
+        const epochSpy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
+            throw new ApiError(500, 'failed by the test');
+        });
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            // The rollback's second move, the home back into place.
+            if (to === homeDir && String(from).includes(PRE_RESTORE_SUFFIX)) throw new Error('rename failed');
+            rename(from, to);
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, `restore-left-aside-${Date.now()}`)).rejects.toThrow(
+                'failed by the test',
+            );
+        } finally {
+            epochSpy.mockRestore();
+            renameSpy.mockRestore();
+        }
+
+        expect((await authedRequest(target.sessionToken, `/drive/${target.id}/mounts`)).status).toBe(503);
+        expect(existsSync(homeDir)).toBe(false);
+        await recoverBackupsAfterRestart();
+        clearHomeRestoring(target.id);
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
 });
@@ -2056,6 +2086,8 @@ describe('Backup restore killed at any point', () => {
             await expect(restoreHome(artifact, user.id, `restore-killed-${Date.now()}`)).rejects.toBe(KILLED);
         } finally {
             for (const spy of spies) spy.mockRestore();
+            // The marks are the process's own, so the one a kill leaves set is gone at the restart.
+            clearHomeRestoring(user.id);
         }
     }
 

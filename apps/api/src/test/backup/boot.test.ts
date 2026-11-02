@@ -217,6 +217,37 @@ describe('Backup boot', () => {
         made.push(join(homeRoot, parked[0]));
     });
 
+    // A folder already under the park name, such as the one a rollback parked before it failed, takes no rename on
+    // top of it. Both folders stay for the operator, and the boot goes on to the next home: a throw here would stop
+    // the server from starting at all.
+    test('a park name already taken leaves both folders and the boot goes on', () => {
+        const id = 'bootrecoverJJJJJJJJJJJJJJJJJJJJJ';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(id, 'made since');
+        seedFolder(aside, 'the home as it was');
+        seedFolder(parkName, 'parked by the rollback');
+        seedRestoringMarker('boot-job-j', id, aside, false, parkName);
+        const other = 'bootrecoverKKKKKKKKKKKKKKKKKKKKK';
+        const otherAside = `${other}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(otherAside, 'the other home');
+        seedRestoringMarker('boot-job-k', other, otherAside);
+        made.push(join(homeRoot, other));
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            expect(() => recoverInterruptedRestores()).not.toThrow();
+            expect(logged.mock.calls.flat().join('\n')).toContain(parkName);
+        } finally {
+            logged.mockRestore();
+        }
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('made since');
+        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('parked by the rollback');
+        expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
+    });
+
     // A safety-copy restore renames the copy into place before its checks, so a kill there leaves a pristine home at
     // the home's path. It goes back under its own name: a `.failed-restore-` one could only be deleted.
     test('a marker of a safety-copy restore parks the copy under its own name and puts the home back', () => {
