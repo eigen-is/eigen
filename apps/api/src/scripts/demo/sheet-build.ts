@@ -5,6 +5,7 @@
 // stored as computed and opens with its values. Deterministic ids: a reseed builds the same workbook.
 
 import { CHART_DEFAULT_SIZE, defaultChartSpec, newSheetChartSpecParts } from '@workspace/lib/charts';
+import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
     BorderSide,
     Cell,
@@ -30,9 +31,10 @@ const ROW_STYLES: Record<NonNullable<SheetRowSpec['style']>, { cell: Cell; borde
     total: { cell: { it: 1 }, border: { t: RULE } },
 };
 
-// The editor's first data-bar preset, and the light red fill with dark red text Google offers for a rule.
-const DATA_BAR_COLOR = '#638ec6';
-const BELOW_ZERO_FORMAT = { textColor: '#c92a2a', cellColor: '#ffe3e3' };
+// The editor's blue data-bar preset, and the light red fill with dark red text Google offers for a rule, both from
+// the Eigen palette as the editor's presets are.
+const DATA_BAR_COLOR = eigenColor('blue', 400);
+const BELOW_ZERO_FORMAT = { textColor: eigenColor('red', 700), cellColor: eigenColor('red', 100) };
 
 // The workbook's sheets with every formula computed.
 export function buildWorkbook(specs: SheetSpec[]): Sheet[] {
