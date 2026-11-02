@@ -161,6 +161,12 @@ export class Drive {
         this.lockManager.clear();
     }
 
+    // Keeps the home open, such as for a collab socket, until the returned release is called. onClosing runs
+    // when the home starts to close. The home refuses with a 503 once it is closing.
+    public holdHome(onClosing?: () => void): () => void {
+        return this.home.hold(onClosing);
+    }
+
     // ---- Mounts ----
 
     // The home's close only closes the mounts this Drive holds. So a closing home gets no new mount,

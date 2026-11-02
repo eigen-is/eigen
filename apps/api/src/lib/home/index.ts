@@ -4,7 +4,6 @@ export {
     getTeamHome,
     getUserHome,
     shutdownAllHomes,
-    touchHomeIfLoaded,
 } from './get-home';
 export { Home } from './home';
 export { OrgHome } from './org-home';

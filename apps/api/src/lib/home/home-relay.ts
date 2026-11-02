@@ -413,8 +413,9 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
 }
 
-// How long a home that the backup opened for itself stays open after its capture. It is longer
-// than the 15 s keepalives, so a user who opened the home in the meantime keeps it open.
+// How long a home that the backup opened for itself stays open after its capture. A user who
+// opened it meanwhile keeps it anyway: their stream or socket holds it, and a request since the
+// capture began keeps the full idle. So the value only needs to be short, and 30 s is a guess.
 export const BACKUP_RELEASE_MS = 30_000;
 
 // A backup captures each home through here. A home that was closed is opened only for the capture,

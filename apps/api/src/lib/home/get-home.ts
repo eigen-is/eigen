@@ -20,7 +20,7 @@ import { UserHome } from './user-home';
 
 const homeFactories = new Map<string, AsyncSingleton<Home>>();
 
-// When a request or a keepalive last reached each home.
+// When a request last reached each home.
 const lastRequestAt = new WeakMap<Home, number>();
 
 // Homes whose folder a restore is replacing. openHome refuses them until the restore is done, so
@@ -33,8 +33,8 @@ const restoringHomes = new Set<string>();
 // mark until a retry of the delete or a restart. Until then the home answers 404 and a restore of it is refused.
 const deletingHomes = new Set<string>();
 
-// While shutdownAllHomes runs, openHome refuses every home, so nothing, such as an open stream's keepalive,
-// builds one again over the databases the shutdown closes. The process ends right after it.
+// While shutdownAllHomes runs, openHome refuses every home, so nothing, such as a tab that reconnects its event
+// stream, builds one again over the databases the shutdown closes. The process ends right after it.
 let shuttingDown = false;
 
 // Whether the cache holds a home for the owner, built or still being built. Never opens one.
@@ -46,14 +46,6 @@ export function atHome(ownerId: string): boolean {
 export function loadedHome(ownerId: string): Home | undefined {
     const home = homeFactories.get(ownerId)?.peek();
     return home && !home.closing ? home : undefined;
-}
-
-// A keepalive of an open connection: keeps a loaded home open, but never opens a closed one.
-export function touchHomeIfLoaded(ownerId: string): void {
-    const home = loadedHome(ownerId);
-    if (!home) return;
-    lastRequestAt.set(home, Date.now());
-    home.touch();
 }
 
 // Tells work that opened a home for itself whether anybody else has used it since.
@@ -204,10 +196,6 @@ export async function evictHome(ownerId: string): Promise<void> {
 // reads no home's data and opens none: a home that is not loaded has no stream to tell.
 export function broadcastToLoadedHomes(event: SSEvent): void {
     for (const factory of homeFactories.values()) factory.peek()?.broadcast(event);
-}
-
-export function isShuttingDown(): boolean {
-    return shuttingDown;
 }
 
 // Closes every home that is open now. A test file's teardown calls it too, and the next file opens homes again.
