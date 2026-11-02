@@ -1196,4 +1196,22 @@ describe('validation rules on two tabs and a joiner', () => {
         }
         expect(joined).toEqual(rules(b));
     });
+
+    test("a row insert made before a peer's rule delete arrived leaves the rule deleted", () => {
+        const { a, b, joined } = race(ruled(), insertRows(2, 1), (ctx) =>
+            clearValidations(ctx.sheets[0], { row: [0, 9], column: [1, 1] }),
+        );
+        for (const validations of [rules(a), rules(b), joined]) expect(Object.keys(validations ?? {})).toEqual(['a']);
+        expect(joined).toEqual(rules(b));
+    });
+
+    test('an undo and a redo of a row insert leave a rule a peer deleted meanwhile deleted', () => {
+        const clearB = (ctx: Context) => clearValidations(ctx.sheets[0], { row: [0, 10], column: [1, 1] });
+        for (const redo of [false, true]) {
+            const { a, b, joined } = raceUndo(clearB, redo);
+            for (const validations of [rules(a), rules(b), joined])
+                expect(Object.keys(validations ?? {})).toEqual(['a']);
+            expect(joined).toEqual(rules(b));
+        }
+    });
 });

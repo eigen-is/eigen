@@ -83,4 +83,34 @@ describe('opToPatchOnSheets', () => {
             { op: 'replace', value: { v1: entry }, path: [0, 'dataValidations'] },
         ]);
     });
+
+    // A whole-entry write over a rule a peer deleted would bring the rule back. Immer writes `add` for an id its base
+    // lacked, so a `replace` means the writer saw the rule, and where it is gone the delete wins.
+    test('a whole-entry replace of a rule the sheet no longer holds is dropped', () => {
+        const entry = {
+            ranges: [{ row: [0, 9], column: [1, 1] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const sheets: Sheet[] = [{ ...SHEETS[0], dataValidations: { x: entry } }];
+        const ops: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'gone'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'x'], value: entry },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations', 'x'] },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'x'], value: entry },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'y'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'y'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { z: entry } },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'y'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'z'], value: entry },
+        ];
+        const [patches] = opToPatchOnSheets(sheets, ops);
+        expect(patches.map(({ op, path }) => [op, ...path])).toEqual([
+            ['replace', 0, 'dataValidations', 'x'],
+            ['remove', 0, 'dataValidations', 'x'],
+            ['add', 0, 'dataValidations', 'y'],
+            ['replace', 0, 'dataValidations', 'y'],
+            ['replace', 0, 'dataValidations'],
+            ['replace', 0, 'dataValidations', 'z'],
+        ]);
+    });
 });

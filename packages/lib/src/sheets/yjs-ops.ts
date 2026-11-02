@@ -14,6 +14,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
     const patches: Patch[] = [];
     const specialOps: Op[] = [];
     const applies = floatingWriteFilter(sheets);
+    const ruleIds = validationIds(sheets);
     for (const op of ops) {
         const { op: kind } = op;
         if (kind !== 'add' && kind !== 'remove' && kind !== 'replace') {
@@ -31,6 +32,7 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;
+        if (op.path[0] === 'dataValidations' && !ruleIds(i, op)) continue;
         const patch: Patch = { op: kind, value: op.value, path: [i, ...op.path] };
         if (applies(patch)) patches.push(patch);
     }
@@ -42,4 +44,25 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
 function isValidationWrite(op: Op): boolean {
     if (op.path.length === 1) return isSheetValidations(op.value);
     return op.path.length === 2 && (op.op === 'remove' || isSheetValidation(op.value));
+}
+
+// Follows the rule ids each sheet holds through a batch, and says whether a validation write applies. A `replace` of
+// one rule means its writer saw the rule, because immer writes `add` for an id its base lacked. So where a peer
+// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike.
+function validationIds(sheets: Sheet[]): (sheet: number, op: Op) => boolean {
+    const held = new Map<number, Set<string>>();
+    return (sheet, { op, path, value }) => {
+        const [, id] = path;
+        if (path.length === 1) {
+            held.set(sheet, new Set(isRecord(value) ? Object.keys(value) : []));
+            return true;
+        }
+        let ids = held.get(sheet);
+        if (!ids) held.set(sheet, (ids = new Set(Object.keys(sheets[sheet].dataValidations ?? {}))));
+        const key = String(id);
+        if (op === 'replace' && !ids.has(key)) return false;
+        if (op === 'remove') ids.delete(key);
+        else ids.add(key);
+        return true;
+    };
 }
