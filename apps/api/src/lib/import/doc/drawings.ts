@@ -280,12 +280,19 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
 // Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
 // that size is drawn at in the file.
 function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
-    const { cx, cy } = extentOf(ext);
-    const drawn = cx > 0 && cy > 0;
-    const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
+    const drawn = chartExtent(ext);
+    const { width, height } = drawn
+        ? { width: drawn.cx / EMU_PER_PX, height: drawn.cy / EMU_PER_PX }
+        : CHART_DEFAULT_SIZE;
     const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
     const size = { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
-    return { ...size, emuPerPx: drawn ? cx / size.width : EMU_PER_PX };
+    return { ...size, emuPerPx: drawn ? drawn.cx / size.width : EMU_PER_PX };
+}
+
+// The extent a chart is drawn at, when both its sides are readable. Else it draws at the default size.
+function chartExtent(ext: XmlElement | undefined): { cx: number; cy: number } | undefined {
+    const { cx, cy } = extentOf(ext);
+    return cx > 0 && cy > 0 ? { cx, cy } : undefined;
 }
 
 // SmartArt's text is the document's: its drawing's shapes in order, else its data model's points; the schema holds no
@@ -338,7 +345,11 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
-    const drawn = drawnWidth(anchor);
+    const graphic = xmlChild(anchor, A_NS, 'graphic');
+    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+    const [first, ...others] = data ? xmlElements(data) : [];
+    const only = others.length === 0 ? first : undefined;
+    const drawn = drawnWidth(anchor, only);
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
     const placed = align ? alignedIn(xmlText(align).trim(), area.width, drawn) : roundedInt(offset && xmlText(offset));
     // The offset from the text column's left edge, kept on the paper.
@@ -346,14 +357,10 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     const marginLeft = margin.left * EMU_PER_TWIP;
     const cx = drawn ?? 0;
     const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
-    // One anchor has one place, so only a lone picture or chart can take it. A group's or a canvas's pictures would
-    // stack there, and its text boxes and shapes would draw elsewhere.
-    const graphic = xmlChild(anchor, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [only, ...others] = data ? xmlElements(data) : [];
+    // One anchor has one place, so only a lone picture, chart or text box can take it. A group's or a canvas's pictures
+    // would stack there, and its text boxes and shapes would draw elsewhere.
     const lone =
         !!only &&
-        others.length === 0 &&
         (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
     if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !context.scope.box) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
@@ -367,10 +374,14 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     return named === undefined || named === side ? { alignment: side } : {};
 }
 
-// The width in EMU an anchor's drawing draws at: its extent's, else a text box's default width. A picture with no
-// extent takes its own size once it loads, so its width is unknown here.
-function drawnWidth(anchor: XmlElement): number | undefined {
-    const { cx } = extentOf(xmlChild(anchor, WP_NS, 'extent'));
+// The width in EMU an anchor's drawing draws at, `only` being what its graphic holds alone: a chart's, else its
+// extent's, else a text box's default width. A picture with no extent takes its own size once it loads, so its width
+// is unknown here.
+function drawnWidth(anchor: XmlElement, only: XmlElement | undefined): number | undefined {
+    const extent = xmlChild(anchor, WP_NS, 'extent');
+    if (only && hasXmlName(only, C_NS, 'chart'))
+        return chartExtent(extent)?.cx ?? CHART_DEFAULT_SIZE.width * EMU_PER_PX;
+    const { cx } = extentOf(extent);
     if (cx > 0) return cx;
     return loneTextBox(anchor) ? TEXT_BOX_DEFAULT_WIDTH * EMU_PER_PX : undefined;
 }

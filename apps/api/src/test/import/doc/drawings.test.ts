@@ -1325,6 +1325,24 @@ describe('charts', () => {
         );
     });
 
+    // It draws at the default size unless both its sides are readable, so it is aligned by the default width, as a sized
+    // chart is by its own. The golden page's column is 9026 twips wide, and an offset is a whole px.
+    test('a chart aligned right with no height or no extent it can read ends at the right edge of the column', async () => {
+        const anchor =
+            '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>';
+        const sized = chartRun('rId20', { anchor });
+        const flat = chartRun('rId20', { extent: 'cx="4572000" cy="0"', anchor });
+        const unsized = sized.replace(/<wp:extent [^>]*\/>/, '');
+        const { json } = await imported([sized, flat, unsized].map(paragraph).join(''), [chartSpace(COLUMNS)]);
+        const ends = charts(json).map((chart) => Number(chart.attrs?.['offsetX']) + Number(chart.attrs?.['width']));
+        expect(charts(json).map((chart) => chart.attrs?.['width'])).toEqual([
+            480,
+            CHART_DEFAULT_SIZE.width,
+            CHART_DEFAULT_SIZE.width,
+        ]);
+        expect(ends).toEqual(ends.map(() => Math.round(9026 / 15)));
+    });
+
     // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.
     test("a chart grouped with a caption's text box takes it as its caption, at its own frame's size", async () => {
         const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
