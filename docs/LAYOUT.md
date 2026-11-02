@@ -41,6 +41,8 @@ Below 769px (`useIsMobile`, [MOBILE.md](MOBILE.md)) a `ColumnLayout` with a `mob
 
 `AppShell`'s `sidebar` prop is a node or a function of `SidebarProps`, whose only field is `condensed`. It is true on a tablet, where the sidebar is a `w-16` rail, its 40px icons inside the sidebar's 12px gutter on each side ([MOBILE.md § Width picks the layout](MOBILE.md#width-picks-the-layout-the-pointer-picks-the-affordances)). On a phone the sidebar replaces `<main>` as the one visible column, and `<main>` is hidden with CSS rather than unmounted, so an editor keeps its collab state and a list keeps its scroll.
 
+A sidebar row is selected by its path alone: `SidebarItem` matches with `includeSearch: false`, because a click on an item in a list adds the item to the URL's search (`?pid=…`), and an exact match that compared the search unselected a filter such as **All stickies** the moment a board was picked.
+
 `useLayout()` exposes the layout state (`sidebarColumnShown`, `isMobile`, `isTablet` and the setters) and `setDocumentTitle` for the browser tab. A fullscreen view with only the topbar (`RequestAccessView`, the admin access-denied screen) calls `setSidebarHidden(true)` and restores it on unmount.
 
 ## A dialog never grows to fit what a user typed
