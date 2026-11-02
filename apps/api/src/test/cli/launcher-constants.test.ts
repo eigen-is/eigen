@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { MAX_RESTART_MESSAGE_LENGTH, MAX_RESTART_WAIT_SECONDS } from '@workspace/lib/validation';
+import { LIGHT_SERVER_ARCHIVE, MAX_RESTART_MESSAGE_LENGTH, MAX_RESTART_WAIT_SECONDS } from '@workspace/lib/validation';
 import { CANNOT_OPEN, DECLINED, ROOT } from '../../cli/install';
 import { SWAP_MARKER } from '../../cli/restore-swap';
 import { RESTORING_DIR } from '../../lib/backup/restore-server';
@@ -49,6 +49,12 @@ describe('the constants the launcher shares with the CLI', () => {
 
     test("SWAP_MARKER is the marker the restore's swap writes", () => {
         expect(launcherValue('SWAP_MARKER')).toBe(SWAP_MARKER);
+    });
+
+    test('the Light archives the launcher leaves out are the ones LIGHT_SERVER_ARCHIVE names', () => {
+        const prefixes = [...launcher.matchAll(/(server-[a-z-]*-light-)\*/g)].map((match) => match[1] ?? '');
+        expect(prefixes.length).toBeGreaterThan(0);
+        for (const prefix of prefixes) expect(LIGHT_SERVER_ARCHIVE.test(`${prefix}20260101-000000.tar`)).toBe(true);
     });
 
     test('MAX_WAIT and MAX_MESSAGE are the longest --in and message the restart notice takes', () => {

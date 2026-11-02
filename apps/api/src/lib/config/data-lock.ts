@@ -4,10 +4,22 @@
 // here is synchronous, so both can run it before anything else opens a database.
 
 import { Database, SQLiteError } from 'bun:sqlite';
-import { closeSync, constants, fstatSync, openSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import {
+    closeSync,
+    constants,
+    fstatSync,
+    lstatSync,
+    openSync,
+    readFileSync,
+    renameSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { isRecord } from '@workspace/lib/guards';
+import { parseJson } from '@workspace/lib/validation';
+import { errnoOf } from '../storage/deadline';
 
 // In data/server/: the API holds it while it runs, and the swap of ./eigen restore while it replaces data/.
 export const DATA_LOCK_FILE = 'instance.lock';
@@ -103,14 +115,18 @@ export function liveLeaseHolder(file: string, warn: (message: string) => void): 
 
 // Only a regular file is read, never through a symlink, so a FIFO or a device planted in its place cannot hang or fill
 // the swap, which runs as root. O_NONBLOCK makes the open of a FIFO return at once. The check is on the opened file, so
-// nothing can replace the path between the check and the read. Null when there is no lease.
+// nothing can replace the path between the check and the read. Null when there is no lease. A lease that does not
+// open, such as one only another user may read or a socket in its place, may still be live. It reads as its inode and
+// time, which every heartbeat changes, and it parses as no lease.
 function readLeaseText(file: string): string | null {
     let fd: number;
     try {
         fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     } catch (err) {
-        if (err instanceof Error && 'code' in err && (err.code === 'ENOENT' || err.code === 'ELOOP')) return null;
-        throw err;
+        const code = errnoOf(err);
+        if (code === 'ENOENT' || code === 'ELOOP') return null;
+        const stat = lstatSync(file, { throwIfNoEntry: false });
+        return stat ? `unreadable ${stat.ino} ${stat.mtimeMs}` : null;
     }
     try {
         return fstatSync(fd).isFile() ? readFileSync(fd, 'utf8') : null;
@@ -120,12 +136,8 @@ function readLeaseText(file: string): string | null {
 }
 
 function parseLease(text: string): DataLease | null {
-    try {
-        const value: unknown = JSON.parse(text);
-        return isDataLease(value) ? value : null;
-    } catch {
-        return null;
-    }
+    const value = parseJson(text);
+    return isDataLease(value) ? value : null;
 }
 
 function isDataLease(value: unknown): value is DataLease {

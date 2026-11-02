@@ -13,6 +13,7 @@ import {
     rmSync,
     statSync,
     symlinkSync,
+    utimesSync,
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
@@ -21,7 +22,6 @@ import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/ba
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { CANNOT_OPEN, DECLINED } from '../../cli/install';
-import { STAGE_LOCK } from '../../cli/restore-stage';
 import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
 import {
     copyArchiveMember,
@@ -161,6 +161,10 @@ async function stageAndSwap(dir: string, archive: string): Promise<string> {
     expect(swapped.stderr).toBe('');
     expect(swapped.code).toBe(0);
     return `${staged.stdout}${swapped.stdout}`;
+}
+
+function modeOf(path: string): number {
+    return statSync(path).mode & 0o7777;
 }
 
 function asideDirs(dir: string): string[] {
@@ -812,9 +816,73 @@ describe('restore --stage and --swap', () => {
                 drop: (name) => name.startsWith('certs/'),
                 manifest: (m) => ({ ...m, certs: false }),
             });
+            chmodSync(join(dir, 'data/certs/cert.pem'), 0o644);
+            chmodSync(join(dir, 'data/certs/key.pem'), 0o640);
+            chmodSync(join(dir, 'data/certs'), 0o755);
             await stageAndSwap(dir, crafted);
             expect(readFileSync(join(dir, 'data/certs/cert.pem'), 'utf8')).toBe('the certificate here');
             expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe('the key here');
+            // As the mail containers left them, owners too, which only a run as root can show.
+            expect(modeOf(join(dir, 'data/certs/cert.pem'))).toBe(0o644);
+            expect(modeOf(join(dir, 'data/certs/key.pem'))).toBe(0o640);
+            expect(modeOf(join(dir, 'data/certs'))).toBe(0o755);
+            expect(existsSync(join(dir, '.eigen/restore-install'))).toBe(false);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'the DKIM key and TLS certificate an archive brings keep the modes the mail containers gave the ones here',
+        async () => {
+            const dir = install();
+            mkdirSync(join(dir, 'data/certs'), { mode: 0o755 });
+            writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here', { mode: 0o644 });
+            writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here', { mode: 0o640 });
+            mkdirSync(join(dir, 'data/dkim'), { mode: 0o755 });
+            writeFileSync(join(dir, 'data/dkim/eigen.private'), 'the key here', { mode: 0o640 });
+            // A setuid bit here is not carried over.
+            chmodSync(join(dir, 'data/certs/cert.pem'), 0o4644);
+            await stageAndSwap(dir, basename(fullArchive));
+            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
+            expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            expect(modeOf(join(dir, 'data/certs/cert.pem'))).toBe(0o644);
+            expect(modeOf(join(dir, 'data/certs/key.pem'))).toBe(0o640);
+            expect(modeOf(join(dir, 'data/dkim/eigen.private'))).toBe(0o640);
+            // A file only the archive holds keeps the mode the stage gave it.
+            expect(modeOf(join(dir, 'data/dkim/eigen.txt'))).toBe(0o600);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file or link',
+        async () => {
+            const crafted = await craft(fullArchive, {
+                drop: (name) => name.startsWith('certs/'),
+                manifest: (m) => ({ ...m, certs: false }),
+            });
+            for (const [plant, said] of [
+                [
+                    (certs: string) => {
+                        writeFileSync(join(certs, 'key.pem'), 'run me');
+                        chmodSync(join(certs, 'key.pem'), 0o4755);
+                    },
+                    'is setuid',
+                ],
+                [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'is a link'],
+            ] as const) {
+                const dir = install();
+                mkdirSync(join(dir, 'data/certs'));
+                writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here');
+                plant(join(dir, 'data/certs'));
+                expect((await stage(dir, crafted)).code).toBe(0);
+                const result = await swap(dir);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(`data/certs/key.pem ${said}`);
+                expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(dir)).toEqual([]);
+            }
         },
         JOB_TIMEOUT_MS,
     );
@@ -1019,7 +1087,7 @@ describe('restore --stage and --swap', () => {
             const dir = install();
             mkdirSync(join(dir, 'data/.restoring/data'), { recursive: true });
             writeFileSync(join(dir, 'data/.restoring/data/half.txt'), 'the other stage');
-            const other = lockDataDir(join(dir, 'data/.restoring', STAGE_LOCK))!;
+            const other = lockDataDir(join(dir, 'data/.restoring/stage.lock'))!;
             try {
                 const result = await stage(dir, basename(fullArchive));
                 expect(result.code).toBe(1);
@@ -1208,6 +1276,55 @@ describe('restore --check-data, which a rollback runs first with the build it go
             // Nothing it reads is staged or moved.
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
             expect(asideDirs(dir)).toEqual(aside);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'with --since, checks only the databases written since then, a -wal counting as a write',
+        async () => {
+            const dir = install();
+            await stageAndSwap(dir, basename(fullArchive));
+            const since = Date.now();
+            const past = new Date(since - 60_000);
+            const metadata = join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db');
+            const shares = join(dir, 'data/server', SERVER_DATABASES.shares);
+            const users = join(dir, 'data/server', SERVER_DATABASES.users);
+            const intact = readFileSync(users);
+            bumpSchema(metadata, 1);
+            bumpSchema(shares, 1);
+            writeFileSync(users, Buffer.alloc(intact.length, 'x'));
+            for (const file of [metadata, shares, users]) utimesSync(file, past, past);
+            const sinceArgs = ['--check-data', '--yes', '--since', String(since)];
+            // Written before the first check began, so that check passed them.
+            const unchanged = await restoreCli(dir, sinceArgs);
+            expect(unchanged.stderr).toBe('');
+            expect(unchanged.code).toBe(0);
+            expect((await restoreCli(dir, ['--check-data', '--yes'])).code).toBe(CANNOT_OPEN);
+            for (const [file, said] of [
+                [metadata, 'is at'],
+                [shares, 'is at'],
+                [users, 'is damaged'],
+            ] as const) {
+                writeFileSync(`${file}-wal`, '');
+                const changed = await restoreCli(dir, sinceArgs);
+                expect(changed.code).toBe(CANNOT_OPEN);
+                expect(changed.stderr).toContain(`${relative(dir, file)} ${said}`);
+                rmSync(`${file}-wal`);
+                if (file === users) writeFileSync(users, intact);
+                else bumpSchema(file, -1);
+                utimesSync(file, past, past);
+            }
+            expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
+            // A time that is not one, or one for another mode, is a usage error.
+            for (const args of [
+                ['--check-data', '--since', 'soon'],
+                [basename(fullArchive), '--stage', '--since', String(since)],
+            ]) {
+                const refused = await restoreCli(dir, args);
+                expect(refused.code).toBe(2);
+                expect(refused.stderr).toContain('--since');
+            }
         },
         JOB_TIMEOUT_MS,
     );

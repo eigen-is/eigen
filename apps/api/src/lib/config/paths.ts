@@ -59,6 +59,7 @@ export const USER_HOMES_DIR = 'home';
 export const TEAM_HOMES_DIR = 'team';
 export const ORG_HOMES_DIR = 'org';
 export const GUEST_HOMES_DIR = 'guest';
+export const HOMES_DIRS = [USER_HOMES_DIR, TEAM_HOMES_DIR, ORG_HOMES_DIR, GUEST_HOMES_DIR] as const;
 // The DKIM key and its DNS record, which the postfix container generates in data/ and owns.
 export const DKIM_DIR = 'dkim';
 // The mail server's TLS certificate, which Caddy's export-certs.sh or the operator's certbot hook copies in.

@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2098 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2100 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -997,7 +997,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1137)
+## Utilities & constants (1139)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1738,6 +1738,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `isStringList` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `LIGHT_SERVER_ARCHIVE` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_RESTART_MESSAGE_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
@@ -1753,6 +1754,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `parseBackupStamp` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `parseContactInput` | `@workspace/lib/validation` | packages/lib/src/validation/contact-input.ts |
 | `parseHomeMountSettings` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `parseJson` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
 | `parseServerArchiveManifest` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `parseServerArchiveName` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `parseServerArchiveNames` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |

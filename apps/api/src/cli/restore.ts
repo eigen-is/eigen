@@ -1,32 +1,33 @@
 // The restore command of the eigen launcher, which puts a whole-server archive back. It picks the mode from the
 // flags: the stage unpacks and checks the archive while Eigen runs, and the swap moves it in with Eigen stopped.
 // It also holds the two small modes. --env takes a fresh machine's .env.production from the archive, and
-// --check-data is the check a rollback runs first, with the build it goes back to, on today's data.
+// --check-data is the check a rollback runs with the build it goes back to, on today's data: first while Eigen runs,
+// then with --since once Eigen is stopped.
 
-import { chmodSync, existsSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import type { parseArgs } from 'node:util';
+import { HOME_DATABASES } from '../lib/backup/archive-layout';
 import { describeError } from '../lib/backup/errors';
+import type { VersionedDatabase } from '../lib/backup/materialize-mount';
 import {
     checkDatabases,
-    checkRestoredDatabases,
     containerDatabasesIn,
     mountIdsIn,
     quickCheck,
     UnopenableDatabaseError,
 } from '../lib/backup/materialize-mount';
-import { isRestoreStagingName, parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
+import {
+    isRestoreStagingName,
+    parseSafetyCopyName,
+    requireMountDir,
+    SERVER_ARCHIVE_ENV_MEMBER,
+} from '../lib/backup/paths';
 import { RESTORING_DIR } from '../lib/backup/restore-server';
 import { readServerArchiveMember } from '../lib/backup/verify-server-archive';
-import {
-    GUEST_HOMES_DIR,
-    ORG_HOMES_DIR,
-    SERVER_DATABASES,
-    SERVER_DIR,
-    TEAM_HOMES_DIR,
-    USER_HOMES_DIR,
-} from '../lib/config/paths';
+import { HOMES_DIRS, PATHS, SERVER_DATABASES, SERVER_DIR } from '../lib/config/paths';
 import { API_IMAGE_KEY } from '../lib/config/release';
+import { MOUNT_DB_CONFIG } from '../lib/mount/db-config';
 import { SHARE_REGISTRY_DB_CONFIG } from '../lib/share/db-config';
 import { WAITLIST_DB_CONFIG } from '../lib/waitlist/db-config';
 import { readEnvFile } from './env-file';
@@ -44,6 +45,7 @@ export const RESTORE_OPTIONS = {
     swap: { type: 'boolean' },
     env: { type: 'boolean' },
     'check-data': { type: 'boolean' },
+    since: { type: 'string' },
     yes: { type: 'boolean' },
     's3-from-archive': { type: 'boolean' },
 } as const;
@@ -51,7 +53,7 @@ export const RESTORE_USAGE = `Usage: restore <archive> --stage [--yes] [--s3-fro
        restore --staged
        restore --swap
        restore <archive> --env
-       restore --check-data [--yes]
+       restore --check-data [--yes] [--since <ms>]
 
 Puts a whole-server archive back in two steps, run by ./eigen restore.
 
@@ -66,7 +68,9 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
   --env              On a fresh machine, before the stage: write the ${ENV_PATH} of <archive> here, which pins
                      the build that restores it
   --check-data       While Eigen runs, as the API's user: check that this build opens every database in data/ as
-                     it is, then ask to go back to it. ./eigen rollback runs it with the build it goes back to`;
+                     it is, then ask to go back to it. ./eigen rollback runs it with the build it goes back to
+  --since <ms>       With --check-data: check only the databases written at or after this time, in ms since 1970.
+                     ./eigen rollback checks again with it once Eigen is stopped`;
 
 export type RestoreFlags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
@@ -77,6 +81,9 @@ export async function restore(archive: string | undefined, flags: RestoreFlags):
             'Pass one of --stage, --staged, --swap, --env or --check-data; only --stage and --env take an archive.',
             RESTORE_USAGE,
         );
+    }
+    if (flags.since !== undefined && !flags['check-data']) {
+        return refuseUsage('Only --check-data takes --since.', RESTORE_USAGE);
     }
     if (flags.env) return writeArchiveEnv(archive);
     if (flags['check-data']) return checkData(flags);
@@ -132,16 +139,18 @@ async function writeArchiveEnv(archive: string | undefined): Promise<void> {
 // check that could not run says nothing of the data, so it must not send the rollback to the backup.
 async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
+    const changed = changedSince(flags.since);
     const server = join(DATA, SERVER_DIR);
-    const homeKinds = [USER_HOMES_DIR, TEAM_HOMES_DIR, ORG_HOMES_DIR, GUEST_HOMES_DIR];
     try {
-        await checkDatabases([
-            { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
-            { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
-        ]);
-        checkPages(join(server, SERVER_DATABASES.users));
-        const homeDirs = homeKinds
-            .map((dir) => join(DATA, dir))
+        await checkDatabases(
+            [
+                { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
+                { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
+            ].filter(changed),
+        );
+        const users = join(server, SERVER_DATABASES.users);
+        if (changed({ filePath: users })) checkPages(users);
+        const homeDirs = HOMES_DIRS.map((dir) => join(DATA, dir))
             .filter(existsSync)
             .flatMap((homes) =>
                 readdirSync(homes, { withFileTypes: true })
@@ -158,8 +167,8 @@ async function checkData(flags: RestoreFlags): Promise<void> {
             console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
             const mountIds = mountIdsIn(homeDir);
             // Each mount's metadata.db first, because the container databases are found by reading it.
-            await checkRestoredDatabases(homeDir, mountIds, []);
-            await checkDatabases(containerDatabasesIn(homeDir, mountIds));
+            await checkDatabases(homeDatabases(homeDir, mountIds).filter(changed));
+            await checkDatabases(containerDatabasesIn(homeDir, mountIds).filter(changed));
         }
     } catch (error) {
         console.error(glyphLine('bad', `${describeError(error)}.`));
@@ -178,10 +187,34 @@ async function checkData(flags: RestoreFlags): Promise<void> {
     }
 }
 
+// With --since, a time in ms, only the databases written at or after it are checked. The rollback checks again once
+// Eigen is stopped, and only what Eigen wrote after the first check began can have changed. A write may be in the
+// -wal alone.
+function changedSince(since: string | undefined): (database: { filePath: string }) => boolean {
+    if (since === undefined) return () => true;
+    if (!/^\d+$/.test(since)) return refuseUsage(`--since takes a time in ms, not "${since}".`, RESTORE_USAGE);
+    const after = Number(since);
+    return ({ filePath }) =>
+        [filePath, `${filePath}-wal`].some(
+            (file) => (statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0) >= after,
+        );
+}
+
 // users3.db has no schema version to compare, so only its pages are checked. The API runs beside this check, and its
 // journal locks out readers while a sign-in writes, so that writer is waited out as for every other database.
 function checkPages(filePath: string): void {
     if (!existsSync(filePath)) return;
     const verdict = quickCheck(filePath);
     if (verdict !== 'ok') throw new UnopenableDatabaseError(500, `${filePath} is damaged: ${verdict}`);
+}
+
+// The databases checkRestoredDatabases checks first in a home: its own, and each mount's metadata.db.
+function homeDatabases(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
+    return [
+        ...HOME_DATABASES.map(([config, relPath]) => ({ filePath: join(homeDir, relPath), config })),
+        ...mountIds.map((mountId) => ({
+            filePath: join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB),
+            config: MOUNT_DB_CONFIG,
+        })),
+    ];
 }

@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { chmodSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import {
     DATA_LEASE_FILE,
@@ -68,6 +68,33 @@ function writeGarbledLease(dataRoot: string, text: string) {
     writeFileSync(leaseFileOf(dataRoot), text);
 }
 
+// Root opens a file whatever its mode, so only another user meets a lease it may not read.
+const asUser = process.getuid?.() !== 0;
+
+// A lease nobody but its owner reads, written anew each time as a heartbeat writes one.
+function writeUnreadableLease(dataRoot: string) {
+    mkdirSync(join(dataRoot, 'server'), { recursive: true });
+    const temp = `${leaseFileOf(dataRoot)}.tmp`;
+    writeFileSync(temp, 'a lease', { mode: 0 });
+    renameSync(temp, leaseFileOf(dataRoot));
+}
+
+// A process that listens on a socket at the lease's path. It binds the name inside data/server, as a whole path can
+// be longer than a socket's address takes.
+async function listenAtLease(dataRoot: string) {
+    mkdirSync(join(dataRoot, 'server'), { recursive: true });
+    const listener = Bun.spawn(
+        [
+            process.execPath,
+            '-e',
+            `require('node:net').createServer().listen(${JSON.stringify(DATA_LEASE_FILE)}, () => console.log('listening'));`,
+        ],
+        { cwd: join(dataRoot, 'server'), stdout: 'pipe' },
+    );
+    expect(new TextDecoder().decode((await listener.stdout.getReader().read()).value)).toBe('listening\n');
+    return listener;
+}
+
 // The scope a holder on this machine writes, once the folder exists to stat.
 function localScope(dataRoot: string) {
     mkdirSync(join(dataRoot, 'server'), { recursive: true });
@@ -94,6 +121,51 @@ describe('instance lock', () => {
         expect(await next.exited).toBe(0);
         expect(await new Response(next.stdout).text()).toBe('held\n');
     });
+
+    test(
+        'a bundled build, as the release image runs, holds the lock after the garbage collector ran',
+        async () => {
+            const dataRoot = join(DATA_ROOT, 'bundled');
+            const dir = mkdtempSync(join(TEST_DATA_DIR, 'instance-lock-build-'));
+            try {
+                // What the entry point and the server do with the module.
+                const entry = join(dir, 'entry.ts');
+                writeFileSync(
+                    entry,
+                    `import ${JSON.stringify(LOCK_MODULE)};
+import { releaseInstanceLease } from ${JSON.stringify(LOCK_MODULE)};
+process.on('SIGTERM', () => { releaseInstanceLease(); process.exit(0); });
+for (let i = 0; i < 5; i++) { Bun.gc(true); await Bun.sleep(50); }
+console.log('held');
+setInterval(() => {}, 1000);
+`,
+                );
+                const built = await Bun.build({
+                    entrypoints: [entry],
+                    outdir: join(dir, 'out'),
+                    target: 'bun',
+                    splitting: true,
+                    minify: true,
+                });
+                expect(built.success).toBe(true);
+                const holder = Bun.spawn([process.execPath, join(dir, 'out/entry.js')], {
+                    env: { ...process.env, EIGEN_DATA_ROOT: dataRoot },
+                    stdout: 'pipe',
+                    stderr: 'pipe',
+                });
+                try {
+                    expect(new TextDecoder().decode((await holder.stdout.getReader().read()).value)).toBe('held\n');
+                    const refused = spawnHolder(false, dataRoot);
+                    expect(await refused.exited).toBe(1);
+                } finally {
+                    holder.kill('SIGKILL');
+                }
+            } finally {
+                rmSync(dir, { recursive: true, force: true });
+            }
+        },
+        LEASE_TEST_TIMEOUT_MS,
+    );
 
     // Two APIs starting together both read the empty lock file (a SHARED lock) before either escalates.
     // BEGIN EXCLUSIVE needs every other SHARED lock gone, so both got SQLITE_BUSY and both exited;
@@ -145,10 +217,15 @@ describe('instance lock', () => {
             const otherKernel = join(DATA_ROOT, 'lease-stale');
             const otherDev = join(DATA_ROOT, 'lease-other-dev');
             const garbledStale = join(DATA_ROOT, 'lease-garbled-stale');
+            // A lease that cannot be opened, such as another user's or a socket in its place, may be live too.
+            const unreadableLive = join(DATA_ROOT, 'lease-unreadable-live');
+            const unreadableStale = join(DATA_ROOT, 'lease-unreadable-stale');
+            const socketStale = join(DATA_ROOT, 'lease-socket');
             let beats = 0;
             const heartbeat = () => {
                 writeForeignLease(live);
                 writeGarbledLease(garbledLive, `not a lease ${beats++}`);
+                if (asUser) writeUnreadableLease(unreadableLive);
             };
             heartbeat();
             writeForeignLease(stalled);
@@ -156,6 +233,8 @@ describe('instance lock', () => {
             const local = localScope(otherDev);
             writeForeignLease(otherDev, { kernel: local.kernel, dev: local.dev + 1 });
             writeGarbledLease(garbledStale, 'not a lease');
+            if (asUser) writeUnreadableLease(unreadableStale);
+            const socket = await listenAtLease(socketStale);
             const remote = setInterval(heartbeat, 50);
             const stalledBeat = setTimeout(() => writeForeignLease(stalled), 3 * LEASE_HEARTBEAT_MS);
             const started = Date.now();
@@ -183,6 +262,8 @@ describe('instance lock', () => {
                     takeOver(otherKernel),
                     takeOver(otherDev),
                     takeOver(garbledStale),
+                    takeOver(socketStale),
+                    ...(asUser ? [refuse(unreadableLive), takeOver(unreadableStale)] : []),
                 ]);
                 expect(liveErr).toContain('other-machine');
                 expect(liveErr).toContain('4242');
@@ -190,6 +271,7 @@ describe('instance lock', () => {
             } finally {
                 clearInterval(remote);
                 clearTimeout(stalledBeat);
+                socket.kill('SIGKILL');
             }
         },
         LEASE_TEST_TIMEOUT_MS,
