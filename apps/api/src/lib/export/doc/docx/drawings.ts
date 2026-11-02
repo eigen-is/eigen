@@ -3,9 +3,9 @@
 // in the paragraph that holds it. The paragraph walker calls figureOf or anchoredFigure for each figure it meets.
 
 import type { JSONContent } from '@tiptap/core';
-import { CHART_DEFAULT_SIZE, readChartSpec } from '@workspace/lib/charts';
+import { readChartSpec } from '@workspace/lib/charts';
 import type { FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { readChartAttrs, readFigureAttrs, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
+import { chartBox, readChartAttrs, readFigureAttrs, readFigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
 import { escapeXml } from '@workspace/lib/xml';
 import { anchorIndentPx, anchorPaddingPx, BODY, boxSide, cssPt, FIGURE_MARGIN, twips } from '../../../document/looks';
 import { proseValue } from '../../../document/prose-css';
@@ -201,8 +201,7 @@ function imageOf(name: string | null, pkg: Package): Image | undefined {
 function wordChartOf(node: JSONContent, pkg: Package, extent: (natural: number) => number): WordChart | undefined {
     const attrs = readChartAttrs(node.attrs ?? {});
     const { spec } = readChartSpec(node.attrs ?? {});
-    const width = attrs.width ?? CHART_DEFAULT_SIZE.width;
-    const height = attrs.height ?? CHART_DEFAULT_SIZE.height;
+    const { width, height } = chartBox(attrs);
     const frame = { width, height, emuPerPx: extent(width) / width };
     const rId = addOfficeChart(
         pkg.charts,
