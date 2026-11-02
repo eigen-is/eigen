@@ -565,6 +565,21 @@ describe('size', () => {
         ]);
     });
 
+    // A side longer than any real length is not read, as emu() refuses one. The cap is on its length, not its size, so
+    // a 40 px side padded with zeros past 64 characters is refused too.
+    test('an extent side past 64 characters gives no size on that side', async () => {
+        const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);
+        const { json } = await importDocxBody(
+            [forged(`cx="${'9'.repeat(65)}" cy="381000"`), forged(`cx="381000" cy="${'0'.repeat(64)}381000"`)]
+                .map(paragraph)
+                .join(''),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+            [40, null],
+        ]);
+    });
+
     // The figure would read a side past the largest paper as that paper, so the import stores no larger one.
     test('a side past the largest paper is that paper', async () => {
         const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);

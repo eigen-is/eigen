@@ -187,9 +187,12 @@ export function roundedInt(value: string | undefined): number | undefined {
 }
 
 // A drawing's size, a wp:extent's or an a:ext's, in whole EMU. A side that is missing, no number or not positive is 0,
-// which every caller reads as no size.
+// which every caller reads as no size. So is one longer than any real length, unread, as emu() refuses one.
 export function extentOf(ext: XmlElement | undefined): { cx: number; cy: number } {
-    const side = (name: string) => Math.max(0, roundedInt(ext && xmlAttr(ext, '', name)) ?? 0);
+    const side = (name: string) => {
+        const value = ext && xmlAttr(ext, '', name);
+        return value && value.length > MAX_MEASURE_CHARS ? 0 : Math.max(0, roundedInt(value) ?? 0);
+    };
     return { cx: side('cx'), cy: side('cy') };
 }
 
