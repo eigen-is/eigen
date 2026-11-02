@@ -1,7 +1,7 @@
-// Pure scene-space geometry for the canvas, such as boxes and their bounds, shape hit tests, a linear
-// element's points, arrowheads and resize math. It reads no element kind, so every kind module can build
-// on it. `Box` is the transform core that hit-testing, bounds and the ObjectTransform primitive share.
-// Angles are degrees at every boundary, and radian math never escapes a function body.
+// The pure geometry of the canvas, such as boxes and their bounds, shape hit tests, a linear element's points,
+// arrowheads, arrow labels and resize math. It reads no element kind, so every kind module can build on it, and
+// the code that asks a kind for its bounds or its outline sits on top of it. Angles are degrees wherever a value
+// enters or leaves a function, and radians stay inside function bodies.
 
 import { isTransparentFill, parseFill } from './fill';
 import { getLineHeightPx } from './font-metrics';
@@ -11,28 +11,30 @@ import type { Arrowhead, VectorArrowElement, VectorLinearElement } from './types
 
 export type Point = { x: number; y: number };
 
-// Canonical transform core: top-left origin + size + rotation. Structurally identical to
-// the stored element fields, so hosts pass stored fields straight through.
+// The transform every element shares: its top-left corner, its size and its rotation. The stored element fields
+// have the same shape, so a host passes an element where a Box is asked for. Hit tests, bounds and the
+// ObjectTransform primitive all work on it.
 export type Box = { x: number; y: number; width: number; height: number; angle: number };
 
 export type Bounds = { minX: number; minY: number; maxX: number; maxY: number };
 
 export const ORIGIN: Point = { x: 0, y: 0 };
 
-// Canvas interaction steps shared by vector + slides, in scene/document units: arrow-key nudge
-// (Shift = large) and the duplicate/paste cascade offset. One source so the two apps' keymaps match.
+// The step an arrow key moves a selection by, in scene units, and the larger step with Shift. Every canvas host
+// reads them here, so the keymaps match.
 export const NUDGE_STEP = 1;
 export const NUDGE_STEP_LARGE = 5;
+// How far a duplicate or a paste lands from its source.
 export const DUPLICATE_OFFSET = 10;
-// A multi-image drop/paste staggers by this much instead, so a stack of natural-size images stays
-// visible (the duplicate step is for identical copies; images need more).
+// How far each image of a multi-image drop or paste lands from the one before. Images arrive at their natural
+// size, so they need a wider step than duplicates for the stack to stay visible.
 export const IMAGE_CASCADE_OFFSET = 20;
 
 export function boxCenter(box: Box): Point {
     return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
 }
 
-// Rotate `point` around `center` by `angleDeg` (clockwise, y-down — matches SVG rotate()).
+// A positive angle turns clockwise on screen, because y points down. SVG's rotate() turns the same way.
 export function rotatePoint(point: Point, center: Point, angleDeg: number): Point {
     const rad = angleDeg * DEG_TO_RAD;
     const cos = Math.cos(rad);
@@ -45,7 +47,7 @@ export function rotatePoint(point: Point, center: Point, angleDeg: number): Poin
     };
 }
 
-// Axis-aligned bounding box of a (possibly rotated) box — its four rotated corners.
+// The axis-aligned bounds of a box, taken over its four corners after rotation.
 export function getElementBounds(box: Box): Bounds {
     const corners: Point[] = [
         { x: box.x, y: box.y },
@@ -59,19 +61,18 @@ export function getElementBounds(box: Box): Bounds {
     return { minX: Math.min(...xs), minY: Math.min(...ys), maxX: Math.max(...xs), maxY: Math.max(...ys) };
 }
 
-// Marquee (rubber-band) selection semantics, shared by slides + vector. Drag direction
-// picks the mode — the AutoCAD/Figma convention — with slides' dashed border (intersect) vs solid
-// (contain) as the visual signal.
+// How a marquee selects. In 'contain' mode it takes the elements that lie fully inside it. In 'intersect' mode it
+// takes every element it touches. The drag direction picks the mode, as in AutoCAD and Figma.
 export type MarqueeMode = 'contain' | 'intersect';
 
-// Rightward drag (current x ≥ start x) = 'contain'; leftward = 'intersect'. Resolve from the RAW
-// start/current x, before the marquee rect is normalized to a min-corner box (that loses direction).
+// A drag to the right selects by containment, and a drag to the left by intersection. Pass the raw start and
+// current x of the drag. Once the marquee is turned into a box with its corner at the minimum, the direction is
+// gone.
 export function marqueeMode(startX: number, currentX: number): MarqueeMode {
     return currentX < startX ? 'intersect' : 'contain';
 }
 
-// Does an element (its axis-aligned bounds) fall in the marquee under `mode`? contain = fully inside;
-// intersect = the boxes overlap at all. Pure AABB math — hosts map their element + marquee to Bounds.
+// Whether an element's axis-aligned bounds fall in the marquee under `mode`.
 export function marqueeHits(bounds: Bounds, marquee: Bounds, mode: MarqueeMode): boolean {
     if (mode === 'contain') {
         return (
@@ -98,13 +99,12 @@ export function unionBounds(a: Bounds, b: Bounds): Bounds {
     };
 }
 
-// Union bounds of several boxes (multi-select). Caller guarantees a non-empty list.
+// The bounds around several boxes. The list must not be empty, because reduce has no start value.
 export function getElementsBounds(boxes: Box[]): Bounds {
     return boxes.map(getElementBounds).reduce(unionBounds);
 }
 
-// Map a scene point into the box's unrotated local frame, so every hit-test works on an
-// axis-aligned shape.
+// Turns a scene point back by the box's rotation, so each hit test below can treat the shape as unturned.
 function toLocal(box: Box, point: Point): Point {
     return box.angle === 0 ? point : rotatePoint(point, boxCenter(box), -box.angle);
 }
@@ -132,42 +132,41 @@ export function hitTestDiamond(box: Box, point: Point): boolean {
     return Math.abs(p.x - (box.x + rx)) / rx + Math.abs(p.y - (box.y + ry)) / ry <= 1;
 }
 
-// --- Linear elements (freedraw / line) ------------------------------------------------
-// points is a JSON `[[x,y],…]` string, scene units relative to (x,y); the bbox min corner is (0,0).
-// Kept a string in the model so a whole stroke is one scalar write (never a per-sample Y.Array).
+// A linear element, such as a line or a freehand stroke, stores its points as a JSON string of [x, y] pairs. They
+// are relative to the element's x and y, and the corner of their bounds sits at 0, 0. A string makes a whole
+// stroke one write to the shared document, instead of one write per sample.
 
-// The full stroke diameter is `strokeWidth * FREEDRAW_SIZE_FACTOR`; hit-testing widens a freedraw's
-// tolerance by half of it (the visible ink half-width). The renderer feeds the same factor to
-// perfect-freehand's `size`.
+// A freehand stroke's ink is this many times its strokeWidth across. The renderer passes the same width to
+// perfect-freehand, and the hit test reaches half of it on each side.
 export const FREEDRAW_SIZE_FACTOR = 2.125;
 
-// A path loops when its ends meet: ≥ 3 points and the first ≈ last within 8 scene units
-// (Excalidraw's isPathALoop at zoom 1 — zoom-free so FE preview and BE export decide fill alike).
+// A path is a loop when it has at least 3 points and its last point lies this close to its first, as in
+// Excalidraw's isPathALoop at zoom 1. It ignores zoom, so the editor and a server export agree on whether a
+// path fills.
 const CLOSE_PATH_THRESHOLD = 8;
 
-// Excalidraw's getElementHitThreshold: a linear/arrow element is grabbed within the LARGER of the
-// zoom-scaled screen threshold (0.85× — Excalidraw's tested floor; lower gets FP-flaky at high zoom)
-// and half the drawn ink width plus 0.1.
+// As Excalidraw's getElementHitThreshold, a line or an arrow is hit within 0.85 of the screen threshold, or
+// within half its ink width when that is larger. Excalidraw's tests hold at 0.85. A lower factor fails on
+// floating-point noise at high zoom.
 export const LINEAR_HIT_SCREEN_FACTOR = 0.85;
 
-// Hit tolerance in screen px (Excalidraw's DEFAULT_COLLISION_THRESHOLD); hosts divide by zoom so an
-// element's grab radius is a constant on-screen distance at any zoom.
+// How near a pointer must come to grab an element, in screen pixels, as Excalidraw's
+// DEFAULT_COLLISION_THRESHOLD. A host divides it by the zoom, so the reach looks the same at every zoom.
 export const HIT_THRESHOLD_SCREEN = 8;
 
-// A coarse pointer (finger/stylus) has no pixel-precise tip, so it grabs within a fatter screen radius
-// than a mouse. Excalidraw keeps a constant threshold — this multiplier is our own touch addition, kept
-// to a single knob applied wherever HIT_THRESHOLD_SCREEN feeds hover/hit-testing/eraser.
+// A finger or a stylus can't point as precisely as a mouse, so a coarse pointer grabs from further away.
+// Excalidraw has no such factor. It is our own addition for touch.
 export const COARSE_HIT_SLOP_MULTIPLIER = 1.75;
 
-// The screen-px grab tolerance for the active pointer: the base for a mouse, fattened for coarse
-// pointers. Callers still divide by zoom. One source so hover/hit and the eraser can never drift apart.
+// The grab reach in screen pixels for the current pointer. Hover, the hit test and the eraser all read it, so
+// they can't disagree. A caller still divides it by the zoom.
 export function hitThresholdScreen(coarse: boolean): number {
     return coarse ? HIT_THRESHOLD_SCREEN * COARSE_HIT_SLOP_MULTIPLIER : HIT_THRESHOLD_SCREEN;
 }
 
-// Per-point pen pressure, the parallel array to a freedraw's points (Excalidraw's `pressures`). Any
-// structural garbage or a non-finite/non-number entry ⇒ [] (the caller then falls back to simulate);
-// finite values clamp to [0,1]. Kept a JSON string like points so a whole stroke is one scalar write.
+// A freehand stroke's pen pressure per point, as Excalidraw's `pressures`. It is stored as a JSON string for the
+// same reason as the points. A value that isn't a list of finite numbers reads as an empty list, and the
+// renderer then simulates the pressure. Each value is clamped to the range 0 to 1.
 export function parsePressures(pressures: string): number[] {
     let raw: unknown;
     try {
@@ -188,18 +187,18 @@ export function serializePressures(pressures: number[]): string {
     return JSON.stringify(pressures.map((p) => round3(Math.min(1, Math.max(0, p)))));
 }
 
-// Pressures are 0..1, so 2-decimal point rounding would flatten the width variation — keep 3 decimals.
+// Points round to 2 decimals. Pressures lie between 0 and 1, where 2 decimals would flatten the changes in width,
+// so pressures keep 3.
 function round3(n: number): number {
     const r = Math.round(n * 1000) / 1000;
     return r === 0 ? 0 : r;
 }
 
-// Re-derive (x, y, width, height, points) so the point bbox's MIN corner is the origin (every point
-// non-negative) and width/height span the raw bbox — so the box ALWAYS equals the content and bounds,
-// viewBox, selection ring, rotation pivot and hit-testing agree with no special case. `box` is the
-// element's CURRENT box (its width/height only matter when rotated): the renderer rotates about the
-// box center, so translating the points by -min AND changing the extent both move that pivot; x/y
-// shift so every point keeps its scene position (Excalidraw's _updatePoints center correction).
+// Sets a linear element's box to fit its points exactly. The points move so the corner of their bounds is at
+// 0, 0, and the width and height span them. Then the bounds, the selection ring, the rotation pivot and the hit
+// test all agree without a special case. `box` is the element's current box. The renderer rotates about the box
+// center, and both the shift and the new size move that center. So x and y move too, and every point keeps its
+// place in the scene, as in Excalidraw's _updatePoints.
 export function normalizeLinear(
     box: Box,
     points: Point[],
@@ -225,9 +224,8 @@ export function normalizeLinear(
     };
 }
 
-// Scale points per axis to fit a new box (ObjectTransform resize). Scaling is about the origin (0,0),
-// the bbox min corner, so non-negative points stay non-negative; a degenerate old dimension keeps that
-// axis (nothing to scale from). resizeLinear re-normalizes after, so the invariant holds regardless.
+// Scales points on each axis to fit a new size. They scale about 0, 0, the corner of their bounds, so no point
+// goes negative. An axis whose old size is 0 has nothing to scale from, so it stays as it is.
 export function rescalePoints(
     points: Point[],
     oldSize: { width: number; height: number },
@@ -238,9 +236,8 @@ export function rescalePoints(
     return points.map((p) => ({ x: p.x * sx, y: p.y * sy }));
 }
 
-// Every width/height write on a linear element goes through here: rescale the points to the new box
-// per axis, then re-normalize so the bbox min corner stays the origin. The one owner of resize for the
-// canvas onCommit, the panel's W/H inputs, and match-size.
+// Every write of a linear element's width or height goes through here, such as a drag on the canvas or the
+// panel's size inputs. Writing the size alone would leave the points where they were.
 export function resizeLinear(
     el: VectorLinearElement | VectorArrowElement,
     box: Box,
@@ -248,14 +245,11 @@ export function resizeLinear(
     return normalizeLinear(box, rescalePoints(parsePoints(el.points), el, box));
 }
 
-// Distance between two points. Every tool that measures a drag, a grab radius or a segment length
-// asks this rather than spelling out its own Math.hypot.
 export function distance(a: Point, b: Point): number {
     return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
-// Nearest distance from a point to a polyline (min over its segments). A single point degrades to the
-// distance to that point; an empty path is unreachable.
+// A polyline of one point is that point. An empty one is infinitely far away, so nothing hits it.
 export function distanceToPolyline(points: Point[], point: Point): number {
     if (points.length === 0) return Number.POSITIVE_INFINITY;
     if (points.length === 1) return distance(point, points[0]);
@@ -267,10 +261,9 @@ export function distanceToPolyline(points: Point[], point: Point): number {
     return min;
 }
 
-// The polyline kinds' hit test: the probe unrotated into the element's local frame, measured to the
-// polyline within the LARGER of the scaled screen threshold and the drawn ink half-width (+0.1); a
-// closed, filled path is also hit anywhere inside. `inkHalf` differs per kind — freedraw's stroke is
-// FREEDRAW_SIZE_FACTOR wider than its strokeWidth.
+// The hit test of the kinds drawn as a polyline. A point hits within the reach LINEAR_HIT_SCREEN_FACTOR sets, and
+// a closed path with a fill is also hit anywhere inside. Each kind passes `inkHalf`, half its drawn ink width,
+// because a freehand stroke draws wider than its strokeWidth.
 export function hitTestLinear(el: VectorLinearElement, point: Point, threshold: number, inkHalf: number): boolean {
     const points = parsePoints(el.points);
     if (points.length === 0) return false;
@@ -286,17 +279,15 @@ export function isClosedPath(points: Point[]): boolean {
     return distance(first, last) <= CLOSE_PATH_THRESHOLD;
 }
 
-// Does this freedraw/line paint a fill at all? Only a looping path does — the rule the renderers apply
-// (freedraw's render arm and linearRoughOptions, both on the points they already hold), so the kind's
-// per-element `fill` capability answers through the same predicate and the panel offers the Fill block
-// exactly when the paint would land.
+// Whether a line or a freehand stroke paints its fill. Only a closed path does, and the renderers apply the same
+// rule. The kind's `fill` capability asks this, so the panel offers a fill only where it would show.
 export function isClosedLinear(el: VectorLinearElement): boolean {
     return isClosedPath(parsePoints(el.points));
 }
 
-// A linear element's local frame ↔ scene mapping. The renderer places every vertex at
-// rotate(origin + local, boxCenter, angle), so hit-testing and the point-handles share this one
-// transform — the pivot convention lives here, not copied at each call site.
+// The renderer places each point of a linear element at x and y plus the point, turned about the box center. The
+// hit test and the point handles map between the scene and the points through these two functions, so they use
+// the same pivot.
 export function linearSceneToLocal(box: Box, scene: Point): Point {
     const un = rotatePoint(scene, boxCenter(box), -box.angle);
     return { x: un.x - box.x, y: un.y - box.y };
@@ -306,14 +297,12 @@ export function linearLocalToScene(box: Box, local: Point): Point {
     return rotatePoint({ x: box.x + local.x, y: box.y + local.y }, boxCenter(box), box.angle);
 }
 
-// --- Arrows: the curve, heads and labels -------------------------------------------
-
 type CubicBezier = [Point, Point, Point, Point];
 
-// The arrow curve's parametric form — the ONE geometry-side owner of the shape roughjs's `gen.curve`
-// draws for a round (non-elbow) arrow. Golden-locked by test to roughjs's `_curve` control points at
-// roughness 0: a uniform Catmull-Rom cardinal spline (curveTightness 0 ⇒ s = 1) with the first and last
-// points duplicated so the shaft passes through its endpoints. `points` must have ≥ 2 entries.
+// The curve a round arrow draws, as Bézier pieces, for code that needs the shape itself, such as an export. It
+// is the curve roughjs's `gen.curve` draws at roughness 0, and a test holds it to those control points. That is
+// a Catmull-Rom spline at curveTightness 0. The first and last points are doubled, so the curve passes through
+// both ends. `points` needs at least 2 entries.
 export function arrowCurveBeziers(points: Point[]): CubicBezier[] {
     const ps = [points[0], points[0], ...points.slice(1), points[points.length - 1]];
     const beziers: CubicBezier[] = [];
@@ -333,16 +322,17 @@ export function arrowCurveBeziers(points: Point[]): CubicBezier[] {
 }
 
 const ARROWHEAD_SIZE = 15;
-const ARROWHEAD_SIZE_LONG = 25; // the plain 'arrow' head is longer
+// The plain arrow head is longer than the others.
+const ARROWHEAD_SIZE_LONG = 25;
 
 type ArrowheadGeometry =
     | { kind: 'barbs'; tip: Point; barb1: Point; barb2: Point }
     | { kind: 'circle'; center: Point; diameter: number };
 
-// Head geometry in the arrow's local frame, from the direction of the raw last or first segment. Excalidraw
-// reads the curve roughjs draws instead, so on a curved shaft the two can differ a little. The head is
-// capped at half its segment so a short arrow's head shrinks instead of overrunning it. 'barbs' feeds
-// the arrow (two lines), bar (one line) and triangle (filled polygon); 'circle' a filled disc.
+// A head's points in the arrow's local frame. Its direction comes from the first or last segment of the points.
+// Excalidraw reads the curve roughjs draws instead, so on a curved shaft the two can differ a little. A head is
+// at most half its segment long, so on a short arrow it shrinks instead of overrunning the shaft. The arrow, bar
+// and triangle heads draw from the barbs, and the circle head from its center and diameter.
 export function arrowheadGeometry(
     el: VectorArrowElement,
     points: Point[],
@@ -359,7 +349,7 @@ export function arrowheadGeometry(
     const size = head === 'arrow' ? ARROWHEAD_SIZE_LONG : ARROWHEAD_SIZE;
     const minSize = Math.min(size, len * 0.5);
     const base = { x: tip.x - (dx / len) * minSize, y: tip.y - (dy / len) * minSize };
-    // Floored at 1: a thin, short arrow's span + strokeWidth − 2 can go non-positive (no disc at all).
+    // On a thin, short arrow the diameter can reach 0 or less, and the disc would vanish. So it is at least 1.
     if (head === 'circle') return { kind: 'circle', center: tip, diameter: Math.max(1, minSize + el.strokeWidth - 2) };
     const angle = head === 'bar' ? 90 : head === 'arrow' ? 20 : 25;
     return { kind: 'barbs', tip, barb1: rotatePoint(base, tip, -angle), barb2: rotatePoint(base, tip, angle) };
@@ -368,11 +358,9 @@ export function arrowheadGeometry(
 // The clearance an arrow label's mask leaves around its text, on every side.
 export const ARROW_LABEL_PAD = 5;
 
-// The label's center (arrow local frame) and box: centered on the polyline's index-midpoint (odd → the
-// middle vertex, even → the middle segment's midpoint), width client-measured (labelWidth),
-// height = line count × the font's line height. null when the arrow has no label. Shared by hit-testing,
-// bounds, and the renderer so the three agree. `route` overrides the stored points for an elbow arrow (its
-// label rides the derived route's midpoint).
+// The center and size of an arrow's label, in the arrow's local frame, or null when it has no label. The hit
+// test, the bounds and the renderer all read it, so they agree. The width is labelWidth, which the browser
+// measured. Pass `route` for an elbow arrow, whose label sits on its routed line.
 export function arrowLabelBox(
     el: VectorArrowElement,
     route?: Point[],
@@ -388,10 +376,10 @@ export function arrowLabelBox(
     };
 }
 
-// The label anchor in the arrow's local frame: the polyline's index-midpoint (odd → the middle vertex,
-// even → the middle segment's midpoint). null for a degenerate arrow (< 2 points). Text-free
-// so the editor can center an empty label on the same anchor a committed one would render at. `route` (the
-// derived elbow polyline) overrides the stored points when given.
+// Where an arrow's label sits, in the arrow's local frame. With an odd number of points it is the middle point,
+// and with an even number the middle of the middle segment. It is null for an arrow of fewer than 2 points. It
+// ignores the text, so the editor can place an empty label where the finished one will show. Pass `route` for an
+// elbow arrow.
 export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point | null {
     const points = route ?? parsePoints(el.points);
     if (points.length < 2) return null;
@@ -401,14 +389,10 @@ export function arrowLabelCenter(el: VectorArrowElement, route?: Point[]): Point
     return { x: (points[i - 1].x + points[i].x) / 2, y: (points[i - 1].y + points[i].y) / 2 };
 }
 
-// --- Resize / rotate transform math ---------------------------------------------------
-// The resize floor is a `minSize` PARAMETER rather than a module constant, so the same math serves a
-// fixed-unit deck and a zoomable canvas (which passes ~1).
-// Angle is DEGREES throughout — no radian value escapes a function body (rotatePoint owns it).
-
-// Resize an axis-aligned box by dragging one handle. The opposite corner/edge stays pinned
-// (unless fromCenter). `mode` is a 'resize-<dir>' string. Angle is passed through unchanged
-// — callers use resizeRotatedRect for rotated boxes.
+// Resizes an unturned box by one dragged handle. The opposite corner or edge stays where it is, unless
+// `fromCenter` grows the box from its center. `mode` names the handle, such as 'resize-se'. The angle passes
+// through unchanged, and a turned box goes through resizeRotatedRect. The caller passes `minSize`, because a
+// slide deck and a zoomable canvas need a different smallest size.
 export function applyResize(
     mode: string,
     dx: number,
@@ -417,11 +401,11 @@ export function applyResize(
     { fromCenter, keepAspect }: { fromCenter: boolean; keepAspect: boolean },
     minSize: number,
 ): Box {
-    // Strip the 'resize-' prefix first — 'resize' itself contains 'e' and 's', poisoning the substring check.
-    const dir = mode?.split('-')[1] ?? '';
+    // The word 'resize' itself contains an e and an s, so the direction checks below read only the part after it.
+    const dir = mode.split('-')[1] ?? '';
     const xDir = dir.includes('e') ? 1 : dir.includes('w') ? -1 : 0;
     const yDir = dir.includes('s') ? 1 : dir.includes('n') ? -1 : 0;
-    // Aspect lock only applies to corners — on edges only one axis is intentional.
+    // The aspect lock applies only to a corner. An edge handle means to change one axis.
     const aspectLocked = keepAspect && xDir !== 0 && yDir !== 0 && ow > 0 && oh > 0;
 
     let dw = xDir * dx;
@@ -441,7 +425,7 @@ export function applyResize(
     let h = oh + sizeFactor * dh;
 
     if (aspectLocked) {
-        // Clamp both dimensions through a single scale so the ratio survives the minSize floor.
+        // Both sides scale by one factor, so the ratio holds when minSize stops the shrink.
         const scale = Math.max(w / ow, minSize / ow, minSize / oh);
         w = ow * scale;
         h = oh * scale;
@@ -463,10 +447,9 @@ export function applyResize(
     return { x, y, width: w, height: h, angle };
 }
 
-// Resize a rotated box: the dragged handle's opposite corner/edge stays fixed in world
-// space and the box grows along its own (rotated) axes. Reuses applyResize in a
-// center-origin local frame, then repositions the center so the pinned point holds. At
-// angle 0 this returns exactly applyResize(...). Rotation is read from the box itself.
+// Resizes a turned box. The box grows along its own turned axes, and the corner or edge opposite the dragged
+// handle stays where it is in the scene. It runs applyResize on the unturned box centered on 0, 0, then moves the
+// center so that opposite point holds still.
 export function resizeRotatedRect(
     mode: string,
     dx: number,
@@ -477,10 +460,8 @@ export function resizeRotatedRect(
 ): Box {
     const rotation = start.angle;
     if (!rotation) return applyResize(mode, dx, dy, start, opts, minSize);
-    const cx = start.x + start.width / 2;
-    const cy = start.y + start.height / 2;
-    // Rotate the pointer delta into the box's unrotated frame (rotatePoint around ORIGIN is a
-    // pure vector rotation — reused rather than a second helper).
+    const { x: cx, y: cy } = boxCenter(start);
+    // Turning about the origin turns the pointer's movement without moving it.
     const local = rotatePoint({ x: dx, y: dy }, ORIGIN, -rotation);
     const r = applyResize(
         mode,
@@ -500,7 +481,7 @@ export function resizeRotatedRect(
     };
 }
 
-// Snap an angle (degrees) to the nearest `step` — used for Shift → 15° rotation.
+// Holding Shift while rotating snaps the angle to steps of 15 degrees.
 export function snapAngle(deg: number, step = 15): number {
     return Math.round(deg / step) * step;
 }

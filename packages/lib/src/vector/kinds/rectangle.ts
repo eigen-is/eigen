@@ -15,8 +15,8 @@ import { bool, oneOf } from './read-fields';
 import { renderRoughShape } from './render-utils';
 import { hasText, plainText, richTextCssText, textRender, textualDefaults } from './textual';
 
-// Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
-// (getDiagonalsForBindableElement) — the focus points behave oddly right at the corners.
+// Excalidraw shortens a rectangle's aim diagonals by 15 px at each end, because an aim right at a corner behaves
+// oddly (getDiagonalsForBindableElement).
 const DIAGONAL_SHRINK = 15;
 
 export const rectangleKind = defineKind<VectorRectangleElement>({
@@ -42,9 +42,8 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     hitTest: (el, point) => hitTestBox(el, point),
     outline: (el, inflate) =>
         rectOutline({ x: el.x, y: el.y, width: el.width, height: el.height }, cornerRadius(el, 'rectangle'), inflate),
-    // The rectangle is Excalidraw's one exception to the center-line default: a straight arrow's bind-time
-    // aim projects onto its two corner diagonals, pulled in by DIAGONAL_SHRINK at both ends. A text box keeps
-    // the default.
+    // In Excalidraw the rectangle is the one shape a straight arrow aims at along its corner diagonals, shortened at
+    // both ends. A text box keeps the default center lines.
     aimLines: (el) => {
         if (el.autoFit) return boxAimLines(el);
         const center = boxCenter(el);
@@ -75,7 +74,8 @@ export function isTextBox<T extends { type: string; autoFit?: boolean }>(
 }
 
 // What a new text box starts with over a new rectangle. It paints no border until the user picks a color, where a new
-// rectangle draws one in ink. Its text starts at the top left, flush with its edge.
+// rectangle draws one in ink. Its text starts at the top left, flush with its edge. The registry's writer lays these
+// over a new rectangle's defaults in textBoxDefaults, because this kind module must not reach the registry.
 export function textBoxOverrides(style: StyleDefaults) {
     return { strokeColor: 'transparent', ...textualDefaults(style, DEFAULT_TEXT_BOX_PROPS), autoFit: true };
 }
@@ -88,13 +88,13 @@ export function textBoxOverrides(style: StyleDefaults) {
 // shortfall of 1 px or more is written.
 export function textBoxFitHeight(el: VectorRectangleElement, contentHeight: number): number | null {
     const needed = contentHeight + 2 * el.padding + (isBordered(el) ? 2 * el.strokeWidth : 0);
-    // A sub-pixel shortfall is left alone: the body overflows visibly rather than clipping, so writing
-    // for it would only cost every peer a round of updates.
+    // A shortfall under a pixel is left alone. The body overflows visibly and isn't clipped, so writing for it would
+    // only cost every peer a round of updates.
     return needed - el.height >= 1 ? Math.ceil(needed) : null;
 }
 
-// Pull a segment in by DIAGONAL_SHRINK at each end, along its own direction. A segment with no room for
-// both bites is returned unchanged — shrinking it would reverse it and aim the arrow back out.
+// A segment pulled in by DIAGONAL_SHRINK at each end. A segment too short for that comes back unchanged, because
+// shortening it would reverse it and aim the arrow back out.
 function shrink(a: Point, b: Point): [Point, Point] {
     const dx = b.x - a.x;
     const dy = b.y - a.y;

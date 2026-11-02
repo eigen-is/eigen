@@ -18,10 +18,9 @@ export type VectorElementType =
     | 'chart'
     | 'path';
 
-// The runtime value lists are the single source; the union types derive from them, so a grown
-// list and its type can never drift. read-vector's validators consume the same arrays.
-// The hatch style is HALF OF THE FILL, not a field of its own: it rides the stored `fill` JSON beside
-// the paint (types/background.ts derives `Fill` from the pair), so a kind that fills carries one field.
+// The value lists are the one source, and the union types derive from them, so a list and its type can't drift.
+// The reader validates against the same arrays. The hatch style is part of the fill and not a field of its own: it
+// rides the stored `fill` JSON beside the paint, so a kind that fills carries one field.
 export const FILL_STYLES = ['hachure', 'cross-hatch', 'solid', 'zigzag'] as const;
 export const STROKE_STYLES = ['solid', 'dashed', 'dotted'] as const;
 export const ROUNDNESS = ['sharp', 'round'] as const;
@@ -35,14 +34,11 @@ export const VERTICAL_ALIGNS = ['top', 'center', 'bottom'] as const;
 export const FONT_WEIGHTS = ['normal', 'bold'] as const;
 export const FONT_STYLES = ['normal', 'italic'] as const;
 export const TEXT_DECORATIONS = ['none', 'underline', 'line-through'] as const;
-// Arrowhead vocabulary (both ends), Excalidraw's trimmed to the shapes we draw. read-vector validates
-// against this array; the panel's start/end selects list it.
+// The heads an arrow's ends can have: Excalidraw's, trimmed to the shapes Eigen draws.
 export const ARROWHEADS = ['none', 'arrow', 'triangle', 'bar', 'circle'] as const;
-// The 3-way arrow-shape vocabulary the panel offers. It is a DERIVED UI concept, not a stored field:
-// 'sharp'/'curved' are the existing `roundness` (sharp linearPath vs round curve shaft), and 'elbow' is the
-// one new stored boolean below. Keeping roundness as the single owner of shaft curvature (shared with
-// line/freedraw) means an arrow carrying only `roundness` reads back unchanged (elbow ⇒ false), so there
-// is no second field answering "how curved is the shaft".
+// The three arrow shapes the panel offers. They are not a stored field. Sharp and curved are the arrow's
+// `roundness`, as on a line, and elbow is the stored `elbow` flag. So one field still says how curved a shaft is,
+// and an arrow that stores only `roundness` reads back unchanged.
 export const ARROW_SHAPES = ['sharp', 'curved', 'elbow'] as const;
 
 export type FillStyle = (typeof FILL_STYLES)[number];
@@ -65,13 +61,16 @@ export type VectorElementBase = {
     y: number;
     width: number;
     height: number;
-    angle: number; // DEGREES, clockwise, y-down — matches SVG rotate()
-    index: string; // fractional-index z-order string
-    // '' on the infinite canvas; when set, x/y are RELATIVE to that frame's origin.
+    // In degrees, clockwise, with y pointing down, as SVG's rotate() takes it.
+    angle: number;
+    // The z-order, as a fractional index.
+    index: string;
+    // Empty on the infinite canvas. When set, x and y are relative to that frame's origin.
     frameId: string;
     // A JSON `["id",…]` string like `points`, so every stored field stays a scalar.
     commentCardIds: string;
-    opacity: number; // 0..100
+    // From 0 to 100.
+    opacity: number;
     strokeColor: string;
     strokeWidth: number;
     strokeStyle: StrokeStyle;
@@ -80,8 +79,8 @@ export type VectorElementBase = {
     seed: number;
 };
 
-// A serialized Fill — paint + hatch style (see fill.ts): a JSON scalar, '' or malformed ⇒ the
-// transparent solid fill.
+// A serialized Fill, its paint and hatch style as JSON. An empty or malformed one reads as the transparent solid
+// fill.
 type Fillable = { fill: string };
 
 // The text a box or a closed shape holds: its HTML and its typography, one block every text kind composes.
@@ -97,31 +96,33 @@ export type Textual = {
     color: string;
     letterSpacing: number;
     lineHeight: number;
-    padding: number; // px inset between the box edge and the text; the box keeps its stored size
+    // The inset in px between the box's edge and its text. The box keeps its stored size.
+    padding: number;
 };
 
-// A rectangle with `autoFit` is a text box: it grows to fit its text, and an empty one that paints nothing is deleted
-// when its editor closes. A plain one keeps its size, lets text that does not fit spill out, and stays when empty.
+// A rectangle with `autoFit` is a text box, which grows to fit its text. A plain one keeps its size and lets text that
+// does not fit spill out.
 export type VectorRectangleElement = VectorElementBase &
     Fillable &
     Textual & { type: 'rectangle'; corners: Corners; autoFit: boolean };
 export type VectorDiamondElement = VectorElementBase & Fillable & Textual & { type: 'diamond'; corners: Corners };
-// An ellipse has no corners to treat, so it carries no `corners` field; the panel hides the row
-// through the kind's capabilities.
+// An ellipse has no corners, so it carries no `corners` field, and its capabilities hide the panel's row.
 export type VectorEllipseElement = VectorElementBase & Fillable & Textual & { type: 'ellipse' };
 
 // The roughjs-drawn closed shapes.
 export type VectorShapeElement = VectorRectangleElement | VectorDiamondElement | VectorEllipseElement;
 
-// A sector of the ellipse its box inscribes (OOXML's `pie`). Degrees, clockwise from 3 o'clock, in the
-// box-normalized circle (roughjs arc's parametric angle), so a resize scales the slice like any shape.
-// Start + sweep, not start + end: a 360° slice has no distinct end.
+// A sector of the ellipse in its box, OOXML's `pie`. Its angles are degrees clockwise from 3 o'clock on the circle
+// the box is stretched from, so a resize scales the slice like any shape. It stores a start and a sweep, because a
+// 360° slice has no end of its own.
 export type VectorPieElement = VectorElementBase &
     Fillable &
     Textual & {
         type: 'pie';
-        startAngle: number; // [0, 360)
-        sweepAngle: number; // (0, 360]
+        // From 0 up to but not including 360.
+        startAngle: number;
+        // Above 0, up to and including 360.
+        sweepAngle: number;
     };
 
 // A free contour of lines and Bézier curves (a pptx custGeom). `path` is absolute M/L/C/Q/Z in the unit
@@ -139,15 +140,16 @@ export type VectorPathElement = VectorElementBase &
 
 export type VectorImageElement = VectorElementBase & {
     type: 'image';
-    mediaName: string; // filename in the container's media/ folder, NEVER a dataURL
+    // A file name in the container's media folder, never a data URL.
+    mediaName: string;
     corners: Corners;
-    objectFit: ObjectFit; // → preserveAspectRatio none / xMidYMid meet / xMidYMid slice
+    objectFit: ObjectFit;
 };
 
 // The kinds that hold text. The runtime answer is the `text` capability (isTextual); the registry test pins the two.
 export type VectorTextualElement = VectorShapeElement | VectorPieElement | VectorPathElement;
 
-// One line of plain text in a kind's local frame, as svgTextLine draws it. y is the line's TOP: a renderer
+// One line of plain text in a kind's local frame, as svgTextLine draws it. y is the line's top, and a renderer
 // adds the font's baseline offset. The line turns `rotate` degrees about (x, y).
 export type TextLine = {
     text: string;
@@ -175,9 +177,8 @@ export type VectorChartElement = VectorElementBase &
     };
 
 // What an arrow endpoint may dock to: the closed shapes, the pie slice, a closed path, the chart and the image, whose
-// outline is the rounded rect its `corners` describes. The RUNTIME answer is the registry's
-// `bindable` capability (isBindable in kinds/index.ts) — this union is its type-level face, and the
-// registry test pins the two against each other so neither can grow without the other.
+// outline is the rounded rect its `corners` describes. At run time the answer is the registry's `bindable`
+// capability, and this union is its type. The registry test pins the two, so neither grows without the other.
 export type VectorBindableElement =
     | VectorShapeElement
     | VectorPieElement
@@ -185,50 +186,50 @@ export type VectorBindableElement =
     | VectorChartElement
     | VectorImageElement;
 
-// Freehand strokes and (poly)lines. `points` is a JSON `[[x,y],…]` string in scene units RELATIVE
-// to (x,y); the point bbox's min corner is ALWAYS (0,0) (normalizeLinear owns that invariant).
+// Freehand strokes and lines. `points` is a JSON `[[x,y],…]` string in scene units, relative to x and y. The points'
+// bounding box always starts at (0, 0), which normalizeLinear keeps true.
 export type VectorLinearElement = VectorElementBase &
     Fillable & {
         type: 'freedraw' | 'line';
         points: string;
-        roundness: Roundness; // line: 'round' = roughjs curve through the vertices. freedraw ignores it.
-        // Per-point pen pressure (freedraw only; a line always carries '' + simulate). A JSON `[p0,…]` string
-        // aligned by INDEX with `points`, '' = none. `simulatePressure:false` + a matching pressures array feeds
-        // perfect-freehand the real per-point widths (Excalidraw's model); the default `simulatePressure:true`
-        // (and/or '') reproduces the velocity-simulated stroke. Pressure rides this SEPARATE field, never inside
-        // `points` — read-vector re-serializes points as 2-tuples and would strip a 3rd element.
+        // A round line draws a roughjs curve through its vertices. A freehand stroke ignores it.
+        roundness: Roundness;
+        // The pen's pressure at each point of a freehand stroke, as a JSON `[p0,…]` string in the order of `points`,
+        // or empty for none. With `simulatePressure` off, perfect-freehand draws these real widths, as Excalidraw
+        // does. Otherwise it simulates them from the pen's speed. Pressure has a field of its own, because the
+        // reader writes each point back as a pair and would drop a third value.
         pressures: string;
         simulatePressure: boolean;
     };
 
-// An arrow is a line (points + roundness) plus heads, forward bindings, and an optional label. Its own
-// exclusive `type` keeps the discriminated union clean — `el.type === 'arrow'` narrows straight to the
-// arrow fields. `startBinding`/`endBinding` are a JSON `{"elementId","fixedPoint":[fx,fy]}` string or ''
-// when unbound (parseBinding/serializeBinding); the reverse index is derived, never stored.
+// An arrow is a line with heads, a binding at each end and an optional label. It has a `type` of its own, so
+// `el.type === 'arrow'` narrows straight to its fields. `startBinding` and `endBinding` are a JSON
+// `{"elementId","fixedPoint":[fx,fy]}` string, or empty when unbound. Which arrows a shape has is derived, never
+// stored.
 export type VectorArrowElement = VectorElementBase & {
     type: 'arrow';
     points: string;
     roundness: Roundness;
-    // Elbow ("snake") arrow: store only this flag + the two endpoints (points) + bindings; the orthogonal
-    // route is DERIVED on every read/render (elbowRoute), never stored. An elbow arrow pins angle 0 (its
-    // route lives in the unrotated local frame — the reader forces it). `roundness` is ignored while true.
+    // An elbow arrow stores this flag, its two endpoints and its bindings. Its route of straight runs is derived
+    // each time it is read or drawn, never stored. Its angle is always 0, because the route lives in the unturned
+    // local frame, and the reader forces that. Its `roundness` is the style of its bends.
     elbow: boolean;
-    // Pinned route segments (Excalidraw's fixedSegments), '' when none. NON-empty flips the elbow arrow
-    // into STORED-POLYLINE mode: `points` then holds the full routed polyline (not just the two endpoints)
-    // and the incremental editors in elbow-pins.ts mutate it — the A* router never runs on a pinned arrow.
-    // The string is a JSON envelope `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`:
-    // each pin keys `points[index-1]→points[index]` (Excalidraw's identity), start/end are LOCAL copies of
-    // those two vertices (self-describing for validation/resize, always re-derived from the polyline), and
-    // the isSpecial flags mark a synthetic L-jog point after start / before end. Ignored on a straight arrow.
+    // The pinned segments of an elbow arrow, Excalidraw's fixedSegments, or empty when none. Once a segment is
+    // pinned, `points` holds the whole route, the pin editors change it, and the router never runs on the arrow. The
+    // string is a JSON `{"segments":[{index,start,end},…],"startIsSpecial","endIsSpecial"}`. A pin's index names the
+    // segment that ends at `points[index]`, and its start and end are local copies of that segment's two points. The
+    // two flags mark an extra point the router adds next to an end. A straight arrow ignores the field.
     fixedSegments: string;
     startArrowhead: Arrowhead;
     endArrowhead: Arrowhead;
     startBinding: string;
     endBinding: string;
-    text: string; // the optional label; '' = no label — the last plain-text path on the canvas
+    // The optional label, or empty for none. It is the one plain-text field left on the canvas.
+    text: string;
     fontSize: number;
     fontFamily: string;
-    labelWidth: number; // client-measured, the sole width source
+    // Measured in the browser. It is the only source of the label's width.
+    labelWidth: number;
 };
 
 export type VectorElement =
@@ -240,15 +241,14 @@ export type VectorElement =
     | VectorLinearElement
     | VectorArrowElement;
 
-// The element type a `type` key materializes as, used to narrow the registry per kind. Keyed by
-// MEMBERSHIP rather than `Extract<VectorElement, { type: K }>`, because freedraw and line share one
-// element type whose `type` is the pair — Extract would match neither.
+// The element type a `type` key stands for, which narrows the registry per kind. It tests membership and not
+// `Extract<VectorElement, { type: K }>`, because a freehand stroke and a line share one element type whose `type`
+// is the pair, which Extract would match for neither.
 type OfType<T, K> = T extends { type: infer U } ? (K extends U ? T : never) : never;
 export type ElementOfType<K extends VectorElementType> = OfType<VectorElement, K>;
 
-// A partial patch over the write/read allow-list — every field optional, so a caller sets any
-// subset of any element variant's fields (the union members share the geometry base). id/type
-// are never patched; z-order changes rewrite `index`.
+// A patch over the stored fields. Every field is optional, so a caller sets any of any kind's fields. An id and a
+// type are never patched, and a z-order change rewrites `index`.
 export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>> &
     Partial<Omit<VectorRectangleElement, 'id' | 'type'>> &
     Partial<Omit<VectorPieElement, 'id' | 'type'>> &
@@ -258,22 +258,20 @@ export type VectorElementPatch = Partial<Omit<VectorShapeElement, 'id' | 'type'>
     Partial<Omit<VectorLinearElement, 'id' | 'type'>> &
     Partial<Omit<VectorArrowElement, 'id' | 'type'>>;
 
-// A new element: the caller names a `type` and overrides whatever it likes; the writer fills the
-// rest from the kind defaults and generates id/seed.
+// A new element. The caller names a `type` and sets whatever it likes, and the writer fills in the rest from the
+// kind's defaults, with a new id and seed.
 export type NewVectorElement = { type: VectorElementType } & VectorElementPatch;
 
-// A forward binding: an anchor as a proportion (fixedPoint) of the target shape's local w/h, so the
-// anchor follows the shape by construction. Not clamped on write; consumers clamp to [0,1] on read.
+// A binding: an anchor stored as a fraction of the target shape's width and height, so it follows the shape. It is
+// not clamped when written. Readers clamp it to [0, 1].
 type Binding = { elementId: string; fixedPoint: [number, number] };
 
-// One pinned polyline segment (Excalidraw's FixedSegment). `index` is the identity — it keys
-// `points[index-1]→points[index]`; `start`/`end` are LOCAL copies of those two vertices (always
-// axis-aligned: they share exactly one coordinate). Every writer rebuilds start/end from the
-// post-normalization polyline, so the copies never drift from the index.
+// One pinned segment, Excalidraw's FixedSegment. `index` names it: the segment that ends at `points[index]`. `start`
+// and `end` are local copies of its two points, which share exactly one coordinate. Every writer rebuilds them
+// from the normalized points, so the copies never drift from the index.
 export type FixedSegment = { index: number; start: [number, number]; end: [number, number] };
 
-// The parsed fixedSegments envelope: the pins plus the two synthetic-point markers. A pinned elbow
-// arrow's whole pin state, decoded from the one JSON scalar.
+// A pinned elbow arrow's whole pin state, decoded from its fixedSegments string: the pins and the two flags.
 type ParsedFixedSegments = { segments: FixedSegment[]; startIsSpecial: boolean; endIsSpecial: boolean };
 
 // `slideWidth` is the deck's physical width in pt (frames.ts).
@@ -283,8 +281,8 @@ export type SlidePage = Pick<VectorMeta, 'slideSize' | 'slideWidth'>;
 
 export type VectorScene = { elements: VectorElement[]; frames: VectorFrame[]; meta: VectorMeta };
 
-// The base half of the write/read whitelist. Each kind adds its own; the union (ELEMENT_FIELDS) is
-// assembled from the registry in kinds/index.ts.
+// The stored fields every kind shares. Each kind adds its own, and the registry assembles the whole list,
+// ELEMENT_FIELDS.
 export const BASE_ELEMENT_FIELDS = [
     'id',
     'type',
@@ -309,14 +307,13 @@ export const DEFAULT_FONT_FAMILY = 'Excalifont';
 export const DEFAULT_FILL_STYLE: FillStyle = 'solid';
 export const DEFAULT_CORNERS: Corners = 'curved';
 export const DEFAULT_OBJECT_FIT: ObjectFit = 'contain';
-// Freedraw draws sharp (Excalidraw stores freedraw roundness null); the reader also falls back to this
-// for any linear element (line/arrow) missing the field, so stored elements keep their meaning.
+// A freehand stroke draws sharp, as Excalidraw's stores no roundness. The reader also falls back to this for a line
+// or arrow without the field, so a stored element keeps its meaning.
 export const DEFAULT_LINEAR_ROUNDNESS: Roundness = 'sharp';
-// A new line curves by default (Excalidraw's currentItemRoundness defaults to 'round', and newLinearElement
-// reads it) — distinct from freedraw's sharp default, hence its own constant.
+// A new line curves, as Excalidraw's currentItemRoundness starts round. A freehand stroke's default is sharp, so the
+// line has a constant of its own.
 export const DEFAULT_LINE_ROUNDNESS: Roundness = 'round';
-// Arrows curve by default (Excalidraw parity); the read fallback stays sharp so stored
-// arrows keep their meaning.
+// A new arrow curves, as in Excalidraw. The reader's fallback stays sharp, so a stored arrow keeps its meaning.
 const DEFAULT_ARROW_ROUNDNESS: Roundness = 'round';
 
 // Canvas-level defaults (the `meta` root). A new deck is PowerPoint's widescreen, 16:9 and 13.33 in wide, so a pt is
@@ -331,9 +328,9 @@ export const DEFAULT_ELEMENT_PROPS = {
     opacity: 100,
     frameId: '',
     commentCardIds: '',
-    // The READER's fallback, not creation's: a stored element with no roughness stays crisp in both
-    // hosts, while a new one is as sketchy as its host's style table says. Never 0 for the seed:
-    // roughjs reads 0 as "pick a random one", and a re-rolled seed redraws the jitter on every render.
+    // The reader's fallback, not a new element's. A stored element with no roughness stays crisp in both apps, and a
+    // new one is as sketchy as its app's style table says. The seed is never 0, because roughjs reads 0 as "pick a
+    // random one" and would draw new jitter every time.
     roughness: 0,
     seed: 1,
 } satisfies Pick<
@@ -365,8 +362,7 @@ export const DEFAULT_SHAPE_TEXT_PROPS = {
     padding: 10,
 } satisfies TextProps;
 
-// Arrow-only defaults. Plain arrow, head on the end only, unbound, no label — Excalidraw's
-// currentItem defaults.
+// What a new arrow starts with, Excalidraw's: a head on its end only, no bindings and no label.
 export const DEFAULT_ARROW_PROPS = {
     startArrowhead: 'none',
     endArrowhead: 'arrow',
@@ -394,15 +390,15 @@ export const DEFAULT_ARROW_PROPS = {
     | 'roundness'
 >;
 
-// The ONE labeling of the Roundness vocabulary, consumed by the panel's Edges row for boxes and
-// lines and by the arrow section (where an elbow's roundness means its corner style).
+// The labels of the Roundness values, for the panel's Edges row. On an elbow arrow they name the style of its
+// bends.
 export const EDGES_OPTIONS: { value: Roundness; label: string }[] = [
     { value: 'sharp', label: 'Sharp' },
     { value: 'round', label: 'Rounded' },
 ];
 
-// Read a property off a parsed-JSON object without a cast (Reflect.get is typed to accept any object).
-// The one idiom every decoder in the vector model uses.
+// A property of a parsed JSON object, read without a cast, since Reflect.get accepts any object. Every decoder in
+// the vector model reads this way.
 export function prop(target: object, key: string): unknown {
     return Reflect.get(target, key);
 }
@@ -428,14 +424,14 @@ export function serializeIdList(ids: string[]): string {
     return ids.length === 0 ? '' : JSON.stringify(ids);
 }
 
-// The linear family (freedraw / line / arrow) — the elements carrying a `points` string. One narrowing
-// predicate so `.points`/`.roundness` access has a single owner as the family grows.
+// The linear kinds, a freehand stroke, a line and an arrow, which carry a `points` string. One guard narrows them
+// all, so reading `.points` or `.roundness` has one owner as the family grows.
 export function isLinearElement(el: VectorElement): el is VectorLinearElement | VectorArrowElement {
     return el.type === 'freedraw' || el.type === 'line' || el.type === 'arrow';
 }
 
-// A binding is a JSON `{"elementId","fixedPoint":[fx,fy]}` string, or '' when unbound. parseBinding is
-// lenient on the ratio range (a shrunk shape can push fixedPoint outside [0,1]; consumers clamp on use).
+// A binding is a JSON `{"elementId","fixedPoint":[fx,fy]}` string, or empty when unbound. Any ratio passes,
+// because a shrunk shape can push one outside [0, 1], and readers clamp it where they use it.
 export function parseBinding(s: string): Binding | null {
     if (s === '') return null;
     let raw: unknown;
@@ -458,10 +454,10 @@ export function serializeBinding(b: Binding): string {
     return JSON.stringify({ elementId: b.elementId, fixedPoint: b.fixedPoint });
 }
 
-// Decode the fixedSegments envelope, dropping anything malformed: each pin needs an integer index and a
-// finite axis-aligned start/end (sharing exactly one coordinate, not degenerate). A '' or unusable string
-// ⇒ no pins. Lenient like parseBinding — a corrupt entry can't wedge the arrow, and the scene never throws
-// over a bad peer write. Index-less legacy arrays (the old geometric keying) decode to no pins.
+// The pins of a fixedSegments string, without anything malformed. A pin needs an integer index and a start and an
+// end that share exactly one coordinate and differ in the other. An empty or unusable string has no pins, so a
+// corrupt peer write can't jam the arrow or make the scene throw. An older bare array without indexes has none
+// too.
 export function parseFixedSegments(s: string): ParsedFixedSegments {
     const empty: ParsedFixedSegments = { segments: [], startIsSpecial: false, endIsSpecial: false };
     if (s === '') return empty;
@@ -471,7 +467,7 @@ export function parseFixedSegments(s: string): ParsedFixedSegments {
     } catch {
         return empty;
     }
-    // Envelope form only — a bare array is legacy and dropped.
+    // Only the object form counts. A bare array is the older form and is dropped.
     if (typeof raw !== 'object' || raw === null) return empty;
     const segments = prop(raw, 'segments');
     if (!Array.isArray(segments)) return empty;
@@ -498,7 +494,7 @@ function fixedSegmentOf(entry: unknown): FixedSegment | null {
     if (!s || !e) return null;
     const horizontal = s[1] === e[1];
     const vertical = s[0] === e[0];
-    // Exactly one axis shared, and the segment has length (a point is not a segment).
+    // The two ends share exactly one coordinate, so the segment is straight and has a length.
     if (horizontal === vertical) return null;
     return { index, start: s, end: e };
 }
@@ -510,7 +506,7 @@ function pairOf(v: unknown): [number, number] | null {
     return [a, b];
 }
 
-// Encode pins back to the envelope scalar. '' when there are no pins (⇒ the arrow returns to derived mode).
+// The pins as a fixedSegments string, or empty when there are none, which lets the router route the arrow again.
 export function serializeFixedSegments(parsed: ParsedFixedSegments): string {
     if (parsed.segments.length === 0) return '';
     return JSON.stringify({
@@ -520,9 +516,8 @@ export function serializeFixedSegments(parsed: ParsedFixedSegments): string {
     });
 }
 
-// The reverse index the forward bindings imply: shape id → the arrows bound to it, either end. Derived
-// in memory (never stored) so there is no two-element write to keep consistent. An arrow bound to
-// one shape at both ends lists once.
+// Each shape's id with the arrows bound to it at either end. It is derived and never stored, so no write has to
+// keep two elements in step. An arrow bound to one shape at both ends is listed once.
 export function arrowsBoundTo(elements: VectorElement[]): Map<string, string[]> {
     const map = new Map<string, string[]>();
     for (const el of elements) {
@@ -538,16 +533,14 @@ export function arrowsBoundTo(elements: VectorElement[]): Map<string, string[]> 
     return map;
 }
 
-// The 3-way shape a panel shows for an arrow, derived from its stored `elbow` + `roundness` (the
-// UI unit's Arrow-type row). elbow wins; otherwise round shaft ⇒ 'curved', sharp shaft ⇒ 'sharp'.
+// The shape the panel's Arrow type row shows, from the stored `elbow` flag and `roundness`.
 export function arrowShapeOf(el: VectorArrowElement): ArrowShape {
     return el.elbow ? 'elbow' : el.roundness === 'round' ? 'curved' : 'sharp';
 }
 
-// The stored fields a chosen shape writes back: 'elbow' sets only the flag and leaves roundness
-// untouched — for an elbow it is the CORNER style (sharp bends vs radius-16 arcs), a separate Edges row,
-// not the shaft curve — so the write must preserve whatever corner style the element already carries;
-// 'curved'/'sharp' clear the flag and pick the shaft roundness. One owner so the panel never re-derives.
+// The stored fields a chosen arrow shape writes. Elbow sets only the flag and keeps `roundness`, because on an
+// elbow arrow that is the style of its bends, which the Edges row sets. Curved and sharp clear the flag and set
+// the shaft's roundness.
 export function arrowShapeFields(shape: ArrowShape): { elbow: boolean; roundness?: Roundness } {
     if (shape === 'elbow') return { elbow: true };
     return { elbow: false, roundness: shape === 'curved' ? 'round' : 'sharp' };

@@ -1,7 +1,7 @@
-// The direction words of an elbow arrow, ported from Excalidraw. A Heading is the axis direction an
-// arrow leaves a shape by. The few distances that elbow code shares, such as the router and the pin
-// editors, live here too. It imports nothing that reaches the kind registry, so a kind module, such as
-// the arrow's painter, can load it first.
+// The directions an elbow arrow runs in, ported from Excalidraw. A Heading is the axis direction an arrow
+// leaves a shape by. The few distances that more than one elbow module needs, such as the padding around a bound
+// shape, live here too. This file imports nothing that reaches the kind registry, so a kind module, such as the
+// arrow's painter, can load it first.
 
 import type { Point } from './geometry';
 
@@ -43,7 +43,7 @@ export function headingIsHorizontal(h: Heading): boolean {
     return h.y === 0;
 }
 
-// Is the segment a→b mostly horizontal? This is Excalidraw's headingForPointIsHorizontal. Unlike
+// Whether the segment from a to b is mostly horizontal, as Excalidraw's headingForPointIsHorizontal. Unlike
 // vectorToHeading, it reads every exact diagonal as vertical.
 export function headingIsHorizontalVec(a: Point, b: Point): boolean {
     return Math.abs(a.y - b.y) < Math.abs(a.x - b.x);

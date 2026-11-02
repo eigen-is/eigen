@@ -1,7 +1,7 @@
 // The text a kind holds, such as a text box's or a rectangle's: one implementation that every kind with text
 // composes. It gives a new element its text fields, reads and clamps the stored ones, turns the typography into
-// CSS and chooses the render arm. It imports no geometry, render-utils, kind or registry, so the chart's shape
-// builders can use it without loading the kind registry.
+// CSS and chooses the render arm. It must not reach the kind registry, because the chart's shape builders use it
+// and the registry loads the chart kind.
 
 import { getFontFamily } from '../../constants/fonts';
 import { stripTagsServer } from '../../core/html';

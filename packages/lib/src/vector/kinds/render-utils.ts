@@ -1,5 +1,5 @@
-// The roughjs/serializer bodies every drawing kind shares: option assembly and the Drawable → SVG
-// serializer. Nothing here knows a kind beyond the fields it reads.
+// The roughjs code every drawing kind shares: the options each element draws with, and the serializer that turns a
+// roughjs Drawable into SVG. Nothing here knows a kind beyond the fields it reads.
 
 import type { Drawable, OpSet, Options } from 'roughjs/bin/core';
 import { RoughGenerator } from 'roughjs/bin/generator';
@@ -33,8 +33,7 @@ import type {
 } from '../types';
 import { isLinearElement } from '../types';
 
-// The SVG namespace, one spelling for every surface that writes it: the viewports scene-layers emits,
-// the documents scene-to-svg serializes, a standalone chart and the live <svg> nodes the canvas mounts.
+// The SVG namespace, spelled once for every surface that writes SVG, such as the live canvas and the SVG export.
 export const SVG_NS = 'http://www.w3.org/2000/svg';
 
 // The most degrees of a slice's arc one cubic draws.
@@ -47,8 +46,8 @@ type FillSource = { id: string; fill: string };
 // it is.
 type RoughBoxElement = VectorShapeElement | VectorPieElement | VectorPathElement | VectorImageElement;
 
-// A closed box's rough drawing. The generator is per-call: seeded roughjs output depends only on
-// el.seed. The linecap rides the paths (the caller owns the placing <g>).
+// A closed box's rough drawing. Each call makes its own generator, because seeded roughjs output depends only on
+// el.seed. The line caps sit on the paths, since the caller owns the group that places them.
 export function renderRoughShape(el: RoughBoxElement): string {
     const outline = boxOutlinePath(el);
     const drawable = shapeDrawable(new RoughGenerator(), el, outline);
@@ -154,10 +153,9 @@ function shapeDrawable(gen: RoughGenerator, el: RoughBoxElement, outline: string
     );
 }
 
-// Options assembly, replicated from Excalidraw's generateRoughOptions, minus the
-// dark-mode filter. Determinism comes from the persisted per-element `seed`. The base fields are shared
-// by every rough element — boxes (shapes, a text box among them, and the image) and linear ones; fill differs (a box that
-// carries one always, lines only when they loop).
+// The roughjs options every rough element shares, boxes and lines alike, as Excalidraw's generateRoughOptions
+// builds them without its dark-mode filter. The stored `seed` makes the drawing the same every time. The fill is
+// not here, because a box always carries one and a line only once it loops.
 export function baseRoughOptions(
     el: RoughBoxElement | VectorLinearElement | VectorArrowElement,
     continuousPath: boolean,
@@ -166,28 +164,25 @@ export function baseRoughOptions(
         seed: el.seed,
         strokeLineDash: dashArray(el.strokeStyle, el.strokeWidth),
         disableMultiStroke: el.strokeStyle !== 'solid',
-        // non-solid strokes disable multiStroke, so widen a touch to match solid weight
+        // A dashed or dotted stroke draws once instead of twice, so it is a little wider to look as heavy.
         strokeWidth: el.strokeStyle !== 'solid' ? el.strokeWidth + 0.5 : el.strokeWidth,
-        // set fill tuning explicitly so rough doesn't re-derive it from strokeWidth
+        // Set explicitly, so roughjs doesn't derive them from the stroke width.
         fillWeight: el.strokeWidth / 2,
         hachureGap: el.strokeWidth * 4,
         roughness: adjustRoughness(el),
         stroke: el.strokeColor,
-        // Deliberate drift from Excalidraw (crisper): a line/arrow SHAFT preserves its vertices at every
-        // roughness, so cartoon-roughness (r≥2) endpoints sit exactly on the stored points instead of
-        // wandering ~3px off. Shapes keep Excalidraw's roughness<2 rule; freedraw's roughjs FILL is
-        // untouched (its stroke is perfect-freehand, never roughjs).
+        // Unlike Excalidraw, a line or an arrow keeps its points at every roughness, so its ends sit on the stored
+        // points instead of about 3 px off. Shapes keep Excalidraw's rule of keeping them below roughness 2.
         preserveVertices: continuousPath || el.roughness < 2 || el.type === 'line' || el.type === 'arrow',
     };
 }
 
 function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
     const options = baseRoughOptions(el, continuousPath);
-    // A shape with its border switched off (capabilities.strokeOptional): roughjs's own 'none' skips
-    // the outline sets entirely, so the fill still paints and no invisible path is serialized.
+    // A shape with its border turned off. roughjs's 'none' skips the outline, so the fill still paints and no
+    // invisible path is written.
     if (isTransparentColor(el.strokeColor)) options.stroke = 'none';
-    // An image carries no Fill at all and an open path has nothing to fill: roughjs then draws the
-    // outline alone.
+    // An image has no Fill and an open path has nothing to fill, so roughjs draws their outline alone.
     if ('fill' in el && (el.type !== 'path' || el.closed)) {
         const { fill, fillStyle } = fillOptions(el);
         options.fill = fill;
@@ -197,9 +192,9 @@ function roughOptions(el: RoughBoxElement, continuousPath: boolean): Options {
     return options;
 }
 
-// A gradient is one <linearGradient> in the element's OWN <defs>, referenced by the paths beside it:
-// WeasyPrint renders nothing for a url(#…) into a different <svg>. Ids are element-scoped, so many
-// fragments on one page never collide.
+// A gradient is one <linearGradient> in the element's own <defs>, which the paths beside it reference, because
+// WeasyPrint draws nothing for a url(#…) into another <svg>. Its id is scoped to the element, so the fragments on
+// one page never collide.
 export function fillDefs(el: FillSource): string {
     const fill = parseFill(el.fill);
     if (fill.type !== 'gradient') return '';
@@ -207,10 +202,9 @@ export function fillDefs(el: FillSource): string {
     return `<defs><linearGradient id="${svgId('fill', el.id)}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}">${svgGradientStops(fill.from, fill.to)}</linearGradient></defs>`;
 }
 
-// The stored Fill as roughjs options: what to paint with, and the hatch style it carries. drawableToSvg
-// copies the paint into `fill=` on fillPath sets and `stroke=` on the fillSketch sets hachure/cross-hatch/
-// zigzag emit, which is what a gradient needs on both. The stroke proper stays a solid color.
-// `fill: undefined` (a transparent paint) leaves roughjs drawing the outline alone.
+// The stored Fill as roughjs options: the paint and its hatch style. drawableToSvg copies the paint into the solid
+// fill's `fill=` and into each hatch line's `stroke=`, so a gradient paints both. The outline stays a solid color.
+// A transparent paint leaves `fill` unset, and roughjs draws the outline alone.
 function fillOptions(el: FillSource): { fill: string | undefined; fillStyle: FillStyle } {
     const fill = parseFill(el.fill);
     return {
@@ -223,14 +217,14 @@ function fillOptions(el: FillSource): { fill: string | undefined; fillStyle: Fil
     };
 }
 
-// A document-unique SVG id for one element's own defs. Every character outside the id-safe set is
-// hex-ESCAPED, not stripped: a hostile element id can neither escape the attribute nor collapse onto
-// another element's id and paint its gradient.
+// An SVG id for one element's own defs, unique in the document. Each character outside the safe set is written as
+// hex and not dropped, so a hostile element id can't escape the attribute or match another element's id and
+// paint its gradient.
 export function svgId(prefix: string, elementId: string): string {
     return `${prefix}-${elementId.replace(/[^A-Za-z0-9-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
 }
 
-// A line/freedraw fills only when its path loops (Excalidraw's generateRoughOptions line arm).
+// A line or freehand stroke fills only when its path loops, as in Excalidraw's generateRoughOptions.
 export function linearRoughOptions(el: VectorLinearElement, points: Point[]): Options {
     const options = baseRoughOptions(el, false);
     const { fill, fillStyle } = fillOptions(el);
@@ -241,8 +235,8 @@ export function linearRoughOptions(el: VectorLinearElement, points: Point[]): Op
     return options;
 }
 
-// Reduce roughness for small elements so they don't look destroyed (Excalidraw's rule); a relatively
-// long linear element is spared too, so a straight line doesn't wobble.
+// Less roughness for a small element, so it doesn't look destroyed, as in Excalidraw. A line 50 or more long keeps
+// its full roughness, however thin it is.
 function adjustRoughness(el: RoughBoxElement | VectorLinearElement | VectorArrowElement): number {
     const maxSize = Math.max(el.width, el.height);
     const minSize = Math.min(el.width, el.height);
@@ -254,17 +248,16 @@ function adjustRoughness(el: RoughBoxElement | VectorLinearElement | VectorArrow
     return Math.min(el.roughness / (maxSize < 10 ? 3 : 2), 2.5);
 }
 
-// The stroke-style vocabulary as roughjs `strokeLineDash`: one dash table behind every stroke roughjs
-// draws, the image's border included.
+// A stroke style as roughjs `strokeLineDash`, for every stroke roughjs draws, an image's border included.
 function dashArray(strokeStyle: VectorShapeElement['strokeStyle'], strokeWidth: number): number[] | undefined {
     if (strokeStyle === 'dashed') return [8, 8 + strokeWidth];
     if (strokeStyle === 'dotted') return [1.5, 6 + strokeWidth];
     return undefined;
 }
 
-// A hatch's clip: the outline it fills and the element its clipPath id is scoped to. roughjs strokes hachure,
-// cross-hatch and zigzag past the shape (a zigzag by about 3px at any size), which shows on a small one, so the
-// strokes draw inside the outline and the outline itself stays unclipped. A solid fill is the outline already.
+// A hatch's clip: the outline it fills and the element its clipPath id is scoped to. roughjs draws hatch lines a
+// little past the shape, about 3 px for a zigzag at any size, which shows on a small one. So the hatch is clipped to
+// the outline, and the outline itself is not. A solid fill is the outline already.
 export type HatchClip = { id: string; d: string };
 
 // Fill sets come before the outline in `sets`, so drawing in order layers fill under stroke.
@@ -297,7 +290,7 @@ export function loopPath(points: Point[], curved: boolean): string {
     return `M ${at(points[0])} ${curves.join(' ')} Z`;
 }
 
-// The whole roughjs serializer: move→M, lineTo→L, bcurveTo→C, coordinates to 2 decimals.
+// The roughjs serializer: each op becomes its SVG path command, with coordinates to 2 decimals.
 function opsToPath(opset: OpSet): string {
     const parts: string[] = [];
     for (const { op, data } of opset.ops) {

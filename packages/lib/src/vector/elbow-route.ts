@@ -1,7 +1,7 @@
-// Routes an elbow arrow. The orthogonal polyline is derived on every read and render from the two
-// endpoints and the bindings, so the server renderer draws what the canvas draws. The router grows an
-// obstacle around each bound shape, builds a grid from their edges and runs A* over it, and falls back
-// to a plain L when no route is found. `arrowRoute` is the entry point, called for example by the SVG
+// Routes an elbow arrow, as a port of Excalidraw's router. The right-angled path is derived from the two endpoints
+// and their bindings on every read, so the server's renderers draw what the canvas draws. The router grows an
+// obstacle box around each bound shape, lays a grid along the box edges and runs A* over it. When A* finds no
+// route it falls back to a single right-angle turn. `arrowRoute` is the entry point, called for example by the SVG
 // renderer, the pptx writer and the canvas.
 
 import { boundShape, elementBounds } from './binding';
@@ -28,14 +28,26 @@ import {
 import { parsePoints } from './points';
 import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
 
-// The derived orthogonal route of an elbow arrow, in its local frame: the two stored endpoints with a
-// right-angled path routed between them. The route ALWAYS starts at points[0] and ends at points[last]
-// exactly — the endpoint dot and the shaft share that one value. Deterministic and pure; degenerate
-// (< 2 points) arrows pass through untouched. Obstacles are only the bound shapes.
-// `origPoints`: the PRE-DOCK scene point per end, distinct from the stored/docked endpoint, used only to
-// gate the heading cone by distance (getHeadingForElbowArrowSnap). At rest the stored point IS the dock, so
-// callers omit it and it defaults to the stored globals; during an endpoint drag the caller passes the raw cursor
-// so the exit side follows the anchor, not the gliding dock, exactly as Excalidraw does.
+// The polyline an arrow draws and hits as. A straight arrow has none, so it returns undefined. Every render path
+// asks here, so none of them can draw an elbow arrow as a straight line by mistake. Without `byId` there are no
+// bound shapes to route around, so it returns undefined and the caller falls back to the stored points.
+export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
+    if (el.type !== 'arrow' || !el.elbow) return undefined;
+    // A pinned arrow's stored polyline is its route, and the pin editors keep it up to date. Every render path
+    // returns it as it is, so a preview and the commit draw the same path.
+    if (el.fixedSegments !== '') return parsePoints(el.points);
+    return byId ? elbowRoute(el, byId) : undefined;
+}
+
+// The derived route of an elbow arrow without pins, in the arrow's local frame. It always starts exactly at the
+// first stored point and ends exactly at the last, because the endpoint dot is drawn there and the shaft must meet
+// it. Excalidraw keeps its stored points in step with the dock. Here boundEndpoint writes the dock into the stored
+// points, so the router only reads them. The only obstacles are the bound shapes. An arrow with fewer than two
+// points comes back as it is.
+// `origPoints` holds, per end, the scene point before it docked. It only decides whether the end is near enough to
+// its shape for the cone test, and it defaults to the stored endpoint, which is the dock at rest. While an endpoint
+// is dragged, passing the raw cursor keeps the exit side with the cursor and not with the dock gliding along the
+// outline, as in Excalidraw.
 export function elbowRoute(
     arrow: VectorArrowElement,
     byId: Map<string, VectorElement>,
@@ -44,140 +56,35 @@ export function elbowRoute(
     const pts = parsePoints(arrow.points);
     if (pts.length < 2) return pts;
 
-    const startShape = boundShape(arrow.startBinding, byId);
-    const endShape = boundShape(arrow.endBinding, byId);
-
-    // The drawn route MUST begin and end on the stored endpoints — the very points the endpoint dot renders
-    // at (linearLocalToScene of points[0]/points[last]) — so the shaft and the dot never diverge (one source
-    // of truth for where the arrow attaches). Excalidraw keeps its stored points in sync with the
-    // fixedPoint-derived dock and routes from that; here that sync is boundEndpoint's job (it will write the
-    // dock into the stored point), so this router routes from whatever endpoint is stored today and never overwrites
-    // it. These scene points are also the "original" point Excalidraw's heading test consumes.
     const startGlobal = linearLocalToScene(arrow, pts[0]);
     const endGlobal = linearLocalToScene(arrow, pts[pts.length - 1]);
-
-    const startArrowhead = arrow.startArrowhead !== 'none';
-    const endArrowhead = arrow.endArrowhead !== 'none';
-
-    // The single derived route (DERIVED mode only — a pinned arrow never reaches here; arrowRoute returns
-    // its stored polyline verbatim).
-    const startEnd: LegEnd = {
-        point: startGlobal,
-        shape: startShape,
-        arrowhead: startArrowhead,
-        orig: origPoints?.start ?? startGlobal,
-    };
-    const endEnd: LegEnd = {
-        point: endGlobal,
-        shape: endShape,
-        arrowhead: endArrowhead,
-        orig: origPoints?.end ?? endGlobal,
-    };
-    const routeScene = routeSceneLeg(startEnd, endEnd, !!arrow.startBinding);
+    const data = getElbowArrowData(
+        {
+            startShape: boundShape(arrow.startBinding, byId),
+            endShape: boundShape(arrow.endBinding, byId),
+            startGlobal,
+            endGlobal,
+            startArrowhead: arrow.startArrowhead !== 'none',
+            endArrowhead: arrow.endArrowhead !== 'none',
+            origStart: origPoints?.start ?? startGlobal,
+            origEnd: origPoints?.end ?? endGlobal,
+        },
+        !!arrow.startBinding,
+    );
+    const routeScene = routeElbowArrow(data) ?? lRoute(startGlobal, endGlobal, data.startHeading);
 
     const corners = getElbowArrowCornerPoints(removeElbowArrowShortSegments(routeScene));
     const local = corners.map((p) => linearSceneToLocal(arrow, p));
     return local.length >= 2 ? local : [linearSceneToLocal(arrow, startGlobal), linearSceneToLocal(arrow, endGlobal)];
 }
 
-// One end of a routing leg — a real bound shape (heading from the cone) or a free endpoint (heading toward
-// the other end). A pinned arrow never routes here — its stored polyline is returned verbatim.
-type LegEnd = {
-    point: Point;
-    shape: VectorBindableElement | null;
-    arrowhead: boolean;
-    orig: Point;
-};
-
-// Route one leg in scene space (endpoints included), never null: the guaranteed-draw L fallback stands in
-// when A* is walled. The shared core of both the no-pin route and every connector leg of a pinned route.
-function routeSceneLeg(start: LegEnd, end: LegEnd, startBinding: boolean): Point[] {
-    const data = getElbowArrowData(
-        {
-            startShape: start.shape,
-            endShape: end.shape,
-            startGlobal: start.point,
-            endGlobal: end.point,
-            startArrowhead: start.arrowhead,
-            endArrowhead: end.arrowhead,
-            origStart: start.orig,
-            origEnd: end.orig,
-        },
-        startBinding,
-    );
-    return routeElbowArrow(data) ?? lRoute(start.point, end.point, data.startHeading);
-}
-
-// The polyline an arrow draws/hits as: the derived orthogonal route for an elbow arrow (undefined without
-// scene context, so callers fall back to the stored points), or undefined for a straight arrow. The single
-// gate for "when does an elbow arrow get a derived route" — every render path (live canvas, previews, export)
-// routes through here so none can silently degrade an elbow arrow back to a straight line.
-export function arrowRoute(el: VectorElement, byId?: Map<string, VectorElement>): Point[] | undefined {
-    if (el.type !== 'arrow' || !el.elbow) return undefined;
-    // PINNED: the stored polyline IS the route — no router, no corner/short passes. The incremental
-    // editors (elbow-pins.ts) own it; every render path returns it verbatim so preview===commit holds.
-    if (el.fixedSegments !== '') return parsePoints(el.points);
-    // DERIVED: route the two endpoints (needs scene context for bound obstacles/headings).
-    return byId ? elbowRoute(el, byId) : undefined;
-}
-
-// --- routing data (Excalidraw's getElbowArrowData, at-rest branch) ---------------------
-
-type RouteInputs = {
-    startShape: VectorBindableElement | null;
-    endShape: VectorBindableElement | null;
-    startGlobal: Point;
-    endGlobal: Point;
-    startArrowhead: boolean;
-    endArrowhead: boolean;
-    // The pre-dock scene point per end for the heading distance-gate; equals the stored global at rest.
-    origStart: Point;
-    origEnd: Point;
-};
-
-type ElbowArrowData = {
-    dynamicAABBs: B4[];
-    startDongle: Point;
-    startGlobal: Point;
-    startHeading: Heading;
-    endDongle: Point;
-    endGlobal: Point;
-    endHeading: Heading;
-    commonBounds: B4;
-    startBound: boolean;
-    endBound: boolean;
-};
-
-// The heading each endpoint leaves its shape by (Excalidraw's getElbowArrowData heading block): a bound end
-// inflates its element by the endpoint's distance to the outline (the cone AABB) and the distance-GATE keys
-// on origStart/origEnd; an unbound end just points at the other endpoint. One source for both the router and
-// the pin-drag routing context.
-function endpointHeadings(
-    startShape: VectorBindableElement | null,
-    endShape: VectorBindableElement | null,
-    startGlobal: Point,
-    endGlobal: Point,
-    origStart: Point,
-    origEnd: Point,
-): { startHeading: Heading; endHeading: Heading } {
-    const startConeAABB = startShape
-        ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
-        : null;
-    const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
-    return {
-        startHeading: getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart),
-        endHeading: getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd),
-    };
-}
-
-// Union of every element's arrow-aware bounds (label overhang + derived elbow bends); non-empty input.
+// The union of every element's bounds, with arrow labels and elbow bends included. `elements` must not be empty.
 export function sceneBounds(elements: VectorElement[], byId: Map<string, VectorElement>): Bounds {
     return elements.map((el) => elementBounds(el, arrowRoute(el, byId))).reduce(unionBounds);
 }
 
-// The routing context an end-segment pin jog needs — the two endpoint headings decomposed into
-// horizontal?/positive? plus per-end bound flags — computed at the call seam so elbow-pins stays pure.
-// Uses the arrow's stored endpoints at rest (origStart/origEnd = the endpoints themselves).
+// What a pin jog on an end segment needs to know: which ends are bound, and the axis and direction of each end's
+// heading. It is computed here, so the pin code needs no scene. It uses the stored endpoints, as at rest.
 export function elbowRoutingContext(arrow: VectorArrowElement, byId: Map<string, VectorElement>): PinRoutingContext {
     const startShape = boundShape(arrow.startBinding, byId);
     const endShape = boundShape(arrow.endBinding, byId);
@@ -192,26 +99,49 @@ export function elbowRoutingContext(arrow: VectorArrowElement, byId: Map<string,
         startGlobal,
         endGlobal,
     );
-    const horizontal = (h: Heading): boolean => headingIsHorizontal(h);
     const positive = (h: Heading): boolean =>
         headingIsHorizontal(h) ? compareHeading(h, HEADING_RIGHT) : compareHeading(h, HEADING_DOWN);
     return {
         startBound: !!startShape,
         endBound: !!endShape,
-        startHeadingHorizontal: horizontal(startHeading),
+        startHeadingHorizontal: headingIsHorizontal(startHeading),
         startHeadingPositive: positive(startHeading),
-        endHeadingHorizontal: horizontal(endHeading),
+        endHeadingHorizontal: headingIsHorizontal(endHeading),
         endHeadingPositive: positive(endHeading),
     };
 }
 
+type RouteInputs = {
+    startShape: VectorBindableElement | null;
+    endShape: VectorBindableElement | null;
+    startGlobal: Point;
+    endGlobal: Point;
+    startArrowhead: boolean;
+    endArrowhead: boolean;
+    // The scene point of each end before it docked, which is the stored endpoint at rest.
+    origStart: Point;
+    origEnd: Point;
+};
+
+// A dongle is where the route leaves an end's obstacle box: the endpoint moved along its heading onto the edge of
+// that box. A* runs from dongle to dongle.
+type ElbowArrowData = {
+    dynamicAABBs: B4[];
+    startDongle: Point;
+    startGlobal: Point;
+    startHeading: Heading;
+    endDongle: Point;
+    endGlobal: Point;
+    endHeading: Heading;
+    commonBounds: B4;
+    startBound: boolean;
+    endBound: boolean;
+};
+
+// The headings, obstacle boxes and dongles of one route, as the at-rest branch of Excalidraw's getElbowArrowData.
 function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArrowData {
     const { startShape, endShape, startGlobal, endGlobal, startArrowhead, endArrowhead, origStart, origEnd } = input;
 
-    // Heading cone AABB is the element inflated on all sides by the endpoint's distance to the outline. The
-    // cone geometry keys on the rest/docked endpoint; the distance-GATE keys on the pre-dock original point
-    // (origStart/origEnd — equal to the stored endpoint at rest), so a dragged dock gliding on the
-    // outline doesn't flip the exit side under the anchor.
     const { startHeading, endHeading } = endpointHeadings(
         startShape,
         endShape,
@@ -224,8 +154,8 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
     const startPointBounds = pointBounds(startGlobal);
     const endPointBounds = pointBounds(endGlobal);
 
-    // Obstacle base per end: the element AABB pushed out on the heading side by gap·6 (arrowhead) or gap·2,
-    // and by 1 elsewhere; an unbound end contributes only its ±2 point box.
+    // A bound end's obstacle is its shape's box, pushed out far on the side the arrow leaves by and by 1 on the
+    // other sides. An unbound end only has a small box around its point.
     const startElementBounds = startShape
         ? aabbForElement(startShape, offsetFromHeading(startHeading, headGap(startShape, startArrowhead), 1))
         : startPointBounds;
@@ -233,8 +163,8 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
         ? aabbForElement(endShape, offsetFromHeading(endHeading, headGap(endShape, endArrowhead), 1))
         : endPointBounds;
 
-    // Overlap: an endpoint sitting inside the other end's BASE_PADDING box collapses both obstacles to their
-    // point boxes so a route between overlapping shapes still exists.
+    // When an endpoint sits inside the other end's padded box, the shapes overlap. Both obstacles then shrink to
+    // their point boxes, so a route between them still exists.
     const boundsOverlap =
         pointInside(
             startGlobal,
@@ -290,7 +220,31 @@ function getElbowArrowData(input: RouteInputs, startBinding: boolean): ElbowArro
     };
 }
 
-// gap·6 when the end carries an arrowhead, else gap·2 (Excalidraw's getBindingGap · {6,2}); gap = 5 + w/2.
+// The heading each end leaves by, as the heading part of Excalidraw's getElbowArrowData. For a bound end, the cone
+// box is its shape grown on every side by the endpoint's distance to the outline. The cone runs from the docked
+// endpoint, but the distance check uses the point before it docked, so a dock gliding along the outline during a
+// drag doesn't flip the exit side. An unbound end points at the other end. The router and elbowRoutingContext
+// both read their headings here.
+function endpointHeadings(
+    startShape: VectorBindableElement | null,
+    endShape: VectorBindableElement | null,
+    startGlobal: Point,
+    endGlobal: Point,
+    origStart: Point,
+    origEnd: Point,
+): { startHeading: Heading; endHeading: Heading } {
+    const startConeAABB = startShape
+        ? aabbForElement(startShape, fill4(distanceToElement(startShape, startGlobal)))
+        : null;
+    const endConeAABB = endShape ? aabbForElement(endShape, fill4(distanceToElement(endShape, endGlobal))) : null;
+    return {
+        startHeading: getHeadingForElbowArrowSnap(startGlobal, endGlobal, startShape, startConeAABB, origStart),
+        endHeading: getHeadingForElbowArrowSnap(endGlobal, startGlobal, endShape, endConeAABB, origEnd),
+    };
+}
+
+// How far an obstacle reaches past its shape on the side the arrow leaves by, as Excalidraw's getBindingGap times
+// six with an arrowhead and two without. The gap grows with the stroke width.
 function headGap(shape: VectorBindableElement, hasArrowhead: boolean): number {
     return (BASE_BINDING_GAP_ELBOW + shape.strokeWidth / 2) * (hasArrowhead ? 6 : 2);
 }
@@ -303,8 +257,8 @@ function fill4(v: number): B4 {
     return [v, v, v, v];
 }
 
-// --- route assembly (Excalidraw's routeElbowArrow) -------------------------------------
-
+// Assembles the route, as Excalidraw's routeElbowArrow. A* runs between the dongles, and the endpoints are added
+// back at both ends. It returns null when A* finds no way through.
 function routeElbowArrow(data: ElbowArrowData): Point[] | null {
     const {
         dynamicAABBs,
@@ -324,7 +278,8 @@ function routeElbowArrow(data: ElbowArrowData): Point[] | null {
     const startDongleNode = pointToGridNode(startDongle, grid);
     const endDongleNode = pointToGridNode(endDongle, grid);
 
-    // Do not allow stepping on the true endpoints when they anchor a bound shape.
+    // A bound end's endpoint touches its shape, so A* may not step onto it. The start checks the stored binding and
+    // the end checks the shape that was found, as Excalidraw does.
     const endNode = pointToGridNode(endGlobal, grid);
     if (endNode && endBound) endNode.closed = true;
     const startNode = pointToGridNode(startGlobal, grid);
@@ -334,6 +289,7 @@ function routeElbowArrow(data: ElbowArrowData): Point[] | null {
     const end = endDongleNode ?? endNode;
     if (!start || !end) return null;
 
+    // When a dongle sits inside the other end's box, the boxes would wall it in, so A* runs without obstacles.
     const dongleOverlap =
         startDongleNode &&
         endDongleNode &&
@@ -348,8 +304,8 @@ function routeElbowArrow(data: ElbowArrowData): Point[] | null {
     return points;
 }
 
-// Excalidraw's offsetFromHeading: put `head` on the heading side, `side` on the other three. Order is
-// [top, right, down, left] — the order aabbForElement expects.
+// Excalidraw's offsetFromHeading. It puts `head` on the side the heading points to and `side` on the other three,
+// in the [top, right, down, left] order that aabbForElement takes.
 function offsetFromHeading(heading: Heading, head: number, side: number): B4 {
     if (compareHeading(heading, HEADING_UP)) return [head, side, side, side];
     if (compareHeading(heading, HEADING_RIGHT)) return [side, head, side, side];
@@ -357,10 +313,11 @@ function offsetFromHeading(heading: Heading, head: number, side: number): B4 {
     return [side, side, side, head];
 }
 
-// Create dynamically resizing, always-touching obstacle boxes: each grows toward the other only to the
-// midline between the two elements, is padded per heading, and — unless disabled (overlap) — is split along
-// the side-hack midline when the two padded boxes would overlap diagonally. Ported verbatim from Excalidraw's
-// generateDynamicAABBs; the nested ternaries are theirs (each picks midline vs padded-edge vs common-edge).
+// The two obstacle boxes, ported as they are from Excalidraw's generateDynamicAABBs, nested ternaries included.
+// Each box grows toward the other only as far as the line halfway between the two shapes, so the boxes touch but
+// don't overlap. The two difference tuples pad each box per side. When the padded boxes still overlap on both
+// axes, they sit diagonally to each other, and both are cut at the line between them. `disableSideHack` turns that
+// cut off, which the caller does when the shapes overlap.
 function generateDynamicAABBs(
     a: B4,
     b: B4,
@@ -446,7 +403,7 @@ function generateDynamicAABBs(
         const endCenterX = (second[0] + second[2]) / 2;
         const endCenterY = (second[1] + second[3]) / 2;
         if (b[0] > a[2] && a[1] > b[3]) {
-            // BOTTOM LEFT
+            // The start box is below and to the left of the end box.
             const cX = first[2] + (second[0] - first[2]) / 2;
             const cY = second[3] + (first[1] - second[3]) / 2;
             if (crossXY(a[2] - endCenterX, a[1] - endCenterY, a[0] - endCenterX, a[3] - endCenterY) > 0) {
@@ -461,7 +418,7 @@ function generateDynamicAABBs(
             ];
         }
         if (a[2] < b[0] && a[3] < b[1]) {
-            // TOP LEFT
+            // The start box is above and to the left of the end box.
             const cX = first[2] + (second[0] - first[2]) / 2;
             const cY = first[3] + (second[1] - first[3]) / 2;
             if (crossXY(a[0] - endCenterX, a[1] - endCenterY, a[2] - endCenterX, a[3] - endCenterY) > 0) {
@@ -476,7 +433,7 @@ function generateDynamicAABBs(
             ];
         }
         if (a[0] > b[2] && a[3] < b[1]) {
-            // TOP RIGHT
+            // The start box is above and to the right of the end box.
             const cX = second[2] + (first[0] - second[2]) / 2;
             const cY = first[3] + (second[1] - first[3]) / 2;
             if (crossXY(a[2] - endCenterX, a[1] - endCenterY, a[0] - endCenterX, a[3] - endCenterY) > 0) {
@@ -491,7 +448,7 @@ function generateDynamicAABBs(
             ];
         }
         if (a[0] > b[2] && a[1] > b[3]) {
-            // BOTTOM RIGHT
+            // The start box is below and to the right of the end box.
             const cX = second[2] + (first[0] - second[2]) / 2;
             const cY = second[3] + (first[1] - second[3]) / 2;
             if (crossXY(a[0] - endCenterX, a[1] - endCenterY, a[2] - endCenterX, a[3] - endCenterY) > 0) {
@@ -518,8 +475,6 @@ function commonAABB(boxes: B4[]): B4 {
     ];
 }
 
-// --- grid -------------------------------------------------------------------------------
-
 type Node = {
     f: number;
     g: number;
@@ -534,9 +489,9 @@ type Node = {
 
 type Grid = { cols: number; rows: number; data: Node[] };
 
-// Grid lines at the dynamic-AABB edges + common-bounds edges, plus the single cross-axis coordinate of each
-// endpoint (its along-axis coordinate already lies on a box edge). A non-uniform grid — Excalidraw's
-// calculateGrid.
+// The grid A* walks, as Excalidraw's calculateGrid. Its lines run along every obstacle edge and the common bounds,
+// so the spacing is not even. Each dongle adds one line along the axis it leaves by, because its other coordinate
+// already lies on a box edge.
 function calculateGrid(
     aabbs: B4[],
     start: Point,
@@ -594,7 +549,7 @@ function pointToGridNode(p: Point, grid: Grid): Node | null {
     return grid.data.find((n) => n.pos.x === p.x && n.pos.y === p.y) ?? null;
 }
 
-// Project the endpoint onto the dynamic AABB edge along its heading — the dongle lies on the box edge.
+// The dongle of an end: its endpoint moved along its heading onto the edge of its obstacle box.
 function getDonglePosition(bounds: B4, heading: Heading, p: Point): Point {
     if (compareHeading(heading, HEADING_UP)) return { x: p.x, y: bounds[1] };
     if (compareHeading(heading, HEADING_RIGHT)) return { x: bounds[2], y: p.y };
@@ -602,8 +557,8 @@ function getDonglePosition(bounds: B4, heading: Heading, p: Point): Point {
     return { x: bounds[0], y: p.y };
 }
 
-// --- A* --------------------------------------------------------------------------------
-
+// A min-heap on `f`, as Excalidraw's BinaryHeap. Its method names are kept: sinkDown moves a node up toward the
+// root, and bubbleUp moves it down.
 class BinaryHeap {
     private content: Node[] = [];
 
@@ -667,10 +622,12 @@ class BinaryHeap {
     }
 }
 
-// A* over the grid, dongle→dongle. A direction change costs bendMultiplier³ (bendMultiplier = the dongles'
-// Manhattan distance), the heuristic adds the estimated remaining bends × bendMultiplier², a segment whose
-// midpoint falls strictly inside any obstacle is banned, and the route may not reverse the previous direction
-// or re-enter the start/end nodes along their own heading. Neighbor order UP, RIGHT, DOWN, LEFT.
+// A* over the grid from dongle to dongle, as Excalidraw's astar. Each step costs its length. A bend adds the cube of
+// the distance between the dongles, so the search prefers fewer bends over a shorter path at any scale. The
+// heuristic adds the remaining distance and the estimated bends left, times the square of that distance. A step
+// whose midpoint lies inside an obstacle is not allowed, and neither is a step that turns back. A step onto the
+// start or end node along that end's own heading is not allowed either, because it would arrive from the shape's
+// side. Neighbors are tried up, right, down, left, which settles ties the way Excalidraw does.
 function astar(
     start: Node,
     end: Node,
@@ -753,8 +710,8 @@ function nodesEqual(a: Node, b: Node): boolean {
     return a.col === b.col && a.row === b.row;
 }
 
-// Excalidraw's estimateSegmentCount: the minimum remaining bends between two headed grid nodes, a 16-case
-// lookup keyed on (endHeading, startHeading) and the relative endpoint positions.
+// Excalidraw's estimateSegmentCount. It looks up the fewest bends a route still needs between two nodes, from the
+// heading at each and from where the two lie relative to each other.
 function estimateSegmentCount(start: Node, end: Node, startHeading: Heading, endHeading: Heading): number {
     if (compareHeading(endHeading, HEADING_RIGHT)) {
         if (compareHeading(startHeading, HEADING_RIGHT)) {
@@ -802,9 +759,8 @@ function estimateSegmentCount(start: Node, end: Node, startHeading: Heading, end
     return 0;
 }
 
-// --- post-passes + fallback ------------------------------------------------------------
-
-// Drop interior points within DEDUP_THRESHOLD px of their predecessor (only when ≥ 4 points).
+// Excalidraw's removeElbowArrowShortSegments. It drops an inner point closer than DEDUP_THRESHOLD to the point
+// before it. A route of fewer than four points stays as it is.
 function removeElbowArrowShortSegments(points: Point[]): Point[] {
     if (points.length < 4) return points;
     return points.filter((p, idx) => {
@@ -813,8 +769,8 @@ function removeElbowArrowShortSegments(points: Point[]): Point[] {
     });
 }
 
-// Keep only direction changes, comparing by dominant axis (|dy| < |dx|) so ~1px slack still collapses —
-// Excalidraw's getElbowArrowCornerPoints.
+// Keeps only the points where the route turns, as Excalidraw's getElbowArrowCornerPoints. A segment counts as
+// horizontal or vertical by its longer axis, so a segment a pixel off true still merges with its neighbor.
 function getElbowArrowCornerPoints(points: Point[]): Point[] {
     if (points.length <= 1) return points;
     let previousHorizontal = headingIsHorizontalVec(points[0], points[1]);
@@ -831,15 +787,13 @@ function getElbowArrowCornerPoints(points: Point[]): Point[] {
     });
 }
 
-// Guaranteed-draw fallback when A* is walled in (Excalidraw returns null here and renders the raw update; we
-// must always draw). A single right-angle turn between the endpoints, first segment along the start heading's
-// axis. May cut through an obstacle — a drawn route beats none.
+// The fallback when A* finds no way through. Excalidraw then draws the raw points, but this router must always
+// return a route. It makes one right-angle turn between the endpoints, and the first segment runs along the axis
+// of the start heading. It may cut through an obstacle, because an arrow through a shape beats no arrow.
 function lRoute(a: Point, b: Point, startHeading: Heading): Point[] {
     const corner = headingIsHorizontal(startHeading) ? { x: b.x, y: a.y } : { x: a.x, y: b.y };
     return [a, corner, b];
 }
-
-// --- small helpers ---------------------------------------------------------------------
 
 function manhattan(a: Point, b: Point): number {
     return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
