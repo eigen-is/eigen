@@ -448,18 +448,18 @@ test('an undo or redo whose row op a read-only row refuses stays on its stack an
         s.edit(s.b, (ctx) => {
             ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: rows };
         });
-    const refused = (step: () => void) => {
+    const refused = (step: () => void, notice: string) => {
         const sent = s.batches.length;
         s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
             ctx.warnDialog = undefined;
         });
         step();
         expect(s.batches.length).toBe(sent);
-        expect(s.a.ctx.warnDialog).toBe("Sorry, this change can't be undone anymore.");
+        expect(s.a.ctx.warnDialog).toBe(notice);
     };
 
     readOnly({ 4: 1 });
-    refused(() => s.undo(s.a));
+    refused(() => s.undo(s.a), "Sorry, this change can't be undone anymore.");
     expect(s.a.history).toEqual({ undoList: [entry], redoList: [] });
 
     readOnly({});
@@ -468,7 +468,7 @@ test('an undo or redo whose row op a read-only row refuses stays on its stack an
     expect(s.a.ctx.sheets[0].data?.length).toBe(40);
 
     readOnly({ 4: 1 });
-    refused(() => s.redo(s.a));
+    refused(() => s.redo(s.a), "Sorry, this change can't be redone anymore.");
     expect(s.a.history).toEqual({ undoList: [], redoList: [entry] });
     expectAgree(s);
 });
