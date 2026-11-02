@@ -11,7 +11,7 @@ import {
     DATA_LEASE_FILE,
     DATA_LOCK_FILE,
     LEASE_HEARTBEAT_MS,
-    liveLeaseAfterWait,
+    liveLeaseHolder,
     lockDataDir,
     lockScope,
     readLease,
@@ -29,10 +29,15 @@ let beatFailed = false;
 // Unref'd, so a process that has nothing else to do still exits.
 const heartbeat = setInterval(beat, LEASE_HEARTBEAT_MS).unref();
 
-// Called by the graceful shutdown once the homes are closed, so the heartbeat runs through the whole drain.
+// Called by the graceful shutdown once the homes are closed, so the heartbeat runs through the whole drain. A lease
+// it cannot remove only costs the next boot elsewhere one wait, so it never keeps the shutdown from exiting.
 export function releaseInstanceLease(): void {
     clearInterval(heartbeat);
-    if (readLease(leaseFile)?.id === lease.id) rmSync(leaseFile);
+    try {
+        if (readLease(leaseFile)?.id === lease.id) rmSync(leaseFile, { force: true });
+    } catch (err) {
+        console.error('[instance-lock] could not remove the data dir lease:', err);
+    }
 }
 
 function holdInstanceLock() {
@@ -43,10 +48,10 @@ function holdInstanceLock() {
 }
 
 function holdInstanceLease(): DataLease {
-    const live = liveLeaseAfterWait(leaseFile);
-    if (live) {
+    const holder = liveLeaseHolder(leaseFile, (message) => console.warn(message));
+    if (holder) {
         console.error(
-            `Another Eigen API is using the data dir ${dataRoot}: ${live.host}, pid ${live.pid} (${live.platform}), still heartbeating. Two APIs on one data dir corrupt its databases; exiting. If this folder is shared between a container and the host, give each its own data folder.`,
+            `Another Eigen API is using the data dir ${dataRoot}: ${holder}, still heartbeating. Two APIs on one data dir corrupt its databases; exiting. If this folder is shared between a container and the host, give each its own data folder.`,
         );
         process.exit(1);
     }

@@ -24,7 +24,7 @@ import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFold
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
-import { DATA_LEASE_FILE, lockDataDir, writeLease } from '../../lib/config/data-lock';
+import { DATA_LEASE_FILE, LEASE_WAIT_MS, lockDataDir, writeLease } from '../../lib/config/data-lock';
 import { homeDirUnder, PATHS, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
@@ -1242,7 +1242,7 @@ describe('restore --stage and --swap', () => {
 
     // An API on another kernel, such as the Mac host beside the container, holds no file lock the swap can see.
     test(
-        'a swap with a live lease in data/server is refused before anything moves',
+        'a swap with a live lease in data/server is refused before anything moves, and a stale one only delays it',
         async () => {
             const dir = install();
             expect((await stage(dir, basename(fullArchive))).code).toBe(0);
@@ -1272,8 +1272,10 @@ describe('restore --stage and --swap', () => {
             } finally {
                 clearInterval(remote);
             }
-            rmSync(leaseFile);
+            // A stopped heartbeat leaves a lease that no longer moves, so it delays the swap once, not forever.
+            const started = Date.now();
             expect((await swap(dir)).code).toBe(0);
+            expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
         },
         JOB_TIMEOUT_MS,
     );

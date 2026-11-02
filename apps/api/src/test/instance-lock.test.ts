@@ -1,8 +1,15 @@
 import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { DATA_LEASE_FILE, LEASE_WAIT_MS, lockScope, writeLease } from '../lib/config/data-lock';
+import {
+    DATA_LEASE_FILE,
+    LEASE_HEARTBEAT_MS,
+    LEASE_WAIT_MS,
+    lockScope,
+    readLease,
+    writeLease,
+} from '../lib/config/data-lock';
 import { TEST_DATA_DIR } from './setup';
 
 const DATA_ROOT = join(TEST_DATA_DIR, 'instance-lock');
@@ -23,7 +30,8 @@ function spawnHolder(hold: boolean, dataRoot = DATA_ROOT) {
     });
 }
 
-// Every wait below is the real one: a foreign lease costs a boot LEASE_WAIT_MS, and a heartbeat comes every half of it.
+// Every wait below is the real one: a foreign lease costs a boot LEASE_WAIT_MS, and the scenarios that wait run side
+// by side, so a test pays it once.
 const LEASE_TEST_TIMEOUT_MS = 2 * LEASE_WAIT_MS;
 
 // Two holders on one machine share the lock scope, so another machine is a lease written here with a scope of its own.
@@ -45,8 +53,9 @@ function leaseFileOf(dataRoot: string) {
     return join(dataRoot, 'server', DATA_LEASE_FILE);
 }
 
-function readLeaseJson(dataRoot: string) {
-    return JSON.parse(readFileSync(leaseFileOf(dataRoot), 'utf8'));
+function writeGarbledLease(dataRoot: string, text: string) {
+    mkdirSync(join(dataRoot, 'server'), { recursive: true });
+    writeFileSync(leaseFileOf(dataRoot), text);
 }
 
 // The scope a holder on this machine writes, once the folder exists to stat.
@@ -114,56 +123,63 @@ describe('instance lock', () => {
         for (const outcome of await Promise.all(pairs)) expect(outcome).toEqual([1, 'held']);
     });
 
+    // A holder's heartbeat stalls while a synchronous boot or VACUUM blocks its event loop, and it is still alive.
     test(
-        'a live lease from another kernel refuses the boot, naming its host and pid',
+        'a foreign lease that moves during the wait refuses the boot, even one that does not parse or stalls',
         async () => {
-            const dataRoot = join(DATA_ROOT, 'lease-live');
-            writeForeignLease(dataRoot);
-            const remote = setInterval(() => writeForeignLease(dataRoot), 50);
+            const live = join(DATA_ROOT, 'lease-live');
+            const garbled = join(DATA_ROOT, 'lease-garbled-live');
+            const stalled = join(DATA_ROOT, 'lease-stalled');
+            let beats = 0;
+            const heartbeat = () => {
+                writeForeignLease(live);
+                writeGarbledLease(garbled, `not a lease ${beats++}`);
+            };
+            heartbeat();
+            writeForeignLease(stalled);
+            const remote = setInterval(heartbeat, 50);
+            const stalledBeat = setTimeout(() => writeForeignLease(stalled), 3 * LEASE_HEARTBEAT_MS);
             try {
-                const holder = spawnHolder(false, dataRoot);
-                expect(await holder.exited).toBe(1);
-                expect(await new Response(holder.stdout).text()).toBe('');
-                const stderr = await new Response(holder.stderr).text();
-                expect(stderr).toContain('other-machine');
-                expect(stderr).toContain('4242');
-                expect(stderr).toContain(resolve(dataRoot));
+                const holders = [spawnHolder(false, live), spawnHolder(false, garbled), spawnHolder(false, stalled)];
+                expect(await Promise.all(holders.map((holder) => holder.exited))).toEqual([1, 1, 1]);
+                for (const holder of holders) expect(await new Response(holder.stdout).text()).toBe('');
+                const [liveErr, garbledErr] = await Promise.all(
+                    holders.map((holder) => new Response(holder.stderr).text()),
+                );
+                expect(liveErr).toContain('other-machine');
+                expect(liveErr).toContain('4242');
+                expect(liveErr).toContain(resolve(live));
+                expect(garbledErr).toContain(resolve(garbled));
             } finally {
                 clearInterval(remote);
+                clearTimeout(stalledBeat);
             }
         },
         LEASE_TEST_TIMEOUT_MS,
     );
 
-    test(
-        'a stale lease from another kernel is taken over after the wait',
-        async () => {
-            const dataRoot = join(DATA_ROOT, 'lease-stale');
-            writeForeignLease(dataRoot);
-            const started = Date.now();
-            const holder = spawnHolder(false, dataRoot);
-            expect(await holder.exited).toBe(0);
-            expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
-            const lease = readLeaseJson(dataRoot);
-            expect(lease).toMatchObject(localScope(dataRoot));
-            expect(lease.id).not.toBe('remote-id');
-        },
-        LEASE_TEST_TIMEOUT_MS,
-    );
-
     // WSL2 runs every distro on one kernel, and one distro's view of another's folder goes over 9p, which has its own
-    // device number and need not carry the file lock.
+    // device number and need not carry the file lock. So a lease from this kernel on another file system is foreign.
     test(
-        'a lease from this kernel on another file system waits before it is taken over',
+        'a foreign lease that sits still is taken over after the wait, even one that does not parse',
         async () => {
-            const dataRoot = join(DATA_ROOT, 'lease-other-dev');
-            const local = localScope(dataRoot);
-            writeForeignLease(dataRoot, { kernel: local.kernel, dev: local.dev + 1 });
+            const otherKernel = join(DATA_ROOT, 'lease-stale');
+            writeForeignLease(otherKernel);
+            const otherDev = join(DATA_ROOT, 'lease-other-dev');
+            const local = localScope(otherDev);
+            writeForeignLease(otherDev, { kernel: local.kernel, dev: local.dev + 1 });
+            const garbled = join(DATA_ROOT, 'lease-garbled-stale');
+            writeGarbledLease(garbled, 'not a lease');
             const started = Date.now();
-            const holder = spawnHolder(false, dataRoot);
-            expect(await holder.exited).toBe(0);
-            expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
-            expect(readLeaseJson(dataRoot)).toMatchObject(local);
+            const takeOver = async (dataRoot: string) => {
+                const holder = spawnHolder(false, dataRoot);
+                expect(await holder.exited).toBe(0);
+                expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
+                const lease = readLease(leaseFileOf(dataRoot));
+                expect(lease).toMatchObject(localScope(dataRoot));
+                expect(lease?.id).not.toBe('remote-id');
+            };
+            await Promise.all([takeOver(otherKernel), takeOver(otherDev), takeOver(garbled)]);
         },
         LEASE_TEST_TIMEOUT_MS,
     );
@@ -175,8 +191,29 @@ describe('instance lock', () => {
         const holder = spawnHolder(false, dataRoot);
         expect(await holder.exited).toBe(0);
         expect(Date.now() - started).toBeLessThan(LEASE_WAIT_MS / 2);
-        expect(readLeaseJson(dataRoot).id).not.toBe('remote-id');
+        expect(readLease(leaseFileOf(dataRoot))?.id).not.toBe('remote-id');
     });
+
+    // The swap of ./eigen restore reads the lease as root, so a symlink to a FIFO or a device must not hang or fill it.
+    test(
+        'a lease that is not a regular file is no lease',
+        async () => {
+            const dataRoot = join(DATA_ROOT, 'lease-fifo');
+            mkdirSync(join(dataRoot, 'server'), { recursive: true });
+            const fifo = join(dataRoot, 'fifo');
+            rmSync(fifo, { force: true });
+            expect(Bun.spawnSync(['mkfifo', fifo]).exitCode).toBe(0);
+            rmSync(leaseFileOf(dataRoot), { force: true });
+            symlinkSync(fifo, leaseFileOf(dataRoot));
+            const holder = spawnHolder(false, dataRoot);
+            // A read of the FIFO would block for good, so a holder that hangs is killed and fails the exit code.
+            const hung = setTimeout(() => holder.kill('SIGKILL'), LEASE_WAIT_MS / 2);
+            expect(await holder.exited).toBe(0);
+            clearTimeout(hung);
+            expect(readLease(leaseFileOf(dataRoot))).toMatchObject(localScope(dataRoot));
+        },
+        LEASE_TEST_TIMEOUT_MS,
+    );
 
     test(
         'a heartbeat that finds another id exits',

@@ -1,19 +1,24 @@
 // What keeps two writers off one data folder. A file lock refuses a second process on the same kernel, and a lease
-// file with a heartbeat refuses one the lock does not reach, such as the Mac host beside a Docker Desktop container. The API holds both while it runs, and the swap of ./eigen restore checks them before it
-// replaces data/. Everything here is synchronous, so both can run it before anything else opens a database.
+// file with a heartbeat refuses one the lock does not reach, such as the Mac host beside a Docker Desktop container.
+// The API holds both while it runs, and the swap of ./eigen restore checks them before it replaces data/. Everything
+// here is synchronous, so both can run it before anything else opens a database.
 
 import { Database, SQLiteError } from 'bun:sqlite';
-import { readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { lstatSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
+import { isRecord } from '@workspace/lib/guards';
 
 // In data/server/: the API holds it while it runs, and the swap of ./eigen restore while it replaces data/.
 export const DATA_LOCK_FILE = 'instance.lock';
 // In data/server/ beside it: only the API writes it, the swap only reads it.
 export const DATA_LEASE_FILE = 'instance.lease';
 export const LEASE_HEARTBEAT_MS = 5_000;
-// Two missed heartbeats: a lease that did not move in this time has no live holder.
-export const LEASE_WAIT_MS = 2 * LEASE_HEARTBEAT_MS;
+// A lease that did not move in this time has no live holder. It is six heartbeats long because a synchronous boot or
+// VACUUM blocks the holder's event loop, and so its heartbeat, for a while.
+export const LEASE_WAIT_MS = 30_000;
+// A lease that does not parse cannot say whose it is.
+const UNREADABLE_HOLDER = 'an API whose lease does not parse';
 
 // `kernel` and `dev` say whose file lock the holder shares. `host` and `pid` are only for the messages: a container's
 // hostname changes when Compose recreates it.
@@ -56,21 +61,10 @@ export function lockScope(file: string): Pick<DataLease, 'kernel' | 'dev'> {
     return { kernel, dev: statSync(dirname(file)).dev };
 }
 
-// A missing or half-readable lease is no lease.
+// A missing lease, or one that does not parse, is no lease.
 export function readLease(file: string): DataLease | null {
-    let text: string;
-    try {
-        text = readFileSync(file, 'utf8');
-    } catch (err) {
-        if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return null;
-        throw err;
-    }
-    try {
-        const value: unknown = JSON.parse(text);
-        return isDataLease(value) ? value : null;
-    } catch {
-        return null;
-    }
+    const text = readLeaseText(file);
+    return text === null ? null : parseLease(text);
 }
 
 // A rename in one folder is atomic, so a reader sees the old lease or the new one. There is no fsync: a lease lost in
@@ -81,43 +75,67 @@ export function writeLease(file: string, lease: DataLease): void {
     renameSync(temp, file);
 }
 
-// The lease of a process outside the caller's lock scope that is still heartbeating, or null. A lease from inside it
-// has no live holder, because the caller holds the file lock it would hold. No clock is compared across machines: a
-// lease is live only when it moved during the wait.
-export function liveLeaseAfterWait(file: string): DataLease | null {
-    const before = readLease(file);
-    if (!before) return null;
+// Who holds a lease from outside the caller's lock scope that is still heartbeating, or null. A lease from inside it
+// has no live holder, because the caller holds the file lock it would hold. A lease that does not parse may be from
+// anywhere, so it is waited on too. No clock is compared across machines: a lease is live only when it changed during
+// the wait.
+export function liveLeaseHolder(file: string, warn: (message: string) => void): string | null {
+    const before = readLeaseText(file);
+    if (before === null) return null;
+    const lease = parseLease(before);
     const scope = lockScope(file);
-    if (before.kernel === scope.kernel && before.dev === scope.dev) return null;
-    console.warn(
-        `Data dir lease held by ${before.host} (pid ${before.pid}, ${before.platform}), last heartbeat ${before.heartbeatAt}; waiting ${LEASE_WAIT_MS / 1000} s to see whether it is alive.`,
+    if (lease?.kernel === scope.kernel && lease.dev === scope.dev) return null;
+    const holder = lease ? describeHolder(lease) : UNREADABLE_HOLDER;
+    const last = lease ? `, last heartbeat ${lease.heartbeatAt}` : '';
+    warn(
+        `The data dir lease is held by ${holder}${last}; waiting ${LEASE_WAIT_MS / 1000} s to see whether it is alive.`,
     );
     Bun.sleepSync(LEASE_WAIT_MS);
-    const after = readLease(file);
-    if (after && (after.id !== before.id || after.heartbeatAt !== before.heartbeatAt)) return after;
-    if (after) console.warn(`The lease of ${before.host} (pid ${before.pid}) did not move, so it is stale.`);
-    return null;
+    const after = readLeaseText(file);
+    if (after === null) return null;
+    if (after === before) {
+        warn('The data dir lease did not move, so it is stale.');
+        return null;
+    }
+    const moved = parseLease(after);
+    return moved ? describeHolder(moved) : UNREADABLE_HOLDER;
+}
+
+// Only a regular file is read, so a FIFO or a device planted in its place cannot hang or fill the swap, which runs as
+// root. Null when there is no lease.
+function readLeaseText(file: string): string | null {
+    if (!lstatSync(file, { throwIfNoEntry: false })?.isFile()) return null;
+    try {
+        return readFileSync(file, 'utf8');
+    } catch (err) {
+        if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return null;
+        throw err;
+    }
+}
+
+function parseLease(text: string): DataLease | null {
+    try {
+        const value: unknown = JSON.parse(text);
+        return isDataLease(value) ? value : null;
+    } catch {
+        return null;
+    }
+}
+
+function describeHolder(lease: DataLease): string {
+    return `${lease.host}, pid ${lease.pid} (${lease.platform})`;
 }
 
 function isDataLease(value: unknown): value is DataLease {
     return (
-        typeof value === 'object' &&
-        value !== null &&
-        'id' in value &&
-        typeof value.id === 'string' &&
-        'host' in value &&
-        typeof value.host === 'string' &&
-        'kernel' in value &&
-        typeof value.kernel === 'string' &&
-        'dev' in value &&
-        typeof value.dev === 'number' &&
-        'pid' in value &&
-        typeof value.pid === 'number' &&
-        'platform' in value &&
-        typeof value.platform === 'string' &&
-        'startedAt' in value &&
-        typeof value.startedAt === 'string' &&
-        'heartbeatAt' in value &&
-        typeof value.heartbeatAt === 'string'
+        isRecord(value) &&
+        typeof value['id'] === 'string' &&
+        typeof value['host'] === 'string' &&
+        typeof value['kernel'] === 'string' &&
+        typeof value['dev'] === 'number' &&
+        typeof value['pid'] === 'number' &&
+        typeof value['platform'] === 'string' &&
+        typeof value['startedAt'] === 'string' &&
+        typeof value['heartbeatAt'] === 'string'
     );
 }
