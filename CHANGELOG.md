@@ -35,7 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
 - **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
-- **Dialogs in Calendar** — Enter in a new event's title saves it, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
+- **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
 - **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
 - **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
 - **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email

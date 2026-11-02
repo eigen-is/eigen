@@ -7,7 +7,6 @@ import type { SourceFile } from './unused-primitives';
 
 // The dialogs that deliberately draw their own footer: they are not a form, or their move waits on other work.
 export const OWN_DIALOG_FOOTER = new Set([
-    'apps/calendar/src/components/edit-event-dialog.tsx', // another session is moving it; it leaves when that lands
     'apps/calendar/src/components/event-detail-dialog.tsx', // actions, no fields
     'apps/docs/src/components/docs/word-count-dialog.tsx', // a FormDialog shell with its own Close footer
     'apps/drive/src/components/editor/conflict-dialog.tsx', // three actions

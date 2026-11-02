@@ -1,6 +1,6 @@
 // A user's Teams section reads like a team's Members section: a header with the count and the add
 // button on the right, then one row per team, or the empty state. The default team every user joins
-// is neither listed nor counted.
+// is neither listed nor counted, and each team's remove button is named after the team.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { AdminUserRow } from '@workspace/lib/types/admin';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -78,4 +78,14 @@ test('the default team is neither listed nor counted, so a user only in it is in
     expect(onlyDefault.querySelector('h3')?.textContent).toBe('Teams (0)');
     expect(onlyDefault.textContent).toContain('Not in any team yet');
     expect(onlyDefault.textContent).not.toContain('Acme');
+});
+
+test("each team's remove button is named after the team", async () => {
+    const section = await renderSection([
+        { id: 't2', name: 'Sales' },
+        { id: 't1', name: 'Design' },
+    ]);
+    expect(section.querySelector('button[aria-label="Remove from Design"]')).not.toBeNull();
+    expect(section.querySelector('button[aria-label="Remove from Sales"]')).not.toBeNull();
+    expect(section.querySelector('button[aria-label="Remove from team"]')).toBeNull();
 });
