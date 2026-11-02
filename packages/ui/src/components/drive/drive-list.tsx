@@ -34,6 +34,7 @@ import type { CreateCallbacks } from './create-menu';
 import { getCreateMenuItems } from './create-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveGrid } from './drive-grid';
+import type { DriveActionRunner } from './drive-layout-dialogs';
 import { useMountLabel } from './drive-mount-list';
 import { DriveTable, nextDriveSort } from './drive-table';
 
@@ -232,24 +233,15 @@ type DriveListProps = CreateCallbacks & {
     onRowActivate?: (path: DrivePath) => void;
     activeRowId?: string;
     onUploadFiles?: (files: File[]) => void;
-    onDelete?: (paths: DrivePath[]) => void;
-    onShareClick?: (item: DrivePath) => void;
-    onEmailCollaborators?: (item: DrivePath) => void;
-    onExport?: (item: DrivePath, format: string) => void;
     getItemHref?: (item: DrivePath) => string | undefined;
     ownerId: string;
     mountId: string;
     pathId?: string;
-    allowDelete?: boolean;
     allowUpload?: boolean;
-    canWrite?: boolean;
-    onRename?: (item: DrivePath) => void;
-    onMove?: (item: DrivePath, targetItemId: string) => void;
-    onMoveTo?: (items: DrivePath[]) => void;
-    onCopyTo?: (items: DrivePath[]) => void;
-    onDuplicate?: (items: DrivePath[]) => void;
+    // What the rows' menus, keys and drops do; Trash draws its own menu instead.
+    actions?: DriveActionRunner;
     onQuickLook?: (path: DrivePath) => void;
-    unreadPathIds?: Set<string>;
+    unreadPathIds?: ReadonlySet<string>;
     hideOwner?: boolean;
     hideShared?: boolean;
     dateLabel?: string;
@@ -268,23 +260,13 @@ export function DriveList({
     onCreateFolder,
     onUploadFile,
     onUploadFiles,
-    onDelete,
-    onShareClick,
-    onEmailCollaborators,
     onCreateEigenDoc,
-    onExport,
     getItemHref,
     ownerId,
     mountId,
     pathId,
-    allowDelete = false,
     allowUpload = false,
-    canWrite = true,
-    onRename,
-    onMove,
-    onMoveTo,
-    onCopyTo,
-    onDuplicate,
+    actions,
     onQuickLook,
     unreadPathIds,
     hideOwner,
@@ -312,13 +294,11 @@ export function DriveList({
     // stop propagation, so their right-clicks surface the per-item menu instead).
     const createMenu = useContextMenu<true>();
 
-    // Handle row click with two different behaviors
+    // A click on the row that is already active opens it; a click on any other row selects it.
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
-            // If the item is already selected, activate it
             onRowActivate(path);
         } else if (onRowSelect) {
-            // Otherwise select it
             onRowSelect(path);
         }
     };
@@ -343,19 +323,8 @@ export function DriveList({
         items,
         activeItemId: activeRowId,
         onItemClick: handleRowClick,
-        onItemOpen: onRowActivate,
-        onShareClick,
-        onEmailCollaborators,
         getItemHref,
-        onExport,
-        onDelete,
-        allowDelete,
-        canWrite,
-        onRename,
-        onMove,
-        onMoveTo,
-        onCopyTo,
-        onDuplicate,
+        actions,
         selection,
         contextMenuItems,
         onQuickLook,

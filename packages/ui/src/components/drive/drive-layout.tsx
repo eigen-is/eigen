@@ -5,15 +5,14 @@
 
 import { getDriveItemUrl } from '@workspace/lib/api';
 import { getDriveComparator, useDriveViewPreferences } from '@workspace/lib/drive';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import type React from 'react';
 import { useCallback, useMemo } from 'react';
 import { Column, ColumnLayout } from '../layout/app/column-layout';
 import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
-import type { DriveCapabilities } from './drive-capabilities';
 import { DriveDetail, DriveDetailToolbar } from './drive-detail';
-import { DriveLayoutDialogs, useDriveLayoutDialogs } from './drive-layout-dialogs';
+import { useDriveActionRunner } from './drive-layout-dialogs';
 import { DriveList, DriveListToolbar } from './drive-list';
 
 export type DriveLayoutProps = {
@@ -26,7 +25,7 @@ export type DriveLayoutProps = {
     selectedPath?: DrivePath | null;
     currentPath?: DrivePath | null;
     onRowSelect: (path: DrivePath) => void;
-    onRowActivate?: (path: DrivePath) => void;
+    onRowActivate: (path: DrivePath) => void;
     onOpenSharedWithMe?: () => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
@@ -35,7 +34,7 @@ export type DriveLayoutProps = {
     title?: string;
     onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
     pid?: string;
-    unreadPathIds?: Set<string>;
+    unreadPathIds?: ReadonlySet<string>;
     emptyState?: React.ReactNode;
 };
 
@@ -61,7 +60,14 @@ export function DriveLayout({
     emptyState,
 }: DriveLayoutProps) {
     const { isMobile } = useLayout();
-    const actions = useDriveLayoutDialogs({ ownerId, mountId, currentPath, capabilities, onAfterAction });
+    const actions = useDriveActionRunner({
+        ownerId,
+        mountId,
+        currentPath,
+        capabilities,
+        onOpen: onRowActivate,
+        onAfterAction,
+    });
 
     // Sort order comes from the shared view preference.
     const { sortKey, sortDir } = useDriveViewPreferences();
@@ -89,24 +95,14 @@ export function DriveLayout({
         onCreateFolder: actions.onCreateFolder,
         onUploadFile: actions.onUploadFile,
         onUploadFiles: actions.onUploadFiles,
-        onDelete: actions.onDelete,
-        onShareClick: actions.onShareClick,
-        onEmailCollaborators: actions.onEmailCollaborators,
         onCreateEigenDoc: actions.onCreateEigenDoc,
         ownerId,
         mountId,
         pathId,
-        onExport: actions.onExport,
         // Every view links rows to the one canonical item URL.
         getItemHref: getDriveItemUrl,
-        allowDelete: capabilities.canDelete,
         allowUpload: capabilities.canUpload,
-        canWrite: capabilities.canWrite,
-        onRename: actions.onRename,
-        onMove: actions.onMove,
-        onMoveTo: actions.onMoveTo,
-        onCopyTo: actions.onCopyTo,
-        onDuplicate: actions.onDuplicate,
+        actions,
         onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
         unreadPathIds,
         emptyState,
@@ -132,23 +128,6 @@ export function DriveLayout({
     // the panel renders the folder's properties (with its Open button) for
     // one tick when arrow-keying between files.
     const detailPath = pid ? selectedPath : selectedPath || currentPath;
-
-    const detailProps = {
-        path: detailPath,
-        siblings: sortedContents,
-        onDelete: actions.onDelete,
-        onShareClick: actions.onShareClick,
-        onDownload: actions.onDownload,
-        onItemOpen: onRowActivate,
-        allowDelete: capabilities.canDelete,
-        canWrite: capabilities.canWrite,
-        onRename: actions.onRename,
-        onMoveTo: actions.onMoveTo,
-        onCopyTo: actions.onCopyTo,
-        onDuplicate: actions.onDuplicate,
-        onExport: actions.onExport,
-        onEmailCollaborators: actions.onEmailCollaborators,
-    };
 
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
     // A folder shows only its own rows (a file moved out keeps its pid in the URL); a feed without a
@@ -177,12 +156,12 @@ export function DriveLayout({
                         onBack={onBackToList}
                         toolbar={detailToolbar}
                     >
-                        <DriveDetail {...detailProps} />
+                        <DriveDetail path={detailPath} siblings={sortedContents} actions={actions} />
                     </Column>
                 )}
             </ColumnLayout>
 
-            <DriveLayoutDialogs actions={actions} />
+            {actions.dialogs}
         </>
     );
 }

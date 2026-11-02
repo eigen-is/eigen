@@ -1,24 +1,37 @@
-// The item actions of a Drive file view and the dialogs behind them, such as rename, move, share and
-// delete. A view's capabilities decide which actions it offers, and the command palette gets the same
-// set.
+// The Drive action runner: performs a Drive action on a set of items, such as rename, move, share or
+// delete, and owns the dialogs behind them. DriveLayout builds one and hands it to the list, the detail
+// column and the toolbar. Which rows a surface draws comes from driveActionsFor, read through the
+// view's capabilities, so every surface and the command palette offer the same set.
 
+import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { useIsGuest } from '@workspace/lib/auth';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
 import { downloadDriveFile } from '@workspace/lib/download';
 import {
+    driveActionsFor,
     useCopyPath,
     useDeletePaths,
     useDuplicatePath,
     useIsEffectiveOwnerOf,
+    useIsSharedWithMe,
     useMovePath,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import type { DrivePath, EigenDocType } from '@workspace/lib/types/drive';
+import { useMailEnabled } from '@workspace/lib/public';
+import type {
+    DriveAction,
+    DriveActionId,
+    DriveCapabilities,
+    DrivePath,
+    EigenDocType,
+    ExportFormat,
+} from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
-import { useCallback, useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
+import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { DriveAccessDialog } from './drive-access-dialog';
-import type { DriveCapabilities } from './drive-capabilities';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
 import { DriveCreateFolder } from './drive-create-folder';
 import { DriveDeleteItem } from './drive-delete-item';
@@ -29,26 +42,40 @@ import { DriveUploadFiles } from './drive-upload-files';
 import { ExportProgressDialog, useDocumentExport } from './use-document-export';
 import { useDriveDialogs } from './use-drive-dialogs';
 
-type UseDriveLayoutDialogsOptions = {
+type UseDriveActionRunnerOptions = {
     ownerId: string;
     mountId: string;
     currentPath: DrivePath | null;
     capabilities: DriveCapabilities;
+    // What Open does with an item: a folder opens in the view, a document in its app.
+    onOpen: (path: DrivePath) => void;
     onAfterAction?: (actionType: string, data: Record<string, unknown>) => void;
 };
 
-// Owns every item action DriveLayout offers: the dialog state behind them, the
-// mutations they run, and the palette publication. DriveLayout wires the on*
-// handlers into its list/detail/toolbar; <DriveLayoutDialogs> renders the dialog
-// stack from the same object. A capability that's off exposes `undefined`, so all
-// surfaces hide the action the same way.
-export function useDriveLayoutDialogs({
+export type DriveActionRunner = {
+    capabilities: DriveCapabilities;
+    // The rows these items offer in this view, to this viewer, on this server.
+    actionsFor: (items: readonly DrivePath[]) => DriveAction[];
+    // Does nothing for a row the items don't offer. Download as… names its format.
+    run: (id: DriveActionId, items: DrivePath[], format?: ExportFormat) => void;
+    // A drag onto a folder row, absent where the view can't move.
+    onMove?: (path: DrivePath, targetItemId: string) => Promise<void>;
+    onCreateFolder?: () => void;
+    onCreateEigenDoc: Partial<Record<EigenDocType, () => void>>;
+    onUploadFile?: () => void;
+    onUploadFiles?: (files: File[]) => void;
+    // Rendered once by DriveLayout, so a dialog opened from a menu row outlives the menu that closed.
+    dialogs: ReactNode;
+};
+
+export function useDriveActionRunner({
     ownerId,
     mountId,
     currentPath,
     capabilities,
+    onOpen,
     onAfterAction,
-}: UseDriveLayoutDialogsOptions) {
+}: UseDriveActionRunnerOptions): DriveActionRunner {
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
     const copyPath = useCopyPath();
@@ -56,63 +83,32 @@ export function useDriveLayoutDialogs({
     const deletePathsMutation = useDeletePaths();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
+    const isSharedWithMe = useIsSharedWithMe();
     const isGuest = useIsGuest();
+    const mailEnabled = useMailEnabled();
     const { exportPath, isExporting } = useDocumentExport();
-    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-    const [pendingDeletePaths, setPendingDeletePaths] = useState<DrivePath[]>([]);
 
-    // Memoized handlers below: stable identity is required because they're published
-    // to the command palette via usePaletteSelectionActions, and that effect refires
-    // whenever the action object's identity changes. Without memoization, the
-    // useCommandPalette context subscription combined with each re-render of
-    // DriveLayout produced an infinite setState loop.
-    const runDeletePaths = useCallback(
-        (paths: DrivePath[]) => {
-            deletePathsMutation.mutate(paths, {
-                onSuccess: () => {
-                    for (const path of paths) onAfterAction?.('delete', path);
-                },
-            });
-        },
-        [deletePathsMutation, onAfterAction],
-    );
+    // The one place that knows who is asking and whether mail is hosted, as useFileActions is for file actions.
+    const actionsFor = (items: readonly DrivePath[]) =>
+        driveActionsFor({ items, capabilities, sharedWithMe: items.every(isSharedWithMe) }).filter(
+            (action) => !(isGuest && action.guestDenied) && (mailEnabled || !action.mailOnly),
+        );
 
-    const handleDeletePaths = useCallback(
-        (paths: DrivePath[]) => {
-            if (paths.length === 0) return;
-            // Confirm on touch (no hover cue, easy mis-taps) and for paths in someone else's
-            // drive, where "delete" either leaves a direct share or trashes the owner's copy.
-            // Fine-pointer own-drive deletes stay instant.
-            if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
-                setPendingDeletePaths(paths);
-                setDeleteConfirmOpen(true);
-                return;
-            }
-            runDeletePaths(paths);
-        },
-        [isCoarsePointer, isEffectiveOwnerOf, runDeletePaths],
-    );
-
-    const handleMovePath = useCallback(
-        async (path: DrivePath, targetItemId: string) => {
-            await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
-        },
-        [movePath],
-    );
-
-    const handleMoveTo = useCallback(
-        (items: DrivePath[]) => {
-            if (items.length) dialogs.copyMove.openDialog(items, 'move');
-        },
-        [dialogs.copyMove.openDialog],
-    );
-
-    const handleCopyTo = useCallback(
-        (items: DrivePath[]) => {
-            if (items.length) dialogs.copyMove.openDialog(items, 'copy');
-        },
-        [dialogs.copyMove.openDialog],
-    );
+    const deletePaths = (paths: DrivePath[]) => {
+        if (paths.length === 0) return;
+        // Confirm on touch (no hover cue, easy mis-taps) and for paths in someone else's drive, where
+        // "delete" either leaves a direct share or trashes the owner's copy. Fine-pointer own-drive
+        // deletes stay instant.
+        if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
+            dialogs.delete.openDialog(paths);
+            return;
+        }
+        deletePathsMutation.mutate(paths, {
+            onSuccess: () => {
+                for (const path of paths) onAfterAction?.('delete', path);
+            },
+        });
+    };
 
     const handleDuplicate = useCallback(
         (items: DrivePath[]) => {
@@ -144,32 +140,65 @@ export function useDriveLayoutDialogs({
         [dialogs.copyMove.items, dialogs.copyMove.mode, ownerId, mountId, movePath, copyPath],
     );
 
-    const handleDownloadPath = useCallback((path: DrivePath) => {
-        if (path.type === 'file') downloadDriveFile(path);
-    }, []);
+    const run = (id: DriveActionId, items: DrivePath[], format?: ExportFormat) => {
+        if (!actionsFor(items).some((action) => action.id === id)) return;
+        const [item] = items;
+        switch (id) {
+            case 'open':
+                onOpen(item);
+                return;
+            case 'open-new-tab': {
+                const href = getDriveItemUrl(item);
+                if (href) window.open(href, '_blank', 'noopener,noreferrer');
+                return;
+            }
+            case 'rename':
+                dialogs.rename.openDialog(item);
+                return;
+            case 'duplicate':
+                handleDuplicate(items);
+                return;
+            case 'move-to':
+                dialogs.copyMove.openDialog(items, 'move');
+                return;
+            case 'copy-to':
+                dialogs.copyMove.openDialog(items, 'copy');
+                return;
+            case 'download-as':
+                if (format) exportPath(item, format);
+                return;
+            case 'share':
+                dialogs.share.openDialog(item);
+                return;
+            case 'email-collaborators':
+                dialogs.email.openDialog(item);
+                return;
+            case 'copy-link':
+                copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
+                return;
+            case 'mail-to':
+                openMailComposeWith({ attachments: items });
+                return;
+            case 'trash':
+            case 'remove-shared':
+                deletePaths(items);
+                return;
+            // Watch toggles through WatchMenuItem, whose label follows the item's live watch state.
+        }
+    };
 
-    const onDelete = capabilities.canDelete ? handleDeletePaths : undefined;
-    const onRename = capabilities.canRename ? dialogs.rename.openDialog : undefined;
-    const onShareClick = capabilities.canShare ? dialogs.share.openDialog : undefined;
-    // A guest may not mail people through the server, as a guest may not share.
-    const onEmailCollaborators = capabilities.canShare && !isGuest ? dialogs.email.openDialog : undefined;
-
-    // Publish the route-local dialog handlers to the palette. Quick preview is
-    // intentionally omitted — it goes via CommandContext.openPreview (a global, from
-    // the PreviewProvider that wraps the whole app), which keeps this object's
-    // identity from churning when an inline onQuickLook prop changes each render.
-    const paletteActions = useMemo(
-        () => ({
-            onDownload: handleDownloadPath,
-            onExport: exportPath,
-            onRename,
-            onShare: onShareClick,
-            onEmailCollaborators,
-            onDelete,
-        }),
-        [handleDownloadPath, exportPath, onRename, onShareClick, onEmailCollaborators, onDelete],
-    );
-    usePaletteSelectionActions(paletteActions);
+    // The command palette acts on the selection the list publishes, through the same dialogs.
+    usePaletteSelectionActions({
+        onDownload: (path) => {
+            if (path.type === 'file') downloadDriveFile(path);
+        },
+        onExport: exportPath,
+        onRename: capabilities.canRename ? dialogs.rename.openDialog : undefined,
+        onShare: capabilities.canShare ? dialogs.share.openDialog : undefined,
+        // A guest may not mail people through the server, as a guest may not share.
+        onEmailCollaborators: capabilities.canShare && !isGuest ? dialogs.email.openDialog : undefined,
+        onDelete: capabilities.canDelete ? deletePaths : undefined,
+    });
 
     const createTypes = capabilities.createTypes ?? new Set<EigenDocType>(EIGEN_DOC_TYPES);
     const onCreateEigenDoc: Partial<Record<EigenDocType, () => void>> = {};
@@ -178,6 +207,14 @@ export function useDriveLayoutDialogs({
     }
 
     return {
+        capabilities,
+        actionsFor,
+        run,
+        onMove: capabilities.canMove
+            ? async (path, targetItemId) => {
+                  await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
+              }
+            : undefined,
         onCreateFolder: capabilities.canCreateFolder ? dialogs.createFolder.openDialog : undefined,
         onCreateEigenDoc,
         onUploadFile: capabilities.canUpload
@@ -186,138 +223,106 @@ export function useDriveLayoutDialogs({
               }
             : undefined,
         onUploadFiles: capabilities.canUpload
-            ? (files: File[]) => {
+            ? (files) => {
                   if (currentPath && files.length > 0) dialogs.upload.openDialog(files);
               }
             : undefined,
-        onDelete,
-        onRename,
-        onMove: capabilities.canMove ? handleMovePath : undefined,
-        onMoveTo: capabilities.canMove ? handleMoveTo : undefined,
-        onCopyTo: handleCopyTo,
-        onDuplicate: capabilities.canMove ? handleDuplicate : undefined,
-        onShareClick,
-        onEmailCollaborators,
-        onDownload: handleDownloadPath,
-        onExport: exportPath,
-        // Wiring consumed by <DriveLayoutDialogs> below.
-        ownerId,
-        mountId,
-        currentPath,
-        capabilities,
-        createTypes,
-        onAfterAction,
-        dialogs,
-        pendingDeletePaths,
-        deleteConfirmOpen,
-        onDeleteConfirmOpenChange: (open: boolean) => {
-            setDeleteConfirmOpen(open);
-            if (!open) setPendingDeletePaths([]);
-        },
-        onPickDestination: handlePickDestination,
-        isExporting,
-    };
-}
+        dialogs: (
+            <>
+                {capabilities.canCreateFolder && (
+                    <DriveCreateFolder
+                        open={dialogs.createFolder.open}
+                        onOpenChange={dialogs.createFolder.setOpen}
+                        defaultOwnerId={currentPath?.ownerId}
+                        defaultFolderId={currentPath?.id}
+                        defaultMountId={currentPath?.mountId}
+                        onAfterCreate={(newPath) => onAfterAction?.('create', { name: newPath.name })}
+                    />
+                )}
 
-type DriveLayoutDialogsProps = {
-    actions: ReturnType<typeof useDriveLayoutDialogs>;
-};
+                {EIGEN_DOC_TYPES.filter((type) => createTypes.has(type)).map((type) => (
+                    <DriveCreateEigenDoc
+                        key={type}
+                        type={type}
+                        open={dialogs.create[type].open}
+                        onOpenChange={dialogs.create[type].setOpen}
+                        defaultOwnerId={currentPath?.ownerId}
+                        defaultFolderId={currentPath?.id}
+                        defaultMountId={currentPath?.mountId}
+                    />
+                ))}
 
-export function DriveLayoutDialogs({ actions }: DriveLayoutDialogsProps) {
-    const { ownerId, mountId, currentPath, capabilities, createTypes, onAfterAction, dialogs } = actions;
+                {capabilities.canUpload && currentPath && (
+                    <DriveUploadFiles
+                        path={currentPath}
+                        open={dialogs.upload.open}
+                        onOpenChange={dialogs.upload.setOpen}
+                        initialFiles={dialogs.upload.files}
+                        onAfterUpload={dialogs.upload.closeDialog}
+                        onAfterAction={onAfterAction}
+                    />
+                )}
 
-    return (
-        <>
-            {capabilities.canCreateFolder && (
-                <DriveCreateFolder
-                    open={dialogs.createFolder.open}
-                    onOpenChange={dialogs.createFolder.setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                    onAfterCreate={(newPath) => onAfterAction?.('create', { name: newPath.name })}
-                />
-            )}
+                {dialogs.rename.item && (
+                    <DriveRenameItem
+                        path={dialogs.rename.item}
+                        open={dialogs.rename.open}
+                        onOpenChange={dialogs.rename.setOpen}
+                        onAfterAction={onAfterAction}
+                    />
+                )}
 
-            {EIGEN_DOC_TYPES.filter((type) => createTypes.has(type)).map((type) => (
-                <DriveCreateEigenDoc
-                    key={type}
-                    type={type}
-                    open={dialogs.create[type].open}
-                    onOpenChange={dialogs.create[type].setOpen}
-                    defaultOwnerId={currentPath?.ownerId}
-                    defaultFolderId={currentPath?.id}
-                    defaultMountId={currentPath?.mountId}
-                />
-            ))}
-
-            {capabilities.canUpload && currentPath && (
-                <DriveUploadFiles
-                    path={currentPath}
-                    open={dialogs.upload.open}
-                    onOpenChange={dialogs.upload.setOpen}
-                    initialFiles={dialogs.upload.files}
-                    onAfterUpload={dialogs.upload.closeDialog}
-                    onAfterAction={onAfterAction}
-                />
-            )}
-
-            {capabilities.canRename && dialogs.rename.item && (
-                <DriveRenameItem
-                    path={dialogs.rename.item}
-                    open={dialogs.rename.open}
-                    onOpenChange={dialogs.rename.setOpen}
-                    onAfterAction={onAfterAction}
-                />
-            )}
-
-            {capabilities.canShare && (
                 <DriveAccessDialog
                     open={dialogs.share.open}
                     onOpenChange={dialogs.share.setOpen}
                     path={dialogs.share.item}
                 />
-            )}
 
-            {capabilities.canShare && dialogs.email.item && (
-                <DriveEmailCollaborators
-                    path={dialogs.email.item}
-                    open={dialogs.email.open}
+                {dialogs.email.item && (
+                    <DriveEmailCollaborators
+                        path={dialogs.email.item}
+                        open={dialogs.email.open}
+                        onOpenChange={(open) => {
+                            if (!open) dialogs.email.closeDialog();
+                            else dialogs.email.setOpen(open);
+                        }}
+                    />
+                )}
+
+                <DriveLocationPicker
+                    open={dialogs.copyMove.open}
                     onOpenChange={(open) => {
-                        if (!open) dialogs.email.closeDialog();
-                        else dialogs.email.setOpen(open);
+                        if (!open) dialogs.copyMove.closeDialog();
+                        else dialogs.copyMove.setOpen(open);
                     }}
+                    mode="folder"
+                    title={dialogs.copyMove.mode === 'move' ? 'Move to' : 'Copy to'}
+                    confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
+                    defaultOwnerId={ownerId}
+                    defaultMountId={mountId}
+                    // currentPath can belong to another drive (eigendoc views pass the user's own root while a
+                    // team drive item is selected). It seeds the start folder only when it lives on the layout's
+                    // drive; otherwise the picker starts at that drive's root.
+                    defaultFolderId={
+                        currentPath?.ownerId === ownerId && currentPath?.mountId === mountId
+                            ? currentPath?.id
+                            : undefined
+                    }
+                    onConfirm={handlePickDestination}
                 />
-            )}
 
-            <DriveLocationPicker
-                open={dialogs.copyMove.open}
-                onOpenChange={(open) => {
-                    if (!open) dialogs.copyMove.closeDialog();
-                    else dialogs.copyMove.setOpen(open);
-                }}
-                mode="folder"
-                title={dialogs.copyMove.mode === 'move' ? 'Move to' : 'Copy to'}
-                confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
-                defaultOwnerId={ownerId}
-                defaultMountId={mountId}
-                // currentPath can belong to another drive (eigendoc views pass the user's own
-                // root while a teamdrive item is selected) — only seed it as the start folder
-                // when it lives on the layout's drive, else fall back to that drive's root.
-                defaultFolderId={
-                    currentPath?.ownerId === ownerId && currentPath?.mountId === mountId ? currentPath?.id : undefined
-                }
-                onConfirm={actions.onPickDestination}
-            />
+                <DriveDeleteItem
+                    paths={dialogs.delete.items}
+                    open={dialogs.delete.open}
+                    onOpenChange={(open) => {
+                        if (!open) dialogs.delete.closeDialog();
+                        else dialogs.delete.setOpen(open);
+                    }}
+                    onAfterAction={onAfterAction}
+                />
 
-            <DriveDeleteItem
-                paths={actions.pendingDeletePaths}
-                open={actions.deleteConfirmOpen}
-                onOpenChange={actions.onDeleteConfirmOpenChange}
-                onAfterAction={onAfterAction}
-            />
-
-            <ExportProgressDialog open={actions.isExporting} />
-        </>
-    );
+                <ExportProgressDialog open={isExporting} />
+            </>
+        ),
+    };
 }
