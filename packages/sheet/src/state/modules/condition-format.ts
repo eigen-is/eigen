@@ -43,6 +43,13 @@ const KNOWN_CONDITION_NAMES = [
     'formula',
 ] as const satisfies readonly ConditionalFormatConditionName[];
 
+// The rules the conditional formatting dialog makes. The others, such as a formula rule, come from a file or from a
+// value that reads a cell.
+export type ConditionRuleType = Exclude<
+    ConditionalFormatConditionName,
+    'greaterThanOrEqual' | 'lessThanOrEqual' | 'notEqual' | 'notBetween' | 'formula'
+>;
+
 const SINGLE_CELL = 'Enter a single cell, such as =A1';
 const NUMBER_OR_CELL = 'Enter a number, or a cell such as =A1';
 const VALUE_OR_CELL = 'Enter a value, or a cell such as =A1';
@@ -58,11 +65,11 @@ const REFERENCE_FORMULAS: Partial<Record<ConditionalFormatConditionName, (cell: 
         between: (cell, [lower, upper]) => `AND(${cell}>=${lower},${cell}<=${upper})`,
     };
 
-// Why the dialog's rule can't be saved, or null when it can. The dialog shows the reason under its fields and stays
+// Why the dialog's rule can't be saved, or undefined when it can. The dialog shows the reason under its fields and stays
 // open, so the check runs before setConditionRules.
-export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): string | null {
+export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): string | undefined {
     const values = readRuleValues(ctx, rules);
-    return typeof values === 'string' ? values : null;
+    return typeof values === 'string' ? values : undefined;
 }
 
 // Adds the dialog's rule over the selection, unless conditionRuleError refuses it or the sheet is protected.
@@ -119,7 +126,7 @@ function readRuleValues(ctx: Context, rules: ConditionRulesProps): string[] | st
                 NUMBER_OR_CELL,
             );
         case 'occurrenceDate':
-            if (!rules.dateValue) return 'Please select a date';
+            if (!rules.dateValue) return 'Select a date';
             return [rules.dateValue];
         case 'duplicateValue':
             return [rules.repeatValue];
@@ -129,7 +136,7 @@ function readRuleValues(ctx: Context, rules: ConditionRulesProps): string[] | st
         case 'last10_percent': {
             const n = parseInt(rules.projectValue, 10);
             if (n.toString() !== rules.projectValue || n < 1 || n > 1000) {
-                return 'Please enter an integer between 1 and 1000';
+                return 'Enter a whole number from 1 to 1000';
             }
             return [rules.projectValue];
         }
@@ -164,13 +171,9 @@ function isCellReference(value: string): boolean {
     return value.startsWith('=');
 }
 
-// Cache for getComputeMap — avoids recomputing the entire CF map on every
-// canvas paint / getStyleByCell call. Keyed per sheet: a single slot made every
-// A→B→A tab switch a guaranteed miss, and on a sheet carrying formula rules that
-// recompute costs seconds. Entries invalidate themselves — immer replaces `rules`
-// and `data` by reference on any edit, rule change or row/col op, so both must
-// stay in the key. Bounded by the workbook: a miss first drops every entry whose
-// sheet the current workbook no longer has.
+// The computed map per sheet, so a canvas paint doesn't evaluate every rule again. A single slot missed on every
+// switch between two sheets, which costs seconds on a sheet with formula rules. Immer replaces a sheet's rules and data
+// on any edit, so an entry is fresh while both are the same objects.
 const _cfCache = new Map<
     string,
     {
@@ -187,21 +190,14 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     const { data } = ctx.sheets[index];
     if (isNil(data)) return null;
 
-    // Return cached result if inputs haven't changed (reference equality)
     const cached = _cfCache.get(ctx.currentSheetId);
     if (cached && cached.rules === ruleArr && cached.data === data) {
         return cached.result;
     }
 
-    // Every entry pins a whole CellMatrix and a ComputeMap, so none may outlive its
-    // usefulness: drop the ones this workbook can no longer address — sheets that
-    // were deleted, and every sheet of a workbook this session has since closed —
-    // and the ones whose sheet has moved on. Immer replaces `data`/`rules` by
-    // reference on any edit, and sheets are edited while not current routinely
-    // (cross-sheet recalc, a collab peer's edit, a row/col op), so such an entry can
-    // never hit again yet pinned its matrix until you navigated back. A miss is the
-    // moment to do it, the recompute below dwarfs the sweep, and the hot path (the
-    // hit above) never pays for it.
+    // Each entry holds a whole matrix, so a miss drops the entries that can't hit again: a sheet that is gone, such as
+    // one of a workbook this session closed, and a sheet edited since, such as by a peer or a cross-sheet recalc. The
+    // recompute below costs far more than this sweep.
     const live = new Map(ctx.sheets.map((sheet) => [sheet.id, sheet]));
     for (const [id, entry] of _cfCache) {
         const sheet = live.get(id);
@@ -210,10 +206,9 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         }
     }
 
-    // Evaluate CF formulas through the engine directly, like the HTML export.
-    // execfunction would assign ctx.calculateSheetId — painting runs against an
-    // immer-frozen context, so that throws — and would register every CF formula into
-    // the sheet's calc chain via insertUpdateFunctionGroup.
+    // Formula rules evaluate through the engine directly, as the HTML export does. execfunction would set
+    // ctx.calculateSheetId, which throws on the frozen context a paint reads, and would add every rule's formula to the
+    // sheet's calc chain.
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
         evaluateFormula: createCfFormulaEvaluator(
             ctx.formulaCache.engine,

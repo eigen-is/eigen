@@ -12,7 +12,7 @@ const { act, createElement } = await import('react');
 const { renderSheetDialog } = await import('../sheet-dialog');
 const { ConditionRules } = await import('../../../components/ConditionFormat/ConditionRules');
 
-type RuleType = import('../../../components/ConditionFormat/ConditionRules').ConditionRuleType;
+type RuleType = import('../../../state').ConditionRuleType;
 
 const cell = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } });
 
@@ -89,6 +89,11 @@ test('a refused value stays open with the reason under the field and the typed v
     expect(dialog.dialogs()).toHaveLength(1);
     expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Value').value).toBe('abc');
+    // The field names the reason as its description, so a screen reader reads it there.
+    const reason = document.querySelector('[role="dialog"] [role="alert"]');
+    expect(reason?.id).toBeTruthy();
+    expect(dialog.field('Value').getAttribute('aria-describedby')).toBe(reason?.id ?? null);
+    expect(dialog.field('Value').getAttribute('aria-invalid')).toBe('true');
     expect(rules(dialog.context())).toEqual([]);
     expect(dialog.context().warnDialog).toBeUndefined();
 
@@ -104,7 +109,9 @@ test('Between takes two values, and refuses an empty second one', async () => {
     await dialog.click('OK');
     expect(alert()).toBe('Enter a number, or a cell such as =A1');
     expect(dialog.field('Lower value').value).toBe('1');
+    expect(dialog.field('Upper value').getAttribute('aria-describedby')).toBeTruthy();
     await dialog.type('Upper value', '9');
+    expect(dialog.field('Upper value').getAttribute('aria-describedby')).toBeNull();
     await dialog.click('OK');
     expect(values(dialog.context())).toEqual([['1', '9']]);
     expect(dialog.dialogs()).toHaveLength(0);
@@ -114,8 +121,9 @@ test('Top 10 refuses a count past 1000 and keeps it', async () => {
     const dialog = await openRule('top10');
     await dialog.type('Number of cells', '1001');
     await dialog.click('OK');
-    expect(alert()).toBe('Please enter an integer between 1 and 1000');
+    expect(alert()).toBe('Enter a whole number from 1 to 1000');
     expect(dialog.field('Number of cells').value).toBe('1001');
+    expect(dialog.field('Number of cells').getAttribute('aria-invalid')).toBe('true');
     expect(rules(dialog.context())).toEqual([]);
 });
 

@@ -12,52 +12,34 @@ import { Label } from '@workspace/ui/components/label';
 import { ColorPicker } from '@workspace/ui/components/media';
 import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import type { ReactNode } from 'react';
-import { useContext, useState } from 'react';
+import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
-import type { ConditionRulesProps } from '../../state';
+import type { ConditionRulesProps, ConditionRuleType } from '../../state';
 import { conditionRuleError, setConditionRules } from '../../state';
 
-export type ConditionRuleType =
-    | 'greaterThan'
-    | 'lessThan'
-    | 'between'
-    | 'equal'
-    | 'textContains'
-    | 'occurrenceDate'
-    | 'duplicateValue'
-    | 'top10'
-    | 'top10_percent'
-    | 'last10'
-    | 'last10_percent'
-    | 'aboveAverage'
-    | 'belowAverage';
-
-// Named once for the menu, this dialog and the Manage-rules list; a few labels
-// carry their connective ("Equal to") because Manage-rules appends the value.
+// Each rule's name and description, shared by the Format menu, this dialog and Manage rules. A label such as "Equal to"
+// keeps its last word, because Manage rules puts the rule's value after it.
 export const RULE_COPY: Record<ConditionRuleType, { label: string; description: string }> = {
     greaterThan: { label: 'Greater than', description: 'Format cells greater than' },
-    lessThan: { label: 'Less than', description: 'Format cells smaller than' },
-    between: { label: 'Between', description: 'Format cells with values between' },
+    lessThan: { label: 'Less than', description: 'Format cells less than' },
+    between: { label: 'Between', description: 'Format cells between' },
     equal: { label: 'Equal to', description: 'Format cells equal to' },
-    textContains: { label: 'Text contains', description: 'Format cells containing the following text' },
-    occurrenceDate: { label: 'Date is', description: 'Format cells containing the following dates' },
-    duplicateValue: {
-        label: 'Duplicate value',
-        description: 'Format cells containing the following types of values',
-    },
-    top10: { label: 'Top 10', description: 'Format the cells with the highest value' },
-    top10_percent: { label: 'Top 10%', description: 'Format the cells with the highest value' },
-    last10: { label: 'Last 10', description: 'Format the cells with the smallest value' },
-    last10_percent: { label: 'Last 10%', description: 'Format the cells with the smallest value' },
-    aboveAverage: { label: 'Above average', description: 'Format cells above average' },
-    belowAverage: { label: 'Below average', description: 'Format cells below average' },
+    textContains: { label: 'Text contains', description: 'Format cells that contain' },
+    occurrenceDate: { label: 'Date is', description: 'Format cells on the date' },
+    duplicateValue: { label: 'Duplicate value', description: 'Format cells with duplicate or unique values' },
+    top10: { label: 'Top 10', description: 'Format cells with the highest values' },
+    top10_percent: { label: 'Top 10%', description: 'Format cells with the highest values' },
+    last10: { label: 'Last 10', description: 'Format cells with the lowest values' },
+    last10_percent: { label: 'Last 10%', description: 'Format cells with the lowest values' },
+    aboveAverage: { label: 'Above average', description: 'Format cells above the average' },
+    belowAverage: { label: 'Below average', description: 'Format cells below the average' },
 };
 
 export function ConditionRules({ type }: { type: ConditionRuleType }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
+    const errorId = useId();
     const { label, description } = RULE_COPY[type];
     const [rule, setRule] = useState<ConditionRulesProps>({
         rulesType: type,
@@ -70,13 +52,15 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
         projectValue: '10',
     });
     // The reason the last OK was refused, until the next edit.
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState<string>();
     const edit = (change: Partial<ConditionRulesProps>) => {
         setRule((prev) => ({ ...prev, ...change }));
-        setError(null);
+        setError(undefined);
     };
-
-    const valueField = ruleValueField(type, rule, edit);
+    // Every value field points at the reason under it.
+    const describedBy = { 'aria-invalid': error !== undefined, 'aria-describedby': error && errorId };
+    const top = type === 'top10' || type === 'top10_percent';
+    const percent = type === 'top10_percent' || type === 'last10_percent';
 
     return (
         <FormDialog {...dialogProps} title={label} description={description} size="md">
@@ -91,10 +75,82 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
                     setContext((ctx) => setConditionRules(ctx, rule));
                 }}
             >
-                {valueField && (
+                {type !== 'aboveAverage' && type !== 'belowAverage' && (
                     <div>
-                        {valueField}
-                        {error && <FieldError className="mt-1.5">{error}</FieldError>}
+                        {(type === 'greaterThan' ||
+                            type === 'lessThan' ||
+                            type === 'equal' ||
+                            type === 'textContains') && (
+                            <Input
+                                aria-label="Value"
+                                {...describedBy}
+                                value={rule.rulesValue}
+                                onChange={(e) => edit({ rulesValue: e.target.value })}
+                            />
+                        )}
+                        {type === 'between' && (
+                            <div className="flex items-center gap-2">
+                                <Input
+                                    aria-label="Lower value"
+                                    {...describedBy}
+                                    className="w-24"
+                                    value={rule.betweenValue.value1}
+                                    onChange={(e) =>
+                                        edit({ betweenValue: { ...rule.betweenValue, value1: e.target.value } })
+                                    }
+                                />
+                                <span className="text-sm">and</span>
+                                <Input
+                                    aria-label="Upper value"
+                                    {...describedBy}
+                                    className="w-24"
+                                    value={rule.betweenValue.value2}
+                                    onChange={(e) =>
+                                        edit({ betweenValue: { ...rule.betweenValue, value2: e.target.value } })
+                                    }
+                                />
+                            </div>
+                        )}
+                        {type === 'occurrenceDate' && (
+                            <Input
+                                type="date"
+                                aria-label="Date"
+                                {...describedBy}
+                                className="w-48"
+                                value={rule.dateValue}
+                                onChange={(e) => edit({ dateValue: e.target.value })}
+                            />
+                        )}
+                        {type === 'duplicateValue' && (
+                            <Select value={rule.repeatValue} onValueChange={(repeatValue) => edit({ repeatValue })}>
+                                <SelectTrigger size="sm" aria-label="Type of value">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="0">Duplicate value</SelectItem>
+                                    <SelectItem value="1">Unique value</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                        {(top || type === 'last10' || type === 'last10_percent') && (
+                            <div className="flex items-center gap-2 text-sm">
+                                {top ? 'Top' : 'Last'}
+                                <Input
+                                    type="number"
+                                    aria-label={percent ? 'Percent of cells' : 'Number of cells'}
+                                    {...describedBy}
+                                    className="w-20"
+                                    value={rule.projectValue}
+                                    onChange={(e) => edit({ projectValue: e.target.value })}
+                                />
+                                {percent && '%'}
+                            </div>
+                        )}
+                        {error && (
+                            <FieldError id={errorId} className="mt-1.5">
+                                {error}
+                            </FieldError>
+                        )}
                     </div>
                 )}
 
@@ -118,88 +174,6 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
             </FormDialogForm>
         </FormDialog>
     );
-}
-
-// The field a rule's value is typed or picked in, or null for a rule that takes none, such as Above average.
-function ruleValueField(
-    type: ConditionRuleType,
-    rule: ConditionRulesProps,
-    edit: (change: Partial<ConditionRulesProps>) => void,
-): ReactNode {
-    switch (type) {
-        case 'greaterThan':
-        case 'lessThan':
-        case 'equal':
-        case 'textContains':
-            return (
-                <Input
-                    aria-label="Value"
-                    value={rule.rulesValue}
-                    onChange={(e) => edit({ rulesValue: e.target.value })}
-                />
-            );
-        case 'between':
-            return (
-                <div className="flex items-center gap-2">
-                    <Input
-                        aria-label="Lower value"
-                        className="w-24"
-                        value={rule.betweenValue.value1}
-                        onChange={(e) => edit({ betweenValue: { ...rule.betweenValue, value1: e.target.value } })}
-                    />
-                    <span className="text-sm">and</span>
-                    <Input
-                        aria-label="Upper value"
-                        className="w-24"
-                        value={rule.betweenValue.value2}
-                        onChange={(e) => edit({ betweenValue: { ...rule.betweenValue, value2: e.target.value } })}
-                    />
-                </div>
-            );
-        case 'occurrenceDate':
-            return (
-                <Input
-                    type="date"
-                    aria-label="Date"
-                    className="w-48"
-                    value={rule.dateValue}
-                    onChange={(e) => edit({ dateValue: e.target.value })}
-                />
-            );
-        case 'duplicateValue':
-            return (
-                <Select value={rule.repeatValue} onValueChange={(repeatValue) => edit({ repeatValue })}>
-                    <SelectTrigger size="sm" aria-label="Type of value">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="0">Duplicate value</SelectItem>
-                        <SelectItem value="1">Unique value</SelectItem>
-                    </SelectContent>
-                </Select>
-            );
-        case 'top10':
-        case 'top10_percent':
-        case 'last10':
-        case 'last10_percent': {
-            const percent = type === 'top10_percent' || type === 'last10_percent';
-            return (
-                <div className="flex items-center gap-2 text-sm">
-                    {type === 'top10' || type === 'top10_percent' ? 'Top' : 'Last'}
-                    <Input
-                        type="number"
-                        aria-label={percent ? 'Percent of cells' : 'Number of cells'}
-                        className="w-20"
-                        value={rule.projectValue}
-                        onChange={(e) => edit({ projectValue: e.target.value })}
-                    />
-                    {percent && '%'}
-                </div>
-            );
-        }
-        default:
-            return null;
-    }
 }
 
 // A tick box that turns one of the rule's colors on, and the swatch that picks it.

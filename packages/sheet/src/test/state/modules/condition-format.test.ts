@@ -244,7 +244,7 @@ const savedValues = (ctx: Context) =>
     savedRules(ctx).flatMap((rule) => (rule.type === 'default' ? [rule.conditionValue] : []));
 
 // What conditionRuleError says about a rule. A refused rule saves nothing, and neither way leaves a notice behind.
-function refusal(draft: ConditionRulesProps): string | null {
+function refusal(draft: ConditionRulesProps): string | undefined {
     const ctx = ctxForRule();
     const error = conditionRuleError(ctx, draft);
     setConditionRules(ctx, draft);
@@ -340,17 +340,17 @@ describe('state/condition-format — setConditionRules', () => {
     });
 
     it('refuses a missing date and a count outside 1 to 1000', () => {
-        expect(refusal(ruleDraft('occurrenceDate'))).toBe('Please select a date');
-        expect(refusal(ruleDraft('occurrenceDate', { dateValue: '2026-11-02' }))).toBeNull();
+        expect(refusal(ruleDraft('occurrenceDate'))).toBe('Select a date');
+        expect(refusal(ruleDraft('occurrenceDate', { dateValue: '2026-11-02' }))).toBeUndefined();
         for (const projectValue of ['0', '1001', '2.5', '']) {
-            expect(refusal(ruleDraft('top10', { projectValue }))).toBe('Please enter an integer between 1 and 1000');
+            expect(refusal(ruleDraft('top10', { projectValue }))).toBe('Enter a whole number from 1 to 1000');
         }
-        expect(refusal(ruleDraft('last10_percent', { projectValue: '1000' }))).toBeNull();
+        expect(refusal(ruleDraft('last10_percent', { projectValue: '1000' }))).toBeUndefined();
     });
 
     it('takes a rule with no value as it is', () => {
-        expect(refusal(ruleDraft('aboveAverage'))).toBeNull();
-        expect(refusal(ruleDraft('duplicateValue', { repeatValue: '1' }))).toBeNull();
+        expect(refusal(ruleDraft('aboveAverage'))).toBeUndefined();
+        expect(refusal(ruleDraft('duplicateValue', { repeatValue: '1' }))).toBeUndefined();
     });
 
     it('reads a cell on another sheet from that sheet', () => {
