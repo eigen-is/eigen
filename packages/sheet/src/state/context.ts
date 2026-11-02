@@ -17,7 +17,6 @@ import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
-    ConditionRulesProps,
     FilterEntry,
     FilterOptions,
     GlobalCache,
@@ -72,7 +71,6 @@ export type Context = {
     currency?: string;
     // Whether a list cell's drop-down is open.
     validationListOpen?: boolean;
-    conditionRules: ConditionRulesProps; // conditional formatting
 
     filterContextMenu?: {
         x: number;
@@ -229,17 +227,6 @@ export function defaultContext(refs: RefValues): Context {
         },
 
         validationListOpen: false,
-
-        conditionRules: {
-            rulesType: '',
-            rulesValue: '',
-            textColor: { check: true, color: '#000000' },
-            cellColor: { check: true, color: '#000000' },
-            betweenValue: { value1: '', value2: '' },
-            dateValue: '',
-            repeatValue: '0',
-            projectValue: '10',
-        },
 
         visibledatarow: [],
         visibledatacolumn: [],
