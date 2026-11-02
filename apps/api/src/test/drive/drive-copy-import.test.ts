@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
+import * as enforcement from '../../lib/config/enforcement';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { copyPathAcross, copySize } from '../../lib/drive/copy-across';
 import { getHome } from '../../lib/home';
@@ -325,6 +326,33 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             const copiedNames = (await home.drive.getFolderContents(mountId, copied.id)).map((c) => c.name);
             expect(copiedNames).toContain('data.db');
             expect(copiedNames).not.toContain('versions');
+        });
+
+        test("a copy into a stranger's folder is refused before the stranger's limits are read", async () => {
+            const id = crypto.randomUUID();
+            const caller = await createTestUser(`copy-stranger-${id}@test.eigen.is`, 'pw-12345678', 'C');
+            const owner = await createTestUser(`copy-private-${id}@test.eigen.is`, 'pw-12345678', 'O');
+            const ownerRoot = await driveGet(owner.sessionToken, owner.id, mountId, 'root');
+            const callerRoot = await driveGet(caller.sessionToken, caller.id, mountId, 'root');
+            const source = await driveUpload<DrivePath>(
+                caller.sessionToken,
+                caller.id,
+                mountId,
+                callerRoot.id,
+                new File(['mine'], 'mine.txt', { type: 'text/plain' }),
+            );
+            const readLimit = spyOn(enforcement, 'getUploadMaxSize');
+            try {
+                const res = await copyFile(caller.sessionToken, caller.id, mountId, source.id, {
+                    targetOwnerId: owner.id,
+                    targetMountId: mountId,
+                    targetParentId: ownerRoot.id,
+                });
+                expect(res.status).toBe(403);
+                expect(readLimit).not.toHaveBeenCalled();
+            } finally {
+                readLimit.mockRestore();
+            }
         });
 
         // A copy into another owner's home can outlast both homes' idle timeout. It holds each until it ends, so

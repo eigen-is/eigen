@@ -195,6 +195,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // ends. The same home held twice is released twice.
             const releases = [sourceDrive.holdHome()];
             try {
+                const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
+
+                // Every copy needs read on the target folder, wherever it comes from.
+                const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
+                const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
+                if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
+                releases.push(targetDrive.holdHome());
+
                 // The per-file upload cap bounds a single file. A folder or a document only has to fit in the
                 // free space.
                 if (isContainerType(source.type)) {
@@ -206,14 +214,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 } else if (source.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
                     throw new ApiError(413, 'Source file too large');
                 }
-
-                const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
-
-                // Every copy needs read on the target folder, wherever it comes from.
-                const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-                const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
-                if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
-                releases.push(targetDrive.holdHome());
 
                 // NFC first: the store keeps names NFC, so the compare below has to see the same form.
                 const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
