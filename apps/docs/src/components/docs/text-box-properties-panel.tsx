@@ -4,6 +4,7 @@
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import type { Border, BorderStyle, TextBoxEdit, TextBoxVerticalAlign } from '@workspace/lib/docs/eigendoc';
 import {
     BORDER_STYLES,
@@ -11,7 +12,6 @@ import {
     figurePlacement,
     MAX_BORDER_PX,
     MIN_BORDER_PX,
-    readCellBackground,
     readTextBoxAttrs,
     TEXT_BOX_DEFAULT_OUTLINE,
     textBoxPadding,
@@ -122,7 +122,7 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                     label="Fill"
                     value={look.fill}
                     allowNone
-                    onChange={(color) => write({ fill: readCellBackground(color) })}
+                    onChange={(color) => write({ fill: readHexColor(color) })}
                 />
                 <PropertyCheckbox
                     label="Rounded corners"
@@ -134,7 +134,7 @@ export function TextBoxPropertiesPanel({ editor }: { editor: Editor }) {
                     value={look.pen?.color ?? ''}
                     allowNone
                     onChange={(color) => {
-                        const hex = readCellBackground(color);
+                        const hex = readHexColor(color);
                         if (hex) outline({ color: hex });
                         else write({ outline: null });
                     }}

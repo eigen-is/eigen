@@ -4,6 +4,7 @@
 // A box elsewhere, such as in a band, a note or a group, keeps its paragraphs after its anchor's.
 
 import type { JSONContent } from '@tiptap/core';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import type { BorderStyle, FigureFrameAttrs, TextBoxEdit } from '@workspace/lib/docs/eigendoc';
 import {
     borderValue,
@@ -11,7 +12,6 @@ import {
     isStoryNode,
     MAX_TEXT_BOX_PADDING,
     newStoryId,
-    readCellBackground,
     readTextBoxSide,
     TEXT_BOX_INSET,
 } from '@workspace/lib/docs/eigendoc';
@@ -146,13 +146,13 @@ export function readVmlTextBox(
     const filled = xmlAttr(shape, '', 'filled') !== 'f' && xmlAttr(shape, '', 'filled') !== 'false';
     const stroked = xmlAttr(shape, '', 'stroked') !== 'f' && xmlAttr(shape, '', 'stroked') !== 'false';
     const weight = vmlPx(xmlAttr(shape, '', 'strokeweight') ?? '0.75pt', 'emu') ?? 1;
-    const strokeColor = readCellBackground(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
+    const strokeColor = readHexColor(xmlAttr(shape, '', 'strokecolor') ?? '#000000');
     const inset = (xmlAttr(textbox, '', 'inset') ?? '').split(',').map((length) => vmlPx(length, 'emu'));
     const [insetLeft, insetTop, insetRight, insetBottom] = inset;
     const look: BoxLook = {
         width: width === null ? null : Math.min(room, width),
         height: [css, vmlStyle(textbox)].some((style) => style.get('mso-fit-shape-to-text') === 't') ? null : height,
-        fill: filled ? readCellBackground(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
+        fill: filled ? readHexColor(xmlAttr(shape, '', 'fillcolor') ?? '#ffffff') : null,
         outline:
             stroked && strokeColor
                 ? borderValue({ width: fitBorderPx(weight), style: 'solid', color: strokeColor })
@@ -203,12 +203,12 @@ function shapeFill(reader: Reader, spPr: XmlElement | undefined, style: XmlEleme
     if (own?.local === 'noFill') return null;
     if (own?.local === 'gradFill') {
         const stop = descendants(own, A_NS, 'gs')[0];
-        return readCellBackground(drawingColor(stop, reader.colors)?.slice(0, 7));
+        return readHexColor(drawingColor(stop, reader.colors)?.slice(0, 7));
     }
-    if (own) return readCellBackground(drawingColor(own, reader.colors)?.slice(0, 7));
+    if (own) return readHexColor(drawingColor(own, reader.colors)?.slice(0, 7));
     const ref = style && xmlChild(style, A_NS, 'fillRef');
     if (!ref || Number(xmlAttr(ref, '', 'idx') ?? 0) === 0) return null;
-    return readCellBackground(drawingColor(ref, reader.colors)?.slice(0, 7));
+    return readHexColor(drawingColor(ref, reader.colors)?.slice(0, 7));
 }
 
 // The shape's own line, else its style's, in the cell-border form: its width in px between a cell border's bounds, its
@@ -219,7 +219,7 @@ function shapeOutline(reader: Reader, spPr: XmlElement | undefined, style: XmlEl
     if (line && xmlChild(line, A_NS, 'noFill')) return null;
     const fill = line && xmlChild(line, A_NS, 'solidFill');
     const fromStyle = !fill && ref && Number(xmlAttr(ref, '', 'idx') ?? 0) > 0 ? ref : undefined;
-    const color = readCellBackground(drawingColor(fill ?? fromStyle, reader.colors)?.slice(0, 7));
+    const color = readHexColor(drawingColor(fill ?? fromStyle, reader.colors)?.slice(0, 7));
     if (!color) return null;
     const width = (lineWidthEmu(line ? xmlAttr(line, '', 'w') : undefined) ?? DEFAULT_LINE_WIDTH_EMU) / EMU_PER_PX;
     const dash = line && xmlChild(line, A_NS, 'prstDash');

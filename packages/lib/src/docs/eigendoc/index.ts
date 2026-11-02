@@ -65,7 +65,7 @@ export {
     storyDepth,
 } from './nodes/stories';
 export type { CellBorderAttribute, CellSide } from './nodes/table-cell';
-export { CELL_BORDER_SIDES, readCellBackground } from './nodes/table-cell';
+export { CELL_BORDER_SIDES } from './nodes/table-cell';
 export type { TocAttrs, TocLevelStyle, TocPreset } from './nodes/table-of-contents';
 export {
     canInsertTableOfContents,

@@ -1309,6 +1309,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
 | `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
+| `readHexColor` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `REDO_ALT_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `REDO_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `S3_ABORT_INCOMPLETE_UPLOAD_DAYS` | `@workspace/lib/constants` | packages/lib/src/constants/s3.ts |
@@ -1439,7 +1440,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `pxToMm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `pxToPt` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readBorder` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
-| `readCellBackground` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/table-cell.ts |
 | `readChartAttrs` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/chart.ts |
 | `readCm` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `readEquation` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/equation.ts |

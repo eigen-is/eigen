@@ -5,9 +5,9 @@
 
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
 import type { BandEdge, FigureLayout } from '@workspace/lib/docs/eigendoc';
-import { readCellBackground } from '@workspace/lib/docs/eigendoc';
 import type { TextAlign } from '@workspace/lib/vector';
 import { TEXT_ALIGNS } from '@workspace/lib/vector';
 import { AppBarMenu } from '@workspace/ui';
@@ -462,7 +462,7 @@ export const FormatMenu = ({
                     label="Fill"
                     value={active.textBox?.fill ?? ''}
                     resetLabel="None"
-                    onChange={(color) => editor.commands.updateTextBox({ fill: readCellBackground(color) })}
+                    onChange={(color) => editor.commands.updateTextBox({ fill: readHexColor(color) })}
                 />
             </DropdownMenuSubContent>
         </DropdownMenuSub>

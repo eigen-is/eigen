@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { createDocument, generateHTML, getSchema } from '@tiptap/core';
-import { getDocExtensions, readCellBackground } from '../../../../docs/eigendoc';
+import { getDocExtensions } from '../../../../docs/eigendoc';
 import { installHappyDom } from '../../../happy-dom';
 
 // generateHTML serializes through `document`, createDocument parses with DOMParser.
@@ -26,23 +26,6 @@ const cellsIn = (html: string) => {
     });
     return cells;
 };
-
-describe('readCellBackground', () => {
-    test.each([
-        ['#cfe2f3', '#cfe2f3'],
-        ['#CFE2F3', '#cfe2f3'],
-        ['#fff', null],
-        ['#cfe2f3ff', null],
-        ['rgb(207, 226, 243)', null],
-        ['red', null],
-        ['#cfe2f3; background-image: url(x)', null],
-        ['transparent', null],
-        [7, null],
-        [null, null],
-    ])('%p reads as %p', (value, color) => {
-        expect(readCellBackground(value)).toBe(color);
-    });
-});
 
 describe('cell background HTML', () => {
     test.each(['tableCell', 'tableHeader'])('a %s draws its fill and parses it back', (type) => {

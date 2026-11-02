@@ -4,7 +4,7 @@
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
-import { readCellBackground } from '@workspace/lib/docs/eigendoc';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import { Button } from '@workspace/ui/components/button';
 import { ColorRow, PropertiesPanel, PropertyRow, PropertySection } from '@workspace/ui/components/properties-panel';
 import { cellBorderPen } from './extensions/table-look';
@@ -131,7 +131,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     value={fill}
                     allowNone
                     onChange={(color) =>
-                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
+                        editor.chain().focus().setCellAttribute('backgroundColor', readHexColor(color)).run()
                     }
                 />
                 <PropertyRow label="Borders">

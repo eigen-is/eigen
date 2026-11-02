@@ -4,6 +4,7 @@
 // widths. The paragraph reader calls it for each table it meets.
 
 import type { JSONContent } from '@tiptap/core';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import type { CellBorderAttribute, CellSide } from '@workspace/lib/docs/eigendoc';
 import {
     borderValue,
@@ -12,7 +13,6 @@ import {
     MIN_TABLE_COLUMN_PX,
     mmToPx,
     PROSE_TEXTBLOCKS,
-    readCellBackground,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlElements } from '../../core/xml';
@@ -197,7 +197,7 @@ export function readTable(reader: Reader, table: XmlElement, scope: Scope): Item
             // A header's gray is the header's own look.
             const backgroundColor =
                 isFill(fill) && !(type === 'tableHeader' && fill === HEADER_CELL_LOOK.fill)
-                    ? readCellBackground(`#${fill}`)
+                    ? readHexColor(`#${fill}`)
                     : null;
             const outer = {
                 top: rowIndex === 0,

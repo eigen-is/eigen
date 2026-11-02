@@ -3,7 +3,7 @@
 // panel's controls do, so a phone, which has no panel, reaches them here.
 
 import type { Editor } from '@tiptap/react';
-import { readCellBackground } from '@workspace/lib/docs/eigendoc';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
@@ -61,7 +61,7 @@ export function tableMenuSections(
                     value={active.cellBackground}
                     resetLabel="None"
                     onChange={(color) =>
-                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
+                        editor.chain().focus().setCellAttribute('backgroundColor', readHexColor(color)).run()
                     }
                 />
                 {BORDER_SET_LOOKS.map(({ set, label, icon: Icon }) => (

@@ -1,10 +1,10 @@
 // A doc's table cells: TipTap's cell and header with the look a cell keeps of its own, its fill and its four border
 // sides. The editor and every server renderer draw a cell through these nodes, and the docx reader and writer store
 // and read the same attributes. A peer or a paste can write any value, so every reader of an attribute goes through
-// readCellBackground or readBorder, which keep only the stored form.
+// readHexColor or readBorder, which keep only the stored form.
 
 import { TableCell, TableHeader } from '@tiptap/extension-table';
-import { isHexColor, parseRgb } from '../../../constants/colors';
+import { parseRgb, readHexColor } from '../../../constants/colors';
 import { BORDER_STYLES, borderValue, MAX_BORDER_PX, MIN_BORDER_PX, readBorder } from './border';
 
 // Each side's attribute, in CSS's clockwise order.
@@ -17,17 +17,11 @@ export const CELL_BORDER_SIDES = [
 export type CellBorderAttribute = (typeof CELL_BORDER_SIDES)[number][0];
 export type CellSide = (typeof CELL_BORDER_SIDES)[number][1];
 
-// A cell's fill as stored: a peer or a paste writes any value, and it lands in a style and a docx's w:shd.
-export function readCellBackground(value: unknown): string | null {
-    const color = typeof value === 'string' ? value.toLowerCase() : '';
-    return isHexColor(color, [6]) ? color : null;
-}
-
 // A browser spells a style's color as rgb(), whatever the HTML wrote. A see-through one is no color: a cell has no
 // alpha, and its rgb() alone would paint it opaque.
 function hexOf(color: string): string | null {
     const rgb = parseRgb(color);
-    if (!rgb) return readCellBackground(color);
+    if (!rgb) return readHexColor(color);
     return rgb.alpha === 1 ? rgb.hex : null;
 }
 
@@ -49,7 +43,7 @@ const backgroundColor = {
     default: null,
     parseHTML: (element: HTMLElement) => hexOf(element.style.backgroundColor),
     renderHTML: (attributes: Record<string, unknown>) => {
-        const color = readCellBackground(attributes['backgroundColor']);
+        const color = readHexColor(attributes['backgroundColor']);
         return color ? { style: `background-color: ${color}` } : {};
     },
 };

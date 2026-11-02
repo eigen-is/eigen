@@ -7,13 +7,13 @@ import { Node } from '@tiptap/core';
 import type { Schema } from '@tiptap/pm/model';
 import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
+import { readHexColor } from '../../../constants/colors';
 import { MAX_PAPER_PX, mmToPx } from '../page';
 import type { Border } from './border';
 import { borderValue, readBorder } from './border';
 import type { FigureFrameAttrs } from './figure-frame';
 import { figureFrameAttributes, figureFrameHTML, readFigureFrameAttrs, updateFigureNodes } from './figure-frame';
 import { flattenNestedStories, insertStory, newStoryId, readStoryId, STORY_ID_ATTRIBUTE } from './stories';
-import { readCellBackground } from './table-cell';
 
 const NAME = 'textBox';
 
@@ -90,7 +90,7 @@ export function readTextBoxAttrs(attrs: Record<string, unknown>): TextBoxAttrs {
         id: readStoryId(attrs['id']),
         width: readTextBoxSide(attrs['width']) ?? TEXT_BOX_DEFAULT_WIDTH,
         height: readTextBoxSide(attrs['height']),
-        fill: readCellBackground(attrs['fill']),
+        fill: readHexColor(attrs['fill']),
         outline: readBorder(attrs['outline']),
         paddingX: readPadding(attrs['paddingX']),
         paddingY: readPadding(attrs['paddingY']),
@@ -212,7 +212,7 @@ export const TextBoxNode = Node.create({
                 default: TEXT_BOX_DEFAULT_WIDTH,
             },
             height: boxAttribute('data-height', (value) => readTextBoxSide(Number(value))),
-            fill: boxAttribute('data-fill', readCellBackground),
+            fill: boxAttribute('data-fill', readHexColor),
             outline: boxAttribute('data-outline', (value) => {
                 const border = readBorder(value);
                 return border && borderValue(border);

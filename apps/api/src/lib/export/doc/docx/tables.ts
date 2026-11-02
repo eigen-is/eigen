@@ -2,13 +2,8 @@
 // with its fill and, in a table where any cell stores sides of its own, all four of its sides.
 
 import type { JSONContent } from '@tiptap/core';
-import {
-    CELL_BORDER_SIDES,
-    columnFit,
-    MIN_TABLE_COLUMN_PX,
-    readBorder,
-    readCellBackground,
-} from '@workspace/lib/docs/eigendoc';
+import { readHexColor } from '@workspace/lib/constants/colors';
+import { CELL_BORDER_SIDES, columnFit, MIN_TABLE_COLUMN_PX, readBorder } from '@workspace/lib/docs/eigendoc';
 import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
     BORDER_EIGHTHS_PER_PX,
@@ -128,7 +123,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const width = spanWidth(column, colspan);
             // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's gray.
             const fill =
-                readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
+                readHexColor(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
                 (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
             // A cell over columns without a width has none either: the grid lays it out, and the reader reads it back unset.
             const tcW = widths.slice(column, column + colspan).every((known) => known === undefined)
