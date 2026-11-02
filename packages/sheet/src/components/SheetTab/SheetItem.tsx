@@ -42,7 +42,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     const [menuOpen, setMenuOpen] = useState(false);
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
-    const { showAlert, hideAlert } = useAlert();
+    const { showAlert } = useAlert();
 
     useEffect(() => {
         if (!editable.current) return;
@@ -123,9 +123,9 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             setContext((ctx) => {
                 let currentOrder = -1;
                 const sorted = ctx.sheets.slice().sort((a, b) => sheetOrder(a) - sheetOrder(b));
-                for (const [i, _sheet] of sorted.entries()) {
-                    _sheet.order = i;
-                    if (_sheet.id === id) currentOrder = i;
+                for (const [i, s] of sorted.entries()) {
+                    s.order = i;
+                    if (s.id === id) currentOrder = i;
                 }
                 api.setSheetOrder(ctx, { [id]: currentOrder + delta });
             });
@@ -172,7 +172,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                         onClick={() => {
                             if (context.allowEdit === false) return;
                             setContext((ctx) => {
-                                const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
+                                const shownSheets = ctx.sheets.filter((s) => s.hide !== 1);
                                 if (shownSheets.length > 1) api.hideSheet(ctx, id);
                                 else showAlert(NO_MORE_SHEET, 'ok');
                             });
@@ -192,14 +192,13 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                 <DropdownMenuItem
                     variant="destructive"
                     onClick={() => {
-                        const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
+                        const shownSheets = context.sheets.filter((s) => s.hide !== 1);
                         if (context.sheets.length < 2 || shownSheets.length < 2) {
                             showAlert(NO_MORE_SHEET, 'ok');
                             return;
                         }
                         showAlert(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
                             setContext((ctx) => deleteSheet(ctx, id), { deleteSheetOp: { id } });
-                            hideAlert();
                         });
                     }}
                 >
