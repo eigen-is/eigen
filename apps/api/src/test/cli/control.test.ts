@@ -394,7 +394,12 @@ describe('the restart notice on the control socket', () => {
             expect(atMs).toBeLessThanOrEqual(Date.now() + 600_000);
             expect(alice.events).toContainEqual({
                 type: 'server:restart-notice',
-                notice: { reason: 'update', message: 'Back in five', msLeft: expect.any(Number) },
+                notice: {
+                    reason: 'update',
+                    message: 'Back in five',
+                    msLeft: expect.any(Number),
+                    msSinceAnnounced: expect.any(Number),
+                },
             });
             expect(notice()?.msLeft).toBeLessThanOrEqual(600_000);
             expect(notice()?.msLeft).toBeGreaterThan(590_000);
@@ -403,7 +408,20 @@ describe('the restart notice on the control socket', () => {
         test('replaces the notice there is, and a notice without a message has null', async () => {
             await post('/restart-notice', { inSeconds: 600, reason: 'update', message: 'Back in five' });
             await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
-            expect(notice()).toEqual({ reason: 'rollback', message: null, msLeft: 0 });
+            expect(notice()).toEqual({
+                reason: 'rollback',
+                message: null,
+                msLeft: 0,
+                msSinceAnnounced: expect.any(Number),
+            });
+        });
+
+        // A stream that opens later, such as a tab that reloads, still says when the notice came.
+        test('a stream that opens later is told how long ago the notice came', async () => {
+            await post('/restart-notice', { inSeconds: 600, reason: 'update' });
+            await Bun.sleep(50);
+            expect(notice()?.msSinceAnnounced).toBeGreaterThanOrEqual(50);
+            expect(notice()?.msSinceAnnounced).toBeLessThan(600_000 - (notice()?.msLeft ?? 0) + 5);
         });
 
         test('takes whole seconds up to an hour, the two reasons, and a short line of text without control characters', async () => {
@@ -531,6 +549,24 @@ describe('the restart notice on the control socket', () => {
             expect(code).toBe(1);
             expect(stderr).toContain('Eigen is not running');
         });
+
+        // The launcher takes a notice back as it exits, so a hung API must not hold that exit.
+        test('gives up on a socket that takes the call and never answers', async () => {
+            const hung = Bun.listen({ unix: join(TEST_DATA_DIR, 'hung-notice.sock'), socket: { data: () => {} } });
+            try {
+                for (const args of [['--clear'], ['--in', '60', '--reason', 'update']]) {
+                    const started = Date.now();
+                    const { stderr, code } = await runCli(['restart-notice', ...args], undefined, {
+                        EIGEN_CONTROL_SOCKET: hung.unix,
+                    });
+                    expect(code).toBe(1);
+                    expect(stderr).toContain('Eigen is not answering.');
+                    expect(Date.now() - started).toBeLessThan(12_000);
+                }
+            } finally {
+                hung.stop(true);
+            }
+        }, 30_000);
     });
 });
 

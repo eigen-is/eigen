@@ -245,7 +245,12 @@ describe('SSE', () => {
             const stream = await openStream(ctx.alice.user.id);
             const notice = await stream.notice();
             await stream.close();
-            expect(notice).toEqual({ reason: 'update', message: 'Back in five', msLeft: expect.any(Number) });
+            expect(notice).toEqual({
+                reason: 'update',
+                message: 'Back in five',
+                msLeft: expect.any(Number),
+                msSinceAnnounced: expect.any(Number),
+            });
             expect(notice?.msLeft).toBeGreaterThan(590_000);
         });
 
@@ -254,7 +259,12 @@ describe('SSE', () => {
             const bob = await openStream(ctx.bob.user.id);
             expect([await alice.notice(), await bob.notice()]).toEqual([null, null]);
             announceRestart(0, 'rollback', null);
-            const told = { reason: 'rollback', message: null, msLeft: 0 } as const;
+            const told = {
+                reason: 'rollback' as const,
+                message: null,
+                msLeft: 0,
+                msSinceAnnounced: expect.any(Number),
+            };
             expect([await alice.notice(), await bob.notice()]).toEqual([told, told]);
             clearRestartNotice();
             expect([await alice.notice(), await bob.notice()]).toEqual([null, null]);
@@ -280,7 +290,12 @@ describe('SSE', () => {
             announceRestart(0, 'rollback', null);
             const notice = await stream.notice();
             await stream.close();
-            expect(notice).toEqual({ reason: 'update', message: null, msLeft: expect.any(Number) });
+            expect(notice).toEqual({
+                reason: 'update',
+                message: null,
+                msLeft: expect.any(Number),
+                msSinceAnnounced: expect.any(Number),
+            });
         });
     });
 });

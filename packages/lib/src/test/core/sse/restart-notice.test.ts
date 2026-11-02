@@ -60,6 +60,30 @@ test('a notice with another time, reason or message is heard anew', () => {
     expect(readRestartNotice().notice?.heardAt).toBe(NOW + 722_000);
 });
 
+// A tab that reloads, or one that opens later, still says when the notice came.
+test('a notice is dated by when the server announced it', () => {
+    handleRestartNoticeSSEvent(
+        noticeEvent({ reason: 'update', msLeft: 540_000, msSinceAnnounced: 60_000, message: null }),
+    );
+    expect(readRestartNotice().notice).toEqual({
+        reason: 'update',
+        message: null,
+        deadline: NOW + 540_000,
+        heardAt: NOW - 60_000,
+    });
+});
+
+test('the same announcement sent again by a new stream is kept as it is held', () => {
+    handleRestartNoticeSSEvent(noticeEvent({ reason: 'update', msLeft: 600_000, msSinceAnnounced: 0, message: null }));
+    const held = readRestartNotice();
+    // The new stream's times are counted a little later, off by the time the event took.
+    setSystemTime(NOW + 30_000);
+    handleRestartNoticeSSEvent(
+        noticeEvent({ reason: 'update', msLeft: 570_040, msSinceAnnounced: 29_960, message: null }),
+    );
+    expect(readRestartNotice()).toBe(held);
+});
+
 test('the snapshot changes only when the stream state does', () => {
     const before = readRestartNotice();
     setStreamDown(false);

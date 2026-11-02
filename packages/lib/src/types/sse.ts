@@ -4,7 +4,6 @@
 // gets its name in SSEventType and its shape in the SSEvent union. The restart notice also has the shape a tab keeps
 // it in for its banner.
 
-import type { RESTART_REASONS } from '../validation/restart';
 import type { NotificationType } from './notification';
 
 export const SSEventType = {
@@ -142,17 +141,21 @@ export type SSEventHomeDataEpochs = {
     epochs: Record<string, string>;
 };
 
+// Why ./eigen restarts Eigen, which the tabs say. A per-home restore never announces one, and a whole-server restore
+// announces itself as a rollback.
+export const RESTART_REASONS = ['update', 'rollback'] as const;
 export type RestartReason = (typeof RESTART_REASONS)[number];
 
 // Sent when a stream opens and whenever ./eigen announces or takes back a restart, such as the one an update makes,
-// to every open stream on the server. A null notice means none. msLeft counts from the moment the event is sent, so a
-// browser whose clock is off still counts down right. The message is the operator's own line, or null.
+// to every open stream on the server. A null notice means none. msLeft and msSinceAnnounced count from the moment the
+// event is sent, so a browser whose clock is off still shows the right times. The message is the operator's own
+// line, or null. An API from before msSinceAnnounced sends none, which a tab meets after a rollback to one.
 export type SSEventRestartNotice = {
     type: typeof SSEventType.SERVER_RESTART_NOTICE;
-    notice: { reason: RestartReason; msLeft: number; message: string | null } | null;
+    notice: { reason: RestartReason; msLeft: number; msSinceAnnounced?: number; message: string | null } | null;
 };
 
-// A restart notice as a tab holds it: its deadline and the time the tab first heard it, both on the tab's own clock.
+// A restart notice as a tab holds it: its deadline and the time it was announced, both on the tab's own clock.
 export type HeldRestartNotice = { reason: RestartReason; message: string | null; deadline: number; heardAt: number };
 
 // What the tab's restart banner reads: the notice it holds, and whether its event stream is down.

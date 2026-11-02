@@ -94,6 +94,22 @@ test('with the stream down and the time come, the server is updating', async () 
     expect(text).not.toContain('about to restart');
 });
 
+// A whole-server restore announces itself as a rollback too.
+test('with the stream down and the time of a rollback come, Eigen is going back', async () => {
+    const rollback = { reason: 'rollback' as const, message: null, deadline: NOW, heardAt: NOW };
+    const text = await show({ notice: rollback, streamDown: true });
+    expect(text).toContain("Eigen is going back to an earlier version. This page reloads when it's back.");
+    expect(text).not.toContain('updating');
+});
+
+// A screen reader keeps reading a status region it already knows. One put in fresh would be read out from the start.
+test('a notice whose deadline moves keeps its status region', async () => {
+    await show({ notice: update(600_000), streamDown: false });
+    const region = container.querySelector('[role="status"]');
+    await show({ notice: update(590_000), streamDown: false });
+    expect(container.querySelector('[role="status"]')).toBe(region);
+});
+
 test('the operator message shows as text, never as markup', async () => {
     const text = await show({ notice: update(600_000, '<b>Back at three</b>'), streamDown: false });
     expect(text).toContain('<b>Back at three</b>');

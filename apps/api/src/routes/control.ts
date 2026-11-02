@@ -5,12 +5,12 @@
 
 import * as fs from 'node:fs';
 import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
+import { RESTART_REASONS } from '@workspace/lib/types/sse';
 import {
     MAX_RESTART_MESSAGE_LENGTH,
     MAX_RESTART_WAIT_SECONDS,
     ON_DEMAND_BACKUP_REASONS,
     RESTART_MESSAGE_PATTERN,
-    RESTART_REASONS,
 } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getBackupJob, isServerJob } from '../lib/backup/jobs';
