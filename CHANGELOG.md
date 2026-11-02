@@ -38,6 +38,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dialogs in Calendar** — Enter in a new event's title saves it, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
 - **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
 - **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
+- **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
 - **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
