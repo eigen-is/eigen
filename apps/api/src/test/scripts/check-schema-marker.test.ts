@@ -1,9 +1,10 @@
+import { Database } from 'bun:sqlite';
 import { describe, expect, spyOn, test } from 'bun:test';
-import { CONTAINER_DB_CONFIGS, HOME_DATABASES } from '../../lib/backup/archive-layout';
-import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
-import { SHARE_REGISTRY_DB_CONFIG } from '../../lib/share/db-config';
-import { WAITLIST_DB_CONFIG } from '../../lib/waitlist/db-config';
+import { join } from 'node:path';
+import { ROOT } from '../../cli/install';
+import { ensureAuthSchemaColumns } from '../../lib/auth/auth-schema-columns';
 import {
+    authColumnsAt,
     previousRelease,
     schemaMarkerError,
     schemaVersionsAt,
@@ -28,13 +29,15 @@ A fix.
 `;
 
 const marked = CHANGELOG.replace('- **Comments** — a new column', '- **Comments (full backup)** — a new column');
-const before = new Map([
+const versions = new Map([
     ['collab', 1],
     ['mail', 2],
     ['comment-index', 5],
 ]);
-const unmoved = new Map(before);
-const moved = new Map([...before, ['comment-index', 6]]);
+const authColumns = new Set(['user.last_login_at']);
+const before = { versions, authColumns };
+const unmoved = { versions: new Map(versions), authColumns: new Set(authColumns) };
+const moved = { versions: new Map([...versions, ['comment-index', 6]]), authColumns };
 
 describe('previousRelease', () => {
     test('is the highest release tag below the version, for a backport too', () => {
@@ -62,8 +65,16 @@ describe('schemaMarkerError', () => {
     });
 
     test('a database a Light backup holds counts too: the build before cannot open it either', () => {
-        const mail = new Map([...before, ['mail', 3]]);
+        const mail = { versions: new Map([...versions, ['mail', 3]]), authColumns };
         expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, mail)).toContain('mail 2 → 3');
+    });
+
+    test('a column ensureAuthSchemaColumns adds to users3.db is a migration too, and passes with the marker', () => {
+        const added = { versions, authColumns: new Set([...authColumns, 'team.member_count']) };
+        expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, added)).toContain(
+            'users3.db adds team.member_count',
+        );
+        expect(schemaMarkerError(marked, '0.3.2', '0.3.3', before, added)).toBeNull();
     });
 
     test('a move with the marker in the release section passes', () => {
@@ -72,7 +83,7 @@ describe('schemaMarkerError', () => {
 
     test('nothing moved passes without the marker, and a database new since the previous release is no move', () => {
         expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, unmoved)).toBeNull();
-        const added = new Map([...before, ['whiteboard', 3]]);
+        const added = { versions: new Map([...versions, ['whiteboard', 3]]), authColumns };
         expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, added)).toBeNull();
     });
 
@@ -89,17 +100,58 @@ describe('schemaMarkerError', () => {
     });
 });
 
+// Every file in the repo, tests aside, that exports a DatabaseConfig, as git grep finds it at HEAD.
+function filesExportingDatabaseConfig(): string[] {
+    const pattern = 'export const [A-Za-z0-9_]+: DatabaseConfig<';
+    const grep = ['git', 'grep', '-l', '-E', pattern, 'HEAD', '--', 'apps', 'packages', ':!*/test/*'];
+    return Bun.spawnSync(grep, { cwd: ROOT })
+        .stdout.toString()
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => line.replace(/^HEAD:/, ''));
+}
+
 describe('schemaVersionsAt', () => {
-    test("reads at HEAD the version of every database config, so the git grep and the regex follow the files' shape", () => {
-        const configs = [
-            ...HOME_DATABASES.map(([config]) => config),
-            ...Object.values(CONTAINER_DB_CONFIGS),
-            MOUNT_DB_CONFIG,
-            SHARE_REGISTRY_DB_CONFIG,
-            WAITLIST_DB_CONFIG,
-        ];
-        const declared = new Map(configs.map(({ name, currentVersion }) => [name, currentVersion]));
+    test('reads at HEAD the name and version of every DatabaseConfig the repo exports, wherever its file is', async () => {
+        const declared = new Map<string, number>();
+        for (const file of filesExportingDatabaseConfig()) {
+            const module: Record<string, unknown> = await import(join(ROOT, file));
+            for (const value of Object.values(module)) {
+                if (typeof value !== 'object' || value === null || !('name' in value) || !('currentVersion' in value)) {
+                    continue;
+                }
+                if (typeof value.name === 'string' && typeof value.currentVersion === 'number') {
+                    declared.set(value.name, value.currentVersion);
+                }
+            }
+        }
+        expect(declared.size).toBeGreaterThan(10);
         expect(schemaVersionsAt('HEAD')).toEqual(declared);
+    });
+});
+
+describe('authColumnsAt', () => {
+    test('reads at HEAD every column ensureAuthSchemaColumns adds, so the regex follows its shape', () => {
+        // Each table with only the columns the function reads, so it adds every one it knows.
+        const db = new Database(':memory:');
+        db.run('CREATE TABLE "user" ("id" text)');
+        db.run('CREATE TABLE "team" ("id" text)');
+        db.run('CREATE TABLE "team_member" ("id" text, "team_id" text)');
+        db.run('CREATE TABLE "invitation" ("id" text)');
+        db.run('CREATE TABLE "two_factor" ("id" text)');
+        const columns = (): string[] =>
+            db
+                .query<{ table: string; column: string }, []>(
+                    `SELECT m.name AS "table", p.name AS "column" FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type = 'table'`,
+                )
+                .all()
+                .map(({ table, column }) => `${table}.${column}`);
+        const old = new Set(columns());
+        ensureAuthSchemaColumns(db);
+        const added = new Set(columns().filter((column) => !old.has(column)));
+        db.close();
+        expect(added.size).toBeGreaterThan(0);
+        expect(authColumnsAt('HEAD')).toEqual(added);
     });
 });
 

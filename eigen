@@ -417,8 +417,8 @@ cli_help() {
 
 # A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
 # install is: .env.production pins what runs and what it follows (configure writes it from PINS), .eigen/bundle names
-# the api image the files came from (write_bundle), .eigen/last-update the backup the last update made (update_apply)
-# until a restore swaps data/ (after_swap).
+# the api image the files came from (write_bundle), .eigen/last-update the backup the last update made and the pins it
+# switched away from (update_apply), until a restore swaps data/ (after_swap) or a rollback keeps it (switch_back).
 
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
@@ -496,10 +496,14 @@ with_image() (
 # The images .env.production pins, a line each.
 pinned_refs() { for name in $IMAGES; do image "$name"; done; }
 
-# What .env.production pins, as PINS spells it: an update records it for a rollback that keeps the data.
+# What .env.production pins, as PINS spells it: an update records it for a rollback that keeps the data. A key the file
+# lacks is left out, so the rollback writes no local build's name for it.
 current_pins() {
-    printf 'EIGEN_REGISTRY=%s\nEIGEN_VERSION=%s\n' "$REGISTRY" "$(env_value EIGEN_VERSION)"
-    for name in $IMAGES; do printf '%s=%s\n' "$(image_key "$name")" "$(image "$name")"; done
+    echo "EIGEN_REGISTRY=$REGISTRY"
+    for key in EIGEN_VERSION $(for name in $IMAGES; do image_key "$name"; done); do
+        value=$(env_value "$key")
+        if [ -n "$value" ]; then echo "$key=$value"; fi
+    done
 }
 
 # The api image .env.production pins, downloaded when it is not here: a pull that moves main leaves the build it
@@ -1326,9 +1330,11 @@ switch_back() {
         die "The launcher that made the last update kept no note of the build before it." \
             "Put its backup back instead: ./eigen restore $1"
     fi
+    NEXT="Eigen $current runs on as it was. Put the backup the update made back instead: ./eigen restore $1"
     step "Getting the build before the update" "The build before the update is here" \
-        "Could not get the build before the update; Eigen runs on as it was" \
+        "Could not get the build before the update" \
         pull_refs $(printf '%s\n' "$PINS" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p')
+    NEXT=''
     old=$(describe "$old_image")
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
     checked=0
@@ -1347,8 +1353,9 @@ switch_back() {
     stop
     step "Switching to Eigen $old" "Switched to Eigen $old" "Could not write Eigen $old into .env.production" \
         with_image "$old_image" with_pins cli configure --backfill
-    rm -f .eigen/last-update
     write_bundle "$old_image"
+    # Only now, so a rollback cut off before here runs again and finishes.
+    rm -f .eigen/last-update
     AT_EXIT=''
     restart
     say "$GREEN" '◇' "Eigen $current → $old is running at https://$(env_value DOMAIN)/"

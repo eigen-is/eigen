@@ -140,7 +140,7 @@ jobs:
 
   # publish.yml runs the same check on a push to main, where a missing (full backup) mark fails the :main image only
   # after develop moved on. Here it turns develop red first. It blocks nothing, since a push to develop publishes none.
-  container-db-marker:
+  schema-marker:
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-26.04
     timeout-minutes: 5

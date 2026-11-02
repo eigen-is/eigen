@@ -4,7 +4,7 @@
 // the archive's .env.production. Every refusal comes before anything in the data folder moves. A rollback after a
 // Light backup restores nothing: the build it goes back to only checks here that it opens the data as it is.
 
-import type { Database } from 'bun:sqlite';
+import { Database } from 'bun:sqlite';
 import {
     chmodSync,
     closeSync,
@@ -56,6 +56,7 @@ import { readServerArchive, readServerArchiveMember } from '../lib/backup/verify
 import { DATA_LOCK_FILE, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
+    GUEST_HOMES_DIR,
     getDataRoot,
     homeDirUnder,
     ORG_HOMES_DIR,
@@ -471,17 +472,21 @@ async function printStaged(): Promise<void> {
 }
 
 // A Light backup is made only when no schema moved since, so the build before the update opens the data of today, and
-// a rollback keeps it. This checks that before the switch, with that build: its verdict on every home, as a restore
-// gives it, and on the server's own versioned databases. Safety copies are left out, as no home opens them.
+// a rollback keeps it. This checks that before the switch, with that build: its verdict on every home of every kind,
+// as a restore gives it, on the server's own versioned databases, and on the pages of users3.db. Safety copies are
+// left out, as no home opens them, and so are the container databases of an s3 mount, which live in the bucket.
+// The launcher says what to do when it fails.
 async function checkData(flags: Flags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
+    const homeKinds = [USER_HOMES_DIR, TEAM_HOMES_DIR, ORG_HOMES_DIR, GUEST_HOMES_DIR];
     try {
         checkDatabases([
             { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
             { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
         ]);
-        for (const homes of [USER_HOMES_DIR, TEAM_HOMES_DIR].map((dir) => join(DATA, dir)).filter(existsSync)) {
+        checkPages(join(server, SERVER_DATABASES.users));
+        for (const homes of homeKinds.map((dir) => join(DATA, dir)).filter(existsSync)) {
             for (const entry of readdirSync(homes, { withFileTypes: true })) {
                 if (!entry.isDirectory() || parseSafetyCopyName(entry.name)) continue;
                 const homeDir = join(homes, entry.name);
@@ -490,7 +495,8 @@ async function checkData(flags: Flags): Promise<void> {
             }
         }
     } catch (error) {
-        return ui.fail(`${describeError(error)}.`, 'Go back with ./eigen restore and the backup the update made.');
+        console.error(glyphLine('bad', `${describeError(error)}.`));
+        process.exit(1);
     }
     console.log(glyphLine('ok', 'This build opens every database in data/'));
     if (flags.yes) return;
@@ -503,6 +509,24 @@ async function checkData(flags: Flags): Promise<void> {
         ui.outro('Nothing was changed.');
         process.exit(DECLINED);
     }
+}
+
+// users3.db has no schema version to compare, so only its pages are checked. A file that is no database at all makes
+// SQLite throw rather than answer, and the error names the file either way.
+function checkPages(filePath: string): void {
+    if (!existsSync(filePath)) return;
+    let verdict: string;
+    try {
+        const db = new Database(filePath, { readwrite: true, create: false });
+        try {
+            verdict = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
+        } finally {
+            db.close();
+        }
+    } catch (error) {
+        verdict = describeError(error);
+    }
+    if (verdict !== 'ok') throw new Error(`${filePath} is damaged: ${verdict}`);
 }
 
 // Why root must not swap the staged tree in, or null. It drops the fifos and sockets. The stage writes files and
