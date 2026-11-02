@@ -332,7 +332,7 @@ function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     const { row_focus: r, column_focus: c } = selection;
     if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return false;
     cellFocus(ctx, r, c);
-    ctx.dataVerificationDropDownList = true;
+    ctx.validationListOpen = true;
     return true;
 }
 

@@ -618,9 +618,9 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
 export function cellFocus(ctx: Context, r: number, c: number) {
     // Reset first, whoever is looking: a viewer who arrives after a permission
     // change would otherwise be stuck with whatever the last edit session left.
-    ctx.dataVerificationDropDownList = false;
+    ctx.validationListOpen = false;
     if (!isAllowEdit(ctx)) return;
-    const dropDownBtn = document.getElementById('sheet-dataVerification-dropdown-btn');
+    const dropDownBtn = document.getElementById('sheet-validation-list-anchor');
     if (!dropDownBtn) return;
     dropDownBtn.style.display = 'none';
     if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return;
@@ -655,7 +655,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
             .filter((v) => arr.indexOf(v) >= 0)
             .join(',');
     } else {
-        ctx.dataVerificationDropDownList = false;
+        ctx.validationListOpen = false;
     }
     setCellValue(ctx, rowIndex, colIndex, d, nextValue);
     jfrefreshgrid(ctx, null, undefined);
@@ -663,7 +663,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
 
 // input data validation
 export function confirmMessage(ctx: Context): boolean {
-    const range = getRangeByTxt(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
+    const range = getRangeByTxt(ctx, ctx.validationDraft.rangeTxt);
     if (range.length === 0) {
         ctx.warnDialog = 'The selection operation has not been performed yet';
         return false;
@@ -686,7 +686,7 @@ export function confirmMessage(ctx: Context): boolean {
     if (edc > d[0].length - 1) {
         edc = d[0].length - 1;
     }
-    const regulation = ctx.dataVerification.dataRegulation;
+    const regulation = ctx.validationDraft;
     const verifacationT = regulation.type;
     const { value1, value2, type2 } = regulation;
     // check if the value is a number

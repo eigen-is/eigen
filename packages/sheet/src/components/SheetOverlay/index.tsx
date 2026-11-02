@@ -98,7 +98,7 @@ export const SheetOverlay: React.FC = () => {
                     // Radix popup.
                     if (
                         !consumed &&
-                        !draftCtx.dataVerificationDropDownList &&
+                        !draftCtx.validationListOpen &&
                         draftCtx.selections?.[0] != null &&
                         Object.keys(draftCtx.selections[0]).length > 0 &&
                         refs.cellInput.current

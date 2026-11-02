@@ -186,7 +186,7 @@ export function handleCellAreaMouseDown(
         isAllowEdit(ctx) &&
         isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
     ) {
-        ctx.dataVerificationDropDownList = true;
+        ctx.validationListOpen = true;
     }
 
     // If clicked cell is not in viewport, request a programmatic scroll to reveal

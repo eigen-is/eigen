@@ -178,7 +178,7 @@ describe('cell glyphs over the selection drag handles', () => {
         // Inside the 8px glyph (x 62..70, y 6..14) and inside the fill grab.
         expect(glyphAt(ctx, 68, 13)).toBe('dropdown');
         mouseDownAt(ctx, 68, 13);
-        expect(ctx.dataVerificationDropDownList).toBe(true);
+        expect(ctx.validationListOpen).toBe(true);
         expect(ctx.cellSelectExtending).toBeFalsy();
         expect(ctx.cellSelectMoving).toBeFalsy();
     });

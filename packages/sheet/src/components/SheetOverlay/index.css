@@ -656,7 +656,7 @@
 /* Invisible anchor for the validation dropdown's Radix portal — the chevron a
    list-validated cell shows is canvas paint, and the canvas hit-test opens the
    menu, so this box wants no ink and no clicks of its own. */
-#sheet-dataVerification-dropdown-btn {
+#sheet-validation-list-anchor {
     display: none;
     width: 20px;
     height: 20px;

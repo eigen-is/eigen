@@ -11,7 +11,7 @@ import { getCellDataVerification, getCellValue, getDropdownList, getFlowdata, se
 
 export function DropDownList() {
     const { context, setContext } = useContext(WorkbookContext);
-    const open = !!context.dataVerificationDropDownList;
+    const open = !!context.validationListOpen;
 
     const cellInfo = useMemo(() => {
         if (!open) return null;
@@ -33,7 +33,7 @@ export function DropDownList() {
     // is open — it hangs over the same corner of the cell.
     const setOpen = (next: boolean) => {
         setContext((ctx) => {
-            ctx.dataVerificationDropDownList = next;
+            ctx.validationListOpen = next;
         });
     };
 
@@ -56,12 +56,7 @@ export function DropDownList() {
                 mousedown hit-test opens this menu. cellFocus still moves and shows
                 this box so Radix has a rect to portal against. */}
             <DropdownMenuTrigger asChild>
-                <div
-                    id="sheet-dataVerification-dropdown-btn"
-                    style={{ display: 'none' }}
-                    tabIndex={-1}
-                    aria-hidden="true"
-                />
+                <div id="sheet-validation-list-anchor" style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" />
             </DropdownMenuTrigger>
             {/* Radix portals out of cellArea's DOM, but React synthetic events still bubble up
                 the React tree across portals — without this class, cellAreaMouseDown's DOM-level

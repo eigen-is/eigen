@@ -1,4 +1,4 @@
-// The data-validation dialog: it edits the rule draft in ctx.dataVerification.dataRegulation for the
+// The data-validation dialog: it edits the rule draft in ctx.validationDraft for the
 // selected range, such as a drop-down list, a tick box or a number condition. On open it seeds the
 // draft from the focus cell's rule, and on confirm it checks the draft with confirmMessage and applies
 // it with applyDataVerification. A range field opens the cell-range picker and reopens this dialog.
@@ -119,7 +119,7 @@ export function DataVerification() {
             if (type === 'confirm') {
                 setContext((ctx) => {
                     if (!confirmMessage(ctx)) return;
-                    const regulation = ctx.dataVerification.dataRegulation;
+                    const regulation = ctx.validationDraft;
                     const target = validationRange(ctx, regulation.rangeTxt);
                     if (!target) return;
                     const item = { ...regulation };
@@ -130,7 +130,7 @@ export function DataVerification() {
                 });
             } else if (type === 'delete') {
                 setContext((ctx) => {
-                    const target = validationRange(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
+                    const target = validationRange(ctx, ctx.validationDraft.rangeTxt);
                     if (!target) {
                         showDialog('The selection operation has not been performed yet', 'ok');
                         return;
@@ -170,7 +170,7 @@ export function DataVerification() {
             const item = validationAt(getSheet(ctx).dataValidations, rowIndex, colIndex);
             let rangValue = item?.value1 ?? '';
             // Range assignment related
-            const { dataRegulation } = ctx.dataVerification;
+            const dataRegulation = ctx.validationDraft;
             if (ctx.rangeDialog.type === 'dropDown' && dataRegulation.rangeTxt) {
                 // When it's a dropdown list selection, assign dropdown selection, keep range unchanged
                 rangeT = dataRegulation.rangeTxt;
@@ -183,7 +183,7 @@ export function DataVerification() {
             ctx.rangeDialog.type = '';
 
             if (item) {
-                ctx.dataVerification.dataRegulation = {
+                ctx.validationDraft = {
                     ...item,
                     value1: rangValue,
                     rangeTxt: rangeT,
@@ -194,7 +194,7 @@ export function DataVerification() {
                     hintValue: item.hintValue ?? '',
                 };
             } else {
-                ctx.dataVerification.dataRegulation = {
+                ctx.validationDraft = {
                     type: 'dropdown',
                     type2: '',
                     rangeTxt: rangeT,
@@ -210,7 +210,7 @@ export function DataVerification() {
         });
     }, []);
 
-    const regulation = context.dataVerification.dataRegulation;
+    const regulation = context.validationDraft;
 
     return (
         <div className="flex flex-col gap-4 select-none">
@@ -229,7 +229,7 @@ export function DataVerification() {
                             onChange={(e) => {
                                 const { value } = e.target;
                                 setContext((ctx) => {
-                                    ctx.dataVerification.dataRegulation.rangeTxt = value;
+                                    ctx.validationDraft.rangeTxt = value;
                                 });
                             }}
                         />
@@ -253,9 +253,9 @@ export function DataVerification() {
                         value={regulation.type}
                         onValueChange={(value) => {
                             setContext((ctx) => {
-                                ctx.dataVerification.dataRegulation.type = value;
+                                ctx.validationDraft.type = value;
                                 if (value === 'dropdown' || value === 'checkbox') {
-                                    ctx.dataVerification.dataRegulation.type2 = '';
+                                    ctx.validationDraft.type2 = '';
                                 } else if (
                                     value === 'number' ||
                                     value === 'number_integer' ||
@@ -263,16 +263,16 @@ export function DataVerification() {
                                     value === 'text_length' ||
                                     value === 'date'
                                 ) {
-                                    ctx.dataVerification.dataRegulation.type2 = 'between';
+                                    ctx.validationDraft.type2 = 'between';
                                 } else if (value === 'text_content') {
-                                    ctx.dataVerification.dataRegulation.type2 = 'include';
+                                    ctx.validationDraft.type2 = 'include';
                                 }
                                 // A tick box arrives usable: the same TRUE/FALSE
                                 // pair Insert → Tick box writes, so the two
                                 // routes to a checkbox rule agree.
                                 const isCheckbox = value === 'checkbox';
-                                ctx.dataVerification.dataRegulation.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
-                                ctx.dataVerification.dataRegulation.value2 = isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '';
+                                ctx.validationDraft.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
+                                ctx.validationDraft.value2 = isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '';
                             });
                         }}
                     >
@@ -299,7 +299,7 @@ export function DataVerification() {
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification.dataRegulation.value1 = value;
+                                            ctx.validationDraft.value1 = value;
                                         });
                                     }}
                                 />
@@ -317,7 +317,7 @@ export function DataVerification() {
                                     checked={regulation.type2 === 'true'}
                                     onCheckedChange={(checked) => {
                                         setContext((ctx) => {
-                                            ctx.dataVerification.dataRegulation.type2 = `${checked}`;
+                                            ctx.validationDraft.type2 = `${checked}`;
                                         });
                                     }}
                                 />
@@ -337,7 +337,7 @@ export function DataVerification() {
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification.dataRegulation.value1 = value;
+                                            ctx.validationDraft.value1 = value;
                                         });
                                     }}
                                 />
@@ -351,7 +351,7 @@ export function DataVerification() {
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification.dataRegulation.value2 = value;
+                                            ctx.validationDraft.value2 = value;
                                         });
                                     }}
                                 />
@@ -368,9 +368,9 @@ export function DataVerification() {
                                 value={regulation.type2}
                                 onValueChange={(value) => {
                                     setContext((ctx) => {
-                                        ctx.dataVerification.dataRegulation.type2 = value;
-                                        ctx.dataVerification.dataRegulation.value1 = '';
-                                        ctx.dataVerification.dataRegulation.value2 = '';
+                                        ctx.validationDraft.type2 = value;
+                                        ctx.validationDraft.value1 = '';
+                                        ctx.validationDraft.value2 = '';
                                     });
                                 }}
                             >
@@ -395,7 +395,7 @@ export function DataVerification() {
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification.dataRegulation.value1 = value;
+                                                ctx.validationDraft.value1 = value;
                                             });
                                         }}
                                     />
@@ -408,7 +408,7 @@ export function DataVerification() {
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification.dataRegulation.value2 = value;
+                                                ctx.validationDraft.value2 = value;
                                             });
                                         }}
                                     />
@@ -422,7 +422,7 @@ export function DataVerification() {
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification.dataRegulation.value1 = value;
+                                            ctx.validationDraft.value1 = value;
                                         });
                                     }}
                                 />
@@ -436,9 +436,9 @@ export function DataVerification() {
                                 value={regulation.type2}
                                 onValueChange={(value) => {
                                     setContext((ctx) => {
-                                        ctx.dataVerification.dataRegulation.type2 = value;
-                                        ctx.dataVerification.dataRegulation.value1 = '';
-                                        ctx.dataVerification.dataRegulation.value2 = '';
+                                        ctx.validationDraft.type2 = value;
+                                        ctx.validationDraft.value1 = '';
+                                        ctx.validationDraft.value2 = '';
                                     });
                                 }}
                             >
@@ -460,7 +460,7 @@ export function DataVerification() {
                                 onChange={(e) => {
                                     const { value } = e.target;
                                     setContext((ctx) => {
-                                        ctx.dataVerification.dataRegulation.value1 = value;
+                                        ctx.validationDraft.value1 = value;
                                     });
                                 }}
                             />
@@ -473,9 +473,9 @@ export function DataVerification() {
                                 value={regulation.type2}
                                 onValueChange={(value) => {
                                     setContext((ctx) => {
-                                        ctx.dataVerification.dataRegulation.type2 = value;
-                                        ctx.dataVerification.dataRegulation.value1 = '';
-                                        ctx.dataVerification.dataRegulation.value2 = '';
+                                        ctx.validationDraft.type2 = value;
+                                        ctx.validationDraft.value1 = '';
+                                        ctx.validationDraft.value2 = '';
                                     });
                                 }}
                             >
@@ -499,7 +499,7 @@ export function DataVerification() {
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification.dataRegulation.value1 = value;
+                                                ctx.validationDraft.value1 = value;
                                             });
                                         }}
                                     />
@@ -511,7 +511,7 @@ export function DataVerification() {
                                         onChange={(e) => {
                                             const { value } = e.target;
                                             setContext((ctx) => {
-                                                ctx.dataVerification.dataRegulation.value2 = value;
+                                                ctx.validationDraft.value2 = value;
                                             });
                                         }}
                                     />
@@ -525,7 +525,7 @@ export function DataVerification() {
                                     onChange={(e) => {
                                         const { value } = e.target;
                                         setContext((ctx) => {
-                                            ctx.dataVerification.dataRegulation.value1 = value;
+                                            ctx.validationDraft.value1 = value;
                                         });
                                     }}
                                 />
@@ -542,7 +542,7 @@ export function DataVerification() {
                                 checked={regulation[value]}
                                 onCheckedChange={() => {
                                     setContext((ctx) => {
-                                        const { dataRegulation } = ctx.dataVerification;
+                                        const dataRegulation = ctx.validationDraft;
                                         dataRegulation[value] = !dataRegulation[value];
                                     });
                                 }}
@@ -558,7 +558,7 @@ export function DataVerification() {
                             onChange={(e) => {
                                 const { value } = e.target;
                                 setContext((ctx) => {
-                                    ctx.dataVerification.dataRegulation.hintValue = value;
+                                    ctx.validationDraft.hintValue = value;
                                 });
                             }}
                         />

@@ -514,20 +514,18 @@ describe('isDropdownChevronClick', () => {
 // rule, so the painter drew the label too.
 function regulationContext(regulation: Partial<DataRegulationProps>) {
     const ctx = contextFactory() as Context;
-    ctx.dataVerification = {
-        dataRegulation: {
-            type: 'dropdown',
-            type2: '',
-            rangeTxt: 'A1:A3',
-            value1: '',
-            value2: '',
-            validity: '',
-            remote: false,
-            prohibitInput: false,
-            hintShow: false,
-            hintValue: '',
-            ...regulation,
-        },
+    ctx.validationDraft = {
+        type: 'dropdown',
+        type2: '',
+        rangeTxt: 'A1:A3',
+        value1: '',
+        value2: '',
+        validity: '',
+        remote: false,
+        prohibitInput: false,
+        hintShow: false,
+        hintValue: '',
+        ...regulation,
     };
     return ctx;
 }
