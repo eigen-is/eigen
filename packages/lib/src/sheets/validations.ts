@@ -2,7 +2,8 @@
 // collaborator's write. A peer can store anything under an id, and every reader, such as the painter, the row and
 // column shift and the export, walks an entry's ranges and reads its rule. So an entry that is not well formed, or
 // that holds more ranges than a rule may, is left out where it arrives, and those readers can trust the type. The
-// writers that build a rule's ranges, such as the editor's paste and the xlsx importer, coalesce them here.
+// writers that build a rule's ranges, such as the editor's paste and the xlsx importer, coalesce them here, and the
+// readers that resolve overlapping rules order them here.
 
 import { isRecord } from '../core/guards';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './defaults';
@@ -66,6 +67,13 @@ export function wellFormedValidations(value: unknown): Record<string, SheetValid
     return Object.fromEntries(
         Object.entries(value).filter((entry): entry is [string, SheetValidation] => isSheetValidation(entry[1])),
     );
+}
+
+// The order of rule ids, for the rule that wins a cell two rules cover: the highest id. A longer id is higher, and
+// ids of one length compare by their characters. So of the rules an import numbers in the file's order, the last one
+// wins.
+export function compareValidationIds(a: string, b: string): number {
+    return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
 }
 
 // The same cells in fewer ranges. Two ranges of one width join where they touch or overlap, first down the rows,

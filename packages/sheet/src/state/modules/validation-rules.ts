@@ -3,13 +3,12 @@
 // also takes cells out of the rules and puts a rule on cells, for writers such as the validation dialog, a paste and
 // a fill. A cell has at most one rule, so putting a rule on cells first takes them out of every other rule.
 
-import { coalescedRanges } from '@workspace/lib/sheets';
+import { coalescedRanges, compareValidationIds } from '@workspace/lib/sheets';
 import { cfSplitRange } from '../../engine/conditional-format';
 import type { DataVerificationRule, Sheet, SheetValidation, SingleRange } from '../types';
 
 // The rule over one cell, with its id. Two peers putting rules on one cell at once can leave the cell in two rules,
-// and an xlsx file can hold overlapping ones. The highest id then wins on every tab: a longer id is higher, and ids of
-// one length compare by their characters. So of the rules an import numbers in the file's order, the last one wins.
+// and an xlsx file can hold overlapping ones. The highest id then wins on every tab (compareValidationIds).
 export function validationEntryAt(
     validations: Sheet['dataValidations'],
     r: number,
@@ -17,7 +16,7 @@ export function validationEntryAt(
 ): [string, SheetValidation] | undefined {
     let found: [string, SheetValidation] | undefined;
     for (const [id, entry] of Object.entries(validations ?? {})) {
-        if ((!found || byId(id, found[0]) > 0) && entry.ranges.some((range) => covers(range, r, c))) {
+        if ((!found || compareValidationIds(id, found[0]) > 0) && entry.ranges.some((range) => covers(range, r, c))) {
             found = [id, entry];
         }
     }
@@ -40,7 +39,7 @@ export function validationLookup(
         const near = ranges.filter((range) => overlaps(range, window));
         if (near.length > 0) inView.push([id, { ranges: near, rule }]);
     }
-    inView.sort(([a], [b]) => byId(b, a));
+    inView.sort(([a], [b]) => compareValidationIds(b, a));
     return (r, c) =>
         covers(window, r, c)
             ? inView.find(([, { ranges }]) => ranges.some((range) => covers(range, r, c)))?.[1].rule
@@ -68,10 +67,6 @@ export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRu
     const validations = (sheet.dataValidations ??= {});
     const entry = validations[id];
     validations[id] = { ranges: coalescedRanges([...(entry?.ranges ?? []), ...landed]), rule: entry?.rule ?? rule };
-}
-
-function byId(a: string, b: string) {
-    return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
 }
 
 function covers(range: SingleRange, r: number, c: number) {

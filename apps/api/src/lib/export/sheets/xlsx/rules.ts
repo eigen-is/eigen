@@ -9,9 +9,9 @@ import type {
     SheetValidation,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { compareValidationIds, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
-import { iscelldata, isWellFormedCfRule, rangeToA1, toA1, withCfRanges } from '@workspace/sheet/engine';
+import { cfSplitRange, iscelldata, isWellFormedCfRule, rangeToA1, toA1, withCfRanges } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import {
     CF_CELL_IS_CONDITION,
@@ -163,7 +163,7 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
     // order of their first range, so one workbook always writes the same file. A relative reference reads from the
     // first range's top-left cell, as Excel reads it.
     const topLeft = (a: SingleRange, b: SingleRange) => a.row[0] - b.row[0] || a.column[0] - b.column[0];
-    const entries = Object.entries(rules)
+    const entries = Object.entries(withoutOverlaps(rules))
         .map(([id, { ranges, rule }]) => ({ id, ranges: [...ranges].sort(topLeft), rule }))
         .sort((a, b) => topLeft(a.ranges[0], b.ranges[0]) || (a.id < b.id ? -1 : 1));
 
@@ -194,6 +194,40 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
     return validations.length > 0
         ? `<dataValidations count="${validations.length}">${validations.join('')}</dataValidations>`
         : '';
+}
+
+// Where rules overlap, the highest id wins the cell, but a file read back numbers its rules in the file's order. So
+// each rule loses the cells a higher id holds, and no two rules overlap in the file. A rule left with no cell goes,
+// and loses nothing: it held no cell.
+function withoutOverlaps(rules: Record<string, SheetValidation>): Record<string, SheetValidation> {
+    const ids = Object.keys(rules).sort(compareValidationIds);
+    const boxes = ids.map((id) => boundsOf(rules[id].ranges));
+    const kept: Record<string, SheetValidation> = {};
+    for (const [i, id] of ids.entries()) {
+        let { ranges } = rules[id];
+        for (let j = i + 1; j < ids.length; j += 1) {
+            if (!overlaps(boxes[i], boxes[j])) continue;
+            for (const higher of rules[ids[j]].ranges) {
+                ranges = ranges.flatMap((range) => cfSplitRange(range, higher, higher, 'restPart'));
+            }
+        }
+        if (ranges.length > 0) kept[id] = { ...rules[id], ranges };
+    }
+    return kept;
+}
+
+// The smallest range around a rule's ranges. A spread would overflow the stack on a rule of many ranges.
+function boundsOf(ranges: readonly SingleRange[]): SingleRange {
+    const bounds = { row: [...ranges[0].row], column: [...ranges[0].column] };
+    for (const { row, column } of ranges) {
+        bounds.row = [Math.min(bounds.row[0], row[0]), Math.max(bounds.row[1], row[1])];
+        bounds.column = [Math.min(bounds.column[0], column[0]), Math.max(bounds.column[1], column[1])];
+    }
+    return bounds;
+}
+
+function overlaps(a: SingleRange, b: SingleRange) {
+    return a.row[0] <= b.row[1] && b.row[0] <= a.row[1] && a.column[0] <= b.column[1] && b.column[0] <= a.column[1];
 }
 
 function promptOf(rule: DataVerificationRule): string {
