@@ -22,9 +22,8 @@ export type FormatSegment = { kind: 'token'; token: DateTokenId; pattern: string
 
 export type DateTokenVariant = {
     label: string;
-    // Static example for the fixed sample Tue 1930-08-05 13:30:30 — hour examples
-    // can't be computed from the pattern alone because numfmt switches h/H to
-    // 12-hour only when AM/PM is present.
+    // The variant shown on the sample date, Tue 1930-08-05 13:30:30. It is written out, because numfmt only reads h and
+    // H as a 12-hour clock when the pattern has AM/PM, so the pattern alone doesn't say how an hour reads.
     example: string;
     pattern: string;
 };
@@ -33,7 +32,7 @@ export type DateToken = {
     id: DateTokenId;
     label: string;
     group: 'date' | 'time' | 'duration';
-    // Pattern used when the token is inserted via the + menu.
+    // The variant a token starts with when the dialog's insert menu adds it.
     insertPattern: string;
     variants: DateTokenVariant[];
 };
@@ -149,8 +148,7 @@ export function getDateToken(id: DateTokenId): DateToken {
     return token;
 }
 
-// Tue 1930-08-05 13:30:30 as an Excel serial — the fixed preview sample, chosen
-// so the chip examples above match the rendered preview.
+// Tue 1930-08-05 13:30:30 as an Excel serial, the date the dialog previews on. The token examples above are this date.
 export const DATETIME_SAMPLE_SERIAL = 11175.562847222222;
 
 // Known token runs per pattern character, longest first for greedy matching.
@@ -245,7 +243,7 @@ export function tokenizePattern(pattern: string): FormatSegment[] {
     return segments;
 }
 
-// Characters numfmt passes through verbatim — anything else gets quoted.
+// The characters numfmt writes out as they are. Any other literal text is quoted.
 const RAW_LITERAL = /^[ \-/:.,]*$/;
 
 export function serializeSegments(segments: FormatSegment[]): string {
@@ -256,20 +254,18 @@ export function serializeSegments(segments: FormatSegment[]): string {
         } else if (RAW_LITERAL.test(segment.text)) {
             out += segment.text;
         } else {
-            // A double quote cannot be escaped inside a quoted literal — drop it.
+            // A quoted literal can't hold a double quote, so it is dropped.
             out += `"${segment.text.replaceAll('"', '')}"`;
         }
     }
     return out;
 }
 
-// Guarded sample rendering for the dialogs' Preview/Sample line: numfmt throws
-// on illegal patterns (e.g. a 000 run straight after yyyy, or adjacent '.,'),
-// and a throw during render would blank the whole app.
-export function previewPattern(
-    pattern: string,
-    value: number,
-): { ok: true; text: string } | { ok: false; error: string } {
+export type FormatPreview = { ok: true; text: string } | { ok: false; error: string };
+
+// A value in a pattern, for a dialog's preview line. numfmt throws on a pattern it can't read, such as a 000 run right
+// after yyyy, and a throw while rendering would blank the whole app, so the reason comes back instead.
+export function previewPattern(pattern: string, value: number): FormatPreview {
     try {
         return { ok: true, text: update(pattern, value) };
     } catch (e) {
@@ -277,23 +273,23 @@ export function previewPattern(
     }
 }
 
-export type CurrencyVariantId = 'symbolFirst' | 'symbolFirstRounded' | 'symbolLast' | 'symbolLastRounded';
+// The layouts of a currency format, in the order the Custom currencies dialog lists them.
+export const CURRENCY_VARIANT_IDS = ['symbolFirst', 'symbolFirstRounded', 'symbolLast', 'symbolLastRounded'] as const;
+export type CurrencyVariantId = (typeof CURRENCY_VARIANT_IDS)[number];
 
-export const CURRENCY_VARIANTS: { id: CurrencyVariantId; mask: string; symbolFirst: boolean }[] = [
-    { id: 'symbolFirst', mask: '#,##0.00', symbolFirst: true },
-    { id: 'symbolFirstRounded', mask: '#,##0', symbolFirst: true },
-    { id: 'symbolLast', mask: '#,##0.00', symbolFirst: false },
-    { id: 'symbolLastRounded', mask: '#,##0', symbolFirst: false },
-];
+const CURRENCY_VARIANTS: Record<CurrencyVariantId, { mask: string; symbolFirst: boolean }> = {
+    symbolFirst: { mask: '#,##0.00', symbolFirst: true },
+    symbolFirstRounded: { mask: '#,##0', symbolFirst: true },
+    symbolLast: { mask: '#,##0.00', symbolFirst: false },
+    symbolLastRounded: { mask: '#,##0', symbolFirst: false },
+};
 
 export function buildCurrencyPattern(symbol: string, variantId: CurrencyVariantId): string {
-    // Bare currency glyphs (€, $, £, ¥, ₼, …) pass through numfmt unquoted, which
-    // keeps the EUR pattern identical to the menu's Currency preset. Text symbols
-    // (kr, Lek, din, …) would be parsed as format tokens, so quote them.
+    // A currency sign, such as € or ₼, goes in as it is, so the euro pattern is the menu's Currency preset. A symbol
+    // written in letters, such as kr or Lek, is quoted, or numfmt would read its letters as format codes.
     const cleaned = symbol.replaceAll('"', '');
     const literal = /^\p{Sc}+$/u.test(cleaned) ? cleaned : `"${cleaned}"`;
-    const variant = CURRENCY_VARIANTS.find((v) => v.id === variantId);
-    if (!variant) throw new Error(`No currency variant ${variantId}`);
+    const variant = CURRENCY_VARIANTS[variantId];
     return variant.symbolFirst ? `${literal}${variant.mask}` : `${variant.mask}${literal}`;
 }
 
