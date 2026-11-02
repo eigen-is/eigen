@@ -44,7 +44,8 @@ describe('CollabDocument close linger', () => {
         jest.useRealTimers();
     });
 
-    // A new doc, whose closes are counted on the drive call the linger timer makes.
+    // A new doc, whose closes are counted on the drive call the linger timer makes. `closing` is the last
+    // close that call started, so a test can wait for its teardown to end.
     async function createCountedDoc(fileName: string) {
         const docPath = await drivePost<DrivePath>(
             ctx.alice.user.sessionToken,
@@ -56,26 +57,30 @@ describe('CollabDocument close linger', () => {
         const { path } = await home.drive.resolveFile(mountId, docPath.id);
 
         let closeCalls = 0;
+        let lastClose = Promise.resolve();
         const original = home.drive.closeCollabDocument.bind(home.drive);
         home.drive.closeCollabDocument = async (...args: Parameters<typeof original>) => {
             closeCalls++;
-            return original(...args);
+            lastClose = original(...args);
+            return lastClose;
         };
         return {
             path,
             calls: () => closeCalls,
+            closing: () => lastClose,
             restore: () => {
                 home.drive.closeCollabDocument = original;
             },
         };
     }
 
-    // The timers are fake from the open on, so the test moves the clock past the linger itself.
+    // The timers are fake before the open, so the linger that init arms is fake too, and the test moves
+    // the clock past it itself.
     async function openLingeringDoc(fileName: string) {
         const counted = await createCountedDoc(fileName);
+        jest.useFakeTimers();
         const doc = new CollabDocument(home.drive, counted.path);
         await doc.init();
-        jest.useFakeTimers();
         return { doc, ...counted };
     }
 
@@ -141,15 +146,16 @@ describe('CollabDocument close linger', () => {
 
     // A server-side writer, such as an import or a convert, opens a document no socket subscribes to.
     test('a document opened with no socket closes after the linger', async () => {
-        const { path, calls, restore } = await createCountedDoc('linger-no-socket');
+        const { path, closing, restore } = await createCountedDoc('linger-no-socket');
         try {
             jest.useFakeTimers();
             await home.drive.getCollabDocument(mountId, path.id);
 
             jest.advanceTimersByTime(CLOSE_LINGER_MS - 1);
-            expect(calls()).toBe(0);
+            expect(home.drive.hasCollabDocument(mountId, path.id)).toBe(true);
             jest.advanceTimersByTime(1);
-            expect(calls()).toBe(1);
+            expect(home.drive.hasCollabDocument(mountId, path.id)).toBe(false);
+            await closing();
         } finally {
             restore();
             jest.useRealTimers();
@@ -158,7 +164,7 @@ describe('CollabDocument close linger', () => {
     });
 
     test('a socket that subscribes to a document nobody had open keeps it open', async () => {
-        const { path, calls, restore } = await createCountedDoc('linger-socket-cancels');
+        const { path, calls, closing, restore } = await createCountedDoc('linger-socket-cancels');
         try {
             jest.useFakeTimers();
             const doc = await home.drive.getCollabDocument(mountId, path.id);
@@ -172,6 +178,7 @@ describe('CollabDocument close linger', () => {
             doc.unsubscribe(conn);
             jest.advanceTimersByTime(CLOSE_LINGER_MS);
             expect(calls()).toBe(1);
+            await closing();
         } finally {
             restore();
             jest.useRealTimers();
