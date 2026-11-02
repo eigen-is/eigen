@@ -19,8 +19,10 @@ function runFrame(now: number) {
 
 const { burstConfetti } = await import('../../../components/celebrate/confetti-burst');
 
+// A burst the last test left running would drop this test's, so it runs to its end first.
 beforeEach(() => {
-    frames = [];
+    runFrame(0);
+    runFrame(5000);
 });
 
 test('one canvas that clicks pass through, gone once the burst settles', () => {

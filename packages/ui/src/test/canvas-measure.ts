@@ -1,6 +1,7 @@
-// The 2d context a test measures vector text on. The measurer keeps the first context it is given for the rest of the
-// bun process, which runs every test file of the package. So every file hands it this one context, and each file sets
-// the width a line measures in it. Call it after installHappyDom, which gives the test its canvas.
+// The 2d context a test measures vector text on. The measurer keeps the first context it is given, so a later stub of
+// getContext would never reach it. Every test file hands it this one context and sets only the width a line measures
+// in it, which holds whichever file ran first in a shared process. Call it after installHappyDom, which gives the
+// test its canvas.
 
 let measure = (_line: string, _font: string) => 0;
 const context = {

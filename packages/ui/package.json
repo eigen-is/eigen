@@ -8,7 +8,7 @@
   ],
   "scripts": {
     "typecheck": "bun check --no-script",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "devDependencies": {
     "happy-dom": "^20.14.6"

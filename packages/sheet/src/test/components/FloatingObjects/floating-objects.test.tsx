@@ -86,6 +86,8 @@ async function mount({ allowEdit = true, aspectLocked = false, showToolbar = fal
     cleanups.push(async () => {
         await act(async () => root.unmount());
         container.remove();
+        // A menu that closed or unmounted hands the focus back on a 0 ms timer, which would land in the next test.
+        await new Promise((resolve) => setTimeout(resolve, 0));
     });
     const frame = (id: string) => container.querySelector<HTMLElement>(`[data-floating-id="${id}"]`);
     const content = (id: string) => {

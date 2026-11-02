@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import * as nodeFs from 'node:fs';
 import {
     chmodSync,
     createWriteStream,
@@ -35,6 +36,7 @@ import {
 } from '../../lib/backup/recovery';
 import { restoreHome } from '../../lib/backup/restore';
 import { archiveEnd, DIRECTORY_TYPEFLAG, FILE_TYPEFLAG, headerChunks, padding } from '../../lib/backup/tar';
+import { clearHomeRestoring, openHome } from '../../lib/home/get-home';
 import { ensureServer, TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
@@ -246,6 +248,49 @@ describe('Backup boot', () => {
         expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
         expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('parked by the rollback');
         expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
+    });
+
+    // A home whose folders cannot be moved, such as a rename that fails with EACCES or EBUSY, must not stop the
+    // server from starting, again on every boot. It is logged, its notes stay for the next boot, and the boot goes
+    // on to the next home. The home answers 503 until then: a request would make a new home folder at its path.
+    test('a home whose rename throws keeps its notes, stays shut, and the boot goes on', async () => {
+        const id = 'bootrecoverOOOOOOOOOOOOOOOOOOOOO';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(aside, 'the home as it was');
+        const notes = seedRestoringMarker('boot-job-l', id, aside);
+        made.push(join(homeRoot, id));
+        const other = 'bootrecoverPPPPPPPPPPPPPPPPPPPPP';
+        const otherAside = `${other}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(otherAside, 'the other home');
+        seedRestoringMarker('boot-job-m', other, otherAside);
+        made.push(join(homeRoot, other));
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (to === join(homeRoot, id)) throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+            rename(from, to);
+        });
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            expect(() => recoverInterruptedRestores()).not.toThrow();
+            const said = logged.mock.calls.flat().join('\n');
+            expect(said).toContain(join(homeRoot, id));
+            expect(said).toContain(notes);
+            expect(said).toContain('./eigen stop, then ./eigen restart');
+        } finally {
+            renameSpy.mockRestore();
+            logged.mockRestore();
+        }
+
+        expect(existsSync(join(notes, 'restoring.json'))).toBe(true);
+        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
+        await expect(openHome(id)).rejects.toThrow('Restore in progress');
+        // The next boot, whose rename works, puts the home back. It starts with no home marked.
+        clearHomeRestoring(id);
+        recoverInterruptedRestores();
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(existsSync(notes)).toBe(false);
     });
 
     // A safety-copy restore renames the copy into place before its checks, so a kill there leaves a pristine home at
@@ -525,6 +570,52 @@ describe('Backup boot', () => {
 
         await recoverBackupsAfterRestart();
 
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('half-written');
+        expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
+    });
+
+    // An older build's notes whose rename throws stay too, so the backups folder's staging is not wiped over them,
+    // and the home answers 503 until a later boot puts it back.
+    test('the notes an older build kept stay when their rename throws, and the home stays shut', async () => {
+        const id = 'bootrecoverQQQQQQQQQQQQQQQQQQQQQ';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260606-000000`;
+        seedFolder(id, 'half-written');
+        seedFolder(aside, 'the home as it was');
+        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260606-000000`;
+        const notes = seedRestoringMarker(
+            'boot-job-q',
+            id,
+            aside,
+            false,
+            parkName,
+            join(getBackupsDir(), '.staging', 'boot-job-q'),
+        );
+        made.push(join(homeRoot, parkName));
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (to === join(homeRoot, id)) throw Object.assign(new Error('device busy'), { code: 'EBUSY' });
+            rename(from, to);
+        });
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            await recoverBackupsAfterRestart();
+            const said = logged.mock.calls.flat().join('\n');
+            expect(said).toContain(join(homeRoot, id));
+            expect(said).toContain(notes);
+            expect(said).toContain('./eigen stop, then ./eigen restart');
+        } finally {
+            renameSpy.mockRestore();
+            logged.mockRestore();
+        }
+
+        expect(existsSync(join(notes, 'restoring.json'))).toBe(true);
+        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+        await expect(openHome(id)).rejects.toThrow('Restore in progress');
+        // The next boot, whose rename works, puts the home back. It starts with no home marked.
+        clearHomeRestoring(id);
+        await recoverBackupsAfterRestart();
         expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
         expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('half-written');
         expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
