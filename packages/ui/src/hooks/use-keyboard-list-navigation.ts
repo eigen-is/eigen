@@ -133,6 +133,9 @@ export function useKeyboardListNavigation<T>({
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
+        // React bubbles a key through its own tree, so a dialog that a row's menu portals to the body would reach the
+        // list too: Enter in its field would open the row. Only a key pressed inside the list's own DOM is the list's.
+        if (!(e.target instanceof Node) || !e.currentTarget.contains(e.target)) return;
         if (items.length === 0) return;
 
         if (selection && (e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey)) {
