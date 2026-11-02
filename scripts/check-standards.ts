@@ -51,6 +51,15 @@ if (CANONICAL_MIMES.size === 0) {
     process.exit(1);
 }
 
+// Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
+// non-test sources of apps and packages.
+const sources: SourceFile[] = [];
+for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
+    if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
+    const text = await Bun.file(path).text();
+    sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
+}
+
 // CODE-STANDARDS § Standards Gates: a primitive the shared-primitives index lists needs a user outside its file. The
 // unused ones are found once, from every source file, before the per-file counts, and each counts against the file
 // that defines it.
@@ -62,8 +71,8 @@ function unusedIn(path: string, isType: boolean): number {
 }
 
 // CODE-STANDARDS § Standards Gates: a dialog footer outside FormDialog is an allow-listed exception. The files are found
-// once, from every source file, like the unused primitives, and a stale list entry counts against its own path.
-const footersOutside = new Set<string>();
+// once, from every source file, and a stale list entry counts against its own path.
+const footers = dialogFooterHits(sources);
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
 // The home-independent surfaces that deliberately carry no `:ownerId` (docs/ARCHITECTURE.md § Pitfalls):
@@ -305,7 +314,7 @@ const METRICS: Metric[] = [
         id: 'dialog-footers',
         label: 'Dialog footers outside FormDialog',
         hardZero: true,
-        count: ({ path }) => (footersOutside.has(path) ? 1 : 0),
+        count: ({ path }) => (footers.outside.includes(path) ? 1 : 0),
         fix: 'A dialog with fields and Cancel/submit is a FormDialog with a FormDialogForm, from @workspace/ui. One that is not a form (information only, several actions, a picker, a grid) goes on OWN_DIALOG_FOOTER in scripts/dialog-footer.ts with the reason. A listed file that no longer uses DialogFooter, or is gone, leaves the list.',
     },
     {
@@ -344,15 +353,6 @@ const METRICS: Metric[] = [
     },
 ];
 
-// Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
-// non-test sources of apps and packages.
-const sources: SourceFile[] = [];
-for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
-    if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
-    const text = await Bun.file(path).text();
-    sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
-}
-
 const exportsMaps: ExportsMaps = {};
 for (const manifest of (await Bun.$`git ls-files 'packages/*/package.json'`.text()).split('\n').filter(Boolean)) {
     exportsMaps[manifest.split('/')[1]] = (await Bun.file(manifest).json()).exports ?? {};
@@ -361,9 +361,6 @@ const primitives = unusedPrimitives(readPrimitivesIndex(await Bun.file(PRIMITIVE
 for (const primitive of primitives.unused) {
     unusedByFile.set(primitive.file, [...(unusedByFile.get(primitive.file) ?? []), primitive]);
 }
-
-const footers = dialogFooterHits(sources);
-for (const path of footers.outside) footersOutside.add(path);
 
 const counts = new Map<string, number>(METRICS.map((metric) => [metric.id, 0]));
 const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [metric.id, new Map()]));
