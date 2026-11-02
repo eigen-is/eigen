@@ -162,7 +162,7 @@ test("a notice that takes the range picker's place lets the cell editor back", a
     const dialog = await openDialog(B3);
     await pickWith('Select cell range');
     expect(dialog.context().rangeDialog.show).toBe(true);
-    await dialog.show((d) => d.showDialog('A notice', 'ok'));
+    await dialog.show((d) => d.showNotice('A notice'));
     expect(dialog.context().rangeDialog.show).toBe(false);
     expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
 });

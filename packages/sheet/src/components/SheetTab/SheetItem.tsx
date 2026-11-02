@@ -14,7 +14,7 @@ import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { useAlert } from '../../hooks/useAlert';
+import { useDialog } from '../../hooks/useDialog';
 import type { Sheet } from '../../state';
 import {
     api,
@@ -42,7 +42,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     const [menuOpen, setMenuOpen] = useState(false);
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
 
     useEffect(() => {
         if (!editable.current) return;
@@ -64,11 +64,11 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             try {
                 editSheetName(draftCtx, editable.current);
             } catch (e) {
-                if (e instanceof Error) showAlert(e.message);
+                if (e instanceof Error) showNotice(e.message);
             }
         });
         setEditing(false);
-    }, [setContext, showAlert]);
+    }, [setContext, showNotice]);
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
         // The blur may open a notice whose OK button takes the focus at once, and the browser would send this Enter's
@@ -174,7 +174,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     <DropdownMenuItem
                         onClick={() => {
                             if (context.allowEdit === false) return;
-                            if (lastShownSheet) showAlert(NO_MORE_SHEET, 'ok');
+                            if (lastShownSheet) showNotice(NO_MORE_SHEET);
                             else setContext((ctx) => api.hideSheet(ctx, id));
                         }}
                     >
@@ -193,10 +193,10 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     variant="destructive"
                     onClick={() => {
                         if (lastShownSheet) {
-                            showAlert(NO_MORE_SHEET, 'ok');
+                            showNotice(NO_MORE_SHEET);
                             return;
                         }
-                        showAlert(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
+                        showNotice(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
                             setContext((ctx) => deleteSheet(ctx, id), { deleteSheetOp: { id } });
                         });
                     }}

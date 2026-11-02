@@ -101,7 +101,7 @@ describe('a FormDialog in the host', () => {
     test('a submit that opens another dialog leaves that one open', async () => {
         const { dialogs } = await renderHost();
         await act(async () =>
-            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showDialog('Replace it?', 'yesno') })),
+            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showNotice('Replace it?', 'yesno') })),
         );
         await click(button('Save'));
         expect(title()).toBe('Notice');
@@ -208,7 +208,7 @@ describe('the focus after a dialog closes', () => {
 
     test('stays in the confirm a submit opened', async () => {
         const dialog = await renderSheetDialog((d) =>
-            d.showDialog(createElement(Rename, { onSubmit: () => d.showDialog('Replace it?', 'yesno') })),
+            d.showDialog(createElement(Rename, { onSubmit: () => d.showNotice('Replace it?', 'yesno') })),
         );
         await dialog.click('Save');
         await focusSettled();

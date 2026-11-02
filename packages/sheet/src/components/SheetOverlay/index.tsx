@@ -15,7 +15,6 @@ import { debounce } from 'es-toolkit/compat';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
 import { cellDisplay } from '../../engine/format';
-import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import type { Context, GlobalCache } from '../../state';
 import {
@@ -52,7 +51,7 @@ import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
     const { context, getContext, setContext, refs } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showNotice } = useDialog();
     const {
         onContextMenu: cellAreaContextMenu,
         openAtPoint: cellAreaLongPressOpen,
@@ -66,7 +65,6 @@ export const SheetOverlay: React.FC = () => {
     const bottomAddRowInputRef = useRef<HTMLInputElement>(null);
     const [lastRangeText, setLastRangeText] = useState('');
     const [lastCellValue, setLastCellValue] = useState('');
-    const { showAlert } = useAlert();
     const cellAreaMouseDown = useCallback(
         (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
             const { nativeEvent } = e;
@@ -241,11 +239,11 @@ export const SheetOverlay: React.FC = () => {
                     );
                 } catch (e) {
                     if (e instanceof ValidationLimitError) throw e;
-                    if (e instanceof Error) showAlert(e.message);
+                    if (e instanceof Error) showNotice(e.message);
                 }
             });
         },
-        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, showAlert],
+        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, showNotice],
     );
 
     const handleBottomAddRow = useCallback(() => {
@@ -270,11 +268,11 @@ export const SheetOverlay: React.FC = () => {
         setContext(
             (draftCtx) => {
                 const error = tryInsertRowCol(draftCtx, insertRowColOp, false);
-                if (error) showAlert(error, 'ok');
+                if (error) showNotice(error);
             },
             { insertRowColOp },
         );
-    }, [getContext, setContext, showAlert]);
+    }, [getContext, setContext, showNotice]);
 
     useEffect(() => {
         setContext((draftCtx) => {
@@ -291,12 +289,12 @@ export const SheetOverlay: React.FC = () => {
     }, [setContext]);
 
     // Warning dialog
-    // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showDialog + setContext are stable
+    // biome-ignore lint/correctness/useExhaustiveDependencies: fires once per new warnDialog message; showNotice + setContext are stable
     useEffect(() => {
         if (context.warnDialog) {
             // Consume the event so repeating the same invalid op warns again.
             const message = context.warnDialog;
-            setTimeout(() => showDialog(message, 'ok'), 240);
+            setTimeout(() => showNotice(message), 240);
             setContext((ctx) => {
                 ctx.warnDialog = undefined;
             });

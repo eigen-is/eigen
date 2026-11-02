@@ -22,7 +22,7 @@ const SEPARATORS = [
 export function SplitColumn() {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
-    const { showDialog } = useDialog();
+    const { showNotice } = useDialog();
     const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
     const [otherValue, setOtherValue] = useState('');
 
@@ -55,7 +55,7 @@ export function SplitColumn() {
                 if (cellValue(data[r + i][c + j]) != null) overwrites = true;
             }
         }
-        if (overwrites) showDialog('There is already data here, do you want to replace it?', 'yesno', write);
+        if (overwrites) showNotice('There is already data here, do you want to replace it?', 'yesno', write);
         else write();
     };
 

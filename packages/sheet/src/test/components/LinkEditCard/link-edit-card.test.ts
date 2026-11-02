@@ -230,7 +230,7 @@ describe('the range picker', () => {
 
     test('a notice that takes its place lets the cell editor and the link card back', async () => {
         const dialog = await openPicker();
-        await dialog.show((d) => d.showDialog('A notice', 'ok'));
+        await dialog.show((d) => d.showNotice('A notice'));
         expect(dialog.context().rangeDialog.show).toBe(false);
         expect(dialog.dialogs()[0]?.textContent).toContain('A notice');
     });
