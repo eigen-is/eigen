@@ -1,8 +1,9 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so their changes reach every
-// editor too. The Drive opens each document once, however many sockets connect, and closes it a while after the last
-// one leaves. A workbook first saves a version, then folds its op log into its snapshot.
+// editor too. The Drive opens each document once, however many sockets connect. It closes it a while after the last
+// socket leaves, or after an open that no socket joins. A workbook first saves a version, then folds its op log into
+// its snapshot.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -41,7 +42,7 @@ const COMPRESS_FRAME_MIN_BYTES = 1024;
 
 // Typing fires many updates a second, so Modified is stamped at most once a minute.
 const TOUCH_THROTTLE_MS = 60_000;
-// The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
+// How long a document with no socket stays open. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
 export const CLOSE_LINGER_MS = 60_000;
 // The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
@@ -170,6 +171,9 @@ export class CollabDocument {
             },
         );
 
+        // A server-side writer, such as an import, opens a document that no socket may ever join. The
+        // linger closes that one too, and a socket that subscribes cancels it.
+        this.scheduleClose();
         return this;
     }
 
