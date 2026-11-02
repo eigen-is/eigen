@@ -1,5 +1,6 @@
-// Escape in a formula with the function suggestions open, as in Excel and Google Sheets: the first Escape closes the
-// list and leaves the edit open, the second cancels the edit. Neither writes the cell.
+// The function suggestions while a formula is open. As in Excel and Google Sheets, the first Escape closes the list and
+// leaves the edit open, the second cancels the edit, and neither writes the cell. A click on another cell commits the
+// edit, and the list goes with it.
 
 import { afterEach, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -55,7 +56,7 @@ async function mount() {
         workbook.current?.setSelection([{ row: [0, 0], column: [0, 0] }]);
     });
     await act(async () => input.focus());
-    return { input, a1: () => workbook.current?.getAllSheets()[0]?.data?.[0]?.[0] };
+    return { container, input, a1: () => workbook.current?.getAllSheets()[0]?.data?.[0]?.[0] };
 }
 
 async function key(target: HTMLElement, init: KeyboardEventInit) {
@@ -108,4 +109,32 @@ test('the first Escape closes the suggestions, the second cancels, and neither w
     expect(editorOpen(input)).toBe(false);
     expect(a1()?.v).toBe('Name');
     expect(a1()?.f).toBeUndefined();
+});
+
+test('a click on another cell commits the formula and leaves no suggestions behind', async () => {
+    const { container, input, a1 } = await mount();
+    await key(input, { key: 'F2', code: 'F2' });
+    await act(async () => {
+        input.textContent = '';
+    });
+    await type(input, '=SUM(Z');
+    expect(suggestions()).toBeGreaterThan(0);
+
+    const cellArea = container.querySelector<HTMLElement>('.sheet-cell-area');
+    if (!cellArea) throw new Error('no cell area');
+    // happy-dom lays nothing out: give the cell area a size, so the press lands on a cell rather than past the grid.
+    cellArea.getBoundingClientRect = () => new DOMRect(0, 0, 800, 600);
+    await act(async () => {
+        cellArea.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0, clientX: 200, clientY: 50 }));
+        cellArea.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0, clientX: 200, clientY: 50 }));
+    });
+    expect(a1()?.f).toBe('=SUM(Z)');
+    expect(editorOpen(input)).toBe(false);
+    expect(suggestions()).toBe(0);
+
+    // The grid hands its keys back to the editor, which is focused again as the next edit opens.
+    await act(async () => input.blur());
+    await act(async () => input.focus());
+    await key(input, { key: 'F2', code: 'F2' });
+    expect(suggestions()).toBe(0);
 });
