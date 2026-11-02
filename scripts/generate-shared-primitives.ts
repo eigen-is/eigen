@@ -4,7 +4,7 @@
 // canonical thing isn't discoverable; this is the index AGENTS.md tells you to search first.
 //
 //   bun run primitives          regenerate docs/SHARED-PRIMITIVES.md
-//   bun run primitives --check  fail (exit 1) if the committed file is stale — the CI gate
+//   bun run primitives --check  fail (exit 1) if the committed file is stale, and print the rows that differ — the CI gate
 //
 // Source of truth: each package's `exports` map. We enumerate the NAMED barrel entry points plus the
 // curated type/constant/hook wildcards; the broad ui `./components/*` catch-all is skipped
@@ -220,6 +220,11 @@ if (process.argv.includes('--check')) {
         .catch(() => '');
     if (current !== markdown) {
         console.error('ERROR: docs/SHARED-PRIMITIVES.md is out of date — run `bun run primitives` and commit.');
+        // Name the rows that differ, so a CI run that disagrees with a laptop says what it saw.
+        const committed = new Set(current.split('\n'));
+        const generated = new Set(markdown.split('\n'));
+        for (const line of committed) if (!generated.has(line)) console.error(`- ${line}`);
+        for (const line of generated) if (!committed.has(line)) console.error(`+ ${line}`);
         process.exit(1);
     }
     console.log(`docs/SHARED-PRIMITIVES.md is current (${primitives.length} primitives).`);
