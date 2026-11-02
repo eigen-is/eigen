@@ -63,7 +63,7 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                                     </Badge>
                                     <TooltipButton
                                         icon={XIcon}
-                                        tooltipText="Remove"
+                                        tooltipText={`Remove ${attendee.email}`}
                                         type="button"
                                         className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                                         onClick={() => removeAttendee(attendee.email)}

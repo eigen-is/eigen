@@ -15,7 +15,7 @@ import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { UsersRound } from 'lucide-react';
 import { useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
-import { buildEventTimes } from './calendar-utils';
+import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import { endAfter, roundToNext15Minutes, toTimeString } from './time-select';
 
@@ -37,7 +37,7 @@ export function CreateEventDialog({ open, onOpenChange, defaultDate, defaultCale
 // Mounted with the dialog, so each opening starts empty at the next quarter hour.
 function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDialogProps, 'open' | 'onOpenChange'>) {
     const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
     const { data: calendars = [] } = useCalendars(ownerId);
     const { data: sharedCalendars = [] } = useSharedCalendars(ownerId);
     const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
@@ -62,18 +62,18 @@ function CreateEventForm({ defaultDate, defaultCalendarId }: Omit<CreateEventDia
 
     // Until the user picks one, the default calendar follows the list, which may still be loading.
     const defaultCal = defaultCalendarId ? calendarOptions.find((c) => c.id === defaultCalendarId) : calendarOptions[0];
-    const selectedCalKey = pickedCalKey ?? (defaultCal ? `${defaultCal.ownerId}:${defaultCal.id}` : '');
-    const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
-    const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
+    const selectedCalKey = pickedCalKey ?? (defaultCal ? calendarKey(defaultCal) : '');
+    const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
+    const createEvent = useCreateEvent(selectedCal?.ownerId ?? ownerId);
 
     return (
         <FormDialogForm
             canSubmit={title.trim() !== '' && !!selectedCal}
             submitLabel="Save"
-            onSubmit={() => {
+            onSubmit={async () => {
                 if (!selectedCal) return false;
                 const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
-                return createEvent.mutateAsync({
+                await createEvent.mutateAsync({
                     calendarId: selectedCal.id,
                     title: title.trim(),
                     startTime: start,

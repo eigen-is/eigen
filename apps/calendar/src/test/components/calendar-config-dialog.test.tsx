@@ -1,5 +1,5 @@
-// New calendar and Edit calendar: a name the schema refuses is named and keeps the dialog open, Save creates or
-// updates the calendar and closes, and a save the server refuses stays open with no unhandled rejection. Delete asks
+// New calendar and Edit calendar: Save and Enter wait for a name with more than spaces, Save creates or updates the
+// calendar with the name trimmed and closes, and a save the server refuses stays open with no unhandled rejection. Delete asks
 // first, on top of the open dialog, so a cancelled delete keeps the user's edits. The default calendar has no Delete.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
@@ -133,25 +133,37 @@ const click = (target: HTMLButtonElement | undefined) =>
     });
 const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 
-test('New calendar names a missing name and stays open, then creates the calendar and closes', async () => {
+test('New calendar waits for a name with more than spaces, then creates the trimmed calendar and closes', async () => {
     await open(null);
     const dialog = dialogTitled('New calendar');
     expect(dialog?.textContent).toContain('Create a new calendar.');
     expect(button(dialog, 'Delete')).toBeUndefined();
+    expect(button(dialog, 'Save')?.disabled).toBe(true);
 
-    await click(button(dialog, 'Save'));
+    await type('   ');
+    expect(button(dialog, 'Save')?.disabled).toBe(true);
+    await act(async () => pressEnter(nameField()));
     await settle();
-    expect(dialog?.textContent).toContain('Calendar name is required.');
     expect(createCalendar.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 
-    await type('Gym');
+    await type(' Gym ');
     await act(async () => pressEnter(nameField()));
     await settle();
     expect(createCalendar.mutateAsync.mock.calls).toEqual([
         [{ name: 'Gym', color: EIGEN_ACCENT_COLORS_SHUFFLED[3].value }],
     ]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('Edit calendar refuses a name emptied to spaces', async () => {
+    await open(calendar({}));
+    const dialog = dialogTitled('Edit calendar');
+    await type('  ');
+    expect(button(dialog, 'Save')?.disabled).toBe(true);
+    await act(async () => pressEnter(nameField()));
+    await settle();
+    expect(updateCalendar.mutateAsync).not.toHaveBeenCalled();
 });
 
 test('Edit calendar starts from the calendar and saves its name, color and shares', async () => {

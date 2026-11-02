@@ -3,6 +3,7 @@
 
 import { useCreateTeam } from '@workspace/lib/admin';
 import { FormDialog, FormDialogForm } from '@workspace/ui';
+import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
 
@@ -30,9 +31,24 @@ function CreateTeamForm({ organizationId }: { organizationId?: string }) {
         <FormDialogForm
             canSubmit={trimmed !== ''}
             submitLabel="Create"
-            onSubmit={() => createTeam.mutateAsync(trimmed)}
+            onSubmit={async () => {
+                await createTeam.mutateAsync(trimmed);
+            }}
         >
-            <Input placeholder="Team name" value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
+            <FieldGroup>
+                <Field>
+                    <FieldLabel htmlFor="team-name">Team name</FieldLabel>
+                    <FieldContent>
+                        <Input
+                            id="team-name"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            autoFocus
+                            required
+                        />
+                    </FieldContent>
+                </Field>
+            </FieldGroup>
         </FormDialogForm>
     );
 }

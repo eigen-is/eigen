@@ -9,6 +9,7 @@ import { SidebarItem } from '../layout/sidebar';
 import { DroppableSidebarItem } from '../layout/sidebar/droppable-sidebar-item';
 import { SidebarSection } from '../layout/sidebar/sidebar-section';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
+import type { LabelFormValues } from './label-dialog';
 import { LabelDialog } from './label-dialog';
 import type { LabelManagerProps } from './types';
 
@@ -36,15 +37,12 @@ export function LabelManager({
         setDialogOpen(true);
     };
 
-    const handleSubmit = (data: { name: string; color: string }) =>
-        selectedLabel
-            ? updateLabel({ ...selectedLabel, name: data.name, color: data.color })
-            : addLabel({ name: data.name, color: data.color });
+    const handleSubmit = (data: LabelFormValues) =>
+        selectedLabel ? updateLabel({ ...selectedLabel, ...data }) : addLabel(data);
 
     const handleDeleteLabel = async () => {
         if (!selectedLabel) return;
-        // Let a rejection propagate to the shared DeleteDialog so it stays open for retry; only close on
-        // success. The mutation's onError already surfaced the toast.
+        // A rejection keeps the DeleteDialog open for another try.
         await deleteLabel(selectedLabel.id);
         setDialogOpen(false);
     };
@@ -62,7 +60,7 @@ export function LabelManager({
                         <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
                             <TooltipButton
                                 icon={Pencil}
-                                tooltipText={`Edit label`}
+                                tooltipText="Edit label"
                                 variant="ghost"
                                 size="icon"
                                 onClick={() => handleEditClick(label)}

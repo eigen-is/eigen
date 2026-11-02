@@ -3,6 +3,7 @@
 
 import { useCreateUser } from '@workspace/lib/admin';
 import { usePublicConfig } from '@workspace/lib/public';
+import type { OrgRole } from '@workspace/lib/types/admin';
 import { MIN_PASSWORD_LENGTH, validateUsername } from '@workspace/lib/validation';
 import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldContent, FieldGroup, FieldLabel } from '@workspace/ui/components/field';
@@ -29,7 +30,7 @@ function CreateUserForm() {
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState<'admin' | 'member'>('member');
+    const [role, setRole] = useState<Exclude<OrgRole, 'owner'>>('member');
     const [usernameError, setUsernameError] = useState('');
     const { data: config } = usePublicConfig();
     const createUser = useCreateUser(config?.orgId);
@@ -38,13 +39,13 @@ function CreateUserForm() {
         <FormDialogForm
             canSubmit={!!config && name !== '' && username !== '' && password.length >= MIN_PASSWORD_LENGTH}
             submitLabel="Create"
-            onSubmit={() => {
+            onSubmit={async () => {
                 if (!config) return false;
                 const normalized = username.toLowerCase().split('@')[0];
                 const validationError = validateUsername(normalized);
                 setUsernameError(validationError ?? '');
                 if (validationError) return false;
-                return createUser.mutateAsync({
+                await createUser.mutateAsync({
                     name,
                     email: `${normalized}@${config.mailDomain}`,
                     password,

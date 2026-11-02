@@ -3,6 +3,7 @@
 // fails or returns false, for another try. A dialog that is closing takes no second submit.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
+import type { DialogAction } from '../../hooks/use-dialog-pending';
 import { installHappyDom } from '../happy-dom';
 import { pressEnter } from '../press-enter';
 import { renderInDocument } from '../render-in-document';
@@ -30,7 +31,7 @@ async function render({
     readOnly,
     description,
 }: {
-    onSubmit?: () => unknown;
+    onSubmit?: DialogAction;
     canSubmit?: boolean;
     footerStart?: ReactNode;
     readOnly?: boolean;
@@ -139,7 +140,7 @@ test('a submit that fails keeps the dialog open for another try', async () => {
 });
 
 test('a submit that returns or resolves false keeps the dialog open, and the next one closes it', async () => {
-    let result: unknown = false;
+    let result: ReturnType<DialogAction> = false;
     const onSubmit = mock(() => result);
     await render({ onSubmit });
     await enter();
@@ -147,7 +148,7 @@ test('a submit that returns or resolves false keeps the dialog open, and the nex
     result = Promise.resolve(false);
     await enter();
     expect(onOpenChange).not.toHaveBeenCalled();
-    result = Promise.resolve('created');
+    result = Promise.resolve();
     await enter();
     expect(onSubmit).toHaveBeenCalledTimes(3);
     expect(onOpenChange.mock.calls).toEqual([[false]]);

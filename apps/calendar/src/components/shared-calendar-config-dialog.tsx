@@ -4,15 +4,16 @@
 import { useAuth } from '@workspace/lib/auth';
 import { useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar } from '@workspace/lib/calendar';
 import { parseOwnerId } from '@workspace/lib/types';
-import type { SharedCalendar } from '@workspace/lib/types/calendar';
+import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calendar';
 import { DeleteDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPicker } from '@workspace/ui/components/media';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { useState } from 'react';
+
+const PERMISSION_LABELS: Partial<Record<CalendarShare['permission'], string>> = { write: 'Editor', read: 'Viewer' };
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
@@ -22,7 +23,8 @@ type SharedCalendarConfigDialogProps = {
 
 export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar }: SharedCalendarConfigDialogProps) {
     const { user } = useAuth();
-    const deleteSharedCalendar = useDeleteSharedCalendar(user?.id || '');
+    const ownerId = user?.id ?? '';
+    const deleteSharedCalendar = useDeleteSharedCalendar(ownerId);
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
     if (!sharedCalendar) return null;
@@ -37,6 +39,7 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
                 size="sm"
             >
                 <SharedCalendarConfigForm
+                    ownerId={ownerId}
                     sharedCalendar={sharedCalendar}
                     onRemove={() => setShowDeleteConfirmation(true)}
                 />
@@ -60,17 +63,17 @@ export function SharedCalendarConfigDialog({ open, onOpenChange, sharedCalendar 
 
 // Mounted with the dialog, so each opening starts from the color the user sees the calendar in.
 function SharedCalendarConfigForm({
+    ownerId,
     sharedCalendar,
     onRemove,
 }: {
+    ownerId: string;
     sharedCalendar: SharedCalendar;
     onRemove: () => void;
 }) {
-    const { user } = useAuth();
-    const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [color, setColor] = useState(sharedCalendar.color || sharedCalendar.calendarColor);
 
-    const updateSharedCalendar = useUpdateSharedCalendar(user?.id || '');
+    const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
     const { data: accessData } = useCalendarAccess(sharedCalendar.ownerUserId, sharedCalendar.calendarId);
 
     const isTeamCalendar = parseOwnerId(sharedCalendar.ownerUserId).type === 'team';
@@ -78,20 +81,15 @@ function SharedCalendarConfigForm({
     return (
         <FormDialogForm
             submitLabel="Save"
-            onSubmit={() =>
-                updateSharedCalendar.mutateAsync({
+            onSubmit={async () => {
+                await updateSharedCalendar.mutateAsync({
                     id: sharedCalendar.id,
                     color: color !== sharedCalendar.calendarColor ? color : null,
-                })
-            }
+                });
+            }}
             footerStart={
                 !isTeamCalendar && (
-                    <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={onRemove}
-                        disabled={updateSharedCalendar.isPending}
-                    >
+                    <Button type="button" variant="destructive" onClick={onRemove}>
                         Remove
                     </Button>
                 )
@@ -100,26 +98,7 @@ function SharedCalendarConfigForm({
             <div className="space-y-4">
                 <div className="flex items-center gap-3">
                     <Label>Color</Label>
-                    <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
-                        <PopoverTrigger asChild>
-                            <button
-                                type="button"
-                                className="h-9 w-9 rounded-md border border-input shrink-0"
-                                style={{ backgroundColor: color }}
-                                disabled={updateSharedCalendar.isPending}
-                            />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-3" align="start">
-                            <ColorPicker
-                                value={color}
-                                onChange={(c) => {
-                                    setColor(c);
-                                    setColorPickerOpen(false);
-                                }}
-                                showReset={false}
-                            />
-                        </PopoverContent>
-                    </Popover>
+                    <ColorPickerSwatch value={color} onChange={setColor} />
                 </div>
 
                 {!isTeamCalendar && (
@@ -130,17 +109,11 @@ function SharedCalendarConfigForm({
                             <Label className="text-sm font-medium">People with access</Label>
                             <div className="mt-2 space-y-3">
                                 <UserItem userId={sharedCalendar.ownerUserId} label="Owner" />
-                                {accessData?.shares?.map((share, i) => (
+                                {accessData?.shares?.map((share) => (
                                     <UserItem
-                                        key={i}
+                                        key={share.targetId}
                                         email={share.targetId}
-                                        label={
-                                            share.permission === 'write'
-                                                ? 'Editor'
-                                                : share.permission === 'read'
-                                                  ? 'Viewer'
-                                                  : share.permission
-                                        }
+                                        label={PERMISSION_LABELS[share.permission] ?? share.permission}
                                     />
                                 ))}
                             </div>
