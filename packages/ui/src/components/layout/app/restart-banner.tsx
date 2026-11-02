@@ -1,9 +1,8 @@
 // The strip a signed-in app shows when the server announced a restart, such as before an update, so its user can
 // save in time. It reads like the broadcast `shutdown` sends to every terminal: the time the message came, what is
 // about to happen and when, then the operator's own line as plain text. AppShell renders it at the foot of every
-// page. It shows nothing while the tab holds no notice, which is always so on a page without the event stream.
-// The strip is a status region, so a screen reader speaks it when it appears or its wording changes. The ticking
-// time is hidden from it, or it would be read out again every second in the last minute.
+// page, and it shows nothing while the tab holds no notice. A screen reader speaks the strip, a status region, with
+// the clock time of the restart instead of the ticking countdown, which it would read out again every second.
 
 import { dateFormatter, formatDayMonth } from '@workspace/lib/date';
 import { useRestartNotice } from '@workspace/lib/sse';
@@ -12,6 +11,16 @@ import { useEffect, useState } from 'react';
 
 const MINUTE_MS = 60_000;
 const SECOND_MS = 1000;
+const UPDATE_WORDS = {
+    soon: 'Eigen restarts for an update',
+    due: 'Eigen is about to restart for an update',
+    warning: "Send or save what you're writing.",
+};
+const ROLLBACK_WORDS = {
+    soon: 'Eigen goes back to an earlier version',
+    due: 'Eigen is about to go back to an earlier version',
+    warning: "What you change from now on won't be in it.",
+};
 
 export function RestartBanner() {
     const { notice, streamDown } = useRestartNotice();
@@ -47,8 +56,12 @@ function RestartBroadcast({ notice, streamDown }: { notice: HeldRestartNotice; s
 function broadcastTime(heardAt: number): string {
     const date = new Date(heardAt);
     const weekday = dateFormatter({ weekday: 'short' }).format(date);
-    const time = dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
-    return `${weekday} ${formatDayMonth(date)}, ${time}`;
+    return `${weekday} ${formatDayMonth(date)}, ${clockTime(date)}`;
+}
+
+// "14:22", in the user's own time zone.
+function clockTime(date: Date): string {
+    return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
 }
 
 function RestartText({
@@ -64,7 +77,12 @@ function RestartText({
     return (
         <p>
             {lead}
-            {when && <span aria-hidden="true"> {when}</span>}
+            {when && (
+                <>
+                    <span aria-hidden="true"> {when}</span>
+                    <span className="sr-only"> at {clockTime(new Date(notice.deadline))}</span>
+                </>
+            )}
             {tail}
         </p>
     );
@@ -72,29 +90,16 @@ function RestartText({
 
 // The sentence in three parts, so the ticking `when` can sit apart from the words that only change with the state.
 function restartParts({ reason }: HeldRestartNotice, msLeft: number, streamDown: boolean) {
+    const { soon, due, warning } = reason === 'update' ? UPDATE_WORDS : ROLLBACK_WORDS;
     if (msLeft > 0) {
         const seconds = Math.ceil(msLeft / SECOND_MS);
         const when =
             msLeft > MINUTE_MS
                 ? `in ${Math.ceil(msLeft / MINUTE_MS)} minutes`
                 : `in ${seconds} ${seconds === 1 ? 'second' : 'seconds'}`;
-        return reason === 'update'
-            ? {
-                  lead: 'Eigen restarts for an update',
-                  when,
-                  tail: ". Send or save what you're writing. This page reloads by itself afterwards.",
-              }
-            : {
-                  lead: 'Eigen goes back to an earlier version',
-                  when,
-                  tail: ". What you change from now on won't be in it. This page reloads by itself afterwards.",
-              };
+        return { lead: soon, when, tail: `. ${warning} This page reloads by itself afterwards.` };
     }
     // A stream that dropped once the time had come is the restart itself, not a crash.
-    const text = streamDown
-        ? "Eigen is updating. This page reloads when it's back."
-        : reason === 'update'
-          ? "Eigen is about to restart for an update. Send or save what you're writing."
-          : "Eigen is about to go back to an earlier version. What you change from now on won't be in it.";
+    const text = streamDown ? "Eigen is updating. This page reloads when it's back." : `${due}. ${warning}`;
     return { lead: text, when: null, tail: '' };
 }

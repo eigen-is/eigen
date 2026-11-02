@@ -30,6 +30,14 @@ async function show(next: RestartNoticeState): Promise<string> {
     return container.textContent ?? '';
 }
 
+// What a screen reader announces: the status region without what it hides.
+function spoken(): string {
+    const region = container.querySelector('[role="status"]')?.cloneNode(true);
+    if (!(region instanceof Element)) return '';
+    region.querySelectorAll('[aria-hidden="true"]').forEach((hidden) => void hidden.remove());
+    return region.textContent ?? '';
+}
+
 const update = (msLeft: number, message: string | null = null): RestartNoticeState['notice'] => ({
     reason: 'update',
     message,
@@ -55,7 +63,7 @@ test('an update ten minutes away reads as a broadcast with the time it came', as
     const text = await show({ notice: update(600_000), streamDown: false });
     expect(text).toBe(
         'Broadcast message from Eigen (Mon 2 Nov, 14:22):' +
-            "Eigen restarts for an update in 10 minutes. Send or save what you're writing. " +
+            "Eigen restarts for an update in 10 minutes at 14:32. Send or save what you're writing. " +
             'This page reloads by itself afterwards.',
     );
 });
@@ -66,7 +74,7 @@ test('in the last minute a rollback counts in seconds', async () => {
         streamDown: false,
     });
     expect(text).toContain(
-        "Eigen goes back to an earlier version in 45 seconds. What you change from now on won't be in it. " +
+        "Eigen goes back to an earlier version in 45 seconds at 14:22. What you change from now on won't be in it. " +
             'This page reloads by itself afterwards.',
     );
 });
@@ -105,18 +113,19 @@ test('the countdown moves on by the minute, then by the second', async () => {
     await tick(15_000);
     expect(container.textContent).toContain('in 45 seconds');
     await tick(44_000);
-    expect(container.textContent).toContain('in 1 second.');
+    expect(container.textContent).toContain('in 1 second at');
     await tick(1000);
     expect(container.textContent).toContain('Eigen is about to restart for an update.');
 });
 
-test('the banner is a status region whose ticking time is hidden from the announcement', async () => {
-    await show({ notice: update(600_000), streamDown: false });
-    const region = container.querySelector('[role="status"]');
-    expect(region).not.toBeNull();
-    const spoken = region?.cloneNode(true) as HTMLElement;
-    spoken.querySelectorAll('[aria-hidden="true"]').forEach((hidden) => void hidden.remove());
-    expect(region?.textContent).toContain('in 10 minutes');
-    expect(spoken.textContent).not.toContain('minutes');
-    expect(spoken.textContent).toContain('Eigen restarts for an update');
+test('the banner is a status region that announces the clock time of the restart, not the ticking time', async () => {
+    expect(await show({ notice: update(600_000), streamDown: false })).toContain('in 10 minutes');
+    expect(container.querySelector('[role="status"]')).not.toBeNull();
+    expect(container.querySelector('.sr-only')?.textContent).toBe(' at 14:32');
+    expect(spoken()).toContain('Eigen restarts for an update at 14:32. Send or save');
+    expect(spoken()).not.toContain('minutes');
+    // The announced words stay the same while the countdown moves on.
+    await act(async () => void jest.advanceTimersByTime(60_000));
+    expect(container.textContent).toContain('in 9 minutes');
+    expect(spoken()).toContain('Eigen restarts for an update at 14:32. Send or save');
 });
