@@ -42,6 +42,21 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
     const canUndo = refs.globalCache.undoList.length > 0;
     const canRedo = refs.globalCache.redoList.length > 0;
 
+    // Deletes the row or the column of the selection's focused cell.
+    const deleteFocused = (type: 'row' | 'column') => {
+        const { selections, currentSheetId } = getContext();
+        const index = type === 'row' ? selections?.[0]?.row_focus : selections?.[0]?.column_focus;
+        if (index == null) return;
+        const deleteRowColOp = { type, start: index, end: index, id: currentSheetId };
+        setContext(
+            (draftCtx) => {
+                const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
+                if (error) showAlert(error, 'ok');
+            },
+            { deleteRowColOp },
+        );
+    };
+
     return (
         <>
             {context.allowEdit && (
@@ -56,22 +71,20 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                     </DropdownMenuItem>
 
                     <DropdownMenuSeparator />
-                </>
-            )}
 
-            {context.allowEdit && (
-                <DropdownMenuItem
-                    onClick={() => {
-                        if (context.activeObject) return copyActiveObject(true);
-                        setContext((draftCtx) => {
-                            handleCut(draftCtx);
-                            flushPendingCopy();
-                        });
-                    }}
-                >
-                    Cut
-                    <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.cut)}</DropdownMenuShortcut>
-                </DropdownMenuItem>
+                    <DropdownMenuItem
+                        onClick={() => {
+                            if (context.activeObject) return copyActiveObject(true);
+                            setContext((draftCtx) => {
+                                handleCut(draftCtx);
+                                flushPendingCopy();
+                            });
+                        }}
+                    >
+                        Cut
+                        <DropdownMenuShortcut>{formatForDisplay(SHEET_HOTKEYS.cut)}</DropdownMenuShortcut>
+                    </DropdownMenuItem>
+                </>
             )}
             <DropdownMenuItem
                 onClick={() => {
@@ -123,50 +136,8 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                             >
                                 Clear contents
                             </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    const { selections, currentSheetId } = getContext();
-                                    const row = selections?.[0]?.row_focus;
-                                    if (row == null) return;
-                                    const deleteRowColOp = {
-                                        type: 'row' as const,
-                                        start: row,
-                                        end: row,
-                                        id: currentSheetId,
-                                    };
-                                    setContext(
-                                        (draftCtx) => {
-                                            const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
-                                            if (error) showAlert(error, 'ok');
-                                        },
-                                        { deleteRowColOp },
-                                    );
-                                }}
-                            >
-                                Row
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                                onClick={() => {
-                                    const { selections, currentSheetId } = getContext();
-                                    const col = selections?.[0]?.column_focus;
-                                    if (col == null) return;
-                                    const deleteRowColOp = {
-                                        type: 'column' as const,
-                                        start: col,
-                                        end: col,
-                                        id: currentSheetId,
-                                    };
-                                    setContext(
-                                        (draftCtx) => {
-                                            const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
-                                            if (error) showAlert(error, 'ok');
-                                        },
-                                        { deleteRowColOp },
-                                    );
-                                }}
-                            >
-                                Column
-                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => deleteFocused('row')}>Row</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => deleteFocused('column')}>Column</DropdownMenuItem>
                         </DropdownMenuSubContent>
                     </DropdownMenuSub>
                 </>

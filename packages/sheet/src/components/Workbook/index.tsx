@@ -417,7 +417,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 // bubbles keydown through the React tree. The grid only owns keys from its
                 // own DOM subtree — without this, menu roving moves the selection and the
                 // handler's tail steals focus out of the open menu.
-                if (!e.currentTarget.contains(e.target as Node)) return;
+                if (!(e.target instanceof Node && e.currentTarget.contains(e.target))) return;
                 const { nativeEvent } = e;
                 // Undo and redo run ahead of the grid's handler, because a write must not start another write
                 // inside its recipe, and handleUndo and handleRedo are writes. An open cell editor leaves them to

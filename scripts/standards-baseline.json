@@ -55,7 +55,7 @@
     "packages/sheet/src/components/SheetOverlay/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/OverlayVisuals.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/reference-cycle.ts": 2,
-    "packages/sheet/src/components/Workbook/index.tsx": 2,
+    "packages/sheet/src/components/Workbook/index.tsx": 1,
     "packages/sheet/src/engine/parser/evaluate-by-operator/operator/formula-function.ts": 1,
     "packages/sheet/src/state/api/cell.ts": 5,
     "packages/sheet/src/state/api/range.ts": 2,
