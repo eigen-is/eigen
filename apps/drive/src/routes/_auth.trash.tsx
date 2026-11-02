@@ -13,7 +13,6 @@ import {
     usePermanentlyDelete,
     useRestorePath,
 } from '@workspace/lib/drive';
-import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { Column, ColumnLayout, DeleteDialog, EmptyState, LoadingState, ToolbarTitle } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
@@ -21,7 +20,7 @@ import { MenuSections } from '@workspace/ui/components/context-menu';
 import { DriveList, DriveViewControls } from '@workspace/ui/components/drive/drive-list';
 import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { RotateCcw, Trash2 } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/_auth/trash')({
     component: TrashRoute,
@@ -72,49 +71,32 @@ function TrashRoute() {
         return [...trashedItems].sort(comparator);
     }, [trashedItems, sortKey, sortDir]);
 
-    const restore = useCallback(
-        (items: DrivePath[]) => {
-            for (const item of items) restorePath.mutate(item.id);
-        },
-        [restorePath],
-    );
+    const restore = (items: DrivePath[]) => {
+        for (const item of items) restorePath.mutate(item.id);
+    };
 
-    const contextMenuItems = useCallback(
-        (items: DrivePath[], close: () => void) => {
-            const suffix = items.length > 1 ? ` ${items.length} items` : '';
-            return (
-                <MenuSections
-                    organize={
-                        <DropdownMenuItem
-                            onClick={() => {
-                                restore(items);
-                                close();
-                            }}
-                        >
-                            <RotateCcw className="h-4 w-4" /> Restore{suffix}
-                        </DropdownMenuItem>
-                    }
-                    destructive={
-                        <DropdownMenuItem
-                            variant="destructive"
-                            onClick={() => {
-                                setDeleteItems(items);
-                                close();
-                            }}
-                        >
-                            <Trash2 className="h-4 w-4" /> Delete{suffix} permanently
-                        </DropdownMenuItem>
-                    }
-                />
-            );
-        },
-        [restore],
-    );
-
-    const paletteActions = (items: DrivePath[]): PaletteSelectionAction[] => [
+    // What a trashed item offers, drawn by its menu and handed to the command palette alike.
+    const trashActions = (items: DrivePath[]) => [
         { action: RESTORE, run: () => restore(items) },
         { action: DELETE_PERMANENTLY, run: () => setDeleteItems(items) },
     ];
+
+    const contextMenuItems = (items: DrivePath[], close: () => void) => {
+        const [restoreRow, deleteRow] = trashActions(items).map(({ action, run }) => (
+            <DropdownMenuItem
+                key={action.id}
+                variant={action === DELETE_PERMANENTLY ? 'destructive' : 'default'}
+                onClick={() => {
+                    run();
+                    close();
+                }}
+            >
+                <action.icon className="h-4 w-4" />
+                {items.length > 1 ? action.pluralLabel.replace('{n}', String(items.length)) : action.label}
+            </DropdownMenuItem>
+        ));
+        return <MenuSections organize={restoreRow} destructive={deleteRow} />;
+    };
 
     if (isLoading) return <LoadingState />;
 
@@ -138,7 +120,7 @@ function TrashRoute() {
                         dateLabel="Trashed"
                         getItemDate={(item) => item.trashedAt}
                         contextMenuItems={contextMenuItems}
-                        paletteActions={paletteActions}
+                        paletteActions={trashActions}
                         emptyState={<EmptyState message="Trash is empty" icon={<Trash2 className="h-10 w-10" />} />}
                     />
                 </Column>
