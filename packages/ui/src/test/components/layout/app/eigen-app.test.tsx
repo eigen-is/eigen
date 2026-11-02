@@ -84,7 +84,7 @@ test('a preview opened over a find-bar surface logs no hotkey conflict, and each
                 new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
             );
         });
-    const preview = () => document.querySelector('[data-preview-overlay]');
+    const preview = () => document.querySelector('[data-slot="file-preview"]');
 
     try {
         await act(async () => controls.openAttachment());

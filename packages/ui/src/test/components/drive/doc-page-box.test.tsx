@@ -54,9 +54,10 @@ const LETTER = {
     pageless: false,
 };
 
-function renderQuickLook() {
+// The preview portals itself to <body>, so what it draws is read from there, not from the render's container.
+async function renderQuickLook() {
     const subject = subjectFromPath(path);
-    return renderInDocument(
+    const { unmount } = await renderInDocument(
         createElement(
             PreviewContext.Provider,
             { value: preview },
@@ -69,6 +70,9 @@ function renderQuickLook() {
             }),
         ),
     );
+    const container = document.querySelector<HTMLElement>('[data-slot="file-preview"]');
+    if (!container) throw new Error('the preview did not open');
+    return { container, unmount };
 }
 
 // The dark prose rules skip descendants of .eigen-paper, so the paper must sit above the prose, not on it.

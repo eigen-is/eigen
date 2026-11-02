@@ -1,15 +1,12 @@
 // The shared modal dialog, built on Radix: the overlay, the content box with its corner X, and the header, title,
-// description and footer parts that dialogs across the apps put inside it. A dialog under an open file preview, such as
-// the one the preview was opened from, leaves Escape and a click outside to the preview.
+// description and footer parts that dialogs across the apps put inside it. Radix stacks the open layers, so Escape
+// and a click outside close only the top one.
 
 import { Button } from '@workspace/ui/components/button';
-import { isLayerAbove } from '@workspace/ui/hooks/use-dialog-open';
 import { cn } from '@workspace/ui/lib/utils';
 import { XIcon } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import { useComposedRefs } from 'radix-ui/internal';
 import type * as React from 'react';
-import { useRef } from 'react';
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
     return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -46,35 +43,21 @@ const dialogSizeMap: Record<DialogSize, string> = {
 // to leave the key alone. cmdk's input says expanded always, because its list is the dialog.
 const OWNS_ESCAPE = '[role="combobox"][aria-expanded="true"]:not([cmdk-input]), [data-owns-escape]';
 
-// The file preview is no Radix layer, so Radix can't tell a dialog under it from one over it. Every layer portals to
-// <body> in the order it opened, so a dialog earlier in the document than the preview is under it, such as the
-// Stickies card the preview was opened from.
-function isUnderPreview(content: Element | null): boolean {
-    const preview = document.querySelector('[data-preview-overlay]');
-    return !!preview && !!content && !isLayerAbove(preview, content);
-}
-
 function DialogContent({
     className,
     children,
     showCloseButton = true,
     size,
-    onPointerDownOutside,
     onEscapeKeyDown,
-    ref,
     ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
     showCloseButton?: boolean;
     size?: DialogSize;
 }) {
-    const contentRef = useRef<HTMLDivElement>(null);
-    const composedRef = useComposedRefs(ref, contentRef);
-
     return (
         <DialogPortal>
             <DialogOverlay />
             <DialogPrimitive.Content
-                ref={composedRef}
                 data-slot="dialog-content"
                 className={cn(
                     // A form taller than the screen scrolls inside the dialog, so its footer stays on screen. A
@@ -85,19 +68,8 @@ function DialogContent({
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
-                // A dialog under an open preview stays open on a click outside it: Radix checks each layer on its
-                // own, so a click in a picker over the preview counts as outside the dialog under the preview. The
-                // preview closes itself when its own overlay is clicked. A dialog above the preview closes alone,
-                // as anywhere else, so a click outside New folder over the Save to Drive picker leaves the picker.
-                onPointerDownOutside={(e) => {
-                    if (isUnderPreview(contentRef.current)) e.preventDefault();
-                    onPointerDownOutside?.(e);
-                }}
-                // Escape over an open preview is the preview's to close, not the dialog's under it. Escape in a
-                // field that closes something of its own is that field's.
                 onEscapeKeyDown={(e) => {
-                    const fieldOwnsEscape = e.target instanceof Element && e.target.matches(OWNS_ESCAPE);
-                    if (isUnderPreview(contentRef.current) || fieldOwnsEscape) e.preventDefault();
+                    if (e.target instanceof Element && e.target.matches(OWNS_ESCAPE)) e.preventDefault();
                     onEscapeKeyDown?.(e);
                 }}
                 {...props}

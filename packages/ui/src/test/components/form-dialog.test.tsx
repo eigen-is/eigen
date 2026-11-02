@@ -15,7 +15,6 @@ const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
-const { isLayerAbove } = await import('../../hooks/use-dialog-open');
 
 let unmount = async () => {};
 const realGetComputedStyle = globalThis.getComputedStyle;
@@ -79,7 +78,7 @@ const click = (label: string) =>
         target.click();
     });
 
-// Cancelable, as a browser's is, so a dialog that leaves the Escape to an open preview can refuse it.
+// Cancelable, as a browser's is, so a dialog that waits for a running submit can refuse it.
 const pressEscape = () =>
     act(async () => {
         document.activeElement?.dispatchEvent(
@@ -247,31 +246,6 @@ test('a description shows under the title and a screen reader reads it, and with
     await unmount();
     await render();
     expect(dialog()?.hasAttribute('aria-describedby')).toBe(false);
-});
-
-// The preview is a layer on <body> like the dialog. A dialog opened after it is later in the document, so it paints
-// above at the same z-index and owns its Escape; one opened before it, such as a Stickies card, leaves Escape to it.
-test('over an open preview the dialog sits later in the document, at no z above 50, and Escape closes it', async () => {
-    onOpenChange.mockClear();
-    const preview = document.createElement('div');
-    preview.setAttribute('data-preview-overlay', '');
-    document.body.append(preview);
-    await render();
-    const content = dialog();
-    if (!content) throw new Error('no dialog');
-    expect(isLayerAbove(preview, content)).toBe(true);
-    expect(content.className).not.toMatch(/\bz-\[/);
-    await pressEscape();
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
-    await unmount();
-    preview.remove();
-
-    // The same dialog opened before the preview is under it, and the Escape is the preview's.
-    await render();
-    document.body.append(preview);
-    await pressEscape();
-    expect(onOpenChange).not.toHaveBeenCalled();
-    preview.remove();
 });
 
 test('a dialog opened from inside another form submits only itself', async () => {

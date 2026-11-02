@@ -26,7 +26,6 @@ afterAll(() => fetchSpy.mockRestore());
 const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { DriveItemNameDialog } = await import('../../../components/drive/drive-item-name-dialog');
-const { isLayerAbove } = await import('../../../hooks/use-dialog-open');
 
 // A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
 const toasted = (message: string) => {
@@ -79,15 +78,6 @@ async function openNewFolder() {
     ({ unmount } = await renderInDocument(createElement(Harness)));
 }
 
-// A file preview is open, as when Save to Drive's picker opens New folder over it. The overlay is on <body> first.
-async function openNewFolderOverPreview() {
-    const preview = document.createElement('div');
-    preview.setAttribute('data-preview-overlay', '');
-    document.body.append(preview);
-    ({ unmount } = await renderInDocument(createElement(Harness)));
-    return preview;
-}
-
 const dialog = () => document.querySelector('[role="dialog"]');
 const button = (label: string) =>
     [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
@@ -128,19 +118,6 @@ test('New folder shows a labelled name field, Cancel and Create', async () => {
     expect(dialog()?.textContent).toContain('Location');
     expect(button('Cancel')).toBeDefined();
     expect(button('Create')).toBeDefined();
-});
-
-test('over an open file preview the dialog sits after it in the document, and Escape closes the dialog', async () => {
-    const preview = await openNewFolderOverPreview();
-    const content = dialog();
-    if (!content) throw new Error('no dialog');
-    expect(isLayerAbove(preview, content)).toBe(true);
-    expect(content.className).not.toMatch(/\bz-\[/);
-    await act(async () => {
-        nameField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-    });
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
-    preview.remove();
 });
 
 test('Create waits for a name with more than spaces', async () => {
