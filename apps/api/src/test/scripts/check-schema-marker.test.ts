@@ -5,7 +5,7 @@ import {
     containerDbVersionsAt,
     previousRelease,
     shallowCloneError,
-} from '../../scripts/check-container-db-marker';
+} from '../../scripts/check-schema-marker';
 
 const CHANGELOG = `# Changelog
 

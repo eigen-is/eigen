@@ -156,7 +156,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun apps/api/src/scripts/check-container-db-marker.ts "$(jq -r .version package.json)" --main
+      - run: bun apps/api/src/scripts/check-schema-marker.ts "$(jq -r .version package.json)" --main
 
   # The launcher under dash, BusyBox and the runner's sh, with a stub docker: no stack, no Bun.
   launcher:

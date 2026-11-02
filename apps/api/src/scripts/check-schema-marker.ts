@@ -3,7 +3,7 @@
 // lets a rollback bring them back. publish.yml runs it on a version tag, and with --main on a push to main, where the
 // mark goes under [Unreleased] since the main channel reads it there.
 //
-// Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version> [--main]
+// Usage: bun apps/api/src/scripts/check-schema-marker.ts <version> [--main]
 //
 // The previous release's versions come from its tag through git grep and git show: a worktree of the tag would resolve
 // @workspace/* through this checkout's node_modules.
@@ -93,7 +93,7 @@ if (import.meta.main) {
     const [version, channel, ...rest] = Bun.argv.slice(2);
     const onMain = channel === '--main';
     if (!version || !VERSION_PATTERN.test(version) || (channel !== undefined && !onMain) || rest.length > 0) {
-        console.error('Usage: bun apps/api/src/scripts/check-container-db-marker.ts <version> [--main]');
+        console.error('Usage: bun apps/api/src/scripts/check-schema-marker.ts <version> [--main]');
         process.exit(1);
     }
     const shallow = shallowCloneError();

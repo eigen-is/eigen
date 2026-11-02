@@ -87,7 +87,7 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
-      - run: bun apps/api/src/scripts/check-container-db-marker.ts "$VERSION" ${CHANNEL:+--main}
+      - run: bun apps/api/src/scripts/check-schema-marker.ts "$VERSION" ${CHANNEL:+--main}
         env:
           VERSION: ${{ steps.meta.outputs.version }}
           CHANNEL: ${{ steps.meta.outputs.channel }}
