@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import type { SingleRange } from '@workspace/lib/sheets';
 import type { Context } from '../../../index';
+import type { ConditionRuleType } from '../../../state/modules/condition-format';
 import { conditionRuleError, getComputeMap, setConditionRules } from '../../../state/modules/condition-format';
 import type { ConditionRulesProps } from '../../../state/types';
 import { contextFactory, workbookContextFactory } from '../factories/context';
@@ -211,7 +212,7 @@ describe('state/condition-format — formula rules resolve relative refs per cel
 });
 
 // A rule the dialog hands to setConditionRules, with a value typed for its type.
-function ruleDraft(rulesType: string, typed: Partial<ConditionRulesProps> = {}): ConditionRulesProps {
+function ruleDraft(rulesType: ConditionRuleType, typed: Partial<ConditionRulesProps> = {}): ConditionRulesProps {
     return {
         rulesType,
         rulesValue: '',
@@ -257,7 +258,7 @@ const NUMBER_OR_CELL = 'Enter a number, or a cell such as =A1';
 
 describe('state/condition-format — setConditionRules', () => {
     it('stores a value typed with = as the formula Excel writes, so the rule reads the cell live', () => {
-        const formulas: [string, Partial<ConditionRulesProps>, string][] = [
+        const formulas: [ConditionRuleType, Partial<ConditionRulesProps>, string][] = [
             ['greaterThan', { rulesValue: '=A1' }, '=B2>A1'],
             ['lessThan', { rulesValue: '=$A$1' }, '=B2<$A$1'],
             ['equal', { rulesValue: '=A1' }, '=B2=A1'],
@@ -299,7 +300,7 @@ describe('state/condition-format — setConditionRules', () => {
 
     it('takes text that looks like a cell, such as FY2024, as text', () => {
         for (const rulesValue of ['FY2024', 'Q1', 'ID1', 'A1']) {
-            for (const rulesType of ['equal', 'textContains']) {
+            for (const rulesType of ['equal', 'textContains'] as const) {
                 const ctx = ctxForRule();
                 setConditionRules(ctx, ruleDraft(rulesType, { rulesValue }));
                 expect(savedRules(ctx)).toMatchObject([{ conditionName: rulesType, conditionValue: [rulesValue] }]);
@@ -319,19 +320,19 @@ describe('state/condition-format — setConditionRules', () => {
     });
 
     it('refuses text where a number rule needs a number', () => {
-        const typed: Partial<ConditionRulesProps>[] = [
-            { rulesType: 'greaterThan', rulesValue: 'abc' },
-            { rulesType: 'lessThan', rulesValue: ' ' },
-            { rulesType: 'between', betweenValue: { value1: 'abc', value2: '3' } },
-            { rulesType: 'between', betweenValue: { value1: '1', value2: 'abc' } },
+        const typed: [ConditionRuleType, Partial<ConditionRulesProps>][] = [
+            ['greaterThan', { rulesValue: 'abc' }],
+            ['lessThan', { rulesValue: ' ' }],
+            ['between', { betweenValue: { value1: 'abc', value2: '3' } }],
+            ['between', { betweenValue: { value1: '1', value2: 'abc' } }],
         ];
-        for (const draft of typed) {
-            expect(refusal(ruleDraft('', draft))).toBe(NUMBER_OR_CELL);
+        for (const [rulesType, draft] of typed) {
+            expect(refusal(ruleDraft(rulesType, draft))).toBe(NUMBER_OR_CELL);
         }
     });
 
     it('takes text as the value of Equal to and Text contains, and refuses only an empty one', () => {
-        for (const rulesType of ['equal', 'textContains']) {
+        for (const rulesType of ['equal', 'textContains'] as const) {
             const ctx = ctxForRule();
             setConditionRules(ctx, ruleDraft(rulesType, { rulesValue: 'abc' }));
             expect(savedValues(ctx)).toEqual([['abc']]);

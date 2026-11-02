@@ -23,27 +23,6 @@ import { createContextResolver } from './formula-cache';
 import { checkProtectionFormatCells } from './protection';
 import { isRealNum } from './validation';
 
-const KNOWN_CONDITION_NAMES = [
-    'greaterThan',
-    'greaterThanOrEqual',
-    'lessThan',
-    'lessThanOrEqual',
-    'equal',
-    'notEqual',
-    'textContains',
-    'between',
-    'notBetween',
-    'occurrenceDate',
-    'duplicateValue',
-    'top10',
-    'top10_percent',
-    'last10',
-    'last10_percent',
-    'aboveAverage',
-    'belowAverage',
-    'formula',
-] as const satisfies readonly ConditionalFormatConditionName[];
-
 // The rules the conditional formatting dialog makes. The others, such as a formula rule, come from a file or from a
 // value that reads a cell.
 export type ConditionRuleType = Exclude<
@@ -57,14 +36,13 @@ const VALUE_OR_CELL = 'Enter a value, or a cell such as =A1';
 
 // The formulas Excel writes for a rule whose value reads a cell, with the rule's top-left cell and its typed values.
 // Like the xlsx import, the editor stores such a rule as a formula rule, so it reads the cell each time it paints.
-const REFERENCE_FORMULAS: Partial<Record<ConditionalFormatConditionName, (cell: string, values: string[]) => string>> =
-    {
-        greaterThan: (cell, [value]) => `${cell}>${value}`,
-        lessThan: (cell, [value]) => `${cell}<${value}`,
-        equal: (cell, [value]) => `${cell}=${value}`,
-        textContains: (cell, [value]) => `NOT(ISERROR(SEARCH(${value},${cell})))`,
-        between: (cell, [lower, upper]) => `AND(${cell}>=${lower},${cell}<=${upper})`,
-    };
+const REFERENCE_FORMULAS: Partial<Record<ConditionRuleType, (cell: string, values: string[]) => string>> = {
+    greaterThan: (cell, [value]) => `${cell}>${value}`,
+    lessThan: (cell, [value]) => `${cell}<${value}`,
+    equal: (cell, [value]) => `${cell}=${value}`,
+    textContains: (cell, [value]) => `NOT(ISERROR(SEARCH(${value},${cell})))`,
+    between: (cell, [lower, upper]) => `AND(${cell}>=${lower},${cell}<=${upper})`,
+};
 
 // Why the dialog's rule can't be saved, or undefined when it can. The dialog shows the reason under its fields and stays
 // open, so the check runs before setConditionRules.
@@ -76,8 +54,6 @@ export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): st
 // Adds the dialog's rule over the selection, unless conditionRuleError refuses it or the sheet is protected.
 export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
     if (!checkProtectionFormatCells(ctx)) return;
-    // rulesType is a plain string, so a name the engine doesn't know would save a rule that never paints.
-    if (!isKnownConditionName(rules.rulesType)) return;
     const values = readRuleValues(ctx, rules);
     const cellrange = ctx.selections ?? [];
     const [anchor] = cellrange;
@@ -103,10 +79,6 @@ export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
     const ruleArr = ctx.sheets[index].conditionalFormatRules ?? [];
     ruleArr.push(rule);
     ctx.sheets[index].conditionalFormatRules = ruleArr;
-}
-
-function isKnownConditionName(s: string): s is ConditionalFormatConditionName {
-    return (KNOWN_CONDITION_NAMES as readonly string[]).includes(s);
 }
 
 // The rule's values as the dialog typed them, or the message that refuses them.

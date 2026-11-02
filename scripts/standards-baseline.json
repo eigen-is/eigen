@@ -51,7 +51,6 @@
     "packages/sheet/src/state/api/cell.ts": 5,
     "packages/sheet/src/state/api/range.ts": 2,
     "packages/sheet/src/state/modules/cell.ts": 2,
-    "packages/sheet/src/state/modules/condition-format.ts": 1,
     "packages/sheet/src/state/modules/cursor.ts": 2,
     "packages/sheet/src/state/modules/drop-cell.ts": 1,
     "packages/sheet/src/state/modules/formula-editor.ts": 2,
