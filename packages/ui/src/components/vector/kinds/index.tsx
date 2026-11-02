@@ -25,10 +25,10 @@ import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
 
 // Rows for a selection of elements that are all this kind. `onChange` applies one patch to every selected element, and
-// `onChangeEach` a patch computed per element, such as a label's measured width. The panel seals each into one undo
-// step. `scene` resolves an element the selection does not hold, such as an arrow's bound shape. `onReplace` swaps a
-// sole selected element for new ones and selects them in one undo step, as a chart's Convert to shapes does.
-// `slideWidth` is the deck's, for its pt; a drawing has none.
+// `onChangeEach` a patch computed per element, such as a font size one step up from each element's own. The panel seals
+// each into one undo step. `scene` resolves an element the selection does not hold, such as an arrow's bound shape.
+// `onReplace` swaps a sole selected element for new ones and selects them in one undo step, as a chart's Convert to
+// shapes does. `slideWidth` is the deck's, so a size can show in pt. A drawing has none.
 export type KindPanelSectionProps = {
     elements: VectorElement[];
     scene: Map<string, VectorElement>;
@@ -49,8 +49,8 @@ export type KindEditDialogProps = {
 type ElementKindUi = {
     icon: LucideIcon;
     label: string;
-    // Present exactly on the kinds a tool can create; an image arrives by upload, so it has none.
-    // Letters are Excalidraw's; `digit` is the same tool on the number row.
+    // Present exactly on the kinds a tool can create. An image arrives by upload, so it has none. The letters are
+    // Excalidraw's, and `digit` picks the same tool from the number row.
     shortcut?: { letter: LetterKey; digit: NumberKey };
     EditDialog?: ComponentType<KindEditDialogProps>;
     PanelSection?: ComponentType<KindPanelSectionProps>;

@@ -199,12 +199,12 @@ type CanvasEditorProps = {
     commentCards?: Record<string, CommentCard>;
     onAddComment?: (elementId: string) => void;
     // ⌘F: every match rings, and the one stepped to rings brighter and flashes. Both come from the host's
-    // useCanvasDocSearch; the canvas only paints them.
+    // useCanvasDocSearch, and the canvas only paints them.
     searchMatchedIds?: ReadonlySet<string>;
     searchActiveId?: string | null;
     // Pages through frames on a one-finger swipe, such as in a deck viewed on a phone.
     onSwipeFrame?: (delta: number) => void;
-    // Opens the host's image picker on the image key; the toolbar gets the same callback.
+    // Opens the host's image picker on the image key. The toolbar gets the same callback.
     onInsertImage?: () => void;
     // The host's rows on a right-click on empty canvas, below the canvas's own Paste, such as a deck's slide rows.
     backgroundMenu?: Omit<MenuSectionsProps, 'clipboard'>;
@@ -251,6 +251,7 @@ export function CanvasEditor({
         updateElement,
         updateElementUntracked,
         updateElements,
+        updateElementsUntracked,
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
@@ -313,7 +314,7 @@ export function CanvasEditor({
     // The snap guide lines, in scene coordinates, while a move or resize snaps. They clear when the gesture ends.
     const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
     const spaceHeld = useSpaceHeld();
-    // Pan mode: space held, or a view-only scene where every primary drag scrolls (one finger on a phone).
+    // Pan mode: space held, or a view-only scene, where every primary drag scrolls, such as one finger on a phone.
     const panMode = spaceHeld || !canEdit;
     const [panning, setPanning] = useState(false);
     // True while the idle pointer is over an element it can select, so the cursor shows `move` there, as in the other
@@ -334,7 +335,7 @@ export function CanvasEditor({
     // The first onTransform of a resize or rotate is the gesture's start, because ObjectTransform fires it at the
     // grip's pointerdown. The seal happens there, once per gesture.
     const transformStartedRef = useRef(false);
-    // Latest finishGesture closure, for the window-blur listener bound once below.
+    // The latest finishGesture, for the window blur listener that is bound once below.
     const finishRef = useRef<() => void>(() => {});
     // The latest touch reset, called from the blur and pointercancel safety net, so a two-finger gesture torn down half
     // way leaves no stale touch state.
@@ -605,7 +606,7 @@ export function CanvasEditor({
     // session, and the canvas only selects and opens.
     const openEditArrowLabel = (el: VectorArrowElement) => {
         const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
-        if (!ed) return false; // a degenerate arrow (< 2 points) has no label anchor
+        if (!ed) return false; // an arrow of fewer than two points has no place for a label
         setSelectedIds([el.id]);
         setEditing(ed);
         return true;
@@ -633,7 +634,7 @@ export function CanvasEditor({
         [frame],
     );
 
-    // Snapping during a resize, through ObjectTransform's snapBox; a move snaps in the gesture loop below. It finds the
+    // Snapping during a resize, through ObjectTransform's snapBox. A move snaps in the gesture loop below. It finds the
     // moved edge by comparing the box with the element's committed box, which holds still during a local resize. A
     // turned box doesn't snap, because its axis-aligned edges are not the ones the user sees. The matched guide lines
     // go to the overlay.
@@ -888,7 +889,7 @@ export function CanvasEditor({
         uploadFile: uploadFile.mutateAsync,
     });
 
-    // Publish the handle for the host (cleared on unmount so a stale canvas never places or pans).
+    // Publishes the handle for the host. It is cleared on unmount, so a stale canvas never places or pans.
     useEffect(() => {
         if (!canvasRef) return;
         canvasRef.current = {
@@ -1020,7 +1021,7 @@ export function CanvasEditor({
     // A comment is raised on the right-clicked element, not on the selection: a card anchors to one element.
     const menuItemId = objectContextMenu.item;
     const menuElement = menuItemId ? committedById.get(menuItemId) : undefined;
-    // Download image draws the selection, or for a viewer, who selects nothing, the element right-clicked; a single
+    // Download image draws the selection, or for a viewer, who selects nothing, the element right-clicked. A single
     // image downloads only its original file.
     const menuSelection = canEdit
         ? ordered.filter((el) => selectedIds.includes(el.id))
@@ -1146,7 +1147,7 @@ export function CanvasEditor({
             return;
         }
 
-        // A press on empty space starts a marquee. Shift adds to the selection; otherwise it clears first.
+        // A press on empty space starts a marquee. Shift adds to the selection, and a plain press clears it first.
         frozenRef.current = true;
         const additive = e.shiftKey;
         if (!additive) setSelectedIds([]);
@@ -1352,7 +1353,7 @@ export function CanvasEditor({
         finishGesture(e.altKey);
     };
 
-    // The O(elements) scan is memoized; the map over it is O(selection) and reads the live previews.
+    // The scan of every element is memoized. The map over the selection reads the live previews, so it runs each render.
     const selectedElements = useMemo(() => ordered.filter((el) => selectedIds.includes(el.id)), [ordered, selectedIds]);
     const selectedRender = selectedElements.map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
@@ -1389,11 +1390,7 @@ export function CanvasEditor({
     const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
     // An arrow label's width follows its text and font, so it is no step of the user's and stays untracked. The user's
     // own step is the text or font change that caused it, and ⌘Z on that change measures the label it brings back.
-    const fitLabelWidth = useCallback(
-        (id: string, labelWidth: number) => updateElementUntracked(id, { labelWidth }),
-        [updateElementUntracked],
-    );
-    useArrowLabelFit(elements, canEdit ? fitLabelWidth : undefined);
+    useArrowLabelFit(elements, canEdit ? updateElementsUntracked : undefined);
 
     // One scene node. Every render path goes through here, so `byId`, an elbow arrow's route context, is passed in one
     // place.
@@ -1403,7 +1400,7 @@ export function CanvasEditor({
         </ElementLayer>
     );
 
-    // Every element's layer, in z-order, plus the in-flight create and freehand/vertex drafts.
+    // Every element's layer, in z-order, and then the shape being created and the freehand or point-edit draft.
     const layers = (
         <>
             {ordered.map((el) => {
@@ -1412,8 +1409,8 @@ export function CanvasEditor({
                 // Only an arrow label opens the label editor, so the arrow under edit keeps its shaft and heads and
                 // hides just the label, which the textarea draws.
                 if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
-                // The layer still paints the box's backdrop; only its text body gives way to the
-                // in-place editor inside it, styled with the same CSS the renderer would have emitted.
+                // The layer still paints the box's backdrop. Only its text body gives way to the in-place editor
+                // inside it, which is styled with the same CSS the renderer would have written.
                 if (el.id === richTextEditId && isTextual(el)) {
                     return node(
                         renderEl(el),
@@ -1475,7 +1472,7 @@ export function CanvasEditor({
             onPaste={onPaste}
             // A press is the canvas's gesture. With text selected over the scene, Safari drags that selection from any
             // press, and Chrome from selectable text, and the page then gets no pointerup. A drag that starts in a text
-            // editor stays its own; a selection's drag starts at its text node.
+            // editor stays its own, and a selection's drag starts at its text node.
             onDragStart={(e) => {
                 const from = e.target instanceof Text ? e.target.parentElement : e.target;
                 const editor =
@@ -1691,7 +1688,7 @@ export function CanvasEditor({
                     Enter or double-click to finish · Esc to cancel
                 </HintPill>
             )}
-            {/* The zoom readout; a click resets to 100% about the viewport center. It sits bottom right, because the
+            {/* The zoom readout. A click resets it to 100% about the viewport center. It sits bottom right, because the
                 router devtools badge owns the bottom left in dev. A framed page always shows the whole page, so it has
                 no zoom and no readout. */}
             {viewport === 'infinite' && (

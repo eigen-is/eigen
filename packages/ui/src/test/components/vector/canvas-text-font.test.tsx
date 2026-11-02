@@ -10,8 +10,9 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 // The font set as a sliced face behaves: a load fetches the slices of its text, and a check without text tests a
-// space. Nothing loads until the test releases the network, which each test starts cold.
+// space. Nothing loads until the test releases the network, or fails it, which each test starts cold.
 let release = () => {};
+let fail = () => {};
 let network = Promise.resolve();
 const loaded = new Set<string>();
 const fontCalls: string[] = [];
@@ -35,13 +36,16 @@ Object.defineProperty(document, 'fonts', {
     },
 });
 // At 20 px a character measures `fallbackAdvance` px in the fallback, 10 unless a test says otherwise, and 20 px once its
-// slice has loaded. It scales with the font size. `measuredFonts` records the font of each measure.
+// slice has loaded. It scales with the font size. `measuredFonts` records the font of each measure, and
+// `measuredLines` its text.
 let fallbackAdvance = 10;
 const measuredFonts: string[] = [];
+const measuredLines: string[] = [];
 const measureContext = {
     font: '',
     measureText: (line: string) => {
         measuredFonts.push(measureContext.font);
+        measuredLines.push(line);
         const scale = Number(/(\d+)px/.exec(measureContext.font)?.[1] ?? 20) / 20;
         return { width: scale * [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : fallbackAdvance), 0) };
     },
@@ -100,8 +104,9 @@ beforeEach(() => {
     undoManager = new Y.UndoManager(doc.getMap('elements'));
     loaded.clear();
     fallbackAdvance = 10;
-    network = new Promise<void>((resolve) => {
+    network = new Promise<void>((resolve, reject) => {
         release = resolve;
+        fail = () => reject(new Error('offline'));
     });
     writeElementInDoc(
         doc,
@@ -159,6 +164,13 @@ async function loadSlices(): Promise<void> {
     });
 }
 
+async function failSlices(): Promise<void> {
+    await act(async () => {
+        fail();
+        await network.catch(() => {});
+    });
+}
+
 const labelText = () => {
     const arrow = readVectorFromDoc(doc).elements.find((el) => el.id === 'arrow');
     return arrow?.type === 'arrow' ? arrow.text : undefined;
@@ -186,6 +198,22 @@ function labelGo(labelWidth = 40) {
         storedArrow().set('labelWidth', labelWidth);
     }, 'file');
 }
+
+// Another arrow, labelled `text` and stored at `labelWidth`, as if it came with the file.
+function addLabelledArrow(id: string, index: string, text: string, labelWidth: number) {
+    writeElementInDoc(
+        doc,
+        { type: 'arrow', x: 0, y: 100, width: 200, height: 0, points: '[[0,0],[200,0]]', text, labelWidth },
+        index,
+        VECTOR_STYLE_DEFAULTS,
+        id,
+    );
+}
+
+const widthOf = (id: string) => {
+    const arrow = readVectorFromDoc(doc).elements.find((el) => el.id === id);
+    return arrow?.type === 'arrow' ? arrow.labelWidth : undefined;
+};
 
 // Every write this tab makes from here on, the file's and a peer's left out.
 function countWrites(): { count: number } {
@@ -294,6 +322,71 @@ test('a label at its measured width is never written', async () => {
     await act(async () => {
         doc.transact(() => storedArrow().set('strokeColor', '#ff0000'), 'peer');
     });
+    await loadSlices();
+    expect(writes.count).toBe(0);
+});
+
+// An editor that is offline, or that blocks the font, would store the fallback's width for everyone, and its peers
+// measure nothing on a change to the width alone, so they would never set it right.
+test('a label whose slices fail to load keeps the width it has', async () => {
+    doc.transact(() => {
+        storedArrow().set('text', '茶 tea');
+        storedArrow().set('labelWidth', 100);
+    }, 'file');
+    const writes = countWrites();
+    await render();
+    await failSlices();
+    expect({ width: labelWidth(), writes: writes.count }).toEqual({ width: 100, writes: 0 });
+});
+
+test("a new label whose slices fail to load gets the fallback's width, which beats none", async () => {
+    doc.transact(() => storedArrow().set('text', '茶 tea'), 'file');
+    await render();
+    await failSlices();
+    expect(labelWidth()).toBe(50);
+});
+
+// Each write reads the whole scene again, so a drawing with many labels must not write once per label.
+test('labels at the wrong width when the drawing opens are written in one transaction', async () => {
+    labelGo(7);
+    addLabelledArrow('second', 'a1', 'go', 7);
+    addLabelledArrow('third', 'a2', 'go', 7);
+    const writes = countWrites();
+    await render();
+    expect({ widths: ['arrow', 'second', 'third'].map(widthOf), writes: writes.count }).toEqual({
+        widths: [40, 40, 40],
+        writes: 1,
+    });
+});
+
+test('labels that wait for their slices are written in one transaction once they load', async () => {
+    addLabelledArrow('second', 'a1', 'tea', 7);
+    addLabelledArrow('third', 'a2', 'eat', 7);
+    const writes = countWrites();
+    await render();
+    await loadSlices();
+    expect({ widths: ['second', 'third'].map(widthOf), writes: writes.count }).toEqual({
+        widths: [60, 60],
+        writes: 1,
+    });
+});
+
+test('a change to one label measures that label alone', async () => {
+    labelGo();
+    addLabelledArrow('second', 'a1', 'go', 40);
+    await render();
+    measuredLines.length = 0;
+    await act(async () => {
+        storedArrow().set('text', 'gog');
+    });
+    expect({ lines: measuredLines, width: labelWidth() }).toEqual({ lines: ['gog'], width: 60 });
+});
+
+test('a canvas closed before the slices of a label load writes nothing', async () => {
+    doc.transact(() => storedArrow().set('text', 'tea'), 'file');
+    const writes = countWrites();
+    await render();
+    await unmount();
     await loadSlices();
     expect(writes.count).toBe(0);
 });
