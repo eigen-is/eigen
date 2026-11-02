@@ -6,8 +6,8 @@ import { pullHomeSnapshot } from '../../lib/home/home-relay';
 import type { TestContext } from '../setup';
 import { getTestContext, TEST_DATA_DIR } from '../setup';
 
-// A job stages a home unpacked, auth rows and every file, inside backups/, which stays listable because ./eigen
-// reads it as the operator. The staging root and each job's folder are the API's user's alone, so what a job
+// A job stages a home unpacked, auth rows and every file, inside backups/, which the operator's group lists because
+// ./eigen reads it. The staging root and each job's folder are the API's user's alone, so what a job
 // writes there is out of reach of other users on the host while it runs, whatever the umask gives each file.
 describe('Backup staging modes', () => {
     const backupsDir = join(TEST_DATA_DIR, 'backups-staging-modes');
@@ -77,5 +77,25 @@ describe('Backup staging modes', () => {
         const tempPath = getBackupTempPath('.json');
         expect(modeOf(getStagingRoot())).toBe(0o700);
         expect(modeOf(dirname(tempPath))).toBe(0o700);
+    });
+
+    // The launcher gives backups/ the operator's group with the setgid bit, so a folder made in it takes that group,
+    // and on Linux the bit too. Folders staged under it go into data/, which must get neither.
+    test('a setgid backups/ passes no setgid bit into staging', () => {
+        const fullModeOf = (target: string): number => statSync(target).mode & 0o7777;
+        mkdirSync(backupsDir, { recursive: true });
+        chmodSync(backupsDir, 0o2750);
+        try {
+            // What a mkdir in backups/ makes on Linux. macOS ignores the bit on a folder, so it is set by hand.
+            rmSync(getStagingRoot(), { recursive: true, force: true });
+            mkdirSync(getStagingRoot(), { mode: 0o700 });
+            chmodSync(getStagingRoot(), 0o2700);
+            const staging = getBackupStagingDir('staging-modes-setgid');
+            expect(fullModeOf(getStagingRoot())).toBe(0o700);
+            expect(fullModeOf(staging)).toBe(0o700);
+            expect(fullModeOf(backupsDir)).toBe(0o2750);
+        } finally {
+            chmodSync(backupsDir, 0o755);
+        }
     });
 });

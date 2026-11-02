@@ -325,8 +325,9 @@ export function readUnpackedHome(
 
 // A sidecar is written in the staging folder and renamed into place, so a reader never sees half of one.
 // The JSON is indented by two spaces: ./eigen finds a server sidecar's top-level "state" line by that indent.
-// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. A caller that
-// passes a mode makes a private one.
+// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. 0640 would shut the
+// operator out: the rename keeps the group the file got in the staging folder, which is the API's, not the operator's.
+// The backups folder is what keeps other users away from it. A caller that passes a mode makes a private one.
 export async function writeRecord(target: string, value: unknown, mode?: number): Promise<void> {
     const tempPath = getBackupTempPath('.json');
     try {
