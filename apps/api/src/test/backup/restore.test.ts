@@ -30,9 +30,11 @@ import {
 } from '../../lib/backup/paths';
 import { readShares, restoreHome, restoreSafetyCopy, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
+import * as verifyModule from '../../lib/backup/verify';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
+import { ApiError } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getDataEpoch } from '../../lib/home/data-epoch';
 import { getHome } from '../../lib/home/get-home';
@@ -1088,7 +1090,7 @@ describe('Backup restore over a live user', () => {
     // A restore puts a home's data back; it never rewrites who somebody is. An id whose email no
     // longer matches the archive is a different person, and their home is not this archive's to
     // replace.
-    test('refuses when the email no longer matches the archive, and puts the home back', async () => {
+    test('refuses when the email no longer matches the archive, before the home is taken', async () => {
         const user = await createTestUser('restore-email@test.eigen.is', PASSWORD, 'Restore Email');
         const mountId = await firstMountId(user.sessionToken, user.id);
         const rootId = (
@@ -1110,12 +1112,18 @@ describe('Backup restore over a live user', () => {
             .where(eq(userScheme.id, user.id))
             .run();
 
+        const home = await getHome(user.id);
+        const epoch = getDataEpoch(user.id);
+
         await expect(restoreHome(artifact, user.id, `restore-email-${Date.now()}`)).rejects.toThrow(
             /is now someone-else@test.eigen.is; the archive holds restore-email@test.eigen.is/,
         );
 
-        // The identity write is the last step, so the rollback undoes everything before it.
-        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX).length).toBe(1);
+        // Judged with the archive, before the home is taken: it was never evicted, moved aside or told to reload.
+        expect(await getHome(user.id)).toBe(home);
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        expect(getDataEpoch(user.id)).toBe(epoch);
         expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
@@ -1515,6 +1523,30 @@ describe('Backup restore of one home judges, then takes the home', () => {
         expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
         expect(getDataEpoch(user.id)).toBe(epoch);
     }
+
+    test('the home serves while the archive is unpacked and verified', async () => {
+        const artifact = await backup(user.id, new Date());
+        const home = await getHome(user.id);
+        const epoch = getDataEpoch(user.id);
+        const verify = verifyModule.verifyFolder;
+        let served: number | undefined;
+        const spy = spyOn(verifyModule, 'verifyFolder').mockImplementation(async (dir, onProgress) => {
+            served = (await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`)).status;
+            // A verify that fails stops the restore here, so the home is never taken.
+            await verify(dir, onProgress);
+            throw new ApiError(400, 'refused by the test');
+        });
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-judged-${Date.now()}`)).rejects.toThrow(
+                'refused by the test',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+        expect(served).toBe(200);
+        await expectUntouched(home, epoch);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
 
     test('an archive of a newer Eigen is refused before the home is taken', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest) => {

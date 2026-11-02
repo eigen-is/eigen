@@ -135,8 +135,8 @@ The verdict goes into the sidecar, which the admin pane's list reads. The manife
 
 A per-home restore starts on **Restore**, which asks first, naming the home. Then:
 
-1. The home is marked as restoring (`markHomeRestoring` in `apps/api/src/lib/home/get-home.ts`), which is also the lock against a second restore.
-2. The home archive is extracted into staging and fully verified, and its `shares.json` is read, since a share row that does not read must stop the restore before any identity row goes in. A failure ends the job with nothing touched.
+1. While the home still serves, the home archive is extracted into staging and judged: a member that is not a whole home, one made by a newer Eigen, a failed verify, a `shares.json` that does not read and an `auth.json` that is not this user's (`authRowsToRestore` in `auth-rows.ts`, with the email check) each end the job with nothing touched. A share row that does not read must stop the restore before any identity row goes in.
+2. The home is marked as restoring (`markHomeRestoring` in `apps/api/src/lib/home/get-home.ts`), which refuses a second restore or a deletion of the home. From here every request to it answers 503.
 3. The home's collab sockets are closed, then the home is evicted.
 4. The home folder is renamed aside as `<id>.pre-restore-<date>-<time>`. A deleted user has none.
 5. The archive's home folder is installed. A `local` mount's files go in as they are, a `local-key` mount's under their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the upload queue drains them with its retry and backoff. Every restored row gets a fresh key, so no bucket object is overwritten.
@@ -148,7 +148,7 @@ A failure after step 4 parks the half-written folder as `<id>.failed-restore-<da
 
 ## A restore refuses a member that is not a whole home
 
-`incompleteReason` (`packages/lib/src/validation/backup.ts`) reads the manifest: a Light member holds no files and no mail, and a mount with `contents: 'metadata'` holds no file bodies. `restoreHome` refuses such an archive right after it reads the manifest, before the verify and before the home goes aside, where a refusal would already have cost the user their open pages. The admin pane shows why on the row and offers no Restore.
+`incompleteReason` (`packages/lib/src/validation/backup.ts`) reads the manifest: a Light member holds no files and no mail, and a mount with `contents: 'metadata'` holds no file bodies. `restoreHome` refuses such an archive right after it reads the manifest, before the verify and before the home goes offline, where a refusal would already have cost the user their open pages. The admin pane shows why on the row and offers no Restore.
 
 So a Full + S3 member restores any home, a Full member a home without `s3` mounts, and a Light member none. The refusal trusts the manifest. A manifest edited to drop `level` and `contents` still verifies, because verify checks the files the manifest lists and not that each row has its file. In an archive without warnings only a row with no bytes on record has no file. Such an archive restores files with no bytes ([ROADMAP.md](ROADMAP.md)).
 
