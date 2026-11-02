@@ -536,6 +536,15 @@ describe('VML', () => {
         ]);
     });
 
+    test("a picture's width too long to be a number is no size", async () => {
+        const { json } = await importDocxBody(
+            paragraph(vml(`style="width:${'9'.repeat(400)}px;height:50pt"`, '<v:imagedata r:id="rId4"/>')),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+        ]);
+    });
+
     test("a picture's alt text is the office namespace's title, not a prefix's", async () => {
         const image = (title: string) => `<v:imagedata r:id="rId4" ${title}/>`;
         const { json } = await importDocxBody(
@@ -903,12 +912,25 @@ describe('text boxes as boxes', () => {
         expect(px[0]?.attrs).toMatchObject({ offsetX: -1 });
     });
 
-    // A digit string too long for a number reads as an infinite length.
+    // A digit string too long for a finite number reads as no length.
     test('a VML inset too long to be a number gives no padding, alone or against its opposite', async () => {
         const huge = `${'9'.repeat(400)}px`;
         const inset = (value: string) => vmlBox(PLACED).replace('inset="7.2pt,3.6pt,7.2pt,3.6pt"', `inset="${value}"`);
         const boxes = await vmlBoxesOf(inset(`${huge},0,-${huge},0`), inset(huge));
         expect(boxes.map((box) => box.attrs?.['paddingX'])).toEqual([null, null]);
+    });
+
+    // A length that reads as infinite would wrap the box on the right and stretch it to the column.
+    test('a VML margin or width too long to be a number reads as none', async () => {
+        const huge = `${'9'.repeat(400)}px`;
+        const wrapped = (style: string) => vmlBox(style, '<w10:wrap type="square"/>');
+        const unplaced = PLACED.replace('margin-left:30pt;margin-top:15pt;width:150pt;', '');
+        const [crafted, plain] = await vmlBoxesOf(
+            wrapped(`margin-left:${huge};margin-top:-${huge};width:${huge};${unplaced}`),
+            wrapped(unplaced),
+        );
+        expect(crafted?.attrs).toEqual({ ...plain?.attrs, id: crafted?.attrs?.['id'] });
+        expect(crafted?.attrs).toMatchObject({ layout: 'wrap-left', offsetX: null, offsetY: null });
     });
 
     // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
