@@ -12,6 +12,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
+import { waitUntil } from '../../fixtures/wait-until';
 
 // happy-dom lays nothing out: a test that needs the editor's width stubs it and fires these.
 let resizes: (() => void)[] = [];
@@ -151,7 +152,6 @@ async function render({
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
-    await frames();
 }
 
 const LAYOUT = {
@@ -168,9 +168,6 @@ const LAYOUT = {
     isMobile: false,
     isTablet: false,
 };
-
-// Tiptap puts the caret in an editor a frame after its command.
-const frames = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
 // An action, with Tiptap's frame run as a browser runs it: after React has drawn what the action changed. happy-dom runs
 // a frame before act lets React draw, when the band the caret goes to is not editable yet.
@@ -466,18 +463,18 @@ test('a document closed with the body’s or a band’s menu open throws nothing
         await unmount();
         await render(WRITER);
         await openMenu('Insert');
-        await act(async () => {
-            [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-                .find((item) => item.textContent?.trim() === 'Equation')
-                ?.click();
-            await unmount();
-        });
-        await frames();
+        await withBrowserFrames(() =>
+            act(async () => {
+                [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+                    .find((item) => item.textContent?.trim() === 'Equation')
+                    ?.click();
+                await unmount();
+            }),
+        );
         await render(WRITER);
         await doubleClick('header');
         await openMenu('Options');
-        await unmount();
-        await frames();
+        await withBrowserFrames(unmount);
     } finally {
         window.removeEventListener('error', onError);
     }
@@ -550,14 +547,11 @@ test('a click on a comment card leaves the band for the comment’s anchor in th
     await render(WRITER);
     await doubleClick('header');
     await act(async () => button('Comments')?.click());
-    // The panel lists the anchors the body holds, read 200 ms after its last change.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
-    // The card is titled by its anchor's text.
-    const card = [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find(
-        (title) => title.textContent === 'Hello',
-    );
-    expect(card).toBeDefined();
-    await act(async () => card?.click());
+    // The card is titled by its anchor's text, which the panel reads 200 ms after the body's last change.
+    const card = () =>
+        [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find((title) => title.textContent === 'Hello');
+    await waitUntil(() => card() !== undefined, 'the comment card');
+    await act(async () => card()?.click());
     expect(editing()).toEqual([]);
 });
 
@@ -735,11 +729,11 @@ test('in a band, Insert greys out the page break, and an image goes into the ban
     expect(doc.getXmlFragment('default').toString()).not.toContain('figure');
 
     await pressEscape(bandView('header'));
-    await act(async () => {
-        finishUpload('logo-1.png');
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-1.png"');
+    await act(async () => finishUpload('logo-1.png'));
+    await waitUntil(
+        () => doc.getXmlFragment('header').toString().includes('mediaName="logo-1.png"'),
+        'the uploaded name',
+    );
 });
 
 test('Different first page stacks both headers, keeps what was typed in the other pages’ one and edits the new first page’s', async () => {
@@ -1129,9 +1123,11 @@ test('the table menu’s Paste pastes what the clipboard holds into the cell', a
     await bodyTable();
     await rightClick(bodyCell());
     await pick(`Paste${formatForDisplay('Mod+V')}`);
-    await frames();
+    await waitUntil(
+        () => doc.getXmlFragment('default').toString().includes('<tablecell colspan="1" rowspan="1"><paragraph>pasted'),
+        'the pasted text',
+    );
     expect(read).toHaveBeenCalled();
-    expect(doc.getXmlFragment('default').toString()).toContain('<tablecell colspan="1" rowspan="1"><paragraph>pasted');
 });
 
 test('the table menu offers Add comment on a cell’s text, where a comment anchors', async () => {
@@ -1216,7 +1212,6 @@ test('the equation menu sets its display, opens its panel and deletes it', async
 
     await rightClick(bodyView()?.querySelector('.equation'));
     await pick('Edit equation');
-    await frames();
     const field = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="LaTeX"]');
     expect(field).not.toBeNull();
     expect(document.activeElement === field).toBe(true);
@@ -1315,7 +1310,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
         expect(menuRows()).toEqual(['Copy', '—', 'Download image']);
         fonts.takeFetched();
         await pick('Download image');
-        await frames();
+        await waitUntil(() => saved.mock.calls.length > 0, 'the download');
         expect(saved).toHaveBeenCalledTimes(1);
         const [blob, name] = saved.mock.calls[0];
         expect(name).toBe('Light dark.svg');

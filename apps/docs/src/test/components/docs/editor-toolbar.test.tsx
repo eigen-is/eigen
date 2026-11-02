@@ -1265,7 +1265,6 @@ async function restartAtCaret(startAt: string) {
         (button) => button.textContent === 'OK',
     );
     await act(async () => ok?.click());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 }
 
@@ -1329,7 +1328,6 @@ test.each([true, false])('Tools › Word count counts the whole doc for a caret 
         (button) => button.textContent === 'OK',
     );
     await act(async () => ok?.click());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
@@ -1514,15 +1512,12 @@ test('Insert › Equation follows Chart and inserts once the menu has closed', a
     await openMenu('Insert');
     expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
 
-    await clickItem('Equation');
-    for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
-        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
+    await withBrowserFrames(() => clickItem('Equation'));
     expect(menuOpenAtInsert).toEqual([false]);
 });
 
 // Word's Insert › Text box, after Chart; the box goes in once the menu has closed, so its editor keeps the focus.
-test('Insert › Text box follows Chart, inserts once the menu has closed, and is greyed in a story', async () => {
+test('Insert › Text box follows Chart and inserts once the menu has closed', async () => {
     const menuOpenAtInsert: boolean[] = [];
     const onInsertTextBox = mock(() => {
         menuOpenAtInsert.push(document.querySelector('[role="menu"]') !== null);
@@ -1530,10 +1525,7 @@ test('Insert › Text box follows Chart, inserts once the menu has closed, and i
     await render(1920, true, { onInsertTextBox });
     await openMenu('Insert');
     expect(openMenuEntries().slice(0, 4)).toEqual(['Link', 'Image', 'Chart', 'Text box']);
-    await clickItem('Text box');
-    for (let tick = 0; tick < 50 && onInsertTextBox.mock.calls.length === 0; tick++) {
-        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
+    await withBrowserFrames(() => clickItem('Text box'));
     expect(menuOpenAtInsert).toEqual([false]);
 });
 
@@ -1691,10 +1683,7 @@ test('Insert › Page elements › Footnote ends the submenu and inserts once th
     await openMenu('Insert');
     await openSubmenu('Page elements');
     expect(openMenuEntries().at(-1)?.startsWith('Footnote')).toBe(true);
-    await act(async () => footnoteItem()?.click());
-    for (let tick = 0; tick < 50 && onInsertFootnote.mock.calls.length === 0; tick++) {
-        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
+    await withBrowserFrames(() => act(async () => footnoteItem()?.click()));
     expect(onInsertFootnote).toHaveBeenCalledTimes(1);
 });
 
