@@ -1,5 +1,6 @@
-// Sorting the selected range by one of its columns, ascending or descending, from the Data menu and the Custom
-// sort dialog. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
+// Sorting the selected range by one of its columns, ascending or descending, from menus such as the Data menu and
+// the Custom sort dialog. A header row, when the caller says the range has one, stays in place. Formulas in the
+// sorted rows are shifted to the rows they land on and evaluated again.
 
 import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
@@ -92,7 +93,7 @@ export function sortDataRange(
     jfrefreshgrid(ctx, sheetData, [{ row: [str, edr], column: [stc, edc] }]);
 }
 
-export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0) {
+export function sortSelection(ctx: Context, isAsc: boolean, colIndex = 0, hasHeaderRow = false) {
     if (ctx.allowEdit === false) return;
     if (ctx.selections == null) return;
     if (ctx.selections.length > 1) {
@@ -106,7 +107,7 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0
     const d = flowdata;
     if (d == null) return;
 
-    const r1 = ctx.selections[0].row[0];
+    const r1 = ctx.selections[0].row[0] + (hasHeaderRow ? 1 : 0);
     const r2 = ctx.selections[0].row[1];
     const c1 = ctx.selections[0].column[0];
     const c2 = ctx.selections[0].column[1];

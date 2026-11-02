@@ -52,3 +52,29 @@ describe('sortSelection — CJK rows participate', () => {
         expect(d[2]?.[0]?.v).toBe('要');
     });
 });
+
+describe('sortSelection — a header row', () => {
+    const data = (): (Cell | null)[][] => [
+        [cell('Name'), cell('Score')],
+        [cell('b'), cell(2)],
+        [cell('c'), cell(3)],
+        [cell('a'), cell(1)],
+    ];
+    const sorted = (hasHeaderRow?: boolean) => {
+        const ctx = contextFactory({
+            selections: selectionFactory([0, 3], [0, 1], 0, 0),
+            sheets: [{ name: 'sheet', id: 'id_1', data: data(), order: 0 }],
+        }) as Context;
+        sortSelection(ctx, true, 1, hasHeaderRow);
+        return ctx.sheets[0].data?.map((row) => row[0]?.v);
+    };
+
+    test('stays in place and only the rows below it sort', () => {
+        expect(sorted(true)).toEqual(['Name', 'a', 'b', 'c']);
+    });
+
+    // The Data menu's Ascending and Descending pass none, so a text first row sorts after the numbers.
+    test('sorts with the rest when none is passed', () => {
+        expect(sorted()).toEqual(['a', 'b', 'c', 'Name']);
+    });
+});

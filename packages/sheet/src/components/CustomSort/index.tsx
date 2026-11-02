@@ -1,5 +1,6 @@
 // The Custom sort dialog, opened from the Data menu: it sorts the selected range by one of its columns, ascending
-// or descending. With Data has a header row ticked, the Sort by choices take their names from the range's first row.
+// or descending. With Data has a header row ticked, the Sort by choices take their names from the range's first row,
+// and that row stays in place.
 
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Checkbox } from '@workspace/ui/components/checkbox';
@@ -43,7 +44,7 @@ export function CustomSort() {
                 submitLabel="Sort"
                 onSubmit={() =>
                     setContext((draftCtx) => {
-                        sortSelection(draftCtx, ascending, Number(sortColumn));
+                        sortSelection(draftCtx, ascending, Number(sortColumn), hasHeaderRow);
                     })
                 }
             >

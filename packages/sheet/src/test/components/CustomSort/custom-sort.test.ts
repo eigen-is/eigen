@@ -1,6 +1,6 @@
 // The Custom sort dialog sorts the selected range by the column picked under Sort by, ascending or descending, and
-// closes. It names the columns by their header when the data has a header row, and two columns with the same header
-// are still two choices. Cancel closes it with the range as it was.
+// closes. With a header row ticked, it names the columns by their header and leaves that row in place, and two columns
+// with the same header are still two choices. Cancel closes it with the range as it was.
 
 import { afterEach, expect, spyOn, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -87,4 +87,13 @@ test('a header row whose columns share a name keeps one choice per column', asyn
     const duplicateKeys = consoleError.mock.calls.filter((call) => String(call[0]).includes('same key'));
     expect(duplicateKeys).toEqual([]);
     expect(sortBy()).toBe('Name');
+});
+
+test('a ticked header row stays in place and only the rows below it sort', async () => {
+    const dialog = await openWithHeaders();
+    await act(async () => document.querySelector<HTMLElement>('[role="dialog"] [role="checkbox"]')?.click());
+    await dialog.click('Sort');
+    expect(columnA(dialog.context())).toEqual(['Name', 'a', 'b']);
+    expect(columnB(dialog.context())).toEqual(['Name', 1, 2]);
+    expect(dialog.dialogs()).toHaveLength(0);
 });
