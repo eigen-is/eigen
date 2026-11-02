@@ -10,7 +10,7 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Table } from 'lucide-react';
-import { useCallback, useContext, useEffect } from 'react';
+import { useCallback, useContext, useEffect, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
 import {
@@ -21,6 +21,7 @@ import {
     confirmMessage,
     getDropdownList,
     getRangetxt,
+    NO_RANGE_MESSAGE,
     validationAt,
     validationRange,
 } from '../../state';
@@ -75,6 +76,7 @@ const HINT_TOGGLES = [
 export function DataVerification() {
     const { context, setContext } = useContext(WorkbookContext);
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
+    const [rangeProblem, setRangeProblem] = useState('');
 
     // Re-show this dialog when the picker closes; its mount effect reads rangeDialog back.
     // biome-ignore lint/correctness/useExhaustiveDependencies: DataVerification is this module's own component — a stable binding, not reactive state
@@ -128,20 +130,24 @@ export function DataVerification() {
                     }
                     applyDataVerification(ctx, target, item);
                 });
-            } else if (type === 'delete') {
-                setContext((ctx) => {
-                    const target = validationRange(ctx, ctx.validationDraft.rangeTxt);
-                    if (!target) {
-                        showDialog('The selection operation has not been performed yet', 'ok');
-                        return;
-                    }
-                    clearValidations(getSheet(ctx), target);
-                });
             }
             hideDialog();
         },
-        [hideDialog, setContext, showDialog],
+        [hideDialog, setContext],
     );
+
+    // A range that names no cells has no rule to take out, so the dialog stays open and says so under the range.
+    const deleteVerification = () => {
+        const target = validationRange(context, context.validationDraft.rangeTxt);
+        if (!target) {
+            setRangeProblem(NO_RANGE_MESSAGE);
+            return;
+        }
+        setContext((ctx) => {
+            clearValidations(getSheet(ctx), target);
+        });
+        hideDialog();
+    };
 
     // On open, the draft takes the focus cell's rule, or a new list, over the selection. A column or row header's
     // selection is named B:B or 2:2, so the rule covers the whole column or row. Back from the range picker, the draft
@@ -217,6 +223,7 @@ export function DataVerification() {
                             value={regulation.rangeTxt}
                             onChange={(e) => {
                                 const { value } = e.target;
+                                setRangeProblem('');
                                 setContext((ctx) => {
                                     ctx.validationDraft.rangeTxt = value;
                                 });
@@ -234,6 +241,7 @@ export function DataVerification() {
                             <Table />
                         </Button>
                     </div>
+                    {rangeProblem && <p className="mt-1 text-xs text-destructive">{rangeProblem}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -558,7 +566,7 @@ export function DataVerification() {
                 <Button variant="outline" size="sm" onClick={() => hideDialog()}>
                     Cancel
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => btn('delete')}>
+                <Button variant="outline" size="sm" onClick={deleteVerification}>
                     Delete verification
                 </Button>
                 <Button size="sm" onClick={() => btn('confirm')}>

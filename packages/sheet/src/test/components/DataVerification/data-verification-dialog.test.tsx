@@ -112,3 +112,15 @@ test('Cancel in the range picker brings the dialog back with its draft too', asy
     expect(dialog.title()).toBe('Data verification');
     expect(input('100').value).toBe('50');
 });
+
+test('Delete with no range to take the rule from stays open and says why under the range', async () => {
+    const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, LAST], column: [1, 1] }], rule: LIST } });
+    await typeInto(rangeField(), '');
+    await dialog.click('Delete verification');
+    expect(dialog.dialogs()).toHaveLength(1);
+    expect(dialog.title()).toBe('Data verification');
+    expect(rangeField().parentElement?.nextElementSibling?.textContent).toBe(
+        'The selection operation has not been performed yet',
+    );
+    expect(Object.keys(dialog.context().sheets[0].dataValidations ?? {})).toEqual(['v']);
+});

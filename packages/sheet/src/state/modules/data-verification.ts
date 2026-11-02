@@ -656,10 +656,13 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     jfrefreshgrid(ctx, null, undefined);
 }
 
+// What the data-validation dialog says when its range names no cells.
+export const NO_RANGE_MESSAGE = 'The selection operation has not been performed yet';
+
 // Checks the dialog's draft before it applies, and says what is wrong through the warning dialog.
 export function confirmMessage(ctx: Context): boolean {
     if (getRangeByTxt(ctx, ctx.validationDraft.rangeTxt).length === 0) {
-        ctx.warnDialog = 'The selection operation has not been performed yet';
+        ctx.warnDialog = NO_RANGE_MESSAGE;
         return false;
     }
     if (!getFlowdata(ctx)) return false;
