@@ -928,6 +928,18 @@ test('a right-click on an image offers a writer Cut, Copy and Delete, and Delete
     expect(doc.getXmlFragment('default').toString()).not.toContain('figure');
 });
 
+test('a right-click on an image offers Add comment where comments are on, which comments on the image', async () => {
+    writeFigure();
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    const figure = bodyView()?.querySelector('.figure');
+    if (!figure) throw new Error('no figure');
+    await act(async () => figure.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Add comment', '—', 'Delete']);
+
+    await pick('Add comment');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New comment');
+});
+
 // A viewer with nothing to download or comment on keeps the browser's own menu.
 test("a viewer's right-click on an image with no rows for it opens no menu", async () => {
     writeFigure();

@@ -111,7 +111,8 @@ import { TableOfContentsPropertiesPanel } from './table-of-contents-properties-p
 import { TablePropertiesPanel } from './table-properties-panel';
 import { TextBoxPropertiesPanel } from './text-box-properties-panel';
 
-// What a cell's or an equation's right-click menu is about: the editor it is in and the comment card under the pointer.
+// What a cell's, an equation's or an image's right-click menu is about: the editor it is in and the comment card under
+// the pointer.
 type NodeMenuItem = { editor: Editor; comment: CommentContextMenuItem | null };
 type TableMenuItem = NodeMenuItem & { cells: ReturnType<typeof selectCellCommands> & { cellBackground: string } };
 type EquationMenuItem = NodeMenuItem & { display: boolean };
@@ -533,7 +534,7 @@ const TiptapEditor = ({
         initialChatName,
     });
     const { allComments, cards, createCard, assignComment, members, assignedCount, setOpenCardId } = lifecycle;
-    // Host-owned so the filter survives panel close/reopen.
+    // The page owns the filter, so it survives when the comments panel closes and opens again.
     const commentFilter = useCommentFilter();
     allCommentsRef.current = allComments;
     cardsRef.current = cards;
@@ -556,6 +557,8 @@ const TiptapEditor = ({
         figureContextMenu.handleContextMenu(event, { imagePath, chart, comment });
     };
     const menuChart = figureContextMenu.item?.chart;
+    // Only the body's images, charts and text boxes open this menu, and a comment anchors on each.
+    const figureComment = { editor, comment: figureContextMenu.item?.comment ?? null };
 
     // A writer's table and equation menus, about what was right-clicked in `editor`: the body's, the band's being edited
     // or the open story's. A viewer, and a band not being edited, keep the browser's.
@@ -611,7 +614,8 @@ const TiptapEditor = ({
         [editor, pendingMarkRange, createCard, assignComment],
     );
 
-    // Sync resolved IDs + colors into the ProseMirror decoration plugin
+    // A comment highlights its text in its card's color until it is resolved, so the body's decorations learn both
+    // whenever a card or a comment changes.
     useEffect(() => {
         const resolved = new Set<string>();
         const colorMap = new Map<string, string>();
@@ -725,8 +729,8 @@ const TiptapEditor = ({
         },
     };
 
-    // A cell's or an equation's comment rows: the card's under the pointer, else Add comment where one anchors, which
-    // is in the body only. The card's Delete goes last, with the cell's or the equation's.
+    // A node's comment rows: the card's under the pointer, else Add comment where one anchors, which is in the body
+    // only. The card's Delete goes last, with the node's own.
     const commentRows = (item: NodeMenuItem, anchors: boolean) => (
         <CommentLifecycleMenuItems
             lifecycle={lifecycle}
@@ -796,9 +800,10 @@ const TiptapEditor = ({
                         commentSearch={commentSearch}
                         initialSearchTerm={initialSearchTerm}
                         onOpenChange={handleSearchOpenChange}
-                        // right-68 = panel width + the bar's own gutter.
+                        // Beside an open panel the find bar moves left by the panel's width and the bar's own gutter.
                         barClassName={cn('top-14', showSidebar && 'right-68')}
-                        // No .focus(): focus stays in the bar so the user can keep replacing after ⌘Z.
+                        // These don't focus the editor, so the focus stays in the bar and the user can keep replacing
+                        // after ⌘Z.
                         onUndo={() => editor.commands.undo()}
                         onRedo={() => editor.commands.redo()}
                     >
@@ -929,9 +934,9 @@ const TiptapEditor = ({
                                         data-document="true"
                                         data-pageless={pageless || undefined}
                                         className={cn(
-                                            // eigen-paper: the page always renders light, in dark mode too (globals.css)
-                                            // Rows: the header band, the body, the notes, the footer band.
-                                            // isolate: the figures behind the text draw on the paper, in every scale.
+                                            // eigen-paper keeps the page light, in dark mode too. The rows are the
+                                            // header band, the body, the notes and the footer band. isolate makes
+                                            // the figures behind the text draw on the paper, at every scale.
                                             'eigen-paper isolate grid grid-rows-[auto_1fr_auto_auto] bg-white',
                                             pageless
                                                 ? 'min-h-full'
@@ -1108,15 +1113,7 @@ const TiptapEditor = ({
                             </>
                         )
                     }
-                    collaborate={
-                        <CommentLifecycleMenuItems
-                            lifecycle={lifecycle}
-                            item={figureContextMenu.item?.comment ?? null}
-                            canWrite={canWrite}
-                            onAddComment={chatFolderId ? handleAddComment : undefined}
-                            part="rows"
-                        />
-                    }
+                    collaborate={commentRows(figureComment, true)}
                     destructive={
                         <>
                             {canWrite && (
@@ -1127,13 +1124,7 @@ const TiptapEditor = ({
                                     <Trash2 className="h-4 w-4" /> Delete
                                 </DropdownMenuItem>
                             )}
-                            <CommentLifecycleMenuItems
-                                lifecycle={lifecycle}
-                                item={figureContextMenu.item?.comment ?? null}
-                                canWrite={canWrite}
-                                onDelete={removeCommentMarks}
-                                part="delete"
-                            />
+                            {commentDelete(figureComment)}
                         </>
                     }
                 />

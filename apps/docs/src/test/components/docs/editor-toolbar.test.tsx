@@ -134,6 +134,12 @@ const openMenuEntries = () =>
         ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim())),
     );
 
+// The rows of the open choices that are checked.
+const checkedItems = () =>
+    [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
+        item.textContent?.trim(),
+    );
+
 // A menu trigger by its text, or by its name when it is an icon.
 const menuTrigger = (label: string) =>
     [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
@@ -235,9 +241,9 @@ test('Format › Text puts Size after the scripts as Google does, then inline co
     await openMenu('Format');
     await openSubmenu('Text');
     expect(openMenuEntries()).toEqual([
-        'Bold',
-        'Italic',
-        'Underline',
+        expect.stringMatching(/^Bold/),
+        expect.stringMatching(/^Italic/),
+        expect.stringMatching(/^Underline/),
         'Strikethrough',
         'Superscript',
         'Subscript',
@@ -248,6 +254,25 @@ test('Format › Text puts Size after the scripts as Google does, then inline co
         '—',
         'Text color',
         'Highlight color',
+    ]);
+});
+
+// The menu and the icon row name one key each, so neither drifts from the other.
+test("Format › Text names Bold's, Italic's and Underline's keys as the icon row's tooltips do", async () => {
+    await render(1920, true);
+    const tooltipKeys = ['Bold', 'Italic', 'Underline'].map((name) =>
+        document
+            .querySelector(`button[aria-label^="${name} ("]`)
+            ?.getAttribute('aria-label')
+            ?.slice(name.length + 2, -1),
+    );
+    expect(tooltipKeys).toEqual([formatForDisplay('Mod+B'), formatForDisplay('Mod+I'), formatForDisplay('Mod+U')]);
+    await openMenu('Format');
+    await openSubmenu('Text');
+    expect(openMenuEntries().slice(0, 3)).toEqual([
+        `Bold${tooltipKeys[0]}`,
+        `Italic${tooltipKeys[1]}`,
+        `Underline${tooltipKeys[2]}`,
     ]);
 });
 
@@ -391,6 +416,25 @@ test('Format › Align and indent lists the alignments, then the indents, as Goo
         '—',
         'Indentation options…',
     ]);
+});
+
+// The alignment is a choice, as the icon row's Align dropdown draws it: the paragraph's own is checked.
+test("Format › Align and indent checks the paragraph's alignment, and a pick aligns it", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', attrs: { textAlign: 'center' }, content: [{ type: 'text', text: 'a' }] }],
+    });
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    expect(checkedItems()).toEqual(['Center']);
+
+    const right = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'Right',
+    );
+    await act(async () => right?.click());
+    expect(editor.state.doc.firstChild?.attrs['textAlign']).toBe('right');
 });
 
 const formatted = (...attrs: Record<string, unknown>[]) => ({
@@ -599,11 +643,7 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
 
     await openMenu('Align');
     expect(openMenuEntries()).toEqual(['Left', 'Center', 'Right', 'Justified']);
-    const checked = () =>
-        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
-            item.textContent?.trim(),
-        );
-    expect(checked()).toEqual(['Left']);
+    expect(checkedItems()).toEqual(['Left']);
 
     const justified = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
         (item) => item.textContent?.trim() === 'Justified',
@@ -613,7 +653,7 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
     expect(alignIcon()).toMatch(/text-align-justify/);
 
     await openMenu('Align');
-    expect(checked()).toEqual(['Justified']);
+    expect(checkedItems()).toEqual(['Justified']);
 });
 
 test('a range of mixed alignments checks no Align item and draws Left', async () => {
@@ -769,11 +809,7 @@ test('Format › Image › In front of text places the selected image and checks
     await render(390, true);
     await openMenu('Format');
     await openSubmenu('Image');
-    const checked = () =>
-        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
-            item.textContent?.trim(),
-        );
-    expect(checked()).toEqual(['In line']);
+    expect(checkedItems()).toEqual(['In line']);
 
     const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
         (item) => item.textContent?.trim() === 'In front of text',
@@ -813,6 +849,47 @@ test('in a table cell, Format › Image offers no place in front of or behind th
     await openMenu('Format');
     await openSubmenu('Image');
     expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+});
+
+// A phone has no Text box panel either, so Format › Text box holds the box's layouts, its own checked, and its fill.
+test("Format › Text box checks the box's layout among the layouts, then Fill, and In front of text places it", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'a' },
+                    {
+                        type: 'textBox',
+                        attrs: { id: 'b', width: 200 },
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Box' }] }],
+                    },
+                ],
+            },
+        ],
+    });
+    editor.commands.setNodeSelection(2);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Text box');
+    expect(openMenuEntries()).toEqual([
+        'In line',
+        'Wrap left',
+        'Wrap right',
+        'Behind text',
+        'In front of text',
+        '—',
+        'Fill',
+    ]);
+    expect(checkedItems()).toEqual(['In line']);
+
+    const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'In front of text',
+    );
+    await act(async () => front?.click());
+    // A positioned box leads its paragraph.
+    expect(editor.state.doc.nodeAt(1)?.attrs['layout']).toBe('front');
 });
 
 test('Format › Headers and footers puts the caret in the header', async () => {
