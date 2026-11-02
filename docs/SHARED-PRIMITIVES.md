@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2067 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2063 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -545,7 +545,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (439)
+## Types (436)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -707,7 +707,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FileEventRecord` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `FreeBusyBlock` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
-| `FullOrganization` | `@workspace/lib/types` | packages/lib/src/types/admin.ts |
 | `HelpSearchDoc` | `@workspace/lib/types` | packages/lib/src/types/search.ts |
 | `HomeSizeResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `ImageDimensions` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -723,7 +722,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MaildirMailbox` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `MountConfig` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `MountInfo` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
-| `MountResponse` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `MountSettings` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
 | `MountStorageType` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `NewDraft` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
@@ -737,7 +735,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ParsedMail` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `ParsedOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `PathWatchStatus` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
-| `PublicConfig` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `PublicUser` | `@workspace/lib/types` | packages/lib/src/types/public.ts |
 | `RecipientSummary` | `@workspace/lib/types` | packages/lib/src/types/mail.ts |
 | `Reminder` | `@workspace/lib/types` | packages/lib/src/types/calendar.ts |
@@ -989,7 +986,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1114)
+## Utilities & constants (1113)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1689,7 +1686,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `toFileEventType` | `@workspace/lib/types` | packages/lib/src/types/file-history.ts |
 | `UNRESOLVED_TEAM_LABEL` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `USER_THEMES` | `@workspace/lib/types` | packages/lib/src/types/settings.ts |
-| `userOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |
 | `VCARD_ACCEPT` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `VCARD_MIMES` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `withEigenExtension` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |

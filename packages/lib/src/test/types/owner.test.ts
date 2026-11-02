@@ -1,12 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import {
-    externalOwnerId,
-    isExternalOwnerId,
-    orgOwnerId,
-    parseOwnerId,
-    teamOwnerId,
-    userOwnerId,
-} from '../../types/owner';
+import { externalOwnerId, isExternalOwnerId, orgOwnerId, parseOwnerId, teamOwnerId } from '../../types/owner';
 
 const ALNUM_32 = 'abcdef0123456789ABCDEFghijklmnop';
 
@@ -49,7 +42,7 @@ describe('parseOwnerId', () => {
 
     test('helpers round-trip with parseOwnerId', () => {
         const userId = ALNUM_32;
-        expect(parseOwnerId(userOwnerId(userId))).toEqual({ type: 'user', id: userId });
+        expect(parseOwnerId(userId)).toEqual({ type: 'user', id: userId });
         expect(parseOwnerId(teamOwnerId(userId))).toEqual({ type: 'team', id: userId });
         expect(parseOwnerId(orgOwnerId(userId))).toEqual({ type: 'org', id: userId });
         expect(parseOwnerId(externalOwnerId('a@b.com'))).toEqual({ type: 'external', id: 'a@b.com' });

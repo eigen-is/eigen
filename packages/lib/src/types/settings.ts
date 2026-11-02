@@ -187,14 +187,6 @@ export type ServerSettings = {
 // what the backup bucket's check warned of.
 export type ServerSettingsSaved = ServerSettings & { notice?: string; warning?: string };
 
-export type MountResponse = {
-    id: string;
-    name: string;
-    storageType: string;
-    maxSizeMB: number;
-    enabled: boolean;
-};
-
 export type HomeSizeResponse = {
     // The Home's one data budget: mail, contacts and calendar bytes against the ceiling they share.
     homeData: { used: number; max: number };

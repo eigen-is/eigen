@@ -1,15 +1,7 @@
-// Generate docs/SHARED-PRIMITIVES.md — the canonical, auto-generated index of everything that
-// packages/ui, packages/lib and packages/math publicly export, so the next author (human or LLM) can FIND a primitive
-// before rebuilding it. Re-derivation is the project's main quality risk and it happens because the
-// canonical thing isn't discoverable; this is the index AGENTS.md tells you to search first.
-//
-//   bun run primitives          regenerate docs/SHARED-PRIMITIVES.md
-//   bun run primitives --check  fail (exit 1) if the committed file is stale, and print the rows that differ — the CI gate
-//
-// Source of truth: each package's `exports` map. We enumerate the NAMED barrel entry points plus the
-// curated type/constant/hook wildcards; the broad ui `./components/*` catch-all is skipped
-// on purpose — it exposes internals, not the public surface. A primitive that isn't reachable from a
-// barrel simply won't appear here, which is the nudge to export it (see AGENTS.md "shared until exported").
+// Writes the shared primitives index: every hook, component, type and util that the ui, lib and math packages export,
+// so an author finds one before building it again. It reads each package's `exports` map and lists only what a barrel
+// reaches, so a primitive that isn't exported doesn't appear. `bun run primitives` writes the index, and with
+// `--check`, the CI gate, it fails on a stale index and prints the rows that differ.
 
 import { basename, dirname, join, relative } from 'node:path';
 import { Glob } from 'bun';
@@ -52,11 +44,15 @@ async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<strin
             // Enumerate the curated file-wildcards: types, constants, hooks, and the loose Eigen layout
             // components (ConfirmDialog etc.). The bare `./components/*` wildcard is excluded on purpose —
             // it only exposes raw shadcn primitives (DropdownMenuItem, DialogHeader, …) that nobody
-            // re-derives. The glob is non-recursive, so named subdir barrels aren't duplicated.
+            // re-derives. The glob is non-recursive, so named subdir barrels aren't duplicated. A `.gen.ts` file is
+            // generated data, and its hand-written sibling is the entry. The files are sorted, because two import
+            // paths of one length to a symbol keep the first one found. macOS and Linux list a directory in different
+            // orders.
             if (!/(types|constants|hooks|components\/layout)/.test(subpath)) continue;
             const baseDir = join(ROOT, pkg.dir, dirname(target));
-            for await (const file of new Glob('*.{ts,tsx}').scan(baseDir)) {
-                if (basename(file) === 'index.ts') continue;
+            const files = await Array.fromAsync(new Glob('*.{ts,tsx}').scan(baseDir));
+            for (const file of files.sort()) {
+                if (basename(file) === 'index.ts' || file.endsWith('.gen.ts')) continue;
                 record(subpath, join(dirname(target), file), basename(file).replace(CODE, ''));
             }
         }

@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import type { PublicConfig, PublicUser } from '@workspace/lib/types/public';
+import type { PublicUser } from '@workspace/lib/types/public';
 import type { LandingLink } from '@workspace/lib/types/settings';
+import type { getPublicConfig } from '../../lib/config/server-config';
 import { assertJson, authedRequest, getTestContext, TEST_PNG_BYTES } from '../setup';
 
 // All /p/* routes are intentionally PUBLIC (unauthenticated) — that is what the /p/ prefix means.
@@ -15,7 +16,7 @@ describe('Public Routes', () => {
     describe('/p/config', () => {
         test('returns public config without authentication', async () => {
             const response = await ctx.app.handle(new Request('http://localhost/p/config'));
-            const data = await assertJson<PublicConfig>(response);
+            const data = await assertJson<ReturnType<typeof getPublicConfig>>(response);
             expect(data.domain).toBe('test.eigen.is');
             expect(data.orgName).toBe('Test Organization');
             expect(data.orgId).toBeString();

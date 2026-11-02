@@ -1,6 +1,6 @@
 // Excel and Google wrap text only: a number too wide for its column stays on one line and clips.
 
-import { beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { getFontFamily } from '@workspace/lib/constants/fonts';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { setCellValue } from '../../../state/modules/cell';
@@ -135,8 +135,16 @@ describe('state/modules/text — font sets', () => {
 // A glyph's ascent and descent are measured from the baseline, so the same text measures differently
 // under another baseline. A cache that mixed them up shifted numbers in one row up or down.
 describe('state/modules/text — measure cache', () => {
+    // Every happy-dom window shares one HTMLElement class, so the real offsetHeight goes back after each stub.
+    const realOffsetHeight = Object.getOwnPropertyDescriptor(window.HTMLElement.prototype, 'offsetHeight');
+
     beforeEach(() => {
         clearMeasureTextCache();
+    });
+
+    afterEach(() => {
+        if (realOffsetHeight) Object.defineProperty(window.HTMLElement.prototype, 'offsetHeight', realOffsetHeight);
+        else Reflect.deleteProperty(window.HTMLElement.prototype, 'offsetHeight');
     });
 
     test('the same text under another baseline is measured again', () => {

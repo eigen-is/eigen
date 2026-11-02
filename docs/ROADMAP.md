@@ -4,7 +4,7 @@ Open work on the road to a trustworthy 1.0, data integrity first. Status is what
 
 **Before 0.5.0** comes first: 0.5.0 announces the open-source repository, and its section lists everything that ships before it. P0 to P2 hold the rest of the road to 1.0, most important first.
 
-The page holds only open work: when work ships, its row or its done part goes in the same commit. A bug found and not fixed gets a row in the same commit, here or in its domain backlog, naming the file and function, the failure and the callers.
+The page holds only open work: when work ships, its row or its done part goes in the same commit. A bug found is fixed, even outside the task; only one that needs the owner's yes, a product choice or more than a small unit gets a row instead, in the same commit, here or in its domain backlog, naming the file and function, the failure and the callers.
 
 **No backward compatibility before 1.0.** A change to a persisted format is done outright: existing data is dropped or converted once, and migrations become mandatory from 1.0. Stickies are the exception, because eigen.is users rely on them. Self-host tooling is never shimmed either: scripts, env files, Compose layouts and archive, snapshot and backup formats change outright, an old script is deleted, and running instances get a short note.
 
