@@ -145,6 +145,32 @@ describe("the range picker's onClose", () => {
     });
 });
 
+describe("the range picker's shell", () => {
+    // The app's stylesheet fades a closing dialog out, and Radix keeps it in the document until the fade ends.
+    test('leaves no empty shell on screen while the picker fades out', async () => {
+        const fade = document.createElement('style');
+        fade.textContent = '[role="dialog"][data-state="closed"] { animation-name: fade-out; }';
+        document.head.append(fade);
+        try {
+            const { host } = await renderHost();
+            await act(async () => host.showNonModal('Pick a range', {}));
+            await act(async () => host.hideModal());
+            expect(openDialogs()).toHaveLength(0);
+        } finally {
+            fade.remove();
+        }
+    });
+
+    test('keeps a picker anchored past the viewport edge on screen', async () => {
+        const { host } = await renderHost();
+        await act(async () => host.showNonModal('Pick a range', { anchor: { left: 5000, top: 5000 } }));
+        const [picker] = openDialogs();
+        if (!(picker instanceof HTMLElement)) throw new Error('no picker');
+        expect(picker.style.left).toBe(`${window.innerWidth - VIEWPORT_MARGIN}px`);
+        expect(picker.style.top).toBe(`${window.innerHeight - VIEWPORT_MARGIN}px`);
+    });
+});
+
 // Radix hands the focus on a moment after a dialog unmounts.
 const focusSettled = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
 
