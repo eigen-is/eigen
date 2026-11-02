@@ -103,9 +103,10 @@ export function isSqliteFile(filePath: string): boolean {
     }
 }
 
-// What Mount.getTotalSize answers, for a mount nobody has open. The admin usage view sizes every home at
-// once, and opening each Home would take seconds. The open is read-write on purpose. A WAL database that
-// nobody holds open has no -shm file beside it, and a read-only open of it fails. Only this SELECT runs.
+// What Mount.getTotalSize answers, read from the file, so it needs no live mount. The admin usage view
+// sizes every home at once, and opening each Home would take seconds. A home whose default mount is
+// switched off has no live mount to ask. The open is read-write on purpose. A WAL database that nobody
+// holds open has no -shm file beside it, and a read-only open of it fails. Only this SELECT runs.
 export function readMountTotalSize(metadataPath: string): number {
     if (!fs.existsSync(metadataPath)) return 0;
     const db = new Database(metadataPath, { readwrite: true, create: false });

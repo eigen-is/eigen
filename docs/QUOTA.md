@@ -82,6 +82,7 @@ The admin Users page sizes homes nobody has loaded, through `pullHomeSize` ([SER
 
 - Mail: `readMailTotalSize` (`maildir-store.ts`), the index sum plus the same `readDraftStagingSize` walk. On a server with mail turned off, `MaildirStore.init` opens no index and seeds its byte counter from these same two reads instead, so the mail kept from before still counts toward storage.
 - Contacts and calendar: `readContactsTotalSize` (`card-store.ts`, plus the `avatars/` folder) and `readCalendarTotalSize` (`resource-store.ts`), both through `readBlobTableSize` (`apps/api/src/lib/core/blob-store.ts`).
+- Drive: a live Home sizes its drive the cold way too. `Home.size` and `pullHomeSize` both call `userHomeSize`, which sums the default mount's `metadata.db` through `readMountTotalSize` and takes the cap from the default mount in `settings.json`. So a home whose default mount is switched off still answers its size, and still counts the files it kept.
 
 `readBlobTableSize` sizes a missing database as 0. It also sizes as 0 a database whose schema stamp is not this build's `currentVersion`, a newer stamp and a missing stamp table included. The column it would sum may not exist yet or may mean other bytes, and the pending migration drops those bytes anyway. So a home not opened since an upgrade reports no cards and no events rather than dropping the user off the page.
 
