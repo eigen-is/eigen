@@ -153,9 +153,9 @@ export class FormulaCache {
 
     public set formulaCellInfoMap(v: FormulaCellInfoMap | null) {
         this.engine.state.formulaCellInfoMap = v;
-        // Code only assigns the map to reset it, to null or to an empty map, such as after a row insert or a sheet
-        // rename. The reverse index mirrors the map, so it resets too. So do the resolved references, which hold the
-        // sheets' old sizes and names. setFormulaCellInfo fills all three again.
+        // Code assigns the map only to reset it, such as after a row insert or a sheet rename. The reverse index mirrors
+        // the map, so it resets too. The resolved references and the sheet sizes go as well, because they hold the
+        // sheets' old sizes and names. setFormulaCellInfo fills them all again.
         this.engine.state.dependencyIndex.clear();
         this.cellTextToIndexList = {};
         this.sheetExtents.clear();
@@ -191,8 +191,8 @@ export class FormulaCache {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
             if (root !== 'sheets' || (field != null && field !== 'data')) continue;
             const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
-            // A sheet added or dropped, a whole matrix, or a row or cell added or dropped: rebuild on next use. A row or
-            // cell added or dropped resizes the grid, which moves where a whole column or row ends.
+            // A patch that adds or drops a sheet, a whole matrix, a row or a cell makes the map build again on next use.
+            // Adding or dropping a row or a cell resizes the grid, which moves where a whole column or row ends.
             const resized = cellField == null && patch.op !== 'replace';
             if (id == null || typeof r !== 'number' || (c != null && typeof c !== 'number') || resized) {
                 this.formulaCellInfoMap = null;
@@ -204,8 +204,9 @@ export class FormulaCache {
             }
             const row: (Cell | null)[] = patch.value;
             for (let col = 0; col < row.length; col += 1) {
-                if (row[col]?.f != null || map[`r${r}c${col}i${id}`] != null)
+                if (row[col]?.f != null || map[`r${r}c${col}i${id}`] != null) {
                     setFormulaCellInfo(ctx, { r, c: col, id });
+                }
             }
         }
     }

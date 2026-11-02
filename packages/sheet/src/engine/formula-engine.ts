@@ -76,7 +76,6 @@ export class FormulaEngine {
             execFunctionGlobalData: {},
             formulaCellInfoMap: null,
             dependencyIndex: new DependencyIndex(),
-            cellTextToIndexList: {},
         };
 
         this.parser = new Parser();
