@@ -2,7 +2,7 @@
 // Enter submits like the button, and the name goes on as typed. A save closes it, and a failed one stays open with the
 // typed name kept. Every editor's File menu mounts the rename dialog closed, so the Location line's breadcrumb is read
 // only once the dialog opens.
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { DRIVE_MIME_DOC, DRIVE_MIME_FOLDER } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -11,14 +11,17 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-
 const requests: string[] = [];
-g.fetch = async (input: string | URL | Request) => {
-    requests.push(input instanceof Request ? input.url : String(input));
-    return Response.json([]);
-};
+const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(
+        async (input: string | URL | Request) => {
+            requests.push(input instanceof Request ? input.url : String(input));
+            return Response.json([]);
+        },
+        { preconnect: fetch.preconnect },
+    ),
+);
+afterAll(() => fetchSpy.mockRestore());
 
 const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');

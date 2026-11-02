@@ -1,6 +1,6 @@
 // The Share dialog saves what changed and closes once it is saved. A save that fails stays open with Cancel and Save
 // still there, so the user can try again or give up.
-import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -8,9 +8,10 @@ import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-// biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
-const g = globalThis as any;
-g.fetch = async () => Response.json([]);
+// The people and contacts the rows look up.
+const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
+    Object.assign(async () => Response.json([]), { preconnect: fetch.preconnect }),
+);
 
 const updateACL = mock(async (_variables: unknown) => {});
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
@@ -31,6 +32,7 @@ mock.module('@workspace/lib/auth', () => ({
 }));
 mock.module('@workspace/lib/home', () => ({ ...realHome, useMyTeams: () => ({ data: [] }) }));
 afterAll(() => {
+    fetchSpy.mockRestore();
     mock.module('@workspace/lib/drive', () => realDrive);
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/home', () => realHome);
