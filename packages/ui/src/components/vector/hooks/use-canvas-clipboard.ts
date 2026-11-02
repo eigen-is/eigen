@@ -42,6 +42,7 @@ import {
     readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
+    textBoxDefaults,
     textBoxFitHeight,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
@@ -61,6 +62,15 @@ import { deleteSelection } from './selection-ops';
 // How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
 // hundreds of parallel fetch + upload round-trips; a handful keeps a normal multi-image paste quick.
 const REUPLOAD_CONCURRENCY = 4;
+
+// A text box as wide as its measured text, rounded up to whole px. The browser rounds the text's width up and the
+// box's down as it lays them out, so a box even a hair narrower than its text wraps the last word.
+function textBoxWidth(measured: number): number {
+    return Math.ceil(measured);
+}
+
+// The fields of a text box that its measured width depends on.
+const FONT_FIELDS = ['fontSize', 'fontFamily', 'fontWeight', 'letterSpacing'] as const;
 
 // Cut deletes only what the clipboard carries, so an image that could not be serialized stays put. Tell
 // the user, or the difference between "cut" and "cut most of it" is invisible — and between "cut" and
@@ -247,21 +257,28 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     typo.fontSize !== undefined && Number.isFinite(typo.fontSize)
                         ? canvasPtToPx(typo.fontSize, slideWidth)
                         : styleDefaults.fontSize;
-                const font = { fontSize, fontFamily };
-                const { width, height } = measureVectorText(item.text, font);
+                const typography = readClipboardTypography(typo);
+                const font = {
+                    fontSize,
+                    fontFamily,
+                    fontWeight: typography.fontWeight,
+                    letterSpacing: typography.letterSpacing,
+                };
+                const measured = measureVectorText(item.text, font);
+                const width = textBoxWidth(measured.width);
                 plan.measuredText.push({ index: plan.partials.length, text: item.text, font, width });
                 plan.partials.push({
                     type: 'rectangle',
                     autoFit: true,
-                    ...placeAt(width, height),
+                    ...placeAt(width, measured.height),
                     width,
-                    height,
+                    height: measured.height,
                     angle,
                     html: textToParagraphHtml(item.text),
                     fontSize,
                     fontFamily,
                     color: typo.color,
-                    ...readClipboardTypography(typo),
+                    ...typography,
                 });
             }
             return plan;
@@ -293,10 +310,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     isTextBox(el) &&
                     el.html === html &&
                     el.width === width &&
-                    el.fontSize === font.fontSize &&
-                    el.fontFamily === font.fontFamily
+                    FONT_FIELDS.every((field) => el[field] === font[field])
                         ? {
-                              width: size.width,
+                              width: textBoxWidth(size.width),
                               height: textBoxFitHeight({ ...el, height: 0 }, size.height) ?? el.height,
                           }
                         : null,
@@ -388,8 +404,11 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     const pasteTextElement = useCallback(
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
-            const font = { fontSize: styleDefaults.fontSize, fontFamily: styleDefaults.fontFamily };
-            const { width, height } = measureVectorText(text, font);
+            const { fontSize, fontFamily, fontWeight, letterSpacing } = textBoxDefaults(styleDefaults);
+            const font = { fontSize, fontFamily, fontWeight, letterSpacing };
+            const measured = measureVectorText(text, font);
+            const width = textBoxWidth(measured.width);
+            const { height } = measured;
             commitPaste({
                 partials: [
                     {

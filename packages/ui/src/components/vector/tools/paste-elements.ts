@@ -19,7 +19,7 @@ export type PastePlan = {
     crossMount: { index: number; item: EigenClipboardImageItem }[];
     // Text boxes sized by a measure of their text as the paste landed. Each keeps the text, its font and the width it
     // was given, so the hook can measure it again once the slices of that text load.
-    measuredText: { index: number; text: string; font: VectorTextFont; width: number }[];
+    measuredText: { index: number; text: string; font: Required<VectorTextFont>; width: number }[];
 };
 
 // The whole stored record minus what the writer allocates: the id, the index and the seed. A copy takes its own

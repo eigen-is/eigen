@@ -14,27 +14,39 @@ let release = () => {};
 let network = Promise.resolve();
 const loaded = new Set<string>();
 const fontCalls: string[] = [];
+const fontFonts: string[] = [];
 Object.defineProperty(document, 'fonts', {
     configurable: true,
     value: {
         ready: Promise.resolve(),
-        check: (_font: string, text = ' ') => {
+        check: (font: string, text = ' ') => {
             fontCalls.push(`check ${JSON.stringify(text)}`);
+            fontFonts.push(font);
             return [...text].every((char) => loaded.has(char));
         },
-        load: async (_font: string, text = ' ') => {
+        load: async (font: string, text = ' ') => {
             fontCalls.push(`load ${JSON.stringify(text)}`);
+            fontFonts.push(font);
             await network;
             for (const char of text) loaded.add(char);
             return [];
         },
     },
 });
-// A character measures 10 px in the fallback and 20 px once its slice has loaded.
-const measureText = (line: string) => ({ width: [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : 10), 0) });
+// A character measures `fallbackAdvance` px in the fallback, 10 unless a test says otherwise, and 20 px once its slice
+// has loaded. `measuredFonts` records the font of each measure.
+let fallbackAdvance = 10;
+const measuredFonts: string[] = [];
+const measureContext = {
+    font: '',
+    measureText: (line: string) => {
+        measuredFonts.push(measureContext.font);
+        return { width: [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : fallbackAdvance), 0) };
+    },
+};
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
     configurable: true,
-    value: () => ({ font: '', measureText }),
+    value: () => measureContext,
 });
 
 const Y = await import('yjs');
@@ -85,6 +97,7 @@ beforeEach(() => {
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
     undoManager = new Y.UndoManager(doc.getMap('elements'));
     loaded.clear();
+    fallbackAdvance = 10;
     network = new Promise<void>((resolve) => {
         release = resolve;
     });
@@ -254,6 +267,41 @@ test("another app's text item sized before its slices load is measured again in 
     expect(textBox()).toEqual({ width: 100, height: oneLine });
 });
 
+// Five characters, each followed by its half px of spacing, measured in the bold face and loading its slices.
+test("another app's spaced bold text is measured, and measured again, in its own weight and spacing", async () => {
+    await render();
+    fontFonts.length = 0;
+    measuredFonts.length = 0;
+    await paste((event) =>
+        writeEigenClipboard(event, {
+            version: 1,
+            items: [
+                {
+                    type: 'text',
+                    text: '茶 tea',
+                    width: 1,
+                    height: 1,
+                    typography: { fontWeight: 'bold', letterSpacing: 0.5 },
+                },
+            ],
+        }),
+    );
+    expect(textBox()).toEqual({ width: Math.ceil(50 + 2.5), height: oneLine });
+
+    await loadSlices();
+    expect(textBox()).toEqual({ width: Math.ceil(100 + 2.5), height: oneLine });
+    const fonts = [...fontFonts, ...measuredFonts];
+    expect(fonts.length > 0 && fonts.every((font) => font.startsWith('bold '))).toBe(true);
+});
+
+// The layer lays its box out at a rounded width, and a box a hair narrower than its text wraps the last word.
+test('a pasted box is never narrower than its text', async () => {
+    fallbackAdvance = 10.001;
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    expect(textBox()).toEqual({ width: 51, height: oneLine });
+});
+
 // A box resized while the slices load has a width the user chose, which a late measure must not take back.
 test('a pasted box resized before its slices load keeps the width it was given', async () => {
     await render();
@@ -297,4 +345,20 @@ test("a pasted box's heal takes back the height a fallback's wrap grew it to", a
 
     await loadSlices();
     expect(textBox()).toEqual({ width: 100, height: oneLine });
+});
+
+// A box made bold while the slices load is measured in another face, so a late measure in the old one is stale.
+test('a pasted box restyled before its slices load keeps the size it has', async () => {
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    const box = readVectorFromDoc(doc).elements.find((el) => el.type === 'rectangle');
+    if (!box) throw new Error('nothing was pasted');
+    const stored = doc.getMap('elements').get(box.id);
+    if (!(stored instanceof Y.Map)) throw new Error('the box is not stored');
+    await act(async () => {
+        stored.set('fontWeight', 'bold');
+    });
+
+    await loadSlices();
+    expect(textBox()).toEqual({ width: 50, height: oneLine });
 });
