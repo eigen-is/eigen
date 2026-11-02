@@ -751,8 +751,8 @@ for SHELL_NAME in dash busybox host; do
     sequence=$(update_steps)
     if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 1 --reason update --message Back in five|backup --level light --reason pre-update --wait|restart-notice --in 0 --reason update --message Back in five|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
         printf '%s\n' "$CALLS" | awk '/^pull /{ pulled = NR } / restart-notice --in 1 /{ told = NR } END { exit !(pulled && told > pulled) }' &&
-        printf '%s\n' "$OUT" | grep -q '◆  Eigen restarts for the update at 2026-01-01 00:10:00 UTC, in 1s. Ctrl+C cancels.$' &&
-        printf '%s\n' "$OUT" | grep -q '│  Back in five$' && printf '%s\n' "$OUT" | grep -q '◇  Waited until 2026-01-01 00:10:00 UTC$'; then
+        printf '%s\n' "$OUT" | grep -q '◆  Restarts in 1s, at 00:10:00 UTC. Ctrl+C cancels.$' &&
+        printf '%s\n' "$OUT" | grep -q '│  Back in five$' && printf '%s\n' "$OUT" | grep -q '◇  Waited until 00:10:00 UTC$'; then
         ok "$SHELL_NAME: update --in tells the open tabs after every pull, with the message, counts down, then backs up"
     else
         fail "$SHELL_NAME: update --in: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
@@ -807,7 +807,8 @@ for SHELL_NAME in dash busybox host; do
     long=$(printf 'x%.0s' $(seq 201))
     for args in 'update --in 10' 'update --in 61m' 'update --in 2h' 'update --in 99999s' 'update --in 10x' \
         'update --in -5m' 'update --in' 'update --check --in 1m' "update --in 1m $long" 'rollback --in 10' \
-        'restore a --in 5'; do
+        'restore a --in 5' 'update --in 10m 0.4.0' 'update --in 10m latest' 'update --in 10m main' \
+        "restore --in 10m $ARCHIVE"; do
         # shellcheck disable=SC2086
         launch release $args
         if [ "$CODE" != 2 ] || [ -n "$OUT" ] || [ -n "$CALLS" ] || ! printf '%s\n' "$ERR" | grep -q '^Usage: ./eigen'; then
@@ -817,10 +818,17 @@ for SHELL_NAME in dash busybox host; do
     STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update --in 0
     zero=$CODE
     launch release update --in 09m --bogus
-    if [ -z "$failed" ] && [ "$zero" = 0 ] && [ "$CODE" = 2 ] && printf '%s\n' "$ERR" | grep -q '^Unknown argument "--bogus".$'; then
-        ok "$SHELL_NAME: --in takes 0 and a leading zero, and refuses a bare number, more than an hour, a stray unit, no time, --check and a long message, before anything runs"
+    bogus_code=$CODE bogus_err=$ERR
+    launch release update --in 10m 0.4.0
+    version_err=$ERR
+    launch release restore --in 10m "$ARCHIVE"
+    if [ -z "$failed" ] && [ "$zero" = 0 ] && [ "$bogus_code" = 2 ] &&
+        printf '%s\n' "$bogus_err" | grep -q '^Unknown argument "--bogus".$' &&
+        printf '%s\n' "$version_err" | grep -qx 'Put the version before --in: ./eigen update 0.4.0 --in 10m' &&
+        printf '%s\n' "$ERR" | grep -qx "Put the archive before --in: ./eigen restore $ARCHIVE --in 10m"; then
+        ok "$SHELL_NAME: --in takes 0 and a leading zero, and refuses a bare number, more than an hour, a stray unit, no time, --check, a long message, and a version or an archive after it, before anything runs"
     else
-        fail "$SHELL_NAME: --in parsing:$failed; --in 0 exit $zero; --in 09m --bogus exit $CODE, '$ERR'"
+        fail "$SHELL_NAME: --in parsing:$failed; --in 0 exit $zero; --in 09m --bogus exit $bogus_code, '$bogus_err'; a version after --in '$version_err'; an archive after --in '$ERR'"
     fi
     rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     failed=''
@@ -922,8 +930,9 @@ for SHELL_NAME in dash busybox host; do
     STUB_DIGEST=ddd launch release update --pulled 0.2.99
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  This update was started by a launcher older than 0.3.1.' &&
         printf '%s\n' "$ERR" | grep -q '└  Copy data/ and .env.production somewhere safe, then run ./eigen update 0.3.1 --no-backup, then ./eigen update.' &&
-        ! printf '%s\n' "$CALLS" | grep -Eq ' configure | stop$| up -d' && [ ! -e "$FIX/release/.eigen/lock" ]; then
-        ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything"
+        ! printf '%s\n' "$CALLS" | grep -Eq ' configure | stop$| up -d' && [ ! -e "$FIX/release/.eigen/lock" ] &&
+        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' restart-notice --clear$'; then
+        ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything, and takes the notice back"
     else
         fail "$SHELL_NAME: a handover from an older launcher: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
@@ -1334,7 +1343,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     reset_release
     launch local restore "$ARCHIVE" --yes --in 1s 'Back soon'
     if [ "$CODE" = 0 ] && [ "$(notice_steps)" = 'stage|staged|restart-notice --in 1 --reason rollback --message Back soon|stop|' ] &&
-        printf '%s\n' "$OUT" | grep -q '◆  Eigen restarts for the restore at 2026-01-01 00:10:00 UTC, in 1s. Ctrl+C cancels.$'; then
+        printf '%s\n' "$OUT" | grep -q '◆  Restarts in 1s, at 00:10:00 UTC. Ctrl+C cancels.$'; then
         ok "$SHELL_NAME: restore --in tells the open tabs, with the message, and waits right before the stop"
     else
         fail "$SHELL_NAME: restore --in: exit $CODE, '$(notice_steps)', '$OUT', '$ERR'"
