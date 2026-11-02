@@ -1654,6 +1654,22 @@ describe('charts', () => {
         expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([[240, 144]]);
     });
 
+    // Each group may scale by up to 63 digits, so nested groups overflow a number; a chart with no size takes the default.
+    test('a chart in groups scaled past what a number holds takes the default size', async () => {
+        const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+        const huge = '9'.repeat(63);
+        const nest = (inner: string, depth: number): string =>
+            depth === 0
+                ? inner
+                : `<wpg:grpSp><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${huge}" cy="${huge}"/><a:chOff x="0" y="0"/><a:chExt cx="1" cy="1"/></a:xfrm></wpg:grpSpPr>${nest(inner, depth - 1)}</wpg:grpSp>`;
+        const frame = `<wpg:graphicFrame><wpg:xfrm><a:off x="0" y="0"/><a:ext cx="4572000" cy="2743200"/></wpg:xfrm><a:graphic><a:graphicData uri="${C_NS}"><c:chart xmlns:c="${C_NS}" r:id="rId20"/></a:graphicData></a:graphic></wpg:graphicFrame>`;
+        const group = `<w:r><w:drawing><wp:inline><wp:extent cx="4572000" cy="2743200"/><wp:docPr id="12" name="Group 12"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}"><wpg:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${huge}" cy="${huge}"/><a:chOff x="0" y="0"/><a:chExt cx="1" cy="1"/></a:xfrm></wpg:grpSpPr>${nest(frame, 5)}</wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const { json } = await imported(paragraph(group), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([
+            [CHART_DEFAULT_SIZE.width, CHART_DEFAULT_SIZE.height],
+        ]);
+    });
+
     test("a chart the reader can't draw is a paragraph naming its kind with its title, a missing part one saying a chart", async () => {
         const { json, warnings } = await imported(
             `${paragraph('<w:r><w:t>Before</w:t></w:r>')}${paragraph(chartRun('rId20'))}${paragraph(chartRun('rId9'))}${paragraph('<w:r><w:t>After</w:t></w:r>')}`,

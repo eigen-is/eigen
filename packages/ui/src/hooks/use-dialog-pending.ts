@@ -7,6 +7,7 @@
 import { isRefusal, wasToasted } from '@workspace/lib/api-error';
 import { useState } from 'react';
 
+// Two promise types rather than Promise<void | false>, which Biome flags as a confusing use of void.
 export type DialogAction = () => void | false | Promise<void> | Promise<false | undefined>;
 
 export function useDialogPending(
