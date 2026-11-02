@@ -8,7 +8,7 @@ import { stripNonXmlChars } from '../../core/xml';
 import { isColorToken, parseFill, serializeFill } from '../fill';
 import { MAX_FONT_SIZE_PX, MIN_FONT_SIZE_PX } from '../frames';
 import { parsePathCommands, serializePath } from '../outline';
-import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_RICHTEXT_PROPS } from '../types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_FONT_FAMILY, DEFAULT_FONT_SIZE, DEFAULT_TEXT_BOX_PROPS } from '../types';
 
 // Sanity bound on spatial fields. Without a cap one client's corrupt write (say 1e15 from a math bug)
 // freezes every other peer — rough fill cost scales with element area.
@@ -97,11 +97,11 @@ export function fontFamily(v: unknown, fallback = DEFAULT_FONT_FAMILY): string {
 // Rich-text typography bounds, shared by the document reader and the paste wire: a hostile value
 // can't blow every peer's layout with 1e9 tracking or leading.
 export function letterSpacingField(v: unknown): number {
-    return clampNum(v, -200, 200, DEFAULT_RICHTEXT_PROPS.letterSpacing);
+    return clampNum(v, -200, 200, DEFAULT_TEXT_BOX_PROPS.letterSpacing);
 }
 
 export function lineHeightField(v: unknown): number {
-    return clampNum(v, 0.5, 10, DEFAULT_RICHTEXT_PROPS.lineHeight);
+    return clampNum(v, 0.5, 10, DEFAULT_TEXT_BOX_PROPS.lineHeight);
 }
 
 // roughjs inputs. A negative strokeWidth reaches SVG as an invalid stroke-width, and an out-of-band

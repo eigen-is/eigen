@@ -4,10 +4,10 @@
 
 import type { Options } from 'roughjs/bin/core';
 import type { RoughGenerator } from 'roughjs/bin/generator';
-import { headingIsHorizontal, vectorToHeading } from '../elbow-heading';
 import { getLineHeightPx } from '../font-metrics';
 import type { Point } from '../geometry';
 import { ARROW_LABEL_PAD, arrowheadGeometry, distance } from '../geometry';
+import { headingIsHorizontal, vectorToHeading } from '../heading';
 import { round } from '../points';
 import type { Arrowhead, VectorArrowElement } from '../types';
 import { baseRoughOptions, drawableToSvg, svgTextLine } from './render-utils';

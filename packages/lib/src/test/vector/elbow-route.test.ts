@@ -5,7 +5,7 @@ import type { Bounds, Point } from '../../vector/geometry';
 import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import type { VectorArrowElement, VectorRectangleElement, VectorShapeElement } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, serializeBinding } from '../../vector/types';
-import { byIdOf, richtext } from './element-factories';
+import { byIdOf, textBox } from './element-factories';
 
 // Spread-only so the ellipse case doesn't trip the excess-property check on `corners`.
 const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
@@ -21,6 +21,7 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     roughness: 1,
     seed: 1,
     corners: 'straight',
+    autoFit: false,
 };
 
 const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
@@ -110,7 +111,7 @@ describe('elbowRoute', () => {
         const a = shapeEl({ id: 'A', type: 'rectangle', x: 0, y: 0, width: 100, height: 100 });
         const geom = { x: 200, y: 200, width: 100, height: 100, corners: 'straight' as const };
         const rect = shapeEl({ id: 'B', type: 'rectangle', ...geom });
-        const text = richtext({ id: 'B', ...geom });
+        const text = textBox({ id: 'B', ...geom });
         const arrow = arrowEl({
             points: '[[100,50],[250,200]]',
             startBinding: bind(a, [1, 0.5]),

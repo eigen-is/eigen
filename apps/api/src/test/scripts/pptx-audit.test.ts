@@ -40,7 +40,8 @@ const ELEMENTS: NewVectorElement[] = [
         corners: 'straight',
     },
     {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: 600,
         y: 100,
         width: 600,
@@ -115,11 +116,11 @@ describe('round trip', () => {
                 const elements = scene.elements
                     .filter((element) => element.type !== 'image')
                     .map((element) =>
-                        element.type === 'rectangle'
-                            ? { ...element, x: element.x + 1 }
-                            : element.type === 'richtext'
+                        element.type !== 'rectangle'
+                            ? element
+                            : element.autoFit
                               ? { ...element, html: element.html.replace('Plain', 'Changed') }
-                              : element,
+                              : { ...element, x: element.x + 1 },
                     );
                 return write({ ...scene, elements }, options);
             }`,
@@ -156,29 +157,39 @@ describe('round trip', () => {
         const scene = (
             x: number,
             html: string,
-            type: 'richtext' | 'ellipse' = 'richtext',
+            kind: 'text' | 'ellipse' = 'text',
             textDecoration: Textual['textDecoration'] = 'none',
         ) => {
             const doc = new Y.Doc();
             writeFrameInDoc(doc, { id: 'f1', index: 'a0', name: '', width: 1920, height: 1080, background: '' });
             writeElementInDoc(
                 doc,
-                { type, x, y: 0, width: 100, height: 100, angle: 0, html, textDecoration, frameId: 'f1' },
+                {
+                    ...(kind === 'text' ? { type: 'rectangle', autoFit: true } : { type: 'ellipse' }),
+                    x,
+                    y: 0,
+                    width: 100,
+                    height: 100,
+                    angle: 0,
+                    html,
+                    textDecoration,
+                    frameId: 'f1',
+                },
                 'a0',
                 SLIDES_STYLE_DEFAULTS,
                 'el-0',
             );
             return { scene: readVectorFromDoc(doc), media: [], pictures: new Map() };
         };
-        const groups = (x: number, html: string, type?: 'richtext' | 'ellipse') =>
-            classifyPptx({ a: scene(10, '<p>Text</p>', type), b: scene(x, html, type), prepared: new Map() }).map(
+        const groups = (x: number, html: string, kind?: 'text' | 'ellipse') =>
+            classifyPptx({ a: scene(10, '<p>Text</p>', kind), b: scene(x, html, kind), prepared: new Map() }).map(
                 ({ kind, listed }) => [kind, listed],
             );
         expect(groups(10.00001, '<p>Text </p>')).toEqual([['text as the canvas lays it out', true]]);
         expect(groups(10, '<p>Text </p>', 'ellipse')).toEqual([['text as the canvas lays it out', true]]);
         expect(groups(11, '<p>Other</p>')).toEqual([
-            ['richtext x', false],
-            ['richtext html', false],
+            ['rectangle x', false],
+            ['rectangle html', false],
         ]);
         // A shape whose only text is a link comes back underlined, as the canvas draws the link.
         const link = '<p><a href="https://eigen.is">Link</a></p>';

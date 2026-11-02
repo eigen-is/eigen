@@ -69,9 +69,9 @@ export function SlideEditor(props: SlideEditorProps) {
     );
 }
 
-// The deck: a canvas of frames of the deck's slide size, one per slide. Tool, selection and the active frame are
-// lifted here so the toolbar, rail, canvas and panel share one source; the viewport, gestures,
-// keymap, clipboard and in-place editing are all the engine's.
+// The deck: a canvas with one frame of the deck's slide size per slide. Tool, selection and the active
+// frame live here, so the toolbar, rail, canvas and panel share them. The viewport, gestures, keymap,
+// clipboard and in-place editing all belong to the engine.
 function SlideEditorInner({
     ownerId,
     path,
@@ -83,8 +83,8 @@ function SlideEditorInner({
     initialSearchTerm,
 }: SlideEditorProps) {
     const { isMobile } = useLayout();
-    // Phones view the deck, never edit it (the shared canEdit split: the file menu, share cluster and
-    // comments keep canWrite); tablets sit above the breakpoint.
+    // Phones view the deck but never edit it. The file menu, the share buttons and comments still follow
+    // canWrite. Tablets count as desktop here.
     const canEdit = canWrite && !isMobile;
     const doc = useCanvasDoc(ownerId, path.mountId, path.id, SLIDES_STYLE_DEFAULTS);
     const { frameId, setFrameId, index: frameIndex, step: stepFrame } = useActiveFrame(doc.frames);
@@ -98,12 +98,12 @@ function SlideEditorInner({
     // Presence carries the frame, so a peer's cursor shows only on the slide they are on.
     const publishCursor = useCanvasPresence(doc.provider, user, selectedIds, frameId);
     const { resolveMediaUrl } = useMediaResolver();
-    const uploadFile = useUploadFile(ownerId, path.mountId);
+    const { mutateAsync: uploadFile } = useUploadFile(ownerId, path.mountId);
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
 
     const { addFrame, deleteFrame, duplicateFrame, updateFrame, updateFrames } = doc;
 
-    // The first writer to open an empty deck seeds its one slide (seed-deck.ts owns the why).
+    // The first writer to open an empty deck seeds its one slide. seedDeck explains why.
     useEffect(() => {
         const yjsDoc = doc.yjsDoc;
         if (!doc.loaded || !canWrite || !yjsDoc) return;
@@ -122,8 +122,8 @@ function SlideEditorInner({
     const allImageSelected = selectedElements.length > 0 && selectedElements.every((el) => el.type === 'image');
     const [aspectLocked, setAspectLocked] = useAspectLock(selectedIds, allImageSelected);
 
-    // Revealing an element means going to its slide FIRST — ⌘F and the comment pane both span the
-    // whole deck, so either can land on an element the canvas is not currently showing.
+    // Revealing an element goes to its slide first. ⌘F and the comment pane both span the whole deck,
+    // so either can land on an element the canvas is not showing.
     const revealElement = useCallback(
         (el: VectorElement) => {
             // An element homed on no live slide (a peer deleted it, or the record never carried one) is
@@ -147,7 +147,7 @@ function SlideEditorInner({
         onReveal: revealElement,
     });
 
-    // "Slide 3" — where a match is, in the deck's words. Frame order is the stored order.
+    // A search result names its slide, such as "Slide 3". The number follows the stored frame order.
     const frameNumbers = useMemo(() => new Map(doc.frames.map((f, i) => [f.id, i + 1])), [doc.frames]);
     const contextOf = useCallback(
         (el: VectorElement) => {
@@ -180,7 +180,7 @@ function SlideEditorInner({
     const [isPresenting, setIsPresenting] = useState(false);
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
 
-    // Adding a slide activates it, the way inserting one always has.
+    // A new slide, added or duplicated, becomes the active one.
     const addSlideAfter = (afterId: string | null) => {
         const id = addFrame(afterId);
         if (id) setFrameId(id);
@@ -191,14 +191,15 @@ function SlideEditorInner({
         addSlideAfter(index > 0 ? doc.frames[index - 1].id : null);
     };
 
-    // The rail thumbnail's menu; empty space on the canvas opens the canvas' own, with these rows below its Paste.
-    const slideMenu = useContextMenu<string>();
-    const menuFrameId = slideMenu.item;
-
     const duplicateSlide = (id: string) => {
         const copyId = duplicateFrame(id);
         if (copyId) setFrameId(copyId);
     };
+
+    // The rail thumbnail's menu. A right-click on empty canvas opens the canvas' own menu, with these
+    // rows below its Paste.
+    const slideMenu = useContextMenu<string>();
+    const menuFrameId = slideMenu.item;
 
     const slideMenuSections = (id: string): MenuSectionsProps => ({
         create: (
@@ -226,8 +227,8 @@ function SlideEditorInner({
         // for an empty screen with no canvas keymap left to leave it.
         if (doc.frames.length === 0) return;
         setSelectedIds([]);
-        // Present unmounts the find-bar subtree without closing the session, so its rings would outlive
-        // the exit — drop them on the way in.
+        // Present unmounts the find bar without closing its session, so its rings would outlive the
+        // exit. They are dropped on the way in.
         docSearchController.highlightAll([]);
         setIsPresenting(true);
         // No API (iOS Safari) or a rejected request still presents: the overlay is fixed inset-0.
@@ -239,8 +240,8 @@ function SlideEditorInner({
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
     }, []);
 
-    // Fullscreen also ends outside our control (the browser's own Esc, an Android back gesture) —
-    // leave present with it.
+    // Fullscreen can also end outside our control, such as the browser's own Esc or an Android back
+    // gesture. Present ends with it.
     useEffect(() => {
         const onFullscreenChange = () => {
             if (!document.fullscreenElement) setIsPresenting(false);
@@ -258,11 +259,11 @@ function SlideEditorInner({
         [frameIndex, doc.frames, exitPresent, setFrameId],
     );
 
-    // Layered Escape, capture phase (docs/CANVAS.md § Escape is layered per host, on purpose): present is the OUTERMOST layer
-    // and claims Escape before anything else sees it; the find bar's own bubble-phase handler and the
-    // canvas' text-edit / gesture / deselect layers keep the rest. A capture listener is required
-    // because the bar closes itself on bubble, so a bubble handler here could never tell it had been
-    // open. State rides a ref so the listener never goes stale.
+    // Escape is layered, and present is the outermost layer: it claims Escape before anything else
+    // sees it. The find bar and the canvas layers, such as text editing and deselect, handle the rest.
+    // This listener uses the capture phase because the find bar closes itself on bubble, so a bubble
+    // handler here could never tell the bar had been open. The flag rides a ref so the listener never
+    // goes stale.
     const presentingRef = useRef(false);
     presentingRef.current = isPresenting;
     useEffect(() => {
@@ -284,10 +285,12 @@ function SlideEditorInner({
     const background = frame ? parseBackgroundFill(frame.background) : null;
     const backgroundImageUrl = background?.type === 'image' ? resolveMediaUrl(background.mediaName) : null;
 
+    // Both hooks toast their own failure. The catch only ends the rejection, so a failed upload or copy
+    // sets no background.
     const uploadBackgroundImage = useCallback(
         async (file: File): Promise<string | null> => {
             if (!mediaFolderId || !file.type.startsWith('image/')) return null;
-            const result = await uploadFile.mutateAsync({ parentId: mediaFolderId, file }).catch(() => null);
+            const result = await uploadFile({ parentId: mediaFolderId, file }).catch(() => null);
             return result?.name ?? null;
         },
         [mediaFolderId, uploadFile],
@@ -308,9 +311,8 @@ function SlideEditorInner({
     );
 
     // Present mode replaces the editor outright: no tools, no rail, no panels. The doc hook stays
-    // mounted above it, so leaving present returns to the same slide with the same selection state —
-    // and so does the leave guard, which must outlive the swap or a presenter's unsynced edits would
-    // navigate away unwarned.
+    // mounted above it, so leaving present returns to the same slide and selection. Present renders
+    // the leave guard too, or a presenter could navigate away from unsynced edits without a warning.
     if (isPresenting && frame) {
         return (
             <>

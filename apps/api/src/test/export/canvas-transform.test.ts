@@ -148,7 +148,7 @@ describe('renderEigenslidesHtml — fonts', () => {
     test.each(['html', 'pdf-html'] as const)('a text box in JetBrains Mono embeds it in %s', async (format) => {
         const scene = buildGoldenDeckScene();
         const elements = scene.elements.map((el) =>
-            el.id === 'el-3' && el.type === 'richtext' ? { ...el, fontFamily: 'JetBrains Mono' } : el,
+            el.id === 'el-3' && el.type === 'rectangle' && el.autoFit ? { ...el, fontFamily: 'JetBrains Mono' } : el,
         );
         expect(await embedded({ ...scene, elements }, format)).toEqual(['Inter', 'JetBrains Mono']);
     });

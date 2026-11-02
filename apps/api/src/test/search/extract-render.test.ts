@@ -183,7 +183,7 @@ describe('extractCollabText', () => {
         seedDeckDoc(doc, {
             ...scene,
             elements: scene.elements.map((el) =>
-                el.type === 'richtext' && el.id === 'el-3' ? { ...el, type: 'rectangle' as const } : el,
+                el.type === 'rectangle' && el.autoFit && el.id === 'el-3' ? { ...el, autoFit: false } : el,
             ),
         });
 
@@ -260,7 +260,10 @@ describe('extractCollabText', () => {
     test('eigenvector: a shape with no text contributes nothing at all', async () => {
         const scene = buildGoldenVectorScene();
         const doc = new Y.Doc();
-        seedVectorDoc(doc, { ...scene, elements: scene.elements.filter((el) => el.type === 'rectangle') });
+        seedVectorDoc(doc, {
+            ...scene,
+            elements: scene.elements.filter((el) => el.type === 'rectangle' && !el.autoFit),
+        });
 
         const { text } = await extractCollabText('eigenvector', doc);
         expect(text).toBe('');

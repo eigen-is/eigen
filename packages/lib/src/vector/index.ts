@@ -1,4 +1,5 @@
 export * from './arrange';
+export * from './binding';
 export * from './canvas-image';
 export * from './clipboard';
 export * from './comments';

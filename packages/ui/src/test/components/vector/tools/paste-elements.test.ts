@@ -9,6 +9,7 @@ import {
     readElementsClipboardItem,
     readVectorFromDoc,
     SLIDES_STYLE_DEFAULTS,
+    textBoxDefaults,
     VECTOR_STYLE_DEFAULTS,
     writeElementInDoc,
 } from '@workspace/lib/vector';
@@ -45,11 +46,11 @@ const image = (id: string, mediaName: string): VectorElement => ({
     mediaName,
 });
 
-const richtext = (id: string, html: string): VectorElement => ({
+const textBox = (id: string, html: string): VectorElement => ({
+    ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
     ...BASE,
-    ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
     id,
-    type: 'richtext',
+    type: 'rectangle',
     index: 'a3',
     html,
 });
@@ -80,7 +81,7 @@ describe('planElementsPaste', () => {
     test('a forged rich-text payload is sanitized before it can reach the document', () => {
         // Any web page can write our clipboard MIME, so the html on the wire is hostile until proven
         // otherwise. It is cleaned HERE, so nothing dangerous is ever stored in the Y.Doc.
-        const el = richtext('t1', '<p>keep <em>this</em></p><script>alert(1)</script><img src=x onerror=alert(1)>');
+        const el = textBox('t1', '<p>keep <em>this</em></p><script>alert(1)</script><img src=x onerror=alert(1)>');
         const partial = planElementsPaste([el], [], 'media-1').partials[0];
         expect(partial.html).toBe('<p>keep <em>this</em></p>');
     });
@@ -149,7 +150,7 @@ describe('a size copied between a deck and a drawing', () => {
 
     test('keeps every bit of a text box and an arrow label', () => {
         const deck = new Y.Doc();
-        writeElementInDoc(deck, { ...richtext('t1', '<p>Title</p>'), fontSize: SIZE }, 'a0', SLIDES_STYLE_DEFAULTS);
+        writeElementInDoc(deck, { ...textBox('t1', '<p>Title</p>'), fontSize: SIZE }, 'a0', SLIDES_STYLE_DEFAULTS);
         writeElementInDoc(deck, { ...arrow('a1', ''), text: 'label', fontSize: SIZE }, 'a1', SLIDES_STYLE_DEFAULTS);
         const drawing = pasteInto(deck, VECTOR_STYLE_DEFAULTS);
         expect(readVectorFromDoc(drawing).elements.map((el) => 'fontSize' in el && el.fontSize)).toEqual([SIZE, SIZE]);

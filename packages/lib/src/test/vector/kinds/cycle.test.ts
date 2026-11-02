@@ -1,20 +1,21 @@
 import { describe, expect, test } from 'bun:test';
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { ELEMENT_FIELDS } from '../../../vector/kinds';
 
-// Any entry works except one that reaches geometry through a kind's own module or defineKind's: the
-// registry then evaluates while that module is in its TDZ and throws a ReferenceError. These tests pin
-// the entries that must work.
-//
-// The runtime back-edges inside vector/: geometry ↔ kinds (kind.ts takes geometry's box primitives while
-// geometry dispatches through the registry), geometry ↔ elbow-route, elbow-heading ↔ kinds (arrow-render
-// reads the heading helpers), and elbow-route → elbow-heading → geometry → elbow-route.
+// Every module of the vector engine must load first in a fresh process. A module that sits on an import
+// cycle and runs its body before a module it needs has finished throws a TDZ ReferenceError there, and
+// only on that entry order.
 //
 // The registry builds ELEMENT_FIELDS while it evaluates, so each entry runs in a process of its own. Two
 // imports in one test process prove nothing: the second only reads Bun's module registry, which the first
 // already filled.
 
 const VECTOR_DIR = join(import.meta.dir, '../../../vector');
+
+const KIND_MODULES = readdirSync(join(VECTOR_DIR, 'kinds'))
+    .filter((file) => file.endsWith('.ts'))
+    .map((file) => `kinds/${file}`);
 
 async function elementFieldsFromEntry(entry: string): Promise<string[]> {
     const script = `await import(${JSON.stringify(join(VECTOR_DIR, entry))});
@@ -31,23 +32,20 @@ console.log(JSON.stringify(kinds.ELEMENT_FIELDS));`;
     return JSON.parse(out);
 }
 
-describe('the vector engine survives either entry order', () => {
-    test('geometry as the process entry still builds the full field table', async () => {
-        expect(await elementFieldsFromEntry('geometry.ts')).toEqual([...ELEMENT_FIELDS]);
-    });
-
-    test('kinds as the process entry builds the same table', async () => {
-        expect(await elementFieldsFromEntry('kinds/index.ts')).toEqual([...ELEMENT_FIELDS]);
-    });
-
-    // The charts layout reaches vector/ only through modules that import no kind, so the chart kind
-    // finds the charts barrel evaluated whichever loads first.
-    test('the charts barrel as the process entry builds the same table', async () => {
-        expect(await elementFieldsFromEntry('../charts/index.ts')).toEqual([...ELEMENT_FIELDS]);
-    });
-
-    // A doc's chart reaches the painter from outside vector/, so it must enter through the barrel.
-    test('the eigendoc barrel as the process entry builds the same table', async () => {
-        expect(await elementFieldsFromEntry('../docs/eigendoc/index.ts')).toEqual([...ELEMENT_FIELDS]);
+describe('every vector module loads first and builds the full field table', () => {
+    const entries = [
+        'geometry.ts',
+        'binding.ts',
+        'heading.ts',
+        'elbow-heading.ts',
+        'elbow-route.ts',
+        'elbow-pins.ts',
+        'index.ts',
+        ...KIND_MODULES,
+        '../charts/index.ts',
+        '../docs/eigendoc/index.ts',
+    ];
+    test.each(entries)('%s as the process entry', async (entry) => {
+        expect(await elementFieldsFromEntry(entry)).toEqual([...ELEMENT_FIELDS]);
     });
 });

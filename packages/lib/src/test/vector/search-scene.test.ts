@@ -4,7 +4,7 @@ import { SLIDE_SIZES } from '../../vector/frames';
 import { readElementFromFields } from '../../vector/read-vector';
 import { searchScene } from '../../vector/search-scene';
 import type { VectorScene } from '../../vector/types';
-import { arrow, ellipse, path, pie, richtext, scene, shape } from './element-factories';
+import { arrow, ellipse, path, pie, scene, shape, textBox } from './element-factories';
 
 const frame = (id: string, index: string): VectorFrame => ({
     id,
@@ -22,7 +22,7 @@ const framed = (elements: VectorScene['elements'], frames: VectorFrame[]): Vecto
 describe('searchScene', () => {
     test('finds rich text with its tags stripped', () => {
         const matches = searchScene(
-            scene([richtext({ id: 'a', html: '<p>Total <strong>budget</strong></p>' })]),
+            scene([textBox({ id: 'a', html: '<p>Total <strong>budget</strong></p>' })]),
             /budget/gi,
         );
         expect(matches.map((m) => m.id)).toEqual(['a']);
@@ -39,12 +39,12 @@ describe('searchScene', () => {
     });
 
     test('a match id is the element id — self-describing, resolvable without a cached search', () => {
-        expect(searchScene(scene([richtext({ id: 'el-9', html: '<p>hit</p>' })]), /hit/gi)[0].id).toBe('el-9');
+        expect(searchScene(scene([textBox({ id: 'el-9', html: '<p>hit</p>' })]), /hit/gi)[0].id).toBe('el-9');
     });
 
     test('finds the text in a shape, in reading order among the text boxes', () => {
         const doc = scene([
-            richtext({ id: 'box', index: 'a2', html: '<p>plan</p>' }),
+            textBox({ id: 'box', index: 'a2', html: '<p>plan</p>' }),
             shape({ id: 'rect', type: 'rectangle', index: 'a0', html: '<p>the <em>plan</em></p>' }),
             pie({ id: 'pie', index: 'a4', html: '<p>plan</p>' }),
             ellipse({ id: 'ellipse', index: 'a1', html: '<p>plan</p>' }),
@@ -68,15 +68,15 @@ describe('searchScene', () => {
     });
 
     test('an element whose text does not match is skipped', () => {
-        expect(searchScene(scene([richtext({ id: 'a', html: '<p>hello</p>' })]), /goodbye/gi)).toEqual([]);
+        expect(searchScene(scene([textBox({ id: 'a', html: '<p>hello</p>' })]), /goodbye/gi)).toEqual([]);
     });
 
     test('results are ordered by frame, then z-order', () => {
         const doc = framed(
             [
-                richtext({ id: 'b', index: 'a1', frameId: 'f2', html: '<p>x</p>' }),
-                richtext({ id: 'a', index: 'a0', frameId: 'f2', html: '<p>x</p>' }),
-                richtext({ id: 'c', index: 'a0', frameId: 'f1', html: '<p>x</p>' }),
+                textBox({ id: 'b', index: 'a1', frameId: 'f2', html: '<p>x</p>' }),
+                textBox({ id: 'a', index: 'a0', frameId: 'f2', html: '<p>x</p>' }),
+                textBox({ id: 'c', index: 'a0', frameId: 'f1', html: '<p>x</p>' }),
             ],
             [frame('f1', 'a0'), frame('f2', 'a1')],
         );
@@ -86,8 +86,8 @@ describe('searchScene', () => {
     test('frames order by their own index, not by array position', () => {
         const doc = framed(
             [
-                richtext({ id: 'a', index: 'a0', frameId: 'f2', html: '<p>x</p>' }),
-                richtext({ id: 'b', index: 'a0', frameId: 'f1', html: '<p>x</p>' }),
+                textBox({ id: 'a', index: 'a0', frameId: 'f2', html: '<p>x</p>' }),
+                textBox({ id: 'b', index: 'a0', frameId: 'f1', html: '<p>x</p>' }),
             ],
             [frame('f2', 'a1'), frame('f1', 'a0')],
         );
@@ -97,8 +97,8 @@ describe('searchScene', () => {
     test('an unframed element sorts before every frame', () => {
         const doc = framed(
             [
-                richtext({ id: 'framed', index: 'a0', frameId: 'f1', html: '<p>x</p>' }),
-                richtext({ id: 'loose', index: 'a1', html: '<p>x</p>' }),
+                textBox({ id: 'framed', index: 'a0', frameId: 'f1', html: '<p>x</p>' }),
+                textBox({ id: 'loose', index: 'a1', html: '<p>x</p>' }),
             ],
             [frame('f1', 'a0')],
         );
@@ -106,13 +106,13 @@ describe('searchScene', () => {
     });
 
     test('context comes from the host', () => {
-        const doc = framed([richtext({ id: 'a', frameId: 'f1', html: '<p>x</p>' })], [frame('f1', 'a0')]);
+        const doc = framed([textBox({ id: 'a', frameId: 'f1', html: '<p>x</p>' })], [frame('f1', 'a0')]);
         const matches = searchScene(doc, /x/gi, { contextOf: (el) => `Slide ${el.frameId === 'f1' ? 1 : 2}` });
         expect(matches[0].context).toBe('Slide 1');
     });
 
     test('a label is one line, capped for the bar list', () => {
-        const doc = scene([richtext({ id: 'a', html: `<p>launch</p><p>${'plan '.repeat(30)}</p>` })]);
+        const doc = scene([textBox({ id: 'a', html: `<p>launch</p><p>${'plan '.repeat(30)}</p>` })]);
         const label = searchScene(doc, /launch/gi)[0].label;
         expect(label.startsWith('launch plan plan')).toBe(true);
         expect(label.length).toBe(80);
@@ -120,8 +120,8 @@ describe('searchScene', () => {
 
     test('a global regex is not left with a stale lastIndex between elements', () => {
         const doc = scene([
-            richtext({ id: 'a', index: 'a0', html: '<p>needle</p>' }),
-            richtext({ id: 'b', index: 'a1', html: '<p>needle</p>' }),
+            textBox({ id: 'a', index: 'a0', html: '<p>needle</p>' }),
+            textBox({ id: 'b', index: 'a1', html: '<p>needle</p>' }),
         ]);
         expect(searchScene(doc, /needle/g).map((m) => m.id)).toEqual(['a', 'b']);
     });

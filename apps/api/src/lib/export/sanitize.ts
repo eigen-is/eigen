@@ -14,9 +14,9 @@ import { toTransferableText } from '../document/transform/protocol';
 
 type SanitizeConfig = Parameters<typeof DOMPurify.sanitize>[1];
 
-// DOMPurify's own config plus the exact non-data: URLs this body keeps. Exports embed every resource
-// as a data: URI and pass none; a preview body embeds the `/file/<id>/preview` URLs the main thread
-// resolved, so it passes exactly those — an exact-string set, never a host or prefix rule.
+// DOMPurify's own config, and the exact URLs other than data: URIs this body keeps. An export embeds every resource as
+// a data: URI and passes none. A preview body embeds the `/file/<id>/preview` URLs the main thread resolved, so it
+// passes exactly those, as exact strings and never as a host or prefix rule.
 type SanitizeOptions = SanitizeConfig & { allowedRefs?: ReadonlySet<string> };
 
 // `url(` as the CSS parser reads it, in any case, unless a same-document fragment or a data: URI with no fragment
@@ -76,13 +76,11 @@ const escapesCss = (value: string): boolean => value.includes('\\') && value.inc
 const cssFetches = (css: string, allowed: ReadonlySet<string>): boolean =>
     CSS_OTHER_FETCHES.test(css) || urlFetches(css, allowed);
 
-// Every export resource is embedded as a data: URI (fonts + images) and every preview resource is one
-// of the prepared media URLs, so any other CSS url() or fetching attribute is attacker-injected via
-// schemaless slide/sheet/vector CRDT strings. A browser opening an HTML download fetches those, and a
-// preview body is injected as live DOM in the drive hero (a beacon fired at every viewer). DOMPurify
-// keeps url()/src by default, so restrict here; WeasyPrint's fetcher opens only data: URIs too.
-// <a href> is left alone: a browser follows a link on a click, and sheets/docs
-// carry legitimate http(s) hyperlinks.
+// Every resource an export embeds is a data: URI, and every resource a preview embeds is one of the prepared media
+// URLs. So any other CSS url() or fetching attribute came from a peer's edit. A browser opening an HTML download
+// fetches those, and a preview body is live DOM in the drive hero, where a fetch would track every viewer. DOMPurify
+// keeps url() and src by default, so this restricts them. WeasyPrint's fetcher opens only data: URIs too. An
+// <a href> stays, because a browser follows a link only on a click, and sheets and docs hold real links.
 function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
     // SVG presentation attributes (fill, filter, mask, marker-*) are CSS too, so every value is scanned for `url(`.
     for (const { name, value } of [...node.attributes]) {
@@ -96,16 +94,16 @@ function restrictToDataRefs(node: Element, allowed: ReadonlySet<string>): void {
             node.removeAttribute(name);
         }
     }
-    // A srcset candidate list separates candidates with the same comma a data: URI contains, so it is
-    // dropped rather than parsed — no renderer here emits one.
+    // A srcset list separates its candidates with the comma a data: URI contains too, so it is dropped and not
+    // parsed. No renderer here writes one.
     node.removeAttribute('srcset');
     for (const attr of REF_ATTRS) {
         const value = node.getAttribute(attr);
         if (value != null && !isAllowedRef(value, allowed)) node.removeAttribute(attr);
     }
-    // SVG <image>/<use> reference through href (and legacy xlink:href), which DOMPurify
-    // keeps by default and a browser fetches — the same beacon as <img src>, through a
-    // different attribute. jsdom names an SVG <a> in lowercase, an HTML one in upper.
+    // An SVG <image> or <use> refers through href or the older xlink:href. DOMPurify keeps both by default and a
+    // browser fetches them, the same tracking as <img src>. jsdom names an SVG <a> in lowercase and an HTML one in
+    // uppercase.
     const tag = node.tagName.toLowerCase();
     if (tag === 'a') return;
     const references = FRAGMENT_REF_TAGS.has(tag);
@@ -145,9 +143,9 @@ export const KEEP_MATHML = { ADD_TAGS: ['none'] };
 // download carries it as a <meta>.
 export const EXPORT_CSP = "default-src 'none'; img-src data:; font-src data:; style-src 'unsafe-inline'";
 
-// Shared sanitizer for assembled export and preview bodies (slides/sheets/docs/vector), used for HTML,
-// PDF and live-DOM output. Adds the URL restriction on top of DOMPurify. The hooks are scoped to this
-// synchronous call (add → sanitize → remove), so they never leak to other DOMPurify users.
+// The sanitizer for every assembled export and preview body, in any app, whether it becomes HTML, a PDF or live DOM.
+// It adds the URL restriction to DOMPurify. Its hooks are added and removed around this one synchronous call, so they
+// never reach another DOMPurify user.
 export function sanitizeExportHtml(html: string, options?: SanitizeOptions): string {
     const { allowedRefs = NO_REFS, ...config } = options ?? {};
     DOMPurify.addHook('afterSanitizeAttributes', (node) => restrictToDataRefs(node, allowedRefs));
@@ -204,13 +202,12 @@ export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
     });
 }
 
-// A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the
-// LightEditor sanitizer — so every renderer of one filters to that same set (@workspace/lib/html), and
-// there is a single answer to what a text box can hold. DOMPurify's own profile is far wider: a <table>,
-// an <img src="data:…"> or a <style> a peer wrote would be invisible on every live client yet rendered
-// in the .svg/.html download, the PDF and the drive hero — and a <style> element styles whatever embeds
-// the box rather than the box itself. The assembled document cannot forbid <style> instead: it carries
-// the generated @font-face block.
+// The `html` of a text box or a shape is a schemaless collaborator string, and the canvas mounts it through the
+// LightEditor sanitizer. So every renderer of it filters to that same set (@workspace/lib/html), and there is one answer
+// to what its text can hold. DOMPurify's own profile is far wider. A <table>, an <img src="data:…"> or a <style> a peer
+// wrote would be invisible on every live client, yet rendered in the .svg and .html downloads, the PDF and the drive
+// hero. A <style> element would also style whatever embeds the box rather than the box itself. The assembled document
+// cannot forbid <style> instead, because it carries the generated @font-face block.
 const LIGHT_EDITOR_ONLY: SanitizeConfig = {
     ALLOWED_TAGS: LIGHT_EDITOR_TAGS,
     ALLOWED_ATTR: LIGHT_EDITOR_ATTRS,
@@ -220,10 +217,9 @@ const LIGHT_EDITOR_ONLY: SanitizeConfig = {
     ADD_URI_SAFE_ATTR: ['target', 'rel'],
 };
 
-// Every canvas scene element that carries an `html` body, with that body filtered: the LightEditor set
-// plus the shared restriction to data: refs, so nothing a collaborator wrote in it can fetch from
-// anywhere. Every renderer of an untrusted scene — both previews, the deck export, the drawing export —
-// reads the scene through here first, then sanitizes its own assembled output.
+// A canvas scene with each element's `html` body filtered to the LightEditor's tags and to data: refs, so nothing
+// a collaborator wrote in it can fetch anything. Every renderer of an untrusted scene, such as a preview or an
+// export, reads the scene through here first and then sanitizes its own assembled output.
 export function sanitizeSceneHtml(scene: VectorScene): VectorScene {
     return {
         ...scene,

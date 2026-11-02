@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test';
 import { commentAnchorTexts, elementForCommentCard } from '../../vector/comments';
 import type { VectorElement } from '../../vector/types';
-import { arrow, richtext, shape } from './element-factories';
+import { arrow, shape, textBox } from './element-factories';
 
 // The host's label table in miniature — the panel row's fallback when a kind carries no text.
 const labelOf = (el: VectorElement): string =>
-    el.type === 'arrow' ? 'Arrow' : el.type === 'richtext' ? 'Text' : 'Rectangle';
+    el.type === 'arrow' ? 'Arrow' : el.type === 'rectangle' && el.autoFit ? 'Text' : 'Rectangle';
 
 describe('commentAnchorTexts', () => {
     test('anchor text comes from the element the card is on', () => {
         const els = [
-            richtext({ id: 'a', commentCardIds: '["c1"]', html: '<p>Budget for Q3</p>' }),
+            textBox({ id: 'a', commentCardIds: '["c1"]', html: '<p>Budget for Q3</p>' }),
             shape({ id: 'b', type: 'rectangle', commentCardIds: '["c2"]' }),
         ];
         const texts = commentAnchorTexts(els, labelOf);
@@ -29,26 +29,26 @@ describe('commentAnchorTexts', () => {
     });
 
     test('whitespace-only text falls back to the label', () => {
-        const el = richtext({ id: 'a', commentCardIds: '["c1"]', html: '<p>   </p>' });
+        const el = textBox({ id: 'a', commentCardIds: '["c1"]', html: '<p>   </p>' });
         expect(commentAnchorTexts([el], labelOf).get('c1')).toBe('Text');
     });
 
     test('anchor text is capped at 100 characters', () => {
-        const el = richtext({ id: 'a', commentCardIds: '["c1"]', html: `<p>${'x'.repeat(200)}</p>` });
+        const el = textBox({ id: 'a', commentCardIds: '["c1"]', html: `<p>${'x'.repeat(200)}</p>` });
         expect(commentAnchorTexts([el], labelOf).get('c1')?.length).toBe(100);
     });
 
     test('the first element holding a card wins the anchor', () => {
         const els = [
-            richtext({ id: 'a', index: 'a0', commentCardIds: '["c1"]', html: '<p>first</p>' }),
-            richtext({ id: 'b', index: 'a1', commentCardIds: '["c1"]', html: '<p>second</p>' }),
+            textBox({ id: 'a', index: 'a0', commentCardIds: '["c1"]', html: '<p>first</p>' }),
+            textBox({ id: 'b', index: 'a1', commentCardIds: '["c1"]', html: '<p>second</p>' }),
         ];
         expect(commentAnchorTexts(els, labelOf).get('c1')).toBe('first');
     });
 
     test('one element can anchor several cards', () => {
         const texts = commentAnchorTexts(
-            [richtext({ id: 'a', commentCardIds: '["c1","c2"]', html: '<p>hi</p>' })],
+            [textBox({ id: 'a', commentCardIds: '["c1","c2"]', html: '<p>hi</p>' })],
             labelOf,
         );
         expect([...texts.entries()]).toEqual([

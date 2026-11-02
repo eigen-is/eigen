@@ -1,5 +1,5 @@
 // Convert to shapes: a chart unpacked into the plain elements its painter draws. It reads the painter's own
-// layout (chartElementLayout), so each shape converts to exactly what drew it; the labels become rich-text boxes.
+// layout (chartElementLayout), so each shape converts to exactly what drew it; the labels become text boxes.
 
 import { textToParagraphHtml } from '../../core/html';
 import type { ChartLabel } from '../../types/chart';
@@ -8,8 +8,8 @@ import { getFontMetrics, getLineHeightPx } from '../font-metrics';
 import { boxCenter, rotatePoint } from '../geometry';
 import { normalizeAngle } from '../outline';
 import { measureLabel } from '../text-width';
-import type { TextAlign, VectorChartElement, VectorElement, VectorRichTextElement } from '../types';
-import { DEFAULT_CORNERS, DEFAULT_RICHTEXT_PROPS } from '../types';
+import type { TextAlign, VectorChartElement, VectorElement, VectorRectangleElement } from '../types';
+import { DEFAULT_CORNERS, DEFAULT_TEXT_BOX_PROPS } from '../types';
 import { chartElementLayout } from './chart-render';
 
 // measureLabel ignores kerning and guesses outside Latin-1, so a box cut to it exactly could wrap its line.
@@ -43,7 +43,7 @@ export function chartToElements(chart: VectorChartElement): VectorElement[] {
 
 // A label turns about its anchor at the line's top, an element about its box center: the box is laid out
 // unturned from the anchor, then its center is turned about the anchor.
-function labelElement(chart: VectorChartElement, label: ChartLabel, i: number): VectorRichTextElement {
+function labelElement(chart: VectorChartElement, label: ChartLabel, i: number): VectorRectangleElement {
     const { fontFamily, fontSize, bold } = label;
     const width = measureLabel(label.text, fontFamily, fontSize, bold) + LABEL_SLACK_EMS * fontSize;
     const height = getLineHeightPx(fontFamily, fontSize);
@@ -53,9 +53,10 @@ function labelElement(chart: VectorChartElement, label: ChartLabel, i: number): 
         label.rotate,
     );
     return {
-        ...DEFAULT_RICHTEXT_PROPS,
+        ...DEFAULT_TEXT_BOX_PROPS,
         id: `${chart.id}:label:${i}`,
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: center.x - width / 2,
         y: center.y - height / 2,
         width,

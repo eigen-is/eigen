@@ -65,17 +65,14 @@ describe('a pptx converted to a deck', () => {
             { type: 'solid', color: '#ffffff' },
         ]);
         const [one, two] = scene.frames;
-        expect(byFrame(scene.elements, one.id).map((el) => el.type)).toEqual([
-            'rectangle',
-            'richtext',
-            'rectangle',
-            'arrow',
-            'path',
-        ]);
+        expect(
+            byFrame(scene.elements, one.id).map((el) => (el.type === 'rectangle' && el.autoFit ? 'text' : el.type)),
+        ).toEqual(['rectangle', 'text', 'rectangle', 'arrow', 'path']);
         const [logo, title, shape, arrow, star] = byFrame(scene.elements, one.id);
         expect(logo).toMatchObject({ x: 1800, y: 0, width: 120, height: 60, corners: 'straight', roughness: 0 });
         expect(title).toMatchObject({
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             html: '<p>Welcome</p>',
             strokeColor: 'transparent',
             corners: 'straight',
@@ -110,7 +107,7 @@ describe('a pptx converted to a deck', () => {
             width: 960,
             height: 540,
         });
-        expect(table).toMatchObject({ type: 'richtext', html: '<p>Table not imported</p>' });
+        expect(table).toMatchObject({ type: 'rectangle', autoFit: true, html: '<p>Table not imported</p>' });
         expect(new Uint8Array(images[0].data)).toEqual(PIXEL_PNG);
         expect(warnings).toEqual([{ code: 'tables-dropped', count: 1 }]);
     });

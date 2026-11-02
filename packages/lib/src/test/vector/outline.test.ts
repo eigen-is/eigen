@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import { outlineIntersections } from '../../vector/binding';
 import { solidFill } from '../../vector/fill';
 import type { Point } from '../../vector/geometry';
-import { outlineIntersections } from '../../vector/geometry';
 import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import {
     cornerRadius,
@@ -36,6 +36,7 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     roughness: 1,
     seed: 1,
     corners: 'straight',
+    autoFit: false,
 };
 
 const shapeEl = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id' | 'type'>): VectorShapeElement => ({
