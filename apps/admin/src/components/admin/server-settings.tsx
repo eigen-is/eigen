@@ -418,7 +418,7 @@ export function ServerSettingsPage() {
 }
 
 // The server refuses an empty title or URL, and a URL that does not start with http:// or https://. A save also trims
-// both fields, drops a row that misses one, lowercases the scheme and gives a bare URL https://.
+// both fields, drops a row that misses one, lowercases the scheme and puts https:// before a URL that has none.
 function normalizeLinks(links: readonly LandingLink[]): LandingLink[] {
     return links
         .map((link) => ({ title: link.title.trim(), url: link.url.trim() }))
