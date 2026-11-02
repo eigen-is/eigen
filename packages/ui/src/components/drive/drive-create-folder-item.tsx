@@ -15,8 +15,6 @@ type DriveCreateItemDialogProps = {
     onOpenChange: (open: boolean) => void;
     // Rejects when the save fails, which keeps the dialog open.
     onCreateItem: (itemName: string) => Promise<unknown>;
-    // Not read: the dialog waits on onCreateItem's promise instead.
-    isPending?: boolean;
     type: string;
     path: DrivePath;
     title?: string;

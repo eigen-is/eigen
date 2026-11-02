@@ -287,7 +287,6 @@ export function DriveBrowser({
                     open={createFolderOpen}
                     onOpenChange={setCreateFolderOpen}
                     onCreateItem={handleCreateFolder}
-                    isPending={createFolder.isPending}
                     type="Folder"
                     path={currentPath}
                 />
