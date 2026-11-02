@@ -1505,6 +1505,12 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
                 expect(refused.stderr).toContain(`data/${kind}/copy/mounts/default/metadata.db is at`);
                 rmSync(home, { recursive: true });
             }
+            // The folder a killed per-home restore staged beside the homes is no home, whatever it holds.
+            const staged = join(dirname(homeDirOf(dir, realShape.user.id)), '.restore-killed');
+            cpSync(homeDirOf(dir, realShape.user.id), staged, { recursive: true });
+            bumpSchema(join(staged, 'mounts/default/metadata.db'), 1);
+            expect((await restoreCli(dir, ['--check-data', '--yes'])).code).toBe(0);
+            rmSync(staged, { recursive: true });
             // users3.db has no schema version, so a damaged one is what refuses.
             const users = join(dir, 'data/server', SERVER_DATABASES.users);
             const intact = readFileSync(users);

@@ -41,18 +41,19 @@ describe('Backup boot', () => {
         return dir;
     }
 
-    // What restoreHome writes before it moves a home aside, in the staging folder of its job — and,
+    // What a restore writes before it moves a home aside, in the folder its job staged beside the home — and,
     // when the install got all the way through, the note it writes beside it. `preRestoreName` is
     // null for a restore of a deleted user: there was no home folder to move aside. `parkName` is a
-    // `.failed-restore-` name unless a safety-copy restore gives its copy's own.
+    // `.failed-restore-` name unless a safety-copy restore gives its copy's own. `dir` is where a build up to 0.4.1
+    // kept them when given.
     function seedRestoringMarker(
         jobId: string,
         homeName: string,
         preRestoreName: string | null,
         complete = false,
         parkName = `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
-    ): void {
-        const dir = join(getBackupsDir(), '.staging', jobId);
+        dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId),
+    ): string {
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
@@ -65,6 +66,7 @@ describe('Backup boot', () => {
         );
         if (complete) writeFileSync(join(dir, 'restore-complete.json'), JSON.stringify({ completedAt: 'seeded' }));
         made.push(dir);
+        return dir;
     }
 
     afterAll(() => {
@@ -291,11 +293,10 @@ describe('Backup boot', () => {
         const id = 'bootrecoverLLLLLLLLLLLLLLLLLLLLL';
         const aside = `${id}${PRE_RESTORE_SUFFIX}20260404-000000`;
         seedFolder(aside, 'the home as it was');
-        const staged = buildRestoreStagingDir(join(homeRoot, id), 'boot-job-l');
+        const staged = seedRestoringMarker('boot-job-l', id, aside);
         mkdirSync(join(staged, `home-${id}`, 'home'), { recursive: true });
         writeFileSync(join(staged, `home-${id}`, 'home', 'marker'), 'the restored home');
-        made.push(staged, join(homeRoot, id));
-        seedRestoringMarker('boot-job-l', id, aside);
+        made.push(join(homeRoot, id));
 
         await recoverBackupsAfterRestart();
 
@@ -303,5 +304,23 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, aside))).toBe(false);
         expect(existsSync(staged)).toBe(false);
         expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
+    });
+
+    // A build up to 0.4.1 kept the notes in backups/.staging. One release still reads them, so an upgrade right after a
+    // killed restore recovers it.
+    test('the notes an older build kept in the backups folder are still read', async () => {
+        const id = 'bootrecoverMMMMMMMMMMMMMMMMMMMMM';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260505-000000`;
+        seedFolder(id, 'half-written');
+        seedFolder(aside, 'the home as it was');
+        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260505-000000`;
+        seedRestoringMarker('boot-job-m', id, aside, false, parkName, join(getBackupsDir(), '.staging', 'boot-job-m'));
+        made.push(join(homeRoot, parkName));
+
+        await recoverBackupsAfterRestart();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('half-written');
+        expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
     });
 });

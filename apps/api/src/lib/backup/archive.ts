@@ -10,6 +10,7 @@ import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
+import { formatFileSize } from '@workspace/lib/format';
 import type { BackupEntry, BackupManifest, BackupProgress, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { parseBackupManifest } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
@@ -194,17 +195,30 @@ type ArtifactSource = string | ArchiveMemberLocation;
 // Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
 // says. Only the API's user reads a restored home, so an older archive with 0644 files restores as private as a
 // new one. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
-// for a folder that its own extract cannot enter either.
-export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
+// for a folder that its own extract cannot enter either. With `maxBytes`, it refuses an archive whose files add up
+// to more, before it writes the file that would pass it.
+export async function extractArtifact(
+    source: ArtifactSource,
+    targetDir: string,
+    maxBytes = Number.POSITIVE_INFINITY,
+): Promise<void> {
     const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     const existed = fs.existsSync(targetDir);
     makeFolder(targetDir);
+    let bytes = 0;
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
             if (entry.typeflag === DIRECTORY_TYPEFLAG) {
                 makeFolder(target);
                 continue;
+            }
+            bytes += entry.size;
+            if (bytes > maxBytes) {
+                throw new ApiError(
+                    400,
+                    `The archive's files pass ${formatFileSize(maxBytes)}, more than its manifest declares`,
+                );
             }
             // A foreign archive may name a file before the directory entry it sits in.
             makeFolder(path.dirname(target));

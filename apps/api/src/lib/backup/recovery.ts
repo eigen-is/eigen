@@ -1,27 +1,27 @@
-// What a restart does about the backup work the last process left behind, in the order it must happen, before the
-// API listens. A per-home restore that died halfway is finished or undone from the notes in its staging folder. Then
-// the staging folders are wiped, along with the folders restores unpacked into beside the homes. The home archives are
-// closed to other users, and a server backup left running is marked failed. The restore writes those notes through
-// here. This module loads the API's jobs and settings, so the stage of ./eigen restore must not import it.
+// What a restart does about the backup work the last process left behind, before the API listens. A per-home restore
+// killed before its job ended leaves the folder it staged beside the home, whose notes say whether to finish or undo
+// it, and then the folder goes. The staging folders in backups/ are wiped, the home archives closed to other users,
+// and a server backup left running is marked failed. The restore writes its notes through here. This module loads the
+// API's jobs and settings, so the stage of ./eigen restore must not import it.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { parseBackupArtifactName } from '@workspace/lib/validation';
+import { getDataRoot, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
 import { ARCHIVE_MODE } from './archive';
 import { describeError } from './errors';
 import {
     backupsDirPath,
-    getBackupStagingDir,
     getStagingRoot,
+    isRestoreStagingName,
     parseSafetyCopyName,
     SIDECAR_SUFFIX,
     wipeBackupStaging,
-    wipeRestoreStaging,
 } from './paths';
 import { recoverInterruptedServerBackups } from './server-archives';
 
-// The note a restore leaves in its staging folder while the home folder is not where it belongs.
-// Written before the move-aside, removed when the mark clears, read once at the next boot.
+// The note a restore leaves in the folder it staged, while the home folder is not where it belongs. Written before
+// the move-aside, removed with the folder when the job ends, read once at the next boot.
 const RESTORING_MARKER = 'restoring.json';
 // Written beside it the moment the install is done, before the mark clears. A marker without this
 // beside it means the process died with a home folder that is somewhere between the two states.
@@ -33,76 +33,97 @@ const RESTORE_COMPLETE_MARKER = 'restore-complete.json';
 type RestoringMarker = { ownerId: string; homeDir: string; preRestoreName: string | null; parkName: string };
 
 // Before the server listens: a request that resolved a home while the recovery was still deciding about it would
-// open a half-written folder as if it were the home. A restore that died between moving the home aside and
-// installing the archive left a note in its staging folder, so that is read first, before the wipe takes the
-// staging folders with it. Then they are cleared, because a backup, verify or restore cut off by a restart leaves a
-// half-written folder that nothing resumes. So does the folder a restore unpacks into beside the home: a restore killed
-// before its swap never moved it in. An older build left its home archives readable, and they are closed. Last,
-// a server backup killed mid-run left its record running, and it becomes a failed attempt.
+// open a half-written folder as if it were the home. Then the staging folders in backups/ are cleared, because a
+// backup or verify cut off by a restart leaves a half-written folder that nothing resumes. An older build left its
+// home archives readable, and they are closed. Last, a server backup killed mid-run left its record running, and it
+// becomes a failed attempt.
 export async function recoverBackupsAfterRestart(): Promise<void> {
     recoverInterruptedRestores();
+    recoverOlderBuildRestores();
     wipeBackupStaging();
-    wipeRestoreStaging();
     closeHomeArchives();
     await recoverInterruptedServerBackups().catch((error) =>
         console.error('[backup] recovering server records:', error),
     );
 }
 
-export function writeRestoringMarker(jobId: string, marker: RestoringMarker): void {
-    fs.writeFileSync(path.join(getBackupStagingDir(jobId), RESTORING_MARKER), JSON.stringify(marker));
+// The notes go in the folder the restore staged beside the home, on the home's own disk, so a boot that finds the
+// home finds them too. A safety-copy restore unpacks nothing, so its folder is made here.
+export function writeRestoringMarker(restoreDir: string, marker: RestoringMarker): void {
+    fs.mkdirSync(restoreDir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(path.join(restoreDir, RESTORING_MARKER), JSON.stringify(marker));
 }
 
-export function writeRestoreCompleteMarker(jobId: string): void {
+export function writeRestoreCompleteMarker(restoreDir: string): void {
     fs.writeFileSync(
-        path.join(getBackupStagingDir(jobId), RESTORE_COMPLETE_MARKER),
+        path.join(restoreDir, RESTORE_COMPLETE_MARKER),
         JSON.stringify({ completedAt: new Date().toISOString() }),
     );
+}
+
+// Every folder a per-home restore staged beside the homes is one whose job never ended, since a job removes its own.
+// Its notes are acted on first, and then it goes, because nothing resumes the job.
+export function recoverInterruptedRestores(): void {
+    for (const kind of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
+        const homesDir = path.join(getDataRoot(), kind);
+        if (!fs.existsSync(homesDir)) continue;
+        for (const name of fs.readdirSync(homesDir)) {
+            if (!isRestoreStagingName(name)) continue;
+            const restoreDir = path.join(homesDir, name);
+            recoverRestore(restoreDir);
+            fs.rmSync(restoreDir, { recursive: true, force: true });
+        }
+    }
+}
+
+// Builds up to 0.4.1 kept the notes in backups/.staging. That is another mount than the homes on Docker, so a boot
+// that ran without the backups folder could leave them to a later boot, which acted on them stale. They are still
+// read, so an upgrade right after a killed restore recovers it. Drop this in the release after the one that ships
+// the notes beside the home: by then no install holds an old note.
+function recoverOlderBuildRestores(): void {
+    const stagingRoot = getStagingRoot();
+    if (!fs.existsSync(stagingRoot)) return;
+    for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
+        if (entry.isDirectory()) recoverRestore(path.join(stagingRoot, entry.name));
+    }
 }
 
 // A restore killed anywhere between the move-aside and the last install step left the home's path
 // empty or holding a folder it had not finished with, and the home's real contents under the
 // `{id}.pre-restore-{ts}` its marker names. The process that knew about it is dead, so nothing else
-// will ever put it back. This does, and logs it as an error. The install writes a completion note
-// beside the marker, which tells a restore that finished from one that did not. This runs before the
-// staging wipe, which clears the markers of both. A safety copy with no marker is not evidence of
-// anything: nothing deletes them automatically, so a deleted user leaves one behind.
-export function recoverInterruptedRestores(): void {
-    const stagingRoot = getStagingRoot();
-    if (!fs.existsSync(stagingRoot)) return;
-    for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const jobDir = path.join(stagingRoot, entry.name);
-        const marker = readRestoringMarker(path.join(jobDir, RESTORING_MARKER));
-        if (!marker) continue;
-        // The install finished. Whatever the job did after that cannot leave the home folder out of place.
-        if (fs.existsSync(path.join(jobDir, RESTORE_COMPLETE_MARKER))) continue;
-        const aside = marker.preRestoreName && path.join(path.dirname(marker.homeDir), marker.preRestoreName);
-        // A copy the restore's own rollback already put back is not there any more, and this must
-        // not move the home folder that is in place over it.
-        if (aside && !fs.existsSync(aside)) continue;
-        // A folder that is there without the completion note is the one the install put in place:
-        // a home from an archive moved in just before the kill, or a safety copy renamed into place
-        // before its trash was re-dated. It goes aside under the name the marker gives, exactly as a
-        // failure the job itself caught would have left it. Nothing is deleted, whether or not there
-        // is a copy to put back afterwards.
-        if (fs.existsSync(marker.homeDir)) {
-            fs.renameSync(marker.homeDir, path.join(path.dirname(marker.homeDir), marker.parkName));
-            console.error(
-                `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
-            );
-        }
-        if (!aside) {
-            // A restore of a deleted user: there was no home to move aside, so the only thing to do
-            // is refuse to leave the half-written folder standing as one.
-            console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
-            continue;
-        }
-        fs.renameSync(aside, marker.homeDir);
+// will ever put it back. This does, and logs it as an error. A completion note beside the marker
+// tells a restore that finished from one that did not. A safety copy with no marker is not evidence
+// of anything: nothing deletes them automatically, so a deleted user leaves one behind.
+function recoverRestore(notesDir: string): void {
+    const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
+    if (!marker) return;
+    // The install finished. Whatever the job did after that cannot leave the home folder out of place.
+    if (fs.existsSync(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return;
+    const aside = marker.preRestoreName && path.join(path.dirname(marker.homeDir), marker.preRestoreName);
+    // The home never went aside, or the restore's own rollback already put it back. Either way the folder in place
+    // is the home, and this must not move it.
+    if (aside && !fs.existsSync(aside)) return;
+    // A folder that is there without the completion note is the one the install put in place:
+    // a home from an archive moved in just before the kill, or a safety copy renamed into place
+    // before its trash was re-dated. It goes aside under the name the marker gives, exactly as a
+    // failure the job itself caught would have left it. Nothing is deleted, whether or not there
+    // is a copy to put back afterwards.
+    if (fs.existsSync(marker.homeDir)) {
+        fs.renameSync(marker.homeDir, path.join(path.dirname(marker.homeDir), marker.parkName));
         console.error(
-            `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
+            `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
         );
     }
+    if (!aside) {
+        // A restore of a deleted user: there was no home to move aside, so the only thing to do
+        // is refuse to leave the half-written folder standing as one.
+        console.error(`[backup] a restore of ${marker.ownerId} was interrupted: they have no home folder again`);
+        return;
+    }
+    fs.renameSync(aside, marker.homeDir);
+    console.error(
+        `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
+    );
 }
 
 // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, so other users of the host read

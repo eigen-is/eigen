@@ -184,7 +184,7 @@ async function stageHome(
     // A Light home carries no files, so its mounts have nothing to put in place.
     for (const summary of level === 'light' ? [] : carried) {
         if (summary.storageType !== 's3' || (s3FromArchive && summary.contents !== 'metadata')) {
-            containerDatabases.push(...materializeMount(homeDir, summary, stamp));
+            containerDatabases.push(...(await materializeMount(homeDir, summary, stamp)));
             continue;
         }
         const replay = replayPendingUploads(

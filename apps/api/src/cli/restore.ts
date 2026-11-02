@@ -14,7 +14,7 @@ import {
     mountIdsIn,
     openToCheck,
 } from '../lib/backup/materialize-mount';
-import { parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
+import { isRestoreStagingName, parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
 import { RESTORING_DIR } from '../lib/backup/restore-server';
 import { readServerArchiveMember } from '../lib/backup/verify-server-archive';
 import {
@@ -126,8 +126,8 @@ async function writeArchiveEnv(archive: string | undefined): Promise<void> {
 // A Light backup is made only when no schema changed since, so a rollback after one keeps today's data. This checks,
 // with the build the rollback goes back to and before the switch, that it opens that data. Every home of every kind
 // gets the verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips
-// the safety copies, which no home opens, and the container databases of an s3 mount, which live in the bucket. The
-// launcher says what to do when it fails.
+// the safety copies and the folder a killed restore staged, which no home opens, and the container databases of an s3
+// mount, which live in the bucket. The launcher says what to do when it fails.
 async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
@@ -143,7 +143,12 @@ async function checkData(flags: RestoreFlags): Promise<void> {
             .filter(existsSync)
             .flatMap((homes) =>
                 readdirSync(homes, { withFileTypes: true })
-                    .filter((entry) => entry.isDirectory() && !parseSafetyCopyName(entry.name))
+                    .filter(
+                        (entry) =>
+                            entry.isDirectory() &&
+                            !parseSafetyCopyName(entry.name) &&
+                            !isRestoreStagingName(entry.name),
+                    )
                     .map((entry) => join(homes, entry.name)),
             );
         // A large server takes minutes, so each home gets a line.

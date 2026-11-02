@@ -349,10 +349,10 @@ describe('Boot recovery in a real boot', () => {
         writeFileSync(join(homeRoot, name, 'marker'), content);
     }
 
-    // What replaceHomeFolder writes before it moves a home aside, and the note it adds once the
-    // install is through.
+    // What replaceHomeFolder writes before it moves a home aside, in the folder its job staged beside the home, and
+    // the note it adds once the install is through.
     function seedMarker(jobId: string, homeName: string, preRestoreName: string | null, complete: boolean): void {
-        const dir = join(backupsDir, '.staging', jobId);
+        const dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
@@ -384,6 +384,7 @@ describe('Boot recovery in a real boot', () => {
         expect(await (await fetch(`${api.base}/health`)).text()).toBe('OK');
         expect(existsSync(join(backupsDir, '.staging'))).toBe(false);
         expect(existsSync(unpacking)).toBe(false);
+        expect(readdirSync(homeRoot).filter((name) => name.startsWith('.'))).toEqual([]);
     });
 
     test('a restore that died mid-install is put back', () => {

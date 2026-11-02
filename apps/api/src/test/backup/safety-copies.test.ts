@@ -410,7 +410,7 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
         const jobId = `safety-killed-${Date.now()}`;
         const spies = [
             spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation(() => {}),
-            spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(async () => {}),
+            spyOn(pathsModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
         ];
         try {
             await restoreSafetyCopy(userId, copy, jobId);
@@ -418,7 +418,6 @@ describe('Backup restore of a safety copy that does not survive its checks', () 
             for (const spy of spies) spy.mockRestore();
         }
         recoverInterruptedRestores();
-        rmSync(join(getBackupsDir(), '.staging', jobId), { recursive: true, force: true });
 
         expect(safetyCopies(userId)).toEqual([copy]);
         expect(safetyCopies(userId, FAILED_RESTORE_SUFFIX)).toEqual([]);

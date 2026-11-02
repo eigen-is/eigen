@@ -21,16 +21,7 @@ import {
     SERVER_ARCHIVE_EXTENSION,
     SERVER_ARCHIVE_PREFIX,
 } from '@workspace/lib/validation';
-import {
-    CERT_FILES,
-    CERTS_DIR,
-    DKIM_DIR,
-    getDataRoot,
-    PATHS,
-    SERVER_DIR,
-    TEAM_HOMES_DIR,
-    USER_HOMES_DIR,
-} from '../config/paths';
+import { CERT_FILES, CERTS_DIR, DKIM_DIR, getDataRoot, PATHS, SERVER_DIR } from '../config/paths';
 import { ApiError } from '../core/errors';
 
 // Where backup artifacts live. Outside `data/` on purpose, so one wipe of the data directory can never
@@ -71,7 +62,7 @@ export function getBackupStagingDir(jobId: string): string {
     return dir;
 }
 
-// Everything one job staged: the unpacked archive, and the restoring marker if it got that far.
+// Everything one job staged, such as the archive a verify unpacked.
 export async function wipeBackupStagingDir(jobId: string): Promise<void> {
     await fsp.rm(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
 }
@@ -94,16 +85,10 @@ export function isRestoreStagingName(name: string): boolean {
     return name.startsWith(RESTORE_STAGING_PREFIX);
 }
 
-// Called on server start, after the restore recovery: a restore killed before its job ended leaves the folder it
-// unpacked into, and nothing resumes it.
-export function wipeRestoreStaging(): void {
-    for (const kind of [USER_HOMES_DIR, TEAM_HOMES_DIR]) {
-        const dir = path.join(getDataRoot(), kind);
-        if (!fs.existsSync(dir)) continue;
-        for (const name of fs.readdirSync(dir)) {
-            if (isRestoreStagingName(name)) fs.rmSync(path.join(dir, name), { recursive: true, force: true });
-        }
-    }
+// Everything a per-home restore staged beside the home: the unpacked archive and the notes the next boot reads. The
+// job removes it however it ends. A boot removes the one a killed job left, once it has read the notes.
+export async function wipeRestoreStagingDir(homeDir: string, jobId: string): Promise<void> {
+    await fsp.rm(buildRestoreStagingDir(homeDir, jobId), { recursive: true, force: true });
 }
 
 // Scratch space for packing: the half-written artifact, the half-written sidecar. Under
