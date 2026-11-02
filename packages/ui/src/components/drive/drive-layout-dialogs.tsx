@@ -4,22 +4,17 @@
 // view's capabilities, so every surface and the command palette offer the same set.
 
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
-import { useIsGuest } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
-import { usePaletteSelectionActions } from '@workspace/lib/command-palette';
-import { downloadDriveFile } from '@workspace/lib/download';
 import {
-    driveActionsFor,
     PartialCopyError,
     useCopyPaths,
     useCopyToFolder,
     useDeletePaths,
+    useDriveActionsFor,
     useIsEffectiveOwnerOf,
-    useIsSharedWithMe,
     useMovePath,
 } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import { useMailEnabled } from '@workspace/lib/public';
 import type {
     DriveAction,
     DriveActionId,
@@ -84,16 +79,8 @@ export function useDriveActionRunner({
     const deletePathsMutation = useDeletePaths();
     const isCoarsePointer = useIsCoarsePointer();
     const isEffectiveOwnerOf = useIsEffectiveOwnerOf();
-    const isSharedWithMe = useIsSharedWithMe();
-    const isGuest = useIsGuest();
-    const mailEnabled = useMailEnabled();
+    const actionsFor = useDriveActionsFor(capabilities);
     const { exportPath, isExporting } = useDocumentExport();
-
-    // The one place that knows who is asking and whether mail is hosted, as useFileActions is for file actions.
-    const actionsFor = (items: readonly DrivePath[]) =>
-        driveActionsFor({ items, capabilities, sharedWithMe: items.every(isSharedWithMe) }).filter(
-            (action) => !(isGuest && action.guestDenied) && (mailEnabled || !action.mailOnly),
-        );
 
     const deletePaths = (paths: DrivePath[]) => {
         if (paths.length === 0) return;
@@ -210,22 +197,9 @@ export function useDriveActionRunner({
             case 'remove-shared':
                 deletePaths(items);
                 return;
-            // Watch toggles through WatchMenuItem, whose label follows the item's live watch state.
+            // Watch toggles through useWatchToggle, as the menu and the palette follow its live label.
         }
     };
-
-    // The command palette acts on the selection the list publishes, through the same dialogs.
-    usePaletteSelectionActions({
-        onDownload: (path) => {
-            if (path.type === 'file') downloadDriveFile(path);
-        },
-        onExport: exportPath,
-        onRename: capabilities.canRename ? dialogs.rename.openDialog : undefined,
-        onShare: capabilities.canShare ? dialogs.share.openDialog : undefined,
-        // A guest may not mail people through the server, as a guest may not share.
-        onEmailCollaborators: capabilities.canShare && !isGuest ? dialogs.email.openDialog : undefined,
-        onDelete: capabilities.canDelete ? deletePaths : undefined,
-    });
 
     const createTypes = capabilities.createTypes ?? new Set<EigenDocType>(EIGEN_DOC_TYPES);
     const onCreateEigenDoc: Partial<Record<EigenDocType, () => void>> = {};

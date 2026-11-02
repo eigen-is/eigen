@@ -1,21 +1,18 @@
+// DocSearchProvider hands the command palette the open document's search: its find controller, the
+// find bar's session and the comment-thread search. The palette's `doc:` scope lists in-document
+// matches through them and reveals one on Enter. A surface without the palette, such as the help
+// center, may mount the find bar too, so with no palette this does nothing.
+
 import type { DocCommentSearch, DocSearchController, DocSearchSession } from '@workspace/lib/types/doc-search';
 import { useEffect, useMemo, useRef } from 'react';
 import { useOptionalCommandPalette } from './use-command-palette';
 
-// DocSearchProvider publishes its per-app controller so the palette `doc:` scope can list
-// in-document matches and reveal one in place on Enter. Mirrors usePaletteSelectionActions:
-// the controller's identity churns per render (apps rebuild it from live editor state), and
-// publishing into context re-renders the publisher — so without stabilisation the publication
-// effect would refire every render and trip React's max-update guard. We stabilise: every
-// method routes through a ref to the latest controller, and the published identity only flips
-// when a controller appears/disappears. Optional palette (a surface may mount the bar without
-// the full EigenApp stack — index/support have no palette), so no-op when there's no provider.
-// commentSearch is the app's optional { docKey, search, reveal } comment-thread capability
-// (docKey + search = useDocCommentSearchHalf bound to the open doc; reveal is app-specific);
-// published as ctx.docCommentSearch, stabilised the same way but keyed on docKey so a same-mount
-// doc switch republishes (a presence-only key would keep serving the previous doc's docKey).
-// session is the provider's find-bar reveal capability (revealFromPalette); published as
-// ctx.docSearchSession and stabilised by presence like the controller.
+// Publishing updates the palette's context, which re-renders the publisher, and an app rebuilds its
+// controller from live editor state on every render. So, as usePaletteSelection does, the hook
+// stabilises what it publishes: each method calls the latest object through a ref, and the published
+// identity changes only when a controller or session appears or goes, or the comment search's
+// document changes. Keying the comment search on its docKey makes a document switch in the same
+// mount publish again, where a key on presence alone would keep serving the previous document.
 export function usePaletteDocSearch(
     controller: DocSearchController | null,
     commentSearch?: DocCommentSearch,
@@ -57,8 +54,8 @@ export function usePaletteDocSearch(
             docKey
                 ? {
                       docKey,
-                      search: (q) => commentRef.current!.search(q),
-                      reveal: (id) => commentRef.current!.reveal(id),
+                      search: (q) => commentRef.current?.search(q) ?? Promise.resolve([]),
+                      reveal: (id) => commentRef.current?.reveal(id),
                   }
                 : null,
         [docKey],

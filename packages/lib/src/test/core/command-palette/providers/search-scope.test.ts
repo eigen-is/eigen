@@ -27,7 +27,7 @@ const ctx: CommandContext = {
     ownerId: 'owner-1',
     mailEnabled: true,
     selection: { items: [] },
-    selectionActions: {},
+    selectionActions: null,
     docSearch: null,
     docSearchSession: null,
     docCommentSearch: null,
