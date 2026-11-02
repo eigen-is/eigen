@@ -1,7 +1,8 @@
 // The Delete key runs the listing's delete row and no other destructive row. A folder is a drop target
 // only where the view can move items.
 import { expect, test } from 'bun:test';
-import type { DriveAction, DriveActionId, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
 import { Trash2 } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import type { DriveActionRunner } from '../../../components/drive/drive-layout-dialogs';
@@ -72,8 +73,8 @@ function render(actions: DriveActionRunner) {
     return seen.controller;
 }
 
-test('Delete runs the delete row, even after another destructive row', () => {
-    const { actions, ran } = runner([destructive('rename'), destructive('trash')]);
+test('Delete runs the row that shows the Delete key, even after another destructive row', () => {
+    const { actions, ran } = runner([destructive('rename'), { ...destructive('trash'), shortcut: 'Delete' }]);
     render(actions).handleKeyDown({
         key: 'Delete',
         preventDefault: () => {},

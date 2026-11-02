@@ -3,7 +3,8 @@
 // its live state, and a private item has no collaborators to mail.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
-import type { DriveActionId, DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';

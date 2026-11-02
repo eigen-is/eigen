@@ -1,10 +1,9 @@
 // The Drive types the API serves and every app reads: a path and its ACL, the kinds of path and their
 // MIME types, the Eigen document types with their extensions, export formats and Y.Doc roots, and the
 // readers that classify a file by its name and MIME type. The API and the apps import them alike, so a
-// new kind of path or format is added here once. The shapes of a Drive view's capabilities and of the
-// actions its menus offer live here too, beside the path they act on.
+// new kind of path or format is added here once. The shape of a Drive view's capabilities lives here
+// too, beside the path it gates.
 
-import type { LucideIcon } from 'lucide-react';
 import type { BytesTextPreviewMode } from '../constants/preview';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
@@ -67,7 +66,7 @@ export type YjsRootKind = 'map' | 'array' | 'text' | 'xmlfragment';
 
 // Every download format the export route can produce. A type's own list is below and keeps this order,
 // so ⌘K's per-format rows read like that type's Download menu.
-export const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
+const EXPORT_FORMATS = ['docx', 'xlsx', 'pptx', 'pdf', 'html'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 // What the convert route turns an office file into: the one format each target reads, by its extension alone, and the
@@ -519,49 +518,6 @@ export type DriveCapabilities = {
     showBreadcrumb: boolean;
     // Omit to allow creating every EigenDocType; an empty set disables create entirely.
     createTypes?: ReadonlySet<EigenDocType>;
-};
-
-export type DriveActionId =
-    | 'open'
-    | 'open-new-tab'
-    | 'rename'
-    | 'duplicate'
-    | 'move-to'
-    | 'copy-to'
-    | 'download-as'
-    | 'share'
-    | 'email-collaborators'
-    | 'copy-link'
-    | 'mail-to'
-    | 'watch'
-    | 'trash'
-    | 'remove-shared';
-
-// The menu group a Drive action's row sits in, named as MenuSections names it.
-export type DriveActionGroup = 'open' | 'create' | 'organize' | 'output' | 'collaborate' | 'destructive';
-
-// The facts a Drive action's gate reads: the items it acts on and what the view allows.
-export type DriveActionSubject = {
-    items: readonly DrivePath[];
-    capabilities: DriveCapabilities;
-    // Every item is shared with the viewer directly, so a delete leaves the share instead of trashing it.
-    sharedWithMe: boolean;
-};
-
-export type DriveAction = {
-    id: DriveActionId;
-    label: string;
-    // The label for a multi-selection, {n} standing for the count. Only a row that acts on a set has one.
-    pluralLabel?: string;
-    icon: LucideIcon;
-    group: DriveActionGroup;
-    applies: (subject: DriveActionSubject) => boolean;
-    // The key that runs the row from the listing, shown beside it in the menu.
-    shortcut?: string;
-    // The route behind the row refuses a guest, and `applies` is never told who is asking.
-    guestDenied?: true;
-    // The row reaches the hosted mailbox, so a server without hosted mail hides it.
-    mailOnly?: true;
 };
 
 // The Drive file an import-from-drive request names: the picked file's owner, mount and path, and

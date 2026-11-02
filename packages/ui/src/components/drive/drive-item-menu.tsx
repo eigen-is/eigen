@@ -2,8 +2,9 @@
 // column's ⋮. It draws the Drive actions the runner offers for the items beside the shared file actions,
 // each in its menu group. The caller wraps it in ContextMenuAnchor or DropdownMenuContent.
 
-import type { DriveAction, DriveActionGroup, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { EXPORT_FORMAT_LABELS, exportFormatsFor } from '@workspace/lib/types/drive';
+import type { DriveAction, DriveActionGroup } from '@workspace/lib/types/drive-actions';
 import {
     DropdownMenuItem,
     DropdownMenuShortcut,
@@ -46,11 +47,9 @@ export function DriveItemMenuItems({ items, actions, runner }: DriveItemMenuItem
     );
     const rowsIn = (group: DriveActionGroup) => rows.filter((action) => action.group === group).map(rowFor);
 
-    // Three rows draw more than a label: Download picks a format, Watch reads its live state, and one
-    // item's sharing rows sit together in a Share submenu.
+    // Download picks a format, and one item's sharing rows sit together in a Share submenu.
     const downloadAs = rows.find((action) => action.id === 'download-as');
-    const watch = rows.find((action) => action.id === 'watch');
-    const shareRows = rows.filter((action) => action.group === 'collaborate' && action !== watch);
+    const shareRows = rows.filter((action) => action.group === 'collaborate');
 
     return (
         <MenuSections
@@ -99,7 +98,9 @@ export function DriveItemMenuItems({ items, actions, runner }: DriveItemMenuItem
                     ) : (
                         shareRows.map(rowFor)
                     )}
-                    {watch && <WatchMenuItem ownerId={item.ownerId} mountId={item.mountId} pathId={item.id} />}
+                    {items.length === 1 && (
+                        <WatchMenuItem ownerId={item.ownerId} mountId={item.mountId} pathId={item.id} />
+                    )}
                 </>
             }
             destructive={rowsIn('destructive')}

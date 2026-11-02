@@ -1,11 +1,11 @@
 // The things a user can do with Drive items in a Drive view, such as rename, move, share or trash, each
-// with its label and the gate that says when it applies. The Drive item menu and the detail column draw
-// their rows from driveActionsFor. File actions that any surface offers, such as Quick preview or a
-// convert, are a separate list, FILE_ACTIONS.
+// with its label and the gate that says when it applies. Surfaces such as the Drive item menu and the
+// command palette draw their rows from driveActionsFor. File actions that any surface offers, such as
+// Quick preview or a convert, are a separate list, FILE_ACTIONS. Watch is not a row here: it shows the
+// item's live watch state, so the surfaces draw it from useWatchToggle.
 
 import {
     ArrowRight,
-    Bell,
     Copy,
     CopyPlus,
     ExternalLink,
@@ -17,8 +17,8 @@ import {
     Trash2,
     UserRoundPlus,
 } from 'lucide-react';
-import type { DriveAction, DriveActionSubject } from '../../types/drive';
 import { exportFormatsFor, isOpenable } from '../../types/drive';
+import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
 import { getDriveItemUrl } from '../api';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;
@@ -102,7 +102,6 @@ export const DRIVE_ACTIONS: readonly DriveAction[] = [
         applies: () => true,
         mailOnly: true,
     },
-    { id: 'watch', label: 'Watch', icon: Bell, group: 'collaborate', applies: one },
     {
         id: 'trash',
         label: 'Move to trash',

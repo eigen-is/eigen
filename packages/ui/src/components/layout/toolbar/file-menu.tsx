@@ -8,7 +8,7 @@ import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useDriveActionsFor } from '@workspace/lib/drive';
-import type { DriveActionId, DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
+import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
     DRIVE_MIME_DOC,
@@ -19,6 +19,7 @@ import {
     EXPORT_FORMAT_LABELS,
     exportFormatsFor,
 } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import {
     DropdownMenuItem,

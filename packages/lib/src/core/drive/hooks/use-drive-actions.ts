@@ -3,7 +3,8 @@
 // is the one place that knows who is asking, whether the items were shared with them, and whether the
 // server hosts mail. The Drive action runner and an open document's File menu both read it.
 
-import type { DriveAction, DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
+import type { DriveAction } from '@workspace/lib/types/drive-actions';
 import { useIsGuest } from '../../auth';
 import { useMailEnabled } from '../../public';
 import { driveActionsFor } from '../drive-actions';

@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2069 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2067 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -543,7 +543,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (441)
+## Types (440)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -668,10 +668,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveAccessRecipient` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACLDelta` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveAction` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveActionGroup` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveActionId` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `DriveActionSubject` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveCapabilities` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContextType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -836,7 +832,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PaletteSelection` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteSelectionAction` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteSelectionActions` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
-| `ResultGroup` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `Sections` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `ActiveComments` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
 | `CardAttachmentDraft` | `@workspace/lib/types/comments` | packages/lib/src/types/comments.ts |
@@ -849,6 +844,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DocSearchMatch` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchOptions` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
 | `DocSearchSession` | `@workspace/lib/types/doc-search` | packages/lib/src/types/doc-search.ts |
+| `DriveAction` | `@workspace/lib/types/drive-actions` | packages/lib/src/types/drive-actions.ts |
+| `DriveActionGroup` | `@workspace/lib/types/drive-actions` | packages/lib/src/types/drive-actions.ts |
+| `DriveActionId` | `@workspace/lib/types/drive-actions` | packages/lib/src/types/drive-actions.ts |
+| `DriveActionSubject` | `@workspace/lib/types/drive-actions` | packages/lib/src/types/drive-actions.ts |
 | `AttachmentReference` | `@workspace/lib/types/drive-reference` | packages/lib/src/types/drive-reference.ts |
 | `FileAction` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
 | `FileActionGroup` | `@workspace/lib/types/file-subject` | packages/lib/src/types/file-subject.ts |
@@ -989,7 +988,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1116)
+## Utilities & constants (1115)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1641,7 +1640,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EML_MIME` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EMPTY_S3` | `@workspace/lib/types` | packages/lib/src/types/mount.ts |
 | `EXPORT_FORMAT_LABELS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
-| `EXPORT_FORMATS` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `EXPORT_SUMMARY_HEADER` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `exportFormatsFor` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `externalOwnerId` | `@workspace/lib/types` | packages/lib/src/types/owner.ts |

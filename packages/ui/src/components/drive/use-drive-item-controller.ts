@@ -79,11 +79,12 @@ export function useDriveItemController({
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef,
         shouldNotify: () => !!activeItemId,
-        // Delete runs the menu's own delete row, on a multi-selection over the cursored row as the menu does.
+        // Delete runs the row the menu marks with the Delete key. Like the menu, it acts on the whole
+        // selection when more than one row is selected.
         onDelete: actions
             ? (item) => {
                   const items = selection.selectedCount > 1 ? selection.selectedItems : [item];
-                  const remove = actions.actionsFor(items).find(({ id }) => id === 'trash' || id === 'remove-shared');
+                  const remove = actions.actionsFor(items).find(({ shortcut }) => shortcut === 'Delete');
                   if (remove) actions.run(remove.id, items);
               }
             : undefined,
