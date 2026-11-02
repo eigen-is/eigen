@@ -295,8 +295,7 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
 // can make that true of a step after the step was recorded.
 function refusedStep(ctx: Context): Step {
     const next = produce(ctx, (draft: Context) => {
-        draft.warnDialog =
-            "This row or column change can't be undone or redone now: a row or column it changes is read-only, or the sheet is at its size limit.";
+        draft.warnDialog = "Sorry, this change can't be undone anymore.";
     });
     return { ctx: next, ops: [], refused: true };
 }

@@ -455,9 +455,7 @@ test('an undo or redo whose row op a read-only row refuses stays on its stack an
         });
         step();
         expect(s.batches.length).toBe(sent);
-        expect(s.a.ctx.warnDialog).toBe(
-            "This row or column change can't be undone or redone now: a row or column it changes is read-only, or the sheet is at its size limit.",
-        );
+        expect(s.a.ctx.warnDialog).toBe("Sorry, this change can't be undone anymore.");
     };
 
     readOnly({ 4: 1 });
