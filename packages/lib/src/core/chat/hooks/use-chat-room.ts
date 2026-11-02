@@ -134,7 +134,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
     }, []);
 
     const handleSendMessage = useCallback(
-        async (rawContent: string, files?: File[]) => {
+        async (rawContent: string, files?: readonly File[]) => {
             if (!rawContent.trim() && (!files || files.length === 0) && pendingDriveAttachments.length === 0) return;
 
             let attachments: ChatAttachment[] | undefined;
@@ -249,7 +249,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
         roomMembers,
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,
-        currentUserEmail: user?.email || '',
+        currentUserEmail: user?.email ?? '',
         mediaFolderId,
         handleSendMessage,
         handleEditMessage,
