@@ -265,7 +265,8 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     if (!made || !live) return { ctx, ops: [] };
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };
-    const applied = applyBatch(ctx, patchToOp(restored, target, options, step));
+    const writes = restoredRuleWrites(index, target, restored, made.ctx, live.ctx);
+    const applied = applyBatch(ctx, patchToOp(restored, writes, options, step));
     if (applied.ops.length === 0) return applied;
     const [repaired] = opToPatch(applied.ctx, step.repair);
     const [next, recalculated] = produceWithPatches(applied.ctx, (draft: Context) => recalculate(draft, repaired));
@@ -295,6 +296,24 @@ function restoredFields(index: number, recorded: Patch[], restored: Context, mad
         fields[field] = restoredValue(wanted[field], marked[field], fields[field], depth);
     }
     return fields;
+}
+
+// The entry's writes with each validation rule it wrote merged as restoredValue merges a field. A rule a peer changed
+// since keeps the peer's value. A write the marker already makes is left out, so a receiver keeps its own shift.
+function restoredRuleWrites(index: number, recorded: Patch[], restored: Context, made: Context, live: Context) {
+    const wanted = restored.sheets[index].dataValidations ?? {};
+    const marked = made.sheets[index].dataValidations ?? {};
+    const now = live.sheets[index].dataValidations ?? {};
+    return recorded.flatMap((patch): Patch[] => {
+        const [, sheet, field, id] = patch.path;
+        if (patch.path.length !== 4 || sheet !== index || field !== 'dataValidations' || typeof id !== 'string') {
+            return [patch];
+        }
+        const value = restoredValue(wanted[id], marked[id], now[id], 0);
+        if (isEqual(value, now[id])) return [];
+        if (value === undefined) return [{ op: 'remove', path: patch.path }];
+        return [{ op: now[id] ? 'replace' : 'add', path: patch.path, value }];
+    });
 }
 
 // `wanted` is the entry's value, `made` what the marker makes of the value the op left, and `live` what it makes of

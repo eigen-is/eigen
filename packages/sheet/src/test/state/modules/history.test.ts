@@ -1140,6 +1140,20 @@ describe('validation rules on two tabs and a joiner', () => {
         expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
     });
 
+    test("an undo and a redo of a row insert keep a peer's later cut of the rule the insert grew", () => {
+        const s = session(ruled());
+        s.edit(s.a, ...insertRows(2, 2));
+        s.edit(s.b, (ctx) => clearValidations(ctx.sheets[0], { row: [8, 11], column: [0, 0] }));
+        s.undo(s.a);
+        const cut = [...repeat('dropdown', 6), ...repeat(null, 4)];
+        for (const t of [s.a, s.b]) expect(column(t, 0, 10)).toEqual(cut);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.redo(s.a);
+        const regrown = [...repeat('dropdown', 8), ...repeat(null, 4)];
+        for (const t of [s.a, s.b]) expect(column(t, 0, 12)).toEqual(regrown);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+    });
+
     test('a row delete over a rule moves it on both tabs and the joiner, and its undo brings the rule back', () => {
         const s = session(ruled());
         s.edit(s.a, apply([4, 5], [0, 0], TICKS));
