@@ -144,19 +144,17 @@ describe('Server backup job', () => {
     );
 
     test(
-        'a home that stores files by name, with renamed, trashed and versioned items, is in a Full and a Light archive',
+        'a home that stores files by name, with renamed, trashed and versioned items, is in a Full archive',
         async () => {
             quietRelay();
-            for (const level of ['full', 'light'] as const) {
-                const { job, archivePath } = await runJob({ level });
-                expect(job.error).toBeUndefined();
-                expect(job.state).toBe('done');
-                const home = (await readServerManifest(archivePath)).manifest.homes.find(
-                    (h) => h.ownerId === realShape.user.id,
-                );
-                expect(home?.failed).toBeUndefined();
-                expect(home?.member).toBeDefined();
-            }
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+            const home = (await readServerManifest(archivePath)).manifest.homes.find(
+                (h) => h.ownerId === realShape.user.id,
+            );
+            expect(home?.failed).toBeUndefined();
+            expect(home?.member).toBeDefined();
         },
         JOB_TIMEOUT_MS,
     );

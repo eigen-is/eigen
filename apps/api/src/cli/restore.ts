@@ -1,7 +1,7 @@
 // The restore command of the eigen launcher, which puts a whole-server archive back. It picks the mode from the
 // flags: the stage unpacks and checks the archive while Eigen runs, and the swap moves it in with Eigen stopped.
 // It also holds the two small modes. --env takes a fresh machine's .env.production from the archive, and
-// --check-data is the check a rollback after a Light backup runs, with the build it goes back to, on today's data.
+// --check-data is the check a rollback runs first, with the build it goes back to, on today's data.
 
 import { chmodSync, existsSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
@@ -59,7 +59,7 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
   --yes              Do not ask
   --s3-from-archive  Upload the files an archive with S3 files holds under fresh keys, instead of keeping the
                      bucket as it is
-  --staged           Print the staged archive's version, level and the images its ${ENV_PATH} pins
+  --staged           Print the staged archive's version and the images its ${ENV_PATH} pins
   --swap             With Eigen stopped: swap the staged tree in and keep what it replaces aside. Finishes a swap
                      that was cut off
   --env              On a fresh machine, before the stage: write the ${ENV_PATH} of <archive> here, which pins
@@ -123,11 +123,10 @@ async function writeArchiveEnv(archive: string | undefined): Promise<void> {
     console.log(glyphLine('ok', `Took ${ENV_PATH} from ${name}`));
 }
 
-// A Light backup is made only when no schema changed since, so a rollback after one keeps today's data. This checks,
-// with the build the rollback goes back to and before the switch, that it opens that data. Every home of every kind
-// gets the verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips
-// the safety copies, which no home opens, and the container databases of an s3 mount, which live in the bucket. The
-// launcher says what to do when it fails.
+// A rollback keeps today's data when the build it goes back to opens it, and puts the update's backup back otherwise.
+// This checks, with that build and before the switch, that it opens that data. Every home of every kind gets the
+// verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips the safety
+// copies, which no home opens, and the container databases of an s3 mount, which live in the bucket.
 async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);

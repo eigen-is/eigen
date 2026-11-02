@@ -220,13 +220,9 @@ export function parseBackupManifest(text: string): BackupManifest | null {
     return isManifest(value) ? value : null;
 }
 
-// Why an archive cannot restore a home on its own, or null when it can. A Light member of a
-// whole-server archive holds no files and no mail; a mount marked metadata-only keeps its bodies in
-// its bucket (an s3 mount at Full). Phrased to follow the archive's name.
-export function incompleteReason(manifest: Pick<BackupManifest, 'level' | 'mounts'>): string | null {
-    if (manifest.level === 'light') {
-        return 'is a light backup: it holds no files and no mail, so it cannot restore an account on its own';
-    }
+// Why an archive cannot restore a home on its own, or null when it can: a mount marked metadata-only keeps its bodies
+// in its bucket (an s3 mount at Full). Phrased to follow the archive's name.
+export function incompleteReason(manifest: Pick<BackupManifest, 'mounts'>): string | null {
     const metadataOnly = manifest.mounts.filter((summary) => summary.contents === 'metadata');
     if (metadataOnly.length === 0) return null;
     const ids = metadataOnly.map((summary) => summary.id).join(', ');

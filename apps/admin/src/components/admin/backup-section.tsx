@@ -225,8 +225,8 @@ function ArtifactRow({ artifact, busy, onVerify, onRestore, onDelete }: Artifact
     // A mount the home had turned off whose storage could not be read: the archive holds nothing for
     // it, and the row says so rather than letting the admin assume it is in there.
     const skipped = artifact.manifest?.mounts.filter((mount) => mount.skipped) ?? [];
-    // A Light or metadata-only member of a whole-server archive: restoreHome refuses it, so the
-    // row says why instead of offering it.
+    // A metadata-only member of a whole-server archive: restoreHome refuses it, so the row says why
+    // instead of offering it.
     const incomplete = artifact.manifest && incompleteReason(artifact.manifest);
     // Without a manifest (an archive copied in by hand) nothing is known of what it holds. A verify writes one.
     const restorable = artifact.manifest !== null && artifact.verify.status !== 'failed' && !incomplete;

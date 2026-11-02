@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import pkg from '../../../../../package.json' with { type: 'json' };
-import { backupLevel, releaseNotes } from '../../cli/update-check';
+import { releaseNotes } from '../../cli/update-check';
 import { runCli } from '../cli-test-helpers';
 
 const { version } = pkg;
@@ -60,9 +60,8 @@ describe('releaseNotes', () => {
             version: '0.2.9',
             intro: 'Nine.',
             breaking: ['Contacts (breaking) — a new vCard shape'],
-            fullBackup: [],
         });
-        expect(ten).toEqual({ version: '0.2.10', intro: 'Ten comes after nine.', breaking: [], fullBackup: [] });
+        expect(ten).toEqual({ version: '0.2.10', intro: 'Ten comes after nine.', breaking: [] });
         expect(three?.intro).toBe('Big release. It spans two lines.');
         expect(three?.breaking).toEqual(['Sheets border storage (breaking) — borders are stored per cell']);
     });
@@ -77,7 +76,6 @@ describe('releaseNotes', () => {
             version: '0.2.1',
             intro: '',
             breaking: ['Mail (breaking) — a new store'],
-            fullBackup: [],
         });
     });
 
@@ -91,43 +89,12 @@ describe('releaseNotes', () => {
             version: '0.2.1',
             intro: 'The steps are in the Self-hosting section (https://eigen.is/support/self-hosting/get-started).',
             breaking: ['Backups (breaking) — see the guide (https://eigen.is/support)'],
-            fullBackup: [],
-        });
-    });
-
-    test('a (full backup) line is no breaking change: the listing and the prompt never see it', () => {
-        const [note] = releaseNotes(
-            '## [0.2.1] - 2026-09-01\n\nComments.\n\n- **Comments (full backup)** — a new column\n',
-            '0.2.0',
-            '0.2.1',
-        );
-        expect(note).toEqual({
-            version: '0.2.1',
-            intro: 'Comments.',
-            breaking: [],
-            fullBackup: ['Comments (full backup) — a new column'],
         });
     });
 
     test('skips [Unreleased], even when this image is newer than every release', () => {
         const notes = releaseNotes(CHANGELOG, '0.3.0', '9.0.0');
         expect(notes).toEqual([]);
-    });
-
-    test('a build of the main channel also reads [Unreleased], last, which it runs', () => {
-        expect(releaseNotes(CHANGELOG, '0.2.10', '0.3.0', { unreleased: true })).toEqual([
-            {
-                version: '0.3.0',
-                intro: 'Big release. It spans two lines.',
-                breaking: ['Sheets border storage (breaking) — borders are stored per cell'],
-                fullBackup: [],
-            },
-            { version: 'Unreleased', intro: '', breaking: ['Mail (breaking) — not released yet'], fullBackup: [] },
-        ]);
-        const marked =
-            '## [Unreleased]\n\n- **Comments (full backup)** — a new column\n\n## [0.2.1] - 2026-09-01\n\nOne.\n';
-        expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1', { unreleased: true }))).toBe('full');
-        expect(backupLevel(releaseNotes(marked, '0.2.1', '0.2.1'))).toBe('light');
     });
 
     test('orders prereleases before their release, and their numbers as numbers', () => {
@@ -138,15 +105,6 @@ describe('releaseNotes', () => {
     test('a downgrade or the same version has no notes', () => {
         expect(releaseNotes(CHANGELOG, '0.3.0', '0.2.9')).toEqual([]);
         expect(releaseNotes(CHANGELOG, '0.2.10', '0.2.10')).toEqual([]);
-    });
-});
-
-describe('backupLevel', () => {
-    test('is full when a release is breaking or marked (full backup), else light', () => {
-        const note = { version: '0.2.1', intro: '', breaking: [], fullBackup: [] };
-        expect(backupLevel([note])).toBe('light');
-        expect(backupLevel([note, { ...note, breaking: ['Mail (breaking)'] }])).toBe('full');
-        expect(backupLevel([{ ...note, fullBackup: ['Comments (full backup)'] }, note])).toBe('full');
     });
 });
 
@@ -185,17 +143,14 @@ describe('update-check', () => {
         }
     });
 
-    test('--level prints only level=full when a release since --from is breaking, else level=light', async () => {
-        expect(await eigen('update-check', '--from', '0.1.1', '--level')).toEqual({
-            stdout: 'level=full\n',
-            stderr: '',
-            code: 0,
-        });
-        expect(await eigen('update-check', '--from', version, '--level')).toEqual({
-            stdout: 'level=light\n',
-            stderr: '',
-            code: 0,
-        });
+    test('--level prints level=full whatever changed, for the launcher of 0.4.1 and before', async () => {
+        for (const from of ['0.1.1', version]) {
+            expect(await eigen('update-check', '--from', from, '--level')).toEqual({
+                stdout: 'level=full\n',
+                stderr: '',
+                code: 0,
+            });
+        }
     });
 
     test('refuses a --from that is no version, and a missing one', async () => {

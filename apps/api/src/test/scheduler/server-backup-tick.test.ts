@@ -134,7 +134,7 @@ describe('The nightly server backup tick', () => {
 
     test('a manual or pre-update archive of the day does not stand in for the night', async () => {
         writeAttempt('manual', 'full', new Date('2026-10-01T01:00:00Z'), 'done');
-        writeAttempt('pre-update', 'light', new Date('2026-10-01T01:30:00Z'), 'done');
+        writeAttempt('pre-update', 'full', new Date('2026-10-01T01:30:00Z'), 'done');
         await tickAt('2026-10-01T02:00:00Z');
         expect(start).toHaveBeenCalledTimes(1);
     });
@@ -142,7 +142,7 @@ describe('The nightly server backup tick', () => {
     test('a pre-update backup that just ended does not hold the night back: the update waits for it', async () => {
         const at = new Date('2026-10-01T02:01:00Z');
         const record = { state: 'done', startedAt: at, finishedAt: new Date('2026-10-01T02:03:00Z') };
-        writeServerRecord(buildServerArchiveName('pre-update', 'light', at), record);
+        writeServerRecord(buildServerArchiveName('pre-update', 'full', at), record);
         await tickAt('2026-10-01T02:05:00Z');
         expect(start).toHaveBeenCalledTimes(1);
     });

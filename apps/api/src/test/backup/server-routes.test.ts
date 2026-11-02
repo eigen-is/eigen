@@ -92,7 +92,7 @@ describe('Server backup routes', () => {
         JOB_TIMEOUT_MS,
     );
 
-    test('a Light backup is refused: it is the launcher’s, for an update', async () => {
+    test('a Light backup is refused: Eigen makes none any more', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, '/admin/server-backup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

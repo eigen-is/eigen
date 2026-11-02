@@ -571,11 +571,11 @@ describe('the server backup on the control socket', () => {
         test(
             'starts one and reports it until it ends, with the size of its archive',
             async () => {
-                const res = await post('/backup', { level: 'light', reason: 'manual' });
+                const res = await post('/backup', { level: 'full', reason: 'manual' });
                 expect(res.status).toBe(200);
                 const started: ControlBackupJob = await res.json();
                 expect(started.state).toBe('running');
-                expect(started.artifact).toStartWith('server-manual-light-');
+                expect(started.artifact).toStartWith('server-manual-full-');
                 const job = await waitForControlJob(started.id);
                 expect(job.error).toBeUndefined();
                 expect(job).toMatchObject({ state: 'done', artifact: started.artifact });
@@ -592,17 +592,15 @@ describe('the server backup on the control socket', () => {
                     const first: ControlBackupJob = await (
                         await post('/backup', { level: 'full', reason: 'manual' })
                     ).json();
-                    const refused = await post('/backup', { level: 'light', reason: 'pre-update' });
+                    const refused = await post('/backup', { level: 'full', reason: 'pre-update' });
                     expect(refused.status).toBe(409);
                     expect(await refused.text()).toContain(first.artifact!);
 
                     let answered = false;
-                    const waiting = post('/backup', { level: 'light', reason: 'pre-update', wait: true }).then(
-                        (res) => {
-                            answered = true;
-                            return res;
-                        },
-                    );
+                    const waiting = post('/backup', { level: 'full', reason: 'pre-update', wait: true }).then((res) => {
+                        answered = true;
+                        return res;
+                    });
                     await Bun.sleep(300);
                     expect(answered).toBe(false);
                     held.release();
@@ -611,7 +609,7 @@ describe('the server backup on the control socket', () => {
                     expect(res.status).toBe(200);
                     const second: ControlBackupJob = await res.json();
                     expect(getBackupJob(first.id)?.state).toBe('done');
-                    expect(second.artifact).toStartWith('server-pre-update-light-');
+                    expect(second.artifact).toStartWith('server-pre-update-full-');
                     expect((await waitForControlJob(second.id)).state).toBe('done');
                 } finally {
                     held.restore();
@@ -620,8 +618,9 @@ describe('the server backup on the control socket', () => {
             JOB_TIMEOUT_MS,
         );
 
-        test('takes no scheduled reason and no level it does not know', async () => {
+        test('takes no scheduled reason, no Light level and no level it does not know', async () => {
             expect((await post('/backup', { level: 'full', reason: 'scheduled' })).status).toBe(422);
+            expect((await post('/backup', { level: 'light', reason: 'manual' })).status).toBe(422);
             expect((await post('/backup', { level: 'all', reason: 'manual' })).status).toBe(422);
             expect(serverRecords()).toEqual([]);
         });
@@ -632,8 +631,11 @@ describe('the server backup on the control socket', () => {
     });
 
     describe('GET /status', () => {
-        function writeRecord(reason: 'scheduled' | 'manual', level: 'light' | 'full', at: string, record: object) {
-            return writeServerRecord(buildServerArchiveName(reason, level, new Date(at)), { startedAt: at, ...record });
+        function writeRecord(reason: 'scheduled' | 'manual', at: string, record: object) {
+            return writeServerRecord(buildServerArchiveName(reason, 'full', new Date(at)), {
+                startedAt: at,
+                ...record,
+            });
         }
 
         test('has no backup when there is none', async () => {
@@ -650,9 +652,9 @@ describe('the server backup on the control socket', () => {
         test('names the newest record, the failed scheduled attempt and the newest Full that verified', async () => {
             const goodAt = '2026-09-01T02:00:00.000Z';
             const manifest = serverManifestOf('scheduled', goodAt, 'complete');
-            writeFileSync(writeRecord('scheduled', 'full', goodAt, { state: 'done', manifest }), 'archive bytes');
-            writeFileSync(writeRecord('manual', 'light', '2026-09-01T12:00:00.000Z', { state: 'done' }), 'light bytes');
-            const failed = writeRecord('scheduled', 'full', '2026-09-02T02:00:00.000Z', {
+            writeFileSync(writeRecord('scheduled', goodAt, { state: 'done', manifest }), 'archive bytes');
+            writeFileSync(writeRecord('manual', '2026-09-01T12:00:00.000Z', { state: 'done' }), 'manual bytes');
+            const failed = writeRecord('scheduled', '2026-09-02T02:00:00.000Z', {
                 state: 'failed',
                 error: 'no room',
             });
@@ -670,7 +672,7 @@ describe('the server backup on the control socket', () => {
         test('names the newest archive backed up with warnings, which is no good Full', async () => {
             const at = '2026-09-04T02:00:00.000Z';
             const manifest = serverManifestOf('scheduled', at, 'warned');
-            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', manifest });
+            const archivePath = writeRecord('scheduled', at, { state: 'done', manifest });
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
             expect(backup.warned).toEqual({ name, createdAt: at, error: 'alice' });
@@ -680,14 +682,14 @@ describe('the server backup on the control socket', () => {
         test('names the newest scheduled archive that saved but did not reach the bucket', async () => {
             const at = '2026-09-03T02:00:00.000Z';
             const upload = { state: 'failed', at, key: 'nightly/x.tar', error: 'bucket refused' };
-            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', upload });
+            const archivePath = writeRecord('scheduled', at, { state: 'done', upload });
             writeFileSync(archivePath, 'archive bytes');
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
             expect(backup.scheduledFailure).toBeNull();
             expect(backup.scheduledNotUploaded).toEqual({ name, createdAt: at, error: 'bucket refused' });
 
-            writeRecord('scheduled', 'full', at, {
+            writeRecord('scheduled', at, {
                 state: 'done',
                 upload: { ...upload, state: 'done', error: undefined },
             });
@@ -696,6 +698,13 @@ describe('the server backup on the control socket', () => {
     });
 
     describe('eigen backup', () => {
+        test('refuses the Light level, which is gone, with exit code 2 and starts nothing', async () => {
+            const { stderr, code } = await runCli(['backup', '--level', 'light']);
+            expect(code).toBe(2);
+            expect(stderr).toContain('Unknown level "light".');
+            expect(serverRecords()).toEqual([]);
+        });
+
         test(
             'prints the steps it sees, then what it saved, and ends with the archive',
             async () => {
@@ -709,16 +718,16 @@ describe('the server backup on the control socket', () => {
                     }
                     return pull(...args);
                 });
-                const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']).finally(() =>
+                const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']).finally(() =>
                     slow.mockRestore(),
                 );
                 expect(stderr).toBe('');
                 expect(code).toBe(0);
-                expect(stdout).toMatch(/^┌ {2}Backing up the server into server-manual-light-/);
+                expect(stdout).toMatch(/^┌ {2}Backing up the server into server-manual-full-/);
                 expect(stdout).toMatch(/│ {2}home 1 of \d+\n/);
-                const archive = stdout.match(/\narchive=(server-manual-light-\d{8}-\d{6}\.tar)\n$/)?.[1];
+                const archive = stdout.match(/\narchive=(server-manual-full-\d{8}-\d{6}\.tar)\n$/)?.[1];
                 expect(archive).toBeDefined();
-                expect(stdout).toContain(`└  Saved ${archive}: Light, `);
+                expect(stdout).toContain(`└  Saved ${archive}: Full, `);
                 expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
             },
             JOB_TIMEOUT_MS,
@@ -735,12 +744,12 @@ describe('the server backup on the control socket', () => {
                 const { stdout, stderr, code } = await runCli([
                     'backup',
                     '--level',
-                    'light',
+                    'full',
                     '--reason',
                     'pre-update',
                 ]).finally(() => warned.mockRestore());
                 expect(code).toBe(0);
-                expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                expect(stdout).toMatch(/\narchive=server-pre-update-full-\d{8}-\d{6}\.tar\n$/);
                 expect(stderr).toMatch(
                     /^▲ {2}Backed up with warnings: .+ \(mount default: files with no object in storage, archived without their bytes: a\.png\)$/m,
                 );
@@ -765,11 +774,11 @@ describe('the server backup on the control socket', () => {
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: UNREACHABLE } } });
                 try {
-                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']);
+                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']);
                     expect(code).toBe(4);
                     expect(stderr).toContain('Not uploaded');
                     expect(stderr).not.toContain(UNREACHABLE.secretAccessKey);
-                    const archive = stdout.match(/\narchive=(server-manual-light-\d{8}-\d{6}\.tar)\n$/)?.[1];
+                    const archive = stdout.match(/\narchive=(server-manual-full-\d{8}-\d{6}\.tar)\n$/)?.[1];
                     expect(archive).toBeDefined();
                     expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
                 } finally {
@@ -793,17 +802,17 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    const running = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const running = await startServerBackup({ level: 'full', reason: 'manual' });
                     const refused = await runCli(['backup']);
                     expect(refused.code).toBe(1);
                     expect(refused.stderr).toContain(running.artifact!);
 
-                    const waiting = runCli(['backup', '--level', 'light', '--reason', 'pre-update', '--wait']);
+                    const waiting = runCli(['backup', '--level', 'full', '--reason', 'pre-update', '--wait']);
                     await Bun.sleep(300);
                     held.release();
                     const { stdout, code } = await waiting;
                     expect(code).toBe(0);
-                    expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                    expect(stdout).toMatch(/\narchive=server-pre-update-full-\d{8}-\d{6}\.tar\n$/);
                 } finally {
                     held.restore();
                 }
@@ -816,9 +825,9 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    await startServerBackup({ level: 'light', reason: 'manual' });
+                    await startServerBackup({ level: 'full', reason: 'manual' });
                     const waiting = runCli(
-                        ['backup', '--level', 'light', '--reason', 'pre-update', '--wait'],
+                        ['backup', '--level', 'full', '--reason', 'pre-update', '--wait'],
                         undefined,
                         { BUN_CONFIG_HTTP_IDLE_TIMEOUT: '1' },
                     );
@@ -829,7 +838,7 @@ describe('the server backup on the control socket', () => {
                     expect(stderr).toBe('');
                     expect(code).toBe(0);
                     expect(stdout).toStartWith('◆  Waiting for the running server backup to end\n');
-                    expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                    expect(stdout).toMatch(/\narchive=server-pre-update-full-\d{8}-\d{6}\.tar\n$/);
                 } finally {
                     held.restore();
                 }
@@ -842,13 +851,13 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    const running = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const running = await startServerBackup({ level: 'full', reason: 'manual' });
                     const caller = new AbortController();
                     const waiting = fetch('http://eigen/backup', {
                         unix: SOCKET,
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ level: 'light', reason: 'pre-update', wait: true }),
+                        body: JSON.stringify({ level: 'full', reason: 'pre-update', wait: true }),
                         signal: caller.signal,
                     }).catch(() => null);
                     await Bun.sleep(300);
@@ -870,7 +879,7 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const failing = spyOn(homeRelay, 'pullHomeSnapshot').mockRejectedValue(new Error('disk on fire'));
                 try {
-                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']);
+                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']);
                     expect(code).toBe(1);
                     expect(stderr).toContain('disk on fire');
                     expect(stdout).not.toContain('archive=');

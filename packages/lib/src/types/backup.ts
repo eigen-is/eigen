@@ -12,12 +12,8 @@ export type BackupEntry = {
 };
 
 // How much of a home a capture takes. `full-s3` is complete, what the per-home backup writes. `full`
-// leaves an s3 mount's objects to its bucket and keeps its metadata.db and staged uploads. `light`
-// keeps the databases and the home outside its mounts and mail: no file bodies, no Maildir. Settings offers only the
-// full levels: a Light restore cannot bring back the files changed since, so Light is left to the launcher.
-export const FULL_BACKUP_LEVELS = ['full', 'full-s3'] as const;
-export type FullBackupLevel = (typeof FULL_BACKUP_LEVELS)[number];
-export const BACKUP_LEVELS = ['light', ...FULL_BACKUP_LEVELS] as const;
+// leaves an s3 mount's objects to its bucket and keeps its metadata.db and staged uploads.
+export const BACKUP_LEVELS = ['full', 'full-s3'] as const;
 export type BackupLevel = (typeof BACKUP_LEVELS)[number];
 
 export const BACKUP_KINDS = ['user', 'team', 'server'] as const;
@@ -38,7 +34,7 @@ export type BackupManifest = {
     // `skipped` is set only for a mount the home has turned off whose storage could not be read: it
     // carries the reason, holds no files, and a restore leaves it disabled and absent. An enabled
     // mount's storage failure fails the whole backup instead. `contents: 'metadata'` marks a mount
-    // whose file bodies the archive does not hold (every mount at level light, an s3 one at full).
+    // whose file bodies the archive does not hold: an s3 one at level full.
     mounts: {
         id: string;
         storageType: MountConfig['storageType'];

@@ -89,7 +89,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     const archives = await listServerArchives();
     const [newest] = archives;
     const scheduled = archives.find((archive) => archive.reason === 'scheduled');
-    const goodFull = archives.find((archive) => archive.level !== 'light' && isGood(archive.record));
+    const good = archives.find((archive) => isGood(archive.record));
     const warned = [scheduled, newest].find((archive) => archive?.record?.state === 'done' && !isGood(archive.record));
     const { schedule, upload } = getServerSettings().backups;
     const notUploaded =
@@ -113,7 +113,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
                       .join(', '),
               )
             : null,
-        newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
+        newestGoodFullAt: good?.createdAt.toISOString() ?? null,
     };
 }
 

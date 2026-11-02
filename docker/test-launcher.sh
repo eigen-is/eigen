@@ -44,8 +44,8 @@ trap 'rm -rf "$FIX"' EXIT
 # pulled; STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
-# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --staged also
-# prints STUB_CHECKED, one of update-check --level prints level=STUB_LEVEL, one of restore --env writes a
+# digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, with STUB_RUN_CODE or 1, and
+# one with --staged also prints STUB_CHECKED, one of restore --env writes a
 # .env.production that pins sha256:eee, and one of restore --swap removes .eigen/restore-swap, or with STUB_SWAP_CUT=1
 # leaves one and fails, after 3 s with STUB_SWAP_SLOW=1; with STUB_SWAP_KEPT=<folder> it keeps that folder aside and
 # says so, as the CLI does. A run of bootstrap writes a Compose file into this folder, the starter keys into
@@ -53,9 +53,8 @@ trap 'rm -rf "$FIX"' EXIT
 # stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE,
 # compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and
 # exits STUB_NOTICE, and one that checksums $EIGEN_ENV_FILE
-# that of STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
-# update-check --level ends its line in \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
-# .env.production.
+# that of STUB_MOUNTED, the file eigen-api mounts, else .env.production. A run of restore --env refuses a folder with
+# a .env.production.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
 #!/bin/sh
@@ -84,7 +83,7 @@ case $1 in
                     ;;
                 esac
                 case " $* " in *" backup "*)
-                    echo "archive=${STUB_ARCHIVE-server-pre-update-light-20260101-000000.tar}"
+                    echo "archive=${STUB_ARCHIVE-server-pre-update-full-20260101-000000.tar}"
                     exit "${STUB_EXEC:-0}"
                     ;;
                 esac
@@ -115,12 +114,8 @@ case $1 in
     run)
         shift
         echo "stub run: $*"
-        case " $* " in *" ${STUB_RUN_FAIL:-none} "*) exit 1 ;; esac
+        case " $* " in *" ${STUB_RUN_FAIL:-none} "*) exit "${STUB_RUN_CODE:-1}" ;; esac
         case " $* " in *" --staged "*) printf '%s\n' "${STUB_CHECKED:-}" ;; esac
-        case " $* " in
-            *" -t "*" update-check "*" --level "*) printf 'level=%s\r\n' "${STUB_LEVEL:-light}" ;;
-            *" update-check "*" --level "*) echo "level=${STUB_LEVEL:-light}" ;;
-        esac
         case " $* " in *" --env "*)
             if [ -e .env.production ]; then echo 'This folder has a .env.production already.' >&2; exit 1; fi
             printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.98\n' >.env.production
@@ -227,7 +222,7 @@ launch() {
     shift
     : >"$FIX/calls.log"
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
-        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
+        STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_RUN_CODE \
         STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_NOTICE \
         STUB_MOUNTED; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
@@ -324,12 +319,11 @@ steps() {
         -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' -e 's/^run .* rm -rf \(.*\)$/rm \1/p' | tr '\n' '|'
 }
 
-# update_steps: what of the last launch an update from 0.2.99 turns on, in order, on one line: the notes and the level
-# the new CLI gives, the restart notices and the backup on the running API, the bootstrap and configure runs with the
-# image each ran in, the stop and the start.
+# update_steps: what of the last launch an update from 0.2.99 turns on, in order, on one line: the notes the new CLI
+# gives, the restart notices and the backup on the running API, the bootstrap and configure runs with the image each
+# ran in, the stop and the start.
 update_steps() {
     printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' \
-        -e 's/^run .* \([^ ]*\) update-check --from 0.2.99 --level$/level \1/p' \
         -e 's/^run .* \([^ ]*\) update-check --from 0.2.99$/notes \1/p' \
         -e 's/^compose .* exec -T -e TERM -e NO_COLOR eigen-api \/app\/docker\/api\/entrypoint.sh \(backup .*\)$/\1/p' \
         -e 's/^compose .* exec -T -e TERM -e NO_COLOR eigen-api \/app\/docker\/api\/entrypoint.sh \(restart-notice .*\)$/\1/p' \
@@ -414,8 +408,8 @@ for SHELL_NAME in dash busybox host; do
     launch bare frobnicate
     expect_error 2 'Unknown command "frobnicate"' "an unknown command is refused with the usage on stderr"
     failed=''
-    for args in 'status extra' 'backup extra' 'backup --light --keep' 'restore a b' 'restore a --bogus' 'restart extra' \
-        'stop extra' 'logs a b' 'update --bogus' 'update 1 2' 'rollback --nope'; do
+    for args in 'status extra' 'backup extra' 'backup --light' 'restore a b' 'restore a --bogus' 'restart extra' \
+        'stop extra' 'logs a b' 'update --bogus' 'update --full' 'update 1 2' 'rollback --nope'; do
         # shellcheck disable=SC2086
         launch local $args
         if [ "$CODE" != 2 ] || [ -n "$OUT" ] || ! printf '%s\n' "$ERR" | grep -q "^Unknown argument \"${args##* }\"\.$" ||
@@ -790,31 +784,25 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update over the files of the pinned build: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
 
-    # The update as the operator types it: the new version's CLI names the level, the running API makes the backup,
+    # The update as the operator types it: the running API makes a Full backup, without asking the new CLI for a level,
     # and only then are the new files written and the new launcher takes over, with the archive. It records the pins
     # .env.production holds, which here are the version and the api image alone.
     mkdir -p "$FIX/release/data"
     echo EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local >>"$FIX/release/.env.production"
     STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
     sequence=$(update_steps)
-    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 0 --reason update|backup --level light --reason pre-update --wait|restart-notice --in 0 --reason update|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
-        [ "$(sed -n 1p "$FIX/release/.eigen/last-update")" = server-pre-update-light-20260101-000000.tar ] &&
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 0 --reason update|backup --reason pre-update --wait|restart-notice --in 0 --reason update|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+        [ "$(sed -n 1p "$FIX/release/.eigen/last-update")" = server-pre-update-full-20260101-000000.tar ] &&
+        ! printf '%s\n' "$CALLS" | grep -q ' --level' &&
         grep -qx 'EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api:local' "$FIX/release/.eigen/last-update" &&
         grep -qx 'EIGEN_VERSION=0.2.99' "$FIX/release/.eigen/last-update" &&
         ! grep -q '^EIGEN_FRONTEND_IMAGE=' "$FIX/release/.eigen/last-update" &&
         printf '%s\n' "$ERR" | grep -qx STUB_LAUNCHER &&
-        printf '%s\n' "$OUT" | grep -q '│  Saved before the update: backups/server-pre-update-light-20260101-000000.tar$' &&
+        printf '%s\n' "$OUT" | grep -q '│  Saved before the update: backups/server-pre-update-full-20260101-000000.tar$' &&
         printf '%s\n' "$OUT" | grep -q '└  ./eigen rollback goes back to Eigen 0.2.99 (abc1234).'; then
-        ok "$SHELL_NAME: update tells the open tabs, backs up on the running API at the level the new CLI names, before it writes a file, tells them again, and the new launcher records the archive and the old pins for a rollback"
+        ok "$SHELL_NAME: update tells the open tabs, makes a Full backup on the running API before it writes a file, tells them again, and the new launcher records the archive and the old pins for a rollback"
     else
         fail "$SHELL_NAME: update: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
-    fi
-    STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --full
-    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' backup --level full --reason pre-update --wait$' &&
-        ! printf '%s\n' "$CALLS" | grep -q ' --level$'; then
-        ok "$SHELL_NAME: update --full makes a full backup without asking the level"
-    else
-        fail "$SHELL_NAME: update --full: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     rm "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     reset_release
@@ -822,7 +810,7 @@ for SHELL_NAME in dash busybox host; do
     # --in: the notice goes out after every pull, the wait counts down in the launcher, and the backup follows it.
     STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --in 1s 'Back in five'
     sequence=$(update_steps)
-    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 1 --reason update --message Back in five|backup --level light --reason pre-update --wait|restart-notice --in 0 --reason update --message Back in five|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
+    if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 1 --reason update --message Back in five|backup --reason pre-update --wait|restart-notice --in 0 --reason update --message Back in five|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
         printf '%s\n' "$CALLS" | awk '/^pull /{ pulled = NR } / restart-notice --in 1 /{ told = NR } END { exit !(pulled && told > pulled) }' &&
         printf '%s\n' "$OUT" | grep -q '◆  Restarts in 1s, at 00:10:00 UTC. Ctrl+C cancels.$' &&
         printf '%s\n' "$OUT" | grep -q '│  Back in five$' && printf '%s\n' "$OUT" | grep -q '◇  Waited until 00:10:00 UTC$'; then
@@ -857,7 +845,7 @@ for SHELL_NAME in dash busybox host; do
     fi
     # A failed backup after the notice takes it back too.
     STUB_EXEC=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
-    if [ "$CODE" = 1 ] && [ "$(update_steps)" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|level ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 0 --reason update|backup --level light --reason pre-update --wait|restart-notice --clear|' ]; then
+    if [ "$CODE" = 1 ] && [ "$(update_steps)" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|restart-notice --in 0 --reason update|backup --reason pre-update --wait|restart-notice --clear|' ]; then
         ok "$SHELL_NAME: a failed backup takes the notice back"
     else
         fail "$SHELL_NAME: a failed backup after the notice: exit $CODE, sequence '$(update_steps)'"
@@ -869,7 +857,7 @@ for SHELL_NAME in dash busybox host; do
     if [ "$told_code" = 1 ] && printf '%s\n' "$told_err" | grep -q '■  Could not tell the open tabs; Eigen runs on as it was$' &&
         ! printf '%s\n' "$told_calls" | grep -Eq ' backup | bootstrap ' && [ "$CODE" = 0 ] &&
         [ "$(printf '%s\n' "$OUT" | grep -c '▲  Could not tell the open tabs that Eigen restarts now.$')" = 2 ] &&
-        printf '%s\n' "$CALLS" | grep -q ' backup --level light --reason pre-update --wait$'; then
+        printf '%s\n' "$CALLS" | grep -q ' backup --reason pre-update --wait$'; then
         ok "$SHELL_NAME: a notice with a wait that fails stops the update before the backup; a notice for now that fails does not"
     else
         fail "$SHELL_NAME: a failed notice: --in 1m exit $told_code, '$told_err'; without --in exit $CODE, '$OUT'"
@@ -971,7 +959,7 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: update with a failed exec: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
-    echo server-pre-update-light-20250101-000000.tar >"$FIX/release/.eigen/last-update"
+    echo server-pre-update-full-20250101-000000.tar >"$FIX/release/.eigen/last-update"
     STUB_RUNNING=0 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update --no-backup
     sequence=$(update_steps)
     if [ "$CODE" = 0 ] && [ "$sequence" = 'notes ghcr.io/eigen-is/eigen/api:0.3.1|bootstrap ghcr.io/eigen-is/eigen/api@sha256:ddd|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|stop|configure ghcr.io/eigen-is/eigen/api@sha256:ddd|up|' ] &&
@@ -982,19 +970,6 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: update --no-backup: exit $CODE, sequence '$sequence', '$OUT', '$ERR'"
     fi
     rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
-    # A terminal on stdin: Docker's pty ends the level the new CLI prints in \r\n, unless the CLI runs without one.
-    if [ "$SHELL_NAME" = host ]; then
-        skip "$SHELL_NAME: update typed on a terminal, which only the container shells get"
-    else
-        LAUNCH_TTY=1 STUB_LATEST=0.3.1 STUB_REVISION=def5678 STUB_DIGEST=ddd launch release update
-        if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' backup --level light --reason pre-update --wait$' &&
-            printf '%s\n' "$CALLS" | grep ' update-check --from 0.2.99 --level$' | grep -vq ' -t '; then
-            ok "$SHELL_NAME: update typed on a terminal asks the level without one, and backs up at that level"
-        else
-            fail "$SHELL_NAME: update on a terminal: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n\r' '|^')"
-        fi
-        rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
-    fi
     # The archive becomes the way back once the switch is written: a switch that failed leaves the build as it was.
     STUB_RUN_FAIL=EIGEN_VERSION STUB_DIGEST=ddd launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Could not write Eigen .* into .env.production' &&
@@ -1060,7 +1035,7 @@ for SHELL_NAME in dash busybox host; do
     mkdir -p "$FIX/elsewhere" "$FIX/release/backups"
     : >"$FIX/elsewhere/$ARCHIVE"
     : >"$FIX/release/backups/$ARCHIVE"
-    echo server-pre-update-light-20260101-000000.tar >"$FIX/local/.eigen/last-update"
+    echo server-pre-update-full-20260101-000000.tar >"$FIX/local/.eigen/last-update"
     # With data/ gone, which Docker would make root's for the stage's bind mount.
     rm -rf "$FIX/local/data"
     launch local restore "$ARCHIVE" --yes
@@ -1188,7 +1163,7 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: a swap that cannot be finished: exit $CODE, '$ERR'"
     fi
     : >"$FIX/release/.eigen/restore-swap"
-    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    echo server-pre-update-full-20260101-000000.tar >"$FIX/release/.eigen/last-update"
     launch release status
     if [ "$CODE" = 0 ] && [ "$(steps)" = 'restore --swap (ghcr.io/eigen-is/eigen/api:local)|share|up|' ] &&
         printf '%s\n' "$OUT" | grep -q '◇  The restore that was cut off is finished' &&
@@ -1199,7 +1174,7 @@ for SHELL_NAME in dash busybox host; do
     fi
     rm -f "$FIX/release/.eigen/last-update"
     : >"$FIX/release/.eigen/restore-swap"
-    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    echo server-pre-update-full-20260101-000000.tar >"$FIX/release/.eigen/last-update"
     launch release rollback --yes
     rm -f "$FIX/release/.eigen/last-update"
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  There is no update to roll back.' &&
@@ -1362,25 +1337,28 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fi
     fi
 
-    echo server-pre-update-light-20260101-000000.tar >"$FIX/release/.eigen/last-update"
+    echo server-pre-update-full-20260101-000000.tar >"$FIX/release/.eigen/last-update"
     STUB_CHECKED=$checked launch release rollback --yes
     if [ "$CODE" = 1 ] &&
-        printf '%s\n' "$ERR" | grep -q '■  The backup the last update made, backups/server-pre-update-light-20260101-000000.tar, is gone.' &&
+        printf '%s\n' "$ERR" | grep -q '■  The backup the last update made, backups/server-pre-update-full-20260101-000000.tar, is gone.' &&
         [ -z "$(steps)" ] && [ -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: rollback whose archive is gone says so before it stages anything"
     else
         fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
     fi
-    # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one.
+    # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one. A
+    # Light one, which no restore takes, is left out.
     older="$FIX/release/backups/server-pre-update-full-20251201-000000.tar"
-    newer="$FIX/release/backups/server-pre-update-light-20251202-000000.tar"
+    newer="$FIX/release/backups/server-pre-update-full-s3-20251202-000000.tar"
+    light="$FIX/release/backups/server-pre-update-light-20251203-000000.tar"
     : >"$older"
     : >"$newer"
+    : >"$light"
     STUB_CHECKED=$checked launch release rollback --yes
     refused=$(printf '%s\n' "$ERR" | sed -n 's/^[│└]  *//p' | tr '\n' '|')
     refused_code=$CODE
     launch release rollback --help
-    rm "$older" "$newer"
+    rm "$older" "$newer" "$light"
     if [ "$refused_code" = 1 ] &&
         [ "$refused" = "The backups earlier updates made:|$(basename "$newer")|$(basename "$older")|./eigen restore <file> puts one of them back.|" ] &&
         [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | sed -n '/Kept:$/,/^$/p' | tr '\n' '|')" = "To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:|  $(basename "$newer")|  $(basename "$older")||" ]; then
@@ -1393,11 +1371,12 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     STUB_CHECKED=$checked launch release rollback --yes
     rm "$FIX/release/backups/server-pre-update-full-20260101-000000.tar"
     if [ "$CODE" = 0 ] &&
+        printf '%s\n' "$OUT" | grep -q '▲  The launcher that made the last update kept no note of the build before it.$' &&
         printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' &&
         [ "$(steps)" = 'share|stage eigen-api restore server-pre-update-full-20260101-000000.tar --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|' ] &&
         [ ! -e "$FIX/release/.eigen/last-update" ] &&
         printf '%s\n' "$OUT" | grep -q '◇  Eigen 0.2.99 (abc1234) → 0.2.99 (abc1234) is running at https://eigen.example.com/'; then
-        ok "$SHELL_NAME: rollback after a Full backup restores the archive .eigen/last-update names on the images it pins, and names the builds it leaves and reaches"
+        ok "$SHELL_NAME: rollback after an update that recorded no pins restores the archive .eigen/last-update names on the images it pins, and names the builds it leaves and reaches"
     else
         fail "$SHELL_NAME: a release rollback: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
@@ -1439,89 +1418,115 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: restore --in: exit $CODE, '$(notice_steps)', '$OUT', '$ERR'"
     fi
 
-    light=server-pre-update-light-20260101-000000.tar
+    # The first way back keeps data/: the build before the update checks it opens it, and Eigen switches to the pins the
+    # update recorded. When that build cannot open it, or is too old to check, the update's Full backup goes back.
+    full=server-pre-update-full-20260101-000000.tar
     old=ghcr.io/eigen-is/eigen/api@sha256:old
-    : >"$FIX/release/backups/$light"
-    # An update made by an older launcher left the archive alone, without the pins of the build before it.
-    echo "$light" >"$FIX/release/.eigen/last-update"
-    launch release rollback --yes
-    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q "└  Put its backup back instead: ./eigen restore $light" &&
-        [ -z "$(steps)" ] && [ -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: rollback after a Light backup with no pins recorded points at ./eigen restore and changes nothing"
-    else
-        fail "$SHELL_NAME: rollback after a Light backup without pins: exit $CODE, steps '$(steps)', '$ERR'"
-    fi
-    printf '%s\n' "$light" EIGEN_REGISTRY=ghcr.io/eigen-is/eigen EIGEN_VERSION=0.2.98 "EIGEN_API_IMAGE=$old" \
-        >"$FIX/release/.eigen/last-update"
+    pinned="$full|EIGEN_REGISTRY=ghcr.io/eigen-is/eigen|EIGEN_VERSION=0.2.98|EIGEN_API_IMAGE=$old"
+    record_pins() { printf '%s\n' "$pinned" | tr '|' '\n' >"$FIX/release/.eigen/last-update"; }
+    : >"$FIX/release/backups/$full"
+    record_pins
     STUB_IMAGE=1 STUB_FAIL=$old launch release rollback --yes
     if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Could not get the build before the update$' &&
-        printf '%s\n' "$ERR" | grep -q "└  Full output: .*Put the backup the update made back instead: ./eigen restore $light$" &&
+        printf '%s\n' "$ERR" | grep -q "└  Full output: .*Check the network, then run ./eigen rollback again.$" &&
         [ "$(steps)" = "pull ghcr.io/eigen-is/eigen/api:local|pull $old|" ] && [ -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: rollback after a Light backup whose build before cannot be downloaded points at ./eigen restore"
+        ok "$SHELL_NAME: rollback whose build before cannot be downloaded changes nothing and says to run it again"
     else
-        fail "$SHELL_NAME: rollback after a Light backup with a failed pull: exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: rollback with a failed pull of the build before: exit $CODE, steps '$(steps)', '$ERR'"
     fi
-    STUB_RUN_FAIL=--check-data launch release rollback --yes
-    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen 0.2.99 (abc1234) cannot open the data here' &&
-        printf '%s\n' "$ERR" | grep -q "└  Put the backup the update made back instead: ./eigen restore $light" &&
-        [ "$(steps)" = "restore --check-data --yes ($old)|" ] && [ -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: rollback after a Light backup whose build before cannot open the data refuses before the stop"
+    failed=''
+    for code in 1 2; do
+        STUB_RUN_FAIL=--check-data STUB_RUN_CODE=$code STUB_CHECKED=$checked launch release rollback --yes
+        why='cannot open the data here.'
+        if [ "$code" = 2 ]; then why='is too old to check the data here.'; fi
+        if [ "$CODE" != 0 ] || ! printf '%s\n' "$OUT" | grep -q "▲  Eigen 0.2.99 (abc1234) $why\$" ||
+            ! printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to the backup the last update made' ||
+            [ "$(steps)" != "restore --check-data --yes ($old)|share|stage eigen-api restore $full --stage --yes|restore --staged (ghcr.io/eigen-is/eigen/api:local)|stop|restore --swap (ghcr.io/eigen-is/eigen/api:local)|bootstrap ghcr.io/eigen-is/eigen/api@sha256:bbb|share|up|" ] ||
+            [ -e "$FIX/release/.eigen/last-update" ]; then
+            failed="$failed check exit $code (exit $CODE, steps '$(steps)', '$OUT', '$ERR')"
+        fi
+        rm -f "$FIX/release/.eigen/bundle"
+        reset_release
+        record_pins
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: rollback whose build before cannot open the data, or is too old to check it, says so and restores the update's Full backup"
     else
-        fail "$SHELL_NAME: rollback after a Light backup with a failed check: exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: rollback after a failed check:$failed"
     fi
     # Cut off after the stop, it starts Eigen again and keeps the way back, so the next rollback below finishes it.
     STUB_RUN_FAIL=bootstrap launch release rollback --yes
     if [ "$CODE" = 1 ] && [ "$(steps)" = "restore --check-data --yes ($old)|stop|configure $old|bootstrap $old|share|up|" ] &&
         [ -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: rollback after a Light backup that fails writing the files starts Eigen and keeps .eigen/last-update"
+        ok "$SHELL_NAME: rollback on the data as it is that fails writing the files starts Eigen and keeps .eigen/last-update"
     else
-        fail "$SHELL_NAME: rollback after a Light backup cut off in the files: exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: rollback on the data as it is cut off in the files: exit $CODE, steps '$(steps)', '$ERR'"
     fi
     launch release rollback --yes
     if [ "$CODE" = 0 ] &&
         printf '%s\n' "$OUT" | grep -q '◆  Back from Eigen 0.2.99 (abc1234) to Eigen 0.2.99 (abc1234), on the data as it is' &&
         [ "$(steps)" = "restore --check-data --yes ($old)|stop|configure $old|bootstrap $old|share|up|" ] &&
         printf '%s\n' "$CALLS" | grep " configure --backfill$" | grep -q ' -e EIGEN_API_IMAGE ' &&
-        [ ! -e "$FIX/release/.eigen/last-update" ] && [ -e "$FIX/release/backups/$light" ] &&
-        printf '%s\n' "$OUT" | grep -q "└  The data stayed as it was. backups/$light stays, for ./eigen restore."; then
-        ok "$SHELL_NAME: rollback after a Light backup keeps data/, and switches to the pins the update recorded once the build before checked the data"
+        [ ! -e "$FIX/release/.eigen/last-update" ] && [ -e "$FIX/release/backups/$full" ] &&
+        printf '%s\n' "$OUT" | grep -q "└  The data stayed as it was. backups/$full stays, for ./eigen restore."; then
+        ok "$SHELL_NAME: rollback keeps data/, and switches to the pins the update recorded once the build before checked the data"
     else
-        fail "$SHELL_NAME: a rollback after a Light backup: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
+        fail "$SHELL_NAME: a rollback on the data as it is: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
-    # rollback --in after a Light backup waits after the check and its question, right before the stop. Cut off in the
+    # rollback --in on the data as it is waits after the check and its question, right before the stop. Cut off in the
     # wait by Ctrl+C or a lost SSH session, it takes the notice back and stops and switches nothing.
-    light_steps() {
+    kept_steps() {
         printf '%s\n' "$CALLS" | sed -n -e 's/^run .* restore --check-data .*$/checked/p' -e 's/^compose .* stop$/stop/p' \
             -e 's/^compose .* exec .*\/entrypoint.sh \(restart-notice .*\)$/\1/p' | tr '\n' '|'
     }
-    pinned="$light|EIGEN_REGISTRY=ghcr.io/eigen-is/eigen|EIGEN_VERSION=0.2.98|EIGEN_API_IMAGE=$old"
     failed=''
     for signal in TERM HUP; do
-        printf '%s\n' "$pinned" | tr '|' '\n' >"$FIX/release/.eigen/last-update"
+        record_pins
         LAUNCH_TERM='restart-notice --in 600' LAUNCH_SIGNAL=$signal launch release rollback --yes --in 10m
         code=130
         if [ "$signal" = HUP ]; then code=129; fi
         if [ "$CODE" != "$code" ] ||
-            [ "$(light_steps)" != 'checked|restart-notice --in 600 --reason rollback|restart-notice --clear|' ] ||
+            [ "$(kept_steps)" != 'checked|restart-notice --in 600 --reason rollback|restart-notice --clear|' ] ||
             printf '%s\n' "$CALLS" | grep -Eq ' bootstrap | configure --backfill$' || [ ! -e "$FIX/release/.eigen/last-update" ]; then
-            failed="$failed $signal (exit $CODE, steps '$(light_steps)', '$ERR')"
+            failed="$failed $signal (exit $CODE, steps '$(kept_steps)', '$ERR')"
         fi
     done
     launch release rollback --in 1s 'Back soon' --yes
     if [ -z "$failed" ] && [ "$CODE" = 0 ] &&
-        [ "$(light_steps)" = 'checked|restart-notice --in 1 --reason rollback --message Back soon|stop|' ] &&
+        [ "$(kept_steps)" = 'checked|restart-notice --in 1 --reason rollback --message Back soon|stop|' ] &&
         printf '%s\n' "$OUT" | grep -q '◆  Restarts in 1s, at 00:10:00 UTC. Ctrl+C cancels.$' &&
         [ ! -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: rollback --in after a Light backup warns the open tabs after the check, waits right before the stop, and cut off there takes the notice back"
+        ok "$SHELL_NAME: rollback --in on the data as it is warns the open tabs after the check, waits right before the stop, and cut off there takes the notice back"
     else
-        fail "$SHELL_NAME: rollback --in after a Light backup:$failed; --in 1s exit $CODE, steps '$(light_steps)', '$OUT', '$ERR'"
+        fail "$SHELL_NAME: rollback --in on the data as it is:$failed; --in 1s exit $CODE, steps '$(kept_steps)', '$OUT', '$ERR'"
     fi
-    rm -f "$FIX/release/backups/$light" "$FIX/release/.eigen/bundle"
+    rm -f "$FIX/release/.eigen/bundle"
+    reset_release
+    # A Light backup, which a launcher of 0.4.1 or before made, brings nothing back: a rollback whose check fails, or
+    # that has no pins to check with, refuses and names it, before anything stops.
+    light=server-pre-update-light-20260101-000000.tar
+    : >"$FIX/release/backups/$light"
+    printf '%s\n' "$light" EIGEN_REGISTRY=ghcr.io/eigen-is/eigen EIGEN_VERSION=0.2.98 "EIGEN_API_IMAGE=$old" \
+        >"$FIX/release/.eigen/last-update"
+    STUB_RUN_FAIL=--check-data launch release rollback --yes
+    refused_code=$CODE refused_err=$ERR refused_steps=$(steps)
+    echo "$light" >"$FIX/release/.eigen/last-update"
+    launch release rollback --yes
+    if [ "$refused_code" = 1 ] && [ "$refused_steps" = "restore --check-data --yes ($old)|" ] &&
+        printf '%s\n' "$refused_err" | grep -q "■  backups/$light is a Light backup, which holds no files and no mail to bring back" &&
+        [ "$CODE" = 1 ] && [ -z "$(steps)" ] &&
+        printf '%s\n' "$ERR" | grep -q "■  backups/$light is a Light backup, which holds no files and no mail to bring back" &&
+        [ -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: rollback after a Light backup whose check fails, or with no pins to check with, refuses and names it"
+    else
+        fail "$SHELL_NAME: rollback after a Light backup: exit $refused_code, steps '$refused_steps', '$refused_err'; without pins exit $CODE, steps '$(steps)', '$ERR'"
+    fi
+    rm -f "$FIX/release/backups/$light" "$FIX/release/backups/$full" "$FIX/release/.eigen/last-update"
     reset_release
 
     # A backup runs on the running API and stops nothing.
     failed=''
-    for flags in '--light|light' '|full' '--full|full' '--s3|full-s3' '--s3 --wait|full-s3 --wait'; do
+    for flags in '|full' '--full|full' '--s3|full-s3' '--s3 --wait|full-s3 --wait'; do
         # shellcheck disable=SC2086
         launch local backup ${flags%|*}
         if [ "$CODE" != 0 ] || [ "$(printf '%s\n' "$CALLS" | grep ' exec .*/entrypoint.sh ' | sed 's/^.* exec //')" != "-T -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh backup --level ${flags#*|}" ] ||
@@ -1540,8 +1545,6 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: backup --help: '$OUT'"
     fi
-    launch local backup --light --s3
-    expect_error 2 'A light backup holds no files, so it takes no --s3.' "backup --light --s3"
     STUB_EXEC=4 launch local backup
     if [ "$CODE" = 4 ]; then ok "$SHELL_NAME: backup exits with the code of the CLI"; else fail "$SHELL_NAME: backup exit $CODE, expected 4"; fi
     STUB_RUNNING=0 launch local backup

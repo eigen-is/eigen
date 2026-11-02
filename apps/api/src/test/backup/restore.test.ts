@@ -1441,8 +1441,8 @@ describe('Backup restore of a disabled mount', () => {
 });
 
 describe('Backup restore refuses a member that is not a complete home', () => {
-    // A Light or Full member of a whole-server archive leaves out what only a restore of that whole
-    // archive puts back. restoreHome refuses one from its manifest before it touches the home.
+    // A Full member of a whole-server archive leaves out an s3 mount's objects, which only a restore of
+    // that whole archive leaves in place. restoreHome refuses one from its manifest before it touches the home.
     const S3_MOUNT_ID = 'restore-partial-s3';
     const S3_BACKING = join(TEST_DATA_DIR, 'restore-partial-backing');
     let user: TestUser;
@@ -1476,20 +1476,6 @@ describe('Backup restore refuses a member that is not a complete home', () => {
         expect(getDataEpoch(user.id)).toBe(epoch);
         expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toEqual(before);
     }
-
-    test('a Light member is refused by its level and the live home is untouched', async () => {
-        const home = await getHome(user.id);
-        const before = await rootNames(user.sessionToken, user.id, mountId, rootId);
-        const epoch = getDataEpoch(user.id);
-        const artifact = await backup(user.id, new Date(), undefined, 'light');
-
-        await expect(restoreHome(artifact, user.id, `restore-light-${Date.now()}`)).rejects.toThrow(
-            `${artifact} is a light backup`,
-        );
-
-        await expectUntouched(home, before, epoch);
-        rmSync(join(getBackupsDir(), artifact), { force: true });
-    });
 
     test('a Full member of a home without s3 mounts is complete and restores', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 60_000), undefined, 'full');

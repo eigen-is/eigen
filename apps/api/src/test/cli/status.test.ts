@@ -53,7 +53,7 @@ describe('status', () => {
 
     test('without the API, names the newest archive in backups/ by the time in its name', async () => {
         const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
-        const newest = buildServerArchiveName('pre-update', 'light', hoursAgo(2));
+        const newest = buildServerArchiveName('pre-update', 'full', hoursAgo(2));
         const listing = [
             buildServerArchiveName('scheduled', 'full', hoursAgo(26)),
             `${newest}.json`,
@@ -62,7 +62,7 @@ describe('status', () => {
             'notes.txt',
         ];
         const result = await status(`--backups=${listing.join('\n')}`);
-        expect(result.stdout).toMatch(new RegExp(`◇ {2}Backup +${newest.replaceAll('.', '\\.')}, Light, 2h ago\n`));
+        expect(result.stdout).toMatch(new RegExp(`◇ {2}Backup +${newest.replaceAll('.', '\\.')}, Full, 2h ago\n`));
         expect((await status('--backups=notes.txt')).stdout).toMatch(
             /▲ {2}Backup +none yet; \.\/eigen backup makes one/,
         );

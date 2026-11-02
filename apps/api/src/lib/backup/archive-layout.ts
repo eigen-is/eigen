@@ -33,16 +33,8 @@ export const HOME_DATABASES: [DatabaseConfig<SchemaType>, string][] = [
 // files are Eigen's own.
 export const HOME_DATABASE_PATHS = new Set(HOME_DATABASES.map(([, relPath]) => relPath));
 
-// The home's mail, which a Light archive leaves where it is.
+// The home's mail, by its path from the home root.
 export const MAILDIR_ROOT = `${PATHS.MAIL.ROOT}/${PATHS.MAIL.MAILDIR}`;
-
-// The folders a Light archive leaves where they are, by their path from the home root: the Maildir, and every folder
-// inside a mount (its files, thumbnails and staging), so of a mount only its metadata.db goes.
-const LIGHT_SKIPPED = new RegExp(`^(?:${MAILDIR_ROOT}|${PATHS.DRIVE.ROOT}/[^/]+/[^/]+)$`);
-
-export function isLightSkipped(rel: string): boolean {
-    return LIGHT_SKIPPED.test(rel);
-}
 
 // The columns every reader of an archived paths table wants, spelled once: readMountPathRows derives
 // its SELECT list from their names, and the row type it hands back is this object's keys.
@@ -80,8 +72,8 @@ const CONTAINER_DATA_DB = 'data.db';
 const CONTAINER_COMMENTS_DB = 'comments.db';
 const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
-// Every schema a container's databases carry, which a Light backup leaves out.
-export const CONTAINER_DB_CONFIGS = {
+// Every schema a container's databases carry.
+const CONTAINER_DB_CONFIGS = {
     collab: COLLAB_DB_CONFIG,
     chat: CHAT_ROOM_DB_CONFIG,
     comments: COMMENT_INDEX_DB_CONFIG,
@@ -140,15 +132,6 @@ export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, 
         return container && isDocumentType(container.type) ? container : null;
     }
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
-}
-
-// Whether a row sits inside a document, such as its databases, media, chat threads and versions. Drive shows the
-// document as one item, whatever it holds.
-export function insideDocument(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): boolean {
-    for (const parent of ancestors(row, byId)) {
-        if (isDocumentType(parent.type)) return true;
-    }
-    return false;
 }
 
 // The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of
