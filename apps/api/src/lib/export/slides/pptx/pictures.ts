@@ -11,8 +11,12 @@ import { lineXml } from './lines';
 import type { Slide } from './package';
 import { boxGeometry, fillXml, spXml, xfrmXml } from './shapes';
 
-// How a picture meets its box: whether it is wider than the box, and the share of the box each side differs by.
-type Fit = { wide: boolean; cut: number };
+// How a picture meets its box: whether it is wider than the box, and how many times wider or taller, always more than 1.
+type Fit = { wide: boolean; ratio: number };
+
+// A fit past this ratio is drawn at it, so the picture keeps at least 1/2,001 of its box, which is under a pixel on any
+// slide. The outward inset then stays at most 1,000 times the box, well inside ST_Percentage's 32-bit int.
+const MAX_FIT_RATIO = 2001;
 
 // A picture's border is its own a:ln, as PowerPoint writes one. Its fit is its crop: cover cuts into the source, and
 // contain crops past it, so the picture keeps the element's box and the border and rounded corners clip as on the
@@ -25,7 +29,9 @@ export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number
         return line && spXml(slide, 'Border', el, boxGeometry(el), '<a:noFill/>', line);
     }
     const fit = fitOf(image, el.width, el.height);
-    const crop = fit && el.objectFit !== 'fill' ? insetXml('srcRect', fit, el.objectFit === 'cover') : '';
+    const cover = el.objectFit === 'cover';
+    const insets = fit && el.objectFit !== 'fill' ? insetsOf(fit, cover, !cover) : '';
+    const crop = insets && `<a:srcRect${insets}/>`;
     const id = ++slide.shapes;
     return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${slideBlipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, el)}${boxGeometry(el)}${line}</p:spPr></p:pic>`;
 }
@@ -41,33 +47,33 @@ export function backgroundXml(background: BackgroundFill | null, frame: VectorFr
         return '';
     }
     const fit = fitOf(image, frame.width, frame.height);
-    const stretch = `<a:stretch>${fit ? insetXml('fillRect', fit, background.fit === 'cover') : '<a:fillRect/>'}</a:stretch>`;
-    return `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1">${slideBlipXml(image, slide, 1)}${stretch}</a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
+    const cover = background.fit === 'cover';
+    const insets = fit ? insetsOf(fit, cover, cover) : '';
+    return `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1">${slideBlipXml(image, slide, 1)}<a:stretch><a:fillRect${insets}/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
+}
+
+// Without the picture's size, or when it has its box's aspect, nothing is fitted and the picture stretches.
+function fitOf(image: OfficeImage, width: number, height: number): Fit | null {
+    const { media } = image;
+    if (!media.width || !media.height || width <= 0 || height <= 0) return null;
+    const picture = media.width / media.height;
+    const box = width / height;
+    const ratio = Math.min(Math.max(picture, box) / Math.min(picture, box), MAX_FIT_RATIO);
+    return ratio > 1 ? { wide: picture > box, ratio } : null;
+}
+
+// The insets of a crop or a fill rectangle that fit the picture to its box, or none when they round to nothing. Cover
+// acts on the axis where the picture overshoots its box, and contain on the other. An inward inset pulls the rectangle
+// in and is positive. An outward one pushes it out past its edges and is negative.
+function insetsOf(fit: Fit, cover: boolean, outward: boolean): string {
+    const inset = drawingShare(outward ? -(fit.ratio - 1) / 2 : (1 - 1 / fit.ratio) / 2);
+    if (inset === 0) return '';
+    const leftAndRight = cover ? fit.wide : !fit.wide;
+    return leftAndRight ? ` l="${inset}" r="${inset}"` : ` t="${inset}" b="${inset}"`;
 }
 
 function slideBlipXml(image: OfficeImage, slide: Slide, opacity: number): string {
     const rId = slide.part.relate('image', `../media/${image.part}`);
     const svgRId = image.svgPart && slide.part.relate('image', `../media/${image.svgPart}`);
     return blipXml(rId, svgRId, opacity < 1 ? `<a:alphaModFix amt="${drawingShare(opacity)}"/>` : '');
-}
-
-// How much of each side cover cuts off the picture, or contain leaves empty in the box: one share of the whole, on the
-// axis where the picture overshoots the box. Without the picture's size, nothing is cut and the picture stretches.
-function fitOf(image: OfficeImage, width: number, height: number): Fit | null {
-    const { media } = image;
-    if (!media.width || !media.height || width <= 0 || height <= 0) return null;
-    const picture = media.width / media.height;
-    const box = width / height;
-    const cut = (1 - Math.min(picture, box) / Math.max(picture, box)) / 2;
-    return cut > 0 ? { wide: picture > box, cut } : null;
-}
-
-// A crop or a fill rectangle that fits the picture to its box, on the axis the fit acts on. A crop cuts into the picture,
-// and a fill rectangle into the box: cover cuts into the picture where it overshoots, and contain into the box where the
-// picture falls short. The other way round, the inset is negative and grows the picture or the box.
-function insetXml(rect: 'srcRect' | 'fillRect', fit: Fit, cover: boolean): string {
-    const grows = (rect === 'fillRect') === cover;
-    const inset = drawingShare(grows ? -fit.cut / (1 - 2 * fit.cut) : fit.cut);
-    const sides = fit.wide === cover ? `l="${inset}" r="${inset}"` : `t="${inset}" b="${inset}"`;
-    return `<a:${rect} ${sides}/>`;
 }

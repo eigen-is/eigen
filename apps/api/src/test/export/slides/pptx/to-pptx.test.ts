@@ -1151,6 +1151,59 @@ describe('pptx images and backgrounds', () => {
         expect(descendants(contain, A, 'ln').map((ln) => attr(ln, 'w'))).toEqual([String(4 * EMU)]);
     });
 
+    // A fit that matches the box, or so nearly that its inset rounds to nothing, draws the picture stretched.
+    test('a picture whose aspect matches its box, or rounds to it, writes no crop and no inset', () => {
+        const media = (name: string, width: number, height: number): OfficeMedia => ({
+            ...PNG_MEDIA,
+            name,
+            width,
+            height,
+        });
+        const zip = pptx(
+            sceneOf([
+                element('image', { ...square, mediaName: 'square.png', objectFit: 'contain' }),
+                element('image', { ...square, mediaName: 'near.png', index: 'a1', objectFit: 'contain' }),
+                element('image', { ...square, mediaName: 'near.png', index: 'a2', objectFit: 'cover' }),
+            ]),
+            [media('square.png', 100, 100), media('near.png', 100_000, 100_001)],
+        );
+        expect(shapes(zip).map((found) => descendants(found, A, 'srcRect').length)).toEqual([0, 0, 0]);
+        // Nearly the slide's 16:9, a background's fill rectangle keeps no inset either.
+        const backgrounds = pptx(
+            sceneOf(
+                [],
+                (['cover', 'contain'] as const).map((fit, i) => ({
+                    id: `f${i}`,
+                    index: `a${i}`,
+                    background: { type: 'image', mediaName: 'near.png', fit },
+                })),
+            ),
+            [media('near.png', 1_600_000, 900_001)],
+        );
+        for (const n of [1, 2]) {
+            const rect = first(descendants(part(backgrounds, `ppt/slides/slide${n}.xml`), P, 'bgPr')[0], A, 'fillRect');
+            expect(['l', 'r', 't', 'b'].filter((side) => attr(rect, side) !== undefined)).toEqual([]);
+        }
+    });
+
+    // A 1 by 100,000 picture in a 2,000 by 100 box would crop 99,999,950,000 past it, outside ST_Percentage's int.
+    test('an extreme aspect writes an inset within range', () => {
+        const zip = pptx(
+            sceneOf([
+                element('image', { width: 2000, height: 100, mediaName: 'wide.png', objectFit: 'contain' }),
+                element('image', { width: 2000, height: 100, mediaName: 'wide.png', objectFit: 'cover', index: 'a1' }),
+            ]),
+            [{ ...PNG_MEDIA, width: 1, height: 100_000 }],
+        );
+        const [contain, cover] = shapes(zip).map((found) => first(found, A, 'srcRect'));
+        expect([attr(contain, 'l'), attr(contain, 'r'), attr(contain, 't')]).toEqual([
+            '-100000000',
+            '-100000000',
+            undefined,
+        ]);
+        expect([attr(cover, 't'), attr(cover, 'b'), attr(cover, 'l')]).toEqual(['49975', '49975', undefined]);
+    });
+
     test('an SVG goes in beside its PNG, a picture with no media writes nothing', () => {
         const svg: OfficeMedia = {
             name: 'd.svg',
