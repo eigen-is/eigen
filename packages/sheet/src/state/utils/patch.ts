@@ -1,7 +1,7 @@
 // Converts between the editor's immer patches and the ops it sends to peers. patchToOp names each sheet by id and
-// swaps the matrices a row or column op rewrote for the op itself, with the sheet's other fields whole. addSheetOps and
-// deleteSheetOps build a sheet's add and delete batches; filterPatch keeps what belongs on the wire; opToPatch turns
-// a peer's ops back into patches on this client's sheet indices.
+// swaps the matrices a row or column op rewrote for the op itself, with the sheet fields no receiver derives.
+// addSheetOps and deleteSheetOps build a sheet's add and delete batches. filterPatch keeps what belongs on the wire,
+// and opToPatch turns a peer's ops back into patches on this client's sheet indices.
 
 import type { MergeCell } from '@workspace/lib/sheets';
 import { opToPatchOnSheets } from '@workspace/lib/sheets/yjs-ops';
@@ -107,22 +107,24 @@ function additionalCellOps(
 // against `keyof Sheet`, so a field that is renamed or deleted fails the build instead of silently no longer matching.
 const PER_CLIENT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['selections']);
 
-// The row and column reducers write each sheet back field by field (writeBackSheets in rowcol.ts), so immer hands us a
-// replace per changed field, `data` above all. Shipping those would copy the sheet's whole matrix into every collab
-// update, so patchToOp drops them (writesOneObject) and ships the op itself, which every consumer, the editor and the
-// server's replay, runs through the engine. The engine rebuilds `data`, the few config fields it owns and the
-// validation rules, but the reducer also shifts the editor-only fields, such as the filter and the links, so the rest
-// of the edited sheet's fields ship whole. sheetMetadataOps ships every field but the ones the engine derives, the
-// per-client ones, and the maps that ship per object: `images`, `charts` and `dataValidations`. A whole map would
-// overwrite a peer's insert, delete or move, or a rule a peer added. A row op moves no image. Each chart or validation
-// rule it moves has immer's own patch, last writer wins, since a receiver's shift can differ from the author's
-// write-back. The edit's own op leaves `calcChain` off too: it scales with formula count, and every receiver shifts
-// its own.
+// A row or column op's reducer writes each sheet back field by field, so immer hands patchToOp a replace per changed
+// field, `data` above all. Shipping those would copy the sheet's whole matrix into every collab update. So the batch
+// ships the op itself, which every receiver runs through the engine, and the edited sheet's other fields whole, since
+// the reducer also shifts fields the engine leaves alone, such as the links.
+//
+// The maps below ship per object, never whole: a whole map would overwrite a peer's insert, delete or move of another
+// object, or a rule a peer added. Of immer's own writes the batch keeps only those into one object, so a write deeper
+// into one, which a peer's removal of that object would leave unresolved, never costs a receiver the batch.
 const PER_OBJECT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['images', 'charts', 'dataValidations']);
 
 // The fields the engine derives on every receiver from the op itself. The size ships least of all: two row ops sent at
 // once would each write their author's count, one op short.
 const ENGINE_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['data', 'row', 'column']);
+
+// The fields every receiver's engine moves with the op, as it moves the cells. The op itself leaves them off: the
+// author's write would overwrite the receiver's own shift of a peer's edit sent at the same time. An undo or redo
+// ships them, since the marker alone would not bring back what the entry restores.
+const SHIFTED_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['dataValidations']);
 
 function sheetMetadataOps(fields: Record<string, unknown>, id: string): Op[] {
     const metaOps: Op[] = [];
@@ -139,10 +141,6 @@ function sheetMetadataOps(fields: Record<string, unknown>, id: string): Op[] {
     return metaOps;
 }
 
-// Of immer's own writes a row or column batch keeps only those into one image, chart or validation rule, an explicit
-// set. Every other sheet field ships whole through sheetMetadataOps or is re-derived by the engine. So a write deeper
-// into one, which a peer's concurrent removal of that field would leave unresolved, can never cost a peer or the
-// replay the batch.
 function writesOneObject(op: Op): boolean {
     return op.path.length > 1 && PER_OBJECT_SHEET_FIELDS.has(op.path[0]);
 }
@@ -195,13 +193,17 @@ export function patchToOp(ctx: Context, patches: Patch[], options: PatchOptions 
     const marker = rowColMarker(options);
     if (marker?.id != null) {
         const { id } = marker;
-        ops = [...ops.filter(writesOneObject), marker];
-        if (step) ops.push(...sheetMetadataOps(step.fields, id), ...step.repair);
-        else {
+        if (step) {
+            ops = [...ops.filter(writesOneObject), marker, ...sheetMetadataOps(step.fields, id), ...step.repair];
+        } else {
+            ops = [...ops.filter((op) => writesOneObject(op) && !SHIFTED_SHEET_FIELDS.has(op.path[0])), marker];
             const index = getSheetIndex(ctx, id);
             if (index != null) {
-                const { calcChain: _calcChain, ...fields } = ctx.sheets[index];
-                ops.push(...sheetMetadataOps(fields, id));
+                // The recalc list scales with the formula count, and every receiver shifts its own.
+                const fields = Object.entries(ctx.sheets[index]).filter(
+                    ([field]) => field !== 'calcChain' && !SHIFTED_SHEET_FIELDS.has(field),
+                );
+                ops.push(...sheetMetadataOps(Object.fromEntries(fields), id));
             }
             if (options.insertRowColOp) ops.push(...additionalCellOps(ctx, options.insertRowColOp));
         }

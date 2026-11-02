@@ -45,8 +45,8 @@ function richContext(): Context {
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
                 calcChain: [{ r: 2, c: 1, id: 'id_1' }],
-                // The hyperlinks are shifted only in the state layer, and the validation rules ship whole as well,
-                // so they prove the metadata ops carry every field a receiver needs.
+                // The hyperlinks are shifted only in the state layer, so they prove the metadata ops carry every
+                // field a receiver needs. The validation rules ship nothing and prove the replay moves them itself.
                 hyperlink: { '2_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } },
                 dataValidations: {
                     v: {
@@ -102,10 +102,8 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
         expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink']));
-        // Each validation rule the insert moved ships under its own id, so a rule a peer added meanwhile survives.
-        expect(metaPaths).not.toContain('dataValidations');
-        const moved = ops.filter((op) => op.path[0] === 'dataValidations').map((op) => op.path);
-        expect(moved).toEqual(Object.keys(next.sheets[0].dataValidations ?? {}).map((id) => ['dataValidations', id]));
+        // Every receiver's engine moves the validation rules itself, so the insert ships none.
+        expect(ops.filter((op) => op.path[0] === 'dataValidations')).toEqual([]);
         // Every receiver derives the sheet's size from its cells, so the size does not ship.
         expect(metaPaths).not.toContain('row');
         const configOp = ops.find((op) => op.path[0] === 'config');

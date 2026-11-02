@@ -1183,6 +1183,43 @@ describe('validation rules on two tabs and a joiner', () => {
         return { a, b, joined: join(base, [fromB, fromA])[0].dataValidations };
     }
 
+    // A tab whose own batch the log puts after a peer's applies the log again, so it ends as a tab that took the
+    // batches in the log's order.
+    function inLogOrder(base: Context, batches: Op[][]) {
+        const t = tab(base);
+        for (const ops of batches) tabReceive(t, ops);
+        return t;
+    }
+    const rangesOfA = (validations: Sheet['dataValidations']) => validations?.a?.ranges;
+
+    test('two row inserts sent at once leave a rule on its cells on both tabs and the joiner', () => {
+        const base = workbook({ A5: text('x'), A6: text('y') });
+        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], rule: LIST } };
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...insertRows(0, 1));
+        const fromB = tabEdit(b, ...insertRows(0, 1));
+        tabReceive(a, fromB);
+        const onB = inLogOrder(base, [fromA, fromB]);
+        expect(cellAt(a, 'A7')?.v).toBe('x');
+        for (const validations of [rules(a), rules(onB), join(base, [fromA, fromB])[0].dataValidations]) {
+            expect(rangesOfA(validations)).toEqual([{ row: [6, 7], column: [0, 0] }]);
+        }
+    });
+
+    test("a row insert sent with a peer's cut of a rule moves the cut rule on both tabs and the joiner", () => {
+        const base = ruled();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...insertRows(0, 1));
+        const fromB = tabEdit(b, (ctx) => clearValidations(ctx.sheets[0], { row: [5, 9], column: [0, 0] }));
+        tabReceive(b, fromA);
+        const onA = inLogOrder(base, [fromB, fromA]);
+        for (const validations of [rules(onA), rules(b), join(base, [fromB, fromA])[0].dataValidations]) {
+            expect(rangesOfA(validations)).toEqual([{ row: [1, 5], column: [0, 0] }]);
+        }
+    });
+
     test("a row insert made before a peer's new rule arrived keeps that rule on both tabs and the joiner", () => {
         const { a, b, joined } = race(ruled(), insertRows(2, 1), apply([0, 1], [3, 3], TICKS));
         for (const validations of [rules(a), rules(b), joined]) {
