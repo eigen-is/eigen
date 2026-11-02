@@ -1,3 +1,7 @@
+// The Admin app's hooks for an organization's members: list them, change a member's role, create a
+// user, delete a user and reset a password. Members and roles come from better-auth's organization
+// plugin, which requires an admin. Deleting a user and resetting a password go through the settings API.
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
 import type { OrgMember, OrgRole } from '@workspace/lib/types/admin';
@@ -19,7 +23,7 @@ export function useMembers(organizationId?: string) {
             const members: OrgMember[] = [];
             for (let offset = 0; ; offset += MEMBERS_PAGE_SIZE) {
                 const { data } = await authClient.organization.listMembers({
-                    query: { organizationId: organizationId!, limit: MEMBERS_PAGE_SIZE, offset },
+                    query: { organizationId, limit: MEMBERS_PAGE_SIZE, offset },
                 });
                 if (!data?.members.length) break;
                 for (const m of data.members) {
@@ -113,7 +117,7 @@ export function useCreateUser(organizationId?: string) {
             name: string;
             email: string;
             password: string;
-            role: 'admin' | 'member';
+            role: Exclude<OrgRole, 'owner'>;
         }) => {
             const { data, error } = await authClient.admin.createUser({ name, email, password });
             if (error) throw new Error(error.message ?? 'Failed to create user');
