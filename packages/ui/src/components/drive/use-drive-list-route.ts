@@ -4,12 +4,12 @@
 
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
-import { fileActionsFor } from '@workspace/lib/file-actions';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
+import { useDriveQuickLook } from './use-drive-quick-look';
 
 type UseDriveListRouteOptions = {
     // The unsorted items backing the list: the fallback preview passes this whole set as siblings.
@@ -40,16 +40,9 @@ export function useDriveListRoute({
     const navigate = useNavigate();
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
+    const onQuickLook = useDriveQuickLook(capabilities.canWrite);
 
     const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities.canWrite);
-
-    // Space is the menu's Quick preview row, so it previews only what that row offers: never a folder.
-    const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        const subject = subjectOf(path);
-        if (fileActionsFor(subject).some((action) => action.id === 'quick-look')) {
-            openPreview(subject, sortedSiblings.map(subjectOf));
-        }
-    };
 
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {

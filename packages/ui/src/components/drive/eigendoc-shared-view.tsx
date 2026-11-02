@@ -1,3 +1,7 @@
+// A document app's Shared by me or Shared with me list, such as the slides shared with the viewer: Drive's
+// shared listing narrowed to the app's type, drawn in Drive's list and detail layout. A row opens its
+// document in the app. The app's shared route renders it.
+
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
@@ -13,6 +17,7 @@ import { DriveLayout } from './drive-layout';
 import type { EigenDocAppConfig } from './eigendoc-config';
 import { eigenDocSharedTitle } from './eigendoc-config';
 import { EigenDocDriveContext } from './eigendoc-root';
+import { useDriveQuickLook } from './use-drive-quick-look';
 
 type EigenDocSharedViewProps = {
     config: EigenDocAppConfig;
@@ -31,11 +36,15 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
     const ownerId = user!.id;
     const { data: selectedPath = null } = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
     const { isMobile } = useLayout();
+    // As in Drive's shared view, a row shared with the viewer belongs to someone else, and this listing
+    // doesn't say what access the viewer has. So only the by-me side offers rows that write.
+    const canWrite = to === 'by-me';
+    const onQuickLook = useDriveQuickLook(canWrite);
 
     const {
         data: unfilteredFolderContents = [],
-        isLoading: isFolderContentLoading,
-        error: isFolderContentLoadingError,
+        isLoading,
+        error,
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
     const folderContents = unfilteredFolderContents.filter((path) => path.type === config.type);
@@ -48,11 +57,11 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         }
     };
 
-    if (isFolderContentLoadingError) {
+    if (error) {
         return <EmptyState message="Encountering the null vector: a rendezvous with nothing at all." />;
     }
 
-    if (isFolderContentLoading) {
+    if (isLoading) {
         return <LoadingState />;
     }
 
@@ -63,19 +72,17 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
             ownerId={uid || ownerId}
             mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={folderContents}
-            isLoading={isFolderContentLoading}
-            error={isFolderContentLoadingError}
+            isLoading={isLoading}
+            error={error}
             onRowSelect={onRowSelect}
             onRowActivate={openDocument}
+            onQuickLook={onQuickLook}
             onBackToList={onNavigateBack}
             onAfterAction={() => navigate({ to: '/' })}
             capabilities={{
                 ...DRIVE_CAPABILITIES.listing,
-                // Same mixed-access feed as Drive's shared view: rows on the with-me side belong to
-                // other people at access levels this listing doesn't carry, so nothing that writes
-                // is offered there.
-                canRename: to === 'by-me',
-                canWrite: to === 'by-me',
+                canRename: canWrite,
+                canWrite,
                 createTypes: new Set([config.type]),
             }}
             title={eigenDocSharedTitle(to === 'by-me' ? 'by' : 'with', config.labelPlural)}
