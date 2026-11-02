@@ -1,7 +1,13 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
-import { MAX_TEXT_BOX_PADDING, TEXT_BOX_DEFAULT_WIDTH, TEXT_BOX_INSET } from '@workspace/lib/docs/eigendoc';
+import {
+    MAX_PAPER_MM,
+    MAX_TEXT_BOX_PADDING,
+    mmToPx,
+    TEXT_BOX_DEFAULT_WIDTH,
+    TEXT_BOX_INSET,
+} from '@workspace/lib/docs/eigendoc';
 import { CAPTION_LOOK, LIST_LEVEL } from '../../../lib/document/looks';
 import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
 import { meanPadding } from '../../../lib/import/doc/text-boxes';
@@ -22,6 +28,9 @@ import {
 } from '../../fixtures/golden-docx';
 
 // Pictures: one media file per image part, named from its content type, placed as Word places it.
+
+// The largest paper's side in px, which a figure reads a larger side as.
+const LARGEST_PAPER = mmToPx(MAX_PAPER_MM);
 
 const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
@@ -521,6 +530,18 @@ describe('size', () => {
         ]);
     });
 
+    // The figure would read a side past the largest paper as that paper, so the import stores no larger one.
+    test('a side past the largest paper is that paper', async () => {
+        const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);
+        const { json } = await importDocxBody(
+            [forged('cx="9525" cy="9.525e303"'), forged('cx="1" cy="95250000000"')].map(paragraph).join(''),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [1, LARGEST_PAPER],
+            [1, LARGEST_PAPER],
+        ]);
+    });
+
     test('an extent that is not positive gives no size on that side', async () => {
         const { json } = await importDocxBody([sized(-40, 40), sized(40, -40), sized(0, 40)].map(paragraph).join(''));
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
@@ -559,6 +580,15 @@ describe('VML', () => {
         );
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
             [null, null],
+        ]);
+    });
+
+    test("a picture's side past the largest paper is that paper", async () => {
+        const { json } = await importDocxBody(
+            paragraph(vml(`style="width:10px;height:${'9'.repeat(60)}px"`, '<v:imagedata r:id="rId4"/>')),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [10, LARGEST_PAPER],
         ]);
     });
 

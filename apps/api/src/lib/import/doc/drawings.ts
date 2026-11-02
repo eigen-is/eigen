@@ -5,7 +5,13 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { isFigureFrameNode, mmToPx, pageTwips, TEXT_BOX_DEFAULT_WIDTH } from '@workspace/lib/docs/eigendoc';
+import {
+    isFigureFrameNode,
+    mmToPx,
+    pageTwips,
+    readFrameSide,
+    TEXT_BOX_DEFAULT_WIDTH,
+} from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
@@ -222,12 +228,13 @@ function partPath(id: string | undefined, scope: Scope): string | undefined {
 }
 
 // A picture's size in px off the extent Word drew it at, stretched or not: the width capped at `columnPx`, and the
-// height scaled with it. One with no extent takes its own size once it loads.
+// height scaled with it. Each side goes through readFrameSide, as the figure reads it, so no side past the largest
+// paper is stored. One with no extent takes its own size once it loads.
 function pictureSize(width: number, height: number | null, columnPx: number): Pick<FigureAttrs, 'width' | 'height'> {
     const scale = Math.min(1, columnPx / width);
     return {
-        width: Math.min(columnPx, Math.max(1, Math.round(width))),
-        height: height ? Math.max(1, Math.round(height * scale)) : null,
+        width: readFrameSide(Math.min(columnPx, Math.max(1, Math.round(width)))),
+        height: height ? readFrameSide(Math.max(1, Math.round(height * scale))) : null,
     };
 }
 
