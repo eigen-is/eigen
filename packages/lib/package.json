@@ -6,7 +6,7 @@
   "sideEffects": false,
   "scripts": {
     "typecheck": "bun check --no-script",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "devDependencies": {
     "@types/jsdom": "^28.0.3",
