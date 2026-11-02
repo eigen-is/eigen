@@ -1,33 +1,33 @@
-// The shape helpers an elbow arrow's router needs, ported from Excalidraw: which side the arrow leaves a
-// bound shape from (a Heading), where its rest endpoint is, and the padded bounds around a shape.
-// Its callers include the router itself, the arrow's renderer and the canvas's drawing tools, which
-// dock an elbow arrow to a shape. Everything is in scene space, and shape angles are degrees.
+// The shape side of an elbow arrow, ported from Excalidraw: the heading a bound end leaves its shape by,
+// the padded bounds around a shape, and the point on the outline an elbow end docks to when it binds.
+// The router reads the headings and bounds. The canvas's drawing tools call the dock while an elbow end
+// is dragged. Everything is in scene space, and shape angles are degrees.
 
-import type { Point } from './geometry';
 import {
     bindingAnchor,
     bindingGap,
-    boxCenter,
+    boundShape,
     elbowAnchorScene,
-    getElementBounds,
-    linearLocalToScene,
     normalizeFixedPoint,
     outlineIntersections,
-    rotatePoint,
-} from './geometry';
-import { capabilitiesOf, ELEMENT_KINDS, isBindable } from './kinds';
+} from './binding';
+import type { Point } from './geometry';
+import { boxCenter, getElementBounds, linearLocalToScene, rotatePoint } from './geometry';
+import type { Heading } from './heading';
+import {
+    BASE_BINDING_GAP_ELBOW,
+    HEADING_DOWN,
+    HEADING_LEFT,
+    HEADING_RIGHT,
+    HEADING_UP,
+    headingIsHorizontal,
+    vectorToHeading,
+} from './heading';
+import { capabilitiesOf, ELEMENT_KINDS } from './kinds';
 import { clamp, nearestPoint, outlineDistance } from './outline';
 import { parsePoints } from './points';
 import type { VectorArrowElement, VectorBindableElement, VectorElement } from './types';
 import { parseBinding, serializeBinding } from './types';
-
-// A unit orthogonal direction. Compared by value (compareHeading), never by reference.
-export type Heading = { x: number; y: number };
-
-export const HEADING_RIGHT: Heading = { x: 1, y: 0 };
-export const HEADING_LEFT: Heading = { x: -1, y: 0 };
-export const HEADING_DOWN: Heading = { x: 0, y: 1 };
-export const HEADING_UP: Heading = { x: 0, y: -1 };
 
 // A bounds tuple [minX, minY, maxX, maxY] — Excalidraw's Bounds shape. The router's dense box math (dynamic
 // AABBs, grid) reads much closer to the source in tuple form; geometry's object Bounds is used at the seams.
@@ -36,29 +36,6 @@ export type B4 = [number, number, number, number];
 // How near (SCENE units) a bound endpoint must sit to its shape for cone-based heading to apply. The router
 // runs zoom-free (server + derive path), so this is maxBindingDistance_simple at zoom 1 = clamp(15/1.5,15,30).
 const MAX_BINDING_DISTANCE = 15;
-
-// Excalidraw's vectorToHeading: snap a free vector to its dominant axis direction (the `<=` on LEFT and the
-// strict `>` elsewhere are load-bearing — they decide the exit side on exact diagonals).
-export function vectorToHeading(dx: number, dy: number): Heading {
-    const ax = Math.abs(dx);
-    const ay = Math.abs(dy);
-    if (dx > ay) return HEADING_RIGHT;
-    if (dx <= -ay) return HEADING_LEFT;
-    if (dy > ax) return HEADING_DOWN;
-    return HEADING_UP;
-}
-
-export function compareHeading(a: Heading, b: Heading): boolean {
-    return a.x === b.x && a.y === b.y;
-}
-
-export function flipHeading(h: Heading): Heading {
-    return { x: -h.x, y: -h.y };
-}
-
-export function headingIsHorizontal(h: Heading): boolean {
-    return h.y === 0;
-}
 
 // The rotated-corner AABB of a shape (getElementBounds), optionally inflated per side. `offset` is
 // Excalidraw's [top, right, down, left] tuple — note the asymmetric axis order, matching offsetFromHeading.
@@ -195,8 +172,6 @@ function triangleIncludesPoint(a: Point, b: Point, c: Point, p: Point): boolean 
 // Below this w/h a shape has no interior to anchor a proportional point into — bind to the (0.5-dodged)
 // center so the arrow stays put on a later resize. Excalidraw's MIN_BINDABLE_SIZE.
 const MIN_BINDABLE_SIZE = 1;
-// The elbow base gap, used only for the axis-swap intersection fallback (Excalidraw's BASE_BINDING_GAP_ELBOW).
-const BASE_BINDING_GAP_ELBOW = 5;
 // Excalidraw's PRECISION: an intersection this close to the edge point is treated as no snap.
 const DOCK_PRECISION = 1e-4;
 
@@ -229,8 +204,8 @@ export function redockBindingsForElbow(
     const redock = (binding: string, endLocal: Point | undefined): string => {
         const b = parseBinding(binding);
         if (!b || !endLocal) return binding;
-        const shape = byId.get(b.elementId);
-        if (!shape || !isBindable(shape)) return binding;
+        const shape = boundShape(binding, byId);
+        if (!shape) return binding;
         const scene = linearLocalToScene(arrow, endLocal);
         return serializeBinding({ elementId: b.elementId, fixedPoint: elbowBindPoint(shape, scene).fixedPoint });
     };

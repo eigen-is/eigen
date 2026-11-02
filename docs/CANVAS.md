@@ -44,7 +44,7 @@ A pasted clipboard record goes through the same `readElementFromFields`, so a fo
 
 Each kind is one `defineKind` file in `packages/lib/src/vector/kinds/`. Besides defaults, `read`, bounds, hit test and `render`, it gives the outline and the `searchText` that feeds both ⌘F and the server search index. A bindable kind may give its own `anchorPoints`, the points a bound arrow snaps to; without them they are the box's four edge midpoints. `defineKind` derives the kind's stored `fields` from its `defaults`, so a kind names its keys once. It also re-narrows through the kind's own guard in every method, so no caller casts and a mis-dispatch degrades quietly instead of throwing mid-render. Presentation (icon, label, shortcut, edit dialog, panel section) is the matching `ELEMENT_KIND_UI` entry in `packages/ui/src/components/vector/kinds/`. A kind with controls of its own in the properties panel, such as the arrow, the chart or the image, declares a `PanelSection`. A kind edited in a dialog rather than in place, the chart, declares an `EditDialog`, which a double-click opens. The canvas mounts it inside a wrapper that stops pointer, double-click, paste and drag-start events, because React bubbles a portaled dialog's events up the component tree, and the canvas' own handlers would select, marquee, paste or cancel a drag under it.
 
-`kinds/index.ts` derives the rest: `ELEMENT_FIELDS`, the type validator, the toolbar tools, `baseDefaultsFor` (so a panel reset restores exactly what create gave). A host's style table (`VECTOR_STYLE_DEFAULTS`, `SLIDES_STYLE_DEFAULTS`) decides how a new element looks, never which kinds exist. `geometry.ts` and the kind registry import each other. A kind calls geometry only inside its methods, so the registry can evaluate before geometry's body does. Any entry works except one that reaches geometry through a kind's own module or `kind.ts`, such as `kinds/rectangle.ts` imported first: the registry then evaluates while that module is in its TDZ and throws a `ReferenceError`.
+`kinds/index.ts` derives the rest: `ELEMENT_FIELDS`, the type validator, the toolbar tools, `baseDefaultsFor` (so a panel reset restores exactly what create gave). A host's style table (`VECTOR_STYLE_DEFAULTS`, `SLIDES_STYLE_DEFAULTS`) decides how a new element looks, never which kinds exist. The kinds build on `geometry.ts`, which reads no kind. The code that dispatches through the registry, such as `elementBounds`, `hitTestElement` and the arrow bindings, lives in `binding.ts`. So no kind module reaches the registry, and any vector module can be the first one a process loads. Were a kind to reach the registry, loading that kind first would evaluate the registry while the kind is still in its TDZ and throw a `ReferenceError`. `test/vector/kinds/cycle.test.ts` loads each module first in a process of its own.
 
 **A `case 'rectangle'` in rendering, bounds, hit testing or the panel is a review finding.** `.type` is still read where behavior is truly per kind: the arrow and line family (`isLinearElement`), the rich-text sanitizer, the image's media name.
 
@@ -60,7 +60,7 @@ The `Textual` block (`kinds/textual.ts`) is the twelve stored text fields: `html
 
 The reader fills every missing or corrupt text field from the kind's defaults, so a shape stored before shapes held text reads with empty `html` and draws the bytes it drew before. Its font is the reader's default too, Excalifont at 20 px, not the deck's. In Slides, typing into such a shape starts in that font, and the user changes it in the panel. A drawing's defaults are the same, so Vector shows no difference. `textRender` returns the shape's svg alone while its html holds no text (`hasText`), such as an emptied list, and the text over it once it does.
 
-`textual.ts` imports only leaf modules: no geometry, no `render-utils`, no kind module and not the kind registry. The chart's shape builders call `textualDefaults`, and a deeper import would load the kind registry from them.
+`textual.ts` must not reach the kind registry. The chart's shape builders call `textualDefaults`, so a registry import in it would close the cycle charts → `textual.ts` → registry → chart kind → charts.
 
 ## A text box grows and a shape spills
 
@@ -106,7 +106,7 @@ A kind names its own defs (a gradient, a hatch's or a rounded image's clip, an a
 
 ## A binding is stored on the arrow only
 
-An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`geometry.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
+An arrow is the one kind that depends on other elements. Its math lives in `packages/lib/src/vector/` (`binding.ts`, `outline.ts`, `elbow-route.ts`, `elbow-pins.ts`), its handles in `packages/ui/src/components/vector/tools/`.
 
 An arrow end binds by storing the target's id and a `fixedPoint`, the anchor as a proportion of the target's width and height. The end follows a move, resize or rotate of the target by construction. Which kinds an arrow may bind to is the `bindable` capability: the three closed shapes, the pie, a closed path, the chart, rich text and images.
 
