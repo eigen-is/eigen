@@ -1432,7 +1432,7 @@ describe('Backup round trip of a home that stores files by name', () => {
 
     // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
     // of the home at the restore in a client that sorts by received date.
-    test('a restore puts a Maildir message back with its mtime, through a rename and through a copy', async () => {
+    test('a restore puts a Maildir message back with its mtime, private, through a rename and through a copy', async () => {
         const { user } = await realShapeHome();
         await deliverMail(user.email, 'Received long ago');
         const maildir = join(TEST_DATA_DIR, 'home', user.id, MAILDIR_ROOT);
@@ -1440,17 +1440,20 @@ describe('Backup round trip of a home that stores files by name', () => {
         const [delivered] = [...new Bun.Glob('{cur,new}/*').scanSync({ cwd: maildir })];
         utimesSync(join(maildir, delivered), received, received);
         const unique = basename(delivered).split(':')[0];
-        const receivedAt = () => {
+        // Dovecot runs as the API's user, so a message and its folder are for that user alone.
+        const restored = () => {
             const [message] = [...new Bun.Glob(`{cur,new}/${unique}*`).scanSync({ cwd: maildir })];
-            return statSync(join(maildir, message)).mtime;
+            const stat = statSync(join(maildir, message));
+            const folderMode = statSync(join(maildir, message, '..')).mode & 0o7777;
+            return { mtime: stat.mtime, mode: stat.mode & 0o7777, folderMode };
         };
         const artifact = await backUp(user.id);
 
         await restoreHome(artifact, user.id, `restore-mtime-${Date.now()}`);
-        expect(receivedAt()).toEqual(received);
+        expect(restored()).toEqual({ mtime: received, mode: 0o600, folderMode: 0o700 });
 
         await restoreAcrossDisks(artifact, user.id, `restore-mtime-copy-${Date.now()}`);
-        expect(receivedAt()).toEqual(received);
+        expect(restored()).toEqual({ mtime: received, mode: 0o600, folderMode: 0o700 });
     });
 
     test('the home moves in through a copy when the backups folder is another disk than data/', async () => {

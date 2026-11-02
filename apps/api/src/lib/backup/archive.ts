@@ -22,9 +22,11 @@ import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
 import { archiveEnd, BLOCK, collect, fileChunks, headerChunks, padding, tarEntries } from './tar';
 
-// An archive holds password hashes, keys and every file of a home, so only the API's own user may read it. A
-// whole-server archive gives its members this mode too, so `tar -xf` hands them to the user alone.
+// An archive holds password hashes, keys and every file of a home, so only the API's own user may read it. Every
+// file inside an archive has this mode too, a home's files and a whole-server archive's members alike, so a
+// `tar -xf` hands them to that user alone. A folder inside one is for that user alone as well.
 export const ARCHIVE_MODE = 0o600;
+const ARCHIVE_FOLDER_MODE = 0o700;
 
 // Packs `dir` into a `.tar.zst` whose single root folder is `dir`'s basename. Memory stays flat:
 // the tar is generated entry by entry into the zstd stream, and the compressed bytes go straight to
@@ -51,7 +53,7 @@ async function* tarChunks(dir: string, rootName: string, onProgress?: BackupProg
     // Directories get entries of their own: an empty one (a Maildir `new/`, a container's `versions/`
     // before its first snapshot) is part of the home and has to survive the round trip.
     function* directory(name: string, mtimeMs: number): Generator<Uint8Array> {
-        for (const chunk of headerChunks(name, 0, Math.floor(mtimeMs / 1000), '5', 0o755)) {
+        for (const chunk of headerChunks(name, 0, Math.floor(mtimeMs / 1000), '5', ARCHIVE_FOLDER_MODE)) {
             written += chunk.length;
             yield chunk;
         }
@@ -87,7 +89,7 @@ async function* fileEntryChunks(
     size: number,
     mtime: number,
 ): AsyncGenerator<Uint8Array> {
-    yield* headerChunks(name, size, mtime, '0', 0o644);
+    yield* headerChunks(name, size, mtime, '0', ARCHIVE_MODE);
     yield* fileChunks(name, absPath, size);
     yield padding(size);
 }
@@ -260,25 +262,23 @@ export async function copyArchiveMember(member: ArchiveMemberAt, destPath: strin
     }
 }
 
-// No setuid, setgid or sticky bit: root swaps what a restore unpacked into data/.
-const PERMISSION_BITS = 0o777;
-
+// Every folder an extract makes is 0700 and every file 0600, whatever the header says. Only the API's user reads a
+// restored home, so an older archive's 0644 entries restore as private as a new one's. A crafted archive cannot ask
+// for a setuid bit, which root would then swap into data/, or for a folder its own extract cannot enter.
 export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
+    const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     const existed = fs.existsSync(targetDir);
-    fs.mkdirSync(targetDir, { recursive: true });
+    makeFolder(targetDir);
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
             if (entry.typeflag === '5') {
-                fs.mkdirSync(target, { recursive: true });
+                makeFolder(target);
                 continue;
             }
             // A foreign archive may name a file before the directory entry it sits in.
-            fs.mkdirSync(path.dirname(target), { recursive: true });
-            await pipeline(
-                Readable.from(entry.body),
-                fs.createWriteStream(target, { mode: entry.mode & PERMISSION_BITS }),
-            );
+            makeFolder(path.dirname(target));
+            await pipeline(Readable.from(entry.body), fs.createWriteStream(target, { mode: ARCHIVE_MODE }));
             // As `tar -x` does: Dovecot dates a Maildir message by its file's mtime.
             await fsp.utimes(target, entry.mtime, entry.mtime);
         }
