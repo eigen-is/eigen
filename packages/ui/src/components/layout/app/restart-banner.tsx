@@ -1,9 +1,8 @@
 // The strip a signed-in app shows when the server announced a restart, such as before an update, so its user can
 // save in time. It reads like the broadcast `shutdown` sends to every terminal: the time the message came, what is
 // about to happen and when, then the operator's own line as plain text. AppShell renders it at the foot of every
-// page. It shows nothing while the tab holds no notice, which is always so on a page without the event stream.
-// The strip is a status region, so a screen reader speaks it when it appears or its wording changes. The ticking
-// time is hidden from it, or it would be read out again every second in the last minute.
+// page, and it shows nothing while the tab holds no notice. A screen reader speaks the strip, a status region, with
+// the clock time of the restart instead of the ticking countdown, which it would read out again every second.
 
 import { dateFormatter, formatDayMonth } from '@workspace/lib/date';
 import { useRestartNotice } from '@workspace/lib/sse';
@@ -47,8 +46,12 @@ function RestartBroadcast({ notice, streamDown }: { notice: HeldRestartNotice; s
 function broadcastTime(heardAt: number): string {
     const date = new Date(heardAt);
     const weekday = dateFormatter({ weekday: 'short' }).format(date);
-    const time = dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
-    return `${weekday} ${formatDayMonth(date)}, ${time}`;
+    return `${weekday} ${formatDayMonth(date)}, ${clockTime(date)}`;
+}
+
+// "14:22", in the user's own time zone.
+function clockTime(date: Date): string {
+    return dateFormatter({ hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(date);
 }
 
 function RestartText({
@@ -64,7 +67,12 @@ function RestartText({
     return (
         <p>
             {lead}
-            {when && <span aria-hidden="true"> {when}</span>}
+            {when && (
+                <>
+                    <span aria-hidden="true"> {when}</span>
+                    <span className="sr-only"> at {clockTime(new Date(notice.deadline))}</span>
+                </>
+            )}
             {tail}
         </p>
     );
