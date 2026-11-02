@@ -6,7 +6,7 @@ category: Sharing
 tags: [drive, sharing, permissions, collaboration]
 related: [drive/share-a-file, drive/get-started]
 order: 90
-updated: 2026-10-27
+updated: 2026-11-02
 ---
 
 Drive keeps two views that bring shared files together in one place: **Shared with me** shows everything other people have given you access to, and **Shared by me** shows everything you have shared with others.
@@ -39,7 +39,7 @@ You can open the Share dialog for any file in either view. Right-click the file 
 
 In **Shared with me**, you can open, preview and download files, but you cannot rename or duplicate them. Those belong to the file's owner.
 
-When you open a folder that was shared with you for viewing only, Drive shows the same folder without the options you cannot use. There is no **New** button, and no **Rename**, **Duplicate** or **Move to trash**. You can still open files, preview them, download them, and copy them to a drive of your own.
+When you open a folder that was shared with you for viewing only, Drive shows the same folder without the options you cannot use. There is no **New** button, and no **Rename**, **Duplicate** or **Move to trash**. You can still open files, preview them, download them, and copy them to a drive of your own. The **Share** submenu stays, holding **Copy link** and **Mail to…**.
 
 </div>
 

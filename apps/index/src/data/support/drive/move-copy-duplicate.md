@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, move, copy, duplicate, organize]
 related: [drive/rename-move-organise, drive/share-a-file]
 order: 75
-updated: 2026-09-13
+updated: 2026-11-02
 ---
 
 Dragging works well for a folder you can see on screen. When the destination is somewhere else, or in another drive, the right-click menu has three options that open a folder picker instead: **Move to…**, **Copy to…**, and **Duplicate**.
@@ -36,15 +36,23 @@ The picker starts in the folder you are browsing. The row at the top shows where
 
 The original stays where it is. Unlike a move, a copy can go into any drive you can write to, including a team drive.
 
+When the copy is done, a message says **1 item copied** (or **3 items copied**, and so on) with an **Open folder** button that takes you to the destination.
+
+If some of the items fail, the **Copy to** dialog stays open with only those items left. Click **Copy here** again to retry them. The ones that already copied are not copied a second time.
+
 Copying a folder copies everything inside it. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents, but the copy starts its own version history rather than inheriting the original's.
 
 ## Duplicate a file in place
 
-To make a second copy next to the original, right-click it and choose **Duplicate**. The new item appears in the same folder, named **Copy of** followed by the original name.
+To make a second copy next to the original, right-click it and choose **Duplicate**. The new item appears in the same folder, named **Copy of** followed by the original name. Eigen shows no message when it is done.
+
+**Duplicate** is also in the menu when you browse a list of files from several folders, such as a type filter, but not for a drive's top-level folder or for files you can only read.
 
 ## Work on several items at once
 
-Select more than one item first. Hold Shift and click to select a range, or hold Ctrl (Command on a Mac) and click to add items one at a time. Right-click the selection and the menu counts them for you: **Move 3 items to…**, **Copy 3 items to…**, or **Duplicate 3 items**.
+Select more than one item first. Hold Shift and click to select a range, or hold Ctrl (Command on a Mac) and click to add items one at a time. Right-click the selection and the menu counts them for you: **Move 3 items to…**, **Copy 3 items to…**, **Duplicate 3 items**, or **Mail 3 items to…**.
+
+**Move to…** isn't offered in a list of files from several folders, such as a type filter. **Copy to…** and **Duplicate** are.
 
 ## What happens to sharing
 
