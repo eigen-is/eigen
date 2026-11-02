@@ -58,6 +58,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Fixed
 
 - **Odd font names in Sheets** — a font name with a semicolon, a bracket, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
+- **Function suggestions in Sheets** — the list of functions under a formula closes when you click another cell to finish the edit, instead of staying on screen
 - **Printing** — printing a document, an email or a contact waits for its fonts, and a few seconds at most for its pictures, so they show on the page
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
