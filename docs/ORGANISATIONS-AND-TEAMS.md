@@ -72,7 +72,7 @@ Every drive route is `/drive/:ownerId/:mountId/...`, and `ownerId` encodes the t
 | Team | `team_{teamId}` | `TeamHome` |
 | Org  | `org_{orgId}`   | `OrgHome` |
 
-It also knows `external_` (a calendar organizer outside Eigen) and flags anything else `invalid`, which `getHome` answers with 400. Build ids with `userOwnerId`, `teamOwnerId` and `orgOwnerId`.
+It also knows `external_` (a calendar organizer outside Eigen) and flags anything else `invalid`, which `getHome` answers with 400. A user's owner id is the user id itself; build the others with `teamOwnerId` and `orgOwnerId`.
 
 `getHome(ownerId)` (`apps/api/src/lib/home/get-home.ts`) dispatches on the type and checks that the user, team or org exists. `getSharedDrive(ownerId, user)` (`apps/api/src/lib/drive/get-drive.ts`) hands the owner their own `Drive` and wraps any other home in a `SharedDrive`.
 
