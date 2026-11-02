@@ -13,7 +13,7 @@ import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { cellDisplay, numberDisplay, numberText } from '../../engine/format';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { CalcChainEntry, Cell, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
+import type { CalcChainEntry, Cell, CellMatrix, Range, Selection, Sheet as SheetType, SingleRange } from '../types';
 import { getSheetIndex, isAllowEdit, replaceHtml, styleObjectToCss } from '../utils';
 import type { CarryTile } from './cell';
 import {
@@ -1097,6 +1097,17 @@ export function moveHighlightRange(
 // matched by every paste reader.
 export const COPY_ACTION_TABLE_MARKER = 'sheet-copy-action-table';
 
+// The text a copy writes for a cell, in its td and in the TSV. A width format such as w0 shows the raw value, and
+// every other cell its display text. A paste reads it to tell the tab's own copy from another table.
+export function copiedCellText(d: CellMatrix, r: number, c: number): string {
+    const cell = d[r]?.[c];
+    if (cell == null) return '';
+    const value = /^(w|W)((0?)|(0\.0+))$/.test(cell.ct?.fa ?? '')
+        ? getCellValue(r, c, d)
+        : (copiedNumberText(cell) ?? getCellValue(r, c, d, 'm'));
+    return String(value ?? getCellValue(r, c, d) ?? '');
+}
+
 // General cuts a number to 11 characters; the clipboard carries Excel's 15 significant digits instead.
 function copiedNumberText(cell: Cell): string | undefined {
     if (typeof cell.v !== 'number' || (cell.ct?.fa ?? 'General') !== 'General') return undefined;
@@ -1160,11 +1171,6 @@ export function rangeValueToClipboard(
 
             const cell = d[r]?.[c];
             if (cell != null) {
-                // A width format such as w0 shows the raw value, and every other cell its display text.
-                const value = /^(w|W)((0?)|(0\.0+))$/.test(cell.ct?.fa ?? '')
-                    ? getCellValue(r, c, d)
-                    : (copiedNumberText(cell) ?? getCellValue(r, c, d, 'm'));
-
                 style += styleObjectToCss(getStyleByCell(ctx, d, r, c, cfCompute));
 
                 if (cell.mc?.rs != null) {
@@ -1184,7 +1190,7 @@ export function rangeValueToClipboard(
                 // parser decodes before CSS sees it.
                 column = replaceHtml(column, { style: escapeHtml(style), span });
 
-                const shown = String(value ?? getCellValue(r, c, d) ?? '');
+                const shown = copiedCellText(d, r, c);
                 textRow.push(shown);
                 column += escapeHtml(shown);
             } else {

@@ -4,9 +4,10 @@
 // paste, so none of it comes here.
 
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
+import { escapeHtml } from '@workspace/lib/html';
 import type { CellBorderSides, ConditionalFormatRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import { cloneDeep, forEach, has, includes, isEmpty, isEqual, isNil, trim } from 'es-toolkit/compat';
+import { cloneDeep, forEach, has, includes, isEmpty, isNil, trim } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
@@ -21,7 +22,7 @@ import { carriedLines, carryCells, getQKBorder, setCellValue } from '../modules/
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
-import { COPY_ACTION_TABLE_MARKER, rangeValueToClipboard, selectionCache } from '../modules/selection';
+import { COPY_ACTION_TABLE_MARKER, copiedCellText, selectionCache } from '../modules/selection';
 import { expandRowsAndColumns, storeSheetSelections } from '../modules/sheet';
 import { hasPartMC } from '../modules/validation';
 import { getSheetIndex, isAllowEdit } from '../utils';
@@ -488,9 +489,40 @@ function readStyleRules(css: string): Map<string, Record<string, string>> {
     return rules;
 }
 
-// The text of every td in a table, in order. The browser may wrap the copied HTML, but it keeps the cells as written.
-function tableCellTexts(html: string): string[] {
-    return (html.match(/<td.*?>(.*?)<\/td>/g) ?? []).map((td) => trim(td.replace(/<td.*?>/, '').replace('</td>', '')));
+// A marked table is this tab's own copy while it holds the cells the copy would write now. A copy in another tab, or
+// an edit of the copied cells since, is pasted as a table instead. The shape is compared first, so most other tables
+// are turned away before a cell's text is read. Only the texts are compared, because building the styles of a large
+// copy takes seconds.
+function isOwnCopyTable(ctx: Context, html: string, copyState: NonNullable<Context['copyState']>): boolean {
+    const index = getSheetIndex(ctx, copyState.dataSheetId);
+    const d = index == null ? undefined : ctx.sheets[index].data;
+    if (!d) return false;
+
+    // The browser may wrap the copied HTML, but it keeps the cells as written. A tr starts a row.
+    const table: string[][] = [];
+    for (const [, td] of html.matchAll(/<tr\b|<td\b[^>]*>([\s\S]*?)<\/td>/g)) {
+        if (td === undefined) table.push([]);
+        else table.at(-1)?.push(td.trim());
+    }
+    const { rows, columns } = carriedLines(ctx, copyState.dataSheetId, copyState.copyRange, !ctx.pasteIsCut);
+    if (table.length !== rows.length) return false;
+
+    // The columns of each row that have a td. A merge writes one td, so the cells it covers have none. A merge whose
+    // first row a filter left out has a td for each of its cells.
+    const anchors = new Set<string>();
+    const written = rows.map((r) => {
+        const tdColumns: number[] = [];
+        for (const c of columns) {
+            const mc = d[r]?.[c]?.mc;
+            if (mc?.rs != null) anchors.add(`${r}_${c}`);
+            else if (mc && anchors.has(`${mc.r}_${mc.c}`)) continue;
+            tdColumns.push(c);
+        }
+        return tdColumns;
+    });
+    if (written.some((tdColumns, i) => tdColumns.length !== table[i].length)) return false;
+
+    return rows.every((r, i) => written[i].every((c, j) => table[i][j] === escapeHtml(copiedCellText(d, r, c)).trim()));
 }
 
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
@@ -506,15 +538,13 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
         let txtdata = clipboardData.getData('text/html') || clipboardData.getData('text/plain');
 
-        // A marked table is this tab's own copy while its cells are the ones the copy state would write now. A copy
-        // in another tab, or an edit of the copied cells since, pastes it as a table instead.
         const { copyState } = ctx;
-        const own =
-            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 && copyState != null && copyState.copyRange.length > 0
-                ? rangeValueToClipboard(ctx, copyState.dataSheetId, copyState.copyRange, { cut: ctx.pasteIsCut })
-                : null;
-
-        if (own && isEqual(tableCellTexts(txtdata), tableCellTexts(own.html))) {
+        if (
+            txtdata.indexOf(COPY_ACTION_TABLE_MARKER) > -1 &&
+            copyState != null &&
+            copyState.copyRange.length > 0 &&
+            isOwnCopyTable(ctx, txtdata, copyState)
+        ) {
             if (ctx.pasteIsCut) {
                 ctx.pasteIsCut = false;
                 pasteHandlerOfCutPaste(ctx, copyState);

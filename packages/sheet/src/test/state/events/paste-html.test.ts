@@ -4,8 +4,15 @@ import { pick } from 'es-toolkit/compat';
 import { Window } from 'happy-dom';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
+import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
-import { copy, rangeValueToClipboard, selectionCache } from '../../../state/modules/selection';
+import { consumePendingCopy } from '../../../state/modules/clipboard';
+import {
+    COPY_ACTION_TABLE_MARKER,
+    copy,
+    rangeValueToClipboard,
+    selectionCache,
+} from '../../../state/modules/selection';
 import { contextFactory } from '../factories/context';
 import { pastedHtmlFactory } from '../factories/pasted-html';
 
@@ -573,5 +580,140 @@ describe('Copy HTML — numeric cells carry their full value', () => {
         ctx.selections = single(0, 1);
         pasteHtml(ctx, html);
         expect(ctx.sheets[0].data![0][1]?.f).toBe('=B2');
+    });
+});
+
+// ⌘V of a marked table serves this tab's copy, formulas and all, only while the table is that copy. A table another
+// tab copied, or the copied cells edited since, pastes as a table.
+describe('HTML-table paste — the copy of this tab', () => {
+    function rangeSel(r1: number, r2: number, c1: number, c2: number) {
+        return [{ row: [r1, r2], column: [c1, c2], row_focus: r1, column_focus: c1 }];
+    }
+
+    function markedTable(rows: readonly string[][]): string {
+        const trs = rows.map((row) => `<tr>${row.map((text) => `<td style="">${text}</td>`).join('')}</tr>`);
+        return `<table data-type="${COPY_ACTION_TABLE_MARKER}">${trs.join('')}</table>`;
+    }
+
+    // Copies rows x cols cells from A1, the formulas =1, =2, … or blanks, and returns the table the copy wrote.
+    function copyCells(ctx: Context, rows: number, cols: number, { cut = false, blank = false } = {}): string {
+        const d = ctx.sheets[0].data ?? [];
+        for (let r = 0; r < rows; r += 1) {
+            for (let c = 0; c < cols; c += 1) {
+                const n = r * cols + c + 1;
+                d[r][c] = blank ? null : { v: n, m: String(n), f: `=${n}` };
+            }
+        }
+        ctx.selections = rangeSel(0, rows - 1, 0, cols - 1);
+        handleCopy(ctx, { cut });
+        return consumePendingCopy()?.html ?? '';
+    }
+
+    function pasteAt(ctx: Context, html: string, r: number, c: number) {
+        ctx.selections = single(r, c);
+        pasteHtml(ctx, html);
+    }
+
+    it('takes the copy state for its own table, with markup, a line break and a merge in it', () => {
+        const ctx = makeCtx(10, 10);
+        const d = ctx.sheets[0].data ?? [];
+        d[0][0] = { v: 'a & <b>', m: 'a & <b>', mc: { r: 0, c: 0, rs: 1, cs: 2 } };
+        d[0][1] = { mc: { r: 0, c: 0 } };
+        d[1][0] = { v: 'x\ny', m: 'x\ny' };
+        d[1][1] = { v: 1, m: '1', f: '=1' };
+        ctx.sheets[0].config = { merge: { '0_0': { r: 0, c: 0, rs: 1, cs: 2 } } };
+        ctx.selections = rangeSel(0, 1, 0, 1);
+        handleCopy(ctx);
+        pasteAt(ctx, consumePendingCopy()?.html ?? '', 4, 4);
+        expect(ctx.sheets[0].data?.[5][5]?.f).toBe('=1');
+        expect(ctx.sheets[0].config?.merge?.['4_4']).toEqual({ r: 4, c: 4, rs: 1, cs: 2 });
+    });
+
+    // The same cell texts in another shape are another copy, and so is a table that holds ours and a row or a column
+    // more. Ours holds formulas or blanks, theirs constants or blanks.
+    it.each([
+        ['2x1 against 3x1', 2, 1, false, [['1'], ['2'], ['3']]],
+        ['1x2 against 1x3', 1, 2, false, [['1', '2', '3']]],
+        [
+            '2x3 against 3x2',
+            2,
+            3,
+            false,
+            [
+                ['1', '2'],
+                ['3', '4'],
+                ['5', '6'],
+            ],
+        ],
+        ['1x6 against 6x1', 1, 6, false, [['1'], ['2'], ['3'], ['4'], ['5'], ['6']]],
+        ['blanks, 1x6 against 6x1', 1, 6, true, [[''], [''], [''], [''], [''], ['']]],
+    ])('pastes a table of another shape as a table: %s', (_name, rows, cols, blank, theirs) => {
+        const ctx = makeCtx(10, 10);
+        copyCells(ctx, rows, cols, { blank });
+        pasteAt(ctx, markedTable(theirs), 2, 2);
+        expect(ctx.selections?.[0]).toMatchObject({
+            row: [2, 2 + theirs.length - 1],
+            column: [2, 2 + theirs[0].length - 1],
+        });
+        expect(ctx.sheets[0].data?.[2][2]?.f).toBeUndefined();
+    });
+
+    it('pastes a table of the same shape with other texts as a table', () => {
+        const ctx = makeCtx(10, 10);
+        copyCells(ctx, 1, 2);
+        pasteAt(ctx, markedTable([['7', '8']]), 2, 2);
+        expect(pick(ctx.sheets[0].data?.[2][3], ['v', 'f'])).toEqual({ v: 8 });
+    });
+
+    it('pastes its own table as a table once the copied cells changed', () => {
+        const ctx = makeCtx(10, 10);
+        const html = copyCells(ctx, 1, 2);
+        ctx.sheets[0].data?.[0].splice(1, 1, { v: 9, m: '9' });
+        pasteAt(ctx, html, 2, 2);
+        expect(pick(ctx.sheets[0].data?.[2][3], ['v', 'f'])).toEqual({ v: 2 });
+    });
+
+    it('takes the cut state for a cut that grows the grid', () => {
+        const ctx = makeCtx(8, 8);
+        const html = copyCells(ctx, 2, 2, { cut: true });
+        pasteAt(ctx, html, 7, 7);
+        const d = ctx.sheets[0].data ?? [];
+        expect([d.length, d[0].length]).toEqual([9, 9]);
+        expect([ctx.visibledatarow.length, ctx.visibledatacolumn.length]).toEqual([9, 9]);
+        expect(d[8][8]?.f).toBe('=4');
+        expect(d[0][0]).toBeNull();
+    });
+
+    // The check reads the copy's cell texts and not its styles, so it takes a fraction of the time the copy took. The
+    // test compares the two because wall-clock time swings with the machine's load. Landing 200,000 cells takes far
+    // longer than the check, so the paste goes over part of a merge, which stops it right after the check.
+    it('recognises a 20,000-row copy, or turns another table away, in a fraction of the time the copy took', () => {
+        const rows = 20000;
+        const data = Array.from({ length: rows + 1 }, (_, r) =>
+            Array.from({ length: 10 }, (_, c): Cell => ({ v: r * c, m: String(r * c), bg: '#ff0000' })),
+        );
+        const ctx = contextFactory({
+            currentSheetId: 'id_1',
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data }],
+        }) as Context;
+        const range = rangeSel(0, rows - 1, 0, 9);
+        ctx.selections = range;
+        handleCopy(ctx);
+        const html = consumePendingCopy()?.html ?? '';
+        ctx.sheets[0].config = { merge: { [`${rows - 1}_0`]: { r: rows - 1, c: 0, rs: 2, cs: 1 } } };
+
+        // The fastest of three runs, so a busy moment doesn't fail the test.
+        function fastest(run: () => void): number {
+            const times = [0, 1, 2].map(() => {
+                const start = performance.now();
+                run();
+                return performance.now() - start;
+            });
+            return Math.min(...times);
+        }
+        const copyTime = fastest(() => rangeValueToClipboard(ctx, 'id_1', range));
+        for (const table of [html, markedTable([['1']])]) {
+            expect(fastest(() => pasteAt(ctx, table, 0, 0))).toBeLessThan(copyTime / 2);
+        }
     });
 });
