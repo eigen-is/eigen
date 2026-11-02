@@ -444,6 +444,34 @@ describe('a data validation', () => {
         expect(kept).toEqual(dataValidations);
     });
 
+    // A whole column sits in the index's grid of tall bands, while single cells sit in its square tiles and a whole row
+    // in its wide bands. A lookup must find the overlaps across grids both ways: a column under higher cells and rows,
+    // and cells and a row under a higher column.
+    test('whole columns cut and are cut by cells and rows kept in the other grids', () => {
+        const rule = (value1: string) => validation({ type: 'dropdown', type2: '', value1, value2: '' });
+        const column = (c: number) => ({ row: [0, REFERENCE_ROW_COUNT - 1], column: [c, c] });
+        const row = (r: number) => ({ row: [r, r], column: [0, 16383] });
+        const cell = (r: number, c: number) => ({ row: [r, r], column: [c, c] });
+        const dataValidations = {
+            'validation-3': { ranges: [cell(2, 1), row(9), cell(70_000, 3)], rule: rule('top') },
+            'validation-2': { ranges: [column(1), column(3)], rule: rule('columns') },
+            'validation-1': { ranges: [cell(19, 1), cell(19, 2), cell(29, 3), row(39)], rule: rule('bottom') },
+        };
+        const lost: CountedWarningCode[] = [];
+        const kept = withoutOverlaps(dataValidations, (code) => lost.push(code));
+        expect(lost).toEqual([]);
+        const rows = [0, 2, 9, 19, 29, 39, 70_000, REFERENCE_ROW_COUNT - 1];
+        for (const r of rows) {
+            for (const c of [0, 1, 2, 3, 4, 16383]) {
+                const covering = Object.values(kept).filter(({ ranges }) =>
+                    ranges.some(({ row, column }) => r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1]),
+                );
+                expect(covering.length).toBeLessThanOrEqual(1);
+                expect(ruleAt(kept, r, c)).toEqual(ruleAt(dataValidations, r, c));
+            }
+        }
+    });
+
     // A cut can split each of a rule's ranges in two, and the importer drops a rule of more ranges than a rule may
     // hold. So the export joins what it cut, and drops and counts a rule still past the cap.
     test('a rule the cuts leave with more ranges than a rule may hold is dropped and counted', () => {
