@@ -5,20 +5,44 @@
 
 import { isRecord } from '../core/guards';
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from './defaults';
-import type { SheetValidation } from './types';
+import type { DataVerificationRule, SheetValidation } from './types';
+
+// The type each field of a rule holds. Typed against the rule, so a field added to it fails the build until it is
+// checked here too.
+const RULE_FIELDS: Record<keyof DataVerificationRule, 'string' | 'boolean'> = {
+    type: 'string',
+    type2: 'string',
+    value1: 'string',
+    value2: 'string',
+    hintShow: 'boolean',
+    hintValue: 'string',
+    prohibitInput: 'boolean',
+    rangeTxt: 'string',
+    validity: 'string',
+    remote: 'boolean',
+};
+const REQUIRED_RULE_FIELDS: ReadonlySet<string> = new Set<keyof DataVerificationRule>([
+    'type',
+    'type2',
+    'value1',
+    'value2',
+]);
 
 export function isSheetValidation(value: unknown): value is SheetValidation {
     if (!isRecord(value)) return false;
     const { ranges, rule } = value;
     if (!Array.isArray(ranges) || ranges.length === 0 || !isRecord(rule)) return false;
-    const { type, type2, value1, value2 } = rule;
     return (
         ranges.every(
             (range) =>
                 isRecord(range) &&
                 isSpan(range['row'], REFERENCE_ROW_COUNT) &&
                 isSpan(range['column'], REFERENCE_COLUMN_COUNT),
-        ) && [type, type2, value1, value2].every((field) => typeof field === 'string')
+        ) &&
+        Object.entries(RULE_FIELDS).every(
+            ([field, kind]) =>
+                typeof rule[field] === kind || (rule[field] === undefined && !REQUIRED_RULE_FIELDS.has(field)),
+        )
     );
 }
 
