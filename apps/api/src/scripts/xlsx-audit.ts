@@ -22,8 +22,14 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Cell, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
-import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import type { Cell, DataVerificationRule, Sheet, SingleRange } from '@workspace/lib/sheets';
+import {
+    cellFontName,
+    coalescedRanges,
+    compareValidationIds,
+    SHEET_DEFAULT_FONT,
+    SHEET_DEFAULT_FONT_SIZE,
+} from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
 import { parseA1Range, rangeToA1, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/document/transform/peak-rss';
@@ -31,7 +37,6 @@ import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/export-image';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
-import { withoutOverlaps } from '../lib/export/sheets/xlsx/rules';
 import { cut } from '../lib/export/sheets/xlsx/strings';
 import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
@@ -985,9 +990,10 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
                 for (const key of new Set([...configA.keys(), ...configB.keys()]))
                     keyed(key, sheet, configA.get(key), configB.get(key));
             } else if (field === 'hyperlink' || field === 'conditionalFormatRules') keyed(field, sheet, x, y);
-            else if (field === 'dataValidations')
-                keyed(field, sheet, rulesByRanges(sheetA.dataValidations), rulesByRanges(sheetB.dataValidations));
-            else if (field === 'charts') {
+            else if (field === 'dataValidations') {
+                for (const difference of validationDifferences(sheetA.dataValidations, sheetB.dataValidations))
+                    note(field, sheet, difference.at, difference.a, difference.b);
+            } else if (field === 'charts') {
                 // A chart's parts compared as one spec, its series ids by place.
                 const spec = (value: unknown) =>
                     Object.values(isRecord(value) ? value : {}).map((chart: unknown) =>
@@ -1019,19 +1025,54 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
     return differences;
 }
 
-// A sheet's validation rules keyed by the ranges they cover, as an import numbers the rules afresh. Where rules
-// overlap, the highest id wins a cell, and the writer cuts that cell out of the others. So each rule is keyed by the
-// cells it decides.
-function rulesByRanges(validations: Sheet['dataValidations']): Record<string, DataVerificationRule> {
-    return Object.fromEntries(
-        Object.values(withoutOverlaps(validations ?? {}, () => {})).map(({ ranges, rule }) => [
-            ranges
-                .map((range) => rangeToA1(range))
-                .sort()
-                .join(' '),
-            rule,
-        ]),
-    );
+// The cells whose rule two sheets' validations give differently, one difference for each pair of rules. Each side is
+// read as the editor reads a cell: of the rules that cover it, the highest id wins. Each import numbers its rules
+// afresh, so the sides compare by the rule each cell gets, never by ids or ranges. The grid is cut at every edge of
+// every range on either side, so each block of cells gets one rule on each side, and only the blocks a range covers
+// are read.
+function validationDifferences(
+    a: Sheet['dataValidations'],
+    b: Sheet['dataValidations'],
+): { at: string; a?: DataVerificationRule; b?: DataVerificationRule }[] {
+    const sides = [a ?? {}, b ?? {}];
+    const ranges = sides.flatMap((rules) => Object.values(rules).flatMap((validation) => validation.ranges));
+    const edges = (axis: 'row' | 'column') =>
+        [...new Set(ranges.flatMap((range) => [range[axis][0], range[axis][1] + 1]))].sort((x, y) => x - y);
+    const rows = edges('row');
+    const columns = edges('column');
+    const rowAt = new Map(rows.map((edge, index) => [edge, index]));
+    const columnAt = new Map(columns.map((edge, index) => [edge, index]));
+    const [blocksA, blocksB] = sides.map((rules) => {
+        const blocks = new Map<number, DataVerificationRule>();
+        // The lowest id first, so a higher id paints over it.
+        for (const id of Object.keys(rules).sort(compareValidationIds)) {
+            for (const { row, column } of rules[id].ranges) {
+                for (let r = rowAt.get(row[0]) ?? rows.length; rows[r] <= row[1]; r += 1) {
+                    for (let c = columnAt.get(column[0]) ?? columns.length; columns[c] <= column[1]; c += 1)
+                        blocks.set(r * columns.length + c, rules[id].rule);
+                }
+            }
+        }
+        return blocks;
+    });
+    const pairs = new Map<string, { a?: DataVerificationRule; b?: DataVerificationRule; blocks: SingleRange[] }>();
+    for (const block of new Set([...blocksA.keys(), ...blocksB.keys()])) {
+        const pair = { a: blocksA.get(block), b: blocksB.get(block) };
+        const [x, y] = [canonical(pair.a ?? null), canonical(pair.b ?? null)];
+        if (x === y) continue;
+        const r = Math.floor(block / columns.length);
+        const c = block % columns.length;
+        const cells = { row: [rows[r], rows[r + 1] - 1], column: [columns[c], columns[c + 1] - 1] };
+        const held = pairs.get(`${x} ${y}`);
+        if (held) held.blocks.push(cells);
+        else pairs.set(`${x} ${y}`, { ...pair, blocks: [cells] });
+    }
+    return [...pairs.values()].map(({ blocks, ...pair }) => ({
+        at: coalescedRanges(blocks)
+            .map((range) => rangeToA1(range))
+            .join(' '),
+        ...pair,
+    }));
 }
 
 // A sheet's pictures in paint order, by place, their media by order of first use, as an import names both afresh, and
@@ -1155,6 +1196,12 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
             a['type'] === 'dropdown' &&
             typeof a['value1'] === 'string' &&
             a['value1'].length > MAX_FORMULA_STRING_LENGTH,
+    },
+    {
+        kind: 'validations dropped',
+        why: "A rule Excel can't hold, or one the cuts of higher rules leave with more ranges than a rule may hold, is dropped and counted (validations-dropped), so its cells come back without a rule",
+        matches: ({ feature, a, b }, { warnings }) =>
+            feature === 'dataValidations' && warnings.has('validations-dropped') && isRecord(a) && b === undefined,
     },
     {
         kind: 'validation prompts cut',
