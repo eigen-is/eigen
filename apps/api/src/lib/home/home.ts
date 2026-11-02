@@ -19,7 +19,7 @@ import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../
 import { ApiError, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
-import { createDefaultMountConfig, createMountConfig, readMountTotalSize } from '../mount/helpers';
+import { createDefaultMountConfig, createMountConfig, DEFAULT_MOUNT_ID, readMountTotalSize } from '../mount/helpers';
 import type { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
 
@@ -259,11 +259,11 @@ export async function userHomeSize(
     teamIds: string[],
 ): Promise<HomeSizeResponse> {
     const driveUsed = readMountTotalSize(
-        path.join(homeDir, PATHS.DRIVE.ROOT, PATHS.DRIVE.DEFAULT_MOUNT, PATHS.DRIVE.METADATA_DB),
+        path.join(homeDir, PATHS.DRIVE.ROOT, DEFAULT_MOUNT_ID, PATHS.DRIVE.METADATA_DB),
     );
-    const mountSettings = settings.mounts?.[PATHS.DRIVE.DEFAULT_MOUNT];
+    const mountSettings = settings.mounts?.[DEFAULT_MOUNT_ID];
     const quotas = await resolveUserQuotas(
-        mountSettings ? createMountConfig(PATHS.DRIVE.DEFAULT_MOUNT, mountSettings) : createDefaultMountConfig(),
+        mountSettings ? createMountConfig(DEFAULT_MOUNT_ID, mountSettings) : createDefaultMountConfig(),
         teamIds,
     );
     return homeSize(dataUsed, driveUsed, quotas);
