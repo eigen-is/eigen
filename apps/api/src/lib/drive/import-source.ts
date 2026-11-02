@@ -1,3 +1,7 @@
+// Reads the Drive file that an import-from-drive request names, for every route that imports one, such as
+// a calendar, an address book, a mail message or a document. The source can live in any drive the user may
+// read, another owner's included, and SharedDrive checks that access.
+
 import type { DriveImportSource } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
 import { ApiError, payloadTooLarge } from '../core';
@@ -5,9 +9,8 @@ import { readStorageFile } from '../storage';
 import type { User } from '../user';
 import { getSharedDrive } from './get-drive';
 
-// The bytes of the Drive file an import-from-drive body names, for every route that ingests one: the
-// source can live in any drive the user may read (SharedDrive checks that), and its recorded size is only
-// a claim, so the read itself carries the ceiling and a source that grew since is cancelled, not buffered.
+// The recorded size of the source is only a claim, so the read itself carries the ceiling, and a source
+// that grew since is cancelled instead of buffered.
 export async function readImportSourceBytes(
     user: User,
     source: DriveImportSource,
@@ -21,7 +24,13 @@ export async function readImportSourceBytes(
     }
     if (path.size > opts.maxBytes) throw payloadTooLarge();
 
-    const file = await drive.downloadFile(source.sourceMountId, source.sourcePathId);
-    if (!file) throw new ApiError(404, 'Source file not found');
-    return new Uint8Array(await readStorageFile(file, { maxBytes: opts.maxBytes }));
+    // The hold covers the database work in downloadFile, which fails if the source's home closes meanwhile.
+    const release = drive.holdHome();
+    try {
+        const file = await drive.downloadFile(source.sourceMountId, source.sourcePathId);
+        if (!file) throw new ApiError(404, 'Source file not found');
+        return new Uint8Array(await readStorageFile(file, { maxBytes: opts.maxBytes }));
+    } finally {
+        release();
+    }
 }
