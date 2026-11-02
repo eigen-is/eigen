@@ -1,5 +1,6 @@
 // The link field of the light editor's toolbar, inside a form such as the card form or Email collaborators. Enter in
-// the field sets the link and leaves the form alone. Escape closes the field.
+// the field sets the link and leaves the form alone. Escape closes the field, and inside a dialog only the field: Radix
+// hears Escape on the document before the field does.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
 import { installHappyDom } from '../../happy-dom';
@@ -8,28 +9,38 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 const { act, createElement } = await import('react');
+const { Dialog, DialogContent, DialogTitle } = await import('../../../components/dialog');
 const { LightEditor } = await import('../../../components/editor/light-editor');
 
 const onSubmit = mock((_event: unknown) => {});
+const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
 afterEach(async () => {
     await unmount();
     onSubmit.mockClear();
+    onOpenChange.mockClear();
 });
 
-async function open() {
-    ({ unmount } = await renderInDocument(
-        createElement(
-            'form',
-            {
-                noValidate: true,
-                onSubmit: (event: { preventDefault: () => void }) => {
-                    event.preventDefault();
-                    onSubmit(event);
-                },
+async function open({ inDialog = false } = {}) {
+    const form = createElement(
+        'form',
+        {
+            noValidate: true,
+            onSubmit: (event: { preventDefault: () => void }) => {
+                event.preventDefault();
+                onSubmit(event);
             },
-            createElement(LightEditor, { content: '<p>Read this</p>', toolbar: 'fixed' }),
-        ),
+        },
+        createElement(LightEditor, { content: '<p>Read this</p>', toolbar: 'fixed' }),
+    );
+    ({ unmount } = await renderInDocument(
+        inDialog
+            ? createElement(
+                  Dialog,
+                  { open: true, onOpenChange },
+                  createElement(DialogContent, null, createElement(DialogTitle, null, 'Card'), form),
+              )
+            : form,
     ));
     await act(async () => new Promise((resolve) => setTimeout(resolve, 0)));
 }
@@ -50,7 +61,7 @@ async function openLinkField() {
             .querySelector('button[aria-label="Link"]')
             ?.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     });
-    expect(linkField()).not.toBeNull();
+    expect(document.activeElement).toBe(linkField());
 }
 
 const type = (value: string) =>
@@ -88,4 +99,23 @@ test('Escape closes the link field and sets no link', async () => {
     await pressKey('Escape');
     expect(linkField()).toBeNull();
     expect(editor().getHTML()).not.toContain('href');
+});
+
+test('Escape in the link field inside a dialog closes the field and leaves the dialog open', async () => {
+    await open({ inDialog: true });
+    await openLinkField();
+    await type('example.com');
+    await pressKey('Escape');
+    expect(linkField()).toBeNull();
+    expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+test('Escape in the editor inside a dialog still closes the dialog', async () => {
+    await open({ inDialog: true });
+    await act(async () => {
+        document
+            .querySelector('.ProseMirror')
+            ?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
 });

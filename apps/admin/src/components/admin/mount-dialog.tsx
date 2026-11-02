@@ -3,7 +3,7 @@
 // which mounts with each opening.
 
 import { FormDialog } from '@workspace/ui';
-import { MountForm } from '@workspace/ui/components/mount/mount-form';
+import { MountForm } from '@workspace/ui/components/mount';
 import type { ComponentProps } from 'react';
 
 type MountDialogProps = ComponentProps<typeof MountForm> & {

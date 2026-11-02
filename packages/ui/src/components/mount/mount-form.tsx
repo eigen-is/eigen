@@ -21,6 +21,8 @@ export type MountFormValues = {
     s3Config?: S3Config;
 };
 
+const MIN_SIZE_MB = 10;
+
 type MountFormProps = {
     defaultStorageType?: MountStorageType;
     defaultMaxSizeMB?: number;
@@ -53,7 +55,7 @@ export function MountForm({
 
     return (
         <FormDialogForm
-            canSubmit={name.trim() !== '' && maxSizeMB >= 10 && (!isS3 || isS3ConfigValid(s3Config))}
+            canSubmit={name.trim() !== '' && maxSizeMB >= MIN_SIZE_MB && (!isS3 || isS3ConfigValid(s3Config))}
             submitLabel={submitLabel}
             onSubmit={() =>
                 onSubmit({ name: name.trim(), storageType, maxSizeMB, s3Config: isS3 ? s3Config : undefined })
@@ -96,9 +98,9 @@ export function MountForm({
                 <Input
                     id="mount-max-size"
                     type="number"
-                    min={10}
+                    min={MIN_SIZE_MB}
                     value={maxSizeMB}
-                    onChange={(e) => setMaxSizeMB(e.target.valueAsNumber || 10)}
+                    onChange={(e) => setMaxSizeMB(e.target.valueAsNumber || MIN_SIZE_MB)}
                 />
             </div>
 

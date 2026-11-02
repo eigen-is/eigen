@@ -27,7 +27,7 @@ function inScope(path: string): boolean {
 const MODULE_STATEMENT =
     /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*import[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
 const DEEP_IMPORT = /@workspace\/(?:lib\/core\/|lib\/src\/|ui\/src\/)|['"]@workspace\/[\w@./-]+\.tsx?['"]/g;
-// Tailwind's default palette — theme tokens replace every one of these (CODE-STANDARDS § Code Style).
+// Tailwind's default palette. A theme token replaces every one of these (CODE-STANDARDS § Code Style).
 const PALETTE =
     'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
 const RAW_COLOR = new RegExp(
@@ -36,9 +36,8 @@ const RAW_COLOR = new RegExp(
 );
 const APP_LAYER = /\b(?:useQuery|useMutation|useInfiniteQuery)\(|\btoast\.(?:error|success)\(/g;
 
-// Every Eigen document MIME, read from the one file that declares them so a seventh type never needs a
-// second list here. `application/eigen-*` — the drag and clipboard wire formats — is a different family,
-// not a document MIME, hence the `(?!-)`.
+// Every Eigen document MIME, read from the one file that declares them, so a new type needs no second list here. The
+// drag and clipboard formats, `application/eigen-*`, are not document MIMEs, hence the `(?!-)`.
 const MIME_SOURCE = 'packages/lib/src/types/drive.ts';
 const EIGEN_MIME = /application\/eigen(?!-)[a-z]*/g;
 const CANONICAL_MIMES = new Set(
@@ -47,8 +46,17 @@ const CANONICAL_MIMES = new Set(
     ),
 );
 if (CANONICAL_MIMES.size === 0) {
-    console.error(`ERROR: no DRIVE_MIME_* constants found in ${MIME_SOURCE} — the mime gate has nothing to check`);
+    console.error(`ERROR: no DRIVE_MIME_* constants found in ${MIME_SOURCE}, so the mime gate has nothing to check`);
     process.exit(1);
+}
+
+// Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
+// non-test sources of apps and packages.
+const sources: SourceFile[] = [];
+for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
+    if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
+    const text = await Bun.file(path).text();
+    sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
 }
 
 // CODE-STANDARDS § Standards Gates: a primitive the shared-primitives index lists needs a user outside its file. The
@@ -62,8 +70,8 @@ function unusedIn(path: string, isType: boolean): number {
 }
 
 // CODE-STANDARDS § Standards Gates: a dialog footer outside FormDialog is an allow-listed exception. The files are found
-// once, from every source file, like the unused primitives, and a stale list entry counts against its own path.
-const footersOutside = new Set<string>();
+// once, from every source file, and a stale list entry counts against its own path.
+const footers = dialogFooterHits(sources);
 
 const ROUTE_FILE = /^apps\/api\/src\/routes\/[^/]+\.ts$/;
 // The home-independent surfaces that deliberately carry no `:ownerId` (docs/ARCHITECTURE.md § Pitfalls):
@@ -79,14 +87,13 @@ const OWNER_ID_EXEMPT = new Set([
 ]);
 // One chunk per route: from its `.method('/…` to the next one.
 const ROUTE_START = /\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"]\//;
-// `/ws` is a transport prefix rather than a path segment — the collab socket's `:ownerId` sits behind it.
+// `/ws` is a transport prefix, not a path segment: the collab socket's `:ownerId` comes after it.
 const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
-// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must
-// rest visible on touch, which has no hover. Only a hidden element is at risk — a decorative
-// `group-hover:scale-105` reveals nothing — so the trigger is a hiding utility plus a revealing
-// `group-hover:` in the same class string.
-// `pointer-fine:group-hover:` declares the hover desktop-only on purpose and is not a gap.
+// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must rest visible
+// on touch, which has no hover. Only a hidden element is at risk, since a decorative `group-hover:scale-105` reveals
+// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string.
+// `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
 const HOVER_REVEAL =
@@ -305,7 +312,7 @@ const METRICS: Metric[] = [
         id: 'dialog-footers',
         label: 'Dialog footers outside FormDialog',
         hardZero: true,
-        count: ({ path }) => (footersOutside.has(path) ? 1 : 0),
+        count: ({ path }) => (footers.outside.includes(path) ? 1 : 0),
         fix: 'A dialog with fields and Cancel/submit is a FormDialog with a FormDialogForm, from @workspace/ui. One that is not a form (information only, several actions, a picker, a grid) goes on OWN_DIALOG_FOOTER in scripts/dialog-footer.ts with the reason. A listed file that no longer uses DialogFooter, or is gone, leaves the list.',
     },
     {
@@ -344,15 +351,6 @@ const METRICS: Metric[] = [
     },
 ];
 
-// Every source file, tests and scripts included, since any of them may use a primitive. The metrics count in the
-// non-test sources of apps and packages.
-const sources: SourceFile[] = [];
-for (const path of (await Bun.$`git ls-files apps packages scripts docker`.text()).split('\n')) {
-    if (!/\.(?:ts|tsx|js|jsx|mjs)$/.test(path) || GENERATED.some((tail) => path.endsWith(tail))) continue;
-    const text = await Bun.file(path).text();
-    sources.push({ path, text, code: stripNoise(text, path.endsWith('x')) });
-}
-
 const exportsMaps: ExportsMaps = {};
 for (const manifest of (await Bun.$`git ls-files 'packages/*/package.json'`.text()).split('\n').filter(Boolean)) {
     exportsMaps[manifest.split('/')[1]] = (await Bun.file(manifest).json()).exports ?? {};
@@ -361,9 +359,6 @@ const primitives = unusedPrimitives(readPrimitivesIndex(await Bun.file(PRIMITIVE
 for (const primitive of primitives.unused) {
     unusedByFile.set(primitive.file, [...(unusedByFile.get(primitive.file) ?? []), primitive]);
 }
-
-const footers = dialogFooterHits(sources);
-for (const path of footers.outside) footersOutside.add(path);
 
 const counts = new Map<string, number>(METRICS.map((metric) => [metric.id, 0]));
 const breakdown = new Map<string, Map<string, number>>(METRICS.map((metric) => [metric.id, new Map()]));

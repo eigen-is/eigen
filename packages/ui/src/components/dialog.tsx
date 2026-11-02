@@ -12,16 +12,8 @@ function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>)
     return <DialogPrimitive.Root data-slot="dialog" {...props} />;
 }
 
-function DialogTrigger({ ...props }: React.ComponentProps<typeof DialogPrimitive.Trigger>) {
-    return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />;
-}
-
 function DialogPortal({ ...props }: React.ComponentProps<typeof DialogPrimitive.Portal>) {
     return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />;
-}
-
-function DialogClose({ ...props }: React.ComponentProps<typeof DialogPrimitive.Close>) {
-    return <DialogPrimitive.Close data-slot="dialog-close" {...props} />;
 }
 
 function DialogOverlay({ className, ...props }: React.ComponentProps<typeof DialogPrimitive.Overlay>) {
@@ -46,10 +38,14 @@ const dialogSizeMap: Record<DialogSize, string> = {
     lg: 'sm:max-w-2xl',
 };
 
-// The layer above the full-screen preview overlay (LAYOUT.md § One z-index scale, and app code sets none).
-// Spelled once: every surface that has to clear the overlay — a dialog, the `.eml` reader header's popover —
-// uses this.
+// The layer above the full-screen file preview. Every surface that has to sit over an open preview uses it, such as a
+// dialog or the popover in the mail reader's header.
 export const ABOVE_PREVIEW_Z = 'z-[200]';
+
+// A field that closes something of its own on Escape: a combobox with its list open, or a field that marks itself,
+// such as the light editor's link field. Radix hears Escape on the document before the field does, so the dialog has
+// to leave the key alone. cmdk's input says expanded always, because its list is the dialog.
+const OWNS_ESCAPE = '[role="combobox"][aria-expanded="true"]:not([cmdk-input]), [data-owns-escape]';
 
 function DialogContent({
     className,
@@ -68,50 +64,38 @@ function DialogContent({
     const preview = useOptionalPreview();
 
     return (
-        <DialogPortal data-slot="dialog-portal">
+        <DialogPortal>
             <DialogOverlay className={abovePreview ? ABOVE_PREVIEW_Z : undefined} />
             <DialogPrimitive.Content
                 data-slot="dialog-content"
                 className={cn(
-                    // max-h + overflow mirror the width cap so a form taller than the viewport
-                    // scrolls inside the dialog instead of pushing its footer off-screen. Callers
-                    // that manage their own height (flex-col + max-h-[85vh]) override both.
-                    // grid-cols-1 is minmax(0,1fr): an implicit auto track would take the min-content
-                    // width of a 700-character title and carry the footer's buttons off with it.
+                    // A form taller than the screen scrolls inside the dialog, so its footer stays on screen. A
+                    // caller that sets its own height overrides max-h and overflow. The single column may shrink
+                    // below its content: an auto column would grow to fit a very long title and push the footer's
+                    // buttons out of the dialog.
                     'fixed top-[50%] left-[50%] z-50 grid grid-cols-1 w-full max-w-[calc(100%-2rem)] max-h-[calc(100vh-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95',
                     abovePreview ? ABOVE_PREVIEW_Z : undefined,
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
-                // While a preview is open, never let an outside pointer-down close the
-                // dialog — Radix's detector fires per layer, so a click inside the
-                // save-to-drive picker (portaled to body) registers as "outside" the
-                // sticky dialog underneath and would otherwise dismiss it.
-                //
-                // Only the dialog flagged abovePreview is responsible for closing the
-                // preview when its own overlay (which covers the preview) is clicked.
-                // For lower-stack dialogs we just preventDefault and let FilePreview's
-                // own onClick close the preview when the user taps its overlay directly.
+                // While a preview is open, a click outside never closes the dialog. Radix checks each layer on its
+                // own, so a click in a picker over the preview counts as outside the dialog under the preview. A
+                // dialog above the preview covers it with its overlay, so a click on that overlay closes the
+                // preview. Under the preview, the preview closes itself when its own overlay is clicked.
                 onPointerDownOutside={(e) => {
                     if (preview?.isPreviewOpen) {
                         e.preventDefault();
-                        if (abovePreview) {
-                            const target = e.target as HTMLElement;
-                            if (!target.closest('[data-preview-overlay]')) {
-                                preview.closePreview();
-                            }
-                        }
+                        const onPreviewOverlay =
+                            e.target instanceof Element && e.target.closest('[data-preview-overlay]') !== null;
+                        if (abovePreview && !onPreviewOverlay) preview.closePreview();
                     }
                     onPointerDownOutside?.(e);
                 }}
-                // Escape over an open preview is the preview's to close, not the dialog's under it, and Escape
-                // in a combobox with its list open is the list's. cmdk's input says expanded always: its list
-                // is the dialog.
+                // Escape over an open preview is the preview's to close, not the dialog's under it. Escape in a
+                // field that closes something of its own is that field's.
                 onEscapeKeyDown={(e) => {
-                    const listOpen =
-                        e.target instanceof Element &&
-                        e.target.matches('[role="combobox"][aria-expanded="true"]:not([cmdk-input])');
-                    if ((preview?.isPreviewOpen && !abovePreview) || listOpen) e.preventDefault();
+                    const fieldOwnsEscape = e.target instanceof Element && e.target.matches(OWNS_ESCAPE);
+                    if ((preview?.isPreviewOpen && !abovePreview) || fieldOwnsEscape) e.preventDefault();
                     onEscapeKeyDown?.(e);
                 }}
                 {...props}
@@ -172,8 +156,7 @@ function DialogTitle({ className, ...props }: React.ComponentProps<typeof Dialog
     return (
         <DialogPrimitive.Title
             data-slot="dialog-title"
-            // pr-8 reserves space for the absolute-positioned close button so long titles
-            // wrap above it instead of running underneath.
+            // The right padding keeps a long title clear of the corner X.
             className={cn('text-lg leading-none font-medium pr-8 break-words', className)}
             {...props}
         />
@@ -190,15 +173,4 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
     );
 }
 
-export {
-    Dialog,
-    DialogClose,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogOverlay,
-    DialogPortal,
-    DialogTitle,
-    DialogTrigger,
-};
+export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };

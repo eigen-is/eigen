@@ -1,19 +1,19 @@
-// The dialog-footer check of `check-standards.ts`: a dialog with a title, fields and Cancel/submit is a FormDialog with a
-// FormDialogForm, which draws the footer. Any other source file that uses DialogFooter fails, unless OWN_DIALOG_FOOTER
-// lists it with the reason it keeps a footer of its own. An entry whose file no longer uses DialogFooter fails too, so
+// The standards check for dialog footers. A dialog with fields and Cancel/submit is a FormDialog with a FormDialogForm,
+// which draws its footer, so a source file that uses DialogFooter fails unless OWN_DIALOG_FOOTER lists it with a reason.
+// It only sees DialogFooter: a footer drawn by hand passes. An entry whose file no longer uses DialogFooter fails too, so
 // the list only shrinks and a dialog that moves leaves it in the same commit.
 
 import type { SourceFile } from './unused-primitives';
 
-// The dialogs that deliberately draw their own footer: they are not a form, or their move waits on other work.
+// The dialogs that draw their own footer: they are not a form, or not yet moved onto FormDialog.
 export const OWN_DIALOG_FOOTER = new Set([
     'apps/calendar/src/components/event-detail-dialog.tsx', // actions, no fields
-    'apps/docs/src/components/docs/word-count-dialog.tsx', // a FormDialog shell with its own Close footer
+    'apps/docs/src/components/docs/word-count-dialog.tsx', // information only, in a FormDialog shell
     'apps/drive/src/components/editor/conflict-dialog.tsx', // three actions
-    'apps/mail/src/components/mail/email-draft.tsx', // the "Cannot send" alert
+    'apps/mail/src/components/mail/email-draft.tsx', // an alert with one OK button
     'apps/mail/src/components/mail/mail-shortcuts-dialog.tsx', // information only
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
-    // The sheet's dialogs are owned by another branch, and move once it lands.
+    // Sheet dialogs not yet moved onto FormDialog.
     'packages/sheet/src/components/CellRangeDialog/index.tsx',
     'packages/sheet/src/components/ConditionFormat/ConditionRules.tsx',
     'packages/sheet/src/components/ConditionFormat/ManageRules.tsx',
@@ -27,7 +27,7 @@ export const OWN_DIALOG_FOOTER = new Set([
     'packages/sheet/src/components/ResizeDialog/index.tsx',
     'packages/sheet/src/components/SplitColumn/index.tsx',
     'packages/sheet/src/hooks/useDialog.tsx',
-    'packages/ui/src/components/cards/card-form.tsx', // CardForm also renders in place inside the card dialogs
+    'packages/ui/src/components/cards/card-form.tsx', // the edit view a card dialog swaps in for its view
     'packages/ui/src/components/charts/chart-data-dialog.tsx', // a grid
     'packages/ui/src/components/chat/chat-create-wizard.tsx', // several steps
     'packages/ui/src/components/confirm-dialog.tsx', // a yes or no
@@ -36,7 +36,7 @@ export const OWN_DIALOG_FOOTER = new Set([
     'packages/ui/src/components/layout/app/about-dialog.tsx', // information only
 ]);
 
-export type DialogFooterHits = {
+type DialogFooterHits = {
     // Files that use DialogFooter and are not on the list.
     outside: string[];
     // Entries of the list whose file no longer uses DialogFooter, or is gone.
@@ -47,7 +47,7 @@ export type DialogFooterHits = {
 const FOOTER_HOMES = new Set(['packages/ui/src/components/dialog.tsx', 'packages/ui/src/components/form-dialog.tsx']);
 // A test renders dialogs as fixtures, so its footer is no new dialog.
 const TEST_FILE = /\/src\/test\/|\.test\.tsx?$/;
-// Read in code as stripNoise blanked it, so a mention in a comment or a string is no use.
+// Read in the code with comments and strings blanked, so a mention in a comment or a string does not count.
 const USES_FOOTER = /\bDialogFooter\b/;
 
 export function dialogFooterHits(sources: SourceFile[]): DialogFooterHits {
