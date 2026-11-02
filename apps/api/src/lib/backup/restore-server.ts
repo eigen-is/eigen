@@ -13,7 +13,7 @@ import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspa
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
-import type { ArchiveMember } from './archive';
+import type { HashedArchiveMember } from './archive';
 import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
 import { flatStorageKey, managedDbContainer, readMountPathRows, rowArchivePath, storageKeyOf } from './archive-layout';
 import { describeError } from './errors';
@@ -35,7 +35,11 @@ export const RESTORING_DIR = '.restoring';
 // Inside it, the new data/, with the archive's .env.production beside it.
 export const RESTORING_DATA_DIR = 'data';
 
-export type ServerArchiveFile = { name: string; manifest: ServerArchiveManifest; members: Map<string, ArchiveMember> };
+export type ServerArchiveFile = {
+    name: string;
+    manifest: ServerArchiveManifest;
+    members: Map<string, HashedArchiveMember>;
+};
 
 // What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded or
 // canceled, `missing` the ones whose bytes the archive does not hold. Their rows name missing files, which

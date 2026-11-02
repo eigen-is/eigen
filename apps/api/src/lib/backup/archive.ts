@@ -102,14 +102,14 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
     };
 }
 
-// Where one member's bytes sit inside a whole-server archive. ArchiveMember adds their sha256 once they are read.
+// Where one member's bytes sit inside a whole-server archive. HashedArchiveMember adds their sha256 once read.
 export type ArchiveMemberLocation = { archivePath: string; name: string; offset: number; bytes: number };
-export type ArchiveMember = ArchiveMemberLocation & { sha256: string };
+export type HashedArchiveMember = ArchiveMemberLocation & { sha256: string };
 
 // Every file member of a whole-server archive in order, each hashed as it streams past. One read tells what
 // the archive holds, where each member sits and what its bytes hash to.
-export async function hashArchiveMembers(archivePath: string): Promise<ArchiveMember[]> {
-    const members: ArchiveMember[] = [];
+export async function hashArchiveMembers(archivePath: string): Promise<HashedArchiveMember[]> {
+    const members: HashedArchiveMember[] = [];
     for await (const entry of tarEntries(fs.createReadStream(archivePath))) {
         if (entry.typeflag === DIRECTORY_TYPEFLAG) continue;
         const hasher = new Bun.CryptoHasher('sha256');
