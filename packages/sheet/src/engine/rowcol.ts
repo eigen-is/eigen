@@ -38,7 +38,7 @@ export type DeleteRowColOp = {
 export type RowColErrorCode = 'readOnly' | 'maxExceeded';
 
 // The engine refuses a row or column op with this error. The editor's menus read its `code` to tell the user why.
-// The replay and a peer's applyOp catch it and skip the op.
+// The replay and a peer's applyOp skip the op's whole batch.
 export class RowColError extends Error {
     public readonly code: RowColErrorCode;
 

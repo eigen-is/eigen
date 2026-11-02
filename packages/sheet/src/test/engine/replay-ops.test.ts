@@ -324,10 +324,9 @@ describe('replaySheetsOps', () => {
         expect(result[0].celldata).toEqual([{ r: 1, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
     });
 
-    test('engine readOnly throw is caught and op skipped on the replay path', () => {
-        // The engine throws RowColError as a UI-layer signal. On the BE replay
-        // path they must not propagate, or every export/preview crashes when an
-        // op queue happens to target a readOnly row.
+    test('an insert into a read-only row skips its whole batch on the replay path', () => {
+        // The engine refuses the insert with a RowColError. The replay must not crash on it, or every export and
+        // preview would, and the batch's other ops were written for the rows the insert would have moved.
         const sheet: Sheet & { config?: EditorSheetConfigExtras } = {
             id: 's1',
             name: 'Sheet1',
@@ -347,9 +346,8 @@ describe('replaySheetsOps', () => {
             ],
         ];
         const result = replaySheetsOps([sheet], ops);
-        // Row insert was skipped (no shift), but the companion patch still applied.
         expect(result[0].data!.length).toBe(1);
-        expect(result[0].data![0][0]?.v).toBe('b');
+        expect(result[0].data![0][0]?.v).toBe('a');
     });
 
     test('cell op beyond the celldata extent applies over the default editor grid', () => {

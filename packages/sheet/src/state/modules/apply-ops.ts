@@ -8,8 +8,8 @@
 import { cloneDeep } from 'es-toolkit/compat';
 import type { Patch } from 'immer';
 import { applyPatches, current, produce } from 'immer';
-import { asDeleteValue, asInsertValue, isNewSheet, isRowColOp } from '../../engine/replay-ops';
-import { RowColError, shiftRangeForDelete, shiftRangeForInsert } from '../../engine/rowcol';
+import { deleteRowColOf, insertRowColOf, isNewSheet, isRowColOp } from '../../engine/replay-ops';
+import { shiftRangeForDelete, shiftRangeForInsert } from '../../engine/rowcol';
 import type { Context } from '../context';
 import type { Op, Selection, Sheet } from '../types';
 import type { PatchOptions } from '../utils';
@@ -51,22 +51,16 @@ export function applyOpBatch(
             for (const op of ops) {
                 const { id } = op;
                 // A batch's row or column op lands for a read-only viewer too, or the grid and the metadata patches
-                // part ways. The op names its sheet, as the replay reads it, whatever its value carries.
-                if (isRowColOp(op) && id) {
-                    const insert = op.op === 'insertRowCol' ? asInsertValue(op.value) : null;
-                    const remove = op.op === 'deleteRowCol' ? asDeleteValue(op.value) : null;
-                    const rowCol: PatchOptions = {
-                        insertRowColOp: insert ? { ...insert, id } : undefined,
-                        deleteRowColOp: remove ? { ...remove, id } : undefined,
-                    };
-                    const { insertRowColOp, deleteRowColOp } = rowCol;
-                    if (!insertRowColOp && !deleteRowColOp) continue;
+                // part ways. The op names its sheet, as the replay reads it, whatever its value carries. One the
+                // shape check or the sheet refuses throws, and the whole batch is skipped.
+                if (isRowColOp(op)) {
+                    const rowCol: PatchOptions =
+                        op.op === 'insertRowCol'
+                            ? { insertRowColOp: insertRowColOf(op) }
+                            : { deleteRowColOp: deleteRowColOf(op) };
                     const sheets = current(draft.sheets);
-                    const applied = skipRowColError(() => {
-                        if (insertRowColOp) insertRowCol(draft, insertRowColOp, false, true);
-                        else if (deleteRowColOp) deleteRowCol(draft, deleteRowColOp, true);
-                    });
-                    if (!applied) continue;
+                    if (rowCol.insertRowColOp) insertRowCol(draft, rowCol.insertRowColOp, false, true);
+                    else if (rowCol.deleteRowColOp) deleteRowCol(draft, rowCol.deleteRowColOp, true);
                     moved.push({ op, sheets });
                     if (moveView && id === draft.currentSheetId) followView(draft, rowCol);
                 } else if (op.op === 'addSheet') {
@@ -136,17 +130,4 @@ function followView(draft: Context, rowCol: PatchOptions) {
         selections.push(row ? { ...shifted, row_focus: at } : { ...shifted, column_focus: at });
     }
     draft.selections = selections.length > 0 ? selections : undefined;
-}
-
-// The replay skips a row or column op the sheet refuses, such as an insert into a read-only row, and so does a client.
-// True when the op applied.
-function skipRowColError(apply: () => void): boolean {
-    try {
-        apply();
-        return true;
-    } catch (e) {
-        if (!(e instanceof RowColError)) throw e;
-        console.warn('[sheet] row or column op skipped:', e.code);
-        return false;
-    }
 }

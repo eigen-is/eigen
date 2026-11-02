@@ -354,6 +354,49 @@ describe('two row ops sent at once keep the sheet size in step with its cells', 
     });
 });
 
+// A peer can send any value in a row op, and a sheet can refuse one, such as an insert into a read-only row. A peer and
+// a joiner then skip the whole batch alike, so no other op of it lands on rows the op did not move.
+describe('a malformed or refused row op skips its whole batch', () => {
+    const write: Op = { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 'x', m: 'x' } };
+    const insert = (value: Record<string, unknown>): Op => ({
+        op: 'insertRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type: 'row', index: 1, count: 1, direction: 'lefttop', ...value },
+    });
+    const remove = (value: Record<string, unknown>): Op => ({
+        op: 'deleteRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type: 'row', start: 1, end: 1, ...value },
+    });
+    const cases: [string, Op][] = [
+        ['a negative index', insert({ index: -1 })],
+        ['a fractional index', insert({ index: 0.5 })],
+        ['an index past the grid', insert({ index: 2 ** 31 })],
+        ['a count of zero', insert({ count: 0 })],
+        ['a NaN count', insert({ count: Number.NaN })],
+        ['a fractional count', insert({ count: 1.5 })],
+        ['a negative start', remove({ start: -1 })],
+        ['a start past its end', remove({ start: 2, end: 1 })],
+        ['a fractional end', remove({ end: 1.5 })],
+        ['a NaN end', remove({ end: Number.NaN })],
+        ['an insert into a read-only row', insert({})],
+    ];
+
+    test.each(cases)('%s', (_, op) => {
+        const base = produce(richContext(), (ctx: Context) => {
+            const { config } = ctx.sheets[0];
+            if (config) config.rowReadOnly = { 1: 1 };
+        });
+        const [joined] = join(base, [[op, write]]).map(withMaterializedData);
+        for (const sheet of [receive(base, [op, write]).sheets[0], joined]) {
+            expect(sheet.data?.length).toBe(4);
+            expect(sheet.data?.[0]?.[0]?.v).toBe(1);
+        }
+    });
+});
+
 // Every receiver's engine moves the merges and the conditional formats, and stamps the merges' cells again. So two
 // row ops sent at once on a sheet with a merge both apply, on both tabs and for a joiner, and the merge and the
 // format stay on their cells. The log holds A's batch first.
