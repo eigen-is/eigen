@@ -16,6 +16,7 @@ import {
     readTextBoxSide,
     TEXT_BOX_INSET,
 } from '@workspace/lib/docs/eigendoc';
+import { readNumberIn } from '@workspace/lib/guards';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlElements } from '../../core/xml';
 import {
@@ -251,9 +252,10 @@ function insets(bodyPr: XmlElement | undefined): Pick<BoxLook, 'paddingX' | 'pad
     };
 }
 
-// A pair of insets as one padding: none where both are unset or the mean is Word's own.
+// A pair of insets as one padding: none where both are unset, where the mean is no finite number, or where it is Word's
+// own. A VML length too long for a number reads as infinite, so a crafted pair can mean NaN.
 function meanPadding(a: number | null, b: number | null, word: number): number | null {
     if (a === null && b === null) return null;
-    const mean = Math.min(MAX_TEXT_BOX_PADDING, Math.max(0, ((a ?? b ?? 0) + (b ?? a ?? 0)) / 2));
-    return Math.abs(mean - word) < 0.01 ? null : mean;
+    const mean = readNumberIn(((a ?? b ?? 0) + (b ?? a ?? 0)) / 2, 0, MAX_TEXT_BOX_PADDING);
+    return mean === null || Math.abs(mean - word) < 0.01 ? null : mean;
 }

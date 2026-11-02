@@ -893,6 +893,14 @@ describe('text boxes as boxes', () => {
         expect(px[0]?.attrs).toMatchObject({ offsetX: -1 });
     });
 
+    // A digit string too long for a number reads as an infinite length.
+    test('a VML inset too long to be a number gives no padding, alone or against its opposite', async () => {
+        const huge = `${'9'.repeat(400)}px`;
+        const inset = (value: string) => vmlBox(PLACED).replace('inset="7.2pt,3.6pt,7.2pt,3.6pt"', `inset="${value}"`);
+        const boxes = await vmlBoxesOf(inset(`${huge},0,-${huge},0`), inset(huge));
+        expect(boxes.map((box) => box.attrs?.['paddingX'])).toEqual([null, null]);
+    });
+
     // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
     test('a VML box wraps by its w10:wrap, never by the wrap of its own text', async () => {
         const boxes = await vmlBoxesOf(
