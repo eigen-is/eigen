@@ -1,10 +1,10 @@
-// The workbook's sheet list in the editor: adding, deleting and switching sheets, giving a sheet its cell matrix, and
-// the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so does a
-// peer's batch through applyOpBatch.
+// The workbook's sheet list in the editor: adding, renaming, deleting and switching sheets, giving a sheet its cell
+// matrix, and the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so
+// does a peer's batch through applyOpBatch.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
-import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
+import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
@@ -185,14 +185,17 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         throw new Error('Sheet name cannot be empty');
     }
 
+    // `search` ignores the global pattern's lastIndex, which `test` would carry from one call into the next.
     if (
         txt.length > MAX_SHEET_NAME_LENGTH ||
-        txt.charAt(0) === "'" ||
-        txt.charAt(txt.length - 1) === "'" ||
-        /[：:\\/？?*[\]]+/.test(txt)
+        txt.startsWith("'") ||
+        txt.endsWith("'") ||
+        txt.search(SHEET_NAME_FORBIDDEN) !== -1
     ) {
         editable.innerText = oldtxt;
-        throw new Error('The name cannot contain:[ ] :  ? * / \' "');
+        throw new Error(
+            `A sheet name has at most ${MAX_SHEET_NAME_LENGTH} characters, none of \\ / ? * [ ] :, and no ' at either end`,
+        );
     }
 
     if (index == null) return;
