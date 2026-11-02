@@ -122,10 +122,11 @@ const PER_OBJECT_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['ima
 // once would each write their author's count, one op short.
 const ENGINE_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>(['data', 'row', 'column']);
 
-// The fields every receiver's engine moves with the op, as it moves the cells. The op itself leaves them off: the
-// author's write would overwrite the receiver's own shift of a peer's edit sent at the same time. An undo or redo
-// ships them, since the marker alone would not bring back what the entry restores.
+// The fields every receiver's engine moves with the op, as it moves the cells, such as the chart refs on every sheet.
+// The op itself leaves them off: the author's write would overwrite the receiver's own shift of a peer's edit sent at
+// the same time. An undo or redo ships them, since the marker alone would not bring back what the entry restores.
 const SHIFTED_SHEET_FIELDS: ReadonlySet<unknown> = new Set<keyof Sheet>([
+    'charts',
     'config',
     'conditionalFormatRules',
     'dataValidations',
