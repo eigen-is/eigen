@@ -170,14 +170,10 @@ export function useDocMedia(path: DrivePath) {
         },
         insertFromDrive: async (editor: () => Editor | null, paths: DrivePath[]) => {
             if (!mediaFolderId) return;
-            const results = await copyPaths(
-                paths.map((source) => ({
-                    source,
-                    targetOwnerId: path.ownerId,
-                    targetMountId: path.mountId,
-                    targetParentId: mediaFolderId,
-                })),
-            ).catch((error) => (error instanceof PartialCopyError ? error.copied : null));
+            const target = { targetOwnerId: path.ownerId, targetMountId: path.mountId, targetParentId: mediaFolderId };
+            const results = await copyPaths(paths.map((source) => ({ source, ...target }))).catch((error) =>
+                error instanceof PartialCopyError ? error.copied : null,
+            );
             const settled = editor();
             if (!results || !settled || settled.isDestroyed) return;
             for (const result of results) {
@@ -198,14 +194,12 @@ export function useDocMedia(path: DrivePath) {
             const target = editor();
             if (!mediaFolderId || !target || paths.length === 0) return;
             const replaced = target.getAttributes('figure').mediaName;
-            const result = await copyPaths([
-                {
-                    source: paths[0],
-                    targetOwnerId: path.ownerId,
-                    targetMountId: path.mountId,
-                    targetParentId: mediaFolderId,
-                },
-            ]).catch(() => null);
+            const destination = {
+                targetOwnerId: path.ownerId,
+                targetMountId: path.mountId,
+                targetParentId: mediaFolderId,
+            };
+            const result = await copyPaths([{ source: paths[0], ...destination }]).catch(() => null);
             const settled = editor();
             // The selection may have left the figure during the copy. The copied file then stays in media/, unused.
             if (result?.[0] && settled && !settled.isDestroyed && settled.isActive('figure', { mediaName: replaced })) {

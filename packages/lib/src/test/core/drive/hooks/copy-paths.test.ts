@@ -49,9 +49,11 @@ beforeEach(() => {
     };
 });
 
+// useCopyPaths sends each source to targetOf(source), which is the media folder unless a test says otherwise.
 async function copy(
     hook: 'paths' | 'folder',
     sources: DrivePath[],
+    targetOf: (source: DrivePath) => typeof TARGET = () => TARGET,
 ): Promise<{ result: DrivePath[] | null; error: unknown; invalidated: readonly unknown[][] }> {
     const { act } = await import('react');
     const { useCopyPaths, useCopyToFolder } = await import('../../../../core/drive/hooks/writes');
@@ -64,7 +66,7 @@ async function copy(
     await act(async () => {
         const done =
             hook === 'paths'
-                ? latest.paths.mutateAsync(sources.map((source) => ({ source, ...TARGET })))
+                ? latest.paths.mutateAsync(sources.map((source) => ({ source, ...targetOf(source) })))
                 : latest.folder.mutateAsync({ items: sources, ...TARGET });
         await done.then(
             (result) => {
@@ -96,6 +98,16 @@ describe('useCopyPaths', () => {
         expect(hasKey(invalidated, ['drive', OWNER, 'mime'])).toBe(true);
     });
 
+    test('a batch shaped like Duplicate refreshes the folder of each copy', async () => {
+        const sources = [path('a', 'left'), path('b', 'right')];
+        const { invalidated } = await copy('paths', sources, (source) => ({
+            ...TARGET,
+            targetParentId: source.parentId ?? '',
+        }));
+        expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'left'])).toBe(true);
+        expect(hasKey(invalidated, ['drive', OWNER, 'folder', 'm1', 'right'])).toBe(true);
+    });
+
     test('a retry with the failed sources posts only those', async () => {
         const first = await copy('paths', [GOOD, BAD]);
         posted.length = 0;
@@ -118,6 +130,11 @@ describe('useCopyToFolder', () => {
         const { result } = await copy('folder', [GOOD, path('other')]);
         expect(result?.length).toBe(2);
         expect(toasts).toEqual(['success: 2 items copied']);
+    });
+
+    test('a single copy says so in the singular', async () => {
+        await copy('folder', [GOOD]);
+        expect(toasts).toEqual(['success: 1 item copied']);
     });
 
     test('a partial failure shows no success toast and rejects with the failures', async () => {

@@ -3,8 +3,7 @@
 // keys and drops reach the same Drive action runner the menu does.
 
 import type { DrivePath } from '@workspace/lib/types';
-import type React from 'react';
-import type { RefObject } from 'react';
+import type { DragEvent, RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../hooks/use-keyboard-list-navigation';
 import { useListDrag } from '../../hooks/use-list-drag';
@@ -62,8 +61,8 @@ export function useDriveItemController({
     const internalSelection = useListSelection({ items, getId: (item) => item.id });
     const selection = externalSelection ?? internalSelection;
 
-    // A row picked through the URL (drive's `pid`) is a real selection, not just active-row
-    // styling — the palette's selection actions and the shift-range anchor read the selection set.
+    // A row picked through the URL, such as Drive's `pid`, is selected for real and not only drawn as
+    // active, because the palette's selection actions and the Shift range read the selection.
     useEffect(() => {
         if (activeItemId) selection.select(activeItemId);
     }, [activeItemId, selection.select]);
@@ -84,7 +83,7 @@ export function useDriveItemController({
         onDelete: actions
             ? (item) => {
                   const items = selection.selectedCount > 1 ? selection.selectedItems : [item];
-                  const remove = actions.actionsFor(items).find((action) => action.group === 'destructive');
+                  const remove = actions.actionsFor(items).find(({ id }) => id === 'trash' || id === 'remove-shared');
                   if (remove) actions.run(remove.id, items);
               }
             : undefined,
@@ -116,23 +115,20 @@ export function useDriveItemController({
         openFromButton: openContextMenuFromButton,
     } = useSelectableContextMenu({ selection, getId: (item) => item.id });
 
-    const isValidFolderDrop = (targetItem: DrivePath) => {
-        if (targetItem.type !== 'folder') return false;
-        return !drag.draggedItems.some((d) => d.id === targetItem.id);
-    };
+    // A view that can't move items, such as a read-only share or a picker, has no onMove and so no drop targets.
+    const isValidFolderDrop = (targetItem: DrivePath) =>
+        !!actions?.onMove && targetItem.type === 'folder' && !drag.draggedItems.some((d) => d.id === targetItem.id);
 
-    // Drop handlers for folder rows/tiles — spread onto the item root next to getDragProps.
+    // The drop handlers a folder row or tile spreads on its root, next to getDragProps.
     const getDropProps = (item: DrivePath) => ({
-        onDragOver: (e: React.DragEvent) => {
+        onDragOver: (e: DragEvent) => {
             e.preventDefault();
-            if (drag.isDragging && isValidFolderDrop(item)) {
-                e.dataTransfer.dropEffect = 'move';
-            }
+            if (drag.isDragging) e.dataTransfer.dropEffect = isValidFolderDrop(item) ? 'move' : 'none';
         },
         onDragEnter: () => {
             if (drag.isDragging) setDragOverItemId(item.id);
         },
-        onDrop: (e: React.DragEvent) => {
+        onDrop: (e: DragEvent) => {
             e.preventDefault();
             setDragOverItemId(null);
             if (isValidFolderDrop(item)) {
