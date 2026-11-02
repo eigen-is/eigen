@@ -26,7 +26,7 @@ function updateEntityField<T>(entity: T, field: keyof T, value: T[keyof T]) { ..
 
 GOOD: just do the thing directly:
 ```typescript
-home.notifications.persist({ type: 'chat:message', userId: user.id, ... });
+home.notify({ type: 'chat:message', title, ... });
 ```
 
 ### Unnecessary error handling
