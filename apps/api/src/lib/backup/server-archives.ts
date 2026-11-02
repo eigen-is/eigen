@@ -82,7 +82,7 @@ export type ServerBackupStatus = {
     scheduledNotUploaded: ArchiveLine | null;
     // The newest scheduled archive or the newest archive, when it was backed up with warnings; `error` names the homes.
     warned: ArchiveLine | null;
-    newestGoodFullAt: string | null;
+    newestGoodAt: string | null;
 };
 
 export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
@@ -113,7 +113,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
                       .join(', '),
               )
             : null,
-        newestGoodFullAt: good?.createdAt.toISOString() ?? null,
+        newestGoodAt: good?.createdAt.toISOString() ?? null,
     };
 }
 

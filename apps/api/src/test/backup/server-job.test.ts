@@ -272,7 +272,7 @@ describe('Server backup job', () => {
             db.run('PRAGMA foreign_keys = OFF');
             db.run('DELETE FROM paths WHERE id = ?', [folderId]);
             db.close();
-            const goodBefore = (await getServerBackupStatus()).newestGoodFullAt;
+            const goodBefore = (await getServerBackupStatus()).newestGoodAt;
             // Archive times have a resolution of one second, so this one cannot share the good one's.
             await Bun.sleep(1_000);
             try {
@@ -294,7 +294,7 @@ describe('Server backup job', () => {
                 expect(status.warned?.name).toBe(basename(archivePath));
                 expect(status.warned?.error).toBe('Warned');
                 // A warned Full is no good one: the newest good Full stays where it was.
-                expect(status.newestGoodFullAt).toBe(goodBefore);
+                expect(status.newestGoodAt).toBe(goodBefore);
             } finally {
                 await deleteUserCompletely(damaged.id, null);
             }

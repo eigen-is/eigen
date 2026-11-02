@@ -212,7 +212,7 @@ function backupRow({
     scheduledFailure,
     scheduledNotUploaded,
     warned,
-    newestGoodFullAt,
+    newestGoodAt,
 }: ControlStatus['backup']): Row {
     const why = (error: string | null) => (error ? `: ${error}` : '');
     if (scheduledFailure) {
@@ -234,8 +234,7 @@ function backupRow({
     if (newest.bytes !== null) parts.push(formatFileSize(newest.bytes, 1));
     if (newest.state === 'running') parts.push('running');
     if (newest.state === 'failed') parts.push(`failed${why(newest.error)}`);
-    const stale =
-        scheduleEnabled && (!newestGoodFullAt || Date.now() - new Date(newestGoodFullAt).getTime() > 2 * DAY_MS);
+    const stale = scheduleEnabled && (!newestGoodAt || Date.now() - new Date(newestGoodAt).getTime() > 2 * DAY_MS);
     return {
         level: stale || newest.state === 'failed' ? 'warn' : 'ok',
         label: 'Backup',

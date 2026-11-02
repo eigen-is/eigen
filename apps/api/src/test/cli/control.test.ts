@@ -645,7 +645,7 @@ describe('the server backup on the control socket', () => {
                 scheduledFailure: null,
                 scheduledNotUploaded: null,
                 warned: null,
-                newestGoodFullAt: null,
+                newestGoodAt: null,
             });
         });
 
@@ -665,7 +665,7 @@ describe('the server backup on the control socket', () => {
                 scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
                 scheduledNotUploaded: null,
                 warned: null,
-                newestGoodFullAt: '2026-09-01T02:00:00.000Z',
+                newestGoodAt: '2026-09-01T02:00:00.000Z',
             });
         });
 
@@ -676,7 +676,7 @@ describe('the server backup on the control socket', () => {
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
             expect(backup.warned).toEqual({ name, createdAt: at, error: 'alice' });
-            expect(backup.newestGoodFullAt).toBeNull();
+            expect(backup.newestGoodAt).toBeNull();
         });
 
         test('names the newest scheduled archive that saved but did not reach the bucket', async () => {

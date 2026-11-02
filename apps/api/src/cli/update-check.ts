@@ -20,7 +20,8 @@ const plainLinks = (text: string) => text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, 
 export const UPDATE_CHECK_OPTIONS = {
     from: { type: 'string' },
     'accept-breaking': { type: 'boolean' },
-    // The launcher of 0.4.1 and before asks it for the level of its pre-update backup, which is always Full now.
+    // The launcher of 0.4.1 and before asks it for the level of its pre-update backup, which is always Full now. It
+    // goes once an update from 0.4.1 is no longer supported.
     level: { type: 'boolean' },
 } as const;
 export const UPDATE_CHECK_USAGE = `Usage: update-check --from <version> [--accept-breaking | --level]

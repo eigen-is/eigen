@@ -21,6 +21,7 @@ export {
     BACKUP_STAMP_PATTERN,
     buildBackupStamp,
     FAILED_RESTORE_SUFFIX,
+    LIGHT_SERVER_ARCHIVE,
     PRE_RESTORE_SUFFIX,
     parseBackupArtifactName,
     parseBackupStamp,

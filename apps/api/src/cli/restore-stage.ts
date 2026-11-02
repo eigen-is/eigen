@@ -5,7 +5,7 @@
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
-import { SERVER_ARCHIVE_PREFIX } from '@workspace/lib/validation';
+import { LIGHT_SERVER_ARCHIVE } from '@workspace/lib/validation';
 import { copyArchiveMember } from '../lib/backup/archive';
 import { describeError } from '../lib/backup/errors';
 import { backupsDirPath, roomShortfall, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
@@ -26,10 +26,6 @@ import { createUi, glyphLine } from './ui';
 // In data/.restoring, held by the stage that fills it: a second one would wipe its tree.
 export const STAGE_LOCK = 'stage.lock';
 
-// The name every Light archive had. This build reads none: Light held no files and no mail, and Eigen keeps no
-// backward compatibility before 1.0.
-const LIGHT_ARCHIVE = new RegExp(`^${SERVER_ARCHIVE_PREFIX}[a-z-]+-light-`);
-
 export async function stage(archive: string | undefined, flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     if (!archive) return ui.fail('Name the archive to restore.', 'Pick a server archive in backups/.');
@@ -38,7 +34,7 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
         return ui.fail(`${archive} is not a file.`, 'Name a server archive in backups/, or its path.');
     }
     const name = basename(archivePath);
-    if (LIGHT_ARCHIVE.test(name)) {
+    if (LIGHT_SERVER_ARCHIVE.test(name)) {
         return ui.fail(
             `${name} is a Light backup, which this version of Eigen no longer restores.`,
             'Restore a Full one.',

@@ -127,7 +127,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
         };
         try {
             const { stdout } = await runCli(['status', '--services=eigen-api\trunning\thealthy'], {
@@ -149,7 +149,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: hoursAgo(3).toISOString(),
+            newestGoodAt: hoursAgo(3).toISOString(),
         });
         expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
     });
@@ -162,7 +162,7 @@ describe('the Backup row', () => {
             scheduledFailure: { ...failed, error: 'no room' },
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: hoursAgo(1).toISOString(),
+            newestGoodAt: hoursAgo(1).toISOString(),
         });
         expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
     });
@@ -175,7 +175,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: { ...missed, error: 'bucket refused' },
             warned: null,
-            newestGoodFullAt: hoursAgo(5).toISOString(),
+            newestGoodAt: hoursAgo(5).toISOString(),
         });
         expect(row).toBe(`▲  Backup       ${missed.name} not uploaded, 5h ago: bucket refused`);
     });
@@ -188,7 +188,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: { ...warned, error: 'Alice, Team Blue' },
-            newestGoodFullAt: hoursAgo(29).toISOString(),
+            newestGoodAt: hoursAgo(29).toISOString(),
         });
         expect(row).toBe(`▲  Backup       ${warned.name} backed up with warnings, 5h ago: Alice, Team Blue`);
     });
@@ -201,7 +201,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: { ...night, error: 'bucket refused' },
             warned: { ...night, error: 'Alice' },
-            newestGoodFullAt: hoursAgo(29).toISOString(),
+            newestGoodAt: hoursAgo(29).toISOString(),
         });
         expect(row).toBe(`▲  Backup       ${night.name} not uploaded, 5h ago: bucket refused`);
     });
@@ -213,12 +213,12 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: hoursAgo(49).toISOString(),
+            newestGoodAt: hoursAgo(49).toISOString(),
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(
             `▲  Backup       ${newest.name}, 1h ago, 1.0 KB; no good Full backup in two days`,
         );
-        expect(await backupRow({ scheduleEnabled: true, ...facts, newestGoodFullAt: null })).toStartWith('▲');
+        expect(await backupRow({ scheduleEnabled: true, ...facts, newestGoodAt: null })).toStartWith('▲');
         expect(await backupRow({ scheduleEnabled: false, ...facts })).toStartWith('◇');
     });
 
@@ -231,7 +231,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
         });
         expect(running).toBe(`◇  Backup       ${name}, just now, running`);
         const failed = await backupRow({
@@ -240,7 +240,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
         });
         expect(failed).toBe(`▲  Backup       ${name}, just now, failed: no room`);
         const none = await backupRow({
@@ -249,7 +249,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
         });
         expect(none).toBe('▲  Backup       none yet; ./eigen backup makes one');
     });
