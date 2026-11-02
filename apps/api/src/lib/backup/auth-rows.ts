@@ -1,11 +1,11 @@
 // Which users3.db rows belong to one user's home archive, and how a restore puts them back. One list of tables
 // serves both directions, so a table added to it is archived and restored alike. The home snapshot reads the rows
-// with readAuthRows, and a per-home restore inserts them with restoreAuthRows, with the roles fixed here and never
-// the archive's.
+// with readAuthRows. A per-home restore judges them with authRowsToRestore and inserts them with restoreAuthRows, with
+// the roles fixed here and never the archive's.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupManifest } from '@workspace/lib/types/backup';
+import type { BackupAuthRows, BackupManifest } from '@workspace/lib/types/backup';
 import { parseBackupAuthRows } from '@workspace/lib/validation';
 import { eq, getTableColumns } from 'drizzle-orm';
 import type { SQLiteColumn, SQLiteTable } from 'drizzle-orm/sqlite-core';
@@ -68,34 +68,9 @@ export function readAuthRows(userId: string): Record<string, unknown[]> {
     return rows;
 }
 
-// Re-inserts the identity the archive carries, for a user the server no longer has. A user who is still
-// here keeps every row they have: a restore puts a home's data back and never rewrites who somebody is.
-// An id whose email no longer matches the archive is a different person, so the restore stops.
-export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folder: string): void {
-    const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
-    if (!fs.existsSync(authPath)) return;
+// Inserts the rows authRowsToRestore judged, for a user the server no longer has.
+export function restoreAuthRows(ownerId: string, archive: BackupAuthRows): void {
     const db = getAuthDrizzleDb();
-
-    const existing = db.select().from(user).where(eq(user.id, ownerId)).get();
-    if (existing) {
-        if (manifest.email && existing.email !== manifest.email) {
-            throw new ApiError(409, `${ownerId} is now ${existing.email}; the archive holds ${manifest.email}`);
-        }
-        return;
-    }
-
-    const archive = parseBackupAuthRows(fs.readFileSync(authPath, 'utf8'));
-    if (!archive) throw new ApiError(400, `${ARCHIVE_AUTH_FILE} is not a set of users3.db rows`);
-
-    // The identity itself is exactly one user row, with this owner's id and the email the manifest was
-    // written with. Anything else and no row goes in: a second user row is somebody the archive invented.
-    const identity = (archive['user'] ?? []).filter((row) => row['id'] === ownerId);
-    if (identity.length !== 1 || (manifest.email && identity[0]['email'] !== manifest.email)) {
-        throw new ApiError(
-            400,
-            `${ARCHIVE_AUTH_FILE} does not hold exactly one ${ownerId} row for ${manifest.email ?? 'this home'}`,
-        );
-    }
     const orgId = getPublicConfig().orgId;
     const drop = (table: string, reason: string): void => {
         console.warn(`[backup] ${ownerId}: a ${table} row was not restored — ${reason}`);
@@ -148,6 +123,37 @@ export function restoreAuthRows(ownerId: string, manifest: BackupManifest, folde
             }
         }
     });
+}
+
+// The rows of the archive's auth.json a restore would insert, or null when it inserts none: a team has no auth.json,
+// and a user who is still here keeps every row they have, since a restore puts a home's data back and never rewrites
+// who somebody is. It throws for an archive that is not this user's, so a restore calls it while it judges the archive,
+// before it takes the home.
+export function authRowsToRestore(ownerId: string, manifest: BackupManifest, folder: string): BackupAuthRows | null {
+    const authPath = path.join(folder, ARCHIVE_AUTH_FILE);
+    if (!fs.existsSync(authPath)) return null;
+
+    // An id whose email no longer matches the archive is a different person.
+    const existing = getAuthDrizzleDb().select().from(user).where(eq(user.id, ownerId)).get();
+    if (existing) {
+        if (manifest.email && existing.email !== manifest.email) {
+            throw new ApiError(409, `${ownerId} is now ${existing.email}; the archive holds ${manifest.email}`);
+        }
+        return null;
+    }
+
+    const archive = parseBackupAuthRows(fs.readFileSync(authPath, 'utf8'));
+    if (!archive) throw new ApiError(400, `${ARCHIVE_AUTH_FILE} is not a set of users3.db rows`);
+    // The identity itself is exactly one user row, with this owner's id and the email the manifest was
+    // written with. Anything else and no row goes in: a second user row is somebody the archive invented.
+    const identity = (archive['user'] ?? []).filter((row) => row['id'] === ownerId);
+    if (identity.length !== 1 || (manifest.email && identity[0]['email'] !== manifest.email)) {
+        throw new ApiError(
+            400,
+            `${ARCHIVE_AUTH_FILE} does not hold exactly one ${ownerId} row for ${manifest.email ?? 'this home'}`,
+        );
+    }
+    return archive;
 }
 
 // The key auth.json spells the owner column under: a Drizzle select keys its rows by the schema's

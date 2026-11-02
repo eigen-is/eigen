@@ -1,6 +1,6 @@
 // Copies one file into a backup's staging folder and returns its manifest entry, hashed as the bytes stream
 // through. The home, mount and server snapshots use it for every file they take, such as a database copy, a
-// drive file or a Maildir message.
+// drive file or a Maildir message, and count the finished folder for their manifest with it.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -8,6 +8,7 @@ import type { BackupEntry, BackupManifest } from '@workspace/lib/types/backup';
 import { eventLoopTurn } from '../core';
 import type { StorageFile } from '../storage';
 import { hashFile, isMissingObjectCause, writeTempWithHash } from '../storage';
+import { countPackedFolders } from './archive';
 
 export async function captureFile(
     source: Buffer | Uint8Array | StorageFile | ReadableStream<Uint8Array>,
@@ -43,11 +44,13 @@ export async function captureWrittenFile(destPath: string, relPath: string): Pro
     return { path: relPath, bytes: size, sha256: hash };
 }
 
-// A manifest's counts: its databases and files are disjoint, so the two add up to its entries.
-export function countEntries(entries: BackupEntry[], databases: number): BackupManifest['counts'] {
+// A manifest's counts, once its folder is whole: its databases and files are disjoint, so the two add up to its
+// entries, and its folders are every folder entry the pack of `folder` writes.
+export function countEntries(entries: BackupEntry[], databases: number, folder: string): BackupManifest['counts'] {
     return {
         databases,
         files: entries.length - databases,
         bytes: entries.reduce((sum, entry) => sum + entry.bytes, 0),
+        dirs: countPackedFolders(folder),
     };
 }

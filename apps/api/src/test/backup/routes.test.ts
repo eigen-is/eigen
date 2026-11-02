@@ -13,7 +13,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { packFolder } from '../../lib/backup/archive';
 import { landUpload } from '../../lib/backup/artifacts';
 import { withHomeSlot } from '../../lib/backup/jobs';
-import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
+import { buildArtifactName, buildHomeFolderName, buildRestoreStagingDir, getBackupsDir } from '../../lib/backup/paths';
 import { measureFolder } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
@@ -393,8 +393,8 @@ describe('Backup routes', () => {
         expect(names).toContain('seeded.png');
         expect(names).not.toContain('after-backup.png');
 
-        // The note the restore left before it moved the home aside is gone with the job.
-        expect(existsSync(join(getBackupsDir(), '.staging', job.id, 'restoring.json'))).toBe(false);
+        // The note the restore left before it moved the home aside is gone with the folder the job staged.
+        expect(existsSync(buildRestoreStagingDir(join(TEST_DATA_DIR, 'home', target.id), job.id))).toBe(false);
 
         const { safetyCopies } = await listArtifacts(target.id);
         const copy = safetyCopies.find((entry) => entry.kind === 'pre-restore');

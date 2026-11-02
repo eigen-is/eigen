@@ -1,7 +1,8 @@
 // The events the server sends on a tab's event stream, shared by the API that builds them and the
 // handlers in the browser that read them. An event carries the ids a handler needs to know which queries
-// to refetch, and rarely data (a notification's display text, the home's data epochs). A new event type
-// gets its name in SSEventType and its shape in the SSEvent union.
+// to refetch, and rarely data, such as a notification's display text or the home's data epochs. A new event type
+// gets its name in SSEventType and its shape in the SSEvent union. The restart notice also has the shape a tab keeps
+// it in for its banner.
 
 import type { NotificationType } from './notification';
 
@@ -55,6 +56,7 @@ export const SSEventType = {
     LABEL_DELETED: 'contacts:label-deleted',
     BACKUP_JOB_UPDATED: 'backup:job-updated',
     HOME_DATA_EPOCHS: 'home:data-epochs',
+    SERVER_RESTART_NOTICE: 'server:restart-notice',
 } as const;
 
 export type SSEventTypeName = (typeof SSEventType)[keyof typeof SSEventType];
@@ -70,7 +72,8 @@ export type SSEvent =
     | SSEventContactsChanged
     | SSEventLabel
     | SSEventBackup
-    | SSEventHomeDataEpochs;
+    | SSEventHomeDataEpochs
+    | SSEventRestartNotice;
 
 export type SSEventMail = {
     type: SSEventTypeName & `mail:${string}`;
@@ -93,7 +96,7 @@ export type SSEventCalendar = {
     ownerId: string;
 };
 
-// The one event that carries display text: it raises the toast, which has nothing to refetch.
+// It carries the toast's display text, because a toast has nothing to refetch.
 export type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
@@ -131,8 +134,29 @@ export type SSEventBackup = {
 };
 
 // Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of
-// their teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it holds changes.
+// their teams, keyed by owner id. Only a restore or an update changes one, so a tab reloads when an epoch it holds
+// changes.
 export type SSEventHomeDataEpochs = {
     type: typeof SSEventType.HOME_DATA_EPOCHS;
     epochs: Record<string, string>;
 };
+
+// Why ./eigen restarts Eigen, which the tabs say. A per-home restore never announces one, and a whole-server restore
+// announces itself as a rollback.
+export const RESTART_REASONS = ['update', 'rollback'] as const;
+export type RestartReason = (typeof RESTART_REASONS)[number];
+
+// Sent when a stream opens and whenever ./eigen announces or takes back a restart, such as the one an update makes,
+// to every open stream on the server. A null notice means none. msLeft and msSinceAnnounced count from the moment the
+// event is sent, so a browser whose clock is off still shows the right times. The message is the operator's own
+// line, or null. An API from before msSinceAnnounced sends none, which a tab meets after a rollback to one.
+export type SSEventRestartNotice = {
+    type: typeof SSEventType.SERVER_RESTART_NOTICE;
+    notice: { reason: RestartReason; msLeft: number; msSinceAnnounced?: number; message: string | null } | null;
+};
+
+// A restart notice as a tab holds it: its deadline and the time it was announced, both on the tab's own clock.
+export type HeldRestartNotice = { reason: RestartReason; message: string | null; deadline: number; heardAt: number };
+
+// What the tab's restart banner reads: the notice it holds, and whether its event stream is down.
+export type RestartNoticeState = { notice: HeldRestartNotice | null; streamDown: boolean };

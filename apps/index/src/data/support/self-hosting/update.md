@@ -6,10 +6,10 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-29
+updated: 2026-11-02
 ---
 
-An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
+An update is one command, and so is going back. Eigen backs itself up before every update, so you can go back to the version you had.
 
 ## Update to the newest release
 
@@ -21,18 +21,35 @@ In the install folder, run:
 
 1. Eigen downloads the new release while it keeps running.
 2. When the release notes list breaking changes, it shows them and asks whether to go on. Without a terminal, like from cron, it refuses until you run `./eigen update --accept-breaking`.
-3. While Eigen keeps running, it makes a backup in `backups/`. When a backup is already running, it waits for that one to end. If the backup fails, the update stops there and Eigen runs on as it was.
-4. Eigen stops, switches to the new version, and starts again.
+3. It tells everyone who has Eigen open that it is about to restart. With `--in`, it warns them first and waits: see [Warn everyone first](#warn-everyone-first).
+4. While Eigen keeps running, it makes a backup in `backups/`. When a backup is already running, it waits for that one to end. If the backup fails, the update stops there and Eigen runs on as it was.
+5. Eigen stops, switches to the new version, and starts again.
 
-Eigen is down only for the switch. When it is back, every open browser tab reloads by itself onto the new version. Anything a tab had not saved yet is lost, such as text typed while Eigen was down or a comment not yet sent. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
+Eigen is down only for the switch. Meanwhile the open tabs say that Eigen is updating. When it is back, every open browser tab reloads by itself onto the new version. Anything a tab had not saved yet is lost, such as text typed while Eigen was down or a comment not yet sent. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
 
 To see whether there is an update, and what it brings, without installing it: `./eigen update --check`. To install a specific release: `./eigen update 0.3.1`.
 
+## Warn everyone first
+
+To give people time to save their work, warn them and wait before the restart:
+
+```bash
+./eigen update --in 10m "Back at three"
+```
+
+Every open Eigen page shows a banner at its foot, like the message `shutdown` sends to every terminal: "Eigen restarts for an update in 10 minutes", with your message below it. It counts down in minutes, and in seconds in the last minute. The terminal counts down too.
+
+The time needs its unit: `90s`, `10m`, or `1h`, the longest wait. The message is optional, up to 200 characters, and comes right after the time. A version goes before `--in`: `./eigen update 0.3.2 --in 10m`.
+
+The wait comes after the download and the question about breaking changes, and before the backup. Ctrl+C cancels it, and so does a lost SSH session, so run a long wait in tmux or screen. When you cancel, or the update fails, the banner goes away and Eigen runs on as it was.
+
+`./eigen rollback --in 10m` and `./eigen restore <backup> --in 10m` warn the same way, right before Eigen stops.
+
 ## The backup an update makes
 
-Usually the backup is a Light one: the accounts, settings, and databases, without the files and the mail. It is a Full one, files and mail included, when a release since yours marks a change as breaking or as `(full backup)`, or when you run `./eigen update --full`. A `(full backup)` change converts how documents, chats, or comments store their data and keeps working after the update, so Eigen does not ask about it, but only a Full backup can bring the old version back.
+The backup is a Full one: the accounts, settings, databases, files, and mail. Some releases convert how Eigen stores part of its data, and the version before cannot read the converted data. A Full backup can bring it back either way.
 
-It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest good ones, and always the one `./eigen rollback` would restore. They stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
+It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest good ones, and always the one the last update made. They stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
 The backup runs on the running server, so with Eigen stopped `./eigen update` refuses. Start Eigen with `./eigen restart`, or copy `data/` and `.env.production` somewhere safe and run `./eigen update --no-backup`. Without a backup, `./eigen rollback` has nothing to go back to.
 
@@ -44,11 +61,17 @@ On 0.3.2 and later, it refuses too when you edited `.env.production` since Eigen
 ./eigen rollback
 ```
 
-This goes back to the version before the last update. It puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first, and asks again when the folder of a user or team made since would move aside: `./eigen rollback --yes` skips the questions, for scripts. Like a restore, it needs `data/` as a plain folder inside the install folder, on the same disk, with room to unpack the backup.
+This goes back to the version before the last update. First it tries to keep your data as it is now.
 
-After a Full backup, a rollback puts back everything, files and mail included. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
+Most updates do not change how your data is stored. While Eigen keeps running, the version before checks that it can open all of the data, and asks whether to go on. Then the rollback stops Eigen, and the version before checks again what Eigen wrote since its first check, which is quick. Then it switches back to the version before and starts Eigen. Files, documents, mail, calendars, and contacts stay as users left them. The backup stays in `backups/`.
 
-After a Light backup, the usual kind, a rollback puts back the accounts, settings, databases, and `.env.production`. The files and the mail stay on disk as they are now, but Drive lists only what it held before the update. Files and documents made since no longer show in Drive, and on drives that store files by their names, files renamed, moved, or put in the Trash since do not open. Calendars and contacts go back to before the update, and mail stays as it is. Nothing is deleted from disk. See [A Light backup leaves the files where they are](/support/self-hosting/back-up-and-restore#a-light-backup-leaves-the-files-where-they-are). To be able to go back with the files too, update with `./eigen update --full`.
+When the version before cannot open the data, or is too old to check, the rollback puts back the backup the update made instead, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. Everything comes back as it was before the update, files and mail included. What people changed since is lost. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first. Like a restore, it needs `data/` as a plain folder inside the install folder, on the same disk, with room to unpack the backup.
+
+When the check itself stops before it can tell, for example because the server ran out of memory or a database stayed busy, the rollback stops too, and Eigen keeps running on your data as it is. Only a database the version before finds damaged, or one too new for it, makes the rollback put the backup back. Fix what it says, then run `./eigen rollback` again. When the second check stops, Eigen starts again on the version you updated to. If you press Ctrl+C at the question, the rollback stops and changes nothing.
+
+An update made by Eigen 0.4.1 or before may have made a Light backup, without files and mail. `./eigen rollback` cannot go back from one: it names the backup and stops. To go back, put back a Full backup with `./eigen restore <file>`.
+
+`./eigen rollback --yes` skips the questions, for scripts. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
 
 ### After the update from 0.3.0
 

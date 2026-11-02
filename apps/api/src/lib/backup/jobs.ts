@@ -8,7 +8,8 @@ import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
-import { extractArtifact, packFolder, readUnpackedHome, writeSidecar } from './archive';
+import { extractArtifact, packFolder, readUnpackedHome, unpackBound } from './archive';
+import { readDeclaredManifest, writeSidecar } from './artifacts';
 import { describeError } from './errors';
 import {
     buildHomeFolderName,
@@ -89,17 +90,16 @@ export function startBackupJob(
 // still walking. A second restore would move aside a folder the first is writing. A safety-copy delete
 // during a restore would judge the wrong home's keys as garbage. An archive deleted under a verify would
 // get its sidecar back. A server job's archive is the owner's to know, so only another server job is told
-// its name.
+// its name. A job holds the slot until it has settled, the same span slotBusy makes a waiter wait for.
 export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
-    dropExpiredJobs();
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
-    for (const running of jobs.values()) {
-        if (running.ownerId === ownerId && running.state === 'running' && holdsSlot(running.kind)) {
-            const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
-            const named = running.artifact && shown ? `: ${running.artifact}` : '';
-            throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
-        }
+    for (const [id, running] of inFlight) {
+        if (running.ownerId !== ownerId || !holdsSlot(running.kind)) continue;
+        const artifact = jobs.get(id)?.artifact;
+        const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
+        const named = artifact && shown ? `: ${artifact}` : '';
+        throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
     }
 }
 
@@ -130,9 +130,12 @@ export function waitForHomeSlot(ownerId: string, holder: string): Promise<() => 
     return whenHomeSlotFree(ownerId, () => holdSlot(ownerId, holder));
 }
 
+// The jobs of a whole-server archive: its backup and its upload.
+export type ServerJobKind = Extract<BackupJob['kind'], 'server-backup' | 'upload'>;
+
 // A server backup and an archive's upload are the owner's alone: they name a server archive, which holds every
 // home's mail, password hashes and mount keys.
-export function isServerJob(kind: BackupJob['kind']): boolean {
+export function isServerJob(kind: BackupJob['kind']): kind is ServerJobKind {
     return kind === 'server-backup' || kind === 'upload';
 }
 
@@ -207,7 +210,7 @@ export async function runArtifactVerify(
     try {
         const unpackDir = path.join(staging, 'verify');
         onProgress('extract', 0, 1);
-        await extractArtifact(artifactPath, unpackDir);
+        await extractArtifact(artifactPath, unpackDir, unpackBound(await readDeclaredManifest(artifactPath)));
         onProgress('extract', 1, 1);
 
         // The job's owner is the one in the artifact's name, which the route parsed.

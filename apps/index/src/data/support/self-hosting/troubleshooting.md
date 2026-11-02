@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, troubleshooting, logs, https, mail, docker]
 related: [self-hosting/commands-and-files, self-hosting/behind-your-web-server, self-hosting/mail-relay]
 order: 130
-updated: 2026-10-01
+updated: 2026-11-02
 ---
 
 Start with `./eigen status`, which shows every service and its health, the disk, and the certificate. `./eigen logs` shows what the services say, and `./eigen logs <service>` shows one. When a step of `./eigen` fails, it prints the last lines of its output, and the full output is in `.eigen/last-step.log`.
@@ -29,6 +29,14 @@ Eigen runs as user 1000 and must be able to write in `data/` and `backups/`, and
 sudo chown -R 1000:1000 data backups
 ```
 
+## Other users share this folder's group
+
+Every start gives `backups/` the group of the install folder, so you can list your backups and nobody else on the server can. When other users share that group, like the `users` group, a group that lists other members or a group that is another user's main group, `./eigen` leaves `backups/` as it was and says so in yellow on every start. Give the install folder a group that only you are in, then run `./eigen restart`. On most Linux systems your own group has your user name:
+
+```bash
+sudo chgrp <your user name> /opt/eigen
+```
+
 ## A backup or restore stops with an error
 
 **"Eigen runs as uid 1000, which cannot read" a backup.** A restore reads the backup as user 1000. A copy made as root is often readable by root alone. Give it the file, as the message says:
@@ -43,9 +51,7 @@ sudo chown 1000:1000 <backup>
 
 **"data/ is in use by Eigen or by another restore".** Something still has `data/` open while the restore wants to swap it: another restore, or an Eigen that `./eigen` did not start. Wait for it to end, or stop it, then run `./eigen restore` again.
 
-**"… cannot be swapped in: … is in the way here".** A restore of a Light backup moves the files of the backup into the users' and teams' folders, and something in your `data/` sits where one of them goes. Move what the message names out of the way, then run `./eigen restore` again.
-
-**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/`, `data/.restoring/`, and every user's and team's folder in `data/` must be on the disk of the install folder, not mounted from another one. Restore checks `data/` and `data/.restoring/` before it stops Eigen, so Eigen keeps running. Move them there, then run `./eigen restore` again.
+**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/` and `data/.restoring/` must be on the disk of the install folder, not mounted from another one. Restore checks them before it stops Eigen, so Eigen keeps running. Move them there, then run `./eigen restore` again.
 
 ## Eigen does not start: pool overlaps
 

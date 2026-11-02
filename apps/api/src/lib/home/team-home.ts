@@ -6,7 +6,7 @@ import type { S3Config } from '@workspace/lib/types/mount';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
-import { getTeamDataPath, PATHS } from '../config/paths';
+import { getTeamHomePath, PATHS } from '../config/paths';
 import { ApiError, JsonStore } from '../core';
 import { Drive } from '../drive';
 import { createMountConfig, newMountSettings } from '../mount';
@@ -33,7 +33,7 @@ export class TeamHome extends Home {
 
     public constructor(syntheticUser: User, onClosed?: () => void) {
         const teamId = parseOwnerId(syntheticUser.id).id;
-        super(syntheticUser, getTeamDataPath(teamId), onClosed);
+        super(syntheticUser, getTeamHomePath(teamId), onClosed);
         this.teamId = teamId;
         this.settings = new JsonStore<TeamSettings>(this.fs, PATHS.SETTINGS, { calendar: { enabled: false } });
         this._drive = new Drive(this);

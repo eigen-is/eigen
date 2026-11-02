@@ -49,7 +49,6 @@ import {
 } from './paths';
 import { pruneLocalArchives, writeServerSidecar } from './server-archives';
 import { appendInstallFiles, assertEnvFileMounted, snapshotServer } from './snapshot-server';
-import { backupKey } from './upload';
 import { startUploadJob } from './upload-job';
 import { requireVerified, verifyFolder } from './verify';
 import { readServerArchive } from './verify-server-archive';
@@ -165,16 +164,16 @@ async function runServerBackup(
         throw error;
     } finally {
         sidecar.finishedAt = new Date();
-        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
-        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box.
-        const { enabled, s3 } = getServerSettings().backups.upload;
-        const uploads = enabled && options.reason !== 'pre-update' && sidecar.verify?.status === 'verified';
-        // Running in the record the backup ends with, so ./eigen stop finds no moment where neither runs.
-        if (uploads) sidecar.upload = { state: 'running', at: new Date(), key: backupKey(s3, name) };
         await writeServerSidecar(archivePath, sidecar);
         // Retention that throws must not replace the job's own outcome.
         await pruneLocalArchives().catch(console.error);
-        if (uploads) job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
+        // An archive that verified goes even when a home failed: the owner heard of the home, and the rest of the
+        // server is worth its copy off the box. A pre-update archive exists for ./eigen rollback on this box. The
+        // upload starts before this job ends, so ./eigen stop always finds one of the two running.
+        const { enabled } = getServerSettings().backups.upload;
+        if (enabled && options.reason !== 'pre-update' && sidecar.verify?.status === 'verified') {
+            job.uploadJobId = startUploadJob(archivePath, job.startedBy).id;
+        }
     }
     return name;
 }

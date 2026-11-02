@@ -100,7 +100,10 @@ describe('Backup refuses an archive that names another home', () => {
             // archive this server accepts at all.
             await expect(readArtifactManifest(artifactPath)).rejects.toThrow(/not an Eigen backup archive/);
 
-            await expect(restoreHome(name, attacker.id, `traversal-${Date.now()}`)).rejects.toThrow(/manifest/);
+            // A restore reads the same manifest for its room check, before it unpacks a byte.
+            await expect(restoreHome(name, attacker.id, `traversal-${Date.now()}`)).rejects.toThrow(
+                /not an Eigen backup archive/,
+            );
 
             expect(await victimFileStatus()).toBe(200);
             const victimData = join(TEST_DATA_DIR, 'home', victim.id, 'mounts', victimMountId, 'data');

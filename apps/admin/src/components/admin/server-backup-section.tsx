@@ -1,6 +1,6 @@
 // The whole-server backup on the owner's Settings page: the schedule, how many backups to keep, an optional S3
-// upload destination, the archives on disk with their jobs, and how to restore one. A restore runs on the server, so
-// the page shows the commands to run there, each with a copy button.
+// upload destination, Back up now, the archives on disk with their jobs, and how to restore one. A restore runs on
+// the server, so the page shows the commands to run there, each with a copy button.
 
 import {
     useCheckBackupDestination,
@@ -13,14 +13,13 @@ import {
 import { getIndexAppUrl } from '@workspace/lib/api';
 import { BACKUP_KEEP_MAX, BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatTime } from '@workspace/lib/date';
-import { formatFileSize } from '@workspace/lib/format';
-import type { BackupLevel, BackupReason, ServerArchive } from '@workspace/lib/types/backup';
+import type { BackupLevel } from '@workspace/lib/types/backup';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
-import { BACKUP_LEVELS, canUploadServerArchive } from '@workspace/lib/validation';
+import { canUploadServerArchive } from '@workspace/lib/validation';
 import { DeleteDialog, ErrorState, LoadingState, SettingsSection, TooltipButton } from '@workspace/ui';
 import { Alert, AlertDescription } from '@workspace/ui/components/alert';
-import { Badge } from '@workspace/ui/components/badge';
 import { Button } from '@workspace/ui/components/button';
 import {
     CodeBlock,
@@ -32,19 +31,13 @@ import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { S3ConfigCard } from '@workspace/ui/components/mount';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { AlertTriangle, Archive, CloudUpload, Trash2, X } from 'lucide-react';
+import { AlertTriangle, Archive, X } from 'lucide-react';
 import { useState } from 'react';
-import { BackupArtifactRow, VerifyBadge, VerifyFailures } from './backup-artifact-row';
 import { BackupJobStatus } from './backup-job-status';
+import { ServerArchiveRow } from './server-archive-row';
 import { SwitchRow } from './switch-row';
 
 type Backups = ServerSettings['backups'];
-
-const REASON_LABEL: Record<BackupReason, string> = {
-    scheduled: 'Scheduled',
-    manual: 'Manual',
-    'pre-update': 'Before an update',
-};
 
 // The owner picks an hour of their own day, listed in its order; the schedule runs on UTC.
 function scheduleHours(): { hourUtc: number; label: string }[] {
@@ -67,8 +60,8 @@ type ServerBackupSectionProps = {
     onDismissNotice: () => void;
 };
 
-// The whole-server backup, on the owner's Settings page: its schedule and bucket are drafts the page's
-// footer saves, the rest acts at once. No download: an archive leaves the box by scp or the bucket.
+// The schedule and the bucket are drafts the page's footer saves; Back up now, upload and delete act at once. An
+// archive has no download: it leaves the server by scp or through the bucket.
 export function ServerBackupSection({
     value,
     onChange,
@@ -196,7 +189,7 @@ export function ServerBackupSection({
                 <div className="flex items-center gap-2">
                     <Select
                         value={shownLevel}
-                        onValueChange={(next) => setLevel(levels.find((l) => l === next) ?? 'full')}
+                        onValueChange={(next) => setLevel(levels.find((option) => option === next) ?? 'full')}
                     >
                         <SelectTrigger size="sm">
                             <SelectValue />
@@ -288,18 +281,6 @@ export function ServerBackupSection({
 }
 
 // A count the route takes from 1 to BACKUP_KEEP_MAX, clamped as it is typed.
-// A command to run in a terminal on the server, with its copy button.
-function CommandBlock({ command }: { command: string }) {
-    return (
-        <CodeBlock size="sm">
-            <CodeBlockActions>
-                <CodeBlockCopyButton value={command} />
-            </CodeBlockActions>
-            <CodeBlockContent>{command}</CodeBlockContent>
-        </CodeBlock>
-    );
-}
-
 function KeepInput({ label, value, onChange }: { label: string; value: number; onChange: (keep: number) => void }) {
     return (
         <div className="space-y-1.5">
@@ -318,112 +299,14 @@ function KeepInput({ label, value, onChange }: { label: string; value: number; o
     );
 }
 
-type ServerArchiveRowProps = {
-    archive: ServerArchive;
-    uploadable: boolean;
-    onUpload: () => void;
-    onDelete: () => void;
-};
-
-function ServerArchiveRow({ archive, uploadable, onUpload, onDelete }: ServerArchiveRowProps) {
-    const { record } = archive;
-    const homes = record?.manifest?.homes ?? [];
-    const detail = [
-        BACKUP_LEVEL_NAMES[archive.level],
-        REASON_LABEL[archive.reason],
-        archive.bytes !== null && formatFileSize(archive.bytes),
-        archive.name,
-    ].filter(Boolean);
+// A command to run in a terminal on the server, with its copy button.
+function CommandBlock({ command }: { command: string }) {
     return (
-        <BackupArtifactRow
-            createdAt={archive.createdAt}
-            detail={detail.join(' · ')}
-            badges={
-                <>
-                    <StateBadge archive={archive} />
-                    <UploadBadge archive={archive} uploadable={uploadable} />
-                </>
-            }
-            actions={
-                <>
-                    {uploadable && (
-                        <TooltipButton
-                            icon={CloudUpload}
-                            tooltipText="Upload to the bucket"
-                            className="h-7 w-7"
-                            onClick={onUpload}
-                        />
-                    )}
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        className="h-7 w-7"
-                        disabled={record?.state === 'running' || record?.upload?.state === 'running'}
-                        onClick={onDelete}
-                    />
-                </>
-            }
-        >
-            {record?.error && <p className="text-xs text-destructive pl-7">{record.error}</p>}
-            {record?.upload?.error && (
-                <p className="text-xs text-destructive pl-7">Not uploaded: {record.upload.error}</p>
-            )}
-            <HomesAlert
-                variant="destructive"
-                title="Not in this backup:"
-                homes={homes.flatMap(({ ownerId, name, failed }) => (failed ? [{ ownerId, name, why: failed }] : []))}
-            />
-            <HomesAlert
-                variant="warning"
-                title="In this backup with warnings:"
-                homes={homes.flatMap(({ ownerId, name, warnings }) =>
-                    warnings?.length ? [{ ownerId, name, why: warnings.join('; ') }] : [],
-                )}
-            />
-            {record?.verify && <VerifyFailures verify={record.verify} />}
-        </BackupArtifactRow>
+        <CodeBlock size="sm">
+            <CodeBlockActions>
+                <CodeBlockCopyButton value={command} />
+            </CodeBlockActions>
+            <CodeBlockContent>{command}</CodeBlockContent>
+        </CodeBlock>
     );
-}
-
-type HomesAlertProps = {
-    variant: 'destructive' | 'warning';
-    title: string;
-    homes: { ownerId: string; name: string; why: string }[];
-};
-
-// The homes of an archive the owner should look at: those it lacks, and those it holds with warnings.
-function HomesAlert({ variant, title, homes }: HomesAlertProps) {
-    if (homes.length === 0) return null;
-    return (
-        <Alert variant={variant} className="mt-1">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-                <p>{title}</p>
-                <ul className="list-disc pl-4">
-                    {homes.map((home) => (
-                        <li key={home.ownerId}>
-                            {home.name}: {home.why}
-                        </li>
-                    ))}
-                </ul>
-            </AlertDescription>
-        </Alert>
-    );
-}
-
-// A backup still being written, one that failed, or how its verify went. A record that is missing or does not
-// read says so.
-function StateBadge({ archive: { record } }: { archive: ServerArchive }) {
-    if (!record) return <Badge variant="outline">No record</Badge>;
-    if (record.state === 'running') return <Badge variant="outline">Running</Badge>;
-    if (record.state === 'failed') return <Badge variant="destructive">Failed</Badge>;
-    return record.verify ? <VerifyBadge verify={record.verify} /> : null;
-}
-
-function UploadBadge({ archive, uploadable }: { archive: ServerArchive; uploadable: boolean }) {
-    const upload = archive.record?.upload;
-    if (upload?.state === 'done') return <Badge variant="secondary">Uploaded</Badge>;
-    if (upload?.state === 'running') return <Badge variant="outline">Uploading</Badge>;
-    if (upload?.state === 'failed') return <Badge variant="destructive">Not uploaded</Badge>;
-    return uploadable ? <Badge variant="outline">Not uploaded</Badge> : null;
 }

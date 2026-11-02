@@ -1,20 +1,20 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { BackupJob, BackupReason, ServerArchiveSidecar } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupReason } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
-import { drainBackupJobs, getBackupJob } from '../../lib/backup/jobs';
+import { drainBackupJobs, getBackupJob, listBackupJobs } from '../../lib/backup/jobs';
 import {
     BUCKET_PARTIAL_SUFFIX,
     buildServerArchiveName,
     getBackupsDir,
     serverSidecarPath,
 } from '../../lib/backup/paths';
-import * as serverArchives from '../../lib/backup/server-archives';
 import { readServerSidecar } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
 import { backupKey, checkBackupDestination, uploadServerArchive } from '../../lib/backup/upload';
+import * as uploadJob from '../../lib/backup/upload-job';
 import { getDataRoot, PATHS, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -31,13 +31,14 @@ import { findOrFail, getTestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 import {
     alertTitlesTo,
+    holdCaptures,
     removeServerRecords,
     serverManifestOf,
     waitForJob,
     writeServerRecord,
 } from './backup-test-helpers';
 
-// A Light job of the file's few homes, for real.
+// A Full job of the file's few homes, for real.
 const JOB_TIMEOUT_MS = 120_000;
 // Over Bun's 5 MiB part, so the upload goes multipart.
 const MULTIPART_BYTES = 12 * 1024 * 1024;
@@ -185,9 +186,9 @@ describe('Upload of server archives', () => {
             buildServerArchiveName('scheduled', 'full', new Date(`2026-08-${day}T02:00:00Z`));
         const untouched = [
             buildServerArchiveName('manual', 'full', new Date('2026-01-01T02:00:00Z')),
-            buildServerArchiveName('pre-update', 'light', new Date('2026-01-02T02:00:00Z')),
-            buildServerArchiveName('pre-update', 'light', new Date('2026-01-03T02:00:00Z')),
-            buildServerArchiveName('pre-update', 'light', new Date('2026-01-04T02:00:00Z')),
+            buildServerArchiveName('pre-update', 'full', new Date('2026-01-02T02:00:00Z')),
+            buildServerArchiveName('pre-update', 'full', new Date('2026-01-03T02:00:00Z')),
+            buildServerArchiveName('pre-update', 'full', new Date('2026-01-04T02:00:00Z')),
             'server-scheduled-full-garbage.tar',
             `${night('01')}.json`,
             'notes.txt',
@@ -364,7 +365,7 @@ describe('Upload of server archives', () => {
             'a verified archive is uploaded, and its record says where',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                const started = await startServerBackup({ level: 'light', reason: 'manual' });
+                const started = await startServerBackup({ level: 'full', reason: 'manual' });
                 const job = await waitForJob(started.id);
                 expect(job.error).toBeUndefined();
                 expect(job.state).toBe('done');
@@ -383,26 +384,66 @@ describe('Upload of server archives', () => {
             JOB_TIMEOUT_MS,
         );
 
-        // ./eigen stop waits while a record says running, so the upload must say so before the backup stops saying it.
+        // ./eigen stop waits while the status names a server backup or an upload that runs.
         test(
-            'the record the backup ends with already says its upload runs',
+            'the status names the server backup that runs, then its upload, and nothing once both ended',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                const written: ServerArchiveSidecar[] = [];
-                const write = serverArchives.writeServerSidecar;
-                const writes = spyOn(serverArchives, 'writeServerSidecar').mockImplementation((archivePath, record) => {
-                    written.push(structuredClone(record));
-                    return write(archivePath, record);
+                const running = async () => (await getServerStatus()).backup.running;
+                const captures = holdCaptures();
+                const gate = Promise.withResolvers<void>();
+                const real = upload.uploadServerArchive;
+                let calls = 0;
+                const held = spyOn(upload, 'uploadServerArchive').mockImplementation(async (...args) => {
+                    calls++;
+                    await gate.promise;
+                    return real(...args);
                 });
-                let job: BackupJob;
                 try {
-                    job = await waitForJob((await startServerBackup({ level: 'light', reason: 'manual' })).id);
+                    expect(await running()).toEqual([]);
+                    const started = await startServerBackup({ level: 'full', reason: 'manual' });
+                    const archive = started.artifact;
+                    if (!archive) throw new Error('the backup names no archive');
+                    expect(await running()).toEqual([{ kind: 'server-backup', archive }]);
+                    captures.release();
+                    const job = await waitForJob(started.id);
+                    await waitFor(() => calls === 1, 10_000);
+                    expect(await running()).toEqual([{ kind: 'upload', archive }]);
+                    gate.resolve();
+                    expect((await uploadOf(job)).state).toBe('done');
+                    expect(await running()).toEqual([]);
+                } finally {
+                    gate.resolve();
+                    captures.restore();
+                    held.mockRestore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'the upload starts while its backup still runs, so the status never names neither',
+            async () => {
+                await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
+                const real = uploadJob.startUploadJob;
+                const backupStates: BackupJob['state'][] = [];
+                const starts = spyOn(uploadJob, 'startUploadJob').mockImplementation((archivePath, startedBy) => {
+                    const uploading = real(archivePath, startedBy);
+                    const name = basename(archivePath);
+                    const backup = findOrFail(
+                        listBackupJobs(),
+                        (job) => job.kind === 'server-backup' && job.artifact === name,
+                    );
+                    backupStates.push(backup.state);
+                    return uploading;
+                });
+                try {
+                    const job = await waitForJob((await startServerBackup({ level: 'full', reason: 'manual' })).id);
                     expect((await uploadOf(job)).state).toBe('done');
                 } finally {
-                    writes.mockRestore();
+                    starts.mockRestore();
                 }
-                const ended = findOrFail(written, (record) => record.state === 'done');
-                expect(ended.upload).toMatchObject({ state: 'running', key: own(job.artifact!) });
+                expect(backupStates).toEqual(['running']);
             },
             JOB_TIMEOUT_MS,
         );
@@ -419,7 +460,7 @@ describe('Upload of server archives', () => {
                     },
                 );
                 try {
-                    const started = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const started = await startServerBackup({ level: 'full', reason: 'manual' });
                     const job = await waitForJob(started.id);
                     expect(job.state).toBe('failed');
                     expect((await uploadOf(job)).state).toBe('done');
@@ -435,7 +476,7 @@ describe('Upload of server archives', () => {
             'a pre-update archive stays on this box',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                const started = await startServerBackup({ level: 'light', reason: 'pre-update' });
+                const started = await startServerBackup({ level: 'full', reason: 'pre-update' });
                 const job = await waitForJob(started.id);
                 expect(job.state).toBe('done');
                 expect(job.uploadJobId).toBeUndefined();
@@ -449,7 +490,7 @@ describe('Upload of server archives', () => {
             'a failed upload keeps the archive good, marks its record and tells the owner once',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: UNREACHABLE, keep: 30 } } });
-                const started = await startServerBackup({ level: 'light', reason: 'manual' });
+                const started = await startServerBackup({ level: 'full', reason: 'manual' });
                 const job = await waitForJob(started.id);
                 expect(job.state).toBe('done');
                 const uploaded = await uploadOf(job);
@@ -492,7 +533,7 @@ describe('Upload of server archives', () => {
                     // Its retention would drop the one being uploaded, which a newer good one pushes out.
                     writeArchive('scheduled', '2026-09-03T02:00:00.000Z', 'newer');
                     await updateServerSettings({ backups: { schedule: { keep: 1 } } });
-                    const preUpdate = await startServerBackup({ level: 'light', reason: 'pre-update' });
+                    const preUpdate = await startServerBackup({ level: 'full', reason: 'pre-update' });
                     expect((await waitForJob(preUpdate.id)).state).toBe('done');
                     await updateServerSettings({ backups: { schedule: { keep: 7 } } });
                     expect(existsSync(join(getBackupsDir(), first))).toBe(true);
@@ -527,7 +568,7 @@ describe('Upload of server archives', () => {
                     return real(...args);
                 });
                 try {
-                    const started = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const started = await startServerBackup({ level: 'full', reason: 'manual' });
                     const job = await waitForJob(started.id);
                     await waitFor(() => calls === 1, 10_000);
                     const archivePath = join(getBackupsDir(), job.artifact!);

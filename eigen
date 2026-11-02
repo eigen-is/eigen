@@ -1,6 +1,8 @@
 #!/bin/sh
-# Eigen's launcher. No container gets the Docker socket, so every Docker step runs here; the CLI in the API image asks
-# the questions and writes the config. POSIX sh: runs under dash and BusyBox.
+# Eigen's launcher, the ./eigen command an operator runs on the server to set up, update, back up, restore, start and
+# stop an install. No container gets the Docker socket, so every Docker step runs here. The CLI in the API image asks
+# the questions and writes the config, and the running API takes the commands that need it, such as a backup. It is
+# POSIX sh, so it runs under dash and BusyBox.
 set -eu
 
 # Through a symlink such as /usr/local/bin/eigen too, this runs in the install folder.
@@ -8,17 +10,23 @@ cd "$(dirname "$(readlink -f "$0")")"
 
 REPO=https://github.com/eigen-is/eigen
 REGISTRY=ghcr.io/eigen-is/eigen
-# IMAGE_NAMES in apps/api/src/lib/config/release.ts. Not from compose config --images: that names the images of the
-# profiles in use, and a release pins every image in IMAGES.
+# The launcher cannot import the CLI, so the constants below that name one of the CLI's copy it. A test checks each pair.
+# IMAGES is the CLI's IMAGE_NAMES. It is not read from compose config --images, which names only the images of the
+# profiles in use, while a release pins them all.
 IMAGES='api frontend postfix dovecot unbound'
-# The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
+# The CLI's exit code for a question answered no, its DECLINED.
 DECLINED=3
-# SWAP_MARKER in apps/api/src/cli/restore.ts, and data/ + RESTORING_DIR in apps/api/src/lib/backup/restore-server.ts.
+# The exit code of restore --check-data for a database the build cannot open, its CANNOT_OPEN.
+CANNOT_OPEN=4
+# The CLI's SWAP_MARKER, and its RESTORING_DIR inside data/.
 SWAP_MARKER=.eigen/restore-swap
 UNSTAGE='cli_as 0 rm -rf data/.restoring'
 LOG=.eigen/last-step.log
 # POSIX sleep only takes whole seconds; the spinner falls back to 1 where 0.2 fails.
 TICK=0.2
+# The longest --in wait and message the restart notice takes: MAX_RESTART_WAIT_SECONDS and MAX_RESTART_MESSAGE_LENGTH.
+MAX_WAIT=3600
+MAX_MESSAGE=200
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     ACCENT=$(printf '\033[1;36m') GREEN=$(printf '\033[32m') RED=$(printf '\033[31m')
@@ -63,14 +71,13 @@ EOF
             ;;
         backup)
             cat <<EOF
-Usage: ./eigen backup [--light | --full] [--s3] [--wait]
+Usage: ./eigen backup [--full | --s3] [--wait]
 
 Backs up the whole server into backups/ while Eigen runs, and checks the archive. It
 stops nothing. With Eigen stopped, a copy of data/ and .env.production is a backup too.
 Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument, and 4
 when it verified but did not reach the backup bucket.
 
-  --light   Accounts, settings and databases: no files and no mail
   --full    Everything but the files in S3 buckets, which keep their own history (the default)
   --s3      The files in S3 buckets too
   --wait    Wait for a backup that runs to end, instead of failing
@@ -78,13 +85,15 @@ EOF
             ;;
         restore)
             cat <<EOF
-Usage: ./eigen restore <archive> [--yes] [--s3-from-archive]
+Usage: ./eigen restore <archive> [--in <time> [message]] [--yes] [--s3-from-archive]
 
 Puts a whole-server backup back: a name in backups/, or the path of an archive. It is
 unpacked and checked while Eigen runs; then Eigen stops, data/ and .env.production are
 swapped for the archive's, and Eigen starts on the version it was made with. What it
 replaces is kept aside. On a new machine with Docker, it sets Eigen up from the archive.
 
+  --in <time>         Warn everyone first, then wait before the stop: 10m, 90s, up to 1h. A
+                      message after the time goes with the warning. Ctrl+C cancels.
   --yes               Do not ask
   --s3-from-archive   Upload the files an archive with S3 files holds under fresh keys,
                       instead of keeping each bucket as it is
@@ -99,34 +108,38 @@ EOF
             ;;
         update)
             cat <<EOF
-Usage: ./eigen update [version] [--check] [--accept-breaking] [--full | --no-backup]
+Usage: ./eigen update [version] [--in <time> [message]] [--check] [--accept-breaking]
+                     [--no-backup]
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
-the backup ./eigen rollback goes back to: a light one, of the accounts, settings and
-databases, unless the new version lists breaking changes or marks a change (full backup),
-when it is full. ./eigen update main follows the main channel instead of releases.
+a full backup, which ./eigen rollback puts back when the version before cannot open the
+data as it is. ./eigen update main follows the main channel instead of releases. Every
+open tab is told before Eigen restarts.
 
+  --in <time>         Warn everyone first, then wait: 10m, 90s, up to 1h. A message after the
+                      time goes with the warning, as with shutdown: --in 10m "Back at three".
+                      Ctrl+C cancels, and so does a lost SSH session: run a long wait in tmux.
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
-  --full              Make a full backup, files and mail too
   --no-backup         Make none, as with Eigen stopped: copy data/ and .env.production first
 EOF
             ;;
         rollback)
             kept=$(pre_update_archives | sed 's/^/  /')
             cat <<EOF
-Usage: ./eigen rollback [--yes]
+Usage: ./eigen rollback [--in <time> [message]] [--yes]
 
-Goes back to the version before the last ./eigen update, with the backup it made first. After
-a light one, the accounts, settings and databases are as they were then, and mail as it is now.
-Files and documents made since drop out of Drive, though they stay on disk; files renamed, moved
-or trashed since are listed where they were and, on drives that store files by their names, do
-not open. The current data is kept aside.
+Goes back to the version before the last ./eigen update. First that version checks it opens
+every database here: when it does, it starts on the data as it is, and the backup the update
+made stays in backups/ for ./eigen restore. When it does not, the rollback puts that backup
+back, and the current data is kept aside.
 
 To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:
 ${kept:-  none}
 
-  --yes   Do not ask
+  --in <time>   Warn everyone first, then wait before the stop: 10m, 90s, up to 1h. A message
+                after the time goes with the warning. Ctrl+C cancels.
+  --yes         Do not ask
 EOF
             ;;
         restart)
@@ -147,12 +160,15 @@ EOF
     esac
 }
 
-# refuse <command> <argument>: an argument the command does not take, with its usage.
-refuse() {
-    printf 'Unknown argument "%s".\n\n' "$2" >&2
+# refuse_usage <command> <why>: a wrong argument, said why, with the command's usage.
+refuse_usage() {
+    printf '%s\n\n' "$2" >&2
     command_usage "$1" >&2
     exit 2
 }
+
+# refuse <command> <argument>: an argument the command does not take.
+refuse() { refuse_usage "$1" "Unknown argument \"$2\"."; }
 
 # help_flag <command> <argument…>: --help among them prints its usage.
 help_flag() {
@@ -178,8 +194,8 @@ arguments() {
     fi
 }
 
-# The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
-# A write to a terminal that hung up fails; the command must not end with it.
+# The glyphs are the CLI's GLYPHS, so its lines and these read alike. A write to a terminal that hung up fails, and
+# the command must not end on it.
 say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3" || :; }
 
 # die <what went wrong> <what to do next>
@@ -278,8 +294,22 @@ api_cli() {
     dc exec $tty -e TERM -e NO_COLOR eigen-api /app/docker/api/entrypoint.sh "$@"
 }
 
+# columns: the width of the terminal, 80 when it cannot be read.
+columns() {
+    width=$(stty size </dev/tty 2>/dev/null || :)
+    width=${width#* }
+    case $width in '' | 0 | *[!0-9]*) width=80 ;; esac
+    printf '%s\n' "$width"
+}
+
+# duration <seconds>: as the spinner and the countdown show it, such as 45s or 2m 5s.
+duration() {
+    if [ "$1" -ge 60 ]; then echo "$(($1 / 60))m $(($1 % 60))s"; else echo "${1}s"; fi
+}
+
 # step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
-# terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
+# terminal. set -m gives the job its own process group, so Ctrl-C stops all of it. A failure ends the launcher, or with
+# STEP_GOES_ON set returns 1 after its output, leaving the next line to the caller.
 step() {
     step_running=$1 step_done=$2 step_failed=$3
     shift 3
@@ -302,12 +332,8 @@ step() {
         while kill -0 "$job" 2>/dev/null; do
             case $((frame % 4)) in 0) glyph=◒ ;; 1) glyph=◐ ;; 2) glyph=◓ ;; *) glyph=◑ ;; esac
             frame=$((frame + 1))
-            seconds=$(($(date +%s) - started))
-            elapsed=${seconds}s
-            if [ "$seconds" -ge 60 ]; then elapsed="$((seconds / 60))m $((seconds % 60))s"; fi
-            width=$(stty size </dev/tty 2>/dev/null || :)
-            width=${width#* }
-            case $width in '' | 0 | *[!0-9]*) width=80 ;; esac
+            elapsed=$(duration $(($(date +%s) - started)))
+            width=$(columns)
             # A wrapped line would break the redraw. BuildKit's "#12 3.45 …" loses its step number and timestamp.
             line=$(tail -n 20 "$LOG" 2>/dev/null | awk -v width=$((width - 4)) '{
                 sub(/.*\r/, ""); gsub(/\033\[[0-9;?]*[A-Za-z]/, ""); gsub(/[[:cntrl:]]/, " ")
@@ -330,6 +356,7 @@ step() {
     {
         say "$RED" '■' "$step_failed"
         tail -n 20 "$LOG" | sed "s/^/${GRAY}│${RESET}  /"
+        if [ -n "${STEP_GOES_ON:-}" ]; then return 1; fi
         say "$GRAY" '└' "Full output: $LOG. ${NEXT:-Fix what it says, then run ./eigen $COMMAND again.}"
     } >&2
     exit 1
@@ -418,8 +445,8 @@ cli_help() {
 
 # A build is an api image, named by its labels as <version> (<revision>) on every install. Three files hold what an
 # install is: .env.production pins what runs and what it follows (configure writes it from PINS), .eigen/bundle names
-# the api image the files came from (write_bundle), .eigen/last-update the backup the last update made (update_apply)
-# until a restore swaps data/ (after_swap).
+# the api image the files came from (write_bundle), .eigen/last-update the backup the last update made and the pins it
+# switched away from (update_apply), until a restore swaps data/ (after_swap) or a rollback keeps it (switch_back).
 
 # image_label <image> <version or revision>: that label of a local image.
 image_label() { docker image inspect --format "{{index .Config.Labels \"org.opencontainers.image.$2\"}}" "$1"; }
@@ -497,6 +524,16 @@ with_image() (
 # The images .env.production pins, a line each.
 pinned_refs() { for name in $IMAGES; do image "$name"; done; }
 
+# What .env.production pins, as PINS spells it: an update records it for a rollback that keeps the data. A key the file
+# lacks is left out, so the rollback writes no local build's name for it.
+current_pins() {
+    echo "EIGEN_REGISTRY=$REGISTRY"
+    for key in EIGEN_VERSION $(for name in $IMAGES; do image_key "$name"; done); do
+        value=$(env_value "$key")
+        if [ -n "$value" ]; then echo "$key=$value"; fi
+    done
+}
+
 # The api image .env.production pins, downloaded when it is not here: a pull that moves main leaves the build it
 # replaced without a local name.
 api_here() {
@@ -506,10 +543,36 @@ api_here() {
 
 # The API, uid 1000, reads .env.production for the server backup: group 1000 may, others not. Each command that writes it
 # starts Eigen after, so start does this. Docker Desktop shows the file as the container user's, readable at 0600 already.
+# backups/ gets the group backups_group names, with setgid and mode 2750: the operator lists it, and other users of the
+# host do not. Its archives and their records are uid 1000's alone (0600), so the launcher asks the API what
+# runs. A folder uid 1000 does not own is left as it is, since 2750 could lock the API out of it.
 share_env() {
     if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
-    docker run --rm --user 0 --entrypoint sh -v "$PWD:/install" "$API_IMAGE" \
-        -c 'chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+    share_file='chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+    share_folder='if [ -n "$1" ] && [ "$(stat -c %u /install/backups 2>/dev/null)" = 1000 ]; then chgrp "$1" /install/backups && chmod 2750 /install/backups; fi'
+    docker run --rm --user 0 --entrypoint sh -v "$PWD:/install" "$API_IMAGE" -c "$share_file && $share_folder" sh "$(backups_group)"
+}
+
+# backups_group: the group of the install folder, which is the operator's, or nothing when other users of the host share
+# it. A gid below 1000 other than root's is a system's shared group, such as users. So is one that lists another member,
+# or that another user has as primary group.
+backups_group() {
+    gid=${EIGEN_OWNER#*:}
+    if [ "$gid" != 0 ] && [ "$gid" -lt 1000 ]; then return 0; fi
+    owner=$(ls -ld . | awk '{ print $3 }')
+    members=$({ getent group "$gid" || grep "^[^:]*:[^:]*:$gid:" /etc/group; } 2>/dev/null | cut -d: -f4)
+    if printf '%s\n' "$members" | tr ',' '\n' | grep -qvx -e "$owner" -e ''; then return 0; fi
+    primary=$({ getent passwd || cat /etc/passwd; } 2>/dev/null | awk -F: -v gid="$gid" '$4 == gid { print $1 }')
+    if printf '%s\n' "$primary" | grep -qvx -e "$owner" -e ''; then return 0; fi
+    printf '%s\n' "$gid"
+}
+
+# shared_backups: a yellow line when share_env leaves backups/ open. The start runs share_env under step, whose output
+# only the log gets, so restart says it before. A command that runs restart twice says it once.
+shared_backups() {
+    if [ "$docker_os" = 'Docker Desktop' ] || [ -n "$(backups_group)" ] || [ -n "${SHARED_SAID:-}" ]; then return 0; fi
+    SHARED_SAID=1
+    say "$YELLOW" '▲' "Other users of this host share this folder's group, ${EIGEN_OWNER#*:}, so backups/ stays open to them. Give the folder a group only you are in, then run ./eigen restart."
 }
 
 # Also removes this project's containers whose service the current profiles leave out, so a rerun that switches web
@@ -559,6 +622,7 @@ restart() {
         step "Stopping eigen-api, which reads an older .env.production" "eigen-api stopped" "Could not stop eigen-api" \
             dc stop eigen-api
     fi
+    shared_backups
     step "Starting Eigen" "Eigen is running" "Eigen did not start; ./eigen logs shows why" start
     if [ "$(mail_containers)" != "$mail" ]; then refresh_fail2ban; fi
 }
@@ -579,36 +643,70 @@ stop() {
     step "Stopping Eigen" "Eigen stopped" "Could not stop Eigen" stop_containers
 }
 
-# Backups run nightly, so one still running after a day is not: its end was never written, as on a full disk.
-BACKUP_STALE_MINUTES=1440
-
-# running_records <find test…>: the records in backups/ whose backup or upload says running, of those the test picks.
-# A record is written when either starts and when it ends only, so while one says running the mtime is its start. The
-# upload's state is the one nested a level deeper.
-running_records() {
-    find backups -maxdepth 1 -name 'server-*.json' "$@" -exec grep -lE '^  (  )?"state": "running"' {} + 2>/dev/null || :
+# running_backup: what the running API says runs of a server backup, such as "the server backup <archive>", on one
+# line, or nothing. It fails when the API does not answer. The new launcher stops the old API in an update, and an API
+# of 0.4.1 or before refuses --running (exit 2). For it the records in backups/ are read, as its own launcher did: one
+# says running at the top, or for its upload a level deeper, and one that has said so for over a day lost its end.
+# Drop the fallback when update_apply's floor, a launcher older than 0.3.1, rises past 0.4.1: then no update stops such
+# an API.
+running_backup() {
+    asked=0
+    running=$(api_cli status --running </dev/null 2>/dev/null) || asked=$?
+    case $asked in
+        0) printf '%s\n' "$running" ;;
+        2)
+            find backups -maxdepth 1 -name 'server-*.json' ! -mmin +1440 -exec grep -HE '^  (  )?"state": "running"' {} + \
+                2>/dev/null | sed -n -e '1s|^backups/\(.*\)\.json:    .*|the upload of \1|p' \
+                -e '1s|^backups/\(.*\)\.json:  .*|the server backup \1|p'
+            ;;
+        *) return 1 ;;
+    esac
 }
 
-# The server backup that runs, by the record it keeps in backups/ until it ends. The boot marks the record of one a stop
-# killed failed, so only a running API has one.
-running_backup() { running_records ! -mmin +"$BACKUP_STALE_MINUTES" | head -n 1; }
+# ask_backup <tries>: running_backup, asked again 2 s later while the API does not answer, <tries> times in all. One
+# docker compose exec can fail on a busy host while the API and its backup run on.
+ask_backup() {
+    tries=$1
+    until running_backup; do
+        tries=$((tries - 1))
+        if [ "$tries" = 0 ]; then return 1; fi
+        sleep 2
+    done
+}
 
-wait_backup() { while [ -n "$(running_backup)" ]; do sleep 2; done; }
+# wait_backup <what runs>: until the API names something else, or nothing. It fails after three failed asks in a row.
+wait_backup() {
+    while now=$(ask_backup 3); do
+        if [ "$now" != "$1" ]; then return 0; fi
+        sleep 2
+    done
+    return 1
+}
 
 # before_stop: a stop, and a restart that stops eigen-api, first waits for a running server backup or its upload. The
-# stop would kill it, and that night would have no backup, or none in the bucket. A restore and an update wait before
-# they arm the restart, and stop looks again. A stale record is named and passed. An interrupt here leaves Eigen
-# running.
+# stop would kill it, and that night would have no backup, or none in the bucket. Each step names what it waits for, so
+# when a backup ends and its upload starts, the last line names the upload. A restore and an update wait before they
+# arm the restart, and stop looks again. An API that does not answer, or stops answering, gets the stop it needs. An
+# interrupt here leaves Eigen running. The restart notice expires a few minutes after its time, and a nightly backup
+# can take longer, so a wait gives the tabs the notice again.
 before_stop() {
     if ! api_running; then return 0; fi
-    record=$(running_backup)
-    if [ -n "$record" ]; then
-        step "Waiting for the server backup $(basename "$record" .json) to end" "The server backup ended" \
-            "Could not wait for the server backup" wait_backup
-    fi
-    for record in $(running_records -mmin +"$BACKUP_STALE_MINUTES"); do
-        say "$YELLOW" '▲' "$record has said running for over a day. It looks stale, so Eigen does not wait for it."
+    answered=1
+    running=$(ask_backup 2) || answered=0
+    # A notice that warn_restart armed is given again after a wait.
+    renotice=''
+    if [ -n "$running" ]; then case $AT_EXIT in *unannounce*) renotice=1 ;; esac; fi
+    STEP_GOES_ON=1
+    while [ "$answered" = 1 ] && [ -n "$running" ]; do
+        step "Waiting for $running to end" "Waited for $running to end" \
+            "Eigen stopped answering whether $running ended" wait_backup "$running" &&
+            running=$(ask_backup 3) || answered=0
     done
+    STEP_GOES_ON=''
+    if [ "$answered" = 0 ]; then
+        say "$YELLOW" '▲' "Eigen did not say whether a server backup runs, so the stop goes on."
+    fi
+    if [ -n "$renotice" ]; then announce 0 "$RESTART_REASON"; fi
 }
 
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
@@ -624,30 +722,6 @@ prepare_data() {
         echo "Eigen runs as uid 1000 and cannot write here. Give it the folders: sudo chown 1000:1000 data backups"
         return 1
     }
-}
-
-# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on.
-pull_pinned() {
-    refs=''
-    for name in $IMAGES; do
-        ref=$(answer "$(image_key "$name")" "$1")
-        if [ -z "$ref" ]; then
-            die "The archive pins no $name image." "Restore an archive made by ./eigen backup on a release install."
-        fi
-        refs="$refs $ref"
-    done
-    version=$(answer EIGEN_VERSION "$1")
-    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
-        pull_refs $refs
-}
-
-# need_readable <archive>: the stage reads it as uid 1000, and a copy root made is often 0600. Docker Desktop shows a
-# bind-mounted file as the container user's.
-need_readable() {
-    if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
-    if ! ls -lnL "$1" | awk '{ bit = $3 == 1000 ? 2 : $4 == 1000 ? 5 : 8; exit substr($1, bit, 1) != "r" }'; then
-        die "Eigen runs as uid 1000, which cannot read $1." "Give it the file: sudo chown 1000:1000 $1"
-    fi
 }
 
 # where_archive <archive>: how the CLI reaches it, as STAGE_ARG in the API's container and CLI_ARG on this folder. A
@@ -676,12 +750,46 @@ where_archive() {
     fi
 }
 
+# need_readable <archive>: the stage reads it as uid 1000, and a copy root made is often 0600. Docker Desktop shows a
+# bind-mounted file as the container user's.
+need_readable() {
+    if [ "$docker_os" = 'Docker Desktop' ]; then return 0; fi
+    if ! ls -lnL "$1" | awk '{ bit = $3 == 1000 ? 2 : $4 == 1000 ? 5 : 8; exit substr($1, bit, 1) != "r" }'; then
+        die "Eigen runs as uid 1000, which cannot read $1." "Give it the file: sudo chown 1000:1000 $1"
+    fi
+}
+
+# put_back: the archive where_archive found, staged, swapped in and started on the images it pins.
+put_back() {
+    before=$(image api)
+    kept=$(kept_aside)
+    # Docker would create a missing data/ as root for its bind mount, which the stage, uid 1000, cannot write.
+    if [ ! -d data ]; then
+        step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
+    fi
+    stage_archive
+    # It also refuses a staged tree the swap cannot rename in, while Eigen still runs.
+    pins=$(cli_as 0 restore --staged </dev/null)
+    if [ "$MODE" = release ]; then
+        pin=$(answer EIGEN_API_IMAGE "$pins")
+        if [ -n "$pin" ] && [ "$pin" != "$before" ]; then pull_pinned "$pins"; fi
+    fi
+    # After the question and the pull, so the wait is the last thing before the stop.
+    warn_restart rollback
+    swap_archive
+    after_swap "$before"
+    AT_EXIT=''
+    restart
+}
+
 # stage_archive: while Eigen runs, the API's user unpacks and checks the archive into data/.restoring, on the data/
 # the API sees, and asks unless $yes. A no ends the command; a refusal stops nothing.
 stage_archive() {
     # The stage reads .env.production as the API does.
     share_env
-    AT_EXIT=$UNSTAGE
+    # What AT_EXIT held stays: after a rollback's second check, Eigen is stopped, and a no or a failure starts it.
+    held=$AT_EXIT
+    AT_EXIT="${held:+($held); }$UNSTAGE"
     tty=''
     if [ ! -t 0 ]; then tty=-T; fi
     # The CLI says how an interrupt ended it, so the launcher waits for it.
@@ -694,11 +802,26 @@ stage_archive() {
     case $staged in
         0) ;;
         "$DECLINED")
-            AT_EXIT=''
+            AT_EXIT=$held
             exit 0
             ;;
         *) exit "$staged" ;;
     esac
+}
+
+# pull_pinned <restore --staged lines>: the images the staged archive pins, got while Eigen runs on.
+pull_pinned() {
+    refs=''
+    for name in $IMAGES; do
+        ref=$(answer "$(image_key "$name")" "$1")
+        if [ -z "$ref" ]; then
+            die "The archive pins no $name image." "Restore an archive made by ./eigen backup on a release install."
+        fi
+        refs="$refs $ref"
+    done
+    version=$(answer EIGEN_VERSION "$1")
+    step "Getting Eigen $version" "Eigen $version is here" "Could not get Eigen $version; Eigen runs on as it was" \
+        pull_refs $refs
 }
 
 # swap_archive: stops Eigen and swaps the staged tree in. A swap refused before its marker starts Eigen on the data it
@@ -741,27 +864,6 @@ after_swap() {
 
 # What restores kept aside in the install folder, as the swap names it, a name a line.
 kept_aside() { ls -d data.pre-restore-* .env.production.pre-restore-* 2>/dev/null || :; }
-
-# put_back: the archive where_archive found, staged, swapped in and started on the images it pins.
-put_back() {
-    before=$(image api)
-    kept=$(kept_aside)
-    # Docker would create a missing data/ as root for its bind mount, which the stage, uid 1000, cannot write.
-    if [ ! -d data ]; then
-        step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
-    fi
-    stage_archive
-    # It also refuses a staged tree the swap cannot rename in, while Eigen still runs.
-    pins=$(cli_as 0 restore --staged </dev/null)
-    if [ "$MODE" = release ]; then
-        pin=$(answer EIGEN_API_IMAGE "$pins")
-        if [ -n "$pin" ] && [ "$pin" != "$before" ]; then pull_pinned "$pins"; fi
-    fi
-    swap_archive
-    after_swap "$before"
-    AT_EXIT=''
-    restart
-}
 
 # The last line of a restore: what its swap kept aside, if anything, is the operator's to delete.
 check_kept() {
@@ -861,8 +963,8 @@ setup() {
     done
     CLI_ENV="EIGEN_PROJECT EIGEN_DOCKER_NETWORKS $relay"
 
-    # Beside the launcher alone: bootstrap the pinned build, else the newest release, and hand over to
-    # its launcher, lock included.
+    # Beside the launcher alone: bootstrap the pinned build, else the newest release, and hand over to its launcher,
+    # lock included.
     if [ "$MODE" = release ] && [ ! -e docker-compose.yml ]; then
         preflight quiet
         lock
@@ -962,25 +1064,16 @@ status() {
 # The running API makes the backup: its job map keeps a backup off a home a restore writes and waits for it at shutdown.
 # It stops nothing, so it takes no lock.
 backup() {
-    level=full s3='' wait=''
+    level=full wait=''
     help_flag backup "$@"
     for arg in "$@"; do
         case $arg in
-            --light) level=light ;;
-            --full) level=full ;;
-            --s3) s3=1 ;;
+            --full) ;;
+            --s3) level=full-s3 ;;
             --wait) wait=--wait ;;
             *) refuse backup "$arg" ;;
         esac
     done
-    if [ -n "$s3" ]; then
-        if [ "$level" = light ]; then
-            printf 'A light backup holds no files, so it takes no --s3.\n\n' >&2
-            command_usage backup >&2
-            exit 2
-        fi
-        level='full-s3'
-    fi
     need_install
     wordmark backup
     preflight
@@ -990,6 +1083,153 @@ backup() {
     fi
     need_env_mounted
     api_cli backup --level "$level" $wait
+}
+
+# in_argument <command> <argument>: takes --in, its time and the message that may follow it, as shutdown takes
+# `+10 "message"`, into IN_SECONDS and IN_MESSAGE. Returns 1 for any other argument, which the command parses itself.
+# A time is digits and s, m or h, or 0 alone, so a bare 10 never waits ten seconds for someone who meant minutes.
+# Checked before anything runs. dash counts the message in bytes, so one with accents may hold fewer characters.
+IN_TIME='' IN_SECONDS=0 IN_MESSAGE='' IN_NEXT=''
+in_argument() {
+    case $IN_NEXT in
+        time)
+            IN_TIME=$2 IN_NEXT=message
+            number=${2%[smh]}
+            case $2 in
+                0) return 0 ;;
+                *s) unit=1 ;;
+                *m) unit=60 ;;
+                *h) unit=3600 ;;
+                *) number='' ;;
+            esac
+            case $number in '' | *[!0-9]*)
+                refuse_usage "$1" "--in takes a time with its unit, such as 10m, 90s or 1h, or 0; not \"$2\"."
+                ;;
+            esac
+            # Without its leading zeros, which $(( )) would read as octal.
+            number=${number#"${number%%[!0]*}"}
+            if [ ${#number} -gt 4 ] || [ $((${number:-0} * unit)) -gt "$MAX_WAIT" ]; then
+                refuse_usage "$1" "--in waits an hour at most."
+            fi
+            IN_SECONDS=$((${number:-0} * unit))
+            return 0
+            ;;
+        message)
+            IN_NEXT=''
+            case $2 in -*) return 1 ;; esac
+            if [ ${#2} -gt "$MAX_MESSAGE" ]; then refuse_usage "$1" "The message is over $MAX_MESSAGE characters."; fi
+            IN_MESSAGE=$2
+            return 0
+            ;;
+    esac
+    if [ "$2" != --in ]; then return 1; fi
+    IN_NEXT=time
+}
+
+# need_in_time <command>: after the arguments, a --in without its time is refused.
+need_in_time() {
+    if [ "$IN_NEXT" = time ]; then refuse_usage "$1" "--in takes a time, such as 10m."; fi
+}
+
+# warn_restart <reason>: when Eigen runs, tells every open tab that it restarts, for an update or a rollback, then
+# waits out --in. From here an exit, Ctrl+C or a hangup takes the notice back through AT_EXIT, so no tab warns of a
+# restart that does not come. dash runs no EXIT trap on a hangup it does not trap. RESTART_REASON keeps the reason,
+# for before_stop to give the notice again.
+RESTART_REASON=''
+warn_restart() {
+    if ! api_running; then return 0; fi
+    RESTART_REASON=$1
+    AT_EXIT="${AT_EXIT:+$AT_EXIT; }unannounce"
+    trap 'exit 129' HUP
+    announce "$IN_SECONDS" "$1"
+    if [ "$IN_SECONDS" -gt 0 ]; then countdown; fi
+}
+
+# announce <seconds> <reason>: the notice of a restart in <seconds>, with IN_MESSAGE, on the running API. It runs in
+# this process, not as a step's job, so a hangup cannot leave a notice landing after unannounce took it back. One with
+# a wait stops the command when it fails, since the wait would warn nobody. One for now is best-effort: an API that
+# cannot take it holds nothing up.
+announce() {
+    told=$(api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
+        </dev/null 2>&1) || {
+        if [ "$1" = 0 ]; then
+            say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
+            return 0
+        fi
+        {
+            say "$RED" '■' "Could not tell the open tabs; Eigen runs on as it was"
+            printf '%s\n' "$told" | tail -n 20 | sed "s/^/${GRAY}│${RESET}  /"
+            say "$GRAY" '└' "Fix what it says, then run ./eigen $COMMAND again."
+        } >&2
+        exit 1
+    }
+    if [ "$1" = 0 ]; then return 0; fi
+    say "$GREEN" '◇' "Told the open tabs"
+    RESTART_AT=$(answer at "$told" | sed 's/^.*T//; s/\.[0-9]*Z$/ UTC/')
+}
+
+# unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
+unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
+
+# countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
+# sees one line count down, as shutdown warns; a log gets it once.
+countdown() {
+    end=$(($(date +%s) + IN_SECONDS)) left=$IN_SECONDS
+    if [ -n "$IN_MESSAGE" ]; then say "$GRAY" '│' "$IN_MESSAGE"; fi
+    trap 'if [ -t 1 ]; then printf "\r\033[K" || :; fi
+        say "$RED" "■" "The wait was cancelled. Eigen runs on as it was." >&2; exit 130' INT TERM
+    while [ "$left" -gt 0 ]; do
+        line="Restarts in $(duration "$left"), at $RESTART_AT. Ctrl+C cancels."
+        if [ -t 1 ]; then
+            # A line that wraps leaves a line a second: \r only goes back to the start of the last one.
+            width=$(columns)
+            if [ "$width" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$((width - 4))"); fi
+            printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
+        elif [ "$left" = "$IN_SECONDS" ]; then
+            say "$ACCENT" '◆' "$line"
+        fi
+        sleep 1
+        left=$((end - $(date +%s)))
+    done
+    trap 'exit 130' INT TERM
+    if [ -t 1 ]; then printf '\r\033[K' || :; fi
+    say "$GREEN" '◇' "Waited until $RESTART_AT"
+}
+
+restore() {
+    archive='' yes='' s3=''
+    help_flag restore "$@"
+    for arg in "$@"; do
+        if in_argument restore "$arg"; then continue; fi
+        case $arg in
+            --yes) yes=--yes ;;
+            --s3-from-archive) s3=--s3-from-archive ;;
+            -*) refuse restore "$arg" ;;
+            *)
+                if [ -n "$archive" ]; then refuse restore "$arg"; fi
+                archive=$arg
+                ;;
+        esac
+    done
+    need_in_time restore
+    # After --in, an archive reads as the message: a name that ends in .tar, or one of a file that exists.
+    if [ -z "$archive" ] && { [ "${IN_MESSAGE%.tar}" != "$IN_MESSAGE" ] || [ -f "$IN_MESSAGE" ] ||
+        [ -f "backups/$IN_MESSAGE" ]; }; then
+        refuse_usage restore "Put the archive before --in: ./eigen restore $IN_MESSAGE --in $IN_TIME"
+    fi
+    if [ -z "$archive" ]; then
+        die "Name the archive to restore." "Pass a name in backups/, or the path of an archive: ./eigen restore <archive>"
+    fi
+    wordmark restore
+    preflight
+    where_archive "$archive"
+    if [ "$MODE" = release ] && unconfigured; then restore_fresh "$@"; fi
+    need_install
+    need_image "Run ./eigen setup first, then ./eigen restore <archive>."
+    if [ "$MODE" = release ]; then api_here; fi
+    lock
+    put_back
+    check_kept
 }
 
 # A new machine: the launcher alone, as the installer leaves it, or beside a mirror's .env.production. The archive's
@@ -1016,37 +1256,8 @@ restore_fresh() {
     exec ./eigen restore "$@"
 }
 
-restore() {
-    archive='' yes='' s3=''
-    help_flag restore "$@"
-    for arg in "$@"; do
-        case $arg in
-            --yes) yes=--yes ;;
-            --s3-from-archive) s3=--s3-from-archive ;;
-            -*) refuse restore "$arg" ;;
-            *)
-                if [ -n "$archive" ]; then refuse restore "$arg"; fi
-                archive=$arg
-                ;;
-        esac
-    done
-    if [ -z "$archive" ]; then
-        die "Name the archive to restore." "Pass a name in backups/, or the path of an archive: ./eigen restore <archive>"
-    fi
-    wordmark restore
-    preflight
-    where_archive "$archive"
-    if [ "$MODE" = release ] && unconfigured; then restore_fresh "$@"; fi
-    need_install
-    need_image "Run ./eigen setup first, then ./eigen restore <archive>."
-    if [ "$MODE" = release ]; then api_here; fi
-    lock
-    put_back
-    check_kept
-}
-
 update() {
-    target='' check=0 accept='' pulled=0 full='' saved='' no_backup='' previous=''
+    target='' check=0 accept='' pulled=0 saved='' no_backup='' previous=''
     help_flag update "$@"
     for arg in "$@"; do
         case $previous in --saved)
@@ -1054,10 +1265,10 @@ update() {
             continue
             ;;
         esac
+        if in_argument update "$arg"; then continue; fi
         case $arg in
             --check) check=1 ;;
             --accept-breaking) accept=--accept-breaking ;;
-            --full) full=--full ;;
             --no-backup) no_backup=--no-backup ;;
             # The handover from the launcher that got the new version to the one that came with it, with the backup
             # it made, or --no-backup.
@@ -1068,8 +1279,26 @@ update() {
         esac
         previous=$arg
     done
+    need_in_time update
+    if [ "$check" = 1 ] && [ -n "$IN_TIME" ]; then refuse_usage update "--check updates nothing, so it takes no --in."; fi
+    # After --in, a version would read as the message. Only a single word can be one: a sentence that mentions a
+    # version is a message.
+    if [ -z "$target" ]; then
+        case $IN_MESSAGE in
+            *' '*) ;;
+            *) if release_name "$IN_MESSAGE"; then
+                refuse_usage update "Put the version before --in: ./eigen update $IN_MESSAGE --in $IN_TIME"
+            fi ;;
+        esac
+    fi
     if [ "$MODE" = local ]; then
         die "A local build has no updates." "Pull the code and run ./eigen setup again, which builds it."
+    fi
+    # The old launcher's notice is on the tabs, and exec dropped its traps: from here a failure takes it back.
+    if [ "$pulled" = 1 ]; then
+        lock
+        AT_EXIT=unannounce RESTART_REASON=update
+        trap 'exit 129' HUP
     fi
     need_install
     if [ "$pulled" = 1 ]; then
@@ -1078,19 +1307,26 @@ update() {
         wordmark update
         preflight
     fi
-    if [ "$check" = 0 ]; then lock; fi
+    if [ "$check" = 0 ] && [ "$pulled" != 1 ]; then lock; fi
     if [ "$pulled" = 1 ]; then update_apply; else update_get; fi
+}
+
+# release_name <name>: a release ./eigen update can go to: a version, latest, or main, the only channel. A version is
+# the CLI's VERSION_PATTERN, loosely.
+release_name() {
+    case $1 in
+        latest | main | [0-9]*.[0-9]*.[0-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # The part the launcher the operator typed runs, while Eigen runs on: get the new version, check it, and hand over to
 # the launcher that came with it.
 update_get() {
-    # main is the only channel; any other tag, such as publish.yml's candidates, is no release. A version is
-    # VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
-    case $target in
-        '' | latest | main | [0-9]*.[0-9]*.[0-9]*) ;;
-        *) die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)." ;;
-    esac
+    # Any other tag, such as a candidate the publish workflow pushes, is no release.
+    if [ -n "$target" ] && ! release_name "$target"; then
+        die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
+    fi
     follows=$(env_value EIGEN_VERSION)
     if [ -z "$follows" ]; then die ".env.production names no Eigen release." "Run ./eigen setup first."; fi
     api_here
@@ -1151,19 +1387,17 @@ update_get() {
         die "$tag moved while downloading: the notes were of Eigen $new." "Run ./eigen update again."
     fi
     pin_images "$tag"
-    # Before the files of the new version, which a failure would leave with the old images, and before its
-    # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release, or one
-    # marked (full backup), gets a full backup, since it may convert what a light one leaves out.
-    level=full
-    if [ -z "$full" ] && [ -z "$no_backup" ]; then
-        levels=$(cli update-check --from "$old_version" --level </dev/null)
-        level=$(answer level "$levels")
-    fi
+    # The pulls and the questions are done, so the wait comes right before the backup, which then misses little.
+    warn_restart update
     handover=--no-backup
     if [ -z "$no_backup" ]; then
+        # The operator may have edited the file during the wait.
+        if [ "$IN_SECONDS" -gt 0 ]; then need_env_mounted; fi
+        # Before the files of the new version, which a failure would leave with the old images, and before its
+        # configure --backfill, so the archive holds the .env.production this build runs on.
         NEXT="Eigen $current runs on as it was. Fix what it says, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
-        step "Backing up Eigen $current, $level" "Backed up Eigen $current" "Could not back up Eigen $current" \
-            api_cli backup --level "$level" --reason pre-update --wait
+        step "Backing up Eigen $current" "Backed up Eigen $current" "Could not back up Eigen $current" \
+            api_cli backup --reason pre-update --wait
         NEXT=''
         saved=$(answer archive "$(cat "$LOG")")
         if [ -z "$saved" ]; then
@@ -1174,14 +1408,20 @@ update_get() {
         # What changes from here to the stop is not in it: the operator is told until when it holds.
         say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
         handover="--saved $saved"
+        # The backup may have outlasted the notice's expiry, which starts over for the handover and the stop.
+        announce 0 update
     fi
     write_bundle "$(answer EIGEN_API_IMAGE "$PINS")"
+    # The notice holds on until the new launcher stops Eigen.
+    AT_EXIT=''
     # The new launcher gets the tag and what it saves as arguments and parses them as this one did; no variable crosses.
     exec ./eigen update --pulled "$tag" $handover
 }
 
 # The part the launcher of the new version runs: stop, switch and start.
 update_apply() {
+    # Up to the stop, which ends the old API and its notice, a failure or a hangup takes back the notice the old
+    # launcher gave (armed in update). The old API's CLI may have no restart-notice, which unannounce lets pass.
     # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
         die "This update was started by a launcher older than 0.3.1." \
@@ -1195,7 +1435,7 @@ update_apply() {
     old=$(describe "$old_image")
     new=$(describe "$new_image")
     # What .env.production pins before the switch is what the rollback goes back to.
-    old_pins=$(pinned_refs)
+    old_pins=$(current_pins)
 
     API_IMAGE=$new_image
     before_stop
@@ -1208,8 +1448,9 @@ update_apply() {
     stop
     step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
         with_pins cli configure --backfill
-    # Only a switch makes the backup the way back; an update without one leaves none to an older build.
-    if [ -n "$saved" ]; then echo "$saved" >.eigen/last-update; else rm -f .eigen/last-update; fi
+    # Only a switch makes the backup the way back; an update without one leaves none to an older build. Its pins
+    # follow, for a rollback that keeps the data.
+    if [ -n "$saved" ]; then printf '%s\n%s\n' "$saved" "$old_pins" >.eigen/last-update; else rm -f .eigen/last-update; fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
     step "Removing old images" "Old images removed" "Could not remove the old images" prune_images $old_pins
@@ -1222,11 +1463,52 @@ update_apply() {
     fi
 }
 
-# pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
-pre_update_archives() {
-    for archive in backups/server-pre-update-*.tar; do
-        if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
-    done | sort -t- -k5r
+# Goes back to the build before the last update. switch_back keeps the data as it is when that build opens it. When
+# it does not, the backup the update made brings back the data and .env.production, staged while Eigen runs, then the
+# images it pins and their bundle files.
+rollback() {
+    yes=''
+    help_flag rollback "$@"
+    for arg in "$@"; do
+        if in_argument rollback "$arg"; then continue; fi
+        case $arg in
+            --yes) yes=--yes ;;
+            *) refuse rollback "$arg" ;;
+        esac
+    done
+    need_in_time rollback
+    if [ "$MODE" = local ]; then
+        die "A local build has no update to roll back." "Go back in the code and run ./eigen setup again, which builds it."
+    fi
+    need_install
+    wordmark rollback
+    # First: a swap that was cut off, finished here, clears .eigen/last-update.
+    preflight
+    if [ ! -f .eigen/last-update ]; then
+        no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
+    fi
+    archive=$(sed -n 1p .eigen/last-update)
+    # Only a launcher of 0.4.1 or before made a Light backup, and it recorded no build to switch back to.
+    case $archive in server-pre-update-light-*)
+        no_rollback "The last update made a Light backup, backups/$archive, which this version of Eigen cannot put back." \
+            "./eigen restore <archive> puts back a Full backup instead."
+        ;;
+    esac
+    if [ ! -f "backups/$archive" ]; then
+        no_rollback "The backup the last update made, backups/$archive, is gone." \
+            "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
+    fi
+    lock
+    api_here
+    current=$(describe "$(image api)")
+    switch_back "$archive"
+    if [ -n "$switched" ]; then return; fi
+    say "$ACCENT" '◆' "Back from Eigen $current to the backup the last update made"
+    s3=''
+    where_archive "$archive"
+    put_back
+    say "$GREEN" '◇' "Eigen $current → $(describe "$API_IMAGE") is running at https://$(env_value DOMAIN)/"
+    check_kept
 }
 
 # no_rollback <what went wrong> <what to do next>: a rollback's refusal, which points at the backups earlier updates
@@ -1241,41 +1523,107 @@ no_rollback() {
     exit 1
 }
 
-# The pre-update backup brings back the data and .env.production, staged while Eigen runs, then the images it pins
-# and their bundle files.
-rollback() {
-    yes=''
-    help_flag rollback "$@"
-    for arg in "$@"; do
-        case $arg in
-            --yes) yes=--yes ;;
-            *) refuse rollback "$arg" ;;
-        esac
-    done
-    if [ "$MODE" = local ]; then
-        die "A local build has no update to roll back." "Go back in the code and run ./eigen setup again, which builds it."
+# pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
+# A Light one, which no restore takes, is left out.
+pre_update_archives() {
+    for archive in backups/server-pre-update-*.tar; do
+        case $archive in backups/server-pre-update-light-*) continue ;; esac
+        if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
+    done | awk -F- '{ print $(NF - 1) $NF, $0 }' | sort -r | cut -d' ' -f2-
+}
+
+# switch_back <archive>: the first way back, which keeps data/. The build before the update, as the API's user while
+# Eigen runs, checks it opens every database here and asks; then the rollback warns the open tabs as put_back does,
+# stops Eigen, checks again what Eigen wrote since (check_again) and switches back to the pins the update recorded.
+# The archive stays for ./eigen restore. Sets switched once Eigen runs on that build. Leaves it empty, and says why,
+# when that build cannot open the data, is too old to check it, or the launcher that made the update recorded no
+# pins: the rollback then puts the archive back. A check that stopped without a verdict on the data ends the
+# rollback, which keeps today's data.
+switch_back() {
+    switched=''
+    PINS=$(sed -n '2,$p' .eigen/last-update)
+    old_image=$(answer EIGEN_API_IMAGE "$PINS")
+    if [ -z "$old_image" ]; then
+        say "$YELLOW" '▲' "The launcher that made the last update kept no note of the build before it."
+        return
     fi
-    need_install
-    wordmark rollback
-    # First: a swap that was cut off, finished here, clears .eigen/last-update.
-    preflight
-    if [ ! -f .eigen/last-update ]; then
-        no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
-    fi
-    archive=$(sed -n 1p .eigen/last-update)
-    if [ ! -f "backups/$archive" ]; then
-        no_rollback "The backup the last update made, backups/$archive, is gone." \
-            "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
-    fi
-    lock
-    api_here
-    current=$(describe "$(image api)")
-    say "$ACCENT" '◆' "Back from Eigen $current to the backup the last update made"
-    s3=''
-    where_archive "$archive"
-    put_back
-    say "$GREEN" '◇' "Eigen $current → $(describe "$API_IMAGE") is running at https://$(env_value DOMAIN)/"
-    check_kept
+    NEXT="Eigen $current runs on as it was. Check the network, then run ./eigen rollback again."
+    step "Getting the build before the update" "The build before the update is here" \
+        "Could not get the build before the update" \
+        pull_refs $(printf '%s\n' "$PINS" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p')
+    NEXT=''
+    old=$(describe "$old_image")
+    say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
+    # In ms, as check_again passes it. The margin covers a clock that differs between this host and Docker's VM.
+    since=$((($(date +%s) - 300) * 1000))
+    checked=0
+    with_image "$old_image" cli_as 1000:1000 restore --check-data $yes || checked=$?
+    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2. 130 is a Ctrl+C at
+    # its question, which the operator saw.
+    case $checked in
+        0) ;;
+        "$CANNOT_OPEN")
+            say "$YELLOW" '▲' "Eigen $old cannot open the data here."
+            return
+            ;;
+        2)
+            say "$YELLOW" '▲' "Eigen $old is too old to check the data here."
+            return
+            ;;
+        "$DECLINED") exit 0 ;;
+        130) exit 130 ;;
+        # The check could not run to the end, as when a database stays locked, Docker cannot run the image or the OOM
+        # killer ends it: it said nothing of the data.
+        *)
+            die "The check stopped (exit $checked); Eigen $current runs on as it was." \
+                "Fix what it says, then run ./eigen rollback again."
+            ;;
+    esac
+    # After the pull, the check and its question, so the wait is the last thing before the stop.
+    warn_restart rollback
+    before_stop
+    # From the stop on, whatever ends the rollback starts Eigen again, on the build .env.production pins by then.
+    AT_EXIT=restart
+    stop
+    if ! check_again "$1"; then return; fi
+    step "Switching to Eigen $old" "Switched to Eigen $old" "Could not write Eigen $old into .env.production" \
+        with_image "$old_image" with_pins cli configure --backfill
+    write_bundle "$old_image"
+    # Only now, so a rollback cut off before here runs again and finishes.
+    rm -f .eigen/last-update
+    AT_EXIT=''
+    restart
+    say "$GREEN" '◇' "Eigen $current → $old is running at https://$(env_value DOMAIN)/"
+    say "$GRAY" '└' "The data stayed as it was. backups/$1 stays, for ./eigen restore."
+    switched=1
+}
+
+# check_again <archive>: with Eigen stopped, the build before the update checks once more the databases written since
+# the first check began. The wait for the tabs and for a server backup ran on the new build, and a server backup opens
+# every home, so a database may have moved to a schema the build before cannot open. Returns 1 when one did: Eigen
+# stays stopped and the rollback puts the archive back. A check that stopped without a verdict ends the rollback, and
+# Eigen starts again on the build it ran.
+check_again() {
+    say "$ACCENT" '◆' "Checking again what Eigen wrote since the first check"
+    rechecked=0
+    with_image "$old_image" cli_as 1000:1000 restore --check-data --yes --since "$since" || rechecked=$?
+    case $rechecked in
+        0) return 0 ;;
+        "$CANNOT_OPEN")
+            say "$YELLOW" '▲' "Eigen $old cannot open what Eigen $current wrote since the first check."
+            return 1
+            ;;
+        # A build from before --since refuses it as an unknown argument. Taking the first verdict would leave the
+        # writes since unchecked, and putting the archive back would throw away what users did since the update.
+        2)
+            die "Eigen $old cannot check again what Eigen $current wrote since the first check; Eigen $current starts again." \
+                "./eigen restore backups/$1 puts back the backup the last update made."
+            ;;
+        *)
+            die "The second check stopped (exit $rechecked); Eigen $current starts again." \
+                "Fix what it says, then run ./eigen rollback again."
+            ;;
+    esac
 }
 
 COMMAND=${1:-}

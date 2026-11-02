@@ -6,17 +6,25 @@
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
+import type { BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
-import type { ArchiveMember } from './archive';
-import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
+import type { HashedArchiveMember, UnpackBound } from './archive';
+import {
+    copyArchiveMember,
+    declaredUnpackBytes,
+    extractArtifact,
+    readArtifactManifest,
+    readUnpackedHome,
+    unpackBound,
+    withUnpackSlack,
+} from './archive';
 import { flatStorageKey, readMountPathRows, rowArchivePath } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
-import { checkRestoredDatabases, materializeMount, movePath } from './materialize-mount';
+import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
@@ -33,41 +41,66 @@ export const RESTORING_DIR = '.restoring';
 // Inside it, the new data/, with the archive's .env.production beside it.
 export const RESTORING_DATA_DIR = 'data';
 
-export type ServerArchiveFile = { name: string; manifest: ServerArchiveManifest; members: Map<string, ArchiveMember> };
+export type ServerArchiveFile = {
+    name: string;
+    manifest: ServerArchiveManifest;
+    members: Map<string, HashedArchiveMember>;
+};
 
-// What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded or
-// canceled, `missing` the ones whose bytes the archive does not hold. Their rows name missing files, which
+// What the stage leaves out of the pending uploads it finds: `settled` the ones data/ here already uploaded,
+// `missing` the ones whose bytes the archive does not hold. The rows of the missing name missing files, which
 // reconcile drops.
 type NotReplayed = { settled: number; missing: number };
 
+// What every member's step of the stage shares. `boundOf` is the most one member's unpack may write.
 type StageContext = {
     dataDir: string;
     unpackDir: string;
     s3FromArchive: boolean;
     stamp: string;
     now: number;
+    boundOf: (member: HashedArchiveMember) => Promise<UnpackBound>;
 };
 
-// How much server.tar.zst can grow unpacked: its manifest carries no inner count, and SQLite shrinks that much.
-const SERVER_MEMBER_EXPANSION = 10;
+// The manifest of each archive inside a server archive, the server member's and every home's, by member name. Each
+// is the last entry of its member, so reading one decompresses the whole member. The stage reads them once, for its
+// room check, and bounds each unpack by them.
+export type MemberManifests = ReadonlyMap<string, BackupManifest>;
 
-// What the stage takes on the data disk, at most: every member unpacked, a home by its inner count. Once: it
-// streams each member out of the archive and renames what it unpacked into place.
-export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
-    const homes = new Map(manifest.homes.map((home) => [home.member, home.bytes ?? 0]));
-    const unpacked = (entry: ServerArchiveManifest['entries'][number]) =>
-        entry.path === SERVER_ARCHIVE_SERVER_MEMBER
-            ? SERVER_MEMBER_EXPANSION * entry.bytes
-            : Math.max(entry.bytes, homes.get(entry.path) ?? 0);
-    return manifest.entries.reduce((sum, entry) => sum + unpacked(entry), 0);
+export async function readMemberManifests({ manifest, members }: ServerArchiveFile): Promise<MemberManifests> {
+    const manifests = new Map<string, BackupManifest>();
+    for (const name of [SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])]) {
+        const member = members.get(name);
+        if (member) manifests.set(name, await readArtifactManifest(member));
+    }
+    return manifests;
+}
+
+// What the stage takes on the data disk, at most: what each member's unpack declares, with the slack and the reserve
+// added once. The server member and each home declare it in their own manifest, and the rest are copied at their
+// size. Counted once: the stage streams each member out and renames what it unpacked into place. A caller that also
+// stages passes the manifests it read, so no member is decompressed for them twice.
+export async function stageBytesNeeded(archive: ServerArchiveFile, manifests?: MemberManifests): Promise<number> {
+    const declaredBy = manifests ?? (await readMemberManifests(archive));
+    let declared = 0;
+    for (const entry of archive.manifest.entries) {
+        const inner = declaredBy.get(entry.path);
+        declared += inner ? declaredUnpackBytes(inner) : entry.bytes;
+    }
+    return withUnpackSlack(declared);
 }
 
 // Every member of the archive into `restoringDir`/data, each verified as it lands. Throws on the first one that
-// is refused; the caller takes the staged tree back.
+// is refused; the caller takes the staged tree back. Each unpack stops at what its manifest declares: from
+// `manifests` when the caller read them for its room check, or read here.
 export async function stageServerArchive(
     archive: ServerArchiveFile,
     restoringDir: string,
-    { s3FromArchive, onStep }: { s3FromArchive: boolean; onStep: (step: string) => void },
+    {
+        s3FromArchive,
+        onStep,
+        manifests,
+    }: { s3FromArchive: boolean; onStep: (step: string) => void; manifests?: MemberManifests },
 ): Promise<NotReplayed> {
     const context: StageContext = {
         dataDir: path.join(restoringDir, RESTORING_DATA_DIR),
@@ -75,9 +108,10 @@ export async function stageServerArchive(
         s3FromArchive,
         stamp: buildBackupStamp(new Date()),
         now: Math.floor(Date.now() / 1000),
+        boundOf: async (member) => unpackBound(manifests?.get(member.name) ?? (await readArtifactManifest(member))),
     };
     onStep("the server's own databases and settings");
-    await stageServerMember(archive, context.dataDir, path.join(context.unpackDir, SERVER_DIR));
+    await stageServerMember(archive, context, path.join(context.unpackDir, SERVER_DIR));
 
     // Each install folder into its folder in data/. The containers that use them give them their owners and modes
     // when they start.
@@ -95,23 +129,27 @@ export async function stageServerArchive(
     }
 
     const homes = archive.manifest.homes.flatMap((home) => (home.member ? [{ ...home, member: home.member }] : []));
-    const notReplayed: NotReplayed = { settled: 0, missing: 0 };
+    const staged: NotReplayed = { settled: 0, missing: 0 };
     for (const [index, home] of homes.entries()) {
         onStep(`home ${index + 1} of ${homes.length}: ${home.name}`);
         const { settled, missing } = await stageHome(archive, home, context);
-        notReplayed.settled += settled;
-        notReplayed.missing += missing;
+        staged.settled += settled;
+        staged.missing += missing;
     }
     fs.rmSync(context.unpackDir, { recursive: true, force: true });
-    return notReplayed;
+    return staged;
 }
 
 // server/ and org/ out of server.tar.zst. The runtime files are never captured; one found here goes, so the
 // restored server draws a new data epoch and every tab from before reloads.
-async function stageServerMember(archive: ServerArchiveFile, dataDir: string, unpackDir: string): Promise<void> {
+async function stageServerMember(
+    archive: ServerArchiveFile,
+    { dataDir, boundOf }: StageContext,
+    unpackDir: string,
+): Promise<void> {
     const member = archive.members.get(SERVER_ARCHIVE_SERVER_MEMBER);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${SERVER_ARCHIVE_SERVER_MEMBER}`);
-    await extractArtifact(member, unpackDir);
+    await extractArtifact(member, unpackDir, await boundOf(member));
     const folder = path.join(unpackDir, buildServerFolderName(new Date(archive.manifest.createdAt)));
     const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
     const manifest = fs.existsSync(manifestPath) ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8')) : null;
@@ -128,23 +166,22 @@ async function stageServerMember(archive: ServerArchiveFile, dataDir: string, un
     }
 }
 
-// One home member into the staged tree, by the mode of each mount. Light carries every database and no files:
-// the swap merges it into the live home. An s3 mount stays on the bucket as it is, with its staged uploads
-// replayed, unless the archive holds its objects and the operator asked for them (fresh keys, as a per-home
-// restore does).
+// One home member into the staged tree, by the mode of each mount. An s3 mount stays on the bucket as it is, with its
+// staged uploads replayed, unless the archive holds its objects and the operator asked for them (fresh keys, as a
+// per-home restore does).
 async function stageHome(
     archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
-    { dataDir, unpackDir, s3FromArchive, stamp, now }: StageContext,
+    { dataDir, unpackDir, s3FromArchive, stamp, now, boundOf }: StageContext,
 ): Promise<NotReplayed> {
     if (!BACKUP_OWNER_ID.test(home.ownerId)) throw new ApiError(400, `${home.ownerId} is not a home id`);
     const member = archive.members.get(home.member);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${home.member}`);
     const unpacked = path.join(unpackDir, home.ownerId);
-    await extractArtifact(member, unpacked);
+    await extractArtifact(member, unpacked, await boundOf(member));
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
-    // The swap goes by the outer level: a light home under a full one would replace a home with no files.
+    // --s3-from-archive trusts the outer level, so every home in the archive is captured at it.
     const { level } = manifest;
     if (level !== archive.manifest.level) {
         throw new ApiError(400, `${home.member} is a ${level} capture in a ${archive.manifest.level} archive`);
@@ -156,10 +193,9 @@ async function stageHome(
     const carried = manifest.mounts.filter((summary) => !summary.skipped);
     const containerDatabases: VersionedDatabase[] = [];
     const notReplayed: NotReplayed = { settled: 0, missing: 0 };
-    // A Light home carries no files, so its mounts have nothing to put in place.
-    for (const summary of level === 'light' ? [] : carried) {
+    for (const summary of carried) {
         if (summary.storageType !== 's3' || (s3FromArchive && summary.contents !== 'metadata')) {
-            containerDatabases.push(...materializeMount(homeDir, summary, stamp));
+            containerDatabases.push(...(await materializeMount(homeDir, summary, stamp)));
             continue;
         }
         const replay = replayPendingUploads(
@@ -171,14 +207,12 @@ async function stageHome(
         notReplayed.missing += replay.missing;
     }
     const mountIds = carried.map((summary) => summary.id);
-    checkRestoredDatabases(homeDir, mountIds, containerDatabases);
-    for (const id of mountIds) {
-        const metadata = path.join(requireMountDir(homeDir, id), PATHS.DRIVE.METADATA_DB);
-        try {
-            redateTrash(metadata, now);
-        } catch (error) {
-            throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
-        }
+    // verifyFolder checked these pages. Since then each file was only renamed, or written through SQLite itself.
+    await checkRestoredDatabases(homeDir, mountIds, containerDatabases, { verified: true });
+    try {
+        redateTrash(homeDir, mountIds, now);
+    } catch (error) {
+        throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
     }
     fs.rmSync(unpacked, { recursive: true, force: true });
     return notReplayed;
@@ -186,12 +220,12 @@ async function stageHome(
 
 // An s3 mount the bucket stays as it is for. Each pending row's bytes go to staging/ under the name its row gives
 // them: from staging/ as archived, or, when the archive holds the mount's files, from its data/, which goes.
-// A key the live mount has no row for any more was acked or canceled here: replaying it puts older bytes on the
-// key. A live row, under whatever name, means the bucket still lacks what the archive holds.
+// A key the live mount uploaded is not replayed, since that would put older bytes on it. Every other key is: the
+// bucket may never have had it, such as after a restore of the home gave its files new keys.
 function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles: boolean): NotReplayed {
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
     const stagingDir = path.join(mountDir, PATHS.DRIVE.STAGING_DIR);
-    const live = livePendingKeys(liveMountDir);
+    const uploaded = liveUploadedKeys(liveMountDir);
     const notReplayed: NotReplayed = { settled: 0, missing: 0 };
     const db = new Database(path.join(mountDir, PATHS.DRIVE.METADATA_DB), { readwrite: true, create: false });
     try {
@@ -207,7 +241,7 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
             // A legacy row holds an absolute path on the server that made it; it gets the name the file lands under.
             const name = path.basename(stagingPath);
             const staged = path.join(stagingDir, name);
-            if (live && !live.has(storageKey)) {
+            if (uploaded?.has(storageKey)) {
                 if (!fromFiles && isUsableName(name)) fs.rmSync(staged, { force: true });
                 notReplayed.settled++;
                 continue;
@@ -230,18 +264,25 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
     return notReplayed;
 }
 
-// The storage keys the live mount still has to upload, or null for a mount that never ran here or whose
-// metadata.db does not read: a damaged live database is a reason to restore, not to refuse one. Read-write like
-// readMountTotalSize: a closed WAL database has no -shm, and a read-only open of it fails.
-function livePendingKeys(liveMountDir: string): Set<string> | null {
+// The storage keys the live mount has uploaded: those of its files with no pending upload. It is null for a mount that
+// never ran here or whose metadata.db does not read: a damaged live database is a reason to restore, not to refuse
+// one, and the warning says what that costs.
+function liveUploadedKeys(liveMountDir: string): Set<string> | null {
     const metadata = path.join(liveMountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadata)) return null;
     let db: Database | undefined;
     try {
-        db = new Database(metadata, { readwrite: true, create: false });
-        db.run('PRAGMA busy_timeout = 5000;');
-        const rows = db.query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads').all();
-        return new Set(rows.map((row) => row.storageKey));
+        db = openToCheck(metadata);
+        const files = db
+            .query<{ id: string; file: string }, []>("SELECT id, file FROM paths WHERE type = 'file'")
+            .all();
+        const uploaded = new Set(files.map(flatStorageKey));
+        for (const { storageKey } of db
+            .query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads')
+            .all()) {
+            uploaded.delete(storageKey);
+        }
+        return uploaded;
     } catch (error) {
         console.warn(
             `${metadata} does not read (${describeError(error)}): every pending upload in the archive is replayed`,
@@ -249,16 +290,5 @@ function livePendingKeys(liveMountDir: string): Set<string> | null {
         return null;
     } finally {
         db?.close();
-    }
-}
-
-// The trash starts over, so a purge never deletes bucket objects the data/ kept aside may still name, and the
-// operator has the whole retention window. In seconds, as trashPath writes it.
-function redateTrash(metadataPath: string, now: number): void {
-    const db = new Database(metadataPath, { readwrite: true, create: false });
-    try {
-        db.run('UPDATE paths SET trashedAt = ? WHERE trashedAt IS NOT NULL', [now]);
-    } finally {
-        db.close();
     }
 }

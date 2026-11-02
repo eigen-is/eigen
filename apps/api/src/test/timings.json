@@ -330,7 +330,6 @@
     "src/test/preview/vcard-preview.test.ts": 866,
     "src/test/preview/video-thumbnail.test.ts": 811,
     "src/test/scheduler/server-backup-tick.test.ts": 2197,
-    "src/test/scripts/check-container-db-marker.test.ts": 1031,
     "src/test/scripts/docx-audit.test.ts": 13353,
     "src/test/scripts/office-audit.test.ts": 830,
     "src/test/scripts/pptx-audit.test.ts": 7983,

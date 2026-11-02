@@ -1,7 +1,10 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     chmodSync,
+    chownSync,
+    copyFileSync,
+    cpSync,
     existsSync,
     mkdirSync,
     mkdtempSync,
@@ -11,30 +14,49 @@ import {
     rmSync,
     statSync,
     symlinkSync,
+    utimesSync,
     writeFileSync,
 } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
-import { DECLINED } from '../../cli/install';
-import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
-import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
+import { CANNOT_OPEN, DECLINED } from '../../cli/install';
+import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
+import * as archiveModule from '../../lib/backup/archive';
+import {
+    copyArchiveMember,
+    createServerArchiveWriter,
+    declaredUnpackBytes,
+    ENTRY_ALLOWANCE_BYTES,
+    packFolder,
+    readArtifactManifest,
+    withUnpackSlack,
+} from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
-import { stageBytesNeeded } from '../../lib/backup/restore-server';
+import { readMemberManifests, stageBytesNeeded, stageServerArchive } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
-import { lockDataDir } from '../../lib/config/data-lock';
-import { homeDirUnder, PATHS, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
+import { DATA_LEASE_FILE, LEASE_WAIT_MS, lockDataDir, writeLease } from '../../lib/config/data-lock';
+import {
+    GUEST_HOMES_DIR,
+    homeDirUnder,
+    ORG_HOMES_DIR,
+    PATHS,
+    SERVER_DATABASES,
+    SERVER_RUNTIME_FILES,
+} from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
 import type { Mount } from '../../lib/mount/mount';
 import type { RealShapeHome } from '../backup/backup-test-helpers';
 import {
     expectRealShape,
+    holdLock,
     readServerManifest,
     realShapeHome,
     removeServerRecords,
+    unpackWhole,
     waitForJob,
 } from '../backup/backup-test-helpers';
 import type { FaultStorage } from '../fault-storage-helpers';
@@ -57,7 +79,6 @@ import {
 
 const JOB_TIMEOUT_MS = 120_000;
 const RESTORE_CLI = join(import.meta.dir, '../../cli/restore.ts');
-const INSTALL_CLI = join(import.meta.dir, '../../cli/install.ts');
 const ARCHIVED_ENV =
     'DOMAIN=archived.example.org\nEIGEN_VERSION=0.3.1\nEIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:abc\n';
 const RELEASE_ENV = 'DOMAIN=here.example.org\nEIGEN_VERSION=0.3.0\n';
@@ -126,26 +147,6 @@ async function restoreCli(dir: string, args: string[], { preamble = [], env = {}
 
 type CliSeams = { preamble?: string[]; env?: Record<string, string>; input?: string };
 
-// Every ownAs of the run into `log`, a line each, with whether the swap marker was there yet. Nothing is chowned.
-function spyOwnAs(log: string): string[] {
-    const path = JSON.stringify(INSTALL_CLI);
-    return [
-        `import { mock } from 'bun:test';`,
-        `import { appendFileSync, existsSync } from 'node:fs';`,
-        `const install = await import(${path});`,
-        `mock.module(${path}, () => ({ ...install, ownAs: (path, { uid, gid }) => appendFileSync(${JSON.stringify(log)}, JSON.stringify({ path, uid, gid, marker: existsSync(${JSON.stringify(SWAP_MARKER)}) }) + '\\n') }));`,
-    ];
-}
-
-type Owned = { path: string; uid: number; gid: number; marker: boolean };
-
-function readOwned(log: string): Owned[] {
-    return readFileSync(log, 'utf8')
-        .trim()
-        .split('\n')
-        .map((line) => JSON.parse(line));
-}
-
 async function stage(dir: string, archive: string, ...flags: string[]) {
     return restoreCli(dir, [archive, '--stage', '--yes', ...flags]);
 }
@@ -162,6 +163,10 @@ async function stageAndSwap(dir: string, archive: string): Promise<string> {
     expect(swapped.stderr).toBe('');
     expect(swapped.code).toBe(0);
     return `${staged.stdout}${swapped.stdout}`;
+}
+
+function modeOf(path: string): number {
+    return statSync(path).mode & 0o7777;
 }
 
 function asideDirs(dir: string): string[] {
@@ -264,7 +269,7 @@ async function rewrittenMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-member-');
-    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
     const entries: Parameters<typeof tarOf>[0] = [];
     for (const rel of new Bun.Glob('**/*').scanSync({ cwd: join(work, 'tree'), onlyFiles: false, dot: true })) {
         const abs = join(work, 'tree', rel);
@@ -280,7 +285,7 @@ async function rewrittenMember(
 async function serverMemberWithEpochs(archive: string): Promise<Record<string, string>> {
     const { members } = await readServerManifest(archive);
     const work = scratch('restore-server-member-');
-    await extractArtifact(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === SERVER_ARCHIVE_SERVER_MEMBER)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     const manifest = JSON.parse(readFileSync(join(root, ARCHIVE_MANIFEST_FILE), 'utf8'));
@@ -304,7 +309,7 @@ async function editedMember(
     const { members, manifest } = await readServerManifest(archive);
     const name = manifest.homes.find((home) => home.ownerId === ownerId)!.member!;
     const work = scratch('restore-edited-');
-    await extractArtifact(members.find((member) => member.name === name)!, join(work, 'tree'));
+    await unpackWhole(members.find((member) => member.name === name)!, join(work, 'tree'));
     const [folder] = readdirSync(join(work, 'tree'));
     const root = join(work, 'tree', folder);
     edit(root);
@@ -334,15 +339,19 @@ async function withUnbackedPendingRow(archive: string): Promise<string> {
     return craft(archive, { replace });
 }
 
-// The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged.
-// WAL and closed, as an idle home leaves it on Linux: no -wal or -shm beside it.
-function liveS3Mount(dir: string, pending: Record<string, string>): void {
+// The s3 mount as it runs here: a metadata.db whose pending rows are `pending`, key to staged name, each staged, and
+// whose files are at the storage keys `files`. WAL and closed, as an idle home leaves it on Linux: no -wal or -shm
+// beside it.
+function liveS3Mount(dir: string, pending: Record<string, string>, files = [stagedUploadKey]): void {
     const mount = join(homeDirOf(dir, s3User.id), 'mounts', S3_MOUNT_ID);
     mkdirSync(join(mount, PATHS.DRIVE.STAGING_DIR), { recursive: true });
     const metadata = join(mount, PATHS.DRIVE.METADATA_DB);
     const db = new Database(metadata);
     try {
         db.run('PRAGMA journal_mode = WAL');
+        db.run('CREATE TABLE paths (id TEXT PRIMARY KEY, type TEXT NOT NULL, file TEXT NOT NULL)');
+        for (const [index, key] of files.entries())
+            db.run("INSERT INTO paths VALUES (?, 'file', ?)", [`f${index}`, key]);
         db.run('CREATE TABLE pending_uploads (storageKey TEXT PRIMARY KEY, stagingPath TEXT NOT NULL)');
         for (const [key, name] of Object.entries(pending)) {
             db.run('INSERT INTO pending_uploads VALUES (?, ?)', [key, name]);
@@ -364,13 +373,13 @@ let alice: TestUser;
 let aliceMountId: string;
 let trashedId: string;
 let teamOwner: string;
+let teamName: string;
 let s3User: TestUser;
 let s3Mount: Mount;
 let s3Fault: FaultStorage;
 let stagedUploadName: string;
 let stagedUploadKey: string;
 let fullArchive: string;
-let lightArchive: string;
 let fullS3Archive: string;
 let realShape: RealShapeHome;
 
@@ -378,7 +387,8 @@ beforeAll(async () => {
     ctx = await getTestContext();
     alice = ctx.alice.user;
     for (const user of [ctx.alice.user, ctx.bob.user, ctx.charlie.user]) await getHome(user.id);
-    teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, `Restore CLI Team ${Date.now()}`));
+    teamName = `Restore CLI Team ${Date.now()}`;
+    teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, teamName));
     await getHome(teamOwner);
     realShape = await realShapeHome();
 
@@ -445,7 +455,6 @@ beforeAll(async () => {
     writeFileSync(join(certs, 'key.pem'), TLS_KEY);
     try {
         fullArchive = await backup('full');
-        lightArchive = await backup('light');
         fullS3Archive = await backup('full-s3');
     } finally {
         rmSync(certs, { recursive: true, force: true });
@@ -506,14 +515,11 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a home that stores files by name comes back with every renamed, trashed and versioned item, Full and then Light',
+        'a home that stores files by name comes back with every renamed, trashed and versioned item',
         async () => {
             const dir = install();
-            const home = homeDirOf(dir, realShape.user.id);
             await stageAndSwap(dir, basename(fullArchive));
-            expectRealShape(home, realShape);
-            await stageAndSwap(dir, basename(lightArchive));
-            expectRealShape(home, realShape);
+            expectRealShape(homeDirOf(dir, realShape.user.id), realShape);
         },
         JOB_TIMEOUT_MS,
     );
@@ -546,7 +552,7 @@ describe('restore --stage and --swap', () => {
         'the data epoch changes: no epoch file survives, so every open tab reloads',
         async () => {
             const withEpochs = await craft(fullArchive, { replace: await serverMemberWithEpochs(fullArchive) });
-            for (const archive of [fullArchive, lightArchive, withEpochs]) {
+            for (const archive of [fullArchive, withEpochs]) {
                 const dir = install();
                 await stageAndSwap(dir, archive);
                 for (const name of [SERVER_RUNTIME_FILES.epoch, SERVER_RUNTIME_FILES.homeEpochs]) {
@@ -579,137 +585,6 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light archive puts back the databases and leaves the files and mail here as they are',
-        async () => {
-            const dir = install();
-            const live = homeDirOf(dir, alice.id);
-            mkdirSync(join(live, 'mounts', aliceMountId, 'data'), { recursive: true });
-            writeFileSync(join(live, 'mounts', aliceMountId, 'data/live.txt'), 'live file');
-            writeFileSync(join(live, 'mounts', aliceMountId, 'metadata.db'), 'the live metadata');
-            mkdirSync(join(live, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR, 'cur'), { recursive: true });
-            writeFileSync(join(live, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR, 'cur/1.eml'), 'live mail');
-            mkdirSync(join(live, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR), { recursive: true });
-            writeFileSync(join(live, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR, 'upload'), 'staged here');
-            mkdirSync(join(dir, 'data/certs'));
-            writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here');
-            // A safety copy of the home no account in the archive owns: no home of its own, so it stays.
-            mkdirSync(join(dir, 'data/home/old.pre-restore-20260101-000000'));
-
-            const output = await stageAndSwap(dir, basename(lightArchive));
-            expect(output).toMatch(/light/i);
-            expect(output).toContain('Files and documents added since drop out of Drive');
-            expect(output).toContain('renamed, moved or trashed since');
-
-            expect(readFileSync(join(live, 'mounts', aliceMountId, 'data/live.txt'), 'utf8')).toBe('live file');
-            expect(readFileSync(join(live, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR, 'cur/1.eml'), 'utf8')).toBe(
-                'live mail',
-            );
-            const db = new Database(join(live, 'mounts', aliceMountId, 'metadata.db'), { readonly: true });
-            try {
-                expect(db.query('SELECT id FROM paths WHERE id = ?').get(trashedId)).toEqual({ id: trashedId });
-            } finally {
-                db.close();
-            }
-            const [aside] = asideDirs(dir);
-            const mountAside = join(dir, aside, 'home', alice.id, 'mounts', aliceMountId);
-            expect(readFileSync(join(mountAside, 'metadata.db'), 'utf8')).toBe('the live metadata');
-            // A staged upload stays for the rows that name it, and a copy goes aside for reconcile to sweep.
-            const upload = join(PATHS.DRIVE.STAGING_DIR, 'upload');
-            expect(readFileSync(join(live, 'mounts', aliceMountId, upload), 'utf8')).toBe('staged here');
-            expect(readFileSync(join(mountAside, upload), 'utf8')).toBe('staged here');
-            // The live server/ went aside whole, epoch and all, and so did a home no account in the archive owns,
-            // such as that of a user made since: nothing would sign in to it.
-            expect(readFileSync(join(dir, aside, 'server', SERVER_RUNTIME_FILES.epoch), 'utf8')).toBe('epoch-before');
-            expect(output).toContain('Homes no account in the archive owns go aside: home/old');
-            expect(existsSync(join(dir, 'data/home/old'))).toBe(false);
-            expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-            expect(existsSync(join(dir, 'data/home/old.pre-restore-20260101-000000'))).toBe(true);
-            expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
-            // The archive's TLS certificate in, the one here aside.
-            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
-            expect(readFileSync(join(dir, aside, 'certs/key.pem'), 'utf8')).toBe('the key here');
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'a Light stage that would set homes aside names them and asks again, and a no leaves nothing staged',
-        async () => {
-            const dir = install();
-            const declined = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\nn\n' });
-            expect(declined.stderr).toBe('');
-            expect(declined.code).toBe(DECLINED);
-            expect(declined.stdout).toContain('Homes no account in the archive owns go aside: home/old');
-            expect(declined.stdout).toContain('Set these homes aside');
-            expectUntouched(dir);
-
-            const agreed = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\ny\n' });
-            expect(agreed.code).toBe(0);
-            expect(existsSync(join(dir, 'data/.restoring/staged.json'))).toBe(true);
-
-            // With no home to set aside there is one question.
-            const bare = install();
-            rmSync(join(bare, 'data/home/old'), { recursive: true });
-            const once = await restoreCli(bare, [basename(lightArchive), '--stage'], { input: 'y\n' });
-            expect(once.stderr).toBe('');
-            expect(once.code).toBe(0);
-            expect(once.stdout).not.toContain('Set these homes aside');
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'a Light swap moves aside only a home folder here that the archive does not hold, whatever staged.json names',
-        async () => {
-            const dir = install();
-            const staged = await stage(dir, basename(lightArchive));
-            expect(staged.code).toBe(0);
-            // The API's user writes staged.json, so it may name anything: root must not move the server's data, the
-            // staged tree, a home the archive holds or a file inside a home.
-            const recordPath = join(dir, 'data/.restoring/staged.json');
-            const record = JSON.parse(readFileSync(recordPath, 'utf8'));
-            const forged = ['server', 'dkim', 'certs', '.restoring', '', 'home', 'home/', 'home/../server'];
-            forged.push('home/.restoring', 'home/old/notes.txt', 'home/gone', `home/${alice.id}`, `team/${teamOwner}`);
-            mkdirSync(join(dir, 'data/home/.hidden'));
-            forged.push('home/.hidden');
-            writeFileSync(recordPath, JSON.stringify({ ...record, orphans: [...forged, ...record.orphans] }));
-            // Alice's home is here too, so the archive merges into it, and her files stay where they are.
-            const liveFile = join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'data/live.txt');
-            mkdirSync(dirname(liveFile), { recursive: true });
-            writeFileSync(liveFile, 'live file');
-
-            const swapped = await swap(dir);
-            expect(swapped.stderr).toBe('');
-            expect(swapped.code).toBe(0);
-            const [aside] = asideDirs(dir);
-            expect(readFileSync(join(dir, aside, 'home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-            expect(readFileSync(liveFile, 'utf8')).toBe('live file');
-            expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'))).toBe(true);
-            expect(existsSync(join(dir, 'data/home/.hidden'))).toBe(true);
-            expect(existsSync(join(dir, 'data/server', SERVER_DATABASES.users))).toBe(true);
-            expect(existsSync(join(dir, 'data/dkim/eigen.private'))).toBe(true);
-            expect(existsSync(join(homeDirOf(dir, teamOwner), 'mounts'))).toBe(true);
-            expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'a Light archive onto an empty install says which homes come back without files and mail',
-        async () => {
-            const dir = install();
-            const { manifest } = await readServerManifest(lightArchive);
-            const staged = await stage(dir, basename(lightArchive));
-            expect(staged.code).toBe(0);
-            const count = manifest.homes.filter((home) => home.member).length;
-            expect(staged.stdout).toContain(`${count} homes come back without their files and mail`);
-            await swap(dir);
-            expect(existsSync(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'))).toBe(true);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
         'the stage names the homes not in the archive and those in it with warnings',
         async () => {
             const dir = install();
@@ -731,6 +606,22 @@ describe('restore --stage and --swap', () => {
             const staged = await stage(dir, warned);
             expect(staged.code).toBe(0);
             expect(staged.stdout).toContain(`; not in it: Gone (disk full); with warnings: ${name} (mount x: a.png)`);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light archive is refused by its name before anything is read',
+        async () => {
+            const dir = install();
+            const light = join(scratch('restore-light-'), 'server-pre-update-light-20260930-020304.tar');
+            copyFileSync(fullArchive, light);
+            const result = await stage(dir, light);
+            expect(result.code).toBe(1);
+            expect(result.stderr).toContain(
+                'server-pre-update-light-20260930-020304.tar is a Light backup, which this version of Eigen no longer restores.',
+            );
+            expectUntouched(dir);
         },
         JOB_TIMEOUT_MS,
     );
@@ -817,6 +708,24 @@ describe('restore --stage and --swap', () => {
             expect(result.code).toBe(0);
             const settings = join(dir, 'data/.restoring/data/home', alice.id, 'settings.json');
             expect(statSync(settings).mode & 0o7000).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // rewrittenMember writes the modes builds up to 0.4.1 packed: 0755 folders and 0644 files.
+    test(
+        "an older archive's 0644 files and 0755 folders stage for the API's user alone",
+        async () => {
+            const dir = install();
+            const member = await rewrittenMember(fullArchive, alice.id, (entries) => entries);
+            const crafted = await craft(fullArchive, { replace: { [member.name]: member.file } });
+            const result = await stage(dir, crafted);
+            expect(result.stderr).toBe('');
+            expect(result.code).toBe(0);
+            const home = join(dir, 'data/.restoring/data/home', alice.id);
+            expect(statSync(home).mode & 0o7777).toBe(0o700);
+            expect(statSync(join(home, 'mounts')).mode & 0o7777).toBe(0o700);
+            expect(statSync(join(home, 'settings.json')).mode & 0o7777).toBe(0o600);
         },
         JOB_TIMEOUT_MS,
     );
@@ -913,9 +822,96 @@ describe('restore --stage and --swap', () => {
                 drop: (name) => name.startsWith('certs/'),
                 manifest: (m) => ({ ...m, certs: false }),
             });
+            chmodSync(join(dir, 'data/certs/cert.pem'), 0o644);
+            chmodSync(join(dir, 'data/certs/key.pem'), 0o640);
+            chmodSync(join(dir, 'data/certs'), 0o755);
             await stageAndSwap(dir, crafted);
             expect(readFileSync(join(dir, 'data/certs/cert.pem'), 'utf8')).toBe('the certificate here');
             expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe('the key here');
+            // As the mail containers left them, owners too, which only a run as root can show.
+            expect(modeOf(join(dir, 'data/certs/cert.pem'))).toBe(0o644);
+            expect(modeOf(join(dir, 'data/certs/key.pem'))).toBe(0o640);
+            expect(modeOf(join(dir, 'data/certs'))).toBe(0o755);
+            expect(existsSync(join(dir, '.eigen/restore-install'))).toBe(false);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'the DKIM key and TLS certificate an archive brings keep the modes the mail containers gave the ones here',
+        async () => {
+            const dir = install();
+            mkdirSync(join(dir, 'data/certs'), { mode: 0o755 });
+            writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here', { mode: 0o644 });
+            writeFileSync(join(dir, 'data/certs/key.pem'), 'the key here', { mode: 0o640 });
+            mkdirSync(join(dir, 'data/dkim'), { mode: 0o755 });
+            writeFileSync(join(dir, 'data/dkim/eigen.private'), 'the key here', { mode: 0o640 });
+            // A setuid bit here is not carried over.
+            chmodSync(join(dir, 'data/certs/cert.pem'), 0o4644);
+            await stageAndSwap(dir, basename(fullArchive));
+            expect(readFileSync(join(dir, 'data/certs/key.pem'), 'utf8')).toBe(TLS_KEY);
+            expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            expect(modeOf(join(dir, 'data/certs/cert.pem'))).toBe(0o644);
+            expect(modeOf(join(dir, 'data/certs/key.pem'))).toBe(0o640);
+            expect(modeOf(join(dir, 'data/dkim/eigen.private'))).toBe(0o640);
+            // A file only the archive holds keeps the mode the stage gave it.
+            expect(modeOf(join(dir, 'data/dkim/eigen.txt'))).toBe(0o600);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // Docker Desktop shows every file of a bind mount as the reading container's user, root in the swap, so a file
+    // the stage wrote may not show its uid. Only root can give a file another owner to show it.
+    test.skipIf(process.getuid?.() !== 0)(
+        'a staged DKIM key that shows another owner than the stage is still swapped in',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            chownSync(join(dir, 'data/.restoring/data/dkim/eigen.txt'), 4321, 4321);
+            const swapped = await swap(dir);
+            expect(swapped.stderr).toBe('');
+            expect(swapped.code).toBe(0);
+            expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            // With no file here to take after, it keeps the owner it showed.
+            expect(statSync(join(dir, 'data/dkim/eigen.txt')).uid).toBe(4321);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file, link or huge file',
+        async () => {
+            const crafted = await craft(fullArchive, {
+                drop: (name) => name.startsWith('certs/'),
+                manifest: (m) => ({ ...m, certs: false }),
+            });
+            for (const [plant, said] of [
+                [
+                    (certs: string) => {
+                        writeFileSync(join(certs, 'key.pem'), 'run me');
+                        chmodSync(join(certs, 'key.pem'), 0o4755);
+                    },
+                    'is setuid',
+                ],
+                [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'is a link'],
+                // Root reads a file whole, so a planted huge one could run the swap out of memory.
+                [
+                    (certs: string) => writeFileSync(join(certs, 'key.pem'), Buffer.alloc(1024 * 1024 + 1)),
+                    'is bigger than a key or a certificate',
+                ],
+            ] as const) {
+                const dir = install();
+                mkdirSync(join(dir, 'data/certs'));
+                writeFileSync(join(dir, 'data/certs/cert.pem'), 'the certificate here');
+                plant(join(dir, 'data/certs'));
+                expect((await stage(dir, crafted)).code).toBe(0);
+                const result = await swap(dir);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain(`data/certs/key.pem ${said}`);
+                expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(dir)).toEqual([]);
+            }
         },
         JOB_TIMEOUT_MS,
     );
@@ -955,23 +951,6 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light archive is refused before anything moves where this install has a folder in place of its file',
-        async () => {
-            const dir = install();
-            mkdirSync(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'), { recursive: true });
-            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
-            const result = await swap(dir);
-            expect(result.code).toBe(1);
-            expect(result.stderr).toContain('metadata.db');
-            expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
-            expect(readFileSync(join(dir, 'data/server', SERVER_RUNTIME_FILES.epoch), 'utf8')).toBe('epoch-before');
-            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
-            expect(asideDirs(dir)).toEqual([]);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
         'a stale data/.restoring is wiped before the stage',
         async () => {
             const dir = install();
@@ -984,7 +963,7 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        '--staged prints the staged version, level and the images its .env.production pins',
+        '--staged prints the staged version and the images its .env.production pins',
         async () => {
             const dir = install();
             expect((await stage(dir, basename(fullArchive))).code).toBe(0);
@@ -992,7 +971,6 @@ describe('restore --stage and --swap', () => {
             expect(result.code).toBe(0);
             expect(result.stdout.trim().split('\n')).toEqual([
                 `version=${pkg.version}`,
-                'level=full',
                 'EIGEN_VERSION=0.3.1',
                 'EIGEN_API_IMAGE=ghcr.io/eigen-is/eigen/api@sha256:abc',
             ]);
@@ -1026,86 +1004,6 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light swap onto an install with no data/team makes it as the owner of what moves in, before its marker',
-        async () => {
-            const dir = install();
-            expect(existsSync(join(dir, 'data/team'))).toBe(false);
-            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
-            const staged = statSync(join(dir, 'data/.restoring/data/team'));
-            const log = join(scratch('restore-owned-'), 'owned.log');
-            // data/ reads as root's and the install folder as another user's, so neither can be mixed up with
-            // the API user who staged the tree.
-            const result = await restoreCli(dir, ['--swap'], {
-                preamble: [
-                    ...spyOwnAs(log),
-                    `import { spyOn } from 'bun:test';`,
-                    `import * as fs from 'node:fs';`,
-                    'const stat = fs.statSync;',
-                    `spyOn(fs, 'statSync').mockImplementation((path, options) => { const found = stat(path, options); if (found && path === 'data') { found.uid = 0; found.gid = 0; } return found; });`,
-                ],
-                env: { EIGEN_OWNER: '4242:4242' },
-            });
-            expect(result.stderr).toBe('');
-            expect(result.code).toBe(0);
-            expect(statSync(join(dir, 'data/team')).isDirectory()).toBe(true);
-            const underData = readOwned(log).filter((call) => call.path.startsWith('data/'));
-            expect(underData.map((call) => call.path)).toContain('data/team');
-            for (const call of underData) {
-                expect(call).toEqual({ path: call.path, uid: staged.uid, gid: staged.gid, marker: false });
-            }
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'a Light swap copies the staged uploads aside only once its marker lists them',
-        async () => {
-            const dir = install();
-            const staging = join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR);
-            mkdirSync(staging, { recursive: true });
-            writeFileSync(join(staging, 'upload'), 'staged here');
-            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
-            const log = join(scratch('restore-owned-'), 'owned.log');
-            const result = await restoreCli(dir, ['--swap'], { preamble: spyOwnAs(log) });
-            expect(result.stderr).toBe('');
-            expect(result.code).toBe(0);
-            const aside = readOwned(log).filter((call) => ASIDE.test(call.path.split('/')[0]));
-            expect(aside.map((call) => call.path)).toContain(
-                join(asideDirs(dir)[0], 'home', alice.id, 'mounts', aliceMountId, PATHS.DRIVE.STAGING_DIR, 'upload'),
-            );
-            for (const call of aside) expect(call.marker).toBe(true);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
-        'a Light swap is refused before its marker where a home sits on another disk',
-        async () => {
-            const dir = install();
-            const live = homeDirOf(dir, alice.id);
-            mkdirSync(live, { recursive: true });
-            writeFileSync(join(live, 'settings.json'), '{}');
-            expect((await stage(dir, basename(lightArchive))).code).toBe(0);
-            // A bind mount: everything in the home reads as another device.
-            const home = JSON.stringify(join('data/home', alice.id));
-            const result = await restoreCli(dir, ['--swap'], {
-                preamble: [
-                    `import { spyOn } from 'bun:test';`,
-                    `import * as fs from 'node:fs';`,
-                    'const lstat = fs.lstatSync;',
-                    `spyOn(fs, 'lstatSync').mockImplementation((path, options) => { const stat = lstat(path, options); if (stat && String(path).startsWith(${home})) stat.dev += 1; return stat; });`,
-                ],
-            });
-            expect(result.code).toBe(1);
-            expect(result.stderr).toContain('another disk');
-            expect(readFileSync(join(live, 'settings.json'), 'utf8')).toBe('{}');
-            expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
-            expect(asideDirs(dir)).toEqual([]);
-        },
-        JOB_TIMEOUT_MS,
-    );
-
-    test(
         'a Full swap is refused before its marker where data/.restoring sits on another disk',
         async () => {
             const dir = install();
@@ -1133,13 +1031,13 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'an archive that calls itself full around light homes is refused before anything moves',
+        'an archive that calls itself full-s3 around full homes is refused before anything moves',
         async () => {
             const dir = install();
-            const lying = await craft(lightArchive, { manifest: (m) => ({ ...m, level: 'full' }) });
+            const lying = await craft(fullArchive, { manifest: (m) => ({ ...m, level: 'full-s3' }) });
             const result = await stage(dir, lying);
             expect(result.code).toBe(1);
-            expect(result.stderr).toContain('a light capture in a full archive');
+            expect(result.stderr).toContain('a full capture in a full-s3 archive');
             expectUntouched(dir);
         },
         JOB_TIMEOUT_MS,
@@ -1149,13 +1047,21 @@ describe('restore --stage and --swap', () => {
         'a trash that cannot be dated names its home',
         async () => {
             const dir = install();
-            const member = await rewrittenMember(lightArchive, alice.id, (entries) =>
-                entries.map((entry) => (entry.name.endsWith('/metadata.db') ? { ...entry, mode: 0o444 } : entry)),
-            );
-            const crafted = await craft(lightArchive, { replace: { [member.name]: member.file } });
-            const result = await stage(dir, crafted);
+            const replace = await editedMember(fullArchive, alice.id, (folder) => {
+                for (const metadata of new Bun.Glob(`home/mounts/*/${PATHS.DRIVE.METADATA_DB}`).scanSync(folder)) {
+                    const db = new Database(join(folder, metadata));
+                    try {
+                        db.run(
+                            "CREATE TRIGGER no_redate BEFORE UPDATE OF trashedAt ON paths BEGIN SELECT RAISE(ABORT, 'no redate'); END",
+                        );
+                    } finally {
+                        db.close();
+                    }
+                }
+            });
+            const result = await stage(dir, await craft(fullArchive, { replace }));
             expect(result.code).toBe(1);
-            expect(result.stderr).toContain(`the trash of ${alice.name}`);
+            expect(result.stderr).toContain(`the trash of ${alice.name} cannot be dated: no redate`);
             expectUntouched(dir);
         },
         JOB_TIMEOUT_MS,
@@ -1180,22 +1086,76 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'the stage counts each member once at what it unpacks to, since it moves what it unpacks',
+        'the stage counts each member once at what its unpack declares, since it moves what it unpacks',
         async () => {
-            const { manifest } = await readServerManifest(fullArchive);
-            const server = manifest.entries.find((entry) => entry.path === SERVER_ARCHIVE_SERVER_MEMBER)!;
-            const home = manifest.homes.find((candidate) => candidate.member)!;
-            const member = manifest.entries.find((entry) => entry.path === home.member)!;
-            const sized = {
-                ...manifest,
-                entries: [
-                    { ...server, bytes: 1_000_000 },
-                    { ...member, bytes: 1_000 },
-                ],
-                homes: [{ ...home, bytes: 5_000_000 }],
+            const read = await readServerManifest(fullArchive);
+            const { manifest } = read;
+            const members = new Map(read.members.map((member) => [member.name, member]));
+            const inner = [SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])];
+            let declared = 0;
+            let entries = 0;
+            for (const name of inner) {
+                const unpacked = await readArtifactManifest(members.get(name)!);
+                declared += declaredUnpackBytes(unpacked);
+                entries += unpacked.entries.length + (unpacked.counts.dirs ?? 0);
+            }
+            const copied = manifest.entries.filter((entry) => !inner.includes(entry.path));
+            declared += copied.reduce((sum, entry) => sum + entry.bytes, 0);
+
+            const needed = await stageBytesNeeded({ name: basename(fullArchive), manifest, members });
+            expect(needed).toBe(withUnpackSlack(declared));
+            // Every file and folder of a home takes its allowance, as each member's unpack charges it.
+            expect(needed).toBeGreaterThan(entries * ENTRY_ALLOWANCE_BYTES);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // A member's manifest is its last entry, so each read of one decompresses the whole member. The stage reads them once
+    // for its room check, and bounds every unpack by those.
+    test(
+        'the manifests read for the room check bound the stage, which reads none again',
+        async () => {
+            const read = await readServerManifest(fullArchive);
+            const archived = {
+                name: basename(fullArchive),
+                manifest: read.manifest,
+                members: new Map(read.members.map((member) => [member.name, member])),
             };
-            // server.tar.zst at what its databases unpack to, a home at its inner count.
-            expect(stageBytesNeeded(sized)).toBe(15_000_000);
+            const manifests = await readMemberManifests(archived);
+            const spy = spyOn(archiveModule, 'readArtifactManifest');
+            let reads = -1;
+            try {
+                await stageBytesNeeded(archived, manifests);
+                await stageServerArchive(archived, scratch('restore-one-read-'), {
+                    s3FromArchive: false,
+                    onStep: () => {},
+                    manifests,
+                });
+                reads = spy.mock.calls.length;
+            } finally {
+                spy.mockRestore();
+            }
+            expect(reads).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        './eigen restore --stage reads each member manifest once',
+        async () => {
+            const read = await readServerManifest(fullArchive);
+            const inner = 1 + read.manifest.homes.filter((home) => home.member).length;
+            const archive = join(import.meta.dir, '../../lib/backup/archive.ts');
+            const result = await restoreCli(install(), [basename(fullArchive), '--stage', '--yes'], {
+                preamble: [
+                    `import { spyOn } from 'bun:test';`,
+                    `const archive = await import(${JSON.stringify(archive)});`,
+                    `const spy = spyOn(archive, 'readArtifactManifest');`,
+                    `process.on('exit', () => console.log('manifest reads: ' + spy.mock.calls.length));`,
+                ],
+            });
+            expect(result.code).toBe(0);
+            expect(result.stdout).toContain(`manifest reads: ${inner}`);
         },
         JOB_TIMEOUT_MS,
     );
@@ -1206,7 +1166,7 @@ describe('restore --stage and --swap', () => {
             const dir = install();
             mkdirSync(join(dir, 'data/.restoring/data'), { recursive: true });
             writeFileSync(join(dir, 'data/.restoring/data/half.txt'), 'the other stage');
-            const other = lockDataDir(join(dir, 'data/.restoring', STAGE_LOCK))!;
+            const other = lockDataDir(join(dir, 'data/.restoring/stage.lock'))!;
             try {
                 const result = await stage(dir, basename(fullArchive));
                 expect(result.code).toBe(1);
@@ -1240,6 +1200,60 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    // An API on another kernel, such as the Mac host beside the container, holds no file lock the swap can see. Each
+    // swap waits LEASE_WAIT_MS on a foreign lease, so the two run side by side on installs of their own.
+    test(
+        'a swap with a live lease in data/server is refused before anything moves, and a stale one only delays it',
+        async () => {
+            const live = install();
+            const stale = install();
+            const staged = await Promise.all([live, stale].map((dir) => stage(dir, basename(fullArchive))));
+            expect(staged.map((result) => result.code)).toEqual([0, 0]);
+            const startedAt = new Date().toISOString();
+            const heartbeat = (dir: string) =>
+                writeLease(join(dir, 'data/server', DATA_LEASE_FILE), {
+                    id: 'remote-id',
+                    host: 'other-machine',
+                    kernel: 'other-kernel',
+                    dev: 0,
+                    pid: 4242,
+                    platform: 'darwin',
+                    startedAt,
+                    heartbeatAt: new Date().toISOString(),
+                });
+            heartbeat(live);
+            heartbeat(stale);
+            const remote = setInterval(() => heartbeat(live), 50);
+            const timed = async (dir: string) => {
+                const started = Date.now();
+                const result = await swap(dir);
+                return { result, waited: Date.now() - started };
+            };
+            try {
+                const [{ result: refused }, { result: delayed, waited }] = await Promise.all([
+                    timed(live),
+                    // A stopped heartbeat leaves a lease that no longer moves, so it delays the swap once, not forever.
+                    timed(stale),
+                ]);
+                expect(refused.code).toBe(1);
+                expect(refused.stderr).toContain('other-machine');
+                expect(refused.stderr).toContain('4242');
+                expect(readFileSync(join(live, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(live, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(live)).toEqual([]);
+                expect(delayed.code).toBe(0);
+                expect(waited).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
+                // A refusal leaves the staged restore usable: once the remote API is gone, the same install swaps.
+                clearInterval(remote);
+                rmSync(join(live, 'data/server', DATA_LEASE_FILE));
+                expect((await swap(live)).code).toBe(0);
+            } finally {
+                clearInterval(remote);
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test(
         'a swap clears backups/.staging, whose per-home restore notes describe the data/ that went aside',
         async () => {
@@ -1258,6 +1272,154 @@ describe('restore --stage and --swap', () => {
         const result = await swap(dir);
         expect(result.code).toBe(1);
         expectUntouched(dir);
+    });
+});
+
+describe('restore --check-data, which a rollback runs first with the build it goes back to', () => {
+    function bumpSchema(file: string, by: number): void {
+        const db = new Database(file, { readwrite: true, create: false });
+        try {
+            db.run('UPDATE __schema_version SET version = version + ? WHERE id = 1', [by]);
+        } finally {
+            db.close();
+        }
+    }
+
+    test(
+        'passes on data this build opens, refuses a database of a newer schema in any kind of home or the server, or a damaged users3.db, as one it cannot open, and a database it may not read as no verdict',
+        async () => {
+            const dir = install();
+            await stageAndSwap(dir, basename(fullArchive));
+            const aside = asideDirs(dir);
+            const passed = await restoreCli(dir, ['--check-data', '--yes']);
+            expect(passed.stderr).toBe('');
+            expect(passed.code).toBe(0);
+            expect(passed.stdout).toContain('This build opens every database in data/');
+            // One line per home, so a large server is not silent for minutes.
+            const progress = passed.stdout.split('\n').filter((line) => / home \d+ of \d+: data\//.test(line));
+            expect(progress.length).toBeGreaterThan(1);
+            expect(progress.at(-1)).toContain(`home ${progress.length} of ${progress.length}: `);
+            expect(passed.stdout).toContain(`: ${relative(dir, homeDirOf(dir, realShape.user.id))}\n`);
+            // Without --yes it asks, and a no is the launcher's sign to change nothing.
+            const declined = await restoreCli(dir, ['--check-data'], { input: 'n\n' });
+            expect(declined.code).toBe(DECLINED);
+            expect(declined.stdout).toContain('keeping the data as it is?');
+
+            for (const file of [
+                join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db'),
+                join(homeDirOf(dir, teamOwner), PATHS.DRIVE.SHARED_DB),
+                join(dir, 'data/server', SERVER_DATABASES.shares),
+            ]) {
+                bumpSchema(file, 1);
+                const refused = await restoreCli(dir, ['--check-data', '--yes']);
+                expect(refused.code).toBe(CANNOT_OPEN);
+                expect(refused.stderr).toContain(`${relative(dir, file)} is at`);
+                expect(refused.stderr).toContain('newer than this server');
+                bumpSchema(file, -1);
+            }
+            // An org's and a guest's home count as a user's does.
+            for (const kind of [ORG_HOMES_DIR, GUEST_HOMES_DIR]) {
+                const home = join(dir, 'data', kind, 'copy');
+                cpSync(homeDirOf(dir, realShape.user.id), home, { recursive: true });
+                bumpSchema(join(home, 'mounts/default/metadata.db'), 1);
+                const refused = await restoreCli(dir, ['--check-data', '--yes']);
+                expect(refused.code).toBe(CANNOT_OPEN);
+                expect(refused.stderr).toContain(`data/${kind}/copy/mounts/default/metadata.db is at`);
+                rmSync(home, { recursive: true });
+            }
+            // The folder a killed per-home restore staged beside the homes is no home, whatever it holds.
+            const staged = join(dirname(homeDirOf(dir, realShape.user.id)), '.restore-killed');
+            cpSync(homeDirOf(dir, realShape.user.id), staged, { recursive: true });
+            bumpSchema(join(staged, 'mounts/default/metadata.db'), 1);
+            expect((await restoreCli(dir, ['--check-data', '--yes'])).code).toBe(0);
+            rmSync(staged, { recursive: true });
+            // users3.db has no schema version, so a damaged one is what refuses.
+            const users = join(dir, 'data/server', SERVER_DATABASES.users);
+            const intact = readFileSync(users);
+            writeFileSync(users, Buffer.alloc(intact.length, 'x'));
+            const damaged = await restoreCli(dir, ['--check-data', '--yes']);
+            expect(damaged.code).toBe(CANNOT_OPEN);
+            expect(damaged.stderr).toContain(`${relative(dir, users)} is damaged`);
+            // The launcher says what to do next, so the CLI does not.
+            expect(damaged.stderr).not.toContain('└');
+            writeFileSync(users, intact);
+            // A database it may not read says nothing of the data, so the rollback must not take it for one this
+            // build cannot open and put the backup back.
+            for (const file of [users, join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db')]) {
+                chmodSync(file, 0);
+                const unread = await restoreCli(dir, ['--check-data', '--yes']);
+                chmodSync(file, 0o644);
+                expect(unread.code).toBe(1);
+                expect(unread.stderr).not.toContain('damaged');
+            }
+            // Nothing it reads is staged or moved.
+            expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
+            expect(asideDirs(dir)).toEqual(aside);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'with --since, checks only the databases written since then, a -wal counting as a write',
+        async () => {
+            const dir = install();
+            await stageAndSwap(dir, basename(fullArchive));
+            const since = Date.now();
+            const past = new Date(since - 60_000);
+            const metadata = join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db');
+            const shares = join(dir, 'data/server', SERVER_DATABASES.shares);
+            const users = join(dir, 'data/server', SERVER_DATABASES.users);
+            const intact = readFileSync(users);
+            bumpSchema(metadata, 1);
+            bumpSchema(shares, 1);
+            writeFileSync(users, Buffer.alloc(intact.length, 'x'));
+            for (const file of [metadata, shares, users]) utimesSync(file, past, past);
+            const sinceArgs = ['--check-data', '--yes', '--since', String(since)];
+            // Written before the first check began, so that check passed them.
+            const unchanged = await restoreCli(dir, sinceArgs);
+            expect(unchanged.stderr).toBe('');
+            expect(unchanged.code).toBe(0);
+            expect((await restoreCli(dir, ['--check-data', '--yes'])).code).toBe(CANNOT_OPEN);
+            for (const [file, said] of [
+                [metadata, 'is at'],
+                [shares, 'is at'],
+                [users, 'is damaged'],
+            ] as const) {
+                writeFileSync(`${file}-wal`, '');
+                const changed = await restoreCli(dir, sinceArgs);
+                expect(changed.code).toBe(CANNOT_OPEN);
+                expect(changed.stderr).toContain(`${relative(dir, file)} ${said}`);
+                rmSync(`${file}-wal`);
+                if (file === users) writeFileSync(users, intact);
+                else bumpSchema(file, -1);
+                utimesSync(file, past, past);
+            }
+            expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
+            // A time that is not one, or one for another mode, is a usage error.
+            for (const args of [
+                ['--check-data', '--since', 'soon'],
+                [basename(fullArchive), '--stage', '--since', String(since)],
+            ]) {
+                const refused = await restoreCli(dir, args);
+                expect(refused.code).toBe(2);
+                expect(refused.stderr).toContain('--since');
+            }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test('waits out a sign-in that holds users3.db, rather than calling it damaged', async () => {
+        const dir = install();
+        const users = join(dir, 'data/server', SERVER_DATABASES.users);
+        const db = new Database(users);
+        db.run('CREATE TABLE user (id TEXT PRIMARY KEY)');
+        db.close();
+        // Long enough to outlast the start of the subprocess, short of the five seconds a writer is waited out.
+        const lock = await holdLock(users, 2000);
+        const checked = await restoreCli(dir, ['--check-data', '--yes']);
+        expect(checked.stderr).toBe('');
+        expect(checked.code).toBe(0);
+        expect(await lock.exited).toBe(0);
     });
 });
 
@@ -1507,13 +1669,15 @@ for (const [what, archive] of [
 ] as const) {
     describe(what, () => {
         test(
-            'a pending upload the live mount has no row for any more is not replayed',
+            'a pending upload the live mount uploaded since is not replayed',
             async () => {
                 const dir = install();
                 liveS3Mount(dir, {});
                 const result = await stage(dir, basename(archive()));
                 expect(result.code).toBe(0);
-                expect(result.stdout).toContain('1 pending upload');
+                expect(result.stdout).toContain(
+                    '1 pending upload(s) in the archive are not replayed: data/ here already uploaded them',
+                );
                 const staged = stagedS3Mount(dir);
                 expect(existsSync(join(staged, PATHS.DRIVE.STAGING_DIR, stagedUploadName))).toBe(false);
                 expect(existsSync(join(staged, PATHS.DRIVE.DATA_DIR))).toBe(false);
@@ -1544,6 +1708,23 @@ for (const [what, archive] of [
                         db.close();
                     }
                 }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        // A restore of the home gives every file a new key, and its old pending uploads stay in the copy it put aside.
+        // So a key the live mount no longer has may never have reached the bucket.
+        test(
+            'a pending upload whose key the live mount no longer has is replayed',
+            async () => {
+                const dir = install();
+                liveS3Mount(dir, {}, ['rekeyed-by-a-restore']);
+                const result = await stage(dir, basename(archive()));
+                expect(result.code).toBe(0);
+                expect(result.stdout).not.toContain('pending upload');
+                expect(readFileSync(join(stagedS3Mount(dir), PATHS.DRIVE.STAGING_DIR, stagedUploadName), 'utf8')).toBe(
+                    'not in the bucket yet',
+                );
             },
             JOB_TIMEOUT_MS,
         );

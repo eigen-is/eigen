@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { MountConfig, S3Config } from '@workspace/lib/types';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { auth } from '../../lib/auth/auth';
-import { extractArtifact, packFolder } from '../../lib/backup/archive';
+import { packFolder } from '../../lib/backup/archive';
 import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib/backup/paths';
 import { restoreHome } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -12,6 +12,7 @@ import { verifyFolder } from '../../lib/backup/verify';
 import { getHome } from '../../lib/home/get-home';
 import { Mount } from '../../lib/mount/mount';
 import { S3Storage } from '../../lib/storage/s3-storage';
+import { unpackWhole } from '../backup/backup-test-helpers';
 import { registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
 import {
     assertJson,
@@ -185,7 +186,7 @@ describe.skipIf(!live)('Backup round trip on a real S3 mount (MinIO)', () => {
         // A verify of a fresh extract is what a restore runs first, and what the admin's Verify
         // button runs: it has to pass on an archive whose bytes came out of a real bucket.
         const extracted = mkdtempSync(join(TEST_DATA_DIR, 'minio-verify-'));
-        await extractArtifact(join(getBackupsDir(), artifact), extracted);
+        await unpackWhole(join(getBackupsDir(), artifact), extracted);
         const record = await verifyFolder(join(extracted, buildHomeFolderName(userId)));
         expect(record.failures).toEqual([]);
         expect(record.status).toBe('verified');

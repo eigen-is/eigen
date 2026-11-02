@@ -1,4 +1,4 @@
-import { afterAll, afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { eq } from 'drizzle-orm';
@@ -12,6 +12,8 @@ import { buildServerArchiveName, getBackupsDir } from '../../lib/backup/paths';
 import type { ControlBackupJob } from '../../lib/backup/server-job';
 import { startServerBackup } from '../../lib/backup/server-job';
 import { getDataRoot } from '../../lib/config/paths';
+import type { AnnouncedRestart } from '../../lib/config/restart-notice';
+import { buildRestartNoticeEvent, clearRestartNotice } from '../../lib/config/restart-notice';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import type { ControlStatus } from '../../lib/config/server-status';
 import { getHome } from '../../lib/home/get-home';
@@ -26,7 +28,7 @@ import {
 } from '../backup/backup-test-helpers';
 import * as cli from '../cli-test-helpers';
 import { CLEARED_S3, DUMMY_S3 } from '../fault-storage-helpers';
-import { createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
+import { collectSSE, createTestUser, ensureServer, getTestContext, hasSession, signsIn, TEST_DATA_DIR } from '../setup';
 
 const FIXTURE_CERT = join(import.meta.dir, '../fixtures/control/expires-2036.crt');
 // Short: a Unix socket path is capped at 104 bytes on macOS.
@@ -369,6 +371,205 @@ describe('eigen reset-password', () => {
     });
 });
 
+describe('the restart notice on the control socket', () => {
+    const clear = () => controlRouter.handle(new Request('http://eigen/restart-notice', { method: 'DELETE' }));
+    const notice = () => buildRestartNoticeEvent().notice;
+
+    afterEach(() => {
+        jest.useRealTimers();
+        clearRestartNotice();
+    });
+
+    describe('POST /restart-notice', () => {
+        test('announces the restart to the open streams and answers when it comes', async () => {
+            const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
+            const before = Date.now();
+            const res = await post('/restart-notice', { inSeconds: 600, reason: 'update', message: 'Back in five' });
+            expect(res.status).toBe(200);
+            const { at }: AnnouncedRestart = await res.json();
+            alice.stop();
+            const atMs = Date.parse(at);
+            expect(atMs).toBeGreaterThanOrEqual(before + 600_000);
+            expect(atMs).toBeLessThanOrEqual(Date.now() + 600_000);
+            expect(alice.events).toContainEqual({
+                type: 'server:restart-notice',
+                notice: {
+                    reason: 'update',
+                    message: 'Back in five',
+                    msLeft: expect.any(Number),
+                    msSinceAnnounced: expect.any(Number),
+                },
+            });
+            expect(notice()?.msLeft).toBeLessThanOrEqual(600_000);
+            expect(notice()?.msLeft).toBeGreaterThan(590_000);
+        });
+
+        test('replaces the notice there is, and a notice without a message has null', async () => {
+            await post('/restart-notice', { inSeconds: 600, reason: 'update', message: 'Back in five' });
+            await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
+            expect(notice()).toEqual({
+                reason: 'rollback',
+                message: null,
+                msLeft: 0,
+                msSinceAnnounced: expect.any(Number),
+            });
+        });
+
+        // A stream that opens later, such as a tab that reloads, still says when the notice came.
+        test('a stream that opens later is told how long ago the notice came', async () => {
+            await post('/restart-notice', { inSeconds: 600, reason: 'update' });
+            await Bun.sleep(50);
+            expect(notice()?.msSinceAnnounced).toBeGreaterThanOrEqual(50);
+            expect(notice()?.msSinceAnnounced).toBeLessThan(600_000 - (notice()?.msLeft ?? 0) + 5);
+        });
+
+        test('takes whole seconds up to an hour, the two reasons, and a short line of text without control characters', async () => {
+            for (const body of [
+                { inSeconds: -1, reason: 'update' },
+                { inSeconds: 3601, reason: 'update' },
+                { inSeconds: 1.5, reason: 'update' },
+                { inSeconds: 60, reason: 'restart' },
+                { inSeconds: 60, reason: 'update', message: '' },
+                { inSeconds: 60, reason: 'update', message: 'x'.repeat(201) },
+                { inSeconds: 60, reason: 'update', message: 'Back\nin five' },
+                { inSeconds: 60, reason: 'update', message: 'Back \x1b[31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back \x9b31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back\x85in five' },
+                { inSeconds: 60, reason: 'update', message: ' \u00a0 ' },
+            ]) {
+                expect({ body, status: (await post('/restart-notice', body)).status }).toEqual({ body, status: 422 });
+            }
+            expect(notice()).toBeNull();
+            expect(
+                (await post('/restart-notice', { inSeconds: 3600, reason: 'update', message: 'x'.repeat(200) })).status,
+            ).toBe(200);
+        });
+
+        test('a notice whose restart has not come five minutes after its time drops itself, and says so', async () => {
+            const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
+            jest.useFakeTimers();
+            await post('/restart-notice', { inSeconds: 60, reason: 'update' });
+            jest.advanceTimersByTime(60_000 + 5 * 60_000 - 1);
+            expect(notice()).not.toBeNull();
+            jest.advanceTimersByTime(1);
+            alice.stop();
+            expect(notice()).toBeNull();
+            expect(alice.events.at(-1)).toEqual({ type: 'server:restart-notice', notice: null });
+        });
+
+        test('a new notice starts the expiry over', async () => {
+            jest.useFakeTimers();
+            await post('/restart-notice', { inSeconds: 60, reason: 'update' });
+            jest.advanceTimersByTime(60_000 + 4 * 60_000);
+            await post('/restart-notice', { inSeconds: 0, reason: 'update' });
+            jest.advanceTimersByTime(2 * 60_000);
+            expect(notice()).not.toBeNull();
+            jest.advanceTimersByTime(3 * 60_000);
+            expect(notice()).toBeNull();
+        });
+    });
+
+    describe('DELETE /restart-notice', () => {
+        test('takes the notice back, tells the open streams, and answers the same when there is none', async () => {
+            const ctx = await getTestContext();
+            await post('/restart-notice', { inSeconds: 600, reason: 'update' });
+            const alice = await collectSSE(ctx.alice.user.id);
+            expect((await clear()).status).toBe(204);
+            expect((await clear()).status).toBe(204);
+            alice.stop();
+            expect(notice()).toBeNull();
+            expect(alice.events).toEqual([{ type: 'server:restart-notice', notice: null }]);
+        });
+
+        // The stream opens before the fake clock, so the ten minutes do not idle its Home out. The last notice shows
+        // the stream still heard the Home after them.
+        test('a cleared notice does not expire into a second event', async () => {
+            const ctx = await getTestContext();
+            const alice = await collectSSE(ctx.alice.user.id);
+            jest.useFakeTimers();
+            await post('/restart-notice', { inSeconds: 60, reason: 'update' });
+            await clear();
+            jest.advanceTimersByTime(10 * 60_000);
+            await post('/restart-notice', { inSeconds: 0, reason: 'rollback' });
+            alice.stop();
+            expect(
+                alice.events.map((event) => ('notice' in event ? (event.notice?.reason ?? null) : event.type)),
+            ).toEqual(['update', null, 'rollback']);
+        });
+    });
+
+    describe('eigen restart-notice', () => {
+        test('announces a restart and prints when it comes, then --clear takes it back', async () => {
+            const { stdout, code } = await runCli(['restart-notice', '--in', '600', '--reason', 'rollback']);
+            expect(code).toBe(0);
+            expect(stdout).toMatch(/^at=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z\n$/);
+            expect(notice()).toMatchObject({ reason: 'rollback', message: null });
+            const cleared = await runCli(['restart-notice', '--clear']);
+            expect(cleared).toEqual({ stdout: '', stderr: '', code: 0 });
+            expect(notice()).toBeNull();
+        });
+
+        test('passes the message on with each control character a space', async () => {
+            const { code } = await runCli([
+                'restart-notice',
+                '--in',
+                '0',
+                '--reason',
+                'update',
+                '--message',
+                ' Back\tin\x1b[31m five\n',
+            ]);
+            expect(code).toBe(0);
+            expect(notice()?.message).toBe('Back in [31m five');
+        });
+
+        test('a wrong flag is a usage error that announces nothing', async () => {
+            for (const args of [
+                ['--reason', 'update'],
+                ['--in', '10m', '--reason', 'update'],
+                ['--in', '3601', '--reason', 'update'],
+                ['--in', '60'],
+                ['--in', '60', '--reason', 'restart'],
+                ['--in', '60', '--reason', 'update', '--message', 'x'.repeat(201)],
+                ['--in', '60', '--reason', 'update', '--clear'],
+            ]) {
+                const { stdout, stderr, code } = await runCli(['restart-notice', ...args]);
+                expect({ args, code, stdout }).toEqual({ args, code: 2, stdout: '' });
+                expect(stderr).toContain('Usage: restart-notice');
+            }
+            expect(notice()).toBeNull();
+        });
+
+        test('with Eigen down it says so', async () => {
+            const { stderr, code } = await runCli(['restart-notice', '--clear'], undefined, {
+                EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock'),
+            });
+            expect(code).toBe(1);
+            expect(stderr).toContain('Eigen is not running');
+        });
+
+        // The launcher takes a notice back as it exits, so a hung API must not hold that exit.
+        test('gives up on a socket that takes the call and never answers', async () => {
+            const hung = Bun.listen({ unix: join(TEST_DATA_DIR, 'hung-notice.sock'), socket: { data: () => {} } });
+            try {
+                for (const args of [['--clear'], ['--in', '60', '--reason', 'update']]) {
+                    const started = Date.now();
+                    const { stderr, code } = await runCli(['restart-notice', ...args], undefined, {
+                        EIGEN_CONTROL_SOCKET: hung.unix,
+                    });
+                    expect(code).toBe(1);
+                    expect(stderr).toContain('Eigen is not answering.');
+                    expect(Date.now() - started).toBeLessThan(12_000);
+                }
+            } finally {
+                hung.stop(true);
+            }
+        }, 30_000);
+    });
+});
+
 // Every server backup in this file captures the few homes of the test context, for real.
 const JOB_TIMEOUT_MS = 120_000;
 
@@ -406,11 +607,11 @@ describe('the server backup on the control socket', () => {
         test(
             'starts one and reports it until it ends, with the size of its archive',
             async () => {
-                const res = await post('/backup', { level: 'light', reason: 'manual' });
+                const res = await post('/backup', { level: 'full', reason: 'manual' });
                 expect(res.status).toBe(200);
                 const started: ControlBackupJob = await res.json();
                 expect(started.state).toBe('running');
-                expect(started.artifact).toStartWith('server-manual-light-');
+                expect(started.artifact).toStartWith('server-manual-full-');
                 const job = await waitForControlJob(started.id);
                 expect(job.error).toBeUndefined();
                 expect(job).toMatchObject({ state: 'done', artifact: started.artifact });
@@ -427,17 +628,15 @@ describe('the server backup on the control socket', () => {
                     const first: ControlBackupJob = await (
                         await post('/backup', { level: 'full', reason: 'manual' })
                     ).json();
-                    const refused = await post('/backup', { level: 'light', reason: 'pre-update' });
+                    const refused = await post('/backup', { level: 'full', reason: 'pre-update' });
                     expect(refused.status).toBe(409);
                     expect(await refused.text()).toContain(first.artifact!);
 
                     let answered = false;
-                    const waiting = post('/backup', { level: 'light', reason: 'pre-update', wait: true }).then(
-                        (res) => {
-                            answered = true;
-                            return res;
-                        },
-                    );
+                    const waiting = post('/backup', { level: 'full', reason: 'pre-update', wait: true }).then((res) => {
+                        answered = true;
+                        return res;
+                    });
                     await Bun.sleep(300);
                     expect(answered).toBe(false);
                     held.release();
@@ -446,7 +645,7 @@ describe('the server backup on the control socket', () => {
                     expect(res.status).toBe(200);
                     const second: ControlBackupJob = await res.json();
                     expect(getBackupJob(first.id)?.state).toBe('done');
-                    expect(second.artifact).toStartWith('server-pre-update-light-');
+                    expect(second.artifact).toStartWith('server-pre-update-full-');
                     expect((await waitForControlJob(second.id)).state).toBe('done');
                 } finally {
                     held.restore();
@@ -455,8 +654,9 @@ describe('the server backup on the control socket', () => {
             JOB_TIMEOUT_MS,
         );
 
-        test('takes no scheduled reason and no level it does not know', async () => {
+        test('takes no scheduled reason, no Light level and no level it does not know', async () => {
             expect((await post('/backup', { level: 'full', reason: 'scheduled' })).status).toBe(422);
+            expect((await post('/backup', { level: 'light', reason: 'manual' })).status).toBe(422);
             expect((await post('/backup', { level: 'all', reason: 'manual' })).status).toBe(422);
             expect(serverRecords()).toEqual([]);
         });
@@ -467,8 +667,11 @@ describe('the server backup on the control socket', () => {
     });
 
     describe('GET /status', () => {
-        function writeRecord(reason: 'scheduled' | 'manual', level: 'light' | 'full', at: string, record: object) {
-            return writeServerRecord(buildServerArchiveName(reason, level, new Date(at)), { startedAt: at, ...record });
+        function writeRecord(reason: 'scheduled' | 'manual', at: string, record: object) {
+            return writeServerRecord(buildServerArchiveName(reason, 'full', new Date(at)), {
+                startedAt: at,
+                ...record,
+            });
         }
 
         test('has no backup when there is none', async () => {
@@ -478,16 +681,17 @@ describe('the server backup on the control socket', () => {
                 scheduledFailure: null,
                 scheduledNotUploaded: null,
                 warned: null,
-                newestGoodFullAt: null,
+                newestGoodAt: null,
+                running: [],
             });
         });
 
         test('names the newest record, the failed scheduled attempt and the newest Full that verified', async () => {
             const goodAt = '2026-09-01T02:00:00.000Z';
             const manifest = serverManifestOf('scheduled', goodAt, 'complete');
-            writeFileSync(writeRecord('scheduled', 'full', goodAt, { state: 'done', manifest }), 'archive bytes');
-            writeFileSync(writeRecord('manual', 'light', '2026-09-01T12:00:00.000Z', { state: 'done' }), 'light bytes');
-            const failed = writeRecord('scheduled', 'full', '2026-09-02T02:00:00.000Z', {
+            writeFileSync(writeRecord('scheduled', goodAt, { state: 'done', manifest }), 'archive bytes');
+            writeFileSync(writeRecord('manual', '2026-09-01T12:00:00.000Z', { state: 'done' }), 'manual bytes');
+            const failed = writeRecord('scheduled', '2026-09-02T02:00:00.000Z', {
                 state: 'failed',
                 error: 'no room',
             });
@@ -498,31 +702,32 @@ describe('the server backup on the control socket', () => {
                 scheduledFailure: { name, createdAt: '2026-09-02T02:00:00.000Z', error: 'no room' },
                 scheduledNotUploaded: null,
                 warned: null,
-                newestGoodFullAt: '2026-09-01T02:00:00.000Z',
+                newestGoodAt: '2026-09-01T02:00:00.000Z',
+                running: [],
             });
         });
 
         test('names the newest archive backed up with warnings, which is no good Full', async () => {
             const at = '2026-09-04T02:00:00.000Z';
             const manifest = serverManifestOf('scheduled', at, 'warned');
-            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', manifest });
+            const archivePath = writeRecord('scheduled', at, { state: 'done', manifest });
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
             expect(backup.warned).toEqual({ name, createdAt: at, error: 'alice' });
-            expect(backup.newestGoodFullAt).toBeNull();
+            expect(backup.newestGoodAt).toBeNull();
         });
 
         test('names the newest scheduled archive that saved but did not reach the bucket', async () => {
             const at = '2026-09-03T02:00:00.000Z';
             const upload = { state: 'failed', at, key: 'nightly/x.tar', error: 'bucket refused' };
-            const archivePath = writeRecord('scheduled', 'full', at, { state: 'done', upload });
+            const archivePath = writeRecord('scheduled', at, { state: 'done', upload });
             writeFileSync(archivePath, 'archive bytes');
             const name = archivePath.slice(archivePath.lastIndexOf('/') + 1);
             const { backup } = await getStatus();
             expect(backup.scheduledFailure).toBeNull();
             expect(backup.scheduledNotUploaded).toEqual({ name, createdAt: at, error: 'bucket refused' });
 
-            writeRecord('scheduled', 'full', at, {
+            writeRecord('scheduled', at, {
                 state: 'done',
                 upload: { ...upload, state: 'done', error: undefined },
             });
@@ -531,6 +736,13 @@ describe('the server backup on the control socket', () => {
     });
 
     describe('eigen backup', () => {
+        test('refuses the Light level, which is gone, with exit code 2 and starts nothing', async () => {
+            const { stderr, code } = await runCli(['backup', '--level', 'light']);
+            expect(code).toBe(2);
+            expect(stderr).toContain('Unknown level "light".');
+            expect(serverRecords()).toEqual([]);
+        });
+
         test(
             'prints the steps it sees, then what it saved, and ends with the archive',
             async () => {
@@ -544,16 +756,16 @@ describe('the server backup on the control socket', () => {
                     }
                     return pull(...args);
                 });
-                const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']).finally(() =>
+                const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']).finally(() =>
                     slow.mockRestore(),
                 );
                 expect(stderr).toBe('');
                 expect(code).toBe(0);
-                expect(stdout).toMatch(/^┌ {2}Backing up the server into server-manual-light-/);
+                expect(stdout).toMatch(/^┌ {2}Backing up the server into server-manual-full-/);
                 expect(stdout).toMatch(/│ {2}home 1 of \d+\n/);
-                const archive = stdout.match(/\narchive=(server-manual-light-\d{8}-\d{6}\.tar)\n$/)?.[1];
+                const archive = stdout.match(/\narchive=(server-manual-full-\d{8}-\d{6}\.tar)\n$/)?.[1];
                 expect(archive).toBeDefined();
-                expect(stdout).toContain(`└  Saved ${archive}: Light, `);
+                expect(stdout).toContain(`└  Saved ${archive}: Full, `);
                 expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
             },
             JOB_TIMEOUT_MS,
@@ -570,12 +782,12 @@ describe('the server backup on the control socket', () => {
                 const { stdout, stderr, code } = await runCli([
                     'backup',
                     '--level',
-                    'light',
+                    'full',
                     '--reason',
                     'pre-update',
                 ]).finally(() => warned.mockRestore());
                 expect(code).toBe(0);
-                expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                expect(stdout).toMatch(/\narchive=server-pre-update-full-\d{8}-\d{6}\.tar\n$/);
                 expect(stderr).toMatch(
                     /^▲ {2}Backed up with warnings: .+ \(mount default: files with no object in storage, archived without their bytes: a\.png\)$/m,
                 );
@@ -600,11 +812,11 @@ describe('the server backup on the control socket', () => {
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: UNREACHABLE } } });
                 try {
-                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']);
+                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']);
                     expect(code).toBe(4);
                     expect(stderr).toContain('Not uploaded');
                     expect(stderr).not.toContain(UNREACHABLE.secretAccessKey);
-                    const archive = stdout.match(/\narchive=(server-manual-light-\d{8}-\d{6}\.tar)\n$/)?.[1];
+                    const archive = stdout.match(/\narchive=(server-manual-full-\d{8}-\d{6}\.tar)\n$/)?.[1];
                     expect(archive).toBeDefined();
                     expect(existsSync(join(getBackupsDir(), archive!))).toBe(true);
                 } finally {
@@ -628,17 +840,17 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    const running = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const running = await startServerBackup({ level: 'full', reason: 'manual' });
                     const refused = await runCli(['backup']);
                     expect(refused.code).toBe(1);
                     expect(refused.stderr).toContain(running.artifact!);
 
-                    const waiting = runCli(['backup', '--level', 'light', '--reason', 'pre-update', '--wait']);
+                    const waiting = runCli(['backup', '--level', 'full', '--reason', 'pre-update', '--wait']);
                     await Bun.sleep(300);
                     held.release();
                     const { stdout, code } = await waiting;
                     expect(code).toBe(0);
-                    expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                    expect(stdout).toMatch(/\narchive=server-pre-update-full-\d{8}-\d{6}\.tar\n$/);
                 } finally {
                     held.restore();
                 }
@@ -651,9 +863,9 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    await startServerBackup({ level: 'light', reason: 'manual' });
+                    await startServerBackup({ level: 'full', reason: 'manual' });
                     const waiting = runCli(
-                        ['backup', '--level', 'light', '--reason', 'pre-update', '--wait'],
+                        ['backup', '--level', 'full', '--reason', 'pre-update', '--wait'],
                         undefined,
                         { BUN_CONFIG_HTTP_IDLE_TIMEOUT: '1' },
                     );
@@ -664,7 +876,7 @@ describe('the server backup on the control socket', () => {
                     expect(stderr).toBe('');
                     expect(code).toBe(0);
                     expect(stdout).toStartWith('◆  Waiting for the running server backup to end\n');
-                    expect(stdout).toMatch(/\narchive=server-pre-update-light-\d{8}-\d{6}\.tar\n$/);
+                    expect(stdout).toMatch(/\narchive=server-pre-update-full-\d{8}-\d{6}\.tar\n$/);
                 } finally {
                     held.restore();
                 }
@@ -677,13 +889,13 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const held = holdCaptures();
                 try {
-                    const running = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const running = await startServerBackup({ level: 'full', reason: 'manual' });
                     const caller = new AbortController();
                     const waiting = fetch('http://eigen/backup', {
                         unix: SOCKET,
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ level: 'light', reason: 'pre-update', wait: true }),
+                        body: JSON.stringify({ level: 'full', reason: 'pre-update', wait: true }),
                         signal: caller.signal,
                     }).catch(() => null);
                     await Bun.sleep(300);
@@ -705,7 +917,7 @@ describe('the server backup on the control socket', () => {
             async () => {
                 const failing = spyOn(homeRelay, 'pullHomeSnapshot').mockRejectedValue(new Error('disk on fire'));
                 try {
-                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'light']);
+                    const { stdout, stderr, code } = await runCli(['backup', '--level', 'full']);
                     expect(code).toBe(1);
                     expect(stderr).toContain('disk on fire');
                     expect(stdout).not.toContain('archive=');

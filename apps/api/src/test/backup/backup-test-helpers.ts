@@ -6,6 +6,8 @@ import type { BackupJob, BackupLevel, BackupManifest, BackupReason } from '@work
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { SERVER_ARCHIVE_PREFIX } from '@workspace/lib/validation';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
+import type { ArchiveMemberLocation } from '../../lib/backup/archive';
+import { extractArtifact, readArtifactManifest, unpackBound } from '../../lib/backup/archive';
 import { getBackupJob } from '../../lib/backup/jobs';
 import { buildHomeFolderName, getBackupsDir, serverSidecarPath } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -26,6 +28,11 @@ export async function waitForJob(id: string): Promise<BackupJob> {
         await Bun.sleep(50);
     }
     throw new Error(`job ${id} did not finish`);
+}
+
+// Unpacks an archive or a member of one as a restore does: stopped at what its own manifest declares.
+export async function unpackWhole(source: string | ArchiveMemberLocation, targetDir: string): Promise<void> {
+    await extractArtifact(source, targetDir, unpackBound(await readArtifactManifest(source)));
 }
 
 // The server archives and records in the backups folder, which the whole run shares.
@@ -92,6 +99,25 @@ export function holdCaptures(): { release(): void; restore(): void } {
             spy.mockRestore();
         },
     };
+}
+
+// Another process holds the database's exclusive lock for `ms`, from the moment this resolves. In the rollback-journal
+// mode of a new database that locks out readers too, as a writer of users3.db does.
+export async function holdLock(filePath: string, ms: number): Promise<{ exited: Promise<number> }> {
+    const script = [
+        `import { Database } from 'bun:sqlite';`,
+        `const db = new Database(${JSON.stringify(filePath)});`,
+        `db.run('BEGIN EXCLUSIVE');`,
+        `console.log('locked');`,
+        `await Bun.sleep(${ms});`,
+        `db.run('COMMIT');`,
+        'db.close();',
+    ].join('\n');
+    const proc = Bun.spawn([process.execPath, '-e', script], { stdout: 'pipe', stderr: 'inherit' });
+    const reader = proc.stdout.getReader();
+    const { value } = await reader.read();
+    expect(new TextDecoder().decode(value)).toContain('locked');
+    return { exited: proc.exited };
 }
 
 // A container database of one table, a row per marker, so which copy a capture took reads back by its markers. No

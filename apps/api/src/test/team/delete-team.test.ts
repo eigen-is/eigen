@@ -6,7 +6,7 @@ import { teamOwnerId } from '@workspace/lib/types/owner';
 import { PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import { eq } from 'drizzle-orm';
 import { waitForHomeSlot } from '../../lib/backup/jobs';
-import { getTeamDataPath } from '../../lib/config/paths';
+import { getTeamHomePath } from '../../lib/config/paths';
 import { getPublicConfig, getServerConfig } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
 import { evictHome, getTeamHome } from '../../lib/home/get-home';
@@ -78,7 +78,7 @@ describe('Delete team', () => {
             await driveUpload(ctx.alice.user.sessionToken, ownerId, mountId, root.id, file);
         }
         await evictHome(ownerId);
-        const db = openMountMetadata(join(getTeamDataPath(teamId), 'mounts', bucket.id, 'metadata.db'));
+        const db = openMountMetadata(join(getTeamHomePath(teamId), 'mounts', bucket.id, 'metadata.db'));
         try {
             const keys = db
                 .query<{ file: string }, []>("SELECT file FROM paths WHERE type = 'file'")
@@ -95,7 +95,7 @@ describe('Delete team', () => {
     test("deleting a team removes its folder, its safety copies, its bucket objects and its share rows, and leaves another team's", async () => {
         const doomed = await teamWithFiles('Doomed Team');
         const kept = await teamWithFiles('Kept Team');
-        const teamDir = getTeamDataPath(doomed.teamId);
+        const teamDir = getTeamHomePath(doomed.teamId);
         const preRestore = `${teamDir}${PRE_RESTORE_SUFFIX}20200101-000000`;
         cpSync(teamDir, preRestore, { recursive: true });
         const ownerId = teamOwnerId(doomed.teamId);
@@ -115,7 +115,7 @@ describe('Delete team', () => {
         expect(eigenDb.select().from(shareRegistry).where(eq(shareRegistry.fromUserId, ownerId)).all()).toHaveLength(0);
         expect(await getEntriesForTarget(ownerId)).toHaveLength(0);
 
-        expect(existsSync(getTeamDataPath(kept.teamId))).toBe(true);
+        expect(existsSync(getTeamHomePath(kept.teamId))).toBe(true);
         expect(await fake.store.exists(kept.keys[0])).toBe(true);
         expect((await removeTeam(kept.teamId)).status).toBe(200);
     });
@@ -129,7 +129,7 @@ describe('Delete team', () => {
         const home = await getTeamHome(ownerId);
         const mount = await home.addMount({ name: 'Org Drive', storageType: 'local' });
         await evictHome(ownerId);
-        const teamDir = getTeamDataPath(defaultTeamId);
+        const teamDir = getTeamHomePath(defaultTeamId);
         expect(existsSync(join(teamDir, 'mounts', mount.id))).toBe(true);
 
         const res = await removeTeam(defaultTeamId);
@@ -146,13 +146,13 @@ describe('Delete team', () => {
         try {
             expect((await removeTeam(teamId)).status).toBe(409);
             expect(await getTeamExists(teamId)).toBe(true);
-            expect(existsSync(getTeamDataPath(teamId))).toBe(true);
+            expect(existsSync(getTeamHomePath(teamId))).toBe(true);
             expect(await fake.store.exists(keys[0])).toBe(true);
         } finally {
             release();
         }
         expect((await removeTeam(teamId)).status).toBe(200);
-        expect(existsSync(getTeamDataPath(teamId))).toBe(false);
+        expect(existsSync(getTeamHomePath(teamId))).toBe(false);
     });
 
     test("a member's request after the teardown but before better-auth deletes the row doesn't rebuild the folder", async () => {
@@ -164,7 +164,7 @@ describe('Delete team', () => {
 
         expect((await authedRequest(ctx.alice.user.sessionToken, `/drive/${ownerId}/mounts`)).status).toBe(404);
         await expect(getTeamHome(ownerId)).rejects.toThrow('Home is being deleted');
-        expect(existsSync(getTeamDataPath(teamId))).toBe(false);
+        expect(existsSync(getTeamHomePath(teamId))).toBe(false);
         expect((await removeTeam(teamId)).status).toBe(200);
     });
 });

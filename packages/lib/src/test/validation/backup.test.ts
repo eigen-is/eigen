@@ -26,19 +26,9 @@ const mount = (id: string, storageType: BackupManifest['mounts'][number]['storag
 });
 
 describe('incompleteReason', () => {
-    test('a complete home has none: full-s3, a manifest from before levels, a Full one with no s3 mount', () => {
-        const mounts = [mount('drive', 'local-key'), mount('bucket', 's3')];
-        expect(incompleteReason({ level: 'full-s3', mounts })).toBeNull();
-        expect(incompleteReason({ mounts })).toBeNull();
-        expect(
-            incompleteReason({ level: 'full', mounts: [mount('drive', 'local'), mount('flat', 'local-key')] }),
-        ).toBeNull();
-    });
-
-    test('a Light one is refused by its level', () => {
-        expect(incompleteReason({ level: 'light', mounts: [mount('drive', 'local')] })).toBe(
-            'is a light backup: it holds no files and no mail, so it cannot restore an account on its own',
-        );
+    test('a complete home has none: every mount holds its files', () => {
+        expect(incompleteReason({ mounts: [mount('drive', 'local-key'), mount('bucket', 's3')] })).toBeNull();
+        expect(incompleteReason({ mounts: [mount('drive', 'local'), mount('flat', 'local-key')] })).toBeNull();
     });
 
     test('a metadata-only mount is refused by name', () => {
@@ -47,7 +37,7 @@ describe('incompleteReason', () => {
             { ...mount('bucket', 's3'), contents: 'metadata' as const },
             { ...mount('other', 's3'), contents: 'metadata' as const },
         ];
-        expect(incompleteReason({ level: 'full', mounts })).toBe(
+        expect(incompleteReason({ mounts })).toBe(
             'holds only the metadata of mount bucket, other, not its files, so it cannot restore an account on its own',
         );
     });
@@ -75,6 +65,17 @@ describe('parseBackupManifest', () => {
         };
         expect(parseBackupManifest(JSON.stringify(warned))).toEqual(warned);
         expect(parseBackupManifest(JSON.stringify(homeManifest))).toEqual(homeManifest);
+    });
+
+    test("reads a home's folder count, and a manifest written before it", () => {
+        const counted = { ...homeManifest, counts: { ...homeManifest.counts, dirs: 3 } };
+        expect(parseBackupManifest(JSON.stringify(counted))).toEqual(counted);
+        expect(parseBackupManifest(JSON.stringify(homeManifest))?.counts.dirs).toBeUndefined();
+    });
+
+    test('refuses a folder count that is not a number', () => {
+        const counts = { ...homeManifest.counts, dirs: '3' };
+        expect(parseBackupManifest(JSON.stringify({ ...homeManifest, counts }))).toBeNull();
     });
 
     test('refuses warnings that are not a list of strings', () => {
@@ -115,7 +116,6 @@ describe('parseServerArchiveName', () => {
             at: new Date('2026-09-30T02:03:04Z'),
         });
         expect(parseServerArchiveName('server-scheduled-full-20260930-020304.tar')?.level).toBe('full');
-        expect(parseServerArchiveName('server-manual-light-20260930-020304.tar')?.reason).toBe('manual');
     });
 
     test('rejects anything that is not an archive name', () => {
@@ -123,6 +123,7 @@ describe('parseServerArchiveName', () => {
             'server-manual-full-20260930-020304.tar.zst',
             'server-nightly-full-20260930-020304.tar',
             'server-manual-heavy-20260930-020304.tar',
+            'server-manual-light-20260930-020304.tar',
             'server-manual-full-20261330-020304.tar',
             'home-abc-20260930-020304.tar.zst',
             '../server-manual-full-20260930-020304.tar',
@@ -179,10 +180,11 @@ describe('parseServerArchiveManifest', () => {
         expect(parseServerArchiveManifest(JSON.stringify(without))).toBeNull();
     });
 
-    test('refuses a per-home manifest, a wrong version and a broken field', () => {
+    test('refuses a per-home manifest, a wrong version, a Light archive and a broken field', () => {
         for (const broken of [
             'not json',
             JSON.stringify({ ...valid, formatVersion: 2 }),
+            JSON.stringify({ ...valid, level: 'light' }),
             JSON.stringify({ ...valid, reason: 'nightly' }),
             JSON.stringify({ ...valid, entries: undefined }),
             JSON.stringify({ ...valid, homes: [{ ownerId: 'u1', kind: 'org', name: 'O' }] }),

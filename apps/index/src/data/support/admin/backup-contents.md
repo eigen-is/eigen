@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-10-01
+updated: 2026-11-02
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -84,4 +84,4 @@ Click **Verify** on any archive to run the checks again and update its badge.
 
 The panel covers one user or team at a time. The owner backs up the whole server in [Settings](/support/admin/server-settings#backups), every night or by hand, or with `./eigen backup` on the server. It runs while Eigen runs, holds the server's own databases and settings as well, is checked the same way, and can go to a backup bucket off the server. See [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
-A whole-server backup holds an archive of every user and team. Copied into the backups folder, one lists in that user's or team's **Backup** section like any other archive. An archive out of a **Light** backup holds no files and no mail, and one out of a **Full** backup holds no files of a drive in an S3 bucket. Neither restores on its own: the row says why and offers no **Restore**.
+A whole-server backup holds an archive of every user and team. Copied into the backups folder, one lists in that user's or team's **Backup** section like any other archive. An archive out of a **Full** backup holds no files of a drive in an S3 bucket, so it does not restore on its own: the row says why and offers no **Restore**.

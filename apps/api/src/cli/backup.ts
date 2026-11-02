@@ -5,7 +5,8 @@
 import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatFileSize } from '@workspace/lib/format';
-import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
+import { ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import type { ControlBackupJob } from '../lib/backup/server-job';
 import { callControl } from './control-socket';
 import { createUi, glyphLine, refuseUsage } from './ui';
@@ -20,14 +21,14 @@ export const BACKUP_OPTIONS = {
     reason: { type: 'string', default: 'manual' },
     wait: { type: 'boolean' },
 } as const;
-export const BACKUP_USAGE = `Usage: backup [--level light|full|full-s3] [--reason manual|pre-update] [--wait]
+export const BACKUP_USAGE = `Usage: backup [--level full|full-s3] [--reason manual|pre-update] [--wait]
 
 Backs up the whole server into backups/ while Eigen runs, prints each step, and ends with
 archive=<name>. Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument, and 4
 when it verified but did not reach the backup bucket.
 
   --level    full (the default): everything but the files in S3 buckets, which keep their own
-             history; full-s3: those too; light: accounts, settings and databases, no files or mail
+             history; full-s3: those too
   --reason   manual (the default), or pre-update, which ./eigen update passes
   --wait     Wait for a server backup that runs to end, instead of failing`;
 
