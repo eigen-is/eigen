@@ -20,7 +20,8 @@ import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/ba
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { DECLINED } from '../../cli/install';
-import { STAGE_LOCK, SWAP_LOCK, SWAP_MARKER } from '../../cli/restore';
+import { STAGE_LOCK } from '../../cli/restore-stage';
+import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
 import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { stageBytesNeeded } from '../../lib/backup/restore-server';

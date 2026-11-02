@@ -1,7 +1,8 @@
 // Brings an older users3.db up to the columns today's better-auth expects. That database has no versioned
 // migrations: setup creates its tables once, with every column of its day. So each column added since is added
 // here, at boot, before better-auth reads the database. A new auth column goes here, in the schema and in setup's
-// DDL together.
+// DDL together. It migrates users3.db, so its release notes need a (full backup) mark, and the release check fails
+// without one.
 
 import type { Database } from 'bun:sqlite';
 

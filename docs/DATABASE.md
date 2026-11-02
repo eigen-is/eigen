@@ -78,7 +78,7 @@ Two API processes on one data folder corrupt its databases, so the first one loc
 
 The lock is a POSIX file lock, so the OS drops it however the holder ends, SIGKILL included, and a `bun --watch` reload takes it again. The open transaction keeps a 512-byte `instance.lock-journal` with no pages beside it, which a SIGKILL leaves behind. The next holder rolls it back as a no-op, so it is harmless.
 
-The swap of `./eigen restore` takes the same lock (`lockData` in `apps/api/src/cli/restore.ts`) and refuses while an API holds it, so it only runs with Eigen stopped. `./eigen backup` runs inside the API and needs none ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)). Seeding and migration scripts don't take it. Tests that boot `app` in-process never take it, while `test/backup/process-lifecycle.test.ts` spawns `src/index.ts`, so each child takes it on its own data root.
+The swap of `./eigen restore` takes the same lock (`lockData` in `apps/api/src/cli/restore-swap.ts`) and refuses while an API holds it, so it only runs with Eigen stopped. `./eigen backup` runs inside the API and needs none ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)). Seeding and migration scripts don't take it. Tests that boot `app` in-process never take it, while `test/backup/process-lifecycle.test.ts` spawns `src/index.ts`, so each child takes it on its own data root.
 
 ## A lease refuses the second API the lock cannot see
 

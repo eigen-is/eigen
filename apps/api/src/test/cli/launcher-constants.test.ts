@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_RESTART_MESSAGE_LENGTH, MAX_RESTART_WAIT_SECONDS } from '@workspace/lib/validation';
 import { DECLINED, ROOT } from '../../cli/install';
-import { SWAP_MARKER } from '../../cli/restore';
+import { SWAP_MARKER } from '../../cli/restore-swap';
 import { RESTORING_DIR } from '../../lib/backup/restore-server';
 import { PIN_KEYS } from '../../lib/config/release';
 
