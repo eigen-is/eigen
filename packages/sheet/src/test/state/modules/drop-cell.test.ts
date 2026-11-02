@@ -208,6 +208,30 @@ describe('drag-fill carries the source cell data validation', () => {
         expect(validationAt(synced.sheets[0].dataValidations, 1, 0)).toEqual(rule);
     });
 
+    // Every filled cell looked its source's rule up again, through every rule on the sheet: 108 s here.
+    it('a fill down 10,000 rows on a sheet of 1,000 rules looks each source cell up once', () => {
+        const rows = 10_000;
+        const ctx = contextFactory({
+            currentSheetId: 'id_1',
+            selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data: grid(rows, 4) }],
+        }) as Context;
+        const elsewhere = Array.from({ length: 1000 }, (_, k) => [
+            `r${k}`,
+            { ranges: Array.from({ length: 8 }, (_, i) => ({ row: [k * 8 + i, k * 8 + i], column: [3, 3] })), rule },
+        ]);
+        ctx.sheets[0].dataValidations = {
+            ...Object.fromEntries(elsewhere),
+            v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule },
+        };
+        const started = performance.now();
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, { row: [0, 0], column: [0, 0] }, { row: [1, rows - 1], column: [0, 0] }, 'down');
+        });
+        expect(performance.now() - started).toBeLessThan(5000);
+        expect(filled.sheets[0].dataValidations?.v.ranges).toEqual([{ row: [0, rows - 1], column: [0, 0] }]);
+    });
+
     it('a filled cell takes the rule of the cell it repeats, and one whose source has none keeps its own', () => {
         const other: DataVerificationRule = { ...rule, value1: 'a,b' };
         const ctx = makeCtx(() => {}, { row: [0, 1], column: [0, 1] });
