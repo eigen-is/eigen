@@ -27,8 +27,9 @@ export type BackupManifest = {
     createdAt: string;
     appVersion: string;
     server: { domain: string; orgId: string };
-    // databases and files are disjoint, so entries.length === databases + files.
-    counts: { databases: number; files: number; bytes: number };
+    // databases and files are disjoint, so entries.length === databases + files. `dirs` is every folder entry the
+    // archive holds, its root folder included. An archive written before the count existed has none.
+    counts: { databases: number; files: number; bytes: number; dirs?: number };
     // Absent in an archive written before levels existed, which was complete.
     level?: BackupLevel;
     // `skipped` is set only for a mount the home has turned off whose storage could not be read: it

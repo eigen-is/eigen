@@ -15,7 +15,7 @@ import {
     quickCheck,
     UnopenableDatabaseError,
 } from '../lib/backup/materialize-mount';
-import { parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
+import { isRestoreStagingName, parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
 import { RESTORING_DIR } from '../lib/backup/restore-server';
 import { readServerArchiveMember } from '../lib/backup/verify-server-archive';
 import {
@@ -127,9 +127,9 @@ async function writeArchiveEnv(archive: string | undefined): Promise<void> {
 // A rollback keeps today's data when the build it goes back to opens it, and puts the update's backup back otherwise.
 // This checks, with that build and before the switch, that it opens that data. Every home of every kind gets the
 // verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips the safety
-// copies, which no home opens, and the container databases of an s3 mount, which live in the bucket. Only a database
-// that fails its check, or is newer than this build, exits CANNOT_OPEN: a check that could not run says nothing of the
-// data, so it must not send the rollback to the backup.
+// copies and the folder a killed restore staged, which no home opens, and the container databases of an s3 mount,
+// which live in the bucket. Only a database that fails its check, or is newer than this build, exits CANNOT_OPEN: a
+// check that could not run says nothing of the data, so it must not send the rollback to the backup.
 async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
@@ -145,7 +145,12 @@ async function checkData(flags: RestoreFlags): Promise<void> {
             .filter(existsSync)
             .flatMap((homes) =>
                 readdirSync(homes, { withFileTypes: true })
-                    .filter((entry) => entry.isDirectory() && !parseSafetyCopyName(entry.name))
+                    .filter(
+                        (entry) =>
+                            entry.isDirectory() &&
+                            !parseSafetyCopyName(entry.name) &&
+                            !isRestoreStagingName(entry.name),
+                    )
                     .map((entry) => join(homes, entry.name)),
             );
         // A large server takes minutes, so each home gets a line.

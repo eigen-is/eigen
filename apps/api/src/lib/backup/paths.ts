@@ -1,7 +1,7 @@
-// Where backups live and what they are called. It builds the names of archives, home folders and safety copies,
-// and the places inside an archive where each part of a home goes. It makes the private staging folder every job
-// works in, and writes the record kept beside an archive through it. It also resolves a path inside a folder without
-// ever leaving it, which every restore step needs before it touches the disk.
+// Where backups live and what they are called. It builds the names of archives, home folders, safety copies and the
+// folder a restore unpacks into, and the places inside an archive where each part of a home goes. It makes the private
+// staging folder every job works in, and writes the record kept beside an archive through it. It also resolves a path
+// inside a folder without ever leaving it, which every restore step needs before it touches the disk.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -50,8 +50,7 @@ export function getStagingRoot(): string {
 }
 
 // The chmod closes a staging root that was made with the umask's mode, such as an older build's. It also clears the
-// setgid bit that Linux gives a folder made in the setgid backups folder. So a job's folder takes the API's own group,
-// and no setgid bit goes into data/ with a staged home.
+// setgid bit that Linux gives a folder made in the setgid backups folder, so a job's folder takes the API's own group.
 export function getBackupStagingDir(jobId: string): string {
     // Makes backups/ first with its own mode, or the recursive mkdir below would make it 0700 too.
     getBackupsDir();
@@ -63,7 +62,7 @@ export function getBackupStagingDir(jobId: string): string {
     return dir;
 }
 
-// Everything one job staged: the unpacked archive, and the restoring marker if it got that far.
+// Everything one job staged, such as the archive a verify unpacked.
 export async function wipeBackupStagingDir(jobId: string): Promise<void> {
     await fsp.rm(path.join(getStagingRoot(), jobId), { recursive: true, force: true });
 }
@@ -72,6 +71,18 @@ export async function wipeBackupStagingDir(jobId: string): Promise<void> {
 // and nothing ever resumes it. It creates nothing, because at boot the backups folder may not exist yet.
 export function wipeBackupStaging(): void {
     fs.rmSync(getStagingRoot(), { recursive: true, force: true });
+}
+
+// A per-home restore unpacks its archive into a folder beside the home it replaces, so its swap renames on one disk.
+// The leading dot keeps that folder apart from every home, since an owner id has no dot (BACKUP_OWNER_ID).
+const RESTORE_STAGING_PREFIX = '.restore-';
+
+export function buildRestoreStagingDir(homeDir: string, jobId: string): string {
+    return path.join(path.dirname(homeDir), `${RESTORE_STAGING_PREFIX}${jobId}`);
+}
+
+export function isRestoreStagingName(name: string): boolean {
+    return name.startsWith(RESTORE_STAGING_PREFIX);
 }
 
 // Scratch space for packing: the half-written artifact, the half-written sidecar. Under
@@ -237,8 +248,7 @@ export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kin
 
 // The stamp the two safety copies of one restore share, under the same collision rule: a second
 // restore of a home inside one second must not rename onto the first's copy (ENOTEMPTY, with the
-// home already moved aside). It also must not hand a flat-key mount the fresh storage keys the first
-// restore just wrote, which materializeMount derives from the stamp.
+// home already moved aside).
 export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
     return buildBackupStamp(
         nextFreeTime(at, (candidate) => {

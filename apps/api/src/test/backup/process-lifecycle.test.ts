@@ -5,6 +5,7 @@ import type { BackupArtifact, BackupJob, BackupSafetyCopy } from '@workspace/lib
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { MountInfo } from '@workspace/lib/types/mount';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import { buildRestoreStagingDir } from '../../lib/backup/paths';
 import { TEST_DATA_DIR } from '../setup';
 
 // The backup promises only a real process can keep. Every test here spawns `bun src/index.ts` as a
@@ -339,6 +340,8 @@ describe('Boot recovery in a real boot', () => {
     const deleted = 'proclifecycleCCCCCCCCCCCCCCCCCCCC';
     const interruptedAside = `${interrupted}${PRE_RESTORE_SUFFIX}20260101-000000`;
     const finishedAside = `${finished}${PRE_RESTORE_SUFFIX}20260202-000000`;
+    // The folder a restore killed mid-unpack was writing beside the home it would have replaced.
+    const unpacking = buildRestoreStagingDir(join(homeRoot, finished), 'job-killed');
     let api: ApiProcess;
 
     function seedFolder(name: string, content: string): void {
@@ -346,10 +349,10 @@ describe('Boot recovery in a real boot', () => {
         writeFileSync(join(homeRoot, name, 'marker'), content);
     }
 
-    // What replaceHomeFolder writes before it moves a home aside, and the note it adds once the
-    // install is through.
+    // What replaceHomeFolder writes before it moves a home aside, in the folder its job staged beside the home, and
+    // the note it adds once the install is through.
     function seedMarker(jobId: string, homeName: string, preRestoreName: string | null, complete: boolean): void {
-        const dir = join(backupsDir, '.staging', jobId);
+        const dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId);
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
@@ -373,12 +376,15 @@ describe('Boot recovery in a real boot', () => {
         seedMarker('job-finished', finished, finishedAside, true);
         seedFolder(deleted, 'half-written, no copy');
         seedMarker('job-deleted', deleted, null, false);
+        mkdirSync(join(unpacking, `home-${finished}`, 'home'), { recursive: true });
         api = await startApi(dataRoot, backupsDir, 'boot-recovery');
     }, LISTEN_TIMEOUT_MS);
 
     test('the API answers only once the recovery and the staging wipe have run', async () => {
         expect(await (await fetch(`${api.base}/health`)).text()).toBe('OK');
         expect(existsSync(join(backupsDir, '.staging'))).toBe(false);
+        expect(existsSync(unpacking)).toBe(false);
+        expect(readdirSync(homeRoot).filter((name) => name.startsWith('.'))).toEqual([]);
     });
 
     test('a restore that died mid-install is put back', () => {

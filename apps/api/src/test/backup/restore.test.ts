@@ -1,8 +1,17 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import * as fsp from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import * as nodeFs from 'node:fs';
+import {
+    existsSync,
+    mkdtempSync,
+    readdirSync,
+    rmSync,
+    statSync,
+    truncateSync,
+    utimesSync,
+    writeFileSync,
+} from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import {
     COLLAB_HOME_REPLACED_CLOSE,
     COLLAB_HOME_REPLACED_REASON,
@@ -17,9 +26,10 @@ import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/valida
 import { eq } from 'drizzle-orm';
 import { apikey as apikeyScheme, user as userScheme } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { packFolder } from '../../lib/backup/archive';
+import * as archiveModule from '../../lib/backup/archive';
+import { packFolder, readArtifactManifest } from '../../lib/backup/archive';
 import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
-import { runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
+import { runArtifactVerify, runHomeBackup, startBackupJob } from '../../lib/backup/jobs';
 import * as materializeModule from '../../lib/backup/materialize-mount';
 import * as pathsModule from '../../lib/backup/paths';
 import {
@@ -27,18 +37,23 @@ import {
     ARCHIVE_SHARES_FILE,
     buildArtifactName,
     buildHomeFolderName,
+    buildRestoreStagingDir,
     getBackupsDir,
+    isRestoreStagingName,
 } from '../../lib/backup/paths';
+import * as recoveryModule from '../../lib/backup/recovery';
+import { recoverBackupsAfterRestart } from '../../lib/backup/recovery';
 import { readShares, restoreHome, restoreSafetyCopy, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
-import { getAvatarsDir } from '../../lib/config/paths';
+import { getAvatarsDir, getDataRoot, PATHS } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { avatarNameOf } from '../../lib/contacts/card-store';
 import { ApiError } from '../../lib/core';
 import type { Home } from '../../lib/home';
+import * as dataEpochModule from '../../lib/home/data-epoch';
 import { getDataEpoch } from '../../lib/home/data-epoch';
-import { getHome } from '../../lib/home/get-home';
+import { getHome, loadedHome } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
@@ -53,6 +68,7 @@ import {
     addTeamMount,
     assertJson,
     authedRequest,
+    countLoopTurns,
     createTeam,
     createTestUser,
     driveGetList,
@@ -77,6 +93,8 @@ const CHATS_FOLDER = 'chats';
 // folders exist only in the paths table. The harness's default mount is local-key (setup uses
 // 'local-id'), so both key shapes are restored here.
 const LOCAL_MOUNT_ID = 'restore-local';
+// A home of tens of thousands of folders is made, backed up, verified and restored in one test.
+const EMPTY_FOLDERS_TIMEOUT_MS = 120_000;
 
 // One artifact of the home as it stands now, in the backups folder restoreHome reads from.
 // `patch` doctors the unpacked folder before it is packed, which is how a restore is made to fail
@@ -170,6 +188,11 @@ function removeSafetyCopies(userId: string): void {
     }
 }
 
+// The folders a per-home restore unpacks into beside the homes. Its job removes its own however it ends.
+function restoreStagingFolders(): string[] {
+    return readdirSync(join(TEST_DATA_DIR, 'home')).filter(isRestoreStagingName);
+}
+
 // What a restore refused before it takes the home leaves as it was: the loaded home, every safety copy beside it, and
 // the data epoch its tabs reload on.
 async function untakenState(userId: string) {
@@ -182,6 +205,7 @@ async function expectNotTaken(userId: string, before: Awaited<ReturnType<typeof 
     expect(after.home).toBe(before.home);
     expect(after.copies).toEqual(before.copies);
     expect(after.epoch).toBe(before.epoch);
+    expect(restoreStagingFolders()).toEqual([]);
 }
 
 // Where a flat-key mount stores one row's object: `paths.file` (Mount.getStorageKey).
@@ -692,20 +716,21 @@ describe('Backup restoreHome', () => {
     });
 
     // The note the next boot reads to tell a restore that finished from one that died halfway. It
-    // lives in the job's staging folder, which every restore wipes on its way out, so the wipe is
-    // held off here to look at what was written.
-    test('a finished restore leaves its completion note beside the marker', async () => {
+    // lives in the folder the job staged beside the home, on the home's disk, and nothing goes to the backups folder.
+    // Every restore removes that folder on its way out, so the wipe is held off here to look at what was written.
+    test('a finished restore leaves its completion note beside the marker, beside the home', async () => {
         const jobId = `restore-sentinel-${Date.now()}`;
-        const spy = spyOn(pathsModule, 'wipeBackupStagingDir').mockImplementation(async () => {});
+        const spy = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
         try {
             await restoreHome(artifact, target.id, jobId);
         } finally {
             spy.mockRestore();
         }
 
-        const staging = join(getBackupsDir(), '.staging', jobId);
+        const staging = buildRestoreStagingDir(join(TEST_DATA_DIR, 'home', target.id), jobId);
         expect(existsSync(join(staging, 'restoring.json'))).toBe(true);
         expect(existsSync(join(staging, 'restore-complete.json'))).toBe(true);
+        expect(existsSync(join(getBackupsDir(), '.staging', jobId))).toBe(false);
         rmSync(staging, { recursive: true, force: true });
     });
 
@@ -722,12 +747,28 @@ describe('Backup restoreHome', () => {
         rmSync(join(getBackupsDir(), doctored), { force: true });
     });
 
+    test('a mount that cannot be put in place refuses the restore before the home is taken', async () => {
+        const before = await untakenState(target.id);
+        const spy = spyOn(materializeModule, 'materializeMount').mockImplementation(() => {
+            throw new ApiError(500, 'failed by the test');
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, `restore-materialize-${Date.now()}`)).rejects.toThrow(
+                'failed by the test',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+
+        await expectNotTaken(target.id, before);
+    });
+
     test('a failure after the move-aside leaves .failed-restore and puts the original back', async () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const epoch = getDataEpoch(target.id);
         const failedBefore = safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length;
-        // After the home folder moved in, so a new folder is in place when it throws.
-        const spy = spyOn(materializeModule, 'materializeMount').mockImplementation(() => {
+        // After the new home folder moved in, so a new folder is in place when it throws.
+        const spy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
             throw new ApiError(500, 'failed by the test');
         });
         try {
@@ -743,6 +784,7 @@ describe('Backup restoreHome', () => {
 
         expect(safetyCopies(target.id, FAILED_RESTORE_SUFFIX).length).toBe(failedBefore + 1);
         expect(existsSync(join(TEST_DATA_DIR, 'home', target.id))).toBe(true);
+        expect(restoreStagingFolders()).toEqual([]);
         // The mark is cleared, so the home serves again — from the folder that was put back.
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
@@ -1533,27 +1575,34 @@ describe('Backup round trip of a home that stores files by name', () => {
         await expectRealShapeServed(shape);
     });
 
-    // The restore as it runs when the backups folder is another disk than data/: the home cannot rename into place.
-    async function restoreAcrossDisks(artifact: string, userId: string, jobId: string): Promise<void> {
-        const homeDir = join(TEST_DATA_DIR, 'home', userId);
-        const rename = fsp.rename;
-        let crossed = false;
-        const spy = spyOn(fsp, 'rename').mockImplementation(async (from, to) => {
-            if (to !== homeDir) return rename(from, to);
-            crossed = true;
-            throw Object.assign(new Error('cross-device link not permitted'), { code: 'EXDEV' });
-        });
-        try {
-            await restoreHome(artifact, userId, jobId);
-        } finally {
-            spy.mockRestore();
-        }
-        expect(crossed).toBe(true);
-    }
+    // A mailbox has an empty `new/` and `tmp/` and a drive has empty folders, which the pack keeps as entries and the
+    // unpack charges each. Thousands of them pass what the slack and the reserve allow, so the manifest counts them.
+    test(
+        'a home of many empty folders backs up, verifies and restores within its own bound',
+        async () => {
+            const { user } = await realShapeHome();
+            const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+            const folders = 20_000;
+            for (let index = 0; index < folders; index++) {
+                nodeFs.mkdirSync(join(homeDir, 'empty-folders', `${index % 100}`, `${index}`), { recursive: true });
+            }
+            const artifact = await backUp(user.id);
+            const verified = await waitForJob(
+                startBackupJob('verify', user.id, undefined, (started, onProgress) =>
+                    runArtifactVerify(artifact, started, onProgress),
+                ).id,
+            );
+            expect(verified.error).toBeUndefined();
+
+            await restoreHome(artifact, user.id, `restore-empty-folders-${Date.now()}`);
+            expect(existsSync(join(homeDir, 'empty-folders', '99', `${folders - 1}`))).toBe(true);
+        },
+        EMPTY_FOLDERS_TIMEOUT_MS,
+    );
 
     // Dovecot dates a message by its file's mtime: a restore that dated every file to itself would put every message
     // of the home at the restore in a client that sorts by received date.
-    test('a restore puts a Maildir message back with its mtime, private, through a rename and through a copy', async () => {
+    test('a restore puts a Maildir message back with its mtime, private', async () => {
         const { user } = await realShapeHome();
         await deliverMail(user.email, 'Received long ago');
         const maildir = join(TEST_DATA_DIR, 'home', user.id, MAILDIR_ROOT);
@@ -1572,16 +1621,6 @@ describe('Backup round trip of a home that stores files by name', () => {
 
         await restoreHome(artifact, user.id, `restore-mtime-${Date.now()}`);
         expect(restored()).toEqual({ mtime: received, mode: 0o600, folderMode: 0o700 });
-
-        await restoreAcrossDisks(artifact, user.id, `restore-mtime-copy-${Date.now()}`);
-        expect(restored()).toEqual({ mtime: received, mode: 0o600, folderMode: 0o700 });
-    });
-
-    test('the home moves in through a copy when the backups folder is another disk than data/', async () => {
-        const shape = await realShapeHome();
-        const { user } = shape;
-        await restoreAcrossDisks(await backUp(user.id), user.id, `restore-cross-device-${Date.now()}`);
-        expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
     });
 });
 
@@ -1683,6 +1722,174 @@ describe('Backup restore of one home judges, then takes the home', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
+    // The archive is unpacked on the data disk beside the home, so the home is offline only for the swap's two renames.
+    test('the mounts are put in place beside the home while it serves, and the swap is two renames', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 95_000));
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        const jobId = `restore-renames-${Date.now()}`;
+        const stagingDir = buildRestoreStagingDir(homeDir, jobId);
+        const unpackedHome = join(stagingDir, buildHomeFolderName(user.id), 'home');
+        const serving = await getHome(user.id);
+        const materialize = materializeModule.materializeMount;
+        const staged: { served: boolean; mode: number; homeDir: string }[] = [];
+        const materializeSpy = spyOn(materializeModule, 'materializeMount').mockImplementation(
+            (dir, summary, stamp) => {
+                staged.push({
+                    served: loadedHome(user.id) === serving,
+                    mode: statSync(stagingDir).mode & 0o777,
+                    homeDir: dir,
+                });
+                return materialize(dir, summary, stamp);
+            },
+        );
+        const rename = nodeFs.renameSync;
+        const renames: string[][] = [];
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (from === homeDir || to === homeDir) renames.push([String(from), String(to)]);
+            rename(from, to);
+        });
+        try {
+            await restoreHome(artifact, user.id, jobId);
+        } finally {
+            materializeSpy.mockRestore();
+            renameSpy.mockRestore();
+        }
+
+        expect(staged).not.toHaveLength(0);
+        for (const mount of staged) expect(mount).toEqual({ served: true, mode: 0o700, homeDir: unpackedHome });
+        // A folder no home lookup reads as a home, on the disk of the homes it sits beside.
+        expect(dirname(stagingDir)).toBe(dirname(homeDir));
+        expect(basename(stagingDir)).toStartWith('.');
+        const [aside] = safetyCopies(user.id, PRE_RESTORE_SUFFIX);
+        expect(renames).toEqual([
+            [homeDir, join(dirname(homeDir), aside)],
+            [unpackedHome, homeDir],
+        ]);
+        expect(existsSync(stagingDir)).toBe(false);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+
+    test('a restore data/ has no room to unpack is refused before anything is unpacked', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 97_000));
+        const manifest = await readArtifactManifest(join(getBackupsDir(), artifact));
+        const before = await untakenState(user.id);
+        let checked: { needed: number; dir: string } | undefined;
+        const roomSpy = spyOn(pathsModule, 'roomShortfall').mockImplementation((what, needed, dir, where) => {
+            checked = { needed, dir };
+            return `${what} has no room by the test; ${where} is full`;
+        });
+        const extractSpy = spyOn(archiveModule, 'extractArtifact');
+        let extracted = -1;
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-room-${Date.now()}`)).rejects.toMatchObject({
+                status: 507,
+            });
+            extracted = extractSpy.mock.calls.length;
+        } finally {
+            roomSpy.mockRestore();
+            extractSpy.mockRestore();
+        }
+
+        // The bound the unpack stops at, which counts the manifest and an allowance for every entry beside the bytes.
+        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest).maxBytes, dir: getDataRoot() });
+        const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
+        const entries = manifest.entries.length + (manifest.counts.dirs ?? 0);
+        expect(manifest.counts.dirs).toBeGreaterThan(0);
+        expect(checked?.needed).toBeGreaterThan(
+            manifest.counts.bytes + manifestBytes + archiveModule.ENTRY_ALLOWANCE_BYTES * entries,
+        );
+        expect(extracted).toBe(0);
+        await expectNotTaken(user.id, before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // An older build's manifest counts no folders, and its unpack charges none, so its archive restores as it did.
+    test('an archive whose manifest counts no folders restores', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 96_000), (manifest) => {
+            delete manifest.counts.dirs;
+        });
+        expect((await readArtifactManifest(join(getBackupsDir(), artifact))).counts.dirs).toBeUndefined();
+        await restoreHome(artifact, user.id, `restore-uncounted-${Date.now()}`);
+        expect(await rootNames(user.sessionToken, user.id, mountId, rootId)).toContain('kept.txt');
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+
+    test('an archive whose files pass the bytes it declares is refused mid-unpack, and leaves nothing behind', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 98_000), (manifest, folder) => {
+            manifest.counts.bytes = 0;
+            // Past the 64 MB reserve and the slack the unpack allows beyond what the manifest declares. Sparse zeros
+            // pack to almost nothing.
+            const padding = join(folder, 'home', 'padding.bin');
+            writeFileSync(padding, '');
+            truncateSync(padding, 80 * 1024 * 1024);
+        });
+        const before = await untakenState(user.id);
+        // The job removes its folder however it ends, so this is held off to see what the unpack itself left.
+        const spy = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-oversized-${Date.now()}`)).rejects.toThrow(
+                /more than its manifest declares/,
+            );
+        } finally {
+            spy.mockRestore();
+        }
+
+        await expectNotTaken(user.id, before);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    // A home can hold tens of thousands of files, and every other request waits while a transaction runs.
+    test('putting a mount in place gives the event loop back between batches of files', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 99_000));
+        const unpackDir = mkdtempSync(join(TEST_DATA_DIR, 'restore-batches-'));
+        await archiveModule.extractArtifact(join(getBackupsDir(), artifact), unpackDir);
+        const { folder, manifest } = archiveModule.readUnpackedHome(unpackDir, user.id, artifact);
+        const mountDir = join(folder, 'home', 'mounts', mountId);
+        const db = openMountMetadata(join(mountDir, 'metadata.db'));
+        const count = 1200;
+        try {
+            db.run(`CREATE TEMP TABLE copied AS SELECT * FROM paths WHERE name = 'kept.txt'`);
+            db.transaction(() => {
+                for (let index = 0; index < count; index++) {
+                    db.run('UPDATE copied SET id = ?, name = ?, file = ?', [
+                        `batch-${index}`,
+                        `batch-${index}.txt`,
+                        `batch-${index}`,
+                    ]);
+                    db.run('INSERT INTO paths SELECT * FROM copied');
+                    writeFileSync(join(mountDir, PATHS.DRIVE.DATA_DIR, `batch-${index}.txt`), String(index));
+                }
+            })();
+        } finally {
+            db.close();
+        }
+        const turns = countLoopTurns();
+        const turnsAtMove: number[] = [];
+        const rename = nodeFs.renameSync;
+        const spy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (basename(String(from)).startsWith('batch-')) turnsAtMove.push(turns.read());
+            rename(from, to);
+        });
+        try {
+            const summary = manifest.mounts.find((mount) => mount.id === mountId);
+            if (!summary) throw new Error(`${mountId} is not in the manifest`);
+            await materializeModule.materializeMount(join(folder, 'home'), summary, 'batches');
+        } finally {
+            spy.mockRestore();
+            turns.stop();
+        }
+
+        expect(turnsAtMove).toHaveLength(count);
+        // Each file lands at the key a local-key mount reads it from, its id.
+        expect(existsSync(join(mountDir, PATHS.DRIVE.DATA_DIR, `batch-${count - 1}`))).toBe(true);
+        // The loop turned between the first file and the last.
+        expect(turnsAtMove.at(-1)).toBeGreaterThan(turnsAtMove[0]);
+        rmSync(unpackDir, { recursive: true, force: true });
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
     test('a safety copy from a newer server is refused while the home still serves', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 100_000));
         await restoreHome(artifact, user.id, `restore-copy-newer-${Date.now()}`);
@@ -1719,6 +1926,141 @@ describe('Backup restore of one home judges, then takes the home', () => {
         expect(trashedAtIn(homeDir)).toBeGreaterThanOrEqual(putBackAt);
 
         rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+});
+
+// A process killed anywhere in a restore leaves the folder its job staged beside the home, with the notes in it, and
+// the next boot finishes or undoes the restore from them. The notes sit on the home's own disk, so a boot that runs
+// without the backups folder reads them as well as one with it.
+describe('Backup restore killed at any point', () => {
+    const KILLED = new Error('killed by the test');
+    let user: TestUser;
+    let mountId: string;
+    let rootId: string;
+    let artifact: string;
+    let homeDir: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        user = await createTestUser('restore-killed@test.eigen.is', PASSWORD, 'Restore Killed');
+        homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        mountId = await firstMountId(user.sessionToken, user.id);
+        rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await driveUpload(user.sessionToken, user.id, mountId, rootId, new File(['backed up'], 'backed-up.txt'));
+        artifact = await backup(user.id, new Date());
+        // Only the home as it stands holds this, so it tells that home from the archive's.
+        await driveUpload(user.sessionToken, user.id, mountId, rootId, new File(['live'], 'live.txt'));
+    });
+
+    afterAll(() => {
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+
+    type KillPoint =
+        | 'in the unpack'
+        | 'while the mounts are put in place'
+        | 'between the marker and the move-aside'
+        | 'between the two renames'
+        | 'before the completion note';
+
+    // A restore that dies at `point`: from there on nothing the job would still do happens, its rollback and its
+    // cleanup included, so the disk is left as a kill leaves it.
+    async function restoreKilledAt(point: KillPoint): Promise<void> {
+        let killed = false;
+        const kill = (): never => {
+            killed = true;
+            throw KILLED;
+        };
+        const extract = archiveModule.extractArtifact;
+        const materialize = materializeModule.materializeMount;
+        const writeComplete = recoveryModule.writeRestoreCompleteMarker;
+        const rename = nodeFs.renameSync;
+        const spies = [
+            spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
+            spyOn(archiveModule, 'extractArtifact').mockImplementation(async (source, target, maxBytes) => {
+                await extract(source, target, maxBytes);
+                if (point === 'in the unpack') kill();
+            }),
+            spyOn(materializeModule, 'materializeMount').mockImplementation(async (dir, summary, stamp) => {
+                const placed = await materialize(dir, summary, stamp);
+                return point === 'while the mounts are put in place' ? kill() : placed;
+            }),
+            spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+                if (killed) throw KILLED;
+                if (point === 'between the marker and the move-aside' && from === homeDir) kill();
+                if (point === 'between the two renames' && to === homeDir) kill();
+                rename(from, to);
+            }),
+            spyOn(recoveryModule, 'writeRestoreCompleteMarker').mockImplementation((dir) => {
+                if (point === 'before the completion note') kill();
+                writeComplete(dir);
+            }),
+        ];
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-killed-${Date.now()}`)).rejects.toBe(KILLED);
+        } finally {
+            for (const spy of spies) spy.mockRestore();
+        }
+    }
+
+    async function rootNames(): Promise<string[]> {
+        const items = await driveGetList(user.sessionToken, user.id, mountId, `folder/${rootId}`);
+        return items.map((item) => item.name).sort();
+    }
+
+    // What every kill comes back to: the home as it was serves, and nothing staged is left.
+    async function expectHomeAsItWas(): Promise<void> {
+        expect(await rootNames()).toContain('live.txt');
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
+        expect(restoreStagingFolders()).toEqual([]);
+    }
+
+    for (const point of [
+        'in the unpack',
+        'while the mounts are put in place',
+        'between the marker and the move-aside',
+        'between the two renames',
+    ] as const) {
+        test(`a restore killed ${point} leaves the home as it was after the next boot`, async () => {
+            await restoreKilledAt(point);
+            expect(restoreStagingFolders()).toHaveLength(1);
+
+            await recoverBackupsAfterRestart();
+
+            await expectHomeAsItWas();
+            expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        });
+    }
+
+    // A boot without the backups folder, such as one with its mount missing, still finds the notes, so the restored
+    // home goes aside at once. A later boot with the folder back has nothing left to act on, and the work done on the
+    // home in between stays.
+    test('a restore killed before its completion note is undone by the next boot, and a later boot changes nothing', async () => {
+        await restoreKilledAt('before the completion note');
+        // Both renames ran: the restored home is in place and the home as it was is aside.
+        expect(existsSync(homeDir)).toBe(true);
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toHaveLength(1);
+
+        const backupsDir = process.env['EIGEN_BACKUPS_DIR'];
+        process.env['EIGEN_BACKUPS_DIR'] = join(TEST_DATA_DIR, 'restore-killed-no-backups');
+        try {
+            await recoverBackupsAfterRestart();
+        } finally {
+            if (backupsDir === undefined) delete process.env['EIGEN_BACKUPS_DIR'];
+            else process.env['EIGEN_BACKUPS_DIR'] = backupsDir;
+        }
+        await expectHomeAsItWas();
+        const [parked] = safetyCopies(user.id, FAILED_RESTORE_SUFFIX);
+        expect(parked).toBeDefined();
+        await driveUpload(user.sessionToken, user.id, mountId, rootId, new File(['a day'], 'a-day-of-work.txt'));
+
+        await recoverBackupsAfterRestart();
+
+        expect(await rootNames()).toContain('a-day-of-work.txt');
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([parked]);
         removeSafetyCopies(user.id);
     });
 });

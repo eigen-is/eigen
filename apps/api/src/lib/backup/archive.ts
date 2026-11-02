@@ -1,7 +1,8 @@
 // Packs, lists and unpacks Eigen's backup archives. A home archive is one home folder as a tar through zstd,
 // so `tar --zstd -xf` unpacks it anywhere. A whole-server archive is a plain tar of members that are compressed
-// already, and its manifest is always the last member. The backup, verify and restore code calls it, ./eigen restore
-// included. The tar bytes themselves come from headerChunks and tarEntries.
+// already, and its manifest is always the last member. An unpack stops at the bound its manifest declares, so an
+// archive that holds more cannot write more. The backup, verify and restore code calls it, ./eigen restore included.
+// The tar bytes themselves come from headerChunks and tarEntries.
 
 /// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';
@@ -10,6 +11,7 @@ import * as path from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createZstdCompress, createZstdDecompress } from 'node:zlib';
+import { formatFileSize } from '@workspace/lib/format';
 import type { BackupEntry, BackupManifest, BackupProgress, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { parseBackupManifest } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
@@ -188,21 +190,82 @@ export async function copyArchiveMember(member: ArchiveMemberLocation, destPath:
     }
 }
 
+// What the disk spends on one entry beyond its bytes, such as a block a small file rounds up to, or a folder's own
+// block. A million empty files or folders declare no bytes and still take gigabytes, so every entry is charged it.
+export const ENTRY_ALLOWANCE_BYTES = 4096;
+// What a restore's room check and its unpack allow beyond what the manifest declares: a tenth more, which also covers
+// the folders of an archive written before its manifest counted them, and a fixed reserve, so a small home is not
+// unpacked onto the disk's last free bytes.
+const UNPACK_SLACK = 1.1;
+const UNPACK_RESERVE_BYTES = 64 * 1024 * 1024;
+
+// The most an unpack may write, and whether its folder entries count toward it. They count once the manifest counts
+// them. An archive written before `counts.dirs` declares no folders, so its unpack does not charge them either.
+export type UnpackBound = { maxBytes: number; chargeFolders: boolean };
+
+// The text of an archive's manifest.json. The snapshots write it, and declaredUnpackBytes measures it.
+export function serializeManifest(manifest: BackupManifest): string {
+    return JSON.stringify(manifest, null, 2);
+}
+
+// The folder entries a pack of `dir` writes: `dir` itself and every folder under it, empty ones included. A snapshot
+// counts them once its folder is whole, so its manifest declares every entry the unpack meets.
+export function countPackedFolders(dir: string): number {
+    return (
+        fs.readdirSync(dir, { recursive: true, withFileTypes: true }).filter((entry) => entry.isDirectory()).length + 1
+    );
+}
+
+// What extractArtifact counts for an archive that holds exactly what its manifest lists: the bytes of every entry and
+// of the manifest itself, and an allowance for each of them and for every folder the manifest counts.
+export function declaredUnpackBytes(manifest: BackupManifest): number {
+    const manifestBytes = Buffer.byteLength(serializeManifest(manifest));
+    const entries = manifest.entries.length + 1 + (manifest.counts.dirs ?? 0);
+    return manifest.counts.bytes + manifestBytes + entries * ENTRY_ALLOWANCE_BYTES;
+}
+
+// The most an unpack of the archive may write. A restore checks the disk for it first, and every unpack stops there.
+export function unpackBound(manifest: BackupManifest): UnpackBound {
+    return {
+        maxBytes: withUnpackSlack(declaredUnpackBytes(manifest)),
+        chargeFolders: manifest.counts.dirs !== undefined,
+    };
+}
+
+// Declared bytes with the slack and the reserve on top. A whole-server stage adds them once over all its members.
+export function withUnpackSlack(bytes: number): number {
+    return Math.ceil(bytes * UNPACK_SLACK) + UNPACK_RESERVE_BYTES;
+}
+
 // An artifact's compressed bytes are a file of their own, or a member read in place from a whole-server archive.
 type ArtifactSource = string | ArchiveMemberLocation;
 
 // Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
 // says. Only the API's user reads a restored home, so an older archive with 0644 files restores as private as a
 // new one. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
-// for a folder that its own extract cannot enter either.
-export async function extractArtifact(source: ArtifactSource, targetDir: string): Promise<void> {
+// for a folder that its own extract cannot enter either. With a `bound`, it refuses an archive whose entries add up
+// to more, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
+export async function extractArtifact(
+    source: ArtifactSource,
+    targetDir: string,
+    bound: UnpackBound = { maxBytes: Number.POSITIVE_INFINITY, chargeFolders: true },
+): Promise<void> {
     const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
     const existed = fs.existsSync(targetDir);
     makeFolder(targetDir);
+    let bytes = 0;
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
-            if (entry.typeflag === DIRECTORY_TYPEFLAG) {
+            const isFolder = entry.typeflag === DIRECTORY_TYPEFLAG;
+            bytes += entry.size + (isFolder && !bound.chargeFolders ? 0 : ENTRY_ALLOWANCE_BYTES);
+            if (bytes > bound.maxBytes) {
+                throw new ApiError(
+                    400,
+                    `The archive unpacks past ${formatFileSize(bound.maxBytes)}, more than its manifest declares`,
+                );
+            }
+            if (isFolder) {
                 makeFolder(target);
                 continue;
             }
@@ -220,16 +283,19 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
     }
 }
 
-// The manifest of the archive's single home folder, without unpacking its files.
-export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
+// The manifest of the archive's single folder, without unpacking its files.
+export async function readArtifactManifest(source: ArtifactSource): Promise<BackupManifest> {
     const manifestGlob = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
     let manifest: BackupManifest | null = null;
-    for await (const entry of tarEntries(artifactBytes(artifactPath))) {
+    for await (const entry of tarEntries(artifactBytes(source))) {
         if (!manifestGlob.match(entry.path)) continue;
         manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
-    if (!manifest) throw new ApiError(400, `${path.basename(artifactPath)} is not an Eigen backup archive`);
+    if (!manifest) {
+        const name = typeof source === 'string' ? path.basename(source) : source.name;
+        throw new ApiError(400, `${name} is not an Eigen backup archive`);
+    }
     return manifest;
 }
 

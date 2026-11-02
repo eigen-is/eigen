@@ -15,7 +15,7 @@ import type { DatabaseConfig, SchemaType } from '../core/managed-database';
 import { MOUNT_DB_CONFIG, PENDING_UPLOAD_KIND_VERSION } from '../mount/db-config';
 import { buildStorageKey } from '../mount/names';
 import { paths, pendingUploads } from '../mount/schema';
-import { errnoOf } from '../storage/deadline';
+import type { MountPathRow } from './archive-layout';
 import {
     HOME_DATABASES,
     listManagedDatabases,
@@ -36,15 +36,18 @@ export class UnopenableDatabaseError extends ApiError {}
 
 // How many databases checkDatabases opens before it gives the event loop back.
 const DATABASES_PER_YIELD = 50;
+// How many files materializeMount puts in place in one transaction before it gives the event loop back.
+const FILES_PER_BATCH = 500;
 
 // Puts one mount's files where the restored mount looks for them. The archive holds them by path, so each backend
 // derives its keys again; an `s3` mount stages each file with a pending upload, which the UploadQueue drains with
-// its retry. Returns the container databases that stayed on local disk.
-export function materializeMount(
+// its retry. Returns the container databases that stayed on local disk. A restore runs it in the API on a folder no
+// home serves yet, so it gives the event loop back between batches, and a failure halfway leaves only that folder.
+export async function materializeMount(
     homeDir: string,
     summary: BackupManifest['mounts'][number],
     stamp: string,
-): VersionedDatabase[] {
+): Promise<VersionedDatabase[]> {
     const metadataPath = requireMaterializable(homeDir, summary);
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
@@ -74,51 +77,56 @@ export function materializeMount(
         if (isRemote) fs.mkdirSync(mountStagingDir, { recursive: true });
         const now = Date.now();
         const managedPaths = new Set(managed.map((entry) => entry.path));
-        // One transaction: a VACUUM INTO copy journals and fsyncs every statement on its own, and this is two per file.
-        db.transaction(() => {
-            for (const row of rows) {
-                if (row.type !== 'file') continue;
-                const archived = rowArchivePath(row, byId);
-                const source = inData(archived);
-                // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
-                // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.
-                if (isRemote) {
-                    row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
-                    orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
-                }
-                // A row whose storage object was already missing when the backup ran has no bytes here;
-                // the restored home mirrors that absence rather than inventing an empty object.
-                if (!fs.existsSync(source)) continue;
-                const key = storageKeyOf(row, byId, isPathBased);
-                if (isRemote) {
-                    const staged = crypto.randomUUID();
-                    movePath(source, path.join(mountStagingDir, staged));
-                    orm.insert(pendingUploads)
-                        .values({
-                            storageKey: key,
-                            stagingPath: staged,
-                            attempt: 0,
-                            enqueuedAt: now,
-                            nextAttemptAt: now,
-                            isDatabase: managedPaths.has(archived),
-                        })
-                        .run();
-                    continue;
-                }
-                // On a path-based mount the key is the archive path unless migration v7 renamed a deduplicated
-                // row's name and left its `file`, which reads go by.
-                const target = inData(key);
-                if (target !== source) movePath(source, target);
+        const placeFile = (row: MountPathRow): void => {
+            const archived = rowArchivePath(row, byId);
+            const source = inData(archived);
+            // A bucket's objects did not move aside with the folder: every row gets a fresh key, even one with
+            // no bytes, so no upload lands on an object the `.pre-restore-` copy still names.
+            if (isRemote) {
+                row.file = buildStorageKey(`${row.id}-r${stamp}`, row.name);
+                orm.update(paths).set({ file: row.file }).where(eq(paths.id, row.id)).run();
             }
-        })();
+            // A row whose storage object was already missing when the backup ran has no bytes here;
+            // the restored home mirrors that absence rather than inventing an empty object.
+            if (!fs.existsSync(source)) return;
+            const key = storageKeyOf(row, byId, isPathBased);
+            if (isRemote) {
+                const staged = crypto.randomUUID();
+                movePath(source, path.join(mountStagingDir, staged));
+                orm.insert(pendingUploads)
+                    .values({
+                        storageKey: key,
+                        stagingPath: staged,
+                        attempt: 0,
+                        enqueuedAt: now,
+                        nextAttemptAt: now,
+                        isDatabase: managedPaths.has(archived),
+                    })
+                    .run();
+                return;
+            }
+            // On a path-based mount the key is the archive path unless migration v7 renamed a deduplicated
+            // row's name and left its `file`, which reads go by.
+            const target = inData(key);
+            if (target !== source) movePath(source, target);
+        };
+        // A transaction per batch: a VACUUM INTO copy journals and fsyncs every statement on its own, and this is two
+        // per file.
+        const files = rows.filter((row) => row.type === 'file');
+        for (let start = 0; start < files.length; start += FILES_PER_BATCH) {
+            if (start > 0) await new Promise(setImmediate);
+            db.transaction(() => {
+                for (const row of files.slice(start, start + FILES_PER_BATCH)) placeFile(row);
+            })();
+        }
         if (isRemote) {
             // Every byte is in staging until its PUT acks; the by-path tree as well would double the disk.
-            fs.rmSync(dataDir, { recursive: true, force: true });
+            await fsp.rm(dataDir, { recursive: true, force: true });
             return [];
         }
         // What is left under data/ after a local-key move is the archive's by-path folders, which
         // that backend has no use for. A path-based mount keeps them: they are its layout.
-        if (!isPathBased) pruneEmptyDirs(dataDir);
+        if (!isPathBased) await pruneEmptyDirs(dataDir);
         return managed.map((entry) => ({
             filePath: inData(storageKeyOf(entry.row, byId, isPathBased)),
             config: entry.config,
@@ -283,18 +291,6 @@ export function movePath(from: string, to: string): void {
     fs.renameSync(from, to);
 }
 
-// A whole home from the backups folder into data/: on Docker the two are separate mounts, a rename between them
-// fails with EXDEV, and the copy that replaces it must not hold every other user's requests.
-export async function movePathAsync(from: string, to: string): Promise<void> {
-    await fsp.mkdir(path.dirname(to), { recursive: true });
-    await fsp.rename(from, to).catch(async (error: unknown) => {
-        if (errnoOf(error) !== 'EXDEV') throw error;
-        // A rename keeps every mtime, and Dovecot dates a Maildir message by its own.
-        await fsp.cp(from, to, { recursive: true, preserveTimestamps: true });
-        await fsp.rm(from, { recursive: true, force: true });
-    });
-}
-
 // A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is
 // read-write, because a closed WAL database has no -shm and a read-only open of it fails. A writer is waited out as
 // long as the API waits for one, so a busy database is not read as damaged.
@@ -349,12 +345,12 @@ function inMountData(dataDir: string, mountId: string, relPath: string): string 
 
 // Depth-first, directories only: a leftover file means the tree and the paths table disagree, and
 // deleting it would be the restore losing bytes.
-function pruneEmptyDirs(dir: string): void {
+async function pruneEmptyDirs(dir: string): Promise<void> {
     if (!fs.existsSync(dir)) return;
-    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    for (const entry of await fsp.readdir(dir, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
         const child = path.join(dir, entry.name);
-        pruneEmptyDirs(child);
-        if (fs.readdirSync(child).length === 0) fs.rmdirSync(child);
+        await pruneEmptyDirs(child);
+        if ((await fsp.readdir(child)).length === 0) await fsp.rmdir(child);
     }
 }

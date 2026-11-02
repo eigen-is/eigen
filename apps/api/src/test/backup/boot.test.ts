@@ -14,13 +14,18 @@ import { join } from 'node:path';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
 import {
     buildArtifactName,
+    buildRestoreStagingDir,
     buildServerArchiveName,
     getBackupsDir,
     serverSidecarPath,
     sidecarPath,
     wipeBackupStaging,
 } from '../../lib/backup/paths';
-import { recoverBackupsAfterRestart, recoverInterruptedRestores } from '../../lib/backup/recovery';
+import {
+    recoverBackupsAfterRestart,
+    recoverInterruptedRestores,
+    wipeRestoreStagingDir,
+} from '../../lib/backup/recovery';
 import { TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
@@ -40,18 +45,19 @@ describe('Backup boot', () => {
         return dir;
     }
 
-    // What restoreHome writes before it moves a home aside, in the staging folder of its job — and,
+    // What a restore writes before it moves a home aside, in the folder its job staged beside the home — and,
     // when the install got all the way through, the note it writes beside it. `preRestoreName` is
     // null for a restore of a deleted user: there was no home folder to move aside. `parkName` is a
-    // `.failed-restore-` name unless a safety-copy restore gives its copy's own.
+    // `.failed-restore-` name unless a safety-copy restore gives its copy's own. `dir` is where a build up to 0.4.1
+    // kept them when given.
     function seedRestoringMarker(
         jobId: string,
         homeName: string,
         preRestoreName: string | null,
         complete = false,
         parkName = `${homeName}${FAILED_RESTORE_SUFFIX}20261231-235959`,
-    ): void {
-        const dir = join(getBackupsDir(), '.staging', jobId);
+        dir = buildRestoreStagingDir(join(homeRoot, homeName), jobId),
+    ): string {
         mkdirSync(dir, { recursive: true });
         writeFileSync(
             join(dir, 'restoring.json'),
@@ -64,6 +70,7 @@ describe('Backup boot', () => {
         );
         if (complete) writeFileSync(join(dir, 'restore-complete.json'), JSON.stringify({ completedAt: 'seeded' }));
         made.push(dir);
+        return dir;
     }
 
     afterAll(() => {
@@ -179,10 +186,9 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, `${id}${PRE_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
     });
 
-    // The install creates the home folder early (a rename of the extracted `home/`, or a whole copy
-    // when the backups folder is on another disk) and keeps writing to it for as long as the
-    // materialization, the checks and the identity writes take. A folder that is there without the
-    // completion note is somewhere in the middle of that, and is not a home.
+    // The install renames the unpacked home into place, and the restore writes its completion note
+    // only after the data epoch rotates. A folder that is there without the note is one the restore
+    // had not finished with, and is not trusted as a home.
     test('a marker with a half-written home folder parks it and puts the copy back', () => {
         const id = 'bootrecoverBBBBBBBBBBBBBBBBBBBBB';
         const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
@@ -252,6 +258,36 @@ describe('Backup boot', () => {
         expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
     });
 
+    // The job removes its folder once the home serves. A kill partway through that removal must not leave the marker
+    // without its completion note, or the next boot would undo a restore the user has worked in since. An unremovable
+    // folder inside stands in for the kill: the removal fails there, after it has started. Root removes it anyway.
+    test.skipIf(process.getuid?.() === 0)(
+        'a removal of a finished restore cut off partway leaves no marker for a later boot',
+        async () => {
+            const id = 'bootrecoverNNNNNNNNNNNNNNNNNNNNN';
+            const aside = `${id}${PRE_RESTORE_SUFFIX}20260606-000000`;
+            const homeDir = seedFolder(id, 'the restored home');
+            seedFolder(aside, 'the home as it was');
+            const staged = seedRestoringMarker('boot-job-n', id, aside, true);
+            const locked = join(staged, `home-${id}`, 'home');
+            mkdirSync(locked, { recursive: true });
+            writeFileSync(join(locked, 'kept'), '');
+            chmodSync(locked, 0o500);
+            try {
+                await expect(wipeRestoreStagingDir(homeDir, 'boot-job-n')).rejects.toThrow();
+            } finally {
+                chmodSync(locked, 0o700);
+            }
+            // What the removal got through before the kill could include the completion note.
+            rmSync(join(staged, 'restore-complete.json'), { force: true });
+
+            expect(existsSync(join(staged, 'restoring.json'))).toBe(false);
+            recoverInterruptedRestores();
+            expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the restored home');
+            expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+        },
+    );
+
     test('a marker naming a folder of another home is refused', () => {
         const id = 'bootrecoverCCCCCCCCCCCCCCCCCCCCC';
         const other = 'bootrecoverEEEEEEEEEEEEEEEEEEEEE';
@@ -265,5 +301,61 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, id))).toBe(false);
         expect(existsSync(join(homeRoot, aside))).toBe(true);
         expect(existsSync(join(homeRoot, `${id}${FAILED_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
+    });
+
+    // A per-home restore unpacks beside the home, and a kill before its job ended leaves that folder. Nothing resumes it.
+    test('the boot removes the folders killed restores were unpacking into, and leaves the homes beside them', async () => {
+        const id = 'bootrecoverJJJJJJJJJJJJJJJJJJJJJ';
+        seedFolder(id, 'the home');
+        const staged = [
+            buildRestoreStagingDir(join(homeRoot, id), 'boot-job-j'),
+            buildRestoreStagingDir(join(TEST_DATA_DIR, 'team', 'bootrecoverTeamJJJJJJJJJJJJJJJJJ'), 'boot-job-k'),
+        ];
+        for (const dir of staged) {
+            mkdirSync(join(dir, `home-${id}`, 'home'), { recursive: true });
+            made.push(dir);
+        }
+
+        await recoverBackupsAfterRestart();
+
+        expect(staged.filter(existsSync)).toEqual([]);
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home');
+    });
+
+    // The home went aside and the staged one did not move in yet: the marker puts the old one back, and the staged one
+    // goes with the other leftovers.
+    test('a kill between the two renames of the swap puts the home as it was back', async () => {
+        const id = 'bootrecoverLLLLLLLLLLLLLLLLLLLLL';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260404-000000`;
+        seedFolder(aside, 'the home as it was');
+        const staged = seedRestoringMarker('boot-job-l', id, aside);
+        mkdirSync(join(staged, `home-${id}`, 'home'), { recursive: true });
+        writeFileSync(join(staged, `home-${id}`, 'home', 'marker'), 'the restored home');
+        made.push(join(homeRoot, id));
+
+        await recoverBackupsAfterRestart();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(existsSync(join(homeRoot, aside))).toBe(false);
+        expect(existsSync(staged)).toBe(false);
+        expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
+    });
+
+    // A build up to 0.4.1 kept the notes in backups/.staging. One release still reads them, so an upgrade right after a
+    // killed restore recovers it.
+    test('the notes an older build kept in the backups folder are still read', async () => {
+        const id = 'bootrecoverMMMMMMMMMMMMMMMMMMMMM';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260505-000000`;
+        seedFolder(id, 'half-written');
+        seedFolder(aside, 'the home as it was');
+        const parkName = `${id}${FAILED_RESTORE_SUFFIX}20260505-000000`;
+        seedRestoringMarker('boot-job-m', id, aside, false, parkName, join(getBackupsDir(), '.staging', 'boot-job-m'));
+        made.push(join(homeRoot, parkName));
+
+        await recoverBackupsAfterRestart();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('half-written');
+        expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
     });
 });

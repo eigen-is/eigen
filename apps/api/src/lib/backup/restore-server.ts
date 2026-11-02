@@ -12,7 +12,15 @@ import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUN
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
 import type { HashedArchiveMember } from './archive';
-import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
+import {
+    copyArchiveMember,
+    declaredUnpackBytes,
+    extractArtifact,
+    readArtifactManifest,
+    readUnpackedHome,
+    unpackBound,
+    withUnpackSlack,
+} from './archive';
 import { flatStorageKey, readMountPathRows, rowArchivePath } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
@@ -52,18 +60,18 @@ type StageContext = {
     now: number;
 };
 
-// How much server.tar.zst can grow unpacked: its manifest carries no inner count, and SQLite shrinks that much.
-const SERVER_MEMBER_EXPANSION = 10;
-
-// What the stage takes on the data disk, at most: every member unpacked, a home by its inner count. Once: it
-// streams each member out of the archive and renames what it unpacked into place.
-export function stageBytesNeeded(manifest: ServerArchiveManifest): number {
-    const homes = new Map(manifest.homes.map((home) => [home.member, home.bytes ?? 0]));
-    const unpacked = (entry: ServerArchiveManifest['entries'][number]) =>
-        entry.path === SERVER_ARCHIVE_SERVER_MEMBER
-            ? SERVER_MEMBER_EXPANSION * entry.bytes
-            : Math.max(entry.bytes, homes.get(entry.path) ?? 0);
-    return manifest.entries.reduce((sum, entry) => sum + unpacked(entry), 0);
+// What the stage takes on the data disk, at most: what each member's unpack declares, with the slack and the reserve
+// added once. The server member and each home carry a manifest of their own, so each is read up to it, and the rest
+// are copied at their size. Counted once: the stage streams each member out and renames what it unpacked into place.
+export async function stageBytesNeeded({ manifest, members }: ServerArchiveFile): Promise<number> {
+    const archives = new Set([SERVER_ARCHIVE_SERVER_MEMBER, ...manifest.homes.flatMap((home) => home.member ?? [])]);
+    let declared = 0;
+    for (const entry of manifest.entries) {
+        const member = members.get(entry.path);
+        declared +=
+            member && archives.has(entry.path) ? declaredUnpackBytes(await readArtifactManifest(member)) : entry.bytes;
+    }
+    return withUnpackSlack(declared);
 }
 
 // Every member of the archive into `restoringDir`/data, each verified as it lands. Throws on the first one that
@@ -115,7 +123,7 @@ export async function stageServerArchive(
 async function stageServerMember(archive: ServerArchiveFile, dataDir: string, unpackDir: string): Promise<void> {
     const member = archive.members.get(SERVER_ARCHIVE_SERVER_MEMBER);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${SERVER_ARCHIVE_SERVER_MEMBER}`);
-    await extractArtifact(member, unpackDir);
+    await extractArtifact(member, unpackDir, unpackBound(await readArtifactManifest(member)));
     const folder = path.join(unpackDir, buildServerFolderName(new Date(archive.manifest.createdAt)));
     const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
     const manifest = fs.existsSync(manifestPath) ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8')) : null;
@@ -144,7 +152,7 @@ async function stageHome(
     const member = archive.members.get(home.member);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${home.member}`);
     const unpacked = path.join(unpackDir, home.ownerId);
-    await extractArtifact(member, unpacked);
+    await extractArtifact(member, unpacked, unpackBound(await readArtifactManifest(member)));
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
     // --s3-from-archive trusts the outer level, so every home in the archive is captured at it.
@@ -161,7 +169,7 @@ async function stageHome(
     const notReplayed: NotReplayed = { settled: 0, missing: 0 };
     for (const summary of carried) {
         if (summary.storageType !== 's3' || (s3FromArchive && summary.contents !== 'metadata')) {
-            containerDatabases.push(...materializeMount(homeDir, summary, stamp));
+            containerDatabases.push(...(await materializeMount(homeDir, summary, stamp)));
             continue;
         }
         const replay = replayPendingUploads(
