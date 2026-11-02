@@ -31,7 +31,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dialogs in Sheets** — Custom sort, Split text, row height and column width, the custom number, date and currency formats, Insert function, conditional formatting, Data verification and the link editor have a close button in the corner, close on a click outside and apply on Enter
 - **Refused rules in Sheets** — a conditional format or Data verification rule Sheets can't take keeps its dialog open with the reason under the field, and what you typed stays
 - **Insert function in Sheets** — the search finds a function by its description, a name typed in full comes first, Up and Down move through the list, and Cancel leaves what you were typing in the cell
-- **Manage rules in Sheets** — **Format › Conditional formatting › Management rules** is called **Manage rules**
+- **Conditional formatting menu in Sheets** — **Management rules** is called **Manage rules**, and **Delete sheet rule**, which clears every rule on the sheet, is called **Delete sheet rules**
 - **Emoji** — emoji draw in one monochrome emoji font, in the color of the text, in the apps and in PDF, web page and SVG downloads, so they look the same on nearly every computer. Safari still draws keycap emoji such as 1️⃣ and some joined emoji in parts
 - **Chinese and Korean text** — draws in Noto Sans SC and Noto Sans KR in the apps and in PDF, web page and SVG downloads, where a PDF printed Korean as boxes. Japanese kanji draw in their Chinese forms
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
@@ -88,6 +88,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Custom sort in Sheets** — with **Data has a header row** ticked, the header row stays where it is
 - **Picking a range in Data verification** — choosing cells on the grid keeps the rest of what you typed, and **Delete verification** with no range says why
 - **Formats from the keyboard in Sheets** — Tab and Enter pick a preset or a currency in the custom number, date and currency formats
+- **Typing after a dialog in Sheets** — when a dialog closes, typing and the arrow keys work on the grid without a click first, and **Insert function** leaves you typing after the bracket
+- **Deleting a rule on a protected sheet** — **Manage rules** refuses the delete, as **Delete sheet rules** already did
 - **Pasting from WPS Office** — a table pasted from WPS keeps its cell styles, such as bold and colors
 - **Filter buttons on narrow columns** — a column narrower than its filter button keeps the button inside it, so a click opens that column's filter
 - **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
