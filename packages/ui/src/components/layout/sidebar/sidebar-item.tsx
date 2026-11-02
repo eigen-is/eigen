@@ -1,6 +1,7 @@
 // One row of a side list, such as an app's sidebar or the docs outline: an icon and a label that link to a route,
-// open a URL or run a click. Condensed, it shows the icon alone. Following a route also closes the sidebar.
-// Its hover and active fills end in the wordmark's ket (.eigen-ket-end in globals.css).
+// open a URL or run a click. Condensed, it shows the icon alone. A route row looks selected while its page is open,
+// whatever the page has selected, and following it closes the sidebar. Its hover and selected fills end in the
+// wordmark's ket (.eigen-ket-end in globals.css).
 
 import { Link } from '@tanstack/react-router';
 import type { MouseEvent, ReactNode } from 'react';
@@ -66,7 +67,9 @@ export function SidebarItem({
                 }}
                 className={baseStyles}
                 activeProps={{ className: 'bg-primary/10 text-primary' }}
-                activeOptions={{ exact }}
+                // A row names a page, and the search holds what is selected on it, such as `?pid=`. So only the
+                // path decides: an `exact` row at `/` stays selected when a click in its list adds a search.
+                activeOptions={{ exact, includeSearch: false }}
             >
                 {content}
             </Link>
