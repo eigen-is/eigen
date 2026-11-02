@@ -42,6 +42,7 @@ export {
     isCurrentSheetsSnapshot,
 } from './snapshot-codec';
 export * from './types';
+export { wellFormedValidations } from './validations';
 export {
     readSheetsBase,
     readSheetsSnapshotJson,

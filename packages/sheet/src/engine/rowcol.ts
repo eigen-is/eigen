@@ -1,10 +1,10 @@
 // Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, merges, borders, row heights,
-// column widths, conditional formats and size of the sheet the op names, and the formula text and chart ranges on every
-// sheet that point at it. It runs wherever such an op applies, for example in the editor's own insert and in the
-// server's replay of the op log. The shifters for one kind of map are exported for code that moves the same maps, such
-// as the undo stacks.
+// column widths, conditional formats, validation rules and size of the sheet the op names, and the formula text and
+// chart ranges on every sheet that point at it. It runs wherever such an op applies, for example in the editor's own
+// insert and in the server's replay of the op log. The shifters for one kind of map are exported for code that moves
+// the same maps, such as the undo stacks.
 
-import type { CellMatrix, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
+import type { CellMatrix, MergeCell, Sheet, SheetChart, SheetValidation } from '@workspace/lib/sheets';
 import { cloneSides, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
 import { mapChartRefs } from './chart-data';
@@ -46,7 +46,10 @@ type AxisRange = { row: readonly number[]; column: readonly number[] };
 
 // Excel's rule for a range across an insert: an insert at or before its first row (or column)
 // moves it, one inside grows it, one right after leaves it. The same range comes back unmoved.
-// CF, alternate formats and chart refs all shift through this pair.
+// CF, validation, alternate formats and chart refs all shift through this pair.
+//
+// A range stops at the grid's last row or column, as Excel's does. So a whole-column rule still ends there after an
+// insert, and a chart ref stays one readChartSpec accepts.
 export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
@@ -54,7 +57,9 @@ export function shiftRangeForInsert<R extends AxisRange>(
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
     const [start, end] = op.type === 'row' ? range.row : range.column;
     if (insertAt > end) return range;
-    const span: [number, number] = insertAt <= start ? [start + op.count, end + op.count] : [start, end + op.count];
+    const last = (op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT) - 1;
+    const moved = (line: number) => Math.min(line + op.count, last);
+    const span: [number, number] = insertAt <= start ? [moved(start), moved(end)] : [start, moved(end)];
     return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 
@@ -98,7 +103,7 @@ function runsAlong(ref: CellRangeRef, type: 'row' | 'column'): boolean {
     return type === 'row' ? ref.column[0] === ref.column[1] : ref.row[0] === ref.row[1];
 }
 
-// Generic over S, so the editor's wider sheet, with its filter, frozen panes and validation, keeps its type. The engine
+// Generic over S, so the editor's wider sheet, with its filter and frozen panes, keeps its type. The engine
 // reads only the plain sheet's fields, and its shallow copies keep the rest.
 //
 // Nothing is deep-cloned. Rows an op doesn't touch, and for a column op the cells, are reused as they are. In the
@@ -462,6 +467,9 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
             cellrange: cf.cellrange.map((range) => shiftRangeForInsert(range, op)),
         }));
     }
+    if (target.dataValidations != null) {
+        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
+    }
 
     const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
@@ -472,22 +480,10 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
-    // An insert stops a chart ref at the grid's last row or column: readChartSpec refuses a ref past
-    // it, which would leave the chart unreadable for good.
-    const lastRow = REFERENCE_ROW_COUNT - 1;
-    const lastColumn = REFERENCE_COLUMN_COUNT - 1;
     return shiftChartsAcrossSheets(
         shifted,
         op.id,
-        (ref) => {
-            const moved = shiftRangeForInsert(ref, op);
-            if (moved.row[1] <= lastRow && moved.column[1] <= lastColumn) return moved;
-            return {
-                ...moved,
-                row: [Math.min(moved.row[0], lastRow), Math.min(moved.row[1], lastRow)],
-                column: [Math.min(moved.column[0], lastColumn), Math.min(moved.column[1], lastColumn)],
-            };
-        },
+        (ref) => shiftRangeForInsert(ref, op),
         (ref) => pointsForInsert(ref, op),
     );
 }
@@ -557,6 +553,9 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         }
         newTarget.conditionalFormatRules = newCFarr;
     }
+    if (target.dataValidations != null) {
+        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
+    }
 
     const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
@@ -573,6 +572,23 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         (ref) => shiftRangeForDelete(ref, op),
         (ref) => pointsForDelete(ref, op),
     );
+}
+
+// Moves every validation rule's ranges, and drops a rule left with none. A rule whose ranges stay where they were is
+// kept as the same object, and so is the map when no rule moved.
+export function shiftValidations(
+    validations: Record<string, SheetValidation>,
+    shift: (range: SingleRange) => SingleRange | null,
+): Record<string, SheetValidation> {
+    let shifted: Record<string, SheetValidation> | null = null;
+    for (const [id, entry] of Object.entries(validations)) {
+        const ranges = entry.ranges.flatMap((range) => shift(range) ?? []);
+        if (ranges.length === entry.ranges.length && ranges.every((range, i) => range === entry.ranges[i])) continue;
+        shifted ??= { ...validations };
+        if (ranges.length > 0) shifted[id] = { ...entry, ranges };
+        else delete shifted[id];
+    }
+    return shifted ?? validations;
 }
 
 // The merge map alone doesn't draw a merge: each of its cells points at the corner, and the corner holds the size.

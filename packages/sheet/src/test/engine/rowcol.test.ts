@@ -719,6 +719,129 @@ describe('conditional-format ranges follow the membership rule', () => {
     }
 });
 
+describe('validation ranges follow the membership rule, as conditional formats do', () => {
+    const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const dvSheet = (type: 'row' | 'column') =>
+        makeSheet('s1', 'Sheet1', grid(), {
+            dataValidations: Object.fromEntries(
+                SPANS.map((span, i) => [`v${i}`, { ranges: [onAxis(type, span)], rule }]),
+            ),
+        });
+    const firstRanges = (sheet: Sheet) => Object.values(sheet.dataValidations ?? {}).map((entry) => entry.ranges[0]);
+
+    for (const type of ['row', 'column'] as const) {
+        test(`${type} inserts`, () => {
+            for (let index = 0; index <= 6; index += 1) {
+                for (const direction of ['lefttop', 'rightbottom'] as const) {
+                    for (const count of [1, 2]) {
+                        const [sheet] = applySheetsInsertRowCol([dvSheet(type)], {
+                            type,
+                            index,
+                            count,
+                            direction,
+                            id: 's1',
+                        });
+                        const insertAt = direction === 'lefttop' ? index : index + 1;
+                        expect(firstRanges(sheet)).toEqual(
+                            SPANS.map((span) => onAxis(type, expectedInsert(span, insertAt, count))),
+                        );
+                    }
+                }
+            }
+        });
+
+        test(`${type} deletes drop a rule with no range left`, () => {
+            for (let start = 0; start <= 6; start += 1) {
+                for (let end = start; end <= 6; end += 1) {
+                    const [sheet] = applySheetsDeleteRowCol([dvSheet(type)], { type, start, end, id: 's1' });
+                    const expected = SPANS.map((span) => expectedDelete(span, start, end)).filter(
+                        (span) => span !== null,
+                    );
+                    expect(firstRanges(sheet)).toEqual(expected.map((span) => onAxis(type, span)));
+                }
+            }
+        });
+    }
+
+    test('an insert right below a bounded rule leaves it as it is', () => {
+        const sheets = [
+            makeSheet('s1', 'Sheet1', grid(), {
+                dataValidations: { v: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } },
+            }),
+        ];
+        const [sheet] = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 3,
+            count: 2,
+            direction: 'rightbottom',
+            id: 's1',
+        });
+        expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, 3], column: [0, 0] }]);
+    });
+
+    test('a whole-column rule keeps covering every row of the grid after an insert', () => {
+        const last = REFERENCE_ROW_COUNT - 1;
+        const sheets = [
+            makeSheet('s1', 'Sheet1', grid(), {
+                dataValidations: { v: { ranges: [{ row: [0, last], column: [1, 1] }], rule } },
+                conditionalFormatRules: [
+                    {
+                        type: 'default',
+                        conditionName: 'greaterThan',
+                        cellrange: [{ row: [0, last], column: [1, 1] }],
+                        conditionValue: [0],
+                        format: { textColor: '#ff0000' },
+                    },
+                ],
+            }),
+        ];
+        const [sheet] = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 2,
+            count: 3,
+            direction: 'lefttop',
+            id: 's1',
+        });
+        expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [0, last], column: [1, 1] }]);
+        expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([{ row: [0, last], column: [1, 1] }]);
+    });
+
+    test('a rule over several ranges keeps the ones a delete leaves', () => {
+        const sheets = [
+            makeSheet('s1', 'Sheet1', grid(), {
+                dataValidations: {
+                    v: {
+                        ranges: [
+                            { row: [1, 1], column: [0, 0] },
+                            { row: [4, 6], column: [0, 0] },
+                        ],
+                        rule,
+                    },
+                },
+            }),
+        ];
+        const [sheet] = applySheetsDeleteRowCol(sheets, { type: 'row', start: 0, end: 1, id: 's1' });
+        expect(sheet.dataValidations?.v.ranges).toEqual([{ row: [2, 4], column: [0, 0] }]);
+    });
+
+    test('an op on another sheet leaves the rules the same object', () => {
+        const sheets = [
+            makeSheet('s1', 'Sheet1', grid(), {
+                dataValidations: { v: { ranges: [{ row: [0, 3], column: [0, 0] }], rule } },
+            }),
+            makeSheet('s2', 'Sheet2', grid()),
+        ];
+        const [sheet] = applySheetsInsertRowCol(sheets, {
+            type: 'row',
+            index: 0,
+            count: 1,
+            direction: 'lefttop',
+            id: 's2',
+        });
+        expect(sheet.dataValidations).toBe(sheets[0].dataValidations);
+    });
+});
+
 describe('applySheetsInsertRowCol/Delete — chart refs', () => {
     const ref = (sheetId: string, row: Span, column: Span = [1, 1]): CellRangeRef => ({ sheetId, row, column });
 

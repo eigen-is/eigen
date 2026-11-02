@@ -138,8 +138,8 @@ export type SheetImage = SheetFloatingObject & { mediaName: string };
 // and read through readChartLook, flat where unset.
 export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
 
-// One cell's data-validation rule, keyed `${row}_${col}` on `Sheet.dataVerification`. The editor writes it, and the
-// canvas painter reads it for the red triangle and the tick box.
+// A data-validation rule, such as a list or a number check. A sheet holds each one with the ranges it covers
+// (SheetValidation). The editor writes it, and the canvas painter reads it for the list chevron and the tick box.
 //
 // `value1` carries the encoded payload as a string regardless of `type`:
 // comma-separated list for `dropdown`, numeric literal for the `number*` and
@@ -172,6 +172,10 @@ export type DataVerificationRule = {
     validity?: string;
     remote?: boolean;
 };
+
+// One rule over its ranges, stored under an id in `Sheet.dataValidations`, as a conditional format keeps its
+// `cellrange`. A cell has at most one rule, so applying a rule takes its cells out of every other entry.
+export type SheetValidation = { ranges: SingleRange[]; rule: DataVerificationRule };
 
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
@@ -260,6 +264,9 @@ export type Sheet = {
     // DataVerification dialog and the xlsx importer; the runtime (cell focus,
     // updateCell, canvas painter) reads them straight off the sheet.
     dataVerification?: Record<string, DataVerificationRule>;
+    // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
+    // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
+    dataValidations?: Record<string, SheetValidation>;
     // Hyperlinks keyed "r_c" (0-based). The editor's `saveHyperlink` and the xlsx importer write them, and the link
     // card and `goToLink` read them. The linked cell carries the `hl` backref. `linkType` is webpage, sheet or
     // cellrange.
