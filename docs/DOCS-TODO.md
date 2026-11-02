@@ -76,7 +76,7 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **No Google Docs re-save pins the title and subtitle** (XS): `google-docs-all-features.docx` predates much of the all-features doc, so the re-save test in `apps/api/src/test/import/doc/round-trip.test.ts` filters out the title, subtitle, table of contents, note and equation paragraphs, page number, positioned figures and chart, and `googleLosses` flips Heading 6's italic (`toggleItalic`). Re-record it from Google Docs and drop the filter and the workaround.
 
-- **Add link sometimes inserts the URL as text on a keyboard selection** (S): Headless, after a Shift+Arrow selection, Add link inserted the URL as new text in 5 of 11 runs: `applyLink` (`apps/docs/src/components/docs/editor-toolbar.tsx`) inserts text when the selection is collapsed, so the selection was lost by then. Needs a headed repro before a fix.
+- **Add link sometimes inserts the URL as text on a keyboard selection** (S): Headless, after a Shift+Arrow selection, Add link inserted the URL as new text in 5 of 11 runs: `LinkForm`'s submit (`apps/docs/src/components/docs/link-dialog.tsx`) inserts text when the selection is collapsed, so the selection was lost by then. Needs a headed repro before a fix.
 
 - **A list pasted at the end of a paragraph merges its first item into it** (S): Pasting `<ol><li>one</li><li>two</li></ol>` at the end of a paragraph joins "one" onto it, autolinked across the join, and leaves a one-item list. ProseMirror fits the open slice into the paragraph; Tiptap's autolink reads the join as a domain. Compare with Google Docs before changing it.
 
