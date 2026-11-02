@@ -51,7 +51,7 @@ const autoSumRows = () =>
 test('Insert › Auto SUM lists SUM first, then the four functions, then the function list', async () => {
     const container = await mountWorkbook();
     await openAutoSum(container);
-    expect(autoSumRows()).toEqual(['Sum (SUM)', 'Average', 'Count', 'Max', 'Min', 'Learn more...']);
+    expect(autoSumRows()).toEqual(['Sum (SUM)', 'Average', 'Count', 'Max', 'Min', 'More functions…']);
 });
 
 test('each function opens the cell editor on its own formula', async () => {

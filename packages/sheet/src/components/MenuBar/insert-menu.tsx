@@ -161,7 +161,7 @@ export function InsertMenu() {
                     ))}
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog />)}>
-                        Learn more...
+                        More functions…
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
