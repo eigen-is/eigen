@@ -30,7 +30,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
 - **The File menu of a document** — a document shared with you offers **Remove shared item**, and **Share** is hidden when you can't share it
 - **Text boxes in PowerPoint files** — a text box aligned to the top downloads set to resize the shape to fit its text, and a rectangle set that way in a PowerPoint file comes in as a text box
-- **Enter in Drive and Admin dialogs** — Enter saves in New folder, Rename, Email collaborators, Import to Calendar, a team's mounts and the bucket safety window. While a save runs, Cancel and Escape wait, and a failure keeps the dialog open with what you typed. The Word, Excel and PowerPoint import choice does the same
+- **Saving in dialogs** — Enter saves in New folder, Rename, Import to Calendar, a team's mounts and the bucket safety window. While a save runs, Cancel and Escape wait, and a failure keeps the dialog open with what you typed. Email collaborators and the Word, Excel and PowerPoint import choice wait the same way, and Email collaborators sends only on **Send**
+- **Share** — **Save** stays grayed out until you change something, and the **Done** button is gone. Someone who may only view the list gets **Close**
 
 ### Fixed
 
@@ -45,7 +46,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
 - **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
 - **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
-- **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email
+- **Email collaborators from Share in Drive** — the envelope in **Share** opens **Email collaborators** again, and the message starts with your signature even when the dialog opens before your settings have loaded
+- **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email. Escape closes only the link field, and opening it no longer shifts the dialog sideways
+- **Keys in a dialog opened from Drive** — Enter, Space and the arrow keys in a dialog opened from a file's menu stay in the dialog, so Enter in **Import to Calendar** imports instead of opening the file
+- **Dialogs over a file preview** — **New folder** in **Save to Drive** and the calendar list in **Import to Calendar** show above an open preview
+- **Retrying an import into a new calendar** — a new calendar whose import fails is removed, so trying again uses the name and calendar you pick then
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
 - **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
