@@ -31,6 +31,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
+import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, MessageSquare, User, Users, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
@@ -38,7 +39,7 @@ import { ContactAddRow } from '../contacts/contact-add-row';
 import { useContactInput } from '../contacts/use-contact-input';
 import type { DriveLocationValue } from '../drive/drive-location-field';
 import { DriveLocationField } from '../drive/drive-location-field';
-import { InfoBlock } from '../info-block';
+import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { UserItem } from '../user/user-item';
 
@@ -379,18 +380,24 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                         ) : (
                             <div className="shrink-0 px-6 pb-2">
                                 <Label className="text-sm text-muted-foreground">Location</Label>
-                                <InfoBlock
-                                    className="mt-1.5 w-full cursor-pointer gap-1.5 text-sm hover:bg-muted"
-                                    onClick={() => {
-                                        setLocationTouched(true);
-                                        setLocationExpanded(true);
-                                    }}
-                                >
+                                <InfoBlock className="relative mt-1.5 w-full gap-1.5 text-sm hover:bg-muted">
                                     <span className="text-xs">My Drive › {CHATS_FOLDER_NAME}</span>
-                                    <div className="ml-auto flex shrink-0 items-center gap-0.5">
+                                    <button
+                                        type="button"
+                                        aria-label="Change location"
+                                        aria-expanded={false}
+                                        className={cn(
+                                            STRETCHED_TRIGGER_CLASS,
+                                            'ml-auto flex shrink-0 items-center gap-0.5',
+                                        )}
+                                        onClick={() => {
+                                            setLocationTouched(true);
+                                            setLocationExpanded(true);
+                                        }}
+                                    >
                                         <span className="mr-1 text-xs text-muted-foreground">Change</span>
                                         <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                                    </div>
+                                    </button>
                                 </InfoBlock>
                             </div>
                         )}

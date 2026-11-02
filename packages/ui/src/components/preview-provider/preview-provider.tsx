@@ -1,11 +1,10 @@
-// PreviewProvider holds the one quick-look preview an app shows, and renders it on <body> while it is open. Anything
-// under it opens a file through usePreview, with the siblings the arrow keys page through.
+// PreviewProvider holds the one quick-look preview an app shows, and renders it while it is open. Anything under it
+// opens a file through usePreview, with the siblings the arrow keys page through.
 
 import { subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
 import { useCallback, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { FilePreview } from '../drive/file-preview';
 import { PreviewContext, useOptionalPreview, usePreview } from './preview-context';
 
@@ -18,7 +17,7 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
     const [preview, setPreview] = useState<PreviewState | null>(null);
 
     const openPreview = useCallback((subject: FileSubject, siblings?: FileSubject[]) => {
-        setPreview({ subject, siblings: siblings || [] });
+        setPreview({ subject, siblings: siblings ?? [] });
     }, []);
 
     const updatePreview = useCallback((subject: FileSubject) => {
@@ -47,17 +46,14 @@ export function PreviewProvider({ children }: { children: React.ReactNode }) {
     return (
         <PreviewContext.Provider value={{ openPreview, updatePreview, closePreview, isPreviewOpen: preview !== null }}>
             {children}
-            {/* On <body> like every Radix layer, so document order is stacking order (isLayerAbove). */}
-            {preview &&
-                createPortal(
-                    <FilePreview
-                        {...preview}
-                        onClose={closePreview}
-                        onPrev={() => navigatePreview(-1)}
-                        onNext={() => navigatePreview(1)}
-                    />,
-                    document.body,
-                )}
+            {preview && (
+                <FilePreview
+                    {...preview}
+                    onClose={closePreview}
+                    onPrev={() => navigatePreview(-1)}
+                    onNext={() => navigatePreview(1)}
+                />
+            )}
         </PreviewContext.Provider>
     );
 }

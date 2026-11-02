@@ -1,3 +1,7 @@
+// The file-action runner performs a row of the shared file action registry for one subject, such as Download, Save to
+// Drive or a convert, and owns the pickers and progress dialogs those rows open. A host such as the file preview or a
+// chip's context menu builds one runner and renders its dialogs once, so a picker outlives the menu that opened it.
+
 import { openDocument } from '@workspace/lib/api';
 import { useImportContactsFile } from '@workspace/lib/contacts';
 import { triggerDownload } from '@workspace/lib/download';
@@ -25,7 +29,6 @@ export type FileActionRunner = {
     openPicker: (subjects: FileSubject[]) => void;
     // Rendered once by the host, so a picker opened from a menu row outlives the menu that closed.
     dialogs: ReactNode;
-    isDialogOpen: boolean;
     isPending: boolean;
 };
 
@@ -156,7 +159,6 @@ export function useFileActionRunner(
                 <ProgressDialog open={importMail.isPending} title="Importing mail" />
             </>
         ),
-        isDialogOpen: pickerOpen || calendarPickerOpen || isPending,
         isPending,
     };
 }

@@ -1,8 +1,8 @@
-// The overlay's keys listen on the document, and everything its content can open above it — a picker,
-// the `.eml` reader header's details popover — is a layer of its own that handles Escape itself. What is
-// pinned here is that the overlay stands its keys down while such a layer is open, and that Space on a
-// focused control inside the overlay is that control's own activation rather than a close. Every layer
-// portals to <body> as it opens, so document order says which one is on top and whose Escape it is.
+// The preview is a Radix dialog, so Radix's stacks decide which layer gets Escape, an outside click, the focus and
+// the wheel, and a layer its content opens above it, such as a picker or the `.eml` reader header's details popover,
+// handles Escape itself. The preview's own keys listen on the document and act only on a key pressed inside it. Space
+// on a focused control inside it is that control's own activation rather than a close. Every layer portals to <body>
+// as it opens, so document order says which one paints on top at the same z-index.
 import { expect, mock, test } from 'bun:test';
 import { subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
@@ -26,7 +26,10 @@ const { FormDialog, FormDialogForm } = await import('../../../components/form-di
 const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } = await import(
     '../../../components/dropdown-menu'
 );
-const { isLayerAbove } = await import('../../../hooks/use-dialog-open');
+
+// Every layer portals to <body> in the order it opened, so a later one in the document paints above at z-50.
+const isLayerAbove = (base: Element, layer: Element) =>
+    (base.compareDocumentPosition(layer) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
 
 // A part with no preview of its own: the overlay draws its file card, and no query runs.
 const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
@@ -71,15 +74,16 @@ async function mount(popoverOpen: boolean) {
                     createElement(
                         Popover,
                         { open: popoverOpen },
-                        createElement(PopoverTrigger, null, 'to: Ada'),
-                        createElement(PopoverContent, null, 'from: ada@example.com'),
+                        createElement(PopoverTrigger, null, 'To: Ada'),
+                        createElement(PopoverContent, null, 'From: ada@example.com'),
                     ),
                 ),
             ),
         );
     });
 
-    const press = async (key: string, from: EventTarget = document) => {
+    // The preview holds the focus, so a key goes where the focus is unless the test presses it elsewhere.
+    const press = async (key: string, from: EventTarget = document.activeElement ?? document) => {
         const event = new KeyboardEvent('keydown', {
             key,
             code: key === ' ' ? 'Space' : key,
@@ -114,7 +118,7 @@ test('Escape with a layer open above the overlay is that layer’s, not the over
 
 test('Space on a focused control inside the overlay is that control’s own activation', async () => {
     const { closed, press, cleanup } = await mount(false);
-    const button = document.querySelector('[data-preview-overlay] button');
+    const button = document.querySelector('[data-slot="file-preview"] button');
     if (!button) throw new Error('the overlay drew no button');
     const onButton = await press(' ', button);
     expect(closed.count).toBe(0);
@@ -127,51 +131,28 @@ test('Space on a focused control inside the overlay is that control’s own acti
     await cleanup();
 });
 
-// A menu and a listbox are layers above the overlay the same way a dialog is, and their own Escape
-// runs on the capture phase of the very keydown the overlay hears later: presence is settled by then,
-// so where the key was pressed is what says whose Escape it was.
-test.each(['menu', 'listbox'])('Escape inside an open %s above the overlay is not the overlay’s', async (role) => {
-    const { closed, press, cleanup } = await mount(false);
-    const layer = document.createElement('div');
-    layer.setAttribute('role', role);
-    const item = document.createElement('button');
-    layer.append(item);
-    document.body.append(layer);
-
-    await press('Escape', item);
-    expect(closed.count).toBe(0);
-
-    // The same key, pressed anywhere else, is still the overlay's.
-    layer.remove();
-    await press('Escape');
-    expect(closed.count).toBe(1);
-    await cleanup();
-});
-
-// The overlay opened from inside a dialog (a stickies card's attachments): that dialog sits below it, earlier
-// in the document, and its focus trap holds focus, so neither its presence nor a key pressed in it is a layer above.
-test('a dialog the overlay was opened over leaves the overlay its keys', async () => {
-    const card = document.createElement('div');
-    card.setAttribute('role', 'dialog');
-    const chip = document.createElement('a');
-    chip.href = '#';
-    card.append(chip);
-    document.body.append(card);
-
+// The keys listen on the document. A layer above the preview holds the focus while it is open, so a key pressed
+// outside the preview is not the preview's.
+test('the arrows page from inside the preview, and a key pressed outside it is not the preview’s', async () => {
     const { closed, paged, press, cleanup } = await mount(false);
-    await press('ArrowRight', chip);
+    await press('ArrowRight');
     expect(paged.count).toBe(1);
-    await press('Escape', chip);
-    expect(closed.count).toBe(1);
+
+    const outside = document.createElement('div');
+    document.body.append(outside);
+    await press('ArrowRight', outside);
+    await press(' ', outside);
+    expect(paged.count).toBe(1);
+    expect(closed.count).toBe(0);
+    outside.remove();
     await cleanup();
-    card.remove();
 });
 
 // Stickies: a card is a dialog holding a chat; an attachment in it opens the preview over the card, and Save to Drive
 // in the preview's footer opens over the preview. None of them is told where it sits: each Escape and each click
 // closes the top layer alone, and the card stays.
 async function mountStickiesChain() {
-    const card = { closed: 0 };
+    const card = { closed: 0, pressedOutside: 0 };
     const save = { closed: 0 };
     const controls = { openAttachment: () => {}, openSave: () => {}, openMenu: () => {} };
     function Card() {
@@ -194,8 +175,15 @@ async function mountStickiesChain() {
                 },
                 createElement(
                     DialogContent,
-                    { 'aria-describedby': undefined },
+                    {
+                        'aria-describedby': undefined,
+                        onPointerDownOutside: () => {
+                            card.pressedOutside += 1;
+                        },
+                    },
                     createElement(DialogTitle, null, 'Groceries'),
+                    createElement('button', null, 'Unassigned'),
+                    createElement('a', { href: '#', 'data-chip': '' }, 'basket.bin'),
                 ),
             ),
             createElement(FormDialog, {
@@ -229,7 +217,8 @@ async function mountStickiesChain() {
         [...document.querySelectorAll('[data-slot="dialog-content"]')].find(
             (layer) => layer.querySelector('h2')?.textContent === title,
         );
-    const preview = () => document.querySelector('[data-preview-overlay]');
+    const preview = () => document.querySelector('[data-slot="file-preview"]');
+    const chip = () => document.querySelector<HTMLElement>('[data-chip]');
     const pressEscape = () =>
         act(async () => {
             (document.activeElement ?? document).dispatchEvent(
@@ -247,8 +236,10 @@ async function mountStickiesChain() {
         await settle();
     };
     await settle();
+    // The attachment chip in the card has the focus when it opens the preview, as after a click on it.
+    chip()?.focus();
     await run(controls.openAttachment);
-    return { card, save, controls, layerTitled, preview, pressEscape, press, run, unmount };
+    return { card, save, chip, controls, layerTitled, preview, pressEscape, press, run, settle, unmount };
 }
 
 const noZAbove50 = (element: Element | null | undefined) => expect(element?.className).not.toMatch(/\bz-\[/);
@@ -321,5 +312,57 @@ test('a menu opened in a dialog over the preview portals after both, and its Esc
     expect(save.closed).toBe(0);
     expect(preview()).not.toBeNull();
     expect(card.closed).toBe(0);
+    await unmount();
+});
+
+// In a browser React closes the preview before the click reaches the document, where Radix decides whether the card
+// was clicked outside, so a card that heard the press would find no preview over it and close. Dispatched from a test,
+// React closes it later, so what is pinned is that the card never hears the press at all.
+test('Stickies: a press on the preview’s backdrop closes the preview, and the card under it never hears it', async () => {
+    const { card, preview, press, unmount } = await mountStickiesChain();
+    await press(preview());
+    expect(preview()).toBeNull();
+    expect(card.pressedOutside).toBe(0);
+    expect(card.closed).toBe(0);
+    await unmount();
+});
+
+test('Stickies: the preview over a card holds the focus, its Tab and its wheel', async () => {
+    const { preview, unmount } = await mountStickiesChain();
+    const overlay = preview();
+    if (!overlay) throw new Error('the preview did not open');
+    expect(overlay.contains(document.activeElement)).toBe(true);
+
+    // A long text preview scrolls: the card's scroll lock must not swallow the wheel.
+    const scroller = document.createElement('div');
+    scroller.style.overflowY = 'auto';
+    Object.defineProperties(scroller, { scrollHeight: { value: 1000 }, clientHeight: { value: 100 } });
+    overlay.append(scroller);
+    const wheel = new WheelEvent('wheel', { deltaY: 100, bubbles: true, cancelable: true });
+    scroller.dispatchEvent(wheel);
+    expect(wheel.defaultPrevented).toBe(false);
+    scroller.remove();
+
+    // Tab from the last control wraps to the first, never into the card behind.
+    const last = [...overlay.querySelectorAll<HTMLElement>('button:not([disabled]), a[href]')].at(-1);
+    last?.focus();
+    await act(async () => {
+        last?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', code: 'Tab', bubbles: true, cancelable: true }));
+    });
+    expect(overlay.contains(document.activeElement)).toBe(true);
+    await unmount();
+});
+
+test('Stickies: Space where the preview put the focus closes it, and the focus goes back to the chip', async () => {
+    const { card, chip, preview, settle, unmount } = await mountStickiesChain();
+    await act(async () => {
+        (document.activeElement ?? document).dispatchEvent(
+            new KeyboardEvent('keydown', { key: ' ', code: 'Space', bubbles: true, cancelable: true }),
+        );
+    });
+    await settle();
+    expect(preview()).toBeNull();
+    expect(card.closed).toBe(0);
+    expect(document.activeElement).toBe(chip());
     await unmount();
 });

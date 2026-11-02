@@ -413,3 +413,19 @@ test('an editor edits the list, unless the owner restricted sharing', async () =
     expect(dialog()?.textContent).toContain('Sharing is restricted by the owner.');
     expect(footerButtons().map((b) => b.textContent)).toEqual(['Close']);
 });
+
+// Who may edit and who may only look see one general access block, in the same words as the lock's name.
+test('an open link reads the same to whoever opens Share, with the role it gives beside it', async () => {
+    sharedPath = { ...notes, visibility: 'public-read' };
+    await open();
+    expect(dialog()?.textContent).toContain('UnrestrictedAnyone signed in with the link');
+    expect(dialog()?.textContent).toContain('Can view');
+    await unmount();
+
+    isGuest = true;
+    sharedPath = { ...notes, visibility: 'public-write' };
+    await open();
+    expect(dialog()?.textContent).toContain('UnrestrictedAnyone signed in with the link');
+    expect(dialog()?.textContent).toContain('Can edit');
+    expect(dialog()?.textContent).not.toContain('authenticated');
+});

@@ -48,7 +48,6 @@ async function openMenu(items: DrivePath[], capabilities: DriveCapabilities, sha
         run: (_action: FileAction) => {},
         openPicker: () => {},
         dialogs: null,
-        isDialogOpen: false,
         isPending: false,
     };
     const { createElement } = await import('react');

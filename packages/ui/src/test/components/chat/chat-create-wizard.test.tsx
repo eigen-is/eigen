@@ -1,6 +1,6 @@
 // The New chat wizard lists each picked person with an × that removes them, and with a team picked it shows the team
 // with an × of its own. A screen reader hears each × by what it removes, never a row of bare "Remove"s, and a click
-// removes only that one.
+// removes only that one. The Location bar of the second step is a button that opens the folder browser.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -37,13 +37,23 @@ afterAll(() => {
     mock.module('@workspace/lib/home', () => realHome);
 });
 
+const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { act, createElement } = await import('react');
 const { ChatCreateWizard } = await import('../../../components/chat/chat-create-wizard');
 const { clickRow } = await import('../../menu-rows');
+const { pressKey } = await import('../../press-key');
 
 async function openWizard(teams: (typeof DESIGN_TEAM)[] = []) {
     myTeams = teams;
-    await renderInDocument(createElement(ChatCreateWizard, { open: true, onOpenChange: () => {} }));
+    // The folder browser the Location bar opens reads Drive; its queries fail here and draw an empty browser.
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    await renderInDocument(
+        createElement(
+            QueryClientProvider,
+            { client },
+            createElement(ChatCreateWizard, { open: true, onOpenChange: () => {} }),
+        ),
+    );
 }
 
 // Types a person into the people field and presses its + button, as a user picks someone.
@@ -91,4 +101,20 @@ test('a picked team has a remove button named after the team, and it goes back t
     await act(async () => removeTeam?.click());
     expect(buttonNamed('Remove Design')).toBeNull();
     expect(document.querySelector('#chat-wizard-people')).not.toBeNull();
+});
+
+test('the Location bar is a button named for what it does, and Enter on it opens the folder browser', async () => {
+    await openWizard();
+    await pick('ada@example.com');
+    // The first step waits for its debounced look for an existing chat with these people.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 350)));
+    const next = [...document.querySelectorAll('button')].find((b) => b.textContent?.trim() === "Let's chat");
+    if (!next) throw new Error('the wizard drew no first-step button');
+    await act(async () => next.click());
+
+    const change = buttonNamed('Change location');
+    if (!change) throw new Error('the Location bar is no button');
+    expect(change.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => pressKey(change, 'Enter'));
+    expect(document.querySelector('button[aria-label="Change location"][aria-expanded="true"]')).not.toBeNull();
 });

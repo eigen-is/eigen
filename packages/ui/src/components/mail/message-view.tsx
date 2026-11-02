@@ -170,14 +170,14 @@ type HeaderFields = Pick<MessageViewProps, 'subject' | 'from' | 'replyTo' | 'to'
 
 function MailHeaderDetails({ header }: { header: HeaderFields }) {
     const rows: { label: string; node: ReactNode }[] = [];
-    if (header.from) rows.push({ label: 'from', node: formatContactObjects(header.from) });
-    if (header.replyTo) rows.push({ label: 'reply-to', node: formatContactObjects(header.replyTo) });
-    if (header.to) rows.push({ label: 'to', node: formatContactObjects(header.to) });
-    if (header.cc) rows.push({ label: 'cc', node: formatContactObjects(header.cc) });
-    if (header.bcc) rows.push({ label: 'bcc', node: formatContactObjects(header.bcc) });
-    rows.push({ label: 'date', node: <span className="text-foreground">{header.formattedDate}</span> });
+    if (header.from) rows.push({ label: 'From', node: formatContactObjects(header.from) });
+    if (header.replyTo) rows.push({ label: 'Reply-to', node: formatContactObjects(header.replyTo) });
+    if (header.to) rows.push({ label: 'To', node: formatContactObjects(header.to) });
+    if (header.cc) rows.push({ label: 'Cc', node: formatContactObjects(header.cc) });
+    if (header.bcc) rows.push({ label: 'Bcc', node: formatContactObjects(header.bcc) });
+    rows.push({ label: 'Date', node: <span className="text-foreground">{header.formattedDate}</span> });
     if (header.subject)
-        rows.push({ label: 'subject', node: <span className="text-foreground">{header.subject}</span> });
+        rows.push({ label: 'Subject', node: <span className="text-foreground">{header.subject}</span> });
 
     return (
         <div className="text-sm">
@@ -221,7 +221,7 @@ function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean
                                     type="button"
                                     className="flex items-center gap-1 min-w-0 hover:text-foreground rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
-                                    <span className="truncate">to: {summaryNames.join(', ')}</span>
+                                    <span className="truncate">To: {summaryNames.join(', ')}</span>
                                     <ChevronDown className="h-3 w-3 shrink-0" />
                                 </button>
                             </PopoverTrigger>

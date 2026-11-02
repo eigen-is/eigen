@@ -9,7 +9,7 @@ import { Label } from '@workspace/ui/components/label';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown, FolderPlus } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import { InfoBlock } from '../info-block';
+import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveBrowser } from './drive-browser';
@@ -91,7 +91,8 @@ export function DriveLocationField({
                                 aria-label="Change location"
                                 aria-expanded={expanded}
                                 className={cn(
-                                    'flex cursor-pointer items-center gap-0.5 outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50',
+                                    STRETCHED_TRIGGER_CLASS,
+                                    'flex items-center gap-0.5',
                                     expanded && 'relative',
                                 )}
                                 onClick={() => onExpandedChange(!expanded)}

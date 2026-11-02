@@ -19,9 +19,9 @@ import { CommandPaletteProvider } from './command-palette/command-palette-provid
 import { ErrorBoundary } from './error-boundary';
 import { ThemeProvider } from './theme-provider';
 
-// Every keymap here listens on the document and gates itself with `enabled`, such as the file preview's Escape and the
-// find bar's. The hotkey library counts a disabled registration as a conflict too, and warns on every register.
-export const HOTKEY_DEFAULTS: HotkeysProviderOptions = { hotkey: { conflictBehavior: 'allow' } };
+// Two keymaps may register one key on the document, such as the canvas's nudges and the file preview's paging, each
+// gated by `enabled`. The hotkey library counts a disabled registration as a conflict too, and warns on every register.
+const HOTKEY_DEFAULTS: HotkeysProviderOptions = { hotkey: { conflictBehavior: 'allow' } };
 
 type EigenAppProps = {
     children: React.ReactNode;

@@ -151,11 +151,17 @@ describe('Contacts import', () => {
         expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 1, skipped: 1, failed: 0 });
     });
 
-    test('a KIND:group card is skipped', async () => {
+    // A group is no contact, and no duplicate either: the toast would call a skip "skipped 1 duplicate".
+    test('a KIND:group card is left out, and counts as neither a duplicate nor a failure', async () => {
         const { instance: contacts } = await makeContacts();
-        const text = card30('Colleagues', 'group@example.com', crypto.randomUUID(), ['X-ADDRESSBOOKSERVER-KIND:group']);
+        const text =
+            card30('Colleagues', 'group@example.com', crypto.randomUUID(), ['X-ADDRESSBOOKSERVER-KIND:group']) +
+            card30('Ada', 'ada@example.com', crypto.randomUUID());
 
-        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 0, skipped: 1, failed: 0 });
+        expect(await contacts.importCards(fileBytes(text))).toEqual({ imported: 1, skipped: 0, failed: 0 });
+        const emails = (await contacts.getContacts()).flatMap((contact) => contact.email);
+        expect(emails).toContain('ada@example.com');
+        expect(emails).not.toContain('group@example.com');
     });
 
     test('a malformed card fails, the others import', async () => {
