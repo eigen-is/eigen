@@ -102,9 +102,10 @@ describe('a tab rename', () => {
         expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
     });
 
-    test('refuses an empty name, and keeps the old one for a name another tab has', () => {
+    test('refuses an empty name, and a name another tab has in any case, and says so', () => {
         expect(rename('')).toEqual({ name: 'One', tab: 'One', error: 'Sheet name cannot be empty' });
-        expect(rename('Two')).toEqual({ name: 'One', tab: 'One', error: undefined });
-        expect(rename('two')).toEqual({ name: 'One', tab: 'One', error: undefined });
+        const taken = { name: 'One', tab: 'One', error: 'Another sheet already has this name' };
+        expect(rename('Two')).toEqual(taken);
+        expect(rename('two')).toEqual(taken);
     });
 });
