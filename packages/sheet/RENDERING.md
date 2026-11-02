@@ -132,7 +132,7 @@ It is standard React layout with Tailwind, not an overlay.
 The autofilter range border and the per-column buttons are painted on the canvas in every `drawMain` pass, so freeze pinning and clipping match the cells underneath.
 
 - The glyphs follow Google's (a lazy `Path2D`): a bare strainer when idle, a filled green funnel when the column has an active filter, and a green wash on hover.
-- Geometry comes from `filterOptions.items` (`createFilterOptions` in `state/modules/filter.ts`) and the shared `FILTER_BUTTON_WIDTH`/`FILTER_BUTTON_HEIGHT`, the values the mousedown hit test reads too ([SHEETS.md § Painter and hit test read one rect](../../docs/SHEETS.md#painter-and-hit-test-read-one-rect)).
+- Each button is painted in its `filterOptions.items` rect (`createFilterOptions` in `state/modules/filter.ts`), the rect the mousedown hit test reads too ([SHEETS.md § Painter and hit test read one rect](../../docs/SHEETS.md#painter-and-hit-test-read-one-rect)).
 
 ### 7. Images and charts (React DOM)
 

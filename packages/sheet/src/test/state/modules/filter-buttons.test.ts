@@ -1,18 +1,11 @@
-// Canvas filter-button geometry. The per-column autofilter buttons are drawn on
-// the canvas and hit-tested in the mousedown path; both sides consume the same
-// filterOptions.items geometry pinned here through the hit-test: a 20×15 button
-// whose right edge sits on the column's right edge (visibledatacolumn[c]) at the
-// top of the filter header row, in sheet coordinates (scroll-independent,
-// freeze-corrected by the caller).
+// Canvas filter-button geometry. Each filterOptions item carries the one rect the canvas paints
+// the button in and the mousedown hit test reads: 20×15, its right edge on the column's right edge
+// (visibledatacolumn[c]), clamped to the column's own start, at the top of the filter header row,
+// in sheet coordinates (scroll-independent, freeze-corrected by the caller).
 
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
-import {
-    createFilterOptions,
-    FILTER_BUTTON_HEIGHT,
-    FILTER_BUTTON_WIDTH,
-    getFilterButtonAtPosition,
-} from '../../../state/modules/filter';
+import { createFilterOptions, getFilterButtonAtPosition } from '../../../state/modules/filter';
 import { contextFactory } from '../factories/context';
 
 function ctxWithFilter(range?: { row: number[]; column: number[] }, sheetId?: string): Context {
@@ -23,8 +16,44 @@ function ctxWithFilter(range?: { row: number[]; column: number[] }, sheetId?: st
 
 // factory geometry: visibledatacolumn [74,148,222,296,370], visibledatarow [20,40,...]
 const RANGE = { row: [1, 3], column: [1, 2] };
-const COL1_LEFT = 148 - FILTER_BUTTON_WIDTH;
+const BUTTON_WIDTH = 20;
+const BUTTON_HEIGHT = 15;
+const COL1_LEFT = 148 - BUTTON_WIDTH;
 const HEADER_TOP = 20;
+
+describe('createFilterOptions button rects', () => {
+    test('a column wider than the button keeps the 20×15 rect on its right edge', () => {
+        const ctx = ctxWithFilter(RANGE);
+        expect(ctx.filterOptions?.items).toEqual([
+            { col: 1, left: 128, top: 20, width: 20, height: 15 },
+            { col: 2, left: 202, top: 20, width: 20, height: 15 },
+        ]);
+    });
+
+    test('two 10px columns side by side each keep their button inside their own column', () => {
+        const ctx = contextFactory() as Context;
+        // Columns 1 and 2 at the 10px resize floor, half the button's width.
+        ctx.visibledatacolumn = [74, 84, 94, 296, 370];
+        createFilterOptions(ctx, RANGE, undefined);
+        expect(ctx.filterOptions?.items).toEqual([
+            { col: 1, left: 74, top: 20, width: 10, height: 15 },
+            { col: 2, left: 84, top: 20, width: 10, height: 15 },
+        ]);
+        expect(getFilterButtonAtPosition(ctx, 73, 22)).toBeUndefined();
+        expect(getFilterButtonAtPosition(ctx, 74, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 83, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 84, 22)?.col).toBe(2);
+        expect(getFilterButtonAtPosition(ctx, 93, 22)?.col).toBe(2);
+        expect(getFilterButtonAtPosition(ctx, 94, 22)).toBeUndefined();
+    });
+
+    test('a first column narrower than the button starts its button at the sheet edge', () => {
+        const ctx = contextFactory() as Context;
+        ctx.visibledatacolumn = [10, 84, 158, 232, 306];
+        createFilterOptions(ctx, { row: [1, 3], column: [0, 1] }, undefined);
+        expect(ctx.filterOptions?.items[0]).toEqual({ col: 0, left: 0, top: 20, width: 10, height: 15 });
+    });
+});
 
 describe('getFilterButtonAtPosition', () => {
     test('hit inside a button rect resolves the column', () => {
@@ -38,13 +67,13 @@ describe('getFilterButtonAtPosition', () => {
         const ctx = ctxWithFilter(RANGE);
         // Corners just inside
         expect(getFilterButtonAtPosition(ctx, COL1_LEFT, HEADER_TOP)?.col).toBe(1);
-        expect(getFilterButtonAtPosition(ctx, COL1_LEFT + FILTER_BUTTON_WIDTH - 1, HEADER_TOP)?.col).toBe(1);
-        expect(getFilterButtonAtPosition(ctx, COL1_LEFT, HEADER_TOP + FILTER_BUTTON_HEIGHT - 1)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, COL1_LEFT + BUTTON_WIDTH - 1, HEADER_TOP)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, COL1_LEFT, HEADER_TOP + BUTTON_HEIGHT - 1)?.col).toBe(1);
         // One pixel outside each edge
         expect(getFilterButtonAtPosition(ctx, COL1_LEFT - 1, HEADER_TOP)).toBeUndefined();
-        expect(getFilterButtonAtPosition(ctx, COL1_LEFT + FILTER_BUTTON_WIDTH, HEADER_TOP)).toBeUndefined();
+        expect(getFilterButtonAtPosition(ctx, COL1_LEFT + BUTTON_WIDTH, HEADER_TOP)).toBeUndefined();
         expect(getFilterButtonAtPosition(ctx, COL1_LEFT, HEADER_TOP - 1)).toBeUndefined();
-        expect(getFilterButtonAtPosition(ctx, COL1_LEFT, HEADER_TOP + FILTER_BUTTON_HEIGHT)).toBeUndefined();
+        expect(getFilterButtonAtPosition(ctx, COL1_LEFT, HEADER_TOP + BUTTON_HEIGHT)).toBeUndefined();
     });
 
     test('misses outside the rect: left of, right of, above and below', () => {
@@ -57,33 +86,32 @@ describe('getFilterButtonAtPosition', () => {
 
     test('header row 0 puts buttons at top 0', () => {
         const ctx = ctxWithFilter({ row: [0, 3], column: [0, 1] });
-        expect(getFilterButtonAtPosition(ctx, 74 - FILTER_BUTTON_WIDTH, 0)?.col).toBe(0);
-        expect(getFilterButtonAtPosition(ctx, 148 - FILTER_BUTTON_WIDTH, 0)?.col).toBe(1);
-        expect(getFilterButtonAtPosition(ctx, 74 - FILTER_BUTTON_WIDTH, FILTER_BUTTON_HEIGHT)).toBeUndefined();
+        expect(getFilterButtonAtPosition(ctx, 74 - BUTTON_WIDTH, 0)?.col).toBe(0);
+        expect(getFilterButtonAtPosition(ctx, 148 - BUTTON_WIDTH, 0)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 74 - BUTTON_WIDTH, BUTTON_HEIGHT)).toBeUndefined();
     });
 
     test('resized columns shift the rects with visibledatacolumn', () => {
         const ctx = contextFactory() as Context;
-        // Column 2 is zero-width here (not colhidden, so it keeps its button): its rect
-        // coincides with column 1's, and the click goes to the button actually painted on
-        // top — the later one — the way the draw loop leaves it.
-        ctx.visibledatacolumn = [74, 100, 100, 296, 370];
-        createFilterOptions(ctx, { row: [1, 3], column: [1, 2] }, undefined);
-        expect(getFilterButtonAtPosition(ctx, 100 - FILTER_BUTTON_WIDTH, 22)?.col).toBe(2);
-        expect(getFilterButtonAtPosition(ctx, 99, 22)?.col).toBe(2);
-        expect(getFilterButtonAtPosition(ctx, 100 - FILTER_BUTTON_WIDTH - 1, 22)).toBeUndefined();
+        ctx.visibledatacolumn = [74, 100, 174, 296, 370];
+        createFilterOptions(ctx, RANGE, undefined);
+        expect(getFilterButtonAtPosition(ctx, 100 - BUTTON_WIDTH, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 99, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 100 - BUTTON_WIDTH - 1, 22)).toBeUndefined();
         expect(getFilterButtonAtPosition(ctx, 100, 22)).toBeUndefined();
+        expect(getFilterButtonAtPosition(ctx, 174 - BUTTON_WIDTH, 22)?.col).toBe(2);
     });
 
-    test('a column narrower than the button gives the click to the button drawn on top', () => {
+    test('a column narrower than the button keeps the click off its neighbor', () => {
         const ctx = contextFactory() as Context;
-        // Column 2 is 10px wide — the resize floor — while the button is 20, so the two
-        // rects overlap. The user sees column 2's button there.
+        // Column 2 is 10px wide, the resize floor, so its button shrinks to the column
+        // instead of reaching over column 1's.
         ctx.visibledatacolumn = [74, 148, 158, 296, 370];
-        createFilterOptions(ctx, { row: [1, 3], column: [1, 2] }, undefined);
-        expect(getFilterButtonAtPosition(ctx, 145, 22)?.col).toBe(2);
+        createFilterOptions(ctx, RANGE, undefined);
+        expect(getFilterButtonAtPosition(ctx, 145, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 148, 22)?.col).toBe(2);
         expect(getFilterButtonAtPosition(ctx, 157, 22)?.col).toBe(2);
-        expect(getFilterButtonAtPosition(ctx, 137, 22)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 158, 22)).toBeUndefined();
     });
 
     test('no filter range never hits', () => {
@@ -124,9 +152,7 @@ describe('createFilterOptions range clamp', () => {
 });
 
 describe('createFilterOptions hidden columns', () => {
-    // A hidden column has zero width, so its button rect coincides exactly with the previous
-    // visible column's. Emitting a button for it handed the hidden column every click on that
-    // shared rect — the hit-test returns the last match, which is what the draw loop paints on top.
+    // A hidden column has zero width, so it gets no button to paint or to click.
     function ctxWithHiddenColumn2(): Context {
         const ctx = contextFactory() as Context;
         ctx.sheets[0].config = { colhidden: { 2: 0 } };
@@ -144,7 +170,7 @@ describe('createFilterOptions hidden columns', () => {
     test('the shared edge opens the visible column, not the hidden one', () => {
         const ctx = ctxWithHiddenColumn2();
         createFilterOptions(ctx, { row: [1, 3], column: [1, 3] }, undefined);
-        expect(getFilterButtonAtPosition(ctx, 148 - FILTER_BUTTON_WIDTH, HEADER_TOP)?.col).toBe(1);
+        expect(getFilterButtonAtPosition(ctx, 148 - BUTTON_WIDTH, HEADER_TOP)?.col).toBe(1);
     });
 });
 
