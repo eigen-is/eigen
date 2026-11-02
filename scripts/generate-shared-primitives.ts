@@ -52,11 +52,15 @@ async function entryFiles(pkg: { name: string; dir: string }): Promise<Map<strin
             // Enumerate the curated file-wildcards: types, constants, hooks, and the loose Eigen layout
             // components (ConfirmDialog etc.). The bare `./components/*` wildcard is excluded on purpose —
             // it only exposes raw shadcn primitives (DropdownMenuItem, DialogHeader, …) that nobody
-            // re-derives. The glob is non-recursive, so named subdir barrels aren't duplicated.
+            // re-derives. The glob is non-recursive, so named subdir barrels aren't duplicated. A generated
+            // `.gen.ts` file is data its hand-written sibling re-exports, so the sibling is the entry. The files are
+            // sorted because a symbol reached by two paths of one length keeps the first, and a directory lists its
+            // files in a different order on macOS and on Linux.
             if (!/(types|constants|hooks|components\/layout)/.test(subpath)) continue;
             const baseDir = join(ROOT, pkg.dir, dirname(target));
-            for await (const file of new Glob('*.{ts,tsx}').scan(baseDir)) {
-                if (basename(file) === 'index.ts') continue;
+            const files = await Array.fromAsync(new Glob('*.{ts,tsx}').scan(baseDir));
+            for (const file of files.sort()) {
+                if (basename(file) === 'index.ts' || file.endsWith('.gen.ts')) continue;
                 record(subpath, join(dirname(target), file), basename(file).replace(CODE, ''));
             }
         }
