@@ -1159,30 +1159,6 @@ countdown() {
     say "$GREEN" '◇' "Waited until $RESTART_AT"
 }
 
-# A new machine: the launcher alone, as the installer leaves it, or beside a mirror's .env.production. The archive's
-# .env.production pins the build that restores it and holds what setup asks, so setup does not run; that build's
-# launcher takes over, lock and all. A mirror's file waits in .eigen/ until the archive's is in place.
-restore_fresh() {
-    lock
-    # dash runs no EXIT trap on a hangup, and the one below puts the mirror's .env.production back.
-    trap '' HUP
-    if [ -e .env.production ]; then mv .env.production .eigen/mirror.env; fi
-    AT_EXIT='rm -f .env.production; if [ -e .eigen/mirror.env ]; then mv .eigen/mirror.env .env.production; fi'
-    API_IMAGE=$REGISTRY/api:latest
-    step "Downloading Eigen" "Eigen downloaded" "Could not download Eigen" docker pull "$API_IMAGE"
-    step "Reading the archive" ".env.production taken from the archive" "The archive cannot be restored here" \
-        cli_as 0 restore "$CLI_ARG" --env
-    API_IMAGE=$(image api)
-    version=$(env_value EIGEN_VERSION)
-    step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
-        pull_refs $(pinned_refs)
-    write_bundle "$API_IMAGE"
-    step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
-    AT_EXIT=''
-    rm -f .eigen/mirror.env
-    exec ./eigen restore "$@"
-}
-
 restore() {
     archive='' yes='' s3=''
     help_flag restore "$@"
@@ -1217,6 +1193,30 @@ restore() {
     lock
     put_back
     check_kept
+}
+
+# A new machine: the launcher alone, as the installer leaves it, or beside a mirror's .env.production. The archive's
+# .env.production pins the build that restores it and holds what setup asks, so setup does not run; that build's
+# launcher takes over, lock and all. A mirror's file waits in .eigen/ until the archive's is in place.
+restore_fresh() {
+    lock
+    # dash runs no EXIT trap on a hangup, and the one below puts the mirror's .env.production back.
+    trap '' HUP
+    if [ -e .env.production ]; then mv .env.production .eigen/mirror.env; fi
+    AT_EXIT='rm -f .env.production; if [ -e .eigen/mirror.env ]; then mv .eigen/mirror.env .env.production; fi'
+    API_IMAGE=$REGISTRY/api:latest
+    step "Downloading Eigen" "Eigen downloaded" "Could not download Eigen" docker pull "$API_IMAGE"
+    step "Reading the archive" ".env.production taken from the archive" "The archive cannot be restored here" \
+        cli_as 0 restore "$CLI_ARG" --env
+    API_IMAGE=$(image api)
+    version=$(env_value EIGEN_VERSION)
+    step "Downloading Eigen $version" "Eigen $version downloaded" "Could not download Eigen $version" \
+        pull_refs $(pinned_refs)
+    write_bundle "$API_IMAGE"
+    step "Preparing data/ and backups/" "Data folders ready" "The data folders are not writable" prepare_data
+    AT_EXIT=''
+    rm -f .eigen/mirror.env
+    exec ./eigen restore "$@"
 }
 
 # release_name <name>: a release ./eigen update can go to: a version, latest, or main, the only channel. A version is
