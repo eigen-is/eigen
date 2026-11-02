@@ -1,3 +1,7 @@
+// The range picker: a small dialog that names the range selected on the grid, for a link or a validation rule to
+// use. It opens in the slot's non-modal shell, so the grid stays usable to pick on, and its field follows the
+// selection. Its opener decides what OK and Cancel do, such as opening its own dialog again with the pick.
+
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
@@ -50,6 +54,7 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
             {isLink ? (
                 <div className="space-y-1.5">
                     <Input
+                        aria-label="Cell range"
                         className={cn('h-8', invalid && rangeTxt && 'border-destructive')}
                         spellCheck={false}
                         placeholder="Select cells using the cursor or enter directly"
@@ -63,6 +68,7 @@ export function CellRangeDialog({ value, variant, onConfirm, onCancel }: CellRan
                 // FocusScope's tabbable candidates, which would otherwise take the dialog's
                 // opening focus and render it focus-ringed with its value selected.
                 <Input
+                    aria-label="Cell range"
                     className="h-8"
                     readOnly
                     tabIndex={-1}

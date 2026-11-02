@@ -64,7 +64,7 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    // The data-verification range picker is open, so the cell editor keeps out of the way of the pick.
+    // A range picker is open, so the cell editor and the link card keep out of the way of the pick.
     rangeDialog: RangeDialogProps;
     // warning dialog
     warnDialog?: string;

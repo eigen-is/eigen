@@ -176,7 +176,6 @@ export type LinkCardProps = {
     originAddress: string;
     position: { cellLeft: number; cellBottom: number };
     isEditing: boolean;
-    selectingCellRange?: boolean;
 };
 
 export type RangeDialogProps = {
