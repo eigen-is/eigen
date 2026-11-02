@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, split text, data, columns]
 related: [sheets/sort-and-filter, sheets/rows-and-columns]
 order: 135
-updated: 2026-09-13
+updated: 2026-11-02
 ---
 
 If one column holds values that belong in several, such as `Ada,Lovelace` in a single cell, you can split them apart. Sheets cuts each cell at the separator you pick and writes the pieces across the row.
@@ -14,8 +14,8 @@ If one column holds values that belong in several, such as `Ada,Lovelace` in a s
 
 1. Select the cells you want to split. Only the first column of the selection is split, so a selection that spans several columns still works on the leftmost one.
 2. Open the **Data** menu and click **Split text**.
-3. Under **Delimiters**, tick every separator your text uses: **Tab**, **semicolon**, **comma**, or **space**. For anything else, tick **Other** and type the character in the box beside it.
-4. Tick **Consecutive separators are treated as a single** if two separators in a row should count as one. Without it, `Ada,,Lovelace` gives you an empty column in the middle.
+3. Under **Delimiters**, tick every separator your text uses: **Tab**, **Semicolon**, **Comma**, or **Space**. For anything else, tick **Other** and type the character in the box beside it.
+4. Tick **Treat consecutive separators as one** if two separators in a row should count as one. Without it, `Ada,,Lovelace` gives you an empty column in the middle.
 5. Check the **Preview** table. It shows the split as you will get it, and updates as you change the delimiters.
 6. Click **OK**.
 
