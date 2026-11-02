@@ -423,6 +423,27 @@ describe('a data validation', () => {
         }
     });
 
+    // Whole rows, each rule's a row in every band of 64, so each range covers too many square tiles to keep in them.
+    // A lookup that checks every such range against every other takes most of a minute.
+    test('many rules of whole rows, interleaved, are kept whole in a moment', () => {
+        const dataValidations = Object.fromEntries(
+            Array.from({ length: 64 }, (_, k) => [
+                `validation-${k + 1}`,
+                {
+                    ranges: Array.from({ length: 2048 }, (_, i) => ({
+                        row: [64 * i + k, 64 * i + k],
+                        column: [0, 16383],
+                    })),
+                    rule: validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' }),
+                },
+            ]),
+        );
+        const started = performance.now();
+        const kept = withoutOverlaps(dataValidations, () => {});
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(kept).toEqual(dataValidations);
+    });
+
     // A cut can split each of a rule's ranges in two, and the importer drops a rule of more ranges than a rule may
     // hold. So the export joins what it cut, and drops and counts a rule still past the cap.
     test('a rule the cuts leave with more ranges than a rule may hold is dropped and counted', () => {

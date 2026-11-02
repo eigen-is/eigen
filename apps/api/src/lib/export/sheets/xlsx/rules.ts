@@ -245,49 +245,83 @@ function boundsOf(ranges: readonly SingleRange[]): SingleRange {
     return bounds;
 }
 
-// The index keeps each range in the square tiles of this many rows and columns that it covers.
+// The index keeps each range in one of three grids: square tiles of this many rows and columns for a small range, bands
+// this many rows tall across the sheet for a wide one, such as a whole row, and bands this many columns wide down the
+// sheet for a tall one, such as a whole column. A range goes in the first grid where it covers at most MAX_TILES tiles.
 const TILE = 64;
-// A range over more tiles than this, such as a whole column, is kept outside the tiles.
 const MAX_TILES = 16;
-const COLUMN_TILES = Math.ceil(REFERENCE_COLUMN_COUNT / TILE);
 
-// The ranges added so far, which a range asks for the ones it overlaps without a check against each of them. A small
-// range is kept in every tile it covers, so a small range checks only the ranges in its own tiles, and the large ones.
-// A large range checks every range. Large ranges are rare, and a rule of them mostly meets no other rule's bounds.
+// The ranges added so far, which a range asks for the ones it overlaps without a check against each of them. A range
+// checks only the ranges in the tiles it covers of each grid. A range too large for every grid, such as the whole
+// sheet, is kept in a list every lookup checks. Such ranges are rare, and a rule of them mostly meets no other rule's
+// bounds.
 function rangeIndex() {
-    const all: SingleRange[] = [];
+    const grids = [tileGrid(TILE, TILE), tileGrid(TILE, REFERENCE_COLUMN_COUNT), tileGrid(REFERENCE_ROW_COUNT, TILE)];
     const large: SingleRange[] = [];
+    return {
+        add(range: SingleRange): void {
+            const grid = grids.find((candidate) => candidate.tileCount(range) <= MAX_TILES);
+            if (grid) grid.add(range);
+            else large.push(range);
+        },
+        overlapping(range: SingleRange): SingleRange[] {
+            // A range over several tiles is in each of them, and is found once.
+            const hits = new Set(large.filter((other) => rangesOverlap(other, range)));
+            for (const grid of grids) {
+                for (const tile of grid.tilesNear(range)) {
+                    for (const other of tile) if (rangesOverlap(other, range)) hits.add(other);
+                }
+            }
+            return [...hits];
+        },
+    };
+}
+
+// Ranges kept in every tile of `rows` by `columns` cells they cover.
+function tileGrid(rows: number, columns: number) {
     const tiles = new Map<number, SingleRange[]>();
-    const tilesOf = ({ row, column }: SingleRange): number[] | undefined => {
-        const rows = [Math.floor(row[0] / TILE), Math.floor(row[1] / TILE)];
-        const columns = [Math.floor(column[0] / TILE), Math.floor(column[1] / TILE)];
-        if ((rows[1] - rows[0] + 1) * (columns[1] - columns[0] + 1) > MAX_TILES) return undefined;
+    const across = Math.ceil(REFERENCE_COLUMN_COUNT / columns);
+    // A range past the sheet's last column is kept in the last tile across, so no two tiles share a key.
+    const spanOf = ({ row, column }: SingleRange) => ({
+        top: Math.floor(row[0] / rows),
+        bottom: Math.floor(row[1] / rows),
+        left: Math.min(across - 1, Math.floor(column[0] / columns)),
+        right: Math.min(across - 1, Math.floor(column[1] / columns)),
+    });
+    type Span = ReturnType<typeof spanOf>;
+    const tileCount = ({ top, bottom, left, right }: Span) => (bottom - top + 1) * (right - left + 1);
+    const keysOf = ({ top, bottom, left, right }: Span) => {
         const keys: number[] = [];
-        for (let r = rows[0]; r <= rows[1]; r += 1) {
-            for (let c = columns[0]; c <= columns[1]; c += 1) keys.push(r * COLUMN_TILES + c);
-        }
+        for (let r = top; r <= bottom; r += 1) for (let c = left; c <= right; c += 1) keys.push(r * across + c);
         return keys;
     };
     return {
+        tileCount: (range: SingleRange): number => tileCount(spanOf(range)),
         add(range: SingleRange): void {
-            all.push(range);
-            const keys = tilesOf(range);
-            if (!keys) large.push(range);
-            for (const key of keys ?? []) {
+            for (const key of keysOf(spanOf(range))) {
                 const tile = tiles.get(key);
                 if (tile) tile.push(range);
                 else tiles.set(key, [range]);
             }
         },
-        overlapping(range: SingleRange): SingleRange[] {
-            const keys = tilesOf(range);
-            if (!keys) return all.filter((other) => rangesOverlap(other, range));
-            // A range over several tiles is in each of them, and is found once.
-            const hits = new Set(large.filter((other) => rangesOverlap(other, range)));
-            for (const key of keys) {
-                for (const other of tiles.get(key) ?? []) if (rangesOverlap(other, range)) hits.add(other);
+        // The tiles a range covers that hold a range. A range over more tiles than the grid holds walks the grid's
+        // tiles instead, so a whole row asks a grid of a few small ranges only those.
+        tilesNear(range: SingleRange): SingleRange[][] {
+            const span = spanOf(range);
+            const near: SingleRange[][] = [];
+            if (tileCount(span) <= tiles.size) {
+                for (const key of keysOf(span)) {
+                    const tile = tiles.get(key);
+                    if (tile) near.push(tile);
+                }
+                return near;
             }
-            return [...hits];
+            for (const [key, tile] of tiles) {
+                const r = Math.floor(key / across);
+                const c = key % across;
+                if (r >= span.top && r <= span.bottom && c >= span.left && c <= span.right) near.push(tile);
+            }
+            return near;
         },
     };
 }
