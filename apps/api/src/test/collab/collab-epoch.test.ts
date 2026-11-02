@@ -26,9 +26,9 @@ let port: number;
 let url: string;
 
 // Reads frames until the server's sync step 1 or a close, noting the epoch frame and whether it came first.
-function open(query = ''): Promise<Opened> {
+function open(query = '', sessionToken = ctx.alice.user.sessionToken): Promise<Opened> {
     const ws = new WebSocket(`${url}${query}`, {
-        headers: { cookie: `better-auth.session_token=${ctx.alice.user.sessionToken}` },
+        headers: { cookie: `better-auth.session_token=${sessionToken}` },
     } as unknown as string[]);
     ws.binaryType = 'arraybuffer';
     const opened: Opened = { epoch: null, synced: false, close: null };
@@ -115,5 +115,12 @@ describe('Collab data epoch', () => {
         expect(stale.close).toEqual({ code: COLLAB_HOME_REPLACED_CLOSE, reason: COLLAB_HOME_REPLACED_REASON });
         const fresh = await open(`?epoch=${getDataEpoch(ownerId)}`);
         expect(fresh.synced).toBe(true);
+    });
+
+    test('a signed-in user who may not read the document is closed 1008 access denied, with no epoch', async () => {
+        const opened = await open(`?epoch=${getDataEpoch(ownerId)}`, ctx.bob.user.sessionToken);
+        expect(opened.synced).toBe(false);
+        expect(opened.epoch).toBeNull();
+        expect(opened.close).toEqual({ code: 1008, reason: 'Access denied' });
     });
 });

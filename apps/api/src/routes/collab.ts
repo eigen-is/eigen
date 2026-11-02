@@ -216,7 +216,7 @@ export const collabRouter = new Elysia({
                 registerCollabConnection(ownerId, rawWs);
                 const drive = await getSharedDrive(ownerId, user);
                 if (!(await drive.canRead(mountId, pathId, user))) {
-                    ws.close(1008, 'Authentication failed');
+                    ws.close(1008, 'Access denied');
                     return;
                 }
 
