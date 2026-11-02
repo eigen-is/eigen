@@ -11,6 +11,19 @@ export function validationsByCell(rules: Record<string, DataVerificationRule>): 
     );
 }
 
+// The rule over one cell, the highest id winning where rules overlap, as the editor reads it.
+export function ruleAt(
+    validations: Record<string, SheetValidation> | undefined,
+    r: number,
+    c: number,
+): DataVerificationRule | undefined {
+    const ids = Object.keys(validations ?? {}).sort((a, b) => b.length - a.length || (a < b ? 1 : -1));
+    const covers = ({ row, column }: { row: number[]; column: number[] }) =>
+        r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1];
+    const id = ids.find((key) => validations?.[key].ranges.some(covers));
+    return id === undefined ? undefined : validations?.[id].rule;
+}
+
 // The rule over each cell a sheet's rules cover, keyed "r_c" in row order. Only for small ranges.
 export function rulesByCell(
     validations: Record<string, SheetValidation> | undefined,

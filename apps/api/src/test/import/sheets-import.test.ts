@@ -26,7 +26,7 @@ import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
 import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
-import { rulesByCell } from '../fixtures/validations';
+import { ruleAt, rulesByCell } from '../fixtures/validations';
 import { exportXlsx, linkRels, rowsXml, SML, sheetXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
@@ -1880,26 +1880,23 @@ describe('Sheets xlsx conversion fidelity', () => {
         expect(rules['3_0']).toMatchObject({ hintShow: false, hintValue: '' });
     });
 
-    test('convert clamps validation emission to the used extent plus a margin', async () => {
-        // A rule keys every cell of its range, so a column-wide rule ("C1:C1048576")
-        // would otherwise emit ~1M rule objects into the snapshot.
+    test('convert keeps a whole-column rule as one range over the whole column', async () => {
+        // The rule is stored once over its range, so a column-wide rule costs one entry however far it reaches.
         const sheets = parseXlsx(
             xlsxFixture({
                 sheets: [
                     {
                         data: rowsXml([1, 2, 3, 4, 5].map((i) => [`A${i}`, `row${i}`])),
-                        after: validations(['C1:C5000', 'type="list" allowBlank="1"', '"Yes,No"']),
+                        after: validations(['C1:C1048576', 'type="list" allowBlank="1"', '"Yes,No"']),
                     },
                 ],
             }),
         );
 
-        const rules = rulesByCell(sheets[0].dataValidations);
-        // rowCount is 5 → rules survive up to 0-based row 1004 (5 + 1000-row margin).
-        expect(rules['0_2']).toMatchObject({ type: 'dropdown', value1: 'Yes,No' });
-        expect(rules['1004_2']).toMatchObject({ type: 'dropdown', value1: 'Yes,No' });
-        expect(rules['1005_2']).toBeUndefined();
-        expect(Object.keys(rules).length).toBe(1005);
+        expect(Object.values(sheets[0].dataValidations ?? {})).toMatchObject([
+            { ranges: [{ row: [0, 1048575], column: [2, 2] }], rule: { type: 'dropdown', value1: 'Yes,No' } },
+        ]);
+        expect(ruleAt(sheets[0].dataValidations, 4999, 2)).toMatchObject({ value1: 'Yes,No' });
     });
 
     test('convert imports webpage and mailto hyperlinks with verbatim targets and cell backrefs', async () => {

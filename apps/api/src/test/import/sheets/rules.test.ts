@@ -28,8 +28,6 @@ const DXFS = readDxfs(
 );
 
 type Options = {
-    rows?: number;
-    columns?: number;
     date1904?: boolean;
     charge?: (cells: number, text: number) => void;
     chargeElements?: (count: number) => void;
@@ -44,8 +42,6 @@ function read(after: string, options: Options = {}) {
         dxfs: DXFS,
         palette: PALETTE,
         date1904: options.date1904 ?? false,
-        rows: options.rows ?? 10,
-        columns: options.columns ?? 5,
         charge: options.charge ?? ((cells, text) => charged.push({ cells, text })),
         chargeElements: options.chargeElements ?? (() => {}),
         lost: options.lost ?? (() => {}),
@@ -529,20 +525,28 @@ describe('a data validation', () => {
         });
     });
 
-    test('stops a margin past the cells, and a later rule on a cell wins', () => {
-        const { rules } = readByCell(
-            dv(list('C1:C5000', '"Yes,No"'), list('A1:XFD1', '"x"'), list('C2 B5:A4', '"Later"')),
-            { rows: 5, columns: 3 },
+    test('reads a whole column or row whole, one range each, and the last of two rules on a cell wins', () => {
+        const { dataValidations } = read(
+            dv(list('C1:C1048576', '"Yes,No"'), list('A1:XFD1', '"x"'), list('C2 B5:A4', '"Later"')),
         );
-        const keys = Object.keys(rules);
-        expect(rules?.['1004_2']).toMatchObject({ value1: 'Yes,No' });
-        expect(rules?.['1005_2']).toBeUndefined();
-        expect(rules?.['0_102']).toMatchObject({ value1: 'x' });
-        expect(rules?.['0_103']).toBeUndefined();
-        expect(rules?.['1_2']).toMatchObject({ value1: 'Later' });
-        expect(rules?.['3_0']).toMatchObject({ value1: 'Later' });
-        expect(rules?.['4_1']).toMatchObject({ value1: 'Later' });
-        expect(keys).toHaveLength(1005 + 102 + 4);
+        expect(Object.values(dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [0, 1048575], column: [2, 2] }],
+            [{ row: [0, 0], column: [0, 16383] }],
+            [
+                { row: [1, 1], column: [2, 2] },
+                { row: [3, 4], column: [0, 1] },
+            ],
+        ]);
+        const last = (r: number, c: number) =>
+            Object.entries(dataValidations ?? {})
+                .filter(([, { ranges }]) =>
+                    ranges.some(({ row, column }) => r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1]),
+                )
+                .map(([id]) => id)
+                .at(-1);
+        expect(last(1, 2)).toBe('validation-3');
+        expect(last(5000, 2)).toBe('validation-1');
+        expect(last(0, 2)).toBe('validation-2');
     });
 
     test("Excel 2010's lists name their source and ranges in its own elements", () => {
@@ -562,24 +566,24 @@ describe('a data validation', () => {
         expect(Object.keys(rules)).toHaveLength(4);
     });
 
-    test('each range is charged its cells past the clamp, and its list and prompt per cell, before a key is built', () => {
+    test('each range is charged one cell and the rule its text, before the rule is built', () => {
         const { charged } = read(
             dv(
                 list('A1:B2 Z9000 C1', '"Yes,No"', ' showInputMessage="1" prompt="Pick"'),
                 '<dataValidation type="custom" sqref="A1:XFD1048576"><formula1>1</formula1></dataValidation>',
             ),
-            { rows: 2, columns: 2 },
         );
         expect(charged).toEqual([
-            { cells: 4, text: 4 * 10 },
-            { cells: 1, text: 10 },
+            { cells: 0, text: 10 },
+            { cells: 1, text: 0 },
+            { cells: 1, text: 0 },
+            { cells: 1, text: 0 },
         ]);
         const refusal = new Error('over budget');
         expect(() =>
             read(dv(list('A1:XFD1048576', '"x"')), {
                 charge: (cells) => {
-                    expect(cells).toBe(1010 * 105);
-                    throw refusal;
+                    if (cells > 0) throw refusal;
                 },
             }),
         ).toThrow(refusal);
@@ -593,8 +597,6 @@ test('a sheet without rules has none', () => {
             dxfs: [],
             palette: [],
             date1904: false,
-            rows: 0,
-            columns: 0,
             charge: () => {},
             chargeElements: () => {},
             lost: () => {},

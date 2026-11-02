@@ -6,6 +6,7 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
+import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
@@ -27,8 +28,6 @@ function roundTrip(sheet: Partial<Sheet>) {
         dxfs: looks,
         palette: [],
         date1904: false,
-        rows: 100,
-        columns: 26,
         charge: () => {},
         chargeElements: () => {},
         lost: () => {},
@@ -307,6 +306,14 @@ describe('a data validation', () => {
         const { xml, ...read } = roundTrip({ dataValidations });
         expect([...xml.matchAll(/sqref="([^"]*)"/g)].map(([, sqref]) => sqref)).toEqual(['E1:E3 E6', 'B2:C4 B5']);
         expect(rulesByCell(read.dataValidations)).toEqual(rulesByCell(dataValidations));
+    });
+
+    test('a whole-column rule writes the whole column, and reads back as one', () => {
+        const list = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
+        const ranges = [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }];
+        const { xml, ...read } = roundTrip({ dataValidations: { v: { ranges, rule: list } } });
+        expect(xml).toContain(`sqref="B1:B${REFERENCE_ROW_COUNT}"`);
+        expect(Object.values(read.dataValidations ?? {})).toEqual([{ ranges, rule: list }]);
     });
 
     test('a text rule is a custom formula on the first cell; the reader drops custom rules', () => {

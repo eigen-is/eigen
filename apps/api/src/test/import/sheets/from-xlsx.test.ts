@@ -5,7 +5,7 @@ import { ApiError } from '../../../lib/core/errors';
 import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
-import { rulesByCell } from '../../fixtures/validations';
+import { ruleAt, rulesByCell } from '../../fixtures/validations';
 import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -540,7 +540,7 @@ describe("the reader's rules", () => {
         expect(plain.conditionalFormatRules).toBeUndefined();
     });
 
-    test('validations of every type, their messages, overlaps and the clamp', () => {
+    test('validations of every type, their messages, overlaps and whole columns', () => {
         const validation = (attributes: string, ...formulas: string[]) =>
             `<dataValidation ${attributes}>${formulas.map((text, index) => `<formula${index + 1}>${text}</formula${index + 1}>`).join('')}</dataValidation>`;
         const validations = `<dataValidations>${[
@@ -569,9 +569,12 @@ describe("the reader's rules", () => {
                 ],
             }),
         );
-        const rules = rulesByCell(sheet.dataValidations);
         const plainRule = { value2: '', prohibitInput: false, hintShow: false, hintValue: '' };
-        expect(rules).toMatchObject({
+        const at = (key: string) => {
+            const [r, c] = key.split('_').map(Number);
+            return ruleAt(sheet.dataValidations, r, c);
+        };
+        const expected = {
             // The later rule wins a cell two name.
             '0_4': { type: 'dropdown', value1: 'wide' },
             '1_4': { type: 'dropdown', value1: 'Yes,No' },
@@ -589,15 +592,16 @@ describe("the reader's rules", () => {
             '4_2': { ...plainRule, type: 'date', type2: 'between', value1: '2024-01-01', value2: '2024-12-31' },
             '5_2': { ...plainRule, type: 'date', type2: 'noEarlierThan', value1: '2024-06-15' },
             '2_7': { type: 'dropdown', value1: 'tall' },
-        });
+        };
+        for (const [key, rule] of Object.entries(expected)) expect(at(key)).toMatchObject(rule);
         // A named range and a reference operand have no literal to hold; a custom formula has no editor rule.
-        for (const key of ['3_0', '6_2', '7_2']) expect(rules[key]).toBeUndefined();
-        // A range is clamped to the cells plus 1,000 rows and 100 columns.
-        const perColumn: Record<string, number> = {};
-        for (const key of Object.keys(rules)) perColumn[key.split('_')[1]] = (perColumn[key.split('_')[1]] ?? 0) + 1;
-        expect(perColumn).toMatchObject({ 4: 1010, 5: 1010, 103: 1 });
-        expect(perColumn['104']).toBeUndefined();
-        expect(Object.keys(rules)).toHaveLength(2133);
+        for (const key of ['3_0', '6_2', '7_2']) expect(at(key)).toBeUndefined();
+        // A whole column or row is kept whole, past the cells, as Excel stores it.
+        expect(at('1999_4')).toMatchObject({ value1: 'Yes,No' });
+        expect(at('2000_4')).toBeUndefined();
+        expect(at('1048575_5')).toMatchObject({ value1: 'tall' });
+        expect(at('0_16383')).toMatchObject({ value1: 'wide' });
+        expect(Object.keys(sheet.dataValidations ?? {})).toHaveLength(10);
         expect(plain.dataValidations).toBeUndefined();
     });
 
@@ -625,7 +629,10 @@ describe("the reader's rules", () => {
         ]);
         expect(sheet.hyperlink).toEqual({ '1_2': { linkType: 'cellrange', linkAddress: "'Second sheet'!A1" } });
         expect(sheet.config?.merge).toMatchObject({ '0_0': { rs: 1, cs: 2 }, '11_4': { rs: 2, cs: 2 } });
-        expect(Object.keys(rulesByCell(sheet.dataValidations))).toHaveLength(1013 + 3);
+        expect(Object.values(sheet.dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [0, 1999], column: [3, 3] }],
+            [{ row: [1, 3], column: [1, 1] }],
+        ]);
     });
 });
 

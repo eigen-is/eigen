@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { replaySheetsOps } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../lib/core/xml';
 import { xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import type { TransformWarning } from '../../lib/document/transform/protocol';
@@ -13,7 +14,7 @@ import { openZip } from '../../lib/ooxml/zip';
 import { cpuClock } from '../cpu-time';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
-import { rulesByCell, validationsByCell } from '../fixtures/validations';
+import { ruleAt, rulesByCell, validationsByCell } from '../fixtures/validations';
 import { exportXlsx, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -753,6 +754,47 @@ describe('Sheets xlsx export — conditional formatting', () => {
 });
 
 describe('Sheets xlsx export — data validation', () => {
+    // xlsx in, an edit, xlsx out: a list on column B and a number check on D2:D4. A row inserted above row 2
+    // moves the check and leaves the whole column whole, so a cell far below the data is still validated.
+    test('a whole-column list survives an import, a row insert and an edit, and writes back as the whole column', () => {
+        const [imported] = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        data: rowsXml([['A1', 'x']]),
+                        after:
+                            '<dataValidations count="2">' +
+                            '<dataValidation type="list" allowBlank="1" sqref="B1:B1048576"><formula1>"Yes,No"</formula1></dataValidation>' +
+                            '<dataValidation type="whole" allowBlank="1" sqref="D2:D4"><formula1>1</formula1><formula2>9</formula2></dataValidation>' +
+                            '</dataValidations>',
+                    },
+                ],
+            }),
+        );
+        const [edited] = replaySheetsOps(
+            [imported],
+            [
+                [
+                    {
+                        op: 'insertRowCol',
+                        id: imported.id,
+                        path: [],
+                        value: { type: 'row', index: 1, count: 1, direction: 'lefttop' },
+                    },
+                ],
+                [{ op: 'replace', id: imported.id, path: ['data', 4, 1], value: { v: 'Yes', m: 'Yes' } }],
+            ],
+        );
+        expect(ruleAt(edited.dataValidations, 4999, 1)).toMatchObject({ value1: 'Yes,No' });
+        const written = writtenValidations(exportXlsx([edited]));
+        expect([...written.keys()]).toEqual(['B1:B1048576', 'D3:D5']);
+        const [again] = xlsxToSheets(exportXlsx([edited]));
+        expect(Object.values(again.dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [0, 1048575], column: [1, 1] }],
+            [{ row: [2, 4], column: [3, 3] }],
+        ]);
+    });
+
     test('exports dropdown rules with quoted literals and verbatim range refs', async () => {
         const literal = dvRule({ type: 'dropdown', type2: '', value1: 'Red,Green,Blue' });
         const quoted = dvRule({ type: 'dropdown', type2: '', value1: 'say "hi",plain' });
