@@ -151,11 +151,12 @@ function holdLock(file: string): boolean {
 }
 
 // Neither Eigen nor another swap reads or replaces data/ while this one does. The lock only refuses an API it reaches.
-// One it does not reach, such as on the host beside the container, shows by its lease, which this only reads.
+// An API it does not reach, such as one on the host beside the container, is refused by its lease, which the swap
+// only reads.
 function lockData(ui: Ui): void {
-    const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
-    // Root must not make one the API could not open; without one, no API ever ran on this data/.
-    if (existsSync(file) && !holdLock(file)) {
+    const lockFile = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
+    // Root must not create a lock file the API could not open. Without one, no API ever ran on this data/.
+    if (existsSync(lockFile) && !holdLock(lockFile)) {
         ui.fail(
             'data/ is in use by Eigen or by another restore.',
             'Wait for it to finish, then run ./eigen restore again.',

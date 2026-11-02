@@ -51,7 +51,7 @@ export function lockDataDir(file: string): Database | null {
 // The processes that share the file lock on `file`: one kernel, seeing its folder through one file system. On Linux
 // the boot id is the same in every container of one VM and in the VM itself, and a restart of the VM changes it. One
 // kernel is not enough, because WSL2 runs every distro on one kernel and shares folders between them over 9p, where
-// file locks need not reach. A bind mount keeps the device number of the file system it shows; a 9p or virtiofs view
+// file locks need not reach. A bind mount keeps the device number of the file system it shows. A 9p or virtiofs view
 // of the same folder has its own.
 export function lockScope(file: string): Pick<DataLease, 'kernel' | 'dev'> {
     const kernel =

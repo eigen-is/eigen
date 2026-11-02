@@ -1,5 +1,5 @@
-// An org home is the organisation's own folder on the server. It has no drive, mail or calendar of
-// its own; it exists so that work done per owner, such as a backup, can treat the organisation like
+// An org home is the organization's own folder on the server. It has no drive, mail or calendar of
+// its own; it exists so that work done per owner, such as a backup, can treat the organization like
 // any other owner.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';

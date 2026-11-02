@@ -48,7 +48,7 @@ function holdInstanceLock() {
 }
 
 function holdInstanceLease(): DataLease {
-    const holder = liveLeaseHolder(leaseFile, (message) => console.warn(message));
+    const holder = liveLeaseHolder(leaseFile, console.warn);
     if (holder) {
         console.error(
             `Another Eigen API is using the data dir ${dataRoot}: ${holder}, still heartbeating. Two APIs on one data dir corrupt its databases; exiting. If this folder is shared between a container and the host, give each its own data folder.`,

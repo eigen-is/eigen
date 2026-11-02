@@ -1,5 +1,6 @@
-// The API's entry point. It runs the recoveries a restart needs, starts the HTTP server, the control
-// socket and the scheduled jobs, and on SIGTERM or SIGINT shuts them down in order, the homes last.
+// The API server, which the entry point loads once this process holds its data folder. It runs the recoveries a
+// restart needs, starts the HTTP server, the control socket and the scheduled jobs. On SIGTERM or SIGINT it shuts
+// them down in order, the homes last, and only then gives up the data folder's lease.
 
 import { MAX_REQUEST_BODY_BYTES } from '@workspace/lib/constants/mount';
 import { app } from './app';

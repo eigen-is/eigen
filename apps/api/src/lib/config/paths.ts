@@ -1,7 +1,7 @@
-// Where Eigen keeps its files on disk. getDataRoot is the data folder; the server keeps its own files in
-// one folder there, and each owner, such as a user or a team, gets a home folder beside it. PATHS names the folders
-// and databases inside one home. Every part of the server that opens a file, and every backup and restore,
-// builds the path from these names, so the layout is written down once.
+// Where Eigen keeps its files on disk. getDataRoot is the data folder. The server keeps its own files in one folder
+// there, and each owner, such as a user or a team, gets a home folder beside it. PATHS names the folders and
+// databases inside one home. Every part of the server that opens a file, and every backup and restore, builds the
+// path from these names, so the layout is written down once.
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
@@ -58,7 +58,7 @@ export const SERVER_DIR = 'server';
 export const USER_HOMES_DIR = 'home';
 export const TEAM_HOMES_DIR = 'team';
 export const ORG_HOMES_DIR = 'org';
-export const GUEST_HOMES_DIR = 'guest';
+const GUEST_HOMES_DIR = 'guest';
 // The DKIM key and its DNS record, which the postfix container generates in data/ and owns.
 export const DKIM_DIR = 'dkim';
 // The mail server's TLS certificate, which Caddy's export-certs.sh or the operator's certbot hook copies in.
@@ -94,9 +94,7 @@ export function getDataRoot(): string {
 
 export function getServerDataPath(filename?: string): string {
     const serverData = path.join(getDataRoot(), SERVER_DIR);
-    if (!fs.existsSync(serverData)) {
-        fs.mkdirSync(serverData, { recursive: true });
-    }
+    fs.mkdirSync(serverData, { recursive: true });
     return filename ? path.join(serverData, filename) : serverData;
 }
 
@@ -107,9 +105,7 @@ export function getControlSocketPath(): string {
 
 export function getAvatarsDir(): string {
     const avatarsDir = path.join(getServerDataPath(), SERVER_FILES.avatars);
-    if (!fs.existsSync(avatarsDir)) {
-        fs.mkdirSync(avatarsDir, { recursive: true });
-    }
+    fs.mkdirSync(avatarsDir, { recursive: true });
     return avatarsDir;
 }
 
