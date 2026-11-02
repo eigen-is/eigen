@@ -92,10 +92,10 @@ type ImportCalendarTarget =
     | { kind: 'existing'; ownerId: string; calendarId: string }
     | { kind: 'new'; name: string; color: string };
 
-// A new calendar that took no events is deleted again, and a failed attempt's calendar is remembered so a retry reuses it.
+// A new calendar that took no events is deleted again. A failed attempt's calendar is remembered so a retry reuses it,
+// for as long as the caller stays mounted, so a dialog that mounts the hook with each opening starts fresh.
 export function useImportToCalendar(ownerId: string): {
     importToCalendar: (source: FileImportSource, target: ImportCalendarTarget) => Promise<void>;
-    forgetNewCalendar: () => void;
 } {
     const createCalendar = useCreateCalendar(ownerId);
     const deleteCalendar = useDeleteCalendar(ownerId);
@@ -122,9 +122,5 @@ export function useImportToCalendar(ownerId: string): {
         [createCalendar, deleteCalendar, importCalendar, ownerId],
     );
 
-    const forgetNewCalendar = useCallback(() => {
-        createdCalendarId.current = null;
-    }, []);
-
-    return { importToCalendar, forgetNewCalendar };
+    return { importToCalendar };
 }

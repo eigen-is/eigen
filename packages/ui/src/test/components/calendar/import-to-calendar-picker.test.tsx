@@ -88,7 +88,6 @@ mock.module('@workspace/lib/calendar', () => ({
             handed.push(target);
             if (failure) throw failure;
         },
-        forgetNewCalendar: () => {},
     }),
 }));
 
