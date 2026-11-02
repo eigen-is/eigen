@@ -1,6 +1,8 @@
 #!/bin/sh
-# Eigen's launcher. No container gets the Docker socket, so every Docker step runs here; the CLI in the API image asks
-# the questions and writes the config. POSIX sh: runs under dash and BusyBox.
+# Eigen's launcher, the ./eigen command an operator runs on the server to set up, update, back up, restore, start and
+# stop an install. No container gets the Docker socket, so every Docker step runs here. The CLI in the API image asks
+# the questions and writes the config, and the running API takes the commands that need it, such as a backup. It is
+# POSIX sh, so it runs under dash and BusyBox.
 set -eu
 
 # Through a symlink such as /usr/local/bin/eigen too, this runs in the install folder.
@@ -8,19 +10,19 @@ cd "$(dirname "$(readlink -f "$0")")"
 
 REPO=https://github.com/eigen-is/eigen
 REGISTRY=ghcr.io/eigen-is/eigen
-# IMAGE_NAMES in apps/api/src/lib/config/release.ts. Not from compose config --images: that names the images of the
-# profiles in use, and a release pins every image in IMAGES.
+# The launcher cannot import the CLI, so the constants below that name one of the CLI's copy it. A test checks each pair.
+# IMAGES is the CLI's IMAGE_NAMES. It is not read from compose config --images, which names only the images of the
+# profiles in use, while a release pins them all.
 IMAGES='api frontend postfix dovecot unbound'
-# The CLI's exit code for a question answered no: DECLINED in apps/api/src/cli/install.ts.
+# The CLI's exit code for a question answered no, its DECLINED.
 DECLINED=3
-# SWAP_MARKER in apps/api/src/cli/restore.ts, and data/ + RESTORING_DIR in apps/api/src/lib/backup/restore-server.ts.
+# The CLI's SWAP_MARKER, and its RESTORING_DIR inside data/.
 SWAP_MARKER=.eigen/restore-swap
 UNSTAGE='cli_as 0 rm -rf data/.restoring'
 LOG=.eigen/last-step.log
 # POSIX sleep only takes whole seconds; the spinner falls back to 1 where 0.2 fails.
 TICK=0.2
-# The longest --in wait and message: MAX_RESTART_WAIT_SECONDS and MAX_RESTART_MESSAGE_LENGTH in
-# packages/lib/src/validation/restart.ts.
+# The longest --in wait and message the restart notice takes: MAX_RESTART_WAIT_SECONDS and MAX_RESTART_MESSAGE_LENGTH.
 MAX_WAIT=3600
 MAX_MESSAGE=200
 
@@ -193,8 +195,8 @@ arguments() {
     fi
 }
 
-# The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
-# A write to a terminal that hung up fails; the command must not end with it.
+# The glyphs are the CLI's GLYPHS, so its lines and these read alike. A write to a terminal that hung up fails, and
+# the command must not end on it.
 say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3" || :; }
 
 # die <what went wrong> <what to do next>
@@ -924,8 +926,8 @@ setup() {
     done
     CLI_ENV="EIGEN_PROJECT EIGEN_DOCKER_NETWORKS $relay"
 
-    # Beside the launcher alone: bootstrap the pinned build, else the newest release, and hand over to
-    # its launcher, lock included.
+    # Beside the launcher alone: bootstrap the pinned build, else the newest release, and hand over to its launcher,
+    # lock included.
     if [ "$MODE" = release ] && [ ! -e docker-compose.yml ]; then
         preflight quiet
         lock
@@ -1245,8 +1247,8 @@ update() {
     done
     need_in_time update
     if [ "$check" = 1 ] && [ -n "$IN_TIME" ]; then refuse_usage update "--check updates nothing, so it takes no --in."; fi
-    # After --in, a version reads as the message.
-    # Only a single word can be one; a sentence that mentions a version is a message.
+    # After --in, a version would read as the message. Only a single word can be one: a sentence that mentions a
+    # version is a message.
     if [ -z "$target" ]; then
         case $IN_MESSAGE in
             *' '*) ;;
@@ -1276,7 +1278,7 @@ update() {
 }
 
 # release_name <name>: a release ./eigen update can go to: a version, latest, or main, the only channel. A version is
-# VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
+# the CLI's VERSION_PATTERN, loosely.
 release_name() {
     case $1 in
         latest | main | [0-9]*.[0-9]*.[0-9]*) return 0 ;;
@@ -1287,7 +1289,7 @@ release_name() {
 # The part the launcher the operator typed runs, while Eigen runs on: get the new version, check it, and hand over to
 # the launcher that came with it.
 update_get() {
-    # Any other tag, such as publish.yml's candidates, is no release.
+    # Any other tag, such as a candidate the publish workflow pushes, is no release.
     if [ -n "$target" ] && ! release_name "$target"; then
         die "Eigen has no \"$target\"." "Name a version (./eigen update 0.3.1), latest, or the main channel (./eigen update main)."
     fi
@@ -1433,8 +1435,9 @@ update_apply() {
     fi
 }
 
-# The pre-update backup brings back the data and .env.production, staged while Eigen runs, then the images it pins
-# and their bundle files.
+# Goes back to the build before the last update. After a Light backup, switch_back keeps the data as it is. After a
+# full one, the backup brings back the data and .env.production, staged while Eigen runs, then the images it pins and
+# their bundle files.
 rollback() {
     yes=''
     help_flag rollback "$@"
