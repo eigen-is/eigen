@@ -279,7 +279,7 @@ describe('useImportToCalendar', () => {
         expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: CALENDAR })]);
     });
 
-    test('when the failed import’s calendar will not go either, the caller still gets the import’s error', async () => {
+    test('when the failed import’s calendar will not go either, the caller gets the import’s error and a retry fills it', async () => {
         const { act } = await import('react');
         const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
         const { queryClient } = trackingClient();
@@ -292,10 +292,48 @@ describe('useImportToCalendar', () => {
                 latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' }),
             ).rejects.toThrow('import failed');
         });
-        await unmount();
-
         expect(failNextDelete).toBe(false);
         expect(deleted).toEqual([]);
+
+        await act(async () => {
+            await latest.importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' });
+        });
+        await unmount();
+
+        expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
+        expect(driveImportBodies).toEqual([expect.objectContaining({ calendarId: 'cal-1' })]);
+        expect(deleted).toEqual([]);
+    });
+
+    test('when a new calendar nothing landed in will not go, a retry fills it, and once it goes the next makes one', async () => {
+        const { act } = await import('react');
+        const { useImportToCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportToCalendar(OWNER), queryClient);
+        const tryNew = () =>
+            act(async () => {
+                await latest
+                    .importToCalendar(DRIVE_SOURCE, { kind: 'new', name: 'Autumn market', color: '#34a853' })
+                    .catch(() => {});
+            });
+
+        driveImportResult = { imported: 0, skipped: 4, failed: 0 };
+        failNextDelete = true;
+        await tryNew();
+        expect(deleted).toEqual([]);
+
+        await tryNew();
+        expect(created).toEqual([{ ownerId: OWNER, name: 'Autumn market' }]);
+        expect(deleted).toEqual(['cal-1']);
+
+        await tryNew();
+        await unmount();
+        expect(created.map((calendar) => calendar.name)).toEqual(['Autumn market', 'Autumn market']);
+        expect(driveImportBodies).toEqual([
+            expect.objectContaining({ calendarId: 'cal-1' }),
+            expect.objectContaining({ calendarId: 'cal-1' }),
+            expect.objectContaining({ calendarId: 'cal-2' }),
+        ]);
     });
 });
 
