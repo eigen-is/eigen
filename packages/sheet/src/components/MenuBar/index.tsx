@@ -5,7 +5,7 @@
 import { AppBarMenu, CenteredToolbar } from '@workspace/ui/components/layout/toolbar';
 import { Menubar } from '@workspace/ui/components/menubar';
 import { useFindBarRefocus } from '@workspace/ui/components/search/find-in-document-button';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
@@ -20,19 +20,20 @@ import { ViewMenu } from './view-menu';
 type Props = {
     leftItems?: ReactNode;
     rightItems?: ReactNode;
+    ref?: Ref<HTMLDivElement>;
 };
 
 // The bar is a size container, so the icon row folds by the bar's own width, and a panel beside the workbook counts.
 // Below 512px the menus get less padding, so all six fit beside the share buttons, and beside the phone's kebab on a
 // 360px screen.
-export function WorkbookMenuBar({ leftItems, rightItems }: Props) {
+export function WorkbookMenuBar({ leftItems, rightItems, ref }: Props) {
     const { context } = useContext(WorkbookContext);
     const { focusFindBarRef, onCloseAutoFocus: refocusFindBar } = useFindBarRefocus();
     const refocusCellEditor = useCellEditorRefocus();
     // Read once for the toolbar and the Format menu, so a caret move reads the editor once.
     const caret = useEditorSelectionStyle();
     return (
-        <div className="@container flex items-center h-12 app-gutter-x border-b border-border bg-background">
+        <div ref={ref} className="@container flex items-center h-12 app-gutter-x border-b border-border bg-background">
             <CenteredToolbar
                 left={
                     <Menubar className="@max-[512px]:**:data-[slot=menubar-trigger]:px-2">

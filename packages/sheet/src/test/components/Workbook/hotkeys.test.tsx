@@ -146,3 +146,20 @@ test('⌘Z, ⇧⌘Z and ⌘Y in an open cell editor leave the sheet history alon
     for (const hotkey of ['Mod+Z', 'Mod+Shift+Z', 'Mod+Y']) await press(input, hotkey);
     expect([a1()?.bl, a1()?.it ?? 0]).toEqual([1, 0]);
 });
+
+// Enter and Space open a focused bar menu. They belong to the bar, so the grid must not open its cell editor too.
+test('Enter or Space on a focused bar menu leaves the cell editor closed', async () => {
+    const { container } = await mount();
+    const edit = [...container.querySelectorAll<HTMLElement>('button[aria-haspopup="menu"]')].find(
+        (button) => button.textContent === 'Edit',
+    );
+    if (!edit) throw new Error('no Edit menu');
+    const editorLayer = () => container.querySelector<HTMLElement>('.sheet-input-box')?.style.zIndex;
+    expect(editorLayer()).toBe('-1');
+    for (const key of ['Enter', ' ']) {
+        await act(async () => {
+            edit.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+        });
+        expect(editorLayer()).toBe('-1');
+    }
+});
