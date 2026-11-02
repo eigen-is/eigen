@@ -334,10 +334,11 @@ describe('Boot recovery in a real boot', () => {
     const dataRoot = join(RUN_DIR, 'recovery-data');
     const backupsDir = join(RUN_DIR, 'recovery-backups');
     const homeRoot = join(dataRoot, 'home');
-    const interrupted = 'proclifecycleAAAAAAAAAAAAAAAAAAAA';
-    const finished = 'proclifecycleBBBBBBBBBBBBBBBBBBBB';
+    // Owner ids of 32 characters, as real ones are: the boot acts only on the notes of a user's or a team's home.
+    const interrupted = 'proclifecycleAAAAAAAAAAAAAAAAAAA';
+    const finished = 'proclifecycleBBBBBBBBBBBBBBBBBBB';
     // A restore of a deleted user: nothing was moved aside, so the marker names no copy.
-    const deleted = 'proclifecycleCCCCCCCCCCCCCCCCCCCC';
+    const deleted = 'proclifecycleCCCCCCCCCCCCCCCCCCC';
     const interruptedAside = `${interrupted}${PRE_RESTORE_SUFFIX}20260101-000000`;
     const finishedAside = `${finished}${PRE_RESTORE_SUFFIX}20260202-000000`;
     // The folder a restore killed mid-unpack was writing beside the home it would have replaced.

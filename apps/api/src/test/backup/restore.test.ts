@@ -788,6 +788,35 @@ describe('Backup restoreHome', () => {
         // The mark is cleared, so the home serves again — from the folder that was put back.
         expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
     });
+
+    // A rollback that could not put the home back leaves it aside, and only the notes tell the next boot where. So the
+    // job keeps them, and the boot finishes the rollback.
+    test('a rollback that fails keeps the notes, and the boot puts the home back', async () => {
+        const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
+        const homeDir = join(TEST_DATA_DIR, 'home', target.id);
+        const jobId = `restore-rollback-fails-${Date.now()}`;
+        const epochSpy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
+            throw new ApiError(500, 'failed by the test');
+        });
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            // The rollback's first move, the new folder aside.
+            if (from === homeDir && String(to).includes(FAILED_RESTORE_SUFFIX)) throw new Error('rename failed');
+            rename(from, to);
+        });
+        try {
+            await expect(restoreHome(artifact, target.id, jobId)).rejects.toThrow('failed by the test');
+        } finally {
+            epochSpy.mockRestore();
+            renameSpy.mockRestore();
+        }
+
+        const staging = buildRestoreStagingDir(homeDir, jobId);
+        expect(existsSync(join(staging, 'restoring.json'))).toBe(true);
+        await recoverBackupsAfterRestart();
+        expect(restoreStagingFolders()).toEqual([]);
+        expect(await rootNames(target.sessionToken, target.id, mountId, rootId)).toEqual(before);
+    });
 });
 
 describe('Backup restore refuses an archive this server cannot open', () => {
@@ -1728,7 +1757,7 @@ describe('Backup restore of one home judges, then takes the home', () => {
         const homeDir = join(TEST_DATA_DIR, 'home', user.id);
         const jobId = `restore-renames-${Date.now()}`;
         const stagingDir = buildRestoreStagingDir(homeDir, jobId);
-        const unpackedHome = join(stagingDir, buildHomeFolderName(user.id), 'home');
+        const unpackedHome = join(stagingDir, 'unpack', buildHomeFolderName(user.id), 'home');
         const serving = await getHome(user.id);
         const materialize = materializeModule.materializeMount;
         const staged: { served: boolean; mode: number; homeDir: string }[] = [];

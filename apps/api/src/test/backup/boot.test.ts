@@ -1,6 +1,7 @@
-import { afterAll, describe, expect, test } from 'bun:test';
+import { afterAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     chmodSync,
+    createWriteStream,
     existsSync,
     mkdirSync,
     readdirSync,
@@ -11,7 +12,12 @@ import {
     writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import { createZstdCompress } from 'node:zlib';
+import type { BackupManifest } from '@workspace/lib/types/backup';
 import { FAILED_RESTORE_SUFFIX, PRE_RESTORE_SUFFIX } from '@workspace/lib/validation';
+import * as archiveModule from '../../lib/backup/archive';
 import {
     buildArtifactName,
     buildRestoreStagingDir,
@@ -21,12 +27,15 @@ import {
     sidecarPath,
     wipeBackupStaging,
 } from '../../lib/backup/paths';
+import * as recoveryModule from '../../lib/backup/recovery';
 import {
     recoverBackupsAfterRestart,
     recoverInterruptedRestores,
     wipeRestoreStagingDir,
 } from '../../lib/backup/recovery';
-import { TEST_DATA_DIR } from '../setup';
+import { restoreHome } from '../../lib/backup/restore';
+import { archiveEnd, DIRECTORY_TYPEFLAG, FILE_TYPEFLAG, headerChunks, padding } from '../../lib/backup/tar';
+import { ensureServer, TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
 // left behind, and put back the home folder of a restore that died between the move-aside and the
@@ -303,6 +312,137 @@ describe('Backup boot', () => {
         expect(existsSync(join(homeRoot, `${id}${FAILED_RESTORE_SUFFIX}20260101-000000`))).toBe(true);
     });
 
+    // The notes name the home by the path it had when they were written. A data folder moved since, such as to
+    // another disk, still recovers: the home is the one beside the notes.
+    test('the notes of a restore recover the home after the data folder moved', () => {
+        const id = 'bootmovedAAAAAAAAAAAAAAAAAAAAAAA';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260707-000000`;
+        seedFolder(aside, 'the home as it was');
+        const dir = seedRestoringMarker('boot-job-moved', id, aside);
+        writeFileSync(
+            join(dir, 'restoring.json'),
+            JSON.stringify({
+                ownerId: id,
+                homeDir: join('/old/disk/data/home', id),
+                preRestoreName: aside,
+                parkName: `${id}${FAILED_RESTORE_SUFFIX}20260707-000000`,
+            }),
+        );
+        made.push(join(homeRoot, id));
+
+        recoverInterruptedRestores();
+
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+    });
+
+    // Every name the notes give must be of the home they sit beside: its owner id, and the homes folder of its kind.
+    test('notes whose owner or folder is not the home beside them are refused', () => {
+        const id = 'bootforeignAAAAAAAAAAAAAAAAAAAAA';
+        const other = 'bootforeignBBBBBBBBBBBBBBBBBBBBB';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260808-000000`;
+        seedFolder(aside, 'the home as it was');
+        const notes = [
+            { ownerId: other, homeDir: join(homeRoot, id) },
+            { ownerId: id, homeDir: join(TEST_DATA_DIR, 'team', id) },
+            { ownerId: `team_${id}`, homeDir: join(homeRoot, id) },
+        ];
+        for (const [index, note] of notes.entries()) {
+            const dir = seedRestoringMarker(`boot-job-foreign-${index}`, id, aside);
+            writeFileSync(
+                join(dir, 'restoring.json'),
+                JSON.stringify({
+                    ...note,
+                    preRestoreName: aside,
+                    parkName: `${id}${FAILED_RESTORE_SUFFIX}20260808-000000`,
+                }),
+            );
+        }
+
+        recoverInterruptedRestores();
+
+        expect(existsSync(join(homeRoot, id))).toBe(false);
+        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+    });
+
+    // The notes an older build kept in the backups folder name the home by its full path, so it must be in data/.
+    test('older notes that name a home outside the data folder are refused', async () => {
+        const id = 'bootoutsideAAAAAAAAAAAAAAAAAAAAA';
+        const elsewhere = join(TEST_DATA_DIR, 'elsewhere', 'home');
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260909-000000`;
+        mkdirSync(join(elsewhere, aside), { recursive: true });
+        made.push(join(TEST_DATA_DIR, 'elsewhere'));
+        const dir = join(getBackupsDir(), '.staging', 'boot-job-outside');
+        mkdirSync(dir, { recursive: true });
+        writeFileSync(
+            join(dir, 'restoring.json'),
+            JSON.stringify({
+                ownerId: id,
+                homeDir: join(elsewhere, id),
+                preRestoreName: aside,
+                parkName: `${id}${FAILED_RESTORE_SUFFIX}20260909-000000`,
+            }),
+        );
+
+        await recoverBackupsAfterRestart();
+
+        expect(existsSync(join(elsewhere, id))).toBe(false);
+        expect(existsSync(join(elsewhere, aside))).toBe(true);
+    });
+
+    // An archive's own top-level files land where the restore unpacks it. A `restoring.json` among them must not be
+    // read as the job's note by the boot after a kill in the unpack, or it moves another user's home aside.
+    test("an archive's own restoring.json is not read as the job's note at boot", async () => {
+        await ensureServer();
+        const archived = 'bootplantedAAAAAAAAAAAAAAAAAAAAA';
+        const victim = 'bootplantedVVVVVVVVVVVVVVVVVVVVV';
+        seedFolder(victim, 'the victim home');
+        const planted = JSON.stringify({
+            ownerId: victim,
+            homeDir: join(homeRoot, victim),
+            preRestoreName: null,
+            parkName: `${victim}${FAILED_RESTORE_SUFFIX}20200101-000000`,
+        });
+        const manifest: BackupManifest = {
+            formatVersion: 1,
+            kind: 'user',
+            ownerId: archived,
+            name: 'planted',
+            createdAt: new Date().toISOString(),
+            appVersion: 'test',
+            server: { domain: 'test', orgId: 'test' },
+            counts: { databases: 0, files: 0, bytes: 0, dirs: 1 },
+            mounts: [],
+            entries: [],
+        };
+        const artifact = buildArtifactName(archived, new Date('2026-01-01T00:00:00Z'));
+        const artifactPath = join(getBackupsDir(), artifact);
+        const files: [string, string][] = [
+            [`home-${archived}/manifest.json`, JSON.stringify(manifest)],
+            ['restoring.json', planted],
+        ];
+        await pipeline(Readable.from(tarOf(files)), createZstdCompress(), createWriteStream(artifactPath));
+        const jobId = 'boot-job-planted';
+        made.push(buildRestoreStagingDir(join(homeRoot, archived), jobId), artifactPath);
+        // The kill comes right after the unpack, so the job never removes its folder.
+        const killed = spyOn(archiveModule, 'readUnpackedHome').mockImplementation(() => {
+            throw new Error('killed');
+        });
+        const kept = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
+        try {
+            await expect(restoreHome(artifact, archived, jobId)).rejects.toThrow('killed');
+        } finally {
+            killed.mockRestore();
+            kept.mockRestore();
+        }
+
+        recoverInterruptedRestores();
+
+        expect(readFileSync(join(homeRoot, victim, 'marker'), 'utf8')).toBe('the victim home');
+        expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${victim}${FAILED_RESTORE_SUFFIX}`))).toEqual(
+            [],
+        );
+    });
+
     // A per-home restore unpacks beside the home, and a kill before its job ended leaves that folder. Nothing resumes it.
     test('the boot removes the folders killed restores were unpacking into, and leaves the homes beside them', async () => {
         const id = 'bootrecoverJJJJJJJJJJJJJJJJJJJJJ';
@@ -359,3 +499,22 @@ describe('Backup boot', () => {
         expect(existsSync(join(getBackupsDir(), '.staging'))).toBe(false);
     });
 });
+
+// A tar of the given files under the first one's root folder, as a crafted archive might hold them.
+function* tarOf(files: [name: string, text: string][]): Generator<Uint8Array> {
+    let written = 0;
+    function* counted(chunks: Iterable<Uint8Array>): Generator<Uint8Array> {
+        for (const chunk of chunks) {
+            written += chunk.length;
+            yield chunk;
+        }
+    }
+    const root = files[0]?.[0].split('/')[0] ?? 'root';
+    yield* counted(headerChunks(`${root}/`, 0, Date.now(), DIRECTORY_TYPEFLAG, 0o700));
+    for (const [name, text] of files) {
+        const body = Buffer.from(text);
+        yield* counted(headerChunks(name, body.length, Date.now(), FILE_TYPEFLAG, 0o600));
+        yield* counted([body, padding(body.length)]);
+    }
+    yield* archiveEnd(written);
+}

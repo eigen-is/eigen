@@ -251,8 +251,8 @@ export async function extractArtifact(
     bound: UnpackBound = { maxBytes: Number.POSITIVE_INFINITY, chargeFolders: true },
 ): Promise<void> {
     const makeFolder = (folder: string) => fs.mkdirSync(folder, { recursive: true, mode: ARCHIVE_FOLDER_MODE });
-    const existed = fs.existsSync(targetDir);
-    makeFolder(targetDir);
+    // The outermost folder this call made, or undefined when `targetDir` was there already.
+    const made = makeFolder(targetDir);
     let bytes = 0;
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
@@ -278,7 +278,7 @@ export async function extractArtifact(
     } catch (error) {
         // Half an unpacked archive is worse than none, because nothing downstream can tell the two apart.
         // Only a folder this call made is removed. A folder the caller already had is left alone.
-        if (!existed) await fsp.rm(targetDir, { recursive: true, force: true });
+        if (made) await fsp.rm(made, { recursive: true, force: true });
         throw error;
     }
 }
