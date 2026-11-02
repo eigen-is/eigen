@@ -22,15 +22,17 @@ import { getDataRoot, getServerDataPath } from './lib/config/paths';
 const dataRoot = path.resolve(getDataRoot());
 const leaseFile = getServerDataPath(DATA_LEASE_FILE);
 
-// Exported so the connection stays referenced for the life of the process.
-export const instanceLock = holdInstanceLock();
+// releaseInstanceLease closes it, and that use keeps it: a bundle drops a binding nothing reads, and the garbage
+// collector would then close the connection and its lock.
+const instanceLock = holdInstanceLock();
 const lease = holdInstanceLease();
 let beatFailed = false;
 // Unref'd, so a process that has nothing else to do still exits.
 const heartbeat = setInterval(beat, LEASE_HEARTBEAT_MS).unref();
 
-// Called by the graceful shutdown once the homes are closed, so the heartbeat runs through the whole drain. A lease
-// it cannot remove only costs the next boot elsewhere one wait, so it never keeps the shutdown from exiting.
+// Called once the homes are closed by the graceful shutdown, so the heartbeat runs through the whole drain, and before
+// a boot that exits on a setting it refuses. A lease it cannot remove only costs the next boot elsewhere one wait, so
+// it never keeps the exit from happening.
 export function releaseInstanceLease(): void {
     clearInterval(heartbeat);
     try {
@@ -38,6 +40,7 @@ export function releaseInstanceLease(): void {
     } catch (err) {
         console.error('[instance-lock] could not remove the data dir lease:', err);
     }
+    instanceLock.close();
 }
 
 function holdInstanceLock() {

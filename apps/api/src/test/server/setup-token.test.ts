@@ -13,6 +13,7 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 import type { S3Config } from '@workspace/lib/types/mount';
+import { DATA_LEASE_FILE } from '../../lib/config/data-lock';
 import { getServerDataPath } from '../../lib/config/paths';
 import { getDomain, getPublicOrigin, getServedOrigin } from '../../lib/config/server-config';
 import type { ControlStatus } from '../../lib/config/server-status';
@@ -386,6 +387,8 @@ describe('the /setup routes before setup', () => {
             );
             await expect(started).rejects.toThrow(`Set MAIL_DOMAIN=${MAIL_DOMAIN} in .env.production`);
             expect(proc.exitCode).toBe(1);
+            // A boot elsewhere on this data dir would otherwise wait out the lease.
+            expect(existsSync(join(dataRoot, 'server', DATA_LEASE_FILE))).toBe(false);
         },
         LISTEN_TIMEOUT_MS + 5_000,
     );
