@@ -1,3 +1,7 @@
+// The editable half of the Share dialog: add people or a team, change or remove each one's access, set the link's
+// general access and, for the owner, whether editors may share. Save sends only what changed, so a dialog opened a
+// while ago can't undo what another sharer added since. The host does the save and decides what a finished one does.
+
 import { getDriveShareUrl } from '@workspace/lib/api';
 import { useAuth } from '@workspace/lib/auth';
 import { copyToClipboard } from '@workspace/lib/clipboard';
@@ -34,7 +38,7 @@ import { UserItem } from '../user/user-item';
 
 export type DriveAccessListEditProps = {
     path: DrivePath;
-    onSave: (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => void;
+    onSave: (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => Promise<void>;
     onCancel?: () => void;
     onEmailClick?: () => void;
     className?: string;
@@ -140,7 +144,7 @@ export function DriveAccessListEdit({
         setPendingChanges(true);
     }, []);
 
-    const handleSave = useCallback(() => {
+    const handleSave = useCallback(async () => {
         // Send only what changed — the server merges onto the current ACL, so a stale
         // dialog can't revert entries another sharer added while it was open.
         const base = new Map(baseDirectList.filter((item) => !item.owner).map((item) => [item.id.toLowerCase(), item]));
@@ -160,7 +164,7 @@ export function DriveAccessListEdit({
             }
         }
 
-        onSave({ add, remove }, visibility, isEffectiveOwner ? sharingRestricted : undefined);
+        await onSave({ add, remove }, visibility, isEffectiveOwner ? sharingRestricted : undefined);
     }, [baseDirectList, directList, visibility, sharingRestricted, isEffectiveOwner, onSave]);
 
     return (

@@ -1,3 +1,8 @@
+// The Share dialog for one Drive item: who has access, the link's general access, and whether editors may share. An
+// owner or editor edits the list and saves it; a guest, or an editor when the owner restricted sharing, only sees it.
+// Drive's item menu and an editor's Share button open it, for example. Its envelope button hands over to Email
+// collaborators.
+
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner, useUpdateACL } from '@workspace/lib/drive';
 import type { DriveACLDelta, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
@@ -6,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { DriveAccessList } from '@workspace/ui/components/drive/drive-access-list';
 import { DriveAccessListEdit } from '@workspace/ui/components/drive/drive-access-list-edit';
 import { DriveEmailCollaborators } from '@workspace/ui/components/drive/drive-email-collaborators';
+import { useDialogPending } from '@workspace/ui/hooks/use-dialog-pending';
 import { useEffect, useState } from 'react';
 
 export type DriveAccessDialogProps = {
@@ -16,7 +22,7 @@ export type DriveAccessDialogProps = {
 };
 
 export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: DriveAccessDialogProps) {
-    const [isSubmitting, setIsSubmitting] = useState(false);
+    const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
     const [emailPath, setEmailPath] = useState<DrivePath | null>(null);
 
     useEffect(() => {
@@ -33,7 +39,6 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
         return null;
     }
 
-    // Guests and non-owner editors (when sharing is restricted) see read-only view
     const readOnly = isGuest || (path.sharingRestricted && !isEffectiveOwner);
 
     const handleEmailClick = () => {
@@ -41,16 +46,14 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
         onOpenChange(false);
     };
 
-    const handleSave = async (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) => {
-        setIsSubmitting(true);
-        await updateACL.mutateAsync({ path, add: delta.add, remove: delta.remove, visibility, sharingRestricted });
-        onOpenChange(false);
-        setIsSubmitting(false);
-    };
+    const handleSave = (delta: DriveACLDelta, visibility: DriveVisibility, sharingRestricted?: boolean) =>
+        run(async () => {
+            await updateACL.mutateAsync({ path, add: delta.add, remove: delta.remove, visibility, sharingRestricted });
+        });
 
     return (
         <>
-            <Dialog open={open} onOpenChange={onOpenChange}>
+            <Dialog open={open} onOpenChange={handleOpenChange}>
                 <DialogContent
                     size="lg"
                     className="max-h-[80vh] flex flex-col overflow-hidden"
@@ -78,7 +81,7 @@ export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: Dr
                         <DriveAccessListEdit
                             path={path}
                             onSave={handleSave}
-                            onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
+                            onCancel={pending ? undefined : () => handleOpenChange(false)}
                             prefillEmail={prefillEmail}
                             onEmailClick={permissions?.canWrite ? handleEmailClick : undefined}
                         />
