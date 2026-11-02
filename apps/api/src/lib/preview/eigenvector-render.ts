@@ -43,9 +43,9 @@ export function renderEigenvectorPreviewBody(
 function renderPreviewPage(page: CanvasPage): string {
     // Fit the whole page: scaled on width alone, a tall narrow drawing magnifies unboundedly.
     const scale = Math.min(CANVAS_PREVIEW_WIDTH / page.width, CANVAS_PREVIEW_HEIGHT / page.height);
-    // A page fitted by height composes narrower than CANVAS_PREVIEW_WIDTH, and drive-preview.tsx
-    // scales the body from exactly that intrinsic width. Widen the page in SCENE units and shift its
-    // origin by half the difference: the box comes out full width with the drawing centered in it.
+    // A page fitted by height comes out narrower than CANVAS_PREVIEW_WIDTH, while the drive preview scales the body
+    // from exactly that width. So the page widens in scene units and its origin moves by half the difference, and the
+    // box comes out full width with the drawing centered in it.
     const width = CANVAS_PREVIEW_WIDTH / scale;
     return renderFittedPage({ ...page, width, originX: page.originX - (width - page.width) / 2 }, scale);
 }

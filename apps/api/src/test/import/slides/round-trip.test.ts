@@ -241,6 +241,26 @@ describe('a deck exported and read back', () => {
         expectPx(back.height, 300);
     });
 
+    test('keeps an empty painted text box a text box, and leaves out an empty one that paints nothing', () => {
+        const empty = (fill: string): NewVectorElement => ({
+            type: 'rectangle',
+            autoFit: true,
+            x: 40,
+            y: 40,
+            width: 400,
+            height: 100,
+            angle: 0,
+            html: '',
+            fill,
+            corners: 'straight',
+        });
+        const back = roundTrip([empty(solidFill('#ffcc00')), empty(serializeFill(TRANSPARENT_FILL))]).deck.slides[0]
+            .elements;
+        expect(back).toHaveLength(1);
+        expect(back[0]).toMatchObject({ type: 'rectangle', autoFit: true, fill: solidFill('#ffcc00') });
+        expectPx(back[0].height, 100);
+    });
+
     test('keeps rich text: its html, typography and box fields', () => {
         for (const [element, found] of pairs) {
             if (element.type !== 'rectangle' || !element.autoFit) continue;

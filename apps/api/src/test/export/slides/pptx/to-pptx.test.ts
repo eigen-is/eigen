@@ -1219,7 +1219,7 @@ describe('pptx images and backgrounds', () => {
                 element('image', { ...square, mediaName: 'near.png', index: 'a1', objectFit: 'contain' }),
                 element('image', { ...square, mediaName: 'near.png', index: 'a2', objectFit: 'cover' }),
             ]),
-            [media('square.png', 100, 100), media('near.png', 100_000, 100_001)],
+            [media('square.png', 100, 100), media('near.png', 1_000_000, 1_000_001)],
         );
         expect(shapes(zip).map((found) => descendants(found, A, 'srcRect').length)).toEqual([0, 0, 0]);
         // Nearly the slide's 16:9, a background's fill rectangle keeps no inset either.

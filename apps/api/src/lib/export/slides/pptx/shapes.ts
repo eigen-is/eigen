@@ -51,25 +51,18 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     const text = drawsTextBody(el) ? textXml(el, slide, opacity) : '';
     switch (el.type) {
         case 'rectangle': {
+            const fill = fillXml(parseFill(el.fill), opacity, el);
+            const line = lineXml(slide, el, opacity);
+            if (!el.autoFit) return spXml(slide, 'Rectangle', el, boxGeometry(el), fill, line, text);
             // A text box is marked txBox. A rounded preset insets its text by its corners, where Eigen's keeps the box,
             // so a painted rounded text box is its outline, and an unpainted one shows no corners.
             const outline = rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, cornerRadius(el), 0);
             const painted = isBordered(el) || !isTransparentFill(parseFill(el.fill));
-            const geometry = !el.autoFit
-                ? boxGeometry(el)
-                : painted && outline.kind === 'rounded'
-                  ? outlineGeometry(outline.core, outline.radius, el, slide)
-                  : presetXml('rect');
-            return spXml(
-                slide,
-                el.autoFit ? 'Text' : 'Rectangle',
-                el,
-                geometry,
-                fillXml(parseFill(el.fill), opacity, el),
-                lineXml(slide, el, opacity),
-                text,
-                el.autoFit,
-            );
+            const geometry =
+                painted && outline.kind === 'rounded'
+                    ? outlineGeometry(outline.core, outline.radius, el, slide)
+                    : presetXml('rect');
+            return spXml(slide, 'Text', el, geometry, fill, line, text, true);
         }
         case 'ellipse':
             return spXml(
@@ -240,7 +233,8 @@ function outlineGeometry(core: Point[], radius: number, box: Box, slide: Slide):
         const circle = `<a:moveTo>${pt({ x: core[0].x + radius, y: core[0].y })}</a:moveTo><a:arcTo wR="${r}" hR="${r}" stAng="0" swAng="${360 * DEGREE}"/>`;
         return customXml(slide, box, `${circle}<a:close/>`, true);
     }
-    // The core winds clockwise (y down), so v→w's outward normal is (dy, -dx), and its angle is where the arc starts.
+    // The core winds clockwise with y pointing down, so the outward normal of the edge from v to w is (dy, -dx). Its
+    // angle is where the arc at w starts.
     const normal = (i: number) => {
         const v = core[i % core.length];
         const w = core[(i + 1) % core.length];
@@ -264,10 +258,10 @@ export function customXml(slide: Slide, box: { width: number; height: number }, 
     return `<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/><a:pathLst><a:path w="${w}" h="${h}"${filled ? '' : ' fill="none"'}>${path}</a:path></a:pathLst></a:custGeom>`;
 }
 
-// The paint alone: a hatched or rough fill exports solid. A gradient takes the stops the canvas samples and its CSS
-// angle (0 paints upward) as DrawingML's (0 paints rightward). The canvas paints an element's in the box's own units
-// (gradientVector), so stretched with the box it runs at another angle; a background is CSS's, at its own. LibreOffice
-// ignores a:lin's scaled, so the angle is the stretched one.
+// The paint alone, where a hatched or rough fill exports solid. A gradient takes the stops the canvas samples. Its
+// CSS angle, where 0 paints upward, becomes DrawingML's, where 0 paints rightward. The canvas paints an element's
+// gradient in the box's own units, so it turns as the box stretches, and the angle written is the stretched one,
+// because LibreOffice ignores a:lin's scaled. A background's gradient is CSS's, at its own angle.
 export function fillXml(
     paint: FillPaint,
     opacity: number,

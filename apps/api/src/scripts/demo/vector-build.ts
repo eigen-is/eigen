@@ -1,8 +1,7 @@
-// Builds the site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN spec —
-// the stickies-board approach without a fixture. Every element is built typed, because the docking math runs on the
-// shapes before anything is written, then goes through the editor's own writer, writeElementInDoc, so the doc reads
-// back through readVectorFromDoc unchanged. Text is sized with measureLabel because the seeder has no DOM to measure
-// with. Deterministic ids + seeds: a reseed renders identical jitter.
+// Builds the demo's site-plan drawing straight into a vector container's Y.Doc from the typed SITE_PLAN spec, with no
+// stored file to keep up with the canvas's shape. Each element is built typed, because the arrows dock on the shapes
+// before anything is written, and then goes through the editor's own writer, so the doc reads back unchanged. Text is
+// sized with measureLabel, because the seeder has no DOM. Fixed ids and seeds make a reseed draw the same jitter.
 
 import { basename } from 'node:path';
 import { textToParagraphHtml } from '@workspace/lib/html';
@@ -56,24 +55,24 @@ import type {
     SitePlanText,
 } from './content';
 
-// Fixed PRNG salt so every reseed of the demo world draws the same roughjs seeds (identical jitter).
+// A fixed salt for the seed generator, so every reseed of the demo draws the same roughjs jitter.
 const SEED_SALT = 0x5170_2e73;
 const FONT = 'Excalifont';
-// The vector app's own style table, with the drawing's font — what an editor-authored element inherits.
+// The Vector app's own style table with the drawing's font, as an element drawn in the editor gets it.
 const SITE_PLAN_STYLE: StyleDefaults = { ...VECTOR_STYLE_DEFAULTS, fontFamily: FONT };
 const DEFAULT_LABEL_SIZE = 16;
 const DEFAULT_ARROW_LABEL_SIZE = 13;
 
-// Width = the widest line's advances; height = lines × the font's line height.
+// The width of the widest line, and the height of all lines at the font's line height.
 function measureExcalifont(text: string, fontSize: number): { width: number; height: number } {
     const lines = text.split('\n');
     const width = Math.max(...lines.map((line) => measureLabel(line, FONT, fontSize, false)));
     return { width, height: lines.length * getLineHeightPx(FONT, fontSize) };
 }
 
-// A text box is laid out by the browser's HTML shaper, which runs a little wider than summed
-// advances; at exactly the measured width a one-line label wraps. 8% slack keeps the demo's
-// labels on one line. Arrow labels are SVG <text> (no wrapping), so they measure unpadded.
+// The browser lays a text box out a little wider than the summed advances, so a one-line label at exactly the
+// measured width wraps. 8% more keeps the demo's labels on one line. An arrow's label is SVG text, which never
+// wraps, so it is measured without it.
 const TEXT_BOX_SLACK = 1.08;
 
 // The box a text box gets for a measured string: the measurement plus the shaping slack.
@@ -82,7 +81,7 @@ function measureTextBox(text: string, fontSize: number): { width: number; height
     return { width: width * TEXT_BOX_SLACK, height };
 }
 
-// Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
+// The sides in shapeAnchorPoints' order.
 const SIDE_INDEX: Record<CanvasSide, number> = { right: 0, bottom: 1, left: 2, top: 3 };
 
 // normalizeLinear rebases a route onto its own bounds, so the box it starts from is empty.
@@ -98,7 +97,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const arrows: VectorArrowElement[] = plan.arrows.map((a, i) => buildArrow(a, i, byKey, byId));
     const texts: VectorRectangleElement[] = plan.texts.map((t, i) => buildText(t, i));
 
-    // Bottom-up z-order: ground outlines, lines, shapes, images, arrows, then every text on top.
+    // The z-order from the bottom: ground outlines, lines, shapes, images, arrows, and every text on top.
     const ground = shapes.filter((_, i) => plan.shapes[i].ground);
     const rest = shapes.filter((_, i) => !plan.shapes[i].ground);
     const ordered: VectorElement[] = [...ground, ...lines, ...rest, ...images, ...arrows, ...texts];
@@ -106,14 +105,13 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const seed = mulberry32(SEED_SALT);
     for (const [i, el] of ordered.entries()) {
         el.index = keys[i];
-        // One draw per element, in z-order: the images and text boxes keep the draw already spent on
-        // them, so no shape's jitter moves. Same 1..2³¹ range randomSeed() draws from in the editor,
-        // because the reader clamps a stored 0 to 1.
+        // One draw per element in z-order. The images and text boxes take theirs too, so every shape keeps the seed
+        // it had. The range is randomSeed's, which starts at 1 because the reader reads a stored 0 as 1.
         el.seed = 1 + Math.floor(seed() * (2 ** 31 - 1));
     }
 
-    // The spec is authored in its own top-left frame; the editor opens on the scene origin, so shift the
-    // drawing to sit centered on it. Linear points and binding anchors are element-relative and ride along.
+    // The spec is drawn from its own top left, and the editor opens on the scene's origin, so the drawing moves to
+    // sit centered on it. Line points and binding anchors are relative to their element and move with it.
     const bounds = sceneBounds(ordered, new Map(ordered.map((el) => [el.id, el])));
     const dx = (bounds.minX + bounds.maxX) / 2;
     const dy = (bounds.minY + bounds.maxY) / 2;
@@ -288,8 +286,8 @@ function buildText(t: SitePlanText, i: number): VectorRectangleElement {
     };
 }
 
-// The base a seeded shape, line or arrow shares, from the same table the apps create with; the builder
-// adds the kind's own fields.
+// The base every seeded element shares, from the table the apps create with. Each builder adds its kind's own
+// fields.
 function baseElement(
     type: VectorElementType,
     id: string,
@@ -298,7 +296,7 @@ function baseElement(
     return { ...baseDefaultsFor(type, style), id, index: '' };
 }
 
-// mulberry32 — a tiny deterministic PRNG, one draw per element (matches randomSeed's range).
+// mulberry32, a tiny seeded random number generator.
 function mulberry32(seed: number): () => number {
     let a = seed >>> 0;
     return () => {
