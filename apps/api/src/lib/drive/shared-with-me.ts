@@ -1,17 +1,18 @@
+// Each home keeps its own copy of the paths other owners shared with it, so "Shared with me" reads
+// one local table. When an owner changes who may see a path, that change is pushed into this home,
+// and receiveSharedPathChange adds, updates or removes the row and tells the user. This file is the
+// only one that reads or writes that table. Drive calls it with its shared database.
+
 import type { DriveACL, DrivePath } from '@workspace/lib/types/drive';
 import { getEigenDocInfoByType, isFolderType, stripEigenExtension } from '@workspace/lib/types/drive';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { eq } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import type { Home } from '../home';
-import { actorDisplayName, getMemberships } from '../user/';
+import { actorDisplayName, getMemberships } from '../user';
 import { matchesACL } from './acl';
 import * as sharedSchema from './sharedschema';
 import { buildDriveEvent } from './sse-events';
-
-// The shared-with-me mirror: a per-Home copy of paths other owners shared with this one,
-// kept fresh by inbound ACL-change pushes (home-relay). Owns all reads/writes of the
-// shared_paths table; Drive delegates here with its sharedDb.
 
 type SharedDb = BunSQLiteDatabase<typeof sharedSchema>;
 
@@ -29,9 +30,9 @@ export async function receiveSharedPathChange(
     if (newACL === null || !matchesACL(newACL, home.user, memberships, 'read')) {
         sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_UNSHARED, path));
-        // Leaving a share is the user's own doing — no notice for that.
+        // A user who leaves a share did it themselves, so they get no notice.
         if (actorEmail?.toLowerCase() !== home.user.email.toLowerCase()) {
-            home.notifications?.persist({
+            home.notify({
                 type: 'unshare',
                 actorEmail,
                 title: actorDisplay ? `${actorDisplay} removed your access` : 'Access removed',
@@ -78,7 +79,7 @@ export async function receiveSharedPathChange(
         home.broadcast(buildDriveEvent(SSEventType.DRIVE_ACL_SHARED, path));
         const info = getEigenDocInfoByType(path.type);
         const noun = info?.noun ?? info?.label.toLowerCase() ?? (isFolderType(path.type) ? 'folder' : 'file');
-        home.notifications?.persist({
+        home.notify({
             type: 'share',
             actorEmail,
             title: actorDisplay ? `${actorDisplay} shared a ${noun}` : 'Shared with you',
@@ -91,11 +92,11 @@ export async function receiveSharedPathChange(
 
 export async function listSharedWithMe(sharedDb: SharedDb): Promise<DrivePath[]> {
     const results = await sharedDb.select().from(sharedSchema.sharedPaths).all();
-    return results.map((r) => sharedRowToDrivePath(r));
+    return results.map(sharedRowToDrivePath);
 }
 
-// Distinct owners that shared at least one path into this home — one row per foreign owner,
-// so the Watched aggregate can fan out over them without loading every shared path.
+// The owners who shared at least one path with this home. The Watched view asks each of them for
+// the user's watched paths, so it doesn't have to load every shared path first.
 export async function listSharedOwnerIds(sharedDb: SharedDb): Promise<string[]> {
     const results = await sharedDb
         .selectDistinct({ ownerId: sharedSchema.sharedPaths.ownerId })
@@ -110,7 +111,7 @@ export async function listSharedWithMeByMimeType(sharedDb: SharedDb, mimeType: s
         .from(sharedSchema.sharedPaths)
         .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
         .all();
-    return results.map((r) => sharedRowToDrivePath(r));
+    return results.map(sharedRowToDrivePath);
 }
 
 function sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
