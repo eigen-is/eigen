@@ -129,7 +129,7 @@ Crowded labels hide, never move, as Highcharts' do: the label of the bigger bar 
 
 ## The painter draws each shape with its own kind and the labels as SVG text
 
-`renderChartSvg` (`vector/kinds/chart-render.ts`) wraps each shape in its own translate group and calls that kind's `render`, so a chart's bar and a drawn rectangle with the same fields are the same SVG by construction. It imports the four shape kinds one by one: the registry imports the chart kind, so reaching the shapes through `ELEMENT_KINDS` would be an import cycle. The charts modules reach `vector/` only through modules that import no kind, such as `vector/points.ts` for the stored point list, so the chart kind imports the charts barrel.
+`renderChartSvg` (`vector/kinds/chart-render.ts`) wraps each shape in its own translate group and calls that kind's `render`, so a chart's bar and a drawn rectangle with the same fields are the same SVG by construction. It imports the four shape kinds one by one: the registry imports the chart kind, so reaching the shapes through `ELEMENT_KINDS` would be an import cycle. The charts modules must not reach the kind registry, because the chart kind imports the charts barrel. So they import only the `vector/` modules that never lead to it, such as `vector/points.ts` for the stored point list.
 
 The labels go through `svgTextLine` (`vector/kinds/render-utils.ts`), the one helper that turns a line of text into SVG `<text>`; an arrow's label draws through it too. Plain SVG text is what lets a chart print: WeasyPrint ignores `foreignObject`, so rich text would vanish from a PDF. A bold label is drawn at weight 600, the weight of Inter's and JetBrains Mono's bundled bold faces.
 
