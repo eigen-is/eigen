@@ -51,14 +51,6 @@
     --chart-3: oklch(0.398 0.07 227.392);
     --chart-4: oklch(0.828 0.189 84.429);
     --chart-5: oklch(0.769 0.188 70.08);
-    --sidebar: oklch(0.984 0.003 247.858);
-    --sidebar-foreground: oklch(0.129 0.042 264.695);
-    --sidebar-primary: oklch(0.208 0.042 265.755);
-    --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
-    --sidebar-accent: oklch(0.968 0.007 247.896);
-    --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-    --sidebar-border: oklch(0.929 0.013 255.508);
-    --sidebar-ring: oklch(0.704 0.04 256.788);
     --selected: oklch(0.932 0.032 255);
     --selected-hover: oklch(0.9 0.04 255);
     --link: #2563eb;
@@ -81,8 +73,8 @@
 .dark .eigen-paper-chrome {
     color-scheme: dark;
     /* Neutral surfaces/text are pure grey (chroma 0) — no blue tint. Only
-       functional colours (destructive/success/warning/charts/link/handle) and
-       the --sidebar-primary accent keep their hue.
+       functional colours (destructive/success/warning/charts/link/handle) keep
+       their hue.
        .eigen-paper-chrome re-applies the theme to app chrome nested inside a
        light-pinned .eigen-paper surface (see below). */
     --background: oklch(0.209 0 0);
@@ -112,14 +104,6 @@
     --chart-3: oklch(0.769 0.188 70.08);
     --chart-4: oklch(0.627 0.265 303.9);
     --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.17 0 0);
-    --sidebar-foreground: oklch(0.984 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.984 0 0);
-    --sidebar-accent: oklch(0.279 0 0);
-    --sidebar-accent-foreground: oklch(0.984 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.551 0 0);
     --selected: oklch(0.35 0 0);
     --selected-hover: oklch(0.4 0 0);
     --link: #60a5fa;
@@ -176,14 +160,6 @@
     --color-chart-3: var(--chart-3);
     --color-chart-4: var(--chart-4);
     --color-chart-5: var(--chart-5);
-    --color-sidebar: var(--sidebar);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-ring: var(--sidebar-ring);
     --color-selected: var(--selected);
     --color-selected-hover: var(--selected-hover);
     --color-link: var(--link);
@@ -223,14 +199,6 @@
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);
     --radius-xl: calc(var(--radius) + 4px);
-    --color-sidebar: var(--sidebar);
-    --color-sidebar-foreground: var(--sidebar-foreground);
-    --color-sidebar-primary: var(--sidebar-primary);
-    --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-    --color-sidebar-accent: var(--sidebar-accent);
-    --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-    --color-sidebar-border: var(--sidebar-border);
-    --color-sidebar-ring: var(--sidebar-ring);
     --color-selected: var(--selected);
     --color-selected-hover: var(--selected-hover);
     --color-link: var(--link);
