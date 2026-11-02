@@ -1,3 +1,7 @@
+// A stickies board's text for Drive's content search: the title and description of each card and the
+// title of each column. The content reindex queue reads it when a board is due, the way it extracts any
+// other document. It reads the board's data.db while it loads the Yjs state, and lets go of it then.
+
 import { getItemMapRoot } from '@workspace/lib/collab/yjs-utils';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
@@ -21,8 +25,9 @@ export async function readStickiesContent(mount: Mount, drivePath: DrivePath): P
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
     if (!dataDbPath) throw new Error('eigenstickies data.db missing');
 
-    const managedDb = await mount.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
-    const { doc } = loadYjsState(managedDb);
+    const { doc } = await mount.withDatabase(COLLAB_DB_CONFIG, dataDbPath.id, async (managedDb) =>
+        loadYjsState(managedDb),
+    );
 
     const tasks: StickiesContent['tasks'] = [];
     for (const [, card] of getItemMapRoot(doc, 'tasks')) {
