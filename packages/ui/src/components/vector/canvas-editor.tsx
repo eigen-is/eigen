@@ -251,6 +251,7 @@ export function CanvasEditor({
         updateElement,
         updateElementUntracked,
         updateElements,
+        updateElementsUntracked,
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
@@ -1389,11 +1390,7 @@ export function CanvasEditor({
     const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
     // An arrow label's width follows its text and font, so it is no step of the user's and stays untracked. The user's
     // own step is the text or font change that caused it, and ⌘Z on that change measures the label it brings back.
-    const fitLabelWidth = useCallback(
-        (id: string, labelWidth: number) => updateElementUntracked(id, { labelWidth }),
-        [updateElementUntracked],
-    );
-    useArrowLabelFit(elements, canEdit ? fitLabelWidth : undefined);
+    useArrowLabelFit(elements, canEdit ? updateElementsUntracked : undefined);
 
     // One scene node. Every render path goes through here, so `byId`, an elbow arrow's route context, is passed in one
     // place.

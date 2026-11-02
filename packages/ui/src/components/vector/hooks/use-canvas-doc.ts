@@ -181,7 +181,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     // `origin` defaults to null (tracked/undoable). Pass UNTRACKED_ORIGIN for a technical fixup the
     // user never undoes as their own step (the cross-mount pending→real swap) — still broadcast.
     const updateElements = useCallback(
-        (patches: { id: string; fields: VectorElementPatch }[], origin: unknown = null) => {
+        (patches: readonly { id: string; fields: VectorElementPatch }[], origin: unknown = null) => {
             const doc = docRef.current;
             if (!doc) return;
             doc.transact(() => {
@@ -209,11 +209,15 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [updateElements],
     );
 
-    // Non-undoable single-element update (see UNTRACKED_ORIGIN): the paste's insert stays the sole
-    // undo step, but peers still receive the write.
-    const updateElementUntracked = useCallback(
-        (id: string, fields: VectorElementPatch) => updateElements([{ id, fields }], UNTRACKED_ORIGIN),
+    // A fixup the user never undoes as a step of their own, such as an arrow label's measured width. Peers still get it.
+    const updateElementsUntracked = useCallback(
+        (patches: readonly { id: string; fields: VectorElementPatch }[]) => updateElements(patches, UNTRACKED_ORIGIN),
         [updateElements],
+    );
+
+    const updateElementUntracked = useCallback(
+        (id: string, fields: VectorElementPatch) => updateElementsUntracked([{ id, fields }]),
+        [updateElementsUntracked],
     );
 
     const deleteElements = useCallback((ids: string[], origin: unknown = null) => {
@@ -316,6 +320,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         updateElement,
         updateElementUntracked,
         updateElements,
+        updateElementsUntracked,
         deleteElements,
         deleteElementsUntracked,
         duplicateElements,
