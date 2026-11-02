@@ -12,7 +12,7 @@ A home's first stream also starts its mail folder watchers, so a change another 
 
 ## The keepalive keeps the stream on a live Home
 
-The stream sends a keepalive at once when it opens and every 15 s after. The first one stops a proxy such as Apache from timing out a stream that has had nothing to say yet. Each later one calls `getHome()`, which touches the Home so it does not idle out under an open tab. When the Home was evicted and rebuilt meanwhile, the stream moves its listener to the new one, or it would go silent while the tab still looks connected.
+The stream sends a keepalive at once when it opens and every 15 s after. The first one stops a proxy such as Apache from timing out a stream that has had nothing to say yet. Each later one calls `getHome()`, which touches the Home so it does not idle out under an open tab. When the Home was evicted and rebuilt meanwhile, the stream moves its listener to the new one, or it would go silent while the tab still looks connected. While the shutdown runs (`shutdownAllHomes`), `openHome` refuses every home with a 503, so the keepalive stops rather than build the home again over the databases the shutdown closes.
 
 The keepalive is a named event with no data, `event: keepalive`, written by Elysia's `sse` helper. A browser never dispatches a named event to `onmessage`, so `useSSE` never sees it and every message it gets is an `SSEvent`. `apps/api/src/test/server/sse.test.ts` pins the bytes.
 

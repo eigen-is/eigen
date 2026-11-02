@@ -1,13 +1,13 @@
-// The event stream of one user's own Home, which the SSE route hands to a signed-in tab. It passes on
-// every event the Home broadcasts. It also sends a keepalive when it opens and every 15 seconds, so a
-// proxy keeps the connection and the Home does not go idle under an open tab. With each keepalive it
-// announces the data epochs, and it follows the Home when an evicted one was built again. When it opens
-// and when it follows, it also sends the restart notice the server holds, or that it holds none.
+// The event stream of one user's own Home, which the SSE route hands to a signed-in tab. It passes on every event
+// the Home broadcasts. A keepalive goes out when it opens and every 15 seconds, so a proxy keeps the connection and
+// the Home does not go idle under an open tab, until the server shuts down. With each keepalive it announces the data
+// epochs, and it follows the Home when an evicted one was built again. When it opens and when it follows, it also
+// sends the restart notice the server holds, or that it holds none.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { sse } from 'elysia';
 import { buildRestartNoticeEvent } from '../config/restart-notice';
-import { getHome } from './get-home';
+import { getHome, isShuttingDown } from './get-home';
 import type { Home } from './home';
 import { buildDataEpochsEvent } from './sse-events';
 
@@ -50,6 +50,11 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
 
             keepalive = setInterval(async () => {
                 if (isClosed) return;
+                // No Home opens while the shutdown runs, and the process ends right after it.
+                if (isShuttingDown()) {
+                    clearInterval(keepalive);
+                    return;
+                }
 
                 // getHome also keeps the Home from going idle. When it was evicted and built again, the
                 // listener moves to the new one, or the stream would go silent.
