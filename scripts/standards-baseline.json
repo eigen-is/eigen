@@ -2,7 +2,6 @@
   "as-casts": {
     "apps/api/scripts/mail-bench.ts": 3,
     "apps/api/scripts/mail-profile.ts": 1,
-    "apps/api/src/lib/core/json-store.ts": 1,
     "apps/api/src/lib/document/transform/protocol.ts": 2,
     "apps/api/src/lib/document/transform/run-transform.ts": 1,
     "apps/api/src/lib/document/transform/runner.ts": 3,

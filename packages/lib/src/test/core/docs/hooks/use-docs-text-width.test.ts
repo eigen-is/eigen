@@ -4,7 +4,7 @@ import { afterAll, describe, expect, mock, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { docsTextWidth } from '@workspace/lib/types/settings';
-import { toMerged } from 'es-toolkit';
+import { deepMerge } from '../../../../core/deep-merge';
 import { spaceKeys } from '../../../../core/space/hooks/keys';
 import { installHappyDom } from '../../../happy-dom';
 import { renderHook } from '../../../render-hook';
@@ -31,7 +31,7 @@ mock.module('../../../../core/api', () => ({
             put: async (body: UserSettings) => {
                 saved.push(body);
                 onPut();
-                stored = toMerged(stored, body);
+                stored = deepMerge(stored, body);
                 return { data: stored, error: null, status: 200 };
             },
         },
