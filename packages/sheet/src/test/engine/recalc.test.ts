@@ -462,13 +462,25 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets, { maxDependencySlots: 10 })[1].data?.[9][0]?.v).toBe(6_400);
     });
 
-    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 edges, though the
+    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 links, though the
     // index lists the column once per formula.
     test('past its edge budget a recalc throws before it links the formulas', () => {
         const rows = Array.from({ length: 4 }, (): (Cell | null)[] => [formula('=COUNT(A:A)')]);
         const sheets = [sheet('s1', 'Sheet1', rows)];
         expect(() => recalcSheets(sheets, { maxDependencyEdges: 15 })).toThrow(RangeError);
         expect(() => recalcSheets(sheets, { maxDependencyEdges: 16 })).not.toThrow();
+    });
+
+    // The 32 formulas in A1:A32 read B41:B42, which lies in their 64 × 16 block. So the lookup of each formula cell
+    // visits all 32 ranges and finds none covering it: 1,024 visits that make no link.
+    test('past its visit budget a recalc throws, though the ranges near the formula cells make no link', () => {
+        const rows = Array.from({ length: 64 }, (_, r): (Cell | null)[] => [
+            r < 32 ? formula('=SUM(B41:B42)') : null,
+            null,
+        ]);
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyVisits: 1_023 })).toThrow(RangeError);
+        expect(() => recalcSheets(sheets, { maxDependencyVisits: 1_024, maxDependencyEdges: 0 })).not.toThrow();
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {

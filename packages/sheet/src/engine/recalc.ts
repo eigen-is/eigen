@@ -72,15 +72,18 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// Three budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
+// Four budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
 // work. `maxDependencySlots` bounds the slots the dependency index lists the formulas' ranges in (dependencySlots).
-// `maxDependencyEdges` bounds the links between the formulas, one for each formula and formula cell it reads.
-// `maxCellsRead` bounds the cells their evaluation reads, each range read cut to its sheet. So many ranges over a large
-// sheet can't cost minutes and gigabytes. The server passes all three, and without them there is no bound.
+// `maxDependencyVisits` bounds the entries a lookup of each formula cell visits in the index (lookupVisits), which is
+// the time the links take to weigh and to make. `maxDependencyEdges` bounds the links between the formulas, one for
+// each formula and formula cell it reads, which is their memory. `maxCellsRead` bounds the cells their evaluation
+// reads, each range read cut to its sheet. So many ranges over a large sheet can't cost minutes and gigabytes. The
+// server passes all four, and without them there is no bound.
 export function recalcSheets(
     sheets: readonly Sheet[],
     {
         maxDependencySlots = Number.POSITIVE_INFINITY,
+        maxDependencyVisits = Number.POSITIVE_INFINITY,
         maxDependencyEdges = Number.POSITIVE_INFINITY,
         maxCellsRead = Number.POSITIVE_INFINITY,
     } = {},
@@ -150,12 +153,17 @@ export function recalcSheets(
 
     // 3. Weigh the links before making them. A whole column read by every formula in it costs the index one slot per
     //    formula, but the formulas square: 20,000 `=COUNT(A:A)` make 400 million links, minutes and gigabytes to build.
-    if (Number.isFinite(maxDependencyEdges)) {
-        let edges = 0;
-        for (const info of allInfos) {
-            edges += depIndex.countDependents(info.id, info.r, info.c);
-            if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
-        }
+    //    The visits come first and cost nothing to count. A range near many formula cells that covers none makes no
+    //    link but costs each of them a visit, so without them counting the links could take as long as making them.
+    let visits = 0;
+    for (const info of allInfos) {
+        visits += depIndex.lookupVisits(info.id, info.r, info.c);
+        if (visits > maxDependencyVisits) throw new RangeError('Formula references past the visit budget');
+    }
+    let edges = 0;
+    for (const info of allInfos) {
+        edges += depIndex.countDependents(info.id, info.r, info.c);
+        if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
     }
 
     // 4. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
