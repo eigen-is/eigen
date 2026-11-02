@@ -35,7 +35,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
 - **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
-- **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
+- **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box. An arrow label's width follows its text after undo, redo and a late-loading font, so its gap in the arrow fits
 
 ## [0.4.1] - 2026-10-28
 
