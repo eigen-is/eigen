@@ -595,10 +595,16 @@ describe('restore --stage and --swap', () => {
             // A safety copy of the home no account in the archive owns: no home of its own, so it stays.
             mkdirSync(join(dir, 'data/home/old.pre-restore-20260101-000000'));
 
-            const output = await stageAndSwap(dir, basename(lightArchive));
+            const staged = await stage(dir, basename(lightArchive));
+            // A live metadata.db that does not read is no reason to refuse: its files go uncounted, and it says so.
+            expect(staged.stderr).toContain(
+                'metadata.db does not read (file is not a database): its files are not counted',
+            );
+            expect(staged.code).toBe(0);
+            const swapped = await swap(dir);
+            expect(swapped.code).toBe(0);
+            const output = `${staged.stdout}${swapped.stdout}`;
             expect(output).toMatch(/light/i);
-            expect(output).toContain('Files and documents added since drop out of Drive');
-            expect(output).toContain('renamed, moved or trashed since');
 
             expect(readFileSync(join(live, 'mounts', aliceMountId, 'data/live.txt'), 'utf8')).toBe('live file');
             expect(readFileSync(join(live, PATHS.MAIL.ROOT, PATHS.MAIL.MAILDIR, 'cur/1.eml'), 'utf8')).toBe(
@@ -654,6 +660,52 @@ describe('restore --stage and --swap', () => {
             expect(once.stderr).toBe('');
             expect(once.code).toBe(0);
             expect(once.stdout).not.toContain('Set these homes aside');
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'a Light stage counts, per home, the files that will not come back, and asks before the swap',
+        async () => {
+            const dir = install();
+            rmSync(join(dir, 'data/home/old'), { recursive: true });
+            await stageAndSwap(dir, basename(fullArchive));
+            // Since the backup: a file and a folder made, and a file renamed, on the by-name mount.
+            const byName = openMountMetadata(join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db'));
+            try {
+                const copy = (id: string, name: string, type: string) =>
+                    byName.run(
+                        'INSERT INTO paths (id, file, name, type, parentId, ownerId, mimeType) SELECT ?, ?, ?, ?, parentId, ownerId, mimeType FROM paths WHERE id = ?',
+                        [id, name, name, type, realShape.ids.renamed],
+                    );
+                copy('made-since', 'made-since.txt', 'file');
+                copy('folder-since', 'Folder since', 'folder');
+                byName.run("UPDATE paths SET name = 'final-2.txt', file = 'final-2.txt' WHERE id = ?", [
+                    realShape.ids.renamed,
+                ]);
+            } finally {
+                byName.close();
+            }
+            // On an id-keyed mount a move keeps the key, so the file still opens.
+            const byId = openMountMetadata(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'));
+            try {
+                byId.run(
+                    "INSERT INTO paths (id, file, name, type, parentId, ownerId, mimeType) SELECT 'moved-into', 'moved-into', 'Moved into', 'folder', parentId, ownerId, mimeType FROM paths WHERE name = 'kept.txt'",
+                );
+                byId.run("UPDATE paths SET parentId = 'moved-into' WHERE name = 'kept.txt'");
+            } finally {
+                byId.close();
+            }
+
+            const declined = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\nn\n' });
+            expect(declined.stderr).toBe('');
+            expect(declined.code).toBe(DECLINED);
+            const lost = declined.stdout.split('\n').filter((line) => line.includes('made since'));
+            expect(lost).toEqual([
+                '▲  Real Shape: 1 file(s) made since drop out of Drive, 1 renamed, moved or trashed since do not open',
+            ]);
+            expect(declined.stdout).toContain(`Swap ${basename(lightArchive)} in?`);
+            expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
         },
         JOB_TIMEOUT_MS,
     );

@@ -347,8 +347,6 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
             bare
                 ? `A light archive holds no files and no mail: ${bare} homes come back without their files and mail`
                 : 'A light archive holds no files and no mail: the mail here stays',
-            'Files and documents added since drop out of Drive; their bytes stay on disk',
-            'Files renamed, moved or trashed since are listed at their old place and do not open',
         );
     }
     ui.note(name, lines);
@@ -361,7 +359,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         if (!go) decline();
     }
 
-    const notReplayed = await stageServerArchive(archived, restoring, {
+    const staged = await stageServerArchive(archived, restoring, {
         s3FromArchive: flags['s3-from-archive'] === true,
         onStep: (step) => console.log(glyphLine('bar', step)),
     }).catch((error) => refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'));
@@ -370,34 +368,43 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         manifest.level === 'light'
             ? enumerateHomes(join(restoring, RESTORING_DATA_DIR, SERVER_DIR, SERVER_DATABASES.users))
             : { orphans: [] };
-    // The first yes came before anyone knew of these homes, so the operator says yes to them on their own.
+    // Their bytes stay on disk, or in the bucket, and the live databases go aside.
+    for (const { home, created, moved } of staged.lost) {
+        console.log(
+            glyphLine(
+                'warn',
+                `${home}: ${created} file(s) made since drop out of Drive, ${moved} renamed, moved or trashed since do not open`,
+            ),
+        );
+    }
     if (orphans.length) {
         console.log(glyphLine('warn', `Homes no account in the archive owns go aside: ${orphans.join(', ')}`));
-        if (!flags.yes) {
-            const go = await ui.confirm({
-                message: `Set these homes aside and swap ${name} in? Eigen stops for the swap.`,
-                initial: false,
-                flag: '--yes',
-            });
-            if (!go) decline();
-        }
+    }
+    // The first yes came before anyone knew of these files and homes, so the operator says yes to them on their own.
+    if ((orphans.length || staged.lost.length) && !flags.yes) {
+        const go = await ui.confirm({
+            message: `${orphans.length ? 'Set these homes aside and swap' : 'Swap'} ${name} in? Eigen stops for the swap.`,
+            initial: false,
+            flag: '--yes',
+        });
+        if (!go) decline();
     }
     const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion, orphans };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
-    if (notReplayed.settled) {
+    if (staged.settled) {
         console.log(
             glyphLine(
                 'warn',
-                `${notReplayed.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
+                `${staged.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
             ),
         );
     }
-    if (notReplayed.missing) {
+    if (staged.missing) {
         console.log(
             glyphLine(
                 'warn',
-                `${notReplayed.missing} pending upload(s) are not replayed: the archive does not hold their bytes`,
+                `${staged.missing} pending upload(s) are not replayed: the archive does not hold their bytes`,
             ),
         );
     }
