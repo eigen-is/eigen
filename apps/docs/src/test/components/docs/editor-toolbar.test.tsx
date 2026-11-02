@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
+import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
 
@@ -1149,6 +1150,58 @@ test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the e
     });
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
+const linkField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input');
+const linkButton = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
+
+async function openLinkDialog() {
+    const icon = document.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Add link"]');
+    await act(async () => icon?.click());
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Add link');
+}
+
+async function typeLink(url: string) {
+    const input = linkField();
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, url);
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+}
+
+test('Add link stays off until a URL is typed, and Enter links the selected text', async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ab' }] }],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 3 });
+    await render(1920, true);
+    await openLinkDialog();
+    expect(linkButton('Add link')?.disabled).toBe(true);
+    await typeLink('https://eigen.is');
+    expect(linkButton('Add link')?.disabled).toBe(false);
+    await act(async () => {
+        const input = linkField();
+        if (!input) throw new Error('no URL field');
+        pressEnter(input);
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+        { type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is' }) },
+    ]);
+});
+
+test('a URL typed and then cancelled is gone the next time Add link opens', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openLinkDialog();
+    await typeLink('https://eigen.is');
+    await act(async () => linkButton('Cancel')?.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await openLinkDialog();
+    expect(linkField()?.value).toBe('');
 });
 
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];

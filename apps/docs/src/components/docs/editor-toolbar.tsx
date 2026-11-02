@@ -21,7 +21,6 @@ import {
     TooltipButton,
 } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { DocumentImportPicker, DrivePickerWithUpload } from '@workspace/ui/components/drive';
 import { ExportProgressDialog, useDocumentExport } from '@workspace/ui/components/drive/use-document-export';
 import {
@@ -33,8 +32,6 @@ import {
     DropdownMenuShortcut,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { ColorPickerButton, FontSizeStepper } from '@workspace/ui/components/media';
 import { FontPicker } from '@workspace/ui/components/media/font-picker';
 import { focusLeftToEditor, Menubar } from '@workspace/ui/components/menubar';
@@ -68,6 +65,7 @@ import { ALIGNMENT_LOOK, FORMAT_HOTKEYS, FormatMenu, lookOption } from './format
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { IndentationOptionsDialog } from './indentation-options-dialog';
 import { InsertMenu } from './insert-menu';
+import { LinkDialog } from './link-dialog';
 import type { PageNumberPreset } from './page-numbers';
 import { PageSetupDialog } from './page-setup-dialog';
 import { RestartNumberingDialog } from './restart-numbering-dialog';
@@ -167,7 +165,6 @@ export const EditorToolbar = ({
     outlineShown,
     onToggleOutline,
 }: EditorToolbarProps) => {
-    const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [pageSetupOpen, setPageSetupOpen] = useState(false);
     const [imagePickerOpen, setImagePickerOpen] = useState(false);
@@ -217,22 +214,6 @@ export const EditorToolbar = ({
         } else {
             setLinkDialogOpen(true);
         }
-    };
-
-    const applyLink = () => {
-        if (!linkUrl) return;
-        const { from, to } = editor.state.selection;
-        if (from === to) {
-            editor
-                .chain()
-                .focus()
-                .insertContent({ type: 'text', text: linkUrl, marks: [{ type: 'link', attrs: { href: linkUrl } }] })
-                .run();
-        } else {
-            editor.chain().focus().setLink({ href: linkUrl }).run();
-        }
-        setLinkUrl('');
-        setLinkDialogOpen(false);
     };
 
     const keepActiveEditorFocus = keepEditorFocus(editor);
@@ -584,39 +565,12 @@ export const EditorToolbar = ({
                 />
             )}
 
-            <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-                <DialogContent size="sm" aria-describedby={undefined}>
-                    <DialogHeader>
-                        <DialogTitle>Add link</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label htmlFor="link">URL</Label>
-                            <Input
-                                id="link"
-                                autoFocus
-                                placeholder="https://example.com"
-                                value={linkUrl}
-                                onChange={(e) => setLinkUrl(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        applyLink();
-                                    }
-                                }}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button type="button" onClick={applyLink}>
-                            Add link
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <LinkDialog
+                editor={editor}
+                open={linkDialogOpen}
+                onOpenChange={setLinkDialogOpen}
+                onCloseAutoFocus={keepActiveEditorFocus}
+            />
 
             <PageSetupDialog
                 open={pageSetupOpen}
