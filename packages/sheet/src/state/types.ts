@@ -25,15 +25,9 @@ import type {
 } from '../engine/types';
 import type { PatchOptions } from './utils';
 
-// Types surfaced here so state-side consumers don't have to know the canonical
-// home. Sheet data shapes (Cell, CellMatrix, CellWithRowAndCol, SingleRange,
-// Range) live in @workspace/lib/sheets and re-export through ../engine/types;
-// Op / ConditionalFormatRule / DataVerificationRule live in lib directly (the BE
-// document reader replays ops without the engine, the HTML export reads CF rules,
-// and data-validation rules are touched by the editor + canvas painter — none is
-// engine-conceptual).
-// AncestorFormulaCell and CalcChainEntry are engine-only (formula dep graph +
-// calc-chain node).
+// Re-exported so state code needn't know where each type lives. The cell and range shapes
+// are lib's and reach this file through the engine's types. Op and the conditional-format and
+// validation rules come from lib directly, because the server reads them without the engine.
 export type {
     AncestorFormulaCell,
     CalcChainEntry,
@@ -149,10 +143,9 @@ export type FilterCondition = {
     values: string[];
 };
 
-// Per-column filter rule state. Producers in state/modules/filter.ts /
-// rowcol.ts set every field. `byCondition` is set when the column filters by
-// condition instead of by values/color. Legacy snapshot fields (e.g. the
-// retired `caljs`) flow through the `[key]: unknown` overflow.
+// One column's filter. Every writer sets every field. `byCondition` is set when the column
+// filters by a condition instead of by values or color. Fields an older snapshot stored, which
+// nothing reads any more, pass through the index signature.
 export type FilterEntry = {
     byCondition?: FilterCondition;
     // Legacy data and a peer's op can leave it out on an entry that hides no rows.
@@ -184,9 +177,7 @@ export type Sheet = Omit<LibSheet, 'config' | 'id'> & {
     status?: number;
     selections?: Selection[];
     calcChain?: CalcChainEntry[];
-    // Pivot-table config — currently unreferenced in active code (only commented-
-    // out callers in toolbar.ts / merge.ts); kept on the type for upstream
-    // workbook-import compatibility.
+    // A pivot table's config, which workbooks from the upstream fork may carry. Nothing reads it.
     pivotTable?: unknown;
     isPivotTable?: boolean;
     filter?: Record<string, FilterEntry>;
@@ -271,11 +262,8 @@ export type FilterOptions = {
     top: number;
     width: number;
     height: number;
-    items: {
-        col: number;
-        left: number;
-        top: number;
-    }[];
+    // One button per visible column, in the rect the canvas paints and the mousedown hit test reads.
+    items: (Rect & { col: number })[];
 };
 
 // One undo step: the edit's patches and their inverse. A cell or field path names its sheet by id,
@@ -338,7 +326,6 @@ export type GlobalCache = {
     pressClosedMenu?: boolean;
 };
 
-// FORMULA
 export type FormulaCell = {
     r: number;
     c: number;

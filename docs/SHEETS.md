@@ -384,7 +384,7 @@ A source scrolled off-screen still spills into view. Past each edge of the view 
 
 ## Painter and hit test read one rect
 
-Each glyph has one geometry function that both the painter and the mousedown hit test call: `checkboxRect`, `dropdownChevronRect` and `cellIndicatorRect`. It is the same split as the filter button's `FILTER_BUTTON_WIDTH`/`HEIGHT`, and it means a glyph and its click target cannot drift apart. The tick box gets its bounds from `cellTextBox` on both sides. Only the box toggles; Space or Enter toggles the focused cell. The chevron's click strip is wider than the glyph but built from the same rect, and both drop out below a minimum column width.
+Each glyph has one geometry function that both the painter and the mousedown hit test call: `checkboxRect`, `dropdownChevronRect` and `cellIndicatorRect`. It means a glyph and its click target cannot drift apart. The filter button works the same way: `createFilterOptions` (`state/modules/filter.ts`) gives each `filterOptions` item its rect, which `drawFilterUI` paints and `getFilterButtonAtPosition` hit-tests. The button is 20×15 on the column's right edge, and in a column narrower than 20px it is as wide as the column, so it never overlaps its neighbor's. The tick box gets its bounds from `cellTextBox` on both sides. Only the box toggles; Space or Enter toggles the focused cell. The chevron's click strip is wider than the glyph but built from the same rect, and both drop out below a minimum column width.
 
 ## Nothing toggles while a cell edit is open
 

@@ -25,7 +25,7 @@ import {
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
 import type { CellGlyph } from '../modules/cell-glyph';
 import { cellGlyphAt } from '../modules/cell-glyph';
-import { FILTER_BUTTON_HEIGHT, getFilterButtonAtPosition } from '../modules/filter';
+import { getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
@@ -122,7 +122,7 @@ export function handleCellAreaMouseDown(
                 // Viewport-space anchor from the click's offset inside the button —
                 // freeze-correct by construction (click and button share a region).
                 x: rect.left + mouseX - (x - filterButton.left),
-                y: rect.top + mouseY - (y - filterButton.top) + FILTER_BUTTON_HEIGHT,
+                y: rect.top + mouseY - (y - filterButton.top) + filterButton.height,
                 col: filterButton.col,
                 startRow,
                 endRow,
@@ -174,7 +174,6 @@ export function handleCellAreaMouseDown(
         checkboxChange(ctx, row_index, col_index);
     }
 
-    // Data verification: cell focus
     cellFocus(ctx, row_index, col_index);
 
     // A click on the painted list chevron opens the dropdown in one go, the way
@@ -205,7 +204,6 @@ export function handleCellAreaMouseDown(
         }
     }
 
-    // Right-click handling
     if (e.button === 2) {
         // If right-click is inside selection, stop mousedown handling
         const isInSelection = ctx.selections?.some(
@@ -221,10 +219,8 @@ export function handleCellAreaMouseDown(
 
     ctx.scrolling = true;
 
-    // Formula-related
     if (ctx.editingCellPosition.length > 0) {
         if (takesFormulaReference(ctx)) {
-            // Formula range selection
             let rowseleted = [row_index, row_index_ed];
             let columnseleted = [col_index, col_index_ed];
 
@@ -262,10 +258,8 @@ export function handleCellAreaMouseDown(
                 height = rowGeom.span;
                 rowseleted = rowGeom.selected;
 
-                // Column axis kept inline: unlike the other copies this site guards
-                // `last.column` / `last.column_focus` lazily inside two arms (the
-                // preamble above only null-checks the row fields), so an early
-                // `return` here can't be expressed through extendSelectionGeometry.
+                // The column axis can't use extendSelectionGeometry. Two of its arms need
+                // last.column and last.column_focus and return without them, and the third doesn't.
                 left = 0;
                 width = 0;
                 columnseleted = [];
@@ -334,7 +328,6 @@ export function handleCellAreaMouseDown(
                     const rangeIndex = anchorParent && siblings ? Array.from<Node>(siblings).indexOf(anchorParent) : -1;
                     ctx.formulaCache.functionRangeIndex = [rangeIndex, currSelection.anchorOffset];
 
-                    /* Re-add closing parenthesis before display */
                     cellInput.innerHTML = vText;
 
                     cancelFunctionrangeSelected(ctx);
@@ -349,7 +342,6 @@ export function handleCellAreaMouseDown(
 
                 rangeHightlightselected(ctx, cellInput);
 
-                // Then proceed with new range selection
                 israngeseleciton(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left,
@@ -420,7 +412,7 @@ export function handleCellAreaMouseDown(
     if (ctx.selectionActive) {
         if (e.shiftKey) {
             // Shift+click: select range
-            const last = ctx.selections?.[ctx.selections.length - 1]; // last selection
+            const last = ctx.selections?.[ctx.selections.length - 1];
             if (
                 last &&
                 last.top != null &&
@@ -497,7 +489,6 @@ export function handleCellAreaMouseDown(
                 });
             }
         } else {
-            // eslint-disable-next-line prefer-const
             ctx.selections = [
                 {
                     left: col_pre,
@@ -514,8 +505,6 @@ export function handleCellAreaMouseDown(
                     column_focus: col_index,
                 },
             ];
-
-            // Update cell format icon
         }
     }
 
@@ -540,9 +529,7 @@ export function handleCellAreaDoubleClick(
     ) {
         return;
     }
-    // Editing disabled (view only)
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left;
@@ -631,9 +618,7 @@ export function handleContextMenu(
                 col_index <= obj_s.column[1],
         );
         if (!isInSelection && (point.metaKey || point.ctrlKey)) {
-            // Add to selection
             if (flowdata[row_index][col_index]?.mc) {
-                // Handle merged cell
                 const changeparam = mergeMoveMain(
                     ctx,
                     [col_index, col_index],
@@ -682,7 +667,6 @@ export function handleContextMenu(
         const row_index_ed = row_index;
         const col_index_ed = col_index;
         if (flowdata[row_index][col_index]?.mc) {
-            // Handle merged cell
             const changeparam = mergeMoveMain(
                 ctx,
                 [col_index, col_index],
