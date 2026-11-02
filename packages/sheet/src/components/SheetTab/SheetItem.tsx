@@ -27,8 +27,11 @@ import {
     sheetOrder,
 } from '../../state';
 
-const NO_MORE_SHEET =
-    'The workbook contains at least one visual worksheet. To delete the selected worksheet, please insert a new worksheet or show a hidden worksheet.';
+// The workbook always shows one sheet, so its last shown sheet can't be hidden or deleted.
+const LAST_SHEET_DELETE =
+    'A workbook always shows at least one sheet. To delete this sheet, add a sheet or show a hidden one first.';
+const LAST_SHEET_HIDE =
+    'A workbook always shows at least one sheet. To hide this sheet, add a sheet or show a hidden one first.';
 
 type Props = {
     id: string;
@@ -58,15 +61,16 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         editable.current.dataset.oldText = editable.current.innerText;
     }, [editing]);
 
+    // A refused name throws out of the write, which then applies nothing, and the notice opens outside the recipe.
     const onBlur = useCallback(() => {
-        setContext((draftCtx) => {
-            if (!editable.current) return;
+        const input = editable.current;
+        if (input) {
             try {
-                editSheetName(draftCtx, editable.current);
+                setContext((draftCtx) => editSheetName(draftCtx, input));
             } catch (e) {
                 if (e instanceof Error) showNotice(e.message);
             }
-        });
+        }
         setEditing(false);
     }, [setContext, showNotice]);
 
@@ -133,8 +137,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         [context.allowEdit, setContext, id],
     );
 
-    // The workbook always shows one sheet, so its last shown sheet can't be hidden or deleted.
-    const lastShownSheet = context.sheets.filter((s) => s.hide !== 1).length < 2;
+    const isLastShownSheet = context.sheets.filter((s) => s.hide !== 1).length < 2;
 
     const menuItems = (
         <MenuSections
@@ -174,7 +177,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     <DropdownMenuItem
                         onClick={() => {
                             if (context.allowEdit === false) return;
-                            if (lastShownSheet) showNotice(NO_MORE_SHEET);
+                            if (isLastShownSheet) showNotice(LAST_SHEET_HIDE);
                             else setContext((ctx) => api.hideSheet(ctx, id));
                         }}
                     >
@@ -192,8 +195,8 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                 <DropdownMenuItem
                     variant="destructive"
                     onClick={() => {
-                        if (lastShownSheet) {
-                            showNotice(NO_MORE_SHEET);
+                        if (isLastShownSheet) {
+                            showNotice(LAST_SHEET_DELETE);
                             return;
                         }
                         showNotice(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
