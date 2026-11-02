@@ -1,122 +1,96 @@
 // The Custom sort dialog, opened from the Data menu: it sorts the selected range by one of its columns, ascending
-// or descending, and can treat the first row as a header that names the columns and stays in place.
+// or descending. With Data has a header row ticked, the Sort by choices take their names from the range's first row.
 
 import { columnIndexToLabel } from '@workspace/lib/sheets';
-import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { cellDisplay } from '../../engine/format';
-import { useDialog } from '../../hooks/useDialog';
-import type { Context } from '../../state';
-import { getSheetIndex, sortSelection } from '../../state';
+import { useDialogProps } from '../../hooks/useDialog';
+import { getFlowdata, sortSelection } from '../../state';
 
 export function CustomSort() {
-    const [rangeColumns, setRangeColumns] = useState<{ offset: number; label: string }[]>([]);
-    const [ascOrDesc, setAscOrDesc] = useState(true);
     const { context, setContext } = useContext(WorkbookContext);
-    const [selectedValue, setSelectedValue] = useState<string>('0');
-    const [isTitleChange, setIsTitleChange] = useState(false);
-    const { hideDialog } = useDialog();
+    const dialogProps = useDialogProps();
+    const [hasHeaderRow, setHasHeaderRow] = useState(false);
+    // The position in the range of the column to sort by, as the Select's value.
+    const [sortColumn, setSortColumn] = useState('0');
+    const [ascending, setAscending] = useState(true);
 
-    const col_start = context.selections![0].column[0];
-    const col_end = context.selections![0].column[1];
-    const row_start = context.selections![0].row[0];
-    const row_end = context.selections![0].row[1];
+    const {
+        row: [rowStart, rowEnd],
+        column: [columnStart, columnEnd],
+    } = context.selections![0];
 
-    const sheetIndex = getSheetIndex(context, context.currentSheetId);
-
-    useEffect(() => {
-        const list: { offset: number; label: string }[] = [];
-        if (isTitleChange) {
-            for (let i = col_start; i <= col_end; i += 1) {
-                const cell = sheetIndex == null ? undefined : context.sheets[sheetIndex].data?.[row_start]?.[i];
-                const colHeaderValue = cellDisplay(cell) || cell?.v;
-                if (colHeaderValue) {
-                    list.push({ offset: i - col_start, label: String(colHeaderValue) });
-                } else {
-                    const ColumnChar = columnIndexToLabel(i);
-                    list.push({ offset: i - col_start, label: `Column ${ColumnChar}` });
-                }
-            }
-        } else {
-            for (let i = col_start; i <= col_end; i += 1) {
-                const ColumnChar = columnIndexToLabel(i);
-                list.push({ offset: i - col_start, label: ColumnChar });
-            }
-        }
-        setRangeColumns(list);
-    }, [col_end, col_start, context.sheets, isTitleChange, row_start, sheetIndex]);
+    const data = getFlowdata(context);
+    const columns: { offset: number; label: string }[] = [];
+    for (let c = columnStart; c <= columnEnd; c += 1) {
+        const letter = columnIndexToLabel(c);
+        const cell = data?.[rowStart]?.[c];
+        const header = cellDisplay(cell) || cell?.v;
+        let label = letter;
+        if (hasHeaderRow) label = header ? String(header) : `Column ${letter}`;
+        columns.push({ offset: c - columnStart, label });
+    }
 
     return (
-        <div className="flex flex-col gap-4">
-            <DialogHeader>
-                <DialogTitle>Custom sort</DialogTitle>
-            </DialogHeader>
-            <div className="text-sm">
-                Sort range from {`${columnIndexToLabel(col_start)}${row_start + 1}`} to{' '}
-                {`${columnIndexToLabel(col_end)}${row_end + 1}`}
-            </div>
+        <FormDialog {...dialogProps} title="Custom sort" size="md">
+            <FormDialogForm
+                submitLabel="Sort"
+                onSubmit={() =>
+                    setContext((draftCtx) => {
+                        sortSelection(draftCtx, ascending, Number(sortColumn));
+                    })
+                }
+            >
+                <p className="text-sm">
+                    Sort range from {`${columnIndexToLabel(columnStart)}${rowStart + 1}`} to{' '}
+                    {`${columnIndexToLabel(columnEnd)}${rowEnd + 1}`}
+                </p>
 
-            <div className="space-y-2.5">
-                <Label className="flex items-center gap-1.5">
-                    <Checkbox checked={isTitleChange} onCheckedChange={(v) => setIsTitleChange(!!v)} />
-                    Data has a header row
-                </Label>
+                <div className="space-y-2.5">
+                    <Label className="flex items-center gap-1.5">
+                        <Checkbox checked={hasHeaderRow} onCheckedChange={(v) => setHasHeaderRow(v === true)} />
+                        Data has a header row
+                    </Label>
 
-                <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2 flex-1">
-                        <span>Sort by</span>
-                        <Select value={selectedValue} onValueChange={setSelectedValue}>
-                            <SelectTrigger size="sm" className="w-full">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {rangeColumns.map(({ offset, label }) => (
-                                    <SelectItem value={String(offset)} key={offset}>
-                                        {label}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                    <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2 flex-1">
+                            <span>Sort by</span>
+                            <Select value={sortColumn} onValueChange={setSortColumn}>
+                                <SelectTrigger size="sm" className="w-full">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {columns.map(({ offset, label }) => (
+                                        <SelectItem value={String(offset)} key={offset}>
+                                            {label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <RadioGroup
+                            value={ascending ? 'asc' : 'desc'}
+                            onValueChange={(v) => setAscending(v === 'asc')}
+                            className="gap-1.5"
+                        >
+                            <Label className="flex items-center gap-1.5">
+                                <RadioGroupItem value="asc" />
+                                Ascending
+                            </Label>
+                            <Label className="flex items-center gap-1.5">
+                                <RadioGroupItem value="desc" />
+                                Descending
+                            </Label>
+                        </RadioGroup>
                     </div>
-                    <RadioGroup
-                        value={ascOrDesc ? 'asc' : 'desc'}
-                        onValueChange={(v) => setAscOrDesc(v === 'asc')}
-                        className="gap-1.5"
-                    >
-                        <Label className="flex items-center gap-1.5">
-                            <RadioGroupItem value="asc" />
-                            Ascending
-                        </Label>
-                        <Label className="flex items-center gap-1.5">
-                            <RadioGroupItem value="desc" />
-                            Descending
-                        </Label>
-                    </RadioGroup>
                 </div>
-            </div>
-
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    Close
-                </Button>
-                <Button
-                    size="sm"
-                    onClick={() => {
-                        setContext((draftCtx: Context) => {
-                            sortSelection(draftCtx, ascOrDesc, parseInt(selectedValue, 10));
-                        });
-                        hideDialog();
-                    }}
-                >
-                    Sort
-                </Button>
-            </DialogFooter>
-        </div>
+            </FormDialogForm>
+        </FormDialog>
     );
 }

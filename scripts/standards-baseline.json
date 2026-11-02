@@ -118,7 +118,7 @@
     "packages/lib/src/core/public/hooks/use-public.ts": 1,
     "packages/lib/src/core/team/hooks/use-team-members.ts": 1,
     "packages/sheet/src/components/ContextMenu/useSheetContextMenu.tsx": 2,
-    "packages/sheet/src/components/CustomSort/index.tsx": 4,
+    "packages/sheet/src/components/CustomSort/index.tsx": 1,
     "packages/sheet/src/components/FormatDialogs/format-pattern.ts": 2,
     "packages/sheet/src/engine/formula-engine.ts": 2,
     "packages/sheet/src/state/events/mouse-cell.ts": 3,

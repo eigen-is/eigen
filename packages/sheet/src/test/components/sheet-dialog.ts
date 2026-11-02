@@ -86,6 +86,11 @@ export async function renderSheetDialog(
         // Every dialog in the document: one, unless a shell wraps another.
         dialogs: () => [...document.querySelectorAll('[role="dialog"]')],
         title: () => document.querySelector('[role="dialog"] h2')?.textContent,
+        // The labels of the footer's buttons, which leaves out the corner X.
+        footer: () =>
+            [...document.querySelectorAll('[role="dialog"] [data-slot="dialog-footer"] button')].map(
+                (b) => b.textContent,
+            ),
         button,
         field,
         click: (label: string) =>

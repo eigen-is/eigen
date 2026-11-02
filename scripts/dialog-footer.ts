@@ -17,7 +17,6 @@ export const OWN_DIALOG_FOOTER = new Set([
     'packages/sheet/src/components/CellRangeDialog/index.tsx',
     'packages/sheet/src/components/ConditionFormat/ConditionRules.tsx',
     'packages/sheet/src/components/ConditionFormat/ManageRules.tsx',
-    'packages/sheet/src/components/CustomSort/index.tsx',
     'packages/sheet/src/components/DataVerification/index.tsx',
     'packages/sheet/src/components/FormatDialogs/CustomCurrencies.tsx',
     'packages/sheet/src/components/FormatDialogs/CustomDateTimeFormats.tsx',
