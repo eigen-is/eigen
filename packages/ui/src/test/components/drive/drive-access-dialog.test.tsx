@@ -1,6 +1,7 @@
 // The Share dialog lists who has access and saves only what changed, then closes. Save waits for a change, Enter in
 // the contact field adds that person and saves nothing, and a save that fails stays open with the edits kept. Cancel
-// waits while a save runs. The owner gets the Share with team menu, and a viewer who may only look gets Close alone.
+// waits while a save runs. The lock is a button the keyboard reaches. The owner gets the Share with team menu, and a
+// viewer who may only look gets Close alone.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
 import { teamOwnerId } from '@workspace/lib/types';
 import type { DirectAccessItem, DrivePath, InheritedAccessItem } from '@workspace/lib/types/drive';
@@ -8,6 +9,7 @@ import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
+import { pressKey } from '../../press-key';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -195,6 +197,16 @@ const people = () =>
         return `${row?.querySelector('p')?.textContent}: ${access?.textContent}`;
     });
 
+// The General access lock, by the action its name says it takes.
+const OPEN_LINK = 'Let anyone signed in with the link view it';
+const RESTRICT = 'Restrict to people with access';
+const lock = (name: string) => {
+    const found = dialog()?.querySelector<HTMLButtonElement>(`button[aria-label="${name}"]`);
+    if (!found) throw new Error(`the dialog has no lock named ${name}`);
+    return found;
+};
+const generalAccess = () => (dialog()?.textContent?.includes('Unrestricted') ? 'Unrestricted' : 'Restricted');
+
 async function chooseAccess(email: string, label: string) {
     const row = rows().find((r) => r?.querySelector('p')?.textContent === email);
     await click(row?.querySelector('[data-slot="select-trigger"]'));
@@ -238,7 +250,7 @@ test('Save sends exactly what changed and closes once it is saved', async () => 
     await addByEnter('dan@example.com');
     await chooseAccess('ada@example.com', 'Remove');
     await chooseAccess('bob@example.com', 'Editor');
-    await click(dialog()?.querySelector('[data-slot="avatar-icon"]'));
+    await click(lock(OPEN_LINK));
     await click(dialog()?.querySelector('[role="checkbox"]'));
     await click(button('Save'));
     await settle();
@@ -257,6 +269,22 @@ test('Save sends exactly what changed and closes once it is saved', async () => 
         ],
     ]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('the lock is a button that says what it does, and Enter, Space or a click flips it', async () => {
+    await open();
+    expect(generalAccess()).toBe('Restricted');
+    await act(async () => pressKey(lock(OPEN_LINK), 'Enter'));
+    expect(generalAccess()).toBe('Unrestricted');
+    await act(async () => pressKey(lock(RESTRICT), ' '));
+    expect(generalAccess()).toBe('Restricted');
+    await click(lock(OPEN_LINK));
+    expect(generalAccess()).toBe('Unrestricted');
+    await click(button('Save'));
+    await settle();
+    expect(updateACL.mock.calls).toEqual([
+        [expect.objectContaining({ add: [], remove: [], visibility: 'public-read' })],
+    ]);
 });
 
 test('a save that fails stays open with the edits kept, and Cancel waits while a save runs', async () => {

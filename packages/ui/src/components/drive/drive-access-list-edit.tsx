@@ -10,7 +10,6 @@ import { useDriveAccess, useIsEffectiveOwner, useUpdateACL } from '@workspace/li
 import { useMyTeams } from '@workspace/lib/home';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { DirectAccessItem, DriveACL, DrivePath, DriveVisibility } from '@workspace/lib/types/drive';
-import { AvatarIcon } from '@workspace/ui/components/avatar';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import {
@@ -29,6 +28,7 @@ import {
     SelectValue,
 } from '@workspace/ui/components/select';
 import { Separator } from '@workspace/ui/components/separator';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@workspace/ui/components/tooltip';
 import { ClipboardCopy, Link, Lock, Mail, Unlock, Users } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { ContactAddRow } from '../contacts/contact-add-row';
@@ -143,6 +143,11 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
             sharingRestricted: isEffectiveOwner ? sharingRestricted : undefined,
         });
     };
+
+    // The lock's name says what a click does, since Restricted or Unrestricted beside it already says the state.
+    const lockLabel =
+        visibility === 'private' ? 'Let anyone signed in with the link view it' : 'Restrict to people with access';
+    const LockIcon = visibility === 'private' ? Lock : Unlock;
 
     return (
         <FormDialogForm
@@ -268,12 +273,22 @@ export function DriveAccessListEdit({ path, onEmailClick, prefillEmail }: DriveA
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
-                        <AvatarIcon
-                            className="w-8 h-8 cursor-pointer"
-                            onClick={() => handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')}
-                        >
-                            {visibility !== 'private' ? <Unlock /> : <Lock />}
-                        </AvatarIcon>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    className="rounded-full"
+                                    aria-label={lockLabel}
+                                    onClick={() =>
+                                        handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')
+                                    }
+                                >
+                                    <LockIcon className="size-6" />
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>{lockLabel}</TooltipContent>
+                        </Tooltip>
                         <div className="ml-3">
                             <p className="text-sm font-medium">
                                 {visibility !== 'private' ? 'Unrestricted' : 'Restricted'}

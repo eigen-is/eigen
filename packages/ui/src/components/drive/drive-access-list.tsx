@@ -59,8 +59,8 @@ export function DriveAccessList({ path, className, onShareClick, scrollable }: D
             <div className="shrink-0 pt-4">
                 <h3 className="eigen-section-label mb-2">General access</h3>
                 <div className="flex items-center">
-                    <AvatarIcon className="w-10 h-10">{isPublic ? <Unlock /> : <Lock />}</AvatarIcon>
-                    <div>
+                    <AvatarIcon className="w-8 h-8">{isPublic ? <Unlock /> : <Lock />}</AvatarIcon>
+                    <div className="ml-3">
                         <p className="text-sm font-medium">{isPublic ? 'Unrestricted' : 'Restricted'}</p>
                         <p className="text-xs text-muted-foreground">
                             {!isPublic
