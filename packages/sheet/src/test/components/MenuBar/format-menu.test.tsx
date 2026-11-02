@@ -84,10 +84,10 @@ test('Format › Conditional formatting opens a rule dialog as one dialog', asyn
     expect(dialogTitles()).toEqual(['Greater than']);
 });
 
-test('Format › Conditional formatting › Management rules opens the rules list as one dialog', async () => {
+test('Format › Conditional formatting › Manage rules opens the rules list as one dialog', async () => {
     const container = await mountWorkbook();
     await openConditionalFormatting(container);
-    await clickRow('Management rules');
+    await clickRow('Manage rules');
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(dialogTitles()).toEqual(['Conditional formatting rules']);
 });

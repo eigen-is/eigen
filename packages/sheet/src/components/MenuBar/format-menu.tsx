@@ -630,7 +630,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>Management rules</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
@@ -647,7 +647,7 @@ function ConditionalFormattingSubmenu() {
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>
-                            Management rules
+                            Manage rules
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>

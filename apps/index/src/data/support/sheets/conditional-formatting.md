@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, conditional formatting, color]
 related: [sheets/format-cells]
 order: 70
-updated: 2026-06-08
+updated: 2026-11-02
 ---
 
 Conditional formatting changes the color of a cell whenever its value meets a rule you set. You can highlight cells that cross a threshold, pick out duplicates, or color a whole range with a gradient that reflects the spread of values.
@@ -54,6 +54,6 @@ A data bar draws a colored bar inside each cell proportional to its value.
 
 ## View and delete rules
 
-To see all the rules on the current sheet, open **Format → Conditional formatting → Management rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. Click the **×** next to a rule to delete it.
+To see all the rules on the current sheet, open **Format → Conditional formatting → Manage rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. Click the **×** next to a rule to delete it.
 
 To remove all conditional formatting from the current sheet at once, open **Format → Conditional formatting → Delete rule → Delete sheet rule**.
