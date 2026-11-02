@@ -33,11 +33,12 @@ import { setCellValue } from './cell';
 import { withoutDeletedFloatingEdits } from './floating';
 import { createContextResolver, FormulaCache, snapshotContext } from './formula-cache';
 import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-exec';
-import { rowColMove } from './history-shift';
+import { rowColMove, shiftEntries } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
-// A row or column step the sheet refused sends nothing, and its entry leaves the stacks.
-type Step = { ctx: Context; ops: Op[]; refused?: boolean };
+// A row or column step the sheet refused sends nothing, names the stack it was refused from, and its entry leaves the
+// stacks.
+type Step = { ctx: Context; ops: Op[]; refused?: 'undo' | 'redo' };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
 // adds the deleted sheet, and keeps only that: its undo and redo are ops, and its patches would hold the whole sheet
@@ -91,6 +92,9 @@ function holdsWholeMatrices({ patches, inversePatches, options }: History): bool
 // Runs the newest entry of `from` and moves it onto `to`: an undo takes it from the undo stack to the redo stack, and a
 // redo back. A step the sheet refused says so once and leaves `from` for neither stack, so the next press steps the
 // entry before it, rather than meeting the same refusal until a peer lifts its cause.
+//
+// The entries left on `from` fit the grid the refused step would have made. A refused undo leaves its row op in the
+// grid, so they take that op's move, and a refused redo leaves it out, so they take its inverse.
 export function stepNewestEntry(
     ctx: Context,
     from: History[],
@@ -101,7 +105,12 @@ export function stepNewestEntry(
     if (!entry) return undefined;
     const next = step(ctx, entry);
     from.pop();
-    if (!next.refused) to.push(entry);
+    if (!next.refused) {
+        to.push(entry);
+        return next;
+    }
+    const kept = rowColMarker((next.refused === 'undo' ? entry.options : inverseRowColOptions(entry.options)) ?? {});
+    if (kept) from.splice(0, from.length, ...shiftEntries(from, kept, next.ctx.sheets, next.refused));
     return next;
 }
 
@@ -297,7 +306,7 @@ function refusedStep(ctx: Context, stack: 'undo' | 'redo'): Step {
     const next = produce(ctx, (draft: Context) => {
         draft.warnDialog = `Sorry, this change can't be ${stack === 'undo' ? 'undone' : 'redone'} anymore.`;
     });
-    return { ctx: next, ops: [], refused: true };
+    return { ctx: next, ops: [], refused: stack };
 }
 
 // The edited sheet's fields as a row or column step leaves them: each as the marker makes it of the live sheet, but a

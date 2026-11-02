@@ -491,6 +491,41 @@ test('a redo whose row op a read-only row refuses says why and leaves its stack'
     expectAgree(s);
 });
 
+// The refused insert stays in the grid, so the undo below it lands on the row its cell moved to. B10 then holds the
+// value B9 moved down, which equals what the typing wrote, so an undo left on the old row would overwrite it.
+test('an undo below a refused row insert lands where its cell moved', () => {
+    const s = session(workbook({ B9: text('new'), B10: text('old') }));
+    s.edit(s.a, typedAt('B10', 'new'));
+    s.edit(s.a, ...insertRows(4, 1));
+    s.edit(s.b, (ctx) => {
+        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+    });
+    s.undo(s.a);
+    s.undo(s.a);
+    expect(cellAt(s.a, 'B10')?.v).toBe('new');
+    expect(cellAt(s.a, 'B11')?.v).toBe('old');
+    expect(s.a.history.redoList).toHaveLength(1);
+    expectAgree(s);
+});
+
+// The refused insert stays out of the grid, so the redo below it lands on the row its cell had before the insert.
+test('a redo below a refused row insert lands where its cell is without the insert', () => {
+    const s = session(workbook({ B10: text('old'), B11: text('old') }));
+    s.edit(s.a, ...insertRows(4, 1));
+    s.edit(s.a, typedAt('B11', 'new'));
+    s.undo(s.a);
+    s.undo(s.a);
+    s.edit(s.b, (ctx) => {
+        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+    });
+    s.redo(s.a);
+    s.redo(s.a);
+    expect(cellAt(s.a, 'B10')?.v).toBe('new');
+    expect(cellAt(s.a, 'B11')?.v).toBe('old');
+    expect(s.a.history.undoList).toHaveLength(1);
+    expectAgree(s);
+});
+
 // A joiner and the server read the stored cells of every sheet a batch doesn't name, so a row op must move the
 // formulas there as the live tabs move them in their matrices.
 describe("a row op moves another sheet's formulas for every reader", () => {
