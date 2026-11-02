@@ -1,5 +1,6 @@
 // The row of formatting buttons above or over a LightEditor: bold, italic, lists, quote and a link. The link button
-// opens a small URL field, and Enter there sets the link without submitting a form the editor sits in.
+// opens a small URL field. Enter there sets the link without submitting a form the editor sits in, and Escape closes
+// the field without closing a dialog around it.
 
 import type { Editor } from '@tiptap/react';
 import { Bold, Italic, Link, List, ListChecks, ListOrdered, Quote } from 'lucide-react';
@@ -100,6 +101,8 @@ export function LightEditorToolbar({ editor }: { editor: Editor }) {
                 <input
                     type="url"
                     aria-label="Link URL"
+                    // Escape closes this field only, not a dialog the editor sits in.
+                    data-owns-escape
                     placeholder="https://..."
                     className="ml-1 px-2 py-1 text-xs border rounded bg-background w-40"
                     value={linkUrl}

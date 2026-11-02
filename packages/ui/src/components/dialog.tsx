@@ -51,6 +51,11 @@ const dialogSizeMap: Record<DialogSize, string> = {
 // uses this.
 export const ABOVE_PREVIEW_Z = 'z-[200]';
 
+// A field that closes something of its own on Escape: a combobox with its list open, or a field that marks itself,
+// such as the light editor's link field. Radix hears Escape on the document before the field does, so the dialog has
+// to leave the key alone. cmdk's input says expanded always, because its list is the dialog.
+const OWNS_ESCAPE = '[role="combobox"][aria-expanded="true"]:not([cmdk-input]), [data-owns-escape]';
+
 function DialogContent({
     className,
     children,
@@ -104,14 +109,11 @@ function DialogContent({
                     }
                     onPointerDownOutside?.(e);
                 }}
-                // Escape over an open preview is the preview's to close, not the dialog's under it, and Escape
-                // in a combobox with its list open is the list's. cmdk's input says expanded always: its list
-                // is the dialog.
+                // Escape over an open preview is the preview's to close, not the dialog's under it. Escape in a
+                // field that closes something of its own is that field's.
                 onEscapeKeyDown={(e) => {
-                    const listOpen =
-                        e.target instanceof Element &&
-                        e.target.matches('[role="combobox"][aria-expanded="true"]:not([cmdk-input])');
-                    if ((preview?.isPreviewOpen && !abovePreview) || listOpen) e.preventDefault();
+                    const fieldOwnsEscape = e.target instanceof Element && e.target.matches(OWNS_ESCAPE);
+                    if ((preview?.isPreviewOpen && !abovePreview) || fieldOwnsEscape) e.preventDefault();
                     onEscapeKeyDown?.(e);
                 }}
                 {...props}
