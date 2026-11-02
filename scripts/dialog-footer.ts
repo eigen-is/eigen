@@ -21,7 +21,6 @@ export const OWN_DIALOG_FOOTER = new Set([
     'packages/sheet/src/components/FormatDialogs/CustomDateTimeFormats.tsx',
     'packages/sheet/src/components/FormatDialogs/CustomNumberFormats.tsx',
     'packages/sheet/src/components/InsertFunctionDialog/index.tsx',
-    'packages/sheet/src/components/LinkEditCard/index.tsx',
     'packages/sheet/src/hooks/useDialog.tsx', // a notice or a yes or no
     'packages/ui/src/components/cards/card-form.tsx', // the edit view a card dialog swaps in for its view
     'packages/ui/src/components/charts/chart-data-dialog.tsx', // a grid

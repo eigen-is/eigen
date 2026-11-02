@@ -1,8 +1,9 @@
-// The link card over a cell: it shows a cell's link and edits or adds one, to a web page or to a range in the
-// workbook. Picking a range hides the card while the range picker is open and puts the selection back after.
+// The link card over a cell: it shows a cell's link and edits or adds one, to a web page, a range or a sheet in the
+// workbook. The hover card sits under the cell. The editor is a dialog the grid draws while ctx.linkCard is editing,
+// and its OK waits for an address Sheets can open. Picking a range hides the editor while the range picker is open and
+// puts the selection back after.
 
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
@@ -38,6 +39,17 @@ const modalBase =
 const RANGE_PICKER_WIDTH = 380;
 const RANGE_PICKER_GAP = 5;
 
+// The events the editor keeps from the grid's handlers around it.
+const stop = (e: React.SyntheticEvent) => e.stopPropagation();
+const STOP_GRID_EVENTS = {
+    onKeyDown: stop,
+    onMouseDown: stop,
+    onMouseMove: stop,
+    onMouseUp: stop,
+    onDoubleClick: stop,
+    onContextMenu: stop,
+};
+
 // biome-ignore lint/suspicious/noTemplateCurlyInString: ${linkAddress} is substituted by replaceHtml() at runtime, not JS template syntax
 const GO_TO_FRAME = 'Go to ${linkAddress}';
 
@@ -64,10 +76,10 @@ export function LinkEditCard({
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
     const [linkType, setLinkType] = useState<string>(originType);
     const lastCell = useRef(normalizeSelection(context, [{ row: [r, r], column: [c, c] }]));
-    const isLinkAddressValid = isLinkValid(linkType, linkAddress);
-    const invalidBorder = linkAddress && !isLinkAddressValid.isValid && 'border-destructive';
+    const validity = isLinkValid(linkType, linkAddress);
+    const invalidBorder = linkAddress && !validity.isValid && 'border-destructive';
 
-    const tooltip = <div className="h-[17px] my-[3px] text-xs text-destructive">{isLinkAddressValid.tooltip}</div>;
+    const tooltip = <div className="h-[17px] my-[3px] text-xs text-destructive">{validity.tooltip}</div>;
 
     const hideLinkCard = useCallback(() => {
         if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
@@ -214,143 +226,124 @@ export function LinkEditCard({
     // The cell-range picker takes over as a non-modal dialog; this editor reappears on close.
     if (selectingCellRange) return null;
 
-    // Link editor: a centered dialog, consistent with the other sheet dialogs.
+    // The editor renders inside cellArea's React tree, so its events would bubble into the grid's handlers, which
+    // start a cell edit, take the focus or undo a sheet edit. The wrapper stops them, as the sheet's modal host does.
     return (
-        <Dialog open onOpenChange={(open) => !open && hideLinkCard()}>
-            <DialogContent
-                aria-describedby={undefined}
-                showCloseButton={false}
-                className="sm:max-w-md"
-                onPointerDownOutside={(e) => e.preventDefault()}
-                onInteractOutside={(e) => e.preventDefault()}
-                // Unlike the ModalProvider dialogs, this one renders inside the cellArea's
-                // React tree, so its synthetic events would bubble into the grid handlers
-                // (start a cell edit, steal focus, trigger sheet undo). Stop them here,
-                // mirroring ModalProvider's guards.
-                onKeyDown={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                onMouseMove={(e) => e.stopPropagation()}
-                onMouseUp={(e) => e.stopPropagation()}
-                onDoubleClick={(e) => e.stopPropagation()}
-                onContextMenu={(e) => e.stopPropagation()}
+        <div className="contents" {...STOP_GRID_EVENTS}>
+            <FormDialog
+                open
+                onOpenChange={(open) => !open && hideLinkCard()}
+                title={originAddress ? 'Edit link' : 'Insert link'}
+                size="md"
             >
-                <DialogHeader>
-                    <DialogTitle>{originAddress ? 'Edit link' : 'Insert link'}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                    <div className="space-y-1.5">
-                        <Label htmlFor="link-text">Display text</Label>
-                        <Input
-                            id="link-text"
-                            spellCheck="false"
-                            autoFocus
-                            value={linkText}
-                            onChange={(e) => setLinkText(e.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-1.5">
-                        <Label htmlFor="link-type">Link type</Label>
-                        <Select
-                            value={linkType}
-                            onValueChange={(value) => {
-                                if (value === 'sheet') {
-                                    if (!linkText) setLinkText(context.sheets[0].name);
-                                    setLinkAddress(context.sheets[0].name);
-                                } else {
-                                    setLinkAddress('');
-                                }
-                                if (value === 'cellrange') openRangePicker('');
-                                setLinkType(value);
-                            }}
-                        >
-                            <SelectTrigger id="link-type" size="sm" className="w-full">
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {LINK_TYPES.map((type) => (
-                                    <SelectItem key={type.value} value={type.value}>
-                                        {type.text}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    {linkType === 'webpage' && (
+                <FormDialogForm
+                    submitLabel="OK"
+                    canSubmit={validity.isValid}
+                    onSubmit={() => {
+                        if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
+                        setContext((draftCtx) => saveHyperlink(draftCtx, r, c, linkText, linkType, linkAddress));
+                    }}
+                >
+                    <div className="space-y-3">
                         <div className="space-y-1.5">
-                            <Label htmlFor="link-address">Link address</Label>
+                            <Label htmlFor="link-text">Display text</Label>
                             <Input
-                                id="link-address"
-                                className={cn(invalidBorder)}
+                                id="link-text"
                                 spellCheck="false"
-                                value={linkAddress}
-                                onChange={(e) => setLinkAddress(e.target.value)}
+                                autoFocus
+                                value={linkText}
+                                onChange={(e) => setLinkText(e.target.value)}
                             />
-                            {tooltip}
                         </div>
-                    )}
-                    {linkType === 'cellrange' && (
                         <div className="space-y-1.5">
-                            <Label htmlFor="link-cell">Cell range</Label>
-                            <div className="relative">
-                                <Input
-                                    id="link-cell"
-                                    className={cn('pr-9', invalidBorder)}
-                                    spellCheck="false"
-                                    value={linkAddress}
-                                    onChange={(e) => setLinkAddress(e.target.value)}
-                                />
-                                <button
-                                    type="button"
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
-                                    onClick={() => openRangePicker(linkAddress)}
-                                >
-                                    <Grid3x3 className="size-4" aria-hidden="true" />
-                                </button>
-                            </div>
-                            {tooltip}
-                        </div>
-                    )}
-                    {linkType === 'sheet' && (
-                        <div className="space-y-1.5">
-                            <Label htmlFor="link-sheet">Worksheet</Label>
+                            <Label htmlFor="link-type">Link type</Label>
                             <Select
-                                value={linkAddress}
+                                value={linkType}
                                 onValueChange={(value) => {
-                                    if (!linkText) setLinkText(value);
-                                    setLinkAddress(value);
+                                    if (value === 'sheet') {
+                                        if (!linkText) setLinkText(context.sheets[0].name);
+                                        setLinkAddress(context.sheets[0].name);
+                                    } else {
+                                        setLinkAddress('');
+                                    }
+                                    if (value === 'cellrange') openRangePicker('');
+                                    setLinkType(value);
                                 }}
                             >
-                                <SelectTrigger id="link-sheet" size="sm" className="w-full">
+                                <SelectTrigger id="link-type" size="sm" className="w-full">
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {context.sheets.map((sheet) => (
-                                        <SelectItem key={sheet.id} value={sheet.name}>
-                                            {sheet.name}
+                                    {LINK_TYPES.map((type) => (
+                                        <SelectItem key={type.value} value={type.value}>
+                                            {type.text}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
-                            {tooltip}
                         </div>
-                    )}
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" size="sm" onClick={hideLinkCard}>
-                        Cancel
-                    </Button>
-                    <Button
-                        size="sm"
-                        onClick={() => {
-                            if (!isLinkAddressValid.isValid) return;
-                            if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
-                            setContext((draftCtx) => saveHyperlink(draftCtx, r, c, linkText, linkType, linkAddress));
-                        }}
-                    >
-                        OK
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+                        {linkType === 'webpage' && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="link-address">Link address</Label>
+                                <Input
+                                    id="link-address"
+                                    className={cn(invalidBorder)}
+                                    spellCheck="false"
+                                    value={linkAddress}
+                                    onChange={(e) => setLinkAddress(e.target.value)}
+                                />
+                                {tooltip}
+                            </div>
+                        )}
+                        {linkType === 'cellrange' && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="link-cell">Cell range</Label>
+                                <div className="relative">
+                                    <Input
+                                        id="link-cell"
+                                        className={cn('pr-9', invalidBorder)}
+                                        spellCheck="false"
+                                        value={linkAddress}
+                                        onChange={(e) => setLinkAddress(e.target.value)}
+                                    />
+                                    <button
+                                        type="button"
+                                        className="absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer text-muted-foreground hover:text-foreground"
+                                        onClick={() => openRangePicker(linkAddress)}
+                                    >
+                                        <Grid3x3 className="size-4" aria-hidden="true" />
+                                    </button>
+                                </div>
+                                {tooltip}
+                            </div>
+                        )}
+                        {linkType === 'sheet' && (
+                            <div className="space-y-1.5">
+                                <Label htmlFor="link-sheet">Worksheet</Label>
+                                <Select
+                                    value={linkAddress}
+                                    onValueChange={(value) => {
+                                        if (!linkText) setLinkText(value);
+                                        setLinkAddress(value);
+                                    }}
+                                >
+                                    <SelectTrigger id="link-sheet" size="sm" className="w-full">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {context.sheets.map((sheet) => (
+                                            <SelectItem key={sheet.id} value={sheet.name}>
+                                                {sheet.name}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                {tooltip}
+                            </div>
+                        )}
+                    </div>
+                </FormDialogForm>
+            </FormDialog>
+        </div>
     );
 }
