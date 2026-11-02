@@ -68,6 +68,8 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **An IME composition across a text box's remount types twice** (S): A peer's re-anchor of the box being typed in remounts its editor mid-composition; in Chrome the pre-edit text stays and the IME's commit adds it again. Rare. Hold the remount's forward until `compositionend`.
 
+- **A closed empty text box shrinks to its padding** (XS): A text box with no stored height and no text is 36 px tall while it is open, but closed, and after a reload, `StaticStory` in `TextBoxView` draws its empty paragraph with no line height, so the box is about 12 px tall. Its 6 px edge bands then cover it, so a click selects the box and typing replaces it; only Enter on the selected box opens it. Draw an empty paragraph of a closed story at the height of one line.
+
 - **An open text box keeps the body's selection ring** (XS): A press on a selected box's text opens it while the body's node selection stays, so `FigureFrame` draws its `eigen-selection-ring` around the open box. Move the body's selection to a caret beside the box as it opens, or hide the ring while it is open.
 
 - **Reach a text box in front of or behind the text by keyboard** (S): The caret rules skip a positioned box as they skip a positioned image ([DOCS.md](DOCS.md#the-caret-never-rests-before-a-positioned-figure)), so a keyboard-only user can't read, type in or select it. The key planned for positioned images (the P2 keyboard row) should reach boxes too; Enter on a selected box already opens it.
