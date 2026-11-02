@@ -1,6 +1,7 @@
 // New event is a form: Enter in the title saves the event, while Enter in the guest field adds a guest and Enter in a
-// time field sets the time, and neither saves. The guest row's buttons save nothing either. A save the server refuses
-// keeps the dialog open beside the hook's toast, with no unhandled rejection, and every opening starts empty.
+// time field sets the time, and neither saves. The guest row's buttons are named and save nothing either. A save the
+// server refuses keeps the dialog open beside the hook's toast, with no unhandled rejection, and every opening starts
+// empty.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { CalendarItem, CreateEventInput } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -116,6 +117,13 @@ const guestField = () => input('#attendee-input');
 const button = (label: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
 
+// An icon-only button, found by the name a screen reader reads out.
+const named = (label: string) => {
+    const found = document.querySelector<HTMLButtonElement>(`[role="dialog"] button[aria-label="${label}"]`);
+    if (!found) throw new Error(`the dialog has no button named ${label}`);
+    return found;
+};
+
 const type = (field: HTMLInputElement, value: string) =>
     act(async () => {
         Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(field, value);
@@ -150,13 +158,13 @@ test('Enter in the guest field adds the guest and saves nothing, and the guest g
     });
 });
 
-test("the guest row's add and remove buttons save nothing", async () => {
+test("the guest row's add and remove buttons are named and save nothing", async () => {
     await open();
     await type(titleField(), 'Dentist');
     await type(guestField(), 'ada@example.org');
-    await act(async () => guestField().parentElement?.parentElement?.parentElement?.querySelector('button')?.click());
+    await act(async () => named('Add').click());
     expect(guests()).toEqual(['ada@example.orgPending']);
-    await act(async () => dialog()?.querySelector<HTMLButtonElement>('.group button')?.click());
+    await act(async () => named('Remove').click());
     expect(guests()).toEqual([]);
     expect(createEvent.mutateAsync).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
