@@ -1,6 +1,10 @@
+// Google Docs' Tools › Word count, without its page count: the editor draws no pages to count. The toolbar opens it,
+// from Tools or its shortcut for example. It counts the body's words and characters, and a selection's out of the whole.
+
 import type { Editor } from '@tiptap/react';
+import { FormDialog } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogFooter } from '@workspace/ui/components/dialog';
 import { useState } from 'react';
 import type { TextCounts } from './word-count';
 import { countWords } from './word-count';
@@ -19,25 +23,20 @@ const ROWS: { key: keyof TextCounts; label: string }[] = [
     { key: 'charactersExcludingSpaces', label: 'Characters excluding spaces' },
 ];
 
-// Google Docs' Tools › Word count, without its page count: the editor draws no pages to count.
 export function WordCountDialog({ editor, open, onOpenChange, onCloseAutoFocus }: WordCountDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="sm"
-                showCloseButton={false}
-                aria-describedby={undefined}
-                onCloseAutoFocus={onCloseAutoFocus}
-            >
-                <DialogHeader>
-                    <DialogTitle>Word count</DialogTitle>
-                </DialogHeader>
-                <WordCounts editor={editor} />
-                <DialogFooter>
-                    <Button onClick={() => onOpenChange(false)}>OK</Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Word count"
+            size="sm"
+            onCloseAutoFocus={onCloseAutoFocus}
+        >
+            <WordCounts editor={editor} />
+            <DialogFooter>
+                <Button onClick={() => onOpenChange(false)}>OK</Button>
+            </DialogFooter>
+        </FormDialog>
     );
 }
 

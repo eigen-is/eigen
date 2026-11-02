@@ -1,8 +1,10 @@
+// Google Docs' Format › Line & paragraph spacing › Custom spacing: the line spacing, and the space before and after in
+// points, for the paragraphs the selection spans. The toolbar opens it, and Apply writes only the fields that changed.
+
 import type { Editor } from '@tiptap/react';
 import type { NormalStyle } from '@workspace/lib/docs/eigendoc';
 import { PARAGRAPH_FORMAT_LIMITS, selectionParagraphFormat } from '@workspace/lib/docs/eigendoc';
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
@@ -13,6 +15,7 @@ type CustomSpacingDialogProps = {
     normal: NormalStyle;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
 };
 
 const LABELS = { lineSpacing: 'Line spacing', spaceBefore: 'Before', spaceAfter: 'After' } as const;
@@ -23,31 +26,29 @@ const KEYS = ['lineSpacing', 'spaceBefore', 'spaceAfter'] as const satisfies rea
 
 const fieldText = (value: number) => String(Math.round(value * 100) / 100);
 
-// Google Docs' Format › Line & paragraph spacing › Custom spacing, on the paragraphs the selection spans.
-export function CustomSpacingDialog({ editor, normal, open, onOpenChange }: CustomSpacingDialogProps) {
+export function CustomSpacingDialog({
+    editor,
+    normal,
+    open,
+    onOpenChange,
+    onCloseAutoFocus,
+}: CustomSpacingDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="sm"
-                showCloseButton={false}
-                aria-describedby={undefined}
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    editor.commands.focus();
-                }}
-            >
-                <DialogHeader>
-                    <DialogTitle>Custom spacing</DialogTitle>
-                </DialogHeader>
-                <CustomSpacingForm editor={editor} normal={normal} onDone={() => onOpenChange(false)} />
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Custom spacing"
+            size="sm"
+            onCloseAutoFocus={onCloseAutoFocus}
+        >
+            <CustomSpacingForm editor={editor} normal={normal} />
+        </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening starts from what the selection's first paragraph draws. A list, a quote and a
 // table cell own the space around what they hold, so there only the line spacing is the paragraph's.
-function CustomSpacingForm({ editor, normal, onDone }: { editor: Editor; normal: NormalStyle; onDone: () => void }) {
+function CustomSpacingForm({ editor, normal }: { editor: Editor; normal: NormalStyle }) {
     const [{ drawn: initial, spacing }] = useState(() => selectionParagraphFormat(editor.state, editor.view, normal));
     const [text, setText] = useState<Record<SpacingKey, string>>(() => ({
         lineSpacing: fieldText(initial.lineSpacing),
@@ -79,15 +80,13 @@ function CustomSpacingForm({ editor, normal, onDone }: { editor: Editor; normal:
     );
 
     return (
-        <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (!valid) return;
+        <FormDialogForm
+            canSubmit={valid}
+            submitLabel="Apply"
+            onSubmit={() => {
                 const format: { [key in SpacingKey]?: number } = {};
                 for (const key of changed) format[key] = Number(text[key]);
                 if (changed.length > 0) editor.chain().focus().setParagraphFormat(format).run();
-                onDone();
             }}
         >
             {field('lineSpacing', true)}
@@ -103,14 +102,6 @@ function CustomSpacingForm({ editor, normal, onDone }: { editor: Editor; normal:
                     {PARAGRAPH_FORMAT_LIMITS.spaceBefore.min} and {PARAGRAPH_FORMAT_LIMITS.spaceBefore.max} points.
                 </FieldError>
             )}
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onDone}>
-                    Cancel
-                </Button>
-                <Button type="submit" disabled={!valid}>
-                    Apply
-                </Button>
-            </DialogFooter>
-        </form>
+        </FormDialogForm>
     );
 }

@@ -1,6 +1,6 @@
-// The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognizes it where a
-// re-save drops the writer's styles and keeps it as direct formatting. It also holds the rough measures of that look
-// the exports estimate with, such as a character's width.
+// The editor's look in OOXML values, from the editor's prose stylesheet: the writer draws it, and the reader
+// recognizes it where a re-save drops the writer's styles and keeps it as direct formatting. It also holds the rough
+// measures of that look the exports estimate with, such as a character's width.
 
 import type { JSONContent } from '@tiptap/core';
 import {
@@ -34,7 +34,7 @@ export function halfPoints(pt: number): number {
 }
 
 // sz in eighths of a point, space in points.
-export type Border = { sz: number; space: number; color: string };
+export type WordBorder = { sz: number; space: number; color: string };
 
 export function proseColor(selector: string, property: string): string {
     const value = proseValue(selector, property);
@@ -74,7 +74,7 @@ export function proseTwips(selector: string, property: string): number {
 }
 
 // A solid border shorthand, its width in eighths of a point.
-export function proseBorder(selector: string, property: string): Omit<Border, 'space'> {
+export function proseBorder(selector: string, property: string): Omit<WordBorder, 'space'> {
     const value = proseValue(selector, property);
     const [width = '', style, color = ''] = value.trim().split(/\s+/);
     if (style !== 'solid') throw new Error(`eigen-prose.css border ${value} on ${selector} has no docx spelling`);

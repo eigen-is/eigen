@@ -3,65 +3,56 @@
 // panel's controls do, so a phone, which has no panel, reaches them here.
 
 import type { Editor } from '@tiptap/react';
-import { readCellBackground } from '@workspace/lib/docs/eigendoc';
+import { readHexColor } from '@workspace/lib/constants/colors';
 import type { MenuSectionsProps } from '@workspace/ui/components/context-menu';
 import { DropdownMenuItem, DropdownMenuSeparator } from '@workspace/ui/components/dropdown-menu';
 import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { PaintBucket } from 'lucide-react';
 import type { ToolbarState } from './hooks/use-toolbar-state';
-import { BORDER_SET_LOOKS, TABLE_ACTION_ICONS } from './table-action-icons';
+import type { TableAction, TableCommand } from './table-actions';
+import { BORDER_SET_LOOKS, TABLE_ACTIONS } from './table-actions';
 
 // The table rows of Format › Table, in MenuSections' groups, for any menu about the table the caret is in.
 export function tableMenuSections(
     editor: Editor,
     active: Pick<ToolbarState, 'canMergeCells' | 'canSplitCell' | 'cellBackground'>,
 ): MenuSectionsProps {
+    const item = (command: TableCommand, variant?: 'destructive') => {
+        const { icon: Icon, label, enabledBy }: TableAction = TABLE_ACTIONS[command];
+        return (
+            <DropdownMenuItem
+                variant={variant}
+                disabled={enabledBy !== undefined && !active[enabledBy]}
+                onClick={() => editor.chain().focus()[command]().run()}
+            >
+                <Icon className="h-4 w-4" /> {label}
+            </DropdownMenuItem>
+        );
+    };
     return {
         create: (
             <>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
-                    <TABLE_ACTION_ICONS.addRowBefore className="h-4 w-4" /> Insert row above
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
-                    <TABLE_ACTION_ICONS.addRowAfter className="h-4 w-4" /> Insert row below
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
-                    <TABLE_ACTION_ICONS.addColumnBefore className="h-4 w-4" /> Insert column left
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                    <TABLE_ACTION_ICONS.addColumnAfter className="h-4 w-4" /> Insert column right
-                </DropdownMenuItem>
+                {item('addRowBefore')}
+                {item('addRowAfter')}
+                {item('addColumnBefore')}
+                {item('addColumnAfter')}
             </>
         ),
         organize: (
             <>
-                <DropdownMenuItem onClick={() => editor.chain().focus().distributeColumns().run()}>
-                    <TABLE_ACTION_ICONS.distributeColumns className="h-4 w-4" /> Distribute columns
-                </DropdownMenuItem>
+                {item('distributeColumns')}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem
-                    disabled={!active.canMergeCells}
-                    onClick={() => editor.chain().focus().mergeCells().run()}
-                >
-                    <TABLE_ACTION_ICONS.mergeCells className="h-4 w-4" /> Merge cells
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                    disabled={!active.canSplitCell}
-                    onClick={() => editor.chain().focus().splitCell().run()}
-                >
-                    <TABLE_ACTION_ICONS.splitCell className="h-4 w-4" /> Unmerge cells
-                </DropdownMenuItem>
+                {item('mergeCells')}
+                {item('splitCell')}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-                    <TABLE_ACTION_ICONS.toggleHeaderRow className="h-4 w-4" /> Toggle header row
-                </DropdownMenuItem>
+                {item('toggleHeaderRow')}
                 <ColorPickerMenuItem
                     icon={PaintBucket}
                     label="Cell background color"
                     value={active.cellBackground}
                     resetLabel="None"
                     onChange={(color) =>
-                        editor.chain().focus().setCellAttribute('backgroundColor', readCellBackground(color)).run()
+                        editor.chain().focus().setCellAttribute('backgroundColor', readHexColor(color)).run()
                     }
                 />
                 {BORDER_SET_LOOKS.map(({ set, label, icon: Icon }) => (
@@ -73,15 +64,9 @@ export function tableMenuSections(
         ),
         destructive: (
             <>
-                <DropdownMenuItem variant="destructive" onClick={() => editor.chain().focus().deleteRow().run()}>
-                    <TABLE_ACTION_ICONS.deleteRow className="h-4 w-4" /> Delete row
-                </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={() => editor.chain().focus().deleteColumn().run()}>
-                    <TABLE_ACTION_ICONS.deleteColumn className="h-4 w-4" /> Delete column
-                </DropdownMenuItem>
-                <DropdownMenuItem variant="destructive" onClick={() => editor.chain().focus().deleteTable().run()}>
-                    <TABLE_ACTION_ICONS.deleteTable className="h-4 w-4" /> Delete table
-                </DropdownMenuItem>
+                {item('deleteRow', 'destructive')}
+                {item('deleteColumn', 'destructive')}
+                {item('deleteTable', 'destructive')}
             </>
         ),
     };

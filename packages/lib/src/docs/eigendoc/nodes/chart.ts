@@ -75,16 +75,15 @@ export function readChartAttrs(attrs: Record<string, unknown>): ChartAttrs & Cha
     };
 }
 
-// The chart drawn in its look at its stored size, or the placeholder for a spec that doesn't parse. Its id is new on
-// every draw, so no two charts on a page, or in a copy beside it, share a gradient's id.
-export function chartSvg(spec: ChartSpec | null, { width, height, ...rest }: ChartAttrs): string {
-    return renderChartSpecSvg({
-        id: `chart-${nanoid(10)}`,
-        spec,
-        width: width ?? CHART_DEFAULT_SIZE.width,
-        height: height ?? CHART_DEFAULT_SIZE.height,
-        look: readChartLook(rest),
-    });
+// The size a chart draws at, in page px: its stored sides, and the default for a side it doesn't store.
+export function chartBox({ width, height }: Pick<ChartAttrs, 'width' | 'height'>): { width: number; height: number } {
+    return { width: width ?? CHART_DEFAULT_SIZE.width, height: height ?? CHART_DEFAULT_SIZE.height };
+}
+
+// The chart drawn in its look at its size, or the placeholder for a spec that doesn't parse. Its id is new on every
+// draw, so no two charts on a page, or in a copy beside it, share a gradient's id.
+export function chartSvg(spec: ChartSpec | null, attrs: ChartAttrs): string {
+    return renderChartSpecSvg({ id: `chart-${nanoid(10)}`, spec, ...chartBox(attrs), look: readChartLook(attrs) });
 }
 
 const sideOf = (element: HTMLElement, name: string) => readFrameSide(Number(element.getAttribute(name)));
@@ -159,8 +158,7 @@ export const ChartNode = Node.create({
         const img = {
             src: `data:image/svg+xml,${encodeURIComponent(chartSvg(spec, attrs))}`,
             alt: spec?.title.text || 'Chart',
-            width: attrs.width ?? CHART_DEFAULT_SIZE.width,
-            height: attrs.height ?? CHART_DEFAULT_SIZE.height,
+            ...chartBox(attrs),
         };
         return figureFrameHTML(frame, attrs, ['img', img]);
     },

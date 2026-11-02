@@ -1,31 +1,34 @@
-// The confirm lifecycle of a dialog whose action awaits a mutation, such as ConfirmDialog's: the buttons and every
-// close path wait while it runs, and it closes once the action succeeds. A failure keeps it open beside the error toast
-// for another try. `closeOnRefusal` is for a yes/no with nothing to edit, such as a team the server won't delete: there
-// another try gets the same no, so a refusal closes it. A picker leaves it off, since its typed name or chosen folder
-// is how the user gets past a 403 or 422.
+// The confirm lifecycle of a dialog whose action may await a mutation, such as ConfirmDialog's. The buttons and every
+// close path wait while it runs. It closes once the action succeeds, unless the action returns or resolves false, as a
+// form check that names a field does. A failure keeps it open for another try. An error the mutation hook toasted ends
+// here, and any other, such as a bug in a synchronous submit, is rethrown. `closeOnRefusal` closes it on a refusal too,
+// for a yes/no where another try gets the same no. A picker leaves it off, since a new name or folder gets past a 403.
 
-import { isRefusal } from '@workspace/lib/api-error';
+import { isRefusal, wasToasted } from '@workspace/lib/api-error';
 import { useState } from 'react';
+
+// Two promise types rather than Promise<void | false>, which Biome flags as a confusing use of void.
+export type DialogAction = () => void | false | Promise<void> | Promise<false | undefined>;
 
 export function useDialogPending(
     onOpenChange: (open: boolean) => void,
     { closeOnRefusal = false }: { closeOnRefusal?: boolean } = {},
 ): {
     pending: boolean;
-    run: (action: () => void | Promise<void>) => Promise<void>;
+    run: (action: DialogAction) => Promise<void>;
     handleOpenChange: (open: boolean) => void;
 } {
     const [pending, setPending] = useState(false);
 
-    const run = async (action: () => void | Promise<void>) => {
+    const run = async (action: DialogAction) => {
         if (pending) return;
         setPending(true);
         try {
-            await action();
-            onOpenChange(false);
+            if ((await action()) !== false) onOpenChange(false);
         } catch (error) {
-            // The mutation's onMutationError already surfaced the toast.
             if (closeOnRefusal && isRefusal(error)) onOpenChange(false);
+            // Swallowing an error no toast has shown would leave the user with a button that does nothing.
+            if (!wasToasted(error)) throw error;
         } finally {
             setPending(false);
         }

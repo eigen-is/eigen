@@ -12,6 +12,7 @@ import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
+import { waitUntil } from '../../fixtures/wait-until';
 
 // happy-dom lays nothing out: a test that needs the editor's width stubs it and fires these.
 let resizes: (() => void)[] = [];
@@ -28,6 +29,7 @@ const realCollab = await import('@workspace/lib/collab');
 const { BAND_ROOTS, PAGE_ROOT, STYLE_ROOT } = await import('@workspace/lib/docs/eigendoc');
 const { DRIVE_MIME_DOC } = await import('@workspace/lib/types/drive');
 const { CommandPaletteProvider } = await import('@workspace/ui');
+const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { LayoutContext } = await import('@workspace/ui/components/layout/app/layout-context');
 const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
 const { drivePath } = await import('@workspace/ui/test/drive-path');
@@ -104,6 +106,13 @@ afterEach(() => unmount());
 
 let setCanWrite = (_canWrite: boolean) => {};
 
+// What the command palette holds, such as the open doc's comment search, read beside the editor.
+let palette: ReturnType<typeof useCommandPalette> | null = null;
+function PaletteProbe() {
+    palette = useCommandPalette();
+    return null;
+}
+
 const WRITER = { canWrite: true, isMobile: false };
 
 async function render({
@@ -143,7 +152,7 @@ async function render({
                     createElement(
                         PreviewProvider,
                         null,
-                        createElement(CommandPaletteProvider, null, createElement(Editor)),
+                        createElement(CommandPaletteProvider, null, createElement(Editor), createElement(PaletteProbe)),
                     ),
                 ),
         }),
@@ -151,7 +160,6 @@ async function render({
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
-    await frames();
 }
 
 const LAYOUT = {
@@ -168,9 +176,6 @@ const LAYOUT = {
     isMobile: false,
     isTablet: false,
 };
-
-// Tiptap puts the caret in an editor a frame after its command.
-const frames = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)));
 
 // An action, with Tiptap's frame run as a browser runs it: after React has drawn what the action changed. happy-dom runs
 // a frame before act lets React draw, when the band the caret goes to is not editable yet.
@@ -466,18 +471,18 @@ test('a document closed with the body’s or a band’s menu open throws nothing
         await unmount();
         await render(WRITER);
         await openMenu('Insert');
-        await act(async () => {
-            [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
-                .find((item) => item.textContent?.trim() === 'Equation')
-                ?.click();
-            await unmount();
-        });
-        await frames();
+        await withBrowserFrames(() =>
+            act(async () => {
+                [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')]
+                    .find((item) => item.textContent?.trim() === 'Equation')
+                    ?.click();
+                await unmount();
+            }),
+        );
         await render(WRITER);
         await doubleClick('header');
         await openMenu('Options');
-        await unmount();
-        await frames();
+        await withBrowserFrames(unmount);
     } finally {
         window.removeEventListener('error', onError);
     }
@@ -550,14 +555,11 @@ test('a click on a comment card leaves the band for the comment’s anchor in th
     await render(WRITER);
     await doubleClick('header');
     await act(async () => button('Comments')?.click());
-    // The panel lists the anchors the body holds, read 200 ms after its last change.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 250)));
-    // The card is titled by its anchor's text.
-    const card = [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find(
-        (title) => title.textContent === 'Hello',
-    );
-    expect(card).toBeDefined();
-    await act(async () => card?.click());
+    // The card is titled by its anchor's text, which the panel reads 200 ms after the body's last change.
+    const card = () =>
+        [...document.querySelectorAll<HTMLElement>('.line-clamp-2')].find((title) => title.textContent === 'Hello');
+    await waitUntil(() => card() !== undefined, 'the comment card');
+    await act(async () => card()?.click());
     expect(editing()).toEqual([]);
 });
 
@@ -735,11 +737,11 @@ test('in a band, Insert greys out the page break, and an image goes into the ban
     expect(doc.getXmlFragment('default').toString()).not.toContain('figure');
 
     await pressEscape(bandView('header'));
-    await act(async () => {
-        finishUpload('logo-1.png');
-        await new Promise((resolve) => setTimeout(resolve, 10));
-    });
-    expect(doc.getXmlFragment('header').toString()).toContain('mediaName="logo-1.png"');
+    await act(async () => finishUpload('logo-1.png'));
+    await waitUntil(
+        () => doc.getXmlFragment('header').toString().includes('mediaName="logo-1.png"'),
+        'the uploaded name',
+    );
 });
 
 test('Different first page stacks both headers, keeps what was typed in the other pages’ one and edits the new first page’s', async () => {
@@ -926,6 +928,18 @@ test('a right-click on an image offers a writer Cut, Copy and Delete, and Delete
 
     await pick('Delete');
     expect(doc.getXmlFragment('default').toString()).not.toContain('figure');
+});
+
+test('a right-click on an image offers Add comment where comments are on, which comments on the image', async () => {
+    writeFigure();
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    const figure = bodyView()?.querySelector('.figure');
+    if (!figure) throw new Error('no figure');
+    await act(async () => figure.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Add comment', '—', 'Delete']);
+
+    await pick('Add comment');
+    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('New comment');
 });
 
 // A viewer with nothing to download or comment on keeps the browser's own menu.
@@ -1117,9 +1131,11 @@ test('the table menu’s Paste pastes what the clipboard holds into the cell', a
     await bodyTable();
     await rightClick(bodyCell());
     await pick(`Paste${formatForDisplay('Mod+V')}`);
-    await frames();
+    await waitUntil(
+        () => doc.getXmlFragment('default').toString().includes('<tablecell colspan="1" rowspan="1"><paragraph>pasted'),
+        'the pasted text',
+    );
     expect(read).toHaveBeenCalled();
-    expect(doc.getXmlFragment('default').toString()).toContain('<tablecell colspan="1" rowspan="1"><paragraph>pasted');
 });
 
 test('the table menu offers Add comment on a cell’s text, where a comment anchors', async () => {
@@ -1204,7 +1220,6 @@ test('the equation menu sets its display, opens its panel and deletes it', async
 
     await rightClick(bodyView()?.querySelector('.equation'));
     await pick('Edit equation');
-    await frames();
     const field = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="LaTeX"]');
     expect(field).not.toBeNull();
     expect(document.activeElement === field).toBe(true);
@@ -1303,7 +1318,7 @@ test("a viewer's Download image saves the chart in its look on white, its font e
         expect(menuRows()).toEqual(['Copy', '—', 'Download image']);
         fonts.takeFetched();
         await pick('Download image');
-        await frames();
+        await waitUntil(() => saved.mock.calls.length > 0, 'the download');
         expect(saved).toHaveBeenCalledTimes(1);
         const [blob, name] = saved.mock.calls[0];
         expect(name).toBe('Light dark.svg');
@@ -1317,6 +1332,82 @@ test("a viewer's Download image saves the chart in its look on white, its font e
     } finally {
         saved.mockRestore();
     }
+});
+
+// A block text box holding "Inside", at the start of the body.
+function writeTextBox() {
+    const paragraph = new Y.XmlElement('paragraph');
+    const box = new Y.XmlElement('textBox');
+    box.setAttribute('id', 'box-1');
+    const inside = new Y.XmlElement('paragraph');
+    inside.insert(0, [new Y.XmlText('Inside')]);
+    box.insert(0, [inside]);
+    paragraph.insert(0, [box]);
+    doc.getXmlFragment('default').insert(0, [paragraph]);
+}
+
+test('a right-click on a text box offers a writer Cut, Copy and Delete, and Delete takes the box out', async () => {
+    writeTextBox();
+    await render(WRITER);
+    const box = bodyView()?.querySelector('.figure');
+    if (!box) throw new Error('no text box');
+    await act(async () => box.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true })));
+    expect(menuRows()).toEqual(['Cut', 'Copy', '—', 'Delete']);
+
+    await pick('Delete');
+    expect(doc.getXmlFragment('default').toString()).not.toContain('textbox');
+});
+
+// A card titled "Check this", with its thread's chat name.
+function writeCard() {
+    const card = new Y.Map<unknown>();
+    card.set('title', 'Check this');
+    card.set('chatName', 'thread-1');
+    doc.getMap('comments').set('c1', card);
+}
+
+const commentsPanelShown = () =>
+    [...document.querySelectorAll('.eigen-toolbar-title')].some((title) => title.textContent === 'Comments');
+const cardDialogText = () => document.querySelector('[role="dialog"]')?.textContent ?? '';
+
+test.each([
+    ['an image', writeFigure],
+    ['a chart', writeChart],
+    ['a text box', writeTextBox],
+])('the comment mark on %s opens its card beside the comments panel', async (_, writeNode) => {
+    writeNode();
+    const paragraph = doc.getXmlFragment('default').get(0);
+    const node = paragraph instanceof Y.XmlElement ? paragraph.get(0) : null;
+    if (!(node instanceof Y.XmlElement)) throw new Error('no node');
+    node.setAttribute('commentCardId', 'c1');
+    writeCard();
+    await render({ ...WRITER, chatFolderId: 'chats' });
+    const mark = bodyView()?.querySelector<HTMLElement>('button[aria-label="Open comment"]');
+    if (!mark) throw new Error('no comment mark');
+    await act(async () => mark.click());
+    expect(commentsPanelShown()).toBe(true);
+    expect(cardDialogText()).toContain('Check this');
+});
+
+// Insert › Footnote and Insert › Text box open the new story with the caret in it; typing lands in the story, and Esc
+// hands the caret back to the body.
+test.each([
+    ['a note', 'footnote', ['Page elements', `Footnote${formatForDisplay('Mod+Alt+F')}`]],
+    ['a text box', 'textbox', ['Text box']],
+])('%s inserted from the Insert menu takes what is typed, and Esc leaves it', async (_, tag, path) => {
+    write('default', 'Hello');
+    await render(WRITER);
+    await act(async () => void bodyEditor().commands.setTextSelection(6));
+    await openMenu('Insert');
+    for (const label of path.slice(0, -1)) await openSubmenu(label);
+    await pick(path[path.length - 1]);
+    const story = document.activeElement?.closest<TiptapEditorHTMLElement>('.ProseMirror');
+    if (!story?.editor || story === bodyView()) throw new Error('no story open');
+    await act(async () => void story.editor?.commands.insertContent('Typed'));
+    expect(doc.getXmlFragment('default').toString()).toMatch(new RegExp(`<${tag}[^>]*>.*Typed.*</${tag}>`));
+
+    await pressEscape(story);
+    expect(document.activeElement === bodyView()).toBe(true);
 });
 
 // The outline: Tools › Show outline on a desktop, remembered per browser, and the kebab's pane on a phone.
@@ -1525,4 +1616,23 @@ test("a viewer's right-click on a table of contents opens no menu and leaves the
     const event = await rightClick(tocLine());
     expect(document.querySelector('[role="menu"]')).toBeNull();
     expect(event.defaultPrevented).toBe(false);
+});
+
+// The palette's comment search reveals a thread by its chat name: the card opens over the comments panel, and on a
+// desktop the caret goes to its anchor in the body. On a phone the comments pane takes the screen.
+test.each([
+    ['a desktop', WRITER],
+    ['a phone', PHONE],
+])('on %s a comment search hit opens its card over the comments panel', async (_, as) => {
+    write('default', 'Intro');
+    write('default', 'Hello', { comment: { cardId: 'c1' } });
+    writeCard();
+    await render({ ...as, chatFolderId: 'chats' });
+    await waitUntil(() => palette?.docCommentSearch != null, 'the comment search');
+    await act(async () => palette?.docCommentSearch?.reveal('thread-1'));
+    expect(commentsPanelShown()).toBe(true);
+    expect(cardDialogText()).toContain('Check this');
+    // The caret goes to the anchor, at the start of the second paragraph, only where the body shows.
+    expect(bodyEditor().state.selection.from).toBe(as.isMobile ? 1 : 8);
+    expect(bodyView()?.closest('.hidden') != null).toBe(as.isMobile);
 });

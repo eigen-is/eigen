@@ -166,7 +166,7 @@ Signatures are as the code declares them. Types the signatures name but the modu
 - `parseOoxml(input: string | Uint8Array): XmlElement | null`: parses with Strict namespaces read as transitional.
 - `alternativeFor(understood: ReadonlySet<string>)`, `isAlternateContent(element)`, `ooxmlElements(element, alternative)`, `ooxmlChild(element, ns, local, alternative)`: markup compatibility.
 - `EMU_PER_PX`, `EMU_PER_POINT`, `POINTS_PER_UNIT`.
-- `emu(value: string | undefined): number | undefined`, `measure(value: string | undefined, perPoint: number): number | undefined`.
+- `emu(value: string | undefined): number | undefined`, `measure(value: string | undefined, perPoint: number): number | undefined`, and `MAX_MEASURE_CHARS`, the length past which both read nothing.
 - `isOn(value: string | undefined): boolean | undefined`, `isOnElement(element: XmlElement | undefined, ns = ''): boolean | undefined`.
 
 ### drawingml.ts
@@ -225,7 +225,7 @@ The package:
 The XML:
 
 - `parseXml` refuses a DOCTYPE, so no entity expands, and refuses a tree nested too deep.
-- `emu` and `measure` ignore a value longer than 64 characters unread.
+- `emu` and `measure` ignore a value longer than `MAX_MEASURE_CHARS` (64) characters unread. A format's own length reader, such as the docx reader's `vmlPx`, holds the same cap.
 
 Budgets and charts:
 

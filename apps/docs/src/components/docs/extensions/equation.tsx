@@ -15,7 +15,7 @@ import { writeMathml } from '@workspace/math';
 import { CommentIndicator } from '@workspace/ui/components/comments';
 import { cn } from '@workspace/ui/lib/utils';
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import { dragOutOfParagraph } from './figure-frame';
+import { dragOutOfParagraph, RERENDER_ON_DECORATIONS } from './figure-frame';
 
 const SLOT = '\u2B1A';
 
@@ -166,12 +166,6 @@ export const Equation = EquationNode.extend<EquationOptions>({
         ];
     },
     addNodeView() {
-        // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.
-        return ReactNodeViewRenderer(EquationView, {
-            update: ({ updateProps }) => {
-                updateProps();
-                return true;
-            },
-        });
+        return ReactNodeViewRenderer(EquationView, RERENDER_ON_DECORATIONS);
     },
 });

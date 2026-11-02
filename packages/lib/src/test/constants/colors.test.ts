@@ -7,6 +7,7 @@ import {
     isLightColor,
     lightenColor,
     parseRgb,
+    readHexColor,
 } from '../../constants/colors';
 
 const ORDER = EIGEN_ACCENT_COLORS_SHUFFLED;
@@ -156,6 +157,23 @@ describe('isHexColor', () => {
         ['', [3]],
     ] as const)('%p is not a hex color of %p digits', (value, digits) => {
         expect(isHexColor(value, digits)).toBe(false);
+    });
+});
+
+describe('readHexColor', () => {
+    test.each([
+        ['#cfe2f3', '#cfe2f3'],
+        ['#CFE2F3', '#cfe2f3'],
+        ['#fff', null],
+        ['#cfe2f3ff', null],
+        ['rgb(207, 226, 243)', null],
+        ['red', null],
+        ['#cfe2f3; background-image: url(x)', null],
+        ['transparent', null],
+        [7, null],
+        [null, null],
+    ])('%p reads as %p', (value, color) => {
+        expect(readHexColor(value)).toBe(color);
     });
 });
 
