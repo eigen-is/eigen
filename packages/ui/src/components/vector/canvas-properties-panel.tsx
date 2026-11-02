@@ -65,7 +65,7 @@ type CanvasPropertiesPanelProps = {
     replaceElement: (id: string, partials: NewVectorElement[]) => string[];
     setSelectedIds: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
-    // Panel title with nothing selected; defaults to the canvas.
+    // The panel's title with nothing selected. Without one it is Canvas.
     emptyTitle?: string;
     // What the panel shows with nothing selected: the host's own rows about its surface, which the engine has no words
     // for, such as a drawing's background color.
@@ -73,7 +73,7 @@ type CanvasPropertiesPanelProps = {
     // The aspect lock. The editor owns it, so the panel's checkbox and the canvas's resize grips share one setting.
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;
-    // The deck's physical width in pt, so its text sizes read in pt; a drawing passes none and reads px.
+    // The deck's physical width in pt, so its text sizes read in pt. A drawing passes none and reads px.
     slideWidth?: number;
 };
 
@@ -128,7 +128,7 @@ export function CanvasPropertiesPanel({
 
     // The same fields on every selected element, in one undo step.
     const applyToAll = (fields: VectorElementPatch) => {
-        if (!selectedIds.length) return;
+        if (!has) return;
         sealed(undoManager, () => updateElements(selectedIds.map((id) => ({ id, fields }))));
     };
 
@@ -136,10 +136,10 @@ export function CanvasPropertiesPanel({
     // a typed number are each one undo step, not one per frame or per digit.
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
 
-    // A patch computed per element, for the writes one patch for all cannot express, such as a label's measured width.
-    // Still one undo step.
+    // A patch computed per element, for the writes one patch for all cannot express, such as a font size one step up
+    // from each element's own. Still one undo step.
     const applyToEach = (patch: (el: VectorElement) => VectorElementPatch) => {
-        if (!selectedElements.length) return;
+        if (!has) return;
         sealed(undoManager, () => updateElements(selectedElements.map((el) => ({ id: el.id, fields: patch(el) }))));
     };
 
@@ -151,7 +151,7 @@ export function CanvasPropertiesPanel({
     // The Transform rows. A width or height change goes through resizeLinearTo for a linear element, so its points
     // scale with the box.
     const applyTransform = (fields: VectorElementPatch) => {
-        if (!selectedIds.length) return;
+        if (!has) return;
         const resizesLinear = fields.width !== undefined || fields.height !== undefined;
         sealed(undoManager, () =>
             updateElements(
@@ -169,7 +169,7 @@ export function CanvasPropertiesPanel({
     // The two halves of the stored fill are edited apart, so each write keeps the other half of each element's fill.
     // Painting a selection with mixed hatches must not give them all one hatch. One undo step.
     const applyFill = (next: (fill: Fill) => Fill) => {
-        if (!selectedIds.length) return;
+        if (!has) return;
         sealed(undoManager, () =>
             updateElements(
                 selectedElements
@@ -189,7 +189,6 @@ export function CanvasPropertiesPanel({
             op,
         );
         if (!patches.length) return;
-        // A linear element's width/height goes through resizeLinearTo so its points scale with the box.
         sealed(undoManager, () =>
             updateElements(
                 patches.map((p) => {
