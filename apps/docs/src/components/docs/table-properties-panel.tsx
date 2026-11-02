@@ -30,7 +30,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
         },
     });
     const button = (command: TableCommand, className = 'text-xs') => {
-        const { icon: Icon, short, enabledBy }: TableAction = TABLE_ACTIONS[command];
+        const { icon: Icon, label, short = label, enabledBy }: TableAction = TABLE_ACTIONS[command];
         return (
             <Button
                 variant="outline"
@@ -108,7 +108,7 @@ export function TablePropertiesPanel({ editor }: TablePropertiesPanelProps) {
                     className="w-full"
                     onClick={() => editor.chain().focus().deleteTable().run()}
                 >
-                    <TABLE_ACTIONS.deleteTable.icon className="h-3.5 w-3.5 mr-1.5" /> {TABLE_ACTIONS.deleteTable.short}
+                    <TABLE_ACTIONS.deleteTable.icon className="h-3.5 w-3.5 mr-1.5" /> {TABLE_ACTIONS.deleteTable.label}
                 </Button>
             </div>
         </PropertiesPanel>

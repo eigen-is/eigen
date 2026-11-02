@@ -1,5 +1,5 @@
 // File › Page setup: Google Docs' two tabs, Pages and Page-less, which pick the doc's format for everyone. Pages holds
-// the paper and its margins; Page-less holds the reader's own text width, which only they see. A band's Header
+// the paper and its margins. Page-less holds the reader's own text width, which only they see. A band's Header
 // format… and Footer format… open the Headers and footers dialog beside it.
 
 import type { PageMargin, PageSetup } from '@workspace/lib/docs/eigendoc';
@@ -322,39 +322,41 @@ function HeadersAndFootersForm({ setup, onSetupChange }: Pick<PageSetupFormProps
 
     return (
         <FormDialogForm canSubmit={valid} submitLabel="Apply" onSubmit={() => onSetupChange(initial, candidate)}>
-            <FieldSet className="gap-3">
-                <FieldLegend variant="label">Margins</FieldLegend>
-                {DISTANCE_FIELDS.map(({ key, label }) => (
-                    <Field key={key} orientation="horizontal">
-                        <FieldLabel htmlFor={`headers-and-footers-${key}`}>{label}</FieldLabel>
-                        <CmInput
-                            id={`headers-and-footers-${key}`}
-                            value={text[key]}
-                            onValueChange={(value) => setText({ ...text, [key]: value })}
-                        />
-                    </Field>
-                ))}
-                {!valid && (
-                    <FieldError>
-                        The header must be 0 to {marginText(initial.margin.top)} cm from the top and the footer 0 to{' '}
-                        {marginText(initial.margin.bottom)} cm from the bottom, within their margins.
-                    </FieldError>
-                )}
-            </FieldSet>
+            <div className="flex flex-col gap-6">
+                <FieldSet className="gap-3">
+                    <FieldLegend variant="label">Margins</FieldLegend>
+                    {DISTANCE_FIELDS.map(({ key, label }) => (
+                        <Field key={key} orientation="horizontal">
+                            <FieldLabel htmlFor={`headers-and-footers-${key}`}>{label}</FieldLabel>
+                            <CmInput
+                                id={`headers-and-footers-${key}`}
+                                value={text[key]}
+                                onValueChange={(value) => setText({ ...text, [key]: value })}
+                            />
+                        </Field>
+                    ))}
+                    {!valid && (
+                        <FieldError>
+                            The header must be 0 to {marginText(initial.margin.top)} cm from the top and the footer 0 to{' '}
+                            {marginText(initial.margin.bottom)} cm from the bottom, within their margins.
+                        </FieldError>
+                    )}
+                </FieldSet>
 
-            <FieldSet className="gap-3">
-                <FieldLegend variant="label">Layout</FieldLegend>
-                <div className="flex items-center gap-2">
-                    <Checkbox
-                        id="headers-and-footers-first-page"
-                        checked={differentFirstPage}
-                        onCheckedChange={(checked) => setDifferentFirstPage(checked === true)}
-                    />
-                    <Label htmlFor="headers-and-footers-first-page" className="font-normal">
-                        Different first page
-                    </Label>
-                </div>
-            </FieldSet>
+                <FieldSet className="gap-3">
+                    <FieldLegend variant="label">Layout</FieldLegend>
+                    <div className="flex items-center gap-2">
+                        <Checkbox
+                            id="headers-and-footers-first-page"
+                            checked={differentFirstPage}
+                            onCheckedChange={(checked) => setDifferentFirstPage(checked === true)}
+                        />
+                        <Label htmlFor="headers-and-footers-first-page" className="font-normal">
+                            Different first page
+                        </Label>
+                    </div>
+                </FieldSet>
+            </div>
         </FormDialogForm>
     );
 }
