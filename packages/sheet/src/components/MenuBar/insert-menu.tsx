@@ -18,7 +18,6 @@ import {
     autoSelectionFormula,
     getFlowdata,
     handleLink,
-    handleSum,
     insertChartFromSelection,
     insertCheckbox,
     tryInsertRowCol,
@@ -27,6 +26,7 @@ import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
 // The Auto SUM functions after SUM, which has its own handler.
 const AUTO_SUM_FUNCTIONS = [
+    { formula: 'SUM', label: 'Sum (SUM)' },
     { formula: 'AVERAGE', label: 'Average' },
     { formula: 'COUNT', label: 'Count' },
     { formula: 'MAX', label: 'Max' },
@@ -140,23 +140,16 @@ export function InsertMenu() {
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>Auto SUM</DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                    <DropdownMenuItem
-                        onClick={() => {
-                            setContext((ctx) => {
-                                handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache);
-                            });
-                        }}
-                    >
-                        Sum (SUM)
-                    </DropdownMenuItem>
                     {AUTO_SUM_FUNCTIONS.map(({ formula, label }) => (
                         <DropdownMenuItem
                             key={formula}
                             onClick={() => {
                                 setContext((ctx) => {
+                                    const cellInput = refs.cellInput.current;
+                                    if (!cellInput) return;
                                     autoSelectionFormula(
                                         ctx,
-                                        refs.cellInput.current!,
+                                        cellInput,
                                         refs.fxInput.current,
                                         formula,
                                         refs.globalCache,
