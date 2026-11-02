@@ -13,9 +13,8 @@ import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { ApiError } from '../lib/core/errors';
 import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';
-import { getUniqueFileName } from '../lib/drive/naming';
+import { withFreeName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
-import { foldName } from '../lib/mount/names';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -81,24 +80,28 @@ export const chatRouter = new Elysia({ name: 'chat' })
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
             // The wizard checks this too, but the route must, because an empty name would create and share
             // a bare '.eigenchat' dotfile.
-            let fileName = body.fileName.trim().normalize('NFC');
+            const fileName = body.fileName.trim().normalize('NFC');
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
             // A chat the wizard named gets a free name beside its siblings, and a name the user typed is a
-            // 409 on a clash. Two creates of one name at once can both pass this check, and then the
-            // unique index answers 409 for the second. The free name is picked with the extension on,
-            // because Drive.create adds it again.
-            if (body.dedupeName) {
-                const desired = withEigenExtension(fileName, DRIVE_TYPE_CHAT);
-                const siblings = await drive.getFolderContents(params.mountId, parentId);
-                const used = new Set(siblings.map((s) => foldName(s.name)));
-                if (used.has(foldName(desired))) {
-                    fileName = stripEigenExtension(getUniqueFileName(desired, used));
-                }
-            }
-            const chat = await drive.create(params.mountId, parentId, fileName, DRIVE_TYPE_CHAT, user);
+            // 409 on a clash. The free name is picked with the extension on, because Drive.create adds it
+            // again.
+            const create = (name: string) => drive.create(params.mountId, parentId, name, DRIVE_TYPE_CHAT, user);
+            const folder = {
+                ownerId: params.ownerId,
+                mountId: params.mountId,
+                parentId,
+                isTaken: async (name: string) => (await drive.getChildByName(params.mountId, parentId, name)) !== null,
+                childNames: async () =>
+                    (await drive.getFolderContents(params.mountId, parentId)).map((child) => child.name),
+            };
+            const chat = body.dedupeName
+                ? await withFreeName(folder, withEigenExtension(fileName, DRIVE_TYPE_CHAT), (name) =>
+                      create(stripEigenExtension(name)),
+                  )
+                : await create(fileName);
 
             // A wizard chat is shared from the start. When the share fails, the new chat goes again
             // instead of staying unshared. No share email goes out, but the notification and the event
