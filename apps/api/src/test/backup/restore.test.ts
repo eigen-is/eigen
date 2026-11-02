@@ -793,7 +793,7 @@ describe('Backup restoreHome', () => {
         const homeDir = join(TEST_DATA_DIR, 'home', target.id);
         const jobId = `restore-rollback-fails-${Date.now()}`;
         const epochSpy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
-            throw new ApiError(500, 'failed by the test');
+            throw new Error('failed by the test');
         });
         const rename = nodeFs.renameSync;
         const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
@@ -802,7 +802,10 @@ describe('Backup restoreHome', () => {
             rename(from, to);
         });
         try {
-            await expect(restoreHome(artifact, target.id, jobId)).rejects.toThrow('failed by the test');
+            const failed = await restoreHome(artifact, target.id, jobId).catch((error: unknown) => error);
+            // A failure that is not an ApiError is the server's own.
+            expect(failed instanceof ApiError && failed.status).toBe(500);
+            expect(failed instanceof Error && failed.message).toContain('failed by the test');
         } finally {
             epochSpy.mockRestore();
             renameSpy.mockRestore();
@@ -824,7 +827,7 @@ describe('Backup restoreHome', () => {
         const before = await rootNames(target.sessionToken, target.id, mountId, rootId);
         const homeDir = join(TEST_DATA_DIR, 'home', target.id);
         const epochSpy = spyOn(dataEpochModule, 'rotateHomeDataEpoch').mockImplementation(async () => {
-            throw new ApiError(500, 'failed by the test');
+            throw new ApiError(409, 'failed by the test');
         });
         const rename = nodeFs.renameSync;
         const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
@@ -833,9 +836,14 @@ describe('Backup restoreHome', () => {
             rename(from, to);
         });
         try {
-            // The admin sees only the job's error, so it says why the home answers 503 and what puts it back.
-            await expect(restoreHome(artifact, target.id, `restore-left-aside-${Date.now()}`)).rejects.toThrow(
-                'failed by the test, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen restart',
+            const failed = await restoreHome(artifact, target.id, `restore-left-aside-${Date.now()}`).catch(
+                (error: unknown) => error,
+            );
+            // The admin sees only the job's error, so it says why the home answers 503 and what puts it back. The
+            // first failure's status stays, so a refusal is not reported as the server's fault.
+            expect(failed instanceof ApiError && failed.status).toBe(409);
+            expect(failed instanceof Error && failed.message).toBe(
+                'failed by the test, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen stop, then ./eigen restart',
             );
         } finally {
             epochSpy.mockRestore();

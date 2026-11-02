@@ -286,9 +286,11 @@ async function replaceHomeFolder<Judged>(
                         rollbackError,
                     );
                     // The job's error is all an admin learns of it, beside a 503 and a second restore refused as running.
+                    // A restart alone leaves a running API as it is, so only a stop first runs the boot that puts the
+                    // home back. A refusal keeps its own status: it is not the server's fault.
                     throw new ApiError(
-                        500,
-                        `${describeError(error)}, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen restart`,
+                        error instanceof ApiError ? error.status : 500,
+                        `${describeError(error)}, and the home could not be put back. The account is shut until Eigen restarts, which puts it back: run ./eigen stop, then ./eigen restart`,
                         { cause: error },
                     );
                 }
