@@ -109,6 +109,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
 - **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
 - **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
+- **Keys after the command palette** — closing the palette puts the focus back where it was, such as on a Drive list, so the arrow keys work there without a click
+- **Keys after a preview** — closing a preview opened from a file's menu or the command palette puts the focus back where you were, such as on the Drive list, so the arrow keys work without a click
 - **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
 - **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
 - **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
