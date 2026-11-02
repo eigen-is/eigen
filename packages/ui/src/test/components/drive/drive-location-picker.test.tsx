@@ -1,7 +1,7 @@
 // A location picker whose create or save fails stays open with the typed name, even when the server refused it: a
 // read-only folder (403) or a name it won't take (422) is fixed by picking another folder or editing the name, which
 // a closed dialog would throw away. Only a yes/no ConfirmDialog closes on a refusal (confirm-dialog.test.tsx).
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -10,7 +10,11 @@ installHappyDom();
 const session = { user: { id: 'owner-1' } };
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
+// A copy, because mock.module rewrites the loaded module in place, and afterAll puts the original back for the
+// field's own test.
+const realLocationField = { ...(await import('../../../components/drive/drive-location-field')) };
 mock.module('../../../components/drive/drive-location-field', () => ({ DriveLocationField: () => null }));
+afterAll(() => mock.module('../../../components/drive/drive-location-field', () => realLocationField));
 
 const { act, createElement } = await import('react');
 const { AppError, onMutationError } = await import('@workspace/lib/api-error');

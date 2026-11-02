@@ -1,6 +1,6 @@
 // After a partial failure, Save to Drive retries only the files that failed, so the ones that copied don't
 // land twice, and its title counts what is left. Closing the picker forgets the failure.
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -11,7 +11,11 @@ installHappyDom();
 const session = { user: { id: 'owner-1' } };
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
+// A copy, because mock.module rewrites the loaded module in place, and afterAll puts the original back for the
+// field's own test.
+const realLocationField = { ...(await import('../../../components/drive/drive-location-field')) };
 mock.module('../../../components/drive/drive-location-field', () => ({ DriveLocationField: () => null }));
+afterAll(() => mock.module('../../../components/drive/drive-location-field', () => realLocationField));
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;

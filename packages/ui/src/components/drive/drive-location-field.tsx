@@ -1,3 +1,7 @@
+// The Location field of a folder picker, such as Save to Drive or a chat's new room: a bar that shows the chosen
+// folder as a crumb row, with a Drive browser under it to pick another. The host owns the value and whether the
+// browser is open. Open, the crumbs and New folder act on the browser, and the bar's toggle closes it.
+
 import { useAuth } from '@workspace/lib/auth';
 import { useBreadcrumb, useRootFolder } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -18,9 +22,9 @@ type DriveLocationFieldProps = {
     onChange: (value: DriveLocationValue) => void;
     expanded: boolean;
     onExpandedChange: (expanded: boolean) => void;
-    // false hides the breadcrumb header and shows only the browser (the always-expanded save-as flow).
+    // False shows the browser alone, with no Location bar, for a picker that is always open, such as Save as.
     collapsible?: boolean;
-    // Restricts the mount list to the user's own drive, hiding team/shared mounts.
+    // Shows only the user's own drive, without team or shared mounts.
     ownMountsOnly?: boolean;
 };
 
@@ -48,9 +52,8 @@ export function DriveLocationField({
         [onChange],
     );
 
-    // Resolve an empty folderId to the mount root as soon as it's known: collapsed, DriveBrowser
-    // never mounts to emit it; expanded, its async emit can lose a race with an immediate submit
-    // (a cold root query + a fast "Move here" would otherwise confirm folderId '').
+    // An empty folderId becomes the mount's root as soon as the root is known. Collapsed, the browser never
+    // mounts to report it. Open, its report can come after a quick submit, which would then confirm no folder.
     useEffect(() => {
         if (!value.folderId && rootFolder) {
             onChange({ ...value, folderId: rootFolder.id });
@@ -62,11 +65,10 @@ export function DriveLocationField({
             {collapsible && (
                 <div className="px-6 pb-2">
                     <Label className="text-sm text-muted-foreground">Location</Label>
-                    <InfoBlock
-                        className="mt-1.5 w-full cursor-pointer gap-1.5 text-sm hover:bg-muted"
-                        onClick={() => onExpandedChange(!expanded)}
-                    >
-                        <div className="flex-1 min-w-0" onClick={expanded ? (e) => e.stopPropagation() : undefined}>
+                    {/* Collapsed, the toggle's hit area stretches over the whole bar. Open, it shrinks to its own box,
+                        so the crumbs before it stay clickable. */}
+                    <InfoBlock className="relative mt-1.5 w-full gap-1.5 text-sm hover:bg-muted">
+                        <div className="flex-1 min-w-0">
                             <DriveBreadcrumb
                                 paths={breadcrumbPaths}
                                 mountLabel={mountLabel}
@@ -76,23 +78,32 @@ export function DriveLocationField({
                         </div>
                         <div className="flex items-center gap-0.5 flex-shrink-0">
                             {expanded && (
-                                <div onClick={(e) => e.stopPropagation()}>
-                                    <TooltipButton
-                                        icon={FolderPlus}
-                                        tooltipText="New folder"
-                                        variant="ghost"
-                                        className="h-7 w-7"
-                                        onClick={() => setCreateFolderOpen(true)}
-                                    />
-                                </div>
+                                <TooltipButton
+                                    icon={FolderPlus}
+                                    tooltipText="New folder"
+                                    variant="ghost"
+                                    className="h-7 w-7"
+                                    onClick={() => setCreateFolderOpen(true)}
+                                />
                             )}
-                            {!expanded && <span className="text-xs text-muted-foreground mr-1">Change</span>}
-                            <ChevronDown
+                            <button
+                                type="button"
+                                aria-label="Change location"
+                                aria-expanded={expanded}
                                 className={cn(
-                                    'h-4 w-4 text-muted-foreground transition-transform duration-200',
-                                    expanded && 'rotate-180',
+                                    'flex cursor-pointer items-center gap-0.5 outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50',
+                                    expanded && 'relative',
                                 )}
-                            />
+                                onClick={() => onExpandedChange(!expanded)}
+                            >
+                                {!expanded && <span className="text-xs text-muted-foreground mr-1">Change</span>}
+                                <ChevronDown
+                                    className={cn(
+                                        'h-4 w-4 text-muted-foreground transition-transform duration-200',
+                                        expanded && 'rotate-180',
+                                    )}
+                                />
+                            </button>
                         </div>
                     </InfoBlock>
                 </div>
@@ -109,8 +120,7 @@ export function DriveLocationField({
                         showNewFolder
                         hideToolbar
                         hideHeader
-                        // Folder picker: pin name-ascending (folders-first is built into the
-                        // comparator); the header is hidden so there's nothing to toggle.
+                        // Folders always sort first, then by name, A to Z. The header that would change the sort is hidden.
                         sort={{ key: 'name', dir: 'asc' }}
                         ownMountsOnly={ownMountsOnly}
                         createFolderOpen={createFolderOpen}
