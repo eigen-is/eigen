@@ -284,6 +284,8 @@ The op log, its order and how edits reach the undo stack ([SHEETS.md](SHEETS.md#
 
 - [ ] **A batch recorded before a peer's row insert writes at the rows it recorded**: ops are not transformed ([SHEETS.md](SHEETS.md#every-tab-applies-the-batches-in-the-logs-order)). When the log puts a peer's insert first, a late batch's cell writes land on the cells that moved into place, and a write into one field of a cell that is now empty doesn't resolve, so the whole batch is dropped on every tab and in the replay. Fix: have the receiver shift a late batch's cell paths by the row and column ops it overtook, or write whole cells. **M**
 
+- [ ] **A refused row op's rollback depends on the order a tab applies the batches**: a batch whose row op the sheet refuses rolls back whole (`insertRowColOf` in `engine/replay-ops.ts`), and whether the sheet refuses it depends on the batches applied before it. The case to pin is two peers inserting rows at once near the 10,000-row limit: each author applies its own insert first, and a joiner refuses the one the log puts second. Found in review and not reproduced yet; pin it over two tabs and a joiner through the log-order replay (`replayOps` in `components/Workbook/api.ts`). **S**
+
 - [ ] **Two rules added at once at the rule cap leave the tabs apart until a reload**: on a sheet with 1,023 validation rules, two peers each add one. Each tab keeps its own and drops the peer's as past `MAX_VALIDATIONS` (`validationIds` in `packages/lib/src/sheets/yjs-ops.ts`), while a joiner keeps the one the log puts first. The two adds write different ids, so they commute and no tab applies the log again. Fix: a rule add that the cap could drop does not commute. **S**
 
 ## Performance

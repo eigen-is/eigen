@@ -59,6 +59,7 @@ import {
     SHEET_HOTKEYS,
     selectionCache,
     sheetChartClipboardItem,
+    stepNewestEntry,
     undoEntry,
     ValidationLimitError,
     warmFormulaCellInfoMapOnIdle,
@@ -264,23 +265,19 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const handleUndo = useCallback(() => {
             if (contextRef.current.allowEdit === false) return;
             const { undoList, redoList } = globalCache.current;
-            const entry = undoList.pop();
-            if (!entry) return;
-            redoList.push(entry);
-            const { ctx, ops } = undoEntry(contextRef.current, entry);
-            commit(ctx);
-            if (ops.length > 0) onOp?.(ops);
+            const step = stepNewestEntry(contextRef.current, undoList, redoList, undoEntry);
+            if (!step) return;
+            commit(step.ctx);
+            if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
         const handleRedo = useCallback(() => {
             if (contextRef.current.allowEdit === false) return;
             const { undoList, redoList } = globalCache.current;
-            const entry = redoList.pop();
-            if (!entry) return;
-            undoList.push(entry);
-            const { ctx, ops } = redoEntry(contextRef.current, entry);
-            commit(ctx);
-            if (ops.length > 0) onOp?.(ops);
+            const step = stepNewestEntry(contextRef.current, redoList, undoList, redoEntry);
+            if (!step) return;
+            commit(step.ctx);
+            if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
         useEffect(() => {

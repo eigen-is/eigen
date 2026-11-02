@@ -2,7 +2,7 @@
 // redo take the context and an entry and return the next context and the batch to send. A cell or field entry skips a
 // target a peer changed since. A sheet, row or column entry builds ops and applies exactly those, through
 // applyOpBatch, as its peers will. A cell, field, row or column step recalculates the formulas it writes back. The
-// Workbook keeps the stacks and calls these from, for example, handleUndo.
+// Workbook keeps the stacks, and stepNewestEntry runs an entry and moves it from one stack to the other.
 
 import { isRecord } from '@workspace/lib/guards';
 import type { MergeCell } from '@workspace/lib/sheets';
@@ -36,7 +36,8 @@ import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-e
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
-type Step = { ctx: Context; ops: Op[] };
+// A row or column step the sheet refused sends nothing, and its entry stays on its stack.
+type Step = { ctx: Context; ops: Op[]; refused?: boolean };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
 // adds the deleted sheet, and keeps only that: its undo and redo are ops, and its patches would hold the whole sheet
@@ -85,6 +86,23 @@ export function pushEntry(stack: History[], entry: History) {
 function holdsWholeMatrices({ patches, inversePatches, options }: History): boolean {
     const whole = ({ path }: Patch) => path.length === 2 || (path.length === 3 && path[2] === 'data');
     return options?.deletedSheet != null || patches.some(whole) || inversePatches.some(whole);
+}
+
+// Runs the newest entry of `from` and moves it onto `to`: an undo takes it from the undo stack to the redo stack, and a
+// redo back. A step the sheet refused stays where it was, so both stacks still hold every step in order.
+export function stepNewestEntry(
+    ctx: Context,
+    from: History[],
+    to: History[],
+    step: (ctx: Context, entry: History) => Step,
+): Step | undefined {
+    const entry = from.at(-1);
+    if (!entry) return undefined;
+    const next = step(ctx, entry);
+    if (next.refused) return next;
+    from.pop();
+    to.push(entry);
+    return next;
 }
 
 export function undoEntry(ctx: Context, entry: History): Step {
@@ -262,15 +280,25 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const trial = (start: Context) => applyOpBatch({ ...start, formulaCache: new FormulaCache() }, [marker]);
     const made = trial(applyPatches(ctx, left));
     const live = trial(ctx);
-    if (!made || !live) return { ctx, ops: [] };
+    if (!made || !live) return refusedStep(ctx);
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };
     const writes = restoredRuleWrites(index, target, restored, made.ctx, live.ctx);
     const applied = applyBatch(ctx, patchToOp(restored, writes, options, step));
-    if (applied.ops.length === 0) return applied;
+    if (applied.ops.length === 0) return refusedStep(ctx);
     const [repaired] = opToPatch(applied.ctx, step.repair);
     const [next, recalculated] = produceWithPatches(applied.ctx, (draft: Context) => recalculate(draft, repaired));
     return { ctx: next, ops: [...applied.ops, ...patchToOp(next, filterPatch(recalculated))] };
+}
+
+// The sheet refuses a row or column op that would change a read-only row or column, or grow past its size limit. A peer
+// can make that true of a step after the step was recorded.
+function refusedStep(ctx: Context): Step {
+    const next = produce(ctx, (draft: Context) => {
+        draft.warnDialog =
+            "This row or column change can't be undone or redone now: a row or column it changes is read-only, or the sheet is at its size limit.";
+    });
+    return { ctx: next, ops: [], refused: true };
 }
 
 // The edited sheet's fields as a row or column step leaves them: each as the marker makes it of the live sheet, but a

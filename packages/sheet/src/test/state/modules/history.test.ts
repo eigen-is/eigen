@@ -438,6 +438,43 @@ describe("an open cell editor follows a peer's row or column op", () => {
     });
 });
 
+// A row step the sheet now refuses sends nothing and says why. Its entry stays where it was, so the stacks still
+// hold every step in order, and the step runs once the row may change again.
+test('an undo or redo whose row op a read-only row refuses stays on its stack and says why', () => {
+    const s = session(workbook());
+    s.edit(s.a, ...insertRows(4, 1));
+    const [entry] = s.a.history.undoList;
+    const readOnly = (rows: Record<number, number>) =>
+        s.edit(s.b, (ctx) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: rows };
+        });
+    const refused = (step: () => void) => {
+        const sent = s.batches.length;
+        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
+            ctx.warnDialog = undefined;
+        });
+        step();
+        expect(s.batches.length).toBe(sent);
+        expect(s.a.ctx.warnDialog).toBe(
+            "This row or column change can't be undone or redone now: a row or column it changes is read-only, or the sheet is at its size limit.",
+        );
+    };
+
+    readOnly({ 4: 1 });
+    refused(() => s.undo(s.a));
+    expect(s.a.history).toEqual({ undoList: [entry], redoList: [] });
+
+    readOnly({});
+    s.undo(s.a);
+    expect(s.a.history).toEqual({ undoList: [], redoList: [entry] });
+    expect(s.a.ctx.sheets[0].data?.length).toBe(40);
+
+    readOnly({ 4: 1 });
+    refused(() => s.redo(s.a));
+    expect(s.a.history).toEqual({ undoList: [], redoList: [entry] });
+    expectAgree(s);
+});
+
 // A joiner and the server read the stored cells of every sheet a batch doesn't name, so a row op must move the
 // formulas there as the live tabs move them in their matrices.
 describe("a row op moves another sheet's formulas for every reader", () => {
