@@ -200,7 +200,7 @@ The overlay opens over other modals, such as a Stickies card whose attachment it
 
 A hand-rolled overlay over a Radix modal breaks all of that. The card under it keeps the focus, so Space presses a hidden button in the card. Its scroll lock cancels the wheel in the overlay, so a long text preview can't scroll. And the card takes a click on the overlay's backdrop for a click outside it, and closes too. `useFocusTrap` is only for an overlay that never opens over a Radix modal.
 
-The content fills the screen, so a click on the dark backdrop lands inside the dialog, and the overlay closes itself on it. On open the focus goes to the content itself rather than to its first button, so Space closes the overlay. The overlay has no Radix trigger, so on close it gives the focus back to whatever had it when it opened, such as the attachment chip in the card.
+The content fills the screen, so a click on the dark backdrop lands inside the dialog, and the overlay closes itself on it. On open the focus goes to the content itself rather than to its first button, so Space closes the overlay. The overlay has no Radix trigger, so it gives the focus back itself on close. A row's menu or the command palette that opened it is gone by then, but as that layer closed it focused the list it came from, and the overlay's focus trap took the focus back. So while it is open the overlay remembers, with a `focusin` listener on the document, the last element outside it that took the focus, and on close it focuses that element if it is still on the page. Otherwise it focuses whatever had the focus when it opened, such as the attachment chip in the card, and with neither it leaves the focus to Radix.
 
 ## The overlay's own keys act only on a key pressed inside it
 
