@@ -14,7 +14,6 @@ export type SidebarItemProps = {
     to?: string;
     href?: string;
     params?: Record<string, string>;
-    isActive?: boolean;
     colorDot?: string;
     onClick?: (e: MouseEvent) => void;
     condensed?: boolean;
@@ -29,7 +28,6 @@ export function SidebarItem({
     to,
     href,
     params,
-    isActive,
     colorDot,
     onClick,
     condensed = false,
@@ -42,7 +40,7 @@ export function SidebarItem({
         'flex items-center rounded-md px-2.5 py-1.5 text-sm font-normal select-none eigen-ket-end',
         // A Button centers its content. A list of labels reads better from the left edge, as links do.
         condensed ? 'justify-center' : 'justify-start gap-2.5 text-left',
-        isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+        'text-muted-foreground hover:bg-muted hover:text-foreground',
         className,
     );
 
@@ -67,12 +65,7 @@ export function SidebarItem({
                     setSidebarOpen(false);
                 }}
                 className={baseStyles}
-                activeProps={{
-                    className: 'bg-primary/10 text-primary',
-                }}
-                inactiveProps={{
-                    className: 'text-muted-foreground hover:bg-muted hover:text-foreground',
-                }}
+                activeProps={{ className: 'bg-primary/10 text-primary' }}
                 activeOptions={{ exact }}
             >
                 {content}
