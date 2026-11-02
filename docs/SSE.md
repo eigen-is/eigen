@@ -64,6 +64,14 @@ A tab keeps its epochs in sessionStorage, so the next page it loads still holds 
 
 The owner reloads in every app, and so does every member of a restored team, because those are the homes a stream announces. A user who only has something shared from the home keeps their tabs. Their open documents of it reload through the collab socket ([COLLAB.md](COLLAB.md#home-replacement-closes-every-socket)).
 
+## The restart notice goes to every open stream
+
+Before `./eigen update`, `rollback` or `restore` stops Eigen, the launcher tells the running API through the control socket, so every tab can warn its user to save first ([SELF-HOSTING.md § An update, rollback or restore warns the open tabs first](SELF-HOSTING.md#an-update-rollback-or-restore-warns-the-open-tabs-first)). The notice is in-memory state of the API process (`apps/api/src/lib/config/restart-notice.ts`): its reason (`update` or `rollback`, `RESTART_REASONS`), its time and the operator's message. A restart of the process drops it, which is right, since that is the restart it announced.
+
+`server:restart-notice` carries `msLeft`, counted when the event is sent, never a clock time, so a browser whose clock is off still counts down right. Every stream sends it when it opens, with `notice: null` when there is none, so a tab that reconnects to the restarted server drops the banner it held. Nothing goes on the keepalive. A change goes out at once to every loaded home's listeners through `broadcastToLoadedHomes` (`apps/api/src/lib/home/get-home.ts`). That is no push across homes: it reads no home's data, opens no home, and a home without a loaded instance has no open stream to tell.
+
+A notice whose restart has not come five minutes after its time drops itself and tells the streams, for a launcher killed before it could take the notice back. The timer is fixed: a new notice starts it over, and nothing else holds it, such as a running backup. `apps/api/src/test/cli/control.test.ts` and `apps/api/src/test/server/sse.test.ts` pin the routes, the expiry and the bytes after the keepalive.
+
 ## A new domain adds four pieces
 
 1. The event type in `packages/lib/src/types/sse.ts`: its entry in `SSEventType` and its member of the `SSEvent` union.

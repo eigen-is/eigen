@@ -19,6 +19,10 @@ UNSTAGE='cli_as 0 rm -rf data/.restoring'
 LOG=.eigen/last-step.log
 # POSIX sleep only takes whole seconds; the spinner falls back to 1 where 0.2 fails.
 TICK=0.2
+# The longest --in wait and message: MAX_RESTART_WAIT_SECONDS and MAX_RESTART_MESSAGE_LENGTH in
+# packages/lib/src/validation/restart.ts.
+MAX_WAIT=3600
+MAX_MESSAGE=200
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
     ACCENT=$(printf '\033[1;36m') GREEN=$(printf '\033[32m') RED=$(printf '\033[31m')
@@ -78,13 +82,15 @@ EOF
             ;;
         restore)
             cat <<EOF
-Usage: ./eigen restore <archive> [--yes] [--s3-from-archive]
+Usage: ./eigen restore <archive> [--in <time> [message]] [--yes] [--s3-from-archive]
 
 Puts a whole-server backup back: a name in backups/, or the path of an archive. It is
 unpacked and checked while Eigen runs; then Eigen stops, data/ and .env.production are
 swapped for the archive's, and Eigen starts on the version it was made with. What it
 replaces is kept aside. On a new machine with Docker, it sets Eigen up from the archive.
 
+  --in <time>         Warn everyone first, then wait before the stop: 10m, 90s, up to 1h. A
+                      message after the time goes with the warning. Ctrl+C cancels.
   --yes               Do not ask
   --s3-from-archive   Upload the files an archive with S3 files holds under fresh keys,
                       instead of keeping each bucket as it is
@@ -99,13 +105,18 @@ EOF
             ;;
         update)
             cat <<EOF
-Usage: ./eigen update [version] [--check] [--accept-breaking] [--full | --no-backup]
+Usage: ./eigen update [version] [--in <time> [message]] [--check] [--accept-breaking]
+                     [--full | --no-backup]
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
 the backup ./eigen rollback goes back to: a light one, of the accounts, settings and
 databases, unless the new version lists breaking changes or marks a change (full backup),
-when it is full. ./eigen update main follows the main channel instead of releases.
+when it is full. ./eigen update main follows the main channel instead of releases. Every open
+tab is told before Eigen restarts.
 
+  --in <time>         Warn everyone first, then wait: 10m, 90s, up to 1h. A message after the
+                      time goes with the warning, as with shutdown: --in 10m "Back at three".
+                      Ctrl+C cancels, and so does a lost SSH session: run a long wait in tmux.
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
   --full              Make a full backup, files and mail too
@@ -115,7 +126,7 @@ EOF
         rollback)
             kept=$(pre_update_archives | sed 's/^/  /')
             cat <<EOF
-Usage: ./eigen rollback [--yes]
+Usage: ./eigen rollback [--in <time> [message]] [--yes]
 
 Goes back to the version before the last ./eigen update, with the backup it made first. After
 a light one, the accounts, settings and databases are as they were then, and mail as it is now.
@@ -126,7 +137,9 @@ not open. The current data is kept aside.
 To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:
 ${kept:-  none}
 
-  --yes   Do not ask
+  --in <time>   Warn everyone first, then wait before the stop: 10m, 90s, up to 1h. A message
+                after the time goes with the warning. Ctrl+C cancels.
+  --yes         Do not ask
 EOF
             ;;
         restart)
@@ -147,12 +160,15 @@ EOF
     esac
 }
 
-# refuse <command> <argument>: an argument the command does not take, with its usage.
-refuse() {
-    printf 'Unknown argument "%s".\n\n' "$2" >&2
+# refuse_usage <command> <why>: a wrong argument, said why, with the command's usage.
+refuse_usage() {
+    printf '%s\n\n' "$2" >&2
     command_usage "$1" >&2
     exit 2
 }
+
+# refuse <command> <argument>: an argument the command does not take.
+refuse() { refuse_usage "$1" "Unknown argument \"$2\"."; }
 
 # help_flag <command> <argument…>: --help among them prints its usage.
 help_flag() {
@@ -176,6 +192,52 @@ arguments() {
         shift "$takes"
         refuse "$command" "$1"
     fi
+}
+
+# in_argument <command> <argument>: takes --in, its time and the message that may follow it, as shutdown takes
+# `+10 "message"`, into IN_SECONDS and IN_MESSAGE. Returns 1 for any other argument, which the command parses itself.
+# A time is digits and s, m or h, or 0 alone, so a bare 10 never waits ten seconds for someone who meant minutes.
+# Checked before anything runs; dash counts the message in bytes, so one with accents may hold fewer characters.
+IN_TIME='' IN_SECONDS=0 IN_MESSAGE='' IN_NEXT=''
+in_argument() {
+    case $IN_NEXT in
+        time)
+            IN_TIME=$2 IN_NEXT=message
+            number=${2%[smh]}
+            case $2 in
+                0) return 0 ;;
+                *s) unit=1 ;;
+                *m) unit=60 ;;
+                *h) unit=3600 ;;
+                *) number='' ;;
+            esac
+            case $number in '' | *[!0-9]*)
+                refuse_usage "$1" "--in takes a time with its unit, such as 10m, 90s or 1h, or 0; not \"$2\"."
+                ;;
+            esac
+            # Without its leading zeros, which $(( )) would read as octal.
+            number=${number#"${number%%[!0]*}"}
+            if [ ${#number} -gt 4 ] || [ $((${number:-0} * unit)) -gt "$MAX_WAIT" ]; then
+                refuse_usage "$1" "--in waits an hour at most."
+            fi
+            IN_SECONDS=$((${number:-0} * unit))
+            return 0
+            ;;
+        message)
+            IN_NEXT=''
+            case $2 in -*) return 1 ;; esac
+            if [ ${#2} -gt "$MAX_MESSAGE" ]; then refuse_usage "$1" "The message is over $MAX_MESSAGE characters."; fi
+            IN_MESSAGE=$2
+            return 0
+            ;;
+    esac
+    if [ "$2" != --in ]; then return 1; fi
+    IN_NEXT=time
+}
+
+# need_in_time <command>: after the arguments, a --in without its time is refused.
+need_in_time() {
+    if [ "$IN_NEXT" = time ]; then refuse_usage "$1" "--in takes a time, such as 10m."; fi
 }
 
 # The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
@@ -611,6 +673,59 @@ before_stop() {
     done
 }
 
+# warn_restart <reason>: when Eigen runs, tells every open tab that it restarts, for an update or a rollback, then
+# waits out --in. From here an exit, Ctrl+C or a hangup takes the notice back through AT_EXIT, so no tab warns of a
+# restart that does not come. dash runs no EXIT trap on a hangup it does not trap.
+warn_restart() {
+    if ! api_running; then return 0; fi
+    AT_EXIT="${AT_EXIT:+$AT_EXIT; }unannounce"
+    trap 'exit 129' HUP
+    announce "$IN_SECONDS" "$1"
+    if [ "$IN_SECONDS" -gt 0 ]; then countdown; fi
+}
+
+# announce <seconds> <reason>: the notice of a restart in <seconds>, with IN_MESSAGE, on the running API. One with a
+# wait is a step, since the wait warns nobody when it fails. One for now is best-effort: an API that cannot take it
+# holds nothing up.
+announce() {
+    if [ "$1" = 0 ]; then
+        api_cli restart-notice --in 0 --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
+            </dev/null >/dev/null 2>&1 || say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
+        return 0
+    fi
+    step "Telling the open tabs that Eigen restarts" "Told the open tabs" \
+        "Could not tell the open tabs; Eigen runs on as it was" \
+        api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"}
+    RESTART_AT=$(answer at "$(cat "$LOG")" | sed 's/T/ /; s/\.[0-9]*Z$/ UTC/')
+}
+
+# unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
+unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
+
+# countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
+# sees one line count down, as shutdown warns; a log gets it once.
+countdown() {
+    end=$(($(date +%s) + IN_SECONDS)) left=$IN_SECONDS
+    if [ -n "$IN_MESSAGE" ]; then say "$GRAY" '│' "$IN_MESSAGE"; fi
+    trap 'if [ -t 1 ]; then printf "\r\033[K" || :; fi
+        say "$RED" "■" "The wait was cancelled. Eigen runs on as it was." >&2; exit 130' INT TERM
+    while [ "$left" -gt 0 ]; do
+        remaining=${left}s
+        if [ "$left" -ge 60 ]; then remaining="$((left / 60))m $((left % 60))s"; fi
+        line="Eigen restarts for the $COMMAND at $RESTART_AT, in $remaining. Ctrl+C cancels."
+        if [ -t 1 ]; then
+            printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
+        elif [ "$left" = "$IN_SECONDS" ]; then
+            say "$ACCENT" '◆' "$line"
+        fi
+        sleep 1
+        left=$((end - $(date +%s)))
+    done
+    trap 'exit 130' INT TERM
+    if [ -t 1 ]; then printf '\r\033[K' || :; fi
+    say "$GREEN" '◇' "Waited until $RESTART_AT"
+}
+
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
 prepare_data() {
     mkdir -p data backups || return 1
@@ -757,6 +872,8 @@ put_back() {
         pin=$(answer EIGEN_API_IMAGE "$pins")
         if [ -n "$pin" ] && [ "$pin" != "$before" ]; then pull_pinned "$pins"; fi
     fi
+    # After the question and the pull, so the wait is the last thing before the stop.
+    warn_restart rollback
     swap_archive
     after_swap "$before"
     AT_EXIT=''
@@ -1020,6 +1137,7 @@ restore() {
     archive='' yes='' s3=''
     help_flag restore "$@"
     for arg in "$@"; do
+        if in_argument restore "$arg"; then continue; fi
         case $arg in
             --yes) yes=--yes ;;
             --s3-from-archive) s3=--s3-from-archive ;;
@@ -1030,6 +1148,7 @@ restore() {
                 ;;
         esac
     done
+    need_in_time restore
     if [ -z "$archive" ]; then
         die "Name the archive to restore." "Pass a name in backups/, or the path of an archive: ./eigen restore <archive>"
     fi
@@ -1054,6 +1173,7 @@ update() {
             continue
             ;;
         esac
+        if in_argument update "$arg"; then continue; fi
         case $arg in
             --check) check=1 ;;
             --accept-breaking) accept=--accept-breaking ;;
@@ -1068,6 +1188,8 @@ update() {
         esac
         previous=$arg
     done
+    need_in_time update
+    if [ "$check" = 1 ] && [ -n "$IN_TIME" ]; then refuse_usage update "--check updates nothing, so it takes no --in."; fi
     if [ "$MODE" = local ]; then
         die "A local build has no updates." "Pull the code and run ./eigen setup again, which builds it."
     fi
@@ -1159,8 +1281,12 @@ update_get() {
         levels=$(cli update-check --from "$old_version" --level </dev/null)
         level=$(answer level "$levels")
     fi
+    # The pulls and the questions are done, so the wait comes right before the backup, which then misses little.
+    warn_restart update
     handover=--no-backup
     if [ -z "$no_backup" ]; then
+        # The operator may have edited the file during the wait.
+        if [ "$IN_SECONDS" -gt 0 ]; then need_env_mounted; fi
         NEXT="Eigen $current runs on as it was. Fix what it says, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
         step "Backing up Eigen $current, $level" "Backed up Eigen $current" "Could not back up Eigen $current" \
             api_cli backup --level "$level" --reason pre-update --wait
@@ -1174,8 +1300,12 @@ update_get() {
         # What changes from here to the stop is not in it: the operator is told until when it holds.
         say "$GRAY" '│' "backups/$saved, made until $(date -u +%H:%M:%S) UTC"
         handover="--saved $saved"
+        # The backup may have outlasted the notice's expiry, which starts over for the handover and the stop.
+        announce 0 update
     fi
     write_bundle "$(answer EIGEN_API_IMAGE "$PINS")"
+    # The notice holds on until the new launcher stops Eigen.
+    AT_EXIT=''
     # The new launcher gets the tag and what it saves as arguments and parses them as this one did; no variable crosses.
     exec ./eigen update --pulled "$tag" $handover
 }
@@ -1198,6 +1328,10 @@ update_apply() {
     old_pins=$(pinned_refs)
 
     API_IMAGE=$new_image
+    # Up to the stop, which ends the old API and its notice, a failure or a hangup takes back the notice the old
+    # launcher gave. The old API's CLI may have no restart-notice, which unannounce lets pass.
+    AT_EXIT=unannounce
+    trap 'exit 129' HUP
     before_stop
     # After the wait, which an interrupt may end: a backfill that adds a key writes .env.production anew, which the
     # running eigen-api would not read. Before the stop, so a failure leaves Eigen running.
@@ -1247,11 +1381,13 @@ rollback() {
     yes=''
     help_flag rollback "$@"
     for arg in "$@"; do
+        if in_argument rollback "$arg"; then continue; fi
         case $arg in
             --yes) yes=--yes ;;
             *) refuse rollback "$arg" ;;
         esac
     done
+    need_in_time rollback
     if [ "$MODE" = local ]; then
         die "A local build has no update to roll back." "Go back in the code and run ./eigen setup again, which builds it."
     fi
