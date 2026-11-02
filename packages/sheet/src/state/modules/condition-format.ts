@@ -2,6 +2,7 @@
 // per-cell format map the painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The
 // evaluation itself lives in the engine, which the server export shares.
 
+import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
     ColorGradationRule,
     ConditionalFormatConditionName,
@@ -227,31 +228,35 @@ export function checkCF(r: number, c: number, computeMap: ComputeMap | null): Ce
     return null;
 }
 
-// 12 color-scale + 6 solid-data-bar presets, ported from luckysheet upstream.
-// Numbers match the preset keys COLOR_SCALE_PRESETS / DATA_BAR_PRESETS offer in
-// components/MenuBar/format-menu.tsx.
+// The color scales and data bars the Format menu offers, by the preset keys it lists. A scale's stops run from the
+// highest value to the lowest. The colors are Eigen's palette and white, the closest to the presets Excel offers. A rule
+// keeps the colors it was made with, so changing one here changes only the rules made after.
+const RED = eigenColor('red', 400);
+const YELLOW = eigenColor('yellow', 200);
+const GREEN = eigenColor('emerald', 500);
+const BLUE = eigenColor('sky', 600);
+const WHITE = '#ffffff';
+
 export const CF_PRESETS: Record<string, string[]> = {
-    // 3-color gradients (max → mid → min)
-    colorGradation_1: ['#f8696b', '#ffeb84', '#63be7b'],
-    colorGradation_2: ['#63be7b', '#ffeb84', '#f8696b'],
-    colorGradation_3: ['#f8696b', '#ffffff', '#63be7b'],
-    colorGradation_4: ['#63be7b', '#ffffff', '#f8696b'],
-    colorGradation_5: ['#f8696b', '#ffffff', '#5a8ac6'],
-    colorGradation_6: ['#5a8ac6', '#ffffff', '#f8696b'],
-    // 2-color gradients (max → min)
-    colorGradation_7: ['#f8696b', '#ffffff'],
-    colorGradation_8: ['#ffffff', '#f8696b'],
-    colorGradation_9: ['#ffffff', '#63be7b'],
-    colorGradation_10: ['#63be7b', '#ffffff'],
-    colorGradation_11: ['#ffeb84', '#63be7b'],
-    colorGradation_12: ['#63be7b', '#ffeb84'],
-    // Solid data-bar colors (single bar color; negative bars hardcode red)
-    solidColorDataBar_1: ['#638ec6'],
-    solidColorDataBar_2: ['#63be7b'],
-    solidColorDataBar_3: ['#f8696b'],
-    solidColorDataBar_4: ['#ffb628'],
-    solidColorDataBar_5: ['#a3c8ff'],
-    solidColorDataBar_6: ['#a085ff'],
+    colorGradation_1: [RED, YELLOW, GREEN],
+    colorGradation_2: [GREEN, YELLOW, RED],
+    colorGradation_3: [RED, WHITE, GREEN],
+    colorGradation_4: [GREEN, WHITE, RED],
+    colorGradation_5: [RED, WHITE, BLUE],
+    colorGradation_6: [BLUE, WHITE, RED],
+    colorGradation_7: [RED, WHITE],
+    colorGradation_8: [WHITE, RED],
+    colorGradation_9: [WHITE, GREEN],
+    colorGradation_10: [GREEN, WHITE],
+    colorGradation_11: [YELLOW, GREEN],
+    colorGradation_12: [GREEN, YELLOW],
+    // A data bar has one color. A negative value's bar is always red.
+    solidColorDataBar_1: [BLUE],
+    solidColorDataBar_2: [GREEN],
+    solidColorDataBar_3: [RED],
+    solidColorDataBar_4: [eigenColor('amber', 400)],
+    solidColorDataBar_5: [eigenColor('blue', 300)],
+    solidColorDataBar_6: [eigenColor('violet', 400)],
 };
 
 export function clearSheetRules(ctx: Context) {

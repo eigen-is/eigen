@@ -3,6 +3,7 @@
 // dialog open with the reason under the field, and a good one goes to setConditionRules. RULE_COPY names each rule
 // once, so this dialog and the places that list rules, such as the Format menu, show the same words.
 
+import { eigenColor } from '@workspace/lib/constants/colors';
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
 import { FieldError } from '@workspace/ui/components/field';
@@ -44,8 +45,8 @@ export function ConditionRules({ type }: { type: ConditionRuleType }) {
     const [rule, setRule] = useState<ConditionRulesProps>({
         rulesType: type,
         rulesValue: '',
-        textColor: { check: false, color: '#009966' },
-        cellColor: { check: true, color: '#d0fae5' },
+        textColor: { check: false, color: eigenColor('emerald', 600) },
+        cellColor: { check: true, color: eigenColor('emerald', 100) },
         betweenValue: { value1: '', value2: '' },
         dateValue: '',
         repeatValue: '0',
