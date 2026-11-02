@@ -39,6 +39,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
 - **Filters and hidden rows in Sheets** — applying, changing or clearing a filter leaves the rows you hid by hand hidden
+- **Typing after a menu in Sheets** — after a command from the Edit, View, Insert, Format or Data menu, such as inserting a row, typing and Delete work on the grid without a click first, as in Google Sheets
 - **Sheet names in formulas** — a formula finds a sheet even when its name's case differs, as in Excel, so `=data!A1` reads the tab Data. A tab can't take another tab's name in another case
 - **Formulas that didn't update in Sheets** — formulas with spaces such as `=A1 + 1`, INDEX, whole columns on another sheet, and whole columns after a row insert or a paste below the data recalculate when their cells change
 - **Pasting from WPS Office** — a table pasted from WPS keeps its cell styles, such as bold and colors
