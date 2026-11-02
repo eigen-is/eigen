@@ -201,7 +201,7 @@ export async function* tarEntries(
         }
     }
 
-    let givenName: string | null = null;
+    let longName: string | null = null;
     try {
         while (true) {
             const header = await take(BLOCK);
@@ -219,16 +219,16 @@ export async function* tarEntries(
                     throw new Error(`backup archive: refusing a ${size}-byte extended header`);
                 }
                 const extra = await collect(body());
-                if (typeflag === 'x') givenName = paxPath(extra);
-                if (typeflag === 'L') givenName = headerField(extra, 0, extra.length);
+                if (typeflag === 'x') longName = paxPath(extra);
+                if (typeflag === 'L') longName = headerField(extra, 0, extra.length);
                 await skip(padLength(size));
                 continue;
             }
             // headerChunks never sets `prefix`; bsdtar does, and then the name is the two joined.
             const prefix = headerField(header, 345, 155);
             const name = headerField(header, 0, NAME_FIELD);
-            const entryPath = checkedEntryPath(givenName ?? (prefix === '' ? name : `${prefix}/${name}`));
-            givenName = null;
+            const entryPath = checkedEntryPath(longName ?? (prefix === '' ? name : `${prefix}/${name}`));
+            longName = null;
             // No archive this server writes holds a link or a device, and one could point a restore anywhere.
             if (LINKS_AND_DEVICES.has(typeflag)) {
                 throw new Error(`backup archive: refusing tar entry "${entryPath}", a link or a device`);
