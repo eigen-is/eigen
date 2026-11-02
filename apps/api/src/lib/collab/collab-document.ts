@@ -51,33 +51,6 @@ const COMPACTION_ORIGIN = Symbol('compaction');
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 
-function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
-    const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, messageType);
-    write(encoder);
-    return encoding.toUint8Array(encoder);
-}
-
-function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
-    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
-}
-
-// Yjs and awareness hand back whatever origin the change was made with. A socket means a peer made
-// it, anything else means the server did.
-function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
-    return origin !== null && typeof origin === 'object' && 'readyState' in origin;
-}
-
-// A client may publish presence for itself only, so the `user` in its awareness state must carry the
-// session user's id. The display name is the client's choice. A state without a `user`, such as the
-// empty one of the handshake, claims no identity.
-function awarenessIdentityMatches(state: unknown, userId: string): boolean {
-    if (!isRecord(state)) return true;
-    const identity = state['user'];
-    if (identity === undefined || identity === null) return true;
-    return isRecord(identity) && identity['userId'] === userId;
-}
-
 export class CollabDocument {
     public readonly doc = new Y.Doc();
     public dataDbPathId: string | null = null;
@@ -433,4 +406,31 @@ export class CollabDocument {
         this.editRecordedAtByUser.set(user.id, now);
         this.drive.recordFileEvent(this.path.mountId, this.path.id, user, { eventType: 'edited' }).catch(() => {});
     }
+}
+
+function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, messageType);
+    write(encoder);
+    return encoding.toUint8Array(encoder);
+}
+
+function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
+    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
+}
+
+// Yjs and awareness hand back whatever origin the change was made with. A socket means a peer made
+// it, anything else means the server did.
+function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
+    return origin !== null && typeof origin === 'object' && 'readyState' in origin;
+}
+
+// A client may publish presence for itself only, so the `user` in its awareness state must carry the
+// session user's id. The display name is the client's choice. A state without a `user`, such as the
+// empty one of the handshake, claims no identity.
+function awarenessIdentityMatches(state: unknown, userId: string): boolean {
+    if (!isRecord(state)) return true;
+    const identity = state['user'];
+    if (identity === undefined || identity === null) return true;
+    return isRecord(identity) && identity['userId'] === userId;
 }
