@@ -1,3 +1,7 @@
+// Cell labels and sheet names as the formula parser reads them: a label's row and column, the two ways a reference
+// may spell a sheet name, the key two names are compared by, and the sheet a name reads. The reference patterns of
+// the engine build on these.
+
 import {
     columnIndexToLabel,
     columnLabelToIndex,
@@ -32,6 +36,43 @@ const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?(?:([$])?([A-
 
 export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
+}
+
+// What two sheet names are compared by. Excel ignores case, so `data!A1` reads the sheet named Data. Each character
+// folds to its uppercase on its own, so the Greek final ς matches σ. A character whose uppercase is longer keeps its
+// case, so ß never matches ss.
+export function sheetNameKey(name: string): string {
+    let key = '';
+    for (const char of name) {
+        const upper = char.toUpperCase();
+        key += upper.length === char.length ? upper : char;
+    }
+    return key;
+}
+
+// The sheet a name reads: the one of exactly that name, else one of that name in another case. A rename refuses a
+// name another sheet holds in any case, but a workbook can still hold Data and data, such as one stored before that
+// rule or a peer's. Then each name keeps reading its own sheet.
+export function findSheetByName<S extends { name: string }>(sheets: readonly S[], name: string): S | undefined {
+    const exact = sheets.find((sheet) => sheet.name === name);
+    if (exact) return exact;
+    const key = sheetNameKey(name);
+    // A key is as long as its name, so a name of another length never matches, and its key is never built.
+    return sheets.find((sheet) => sheet.name.length === name.length && sheetNameKey(sheet.name) === key);
+}
+
+// The sheet each name reads, as findSheetByName reads it, through maps built once. A walk that reads many names, such
+// as a recalc or a row insert over every formula, builds one, so a name no sheet holds costs no walk of the sheets.
+export function sheetFinder<S extends { name: string }>(sheets: readonly S[]): (name: string) => S | undefined {
+    const byName = new Map<string, S>();
+    const byKey = new Map<string, S>();
+    for (const sheet of sheets) {
+        // The first wins, as in findSheetByName.
+        if (!byName.has(sheet.name)) byName.set(sheet.name, sheet);
+        const key = sheetNameKey(sheet.name);
+        if (!byKey.has(key)) byKey.set(key, sheet);
+    }
+    return (name) => byName.get(name) ?? byKey.get(sheetNameKey(name));
 }
 
 // Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.

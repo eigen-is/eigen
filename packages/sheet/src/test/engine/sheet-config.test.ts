@@ -13,6 +13,19 @@ describe('normalizeSheetConfig', () => {
         normalizeSheetConfig(sheet);
         for (const key of SHEET_CONFIG_COLLECTIONS) expect(config[key]).toEqual({});
         expect(sheet.charts).toEqual({});
+        expect(sheet.dataValidations).toEqual({});
+    });
+
+    test('keeps the well-formed validation rules a sheet has and leaves out the rest', () => {
+        const entry = {
+            ranges: [{ row: [0, 4], column: [1, 1] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const sheet: Sheet = JSON.parse(
+            JSON.stringify({ id: 's1', name: 'Sheet1', dataValidations: { v1: entry, v2: { ranges: [] } } }),
+        );
+        normalizeSheetConfig(sheet);
+        expect(sheet.dataValidations).toEqual({ v1: entry });
     });
 
     test('keeps the charts a sheet already has', () => {
@@ -45,5 +58,7 @@ describe('normalizeSheetConfig', () => {
         );
         expect(base.charts).toEqual({});
         expect(added.charts).toEqual({});
+        expect(base.dataValidations).toEqual({});
+        expect(added.dataValidations).toEqual({});
     });
 });

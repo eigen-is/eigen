@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
 import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { replaySheetsOps } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../lib/core/xml';
 import { xmlChildren, xmlElements, xmlText } from '../../lib/core/xml';
 import type { TransformWarning } from '../../lib/document/transform/protocol';
@@ -13,6 +14,7 @@ import { openZip } from '../../lib/ooxml/zip';
 import { cpuClock } from '../cpu-time';
 import { seedDocumentMedia } from '../fixtures/golden-documents';
 import { writeSheetsToYjs } from '../fixtures/heavy-sheets';
+import { ruleAt, rulesByCell, validationsByCell } from '../fixtures/validations';
 import { exportXlsx, rowsXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { driveGet, drivePost, getTestContext, TEST_PNG_BYTES } from '../setup';
 
@@ -752,6 +754,47 @@ describe('Sheets xlsx export — conditional formatting', () => {
 });
 
 describe('Sheets xlsx export — data validation', () => {
+    // xlsx in, an edit, xlsx out: a list on column B and a number check on D2:D4. A row inserted above row 2
+    // moves the check and leaves the whole column whole, so a cell far below the data is still validated.
+    test('a whole-column list survives an import, a row insert and an edit, and writes back as the whole column', () => {
+        const [imported] = xlsxToSheets(
+            xlsxFixture({
+                sheets: [
+                    {
+                        data: rowsXml([['A1', 'x']]),
+                        after:
+                            '<dataValidations count="2">' +
+                            '<dataValidation type="list" allowBlank="1" sqref="B1:B1048576"><formula1>"Yes,No"</formula1></dataValidation>' +
+                            '<dataValidation type="whole" allowBlank="1" sqref="D2:D4"><formula1>1</formula1><formula2>9</formula2></dataValidation>' +
+                            '</dataValidations>',
+                    },
+                ],
+            }),
+        );
+        const [edited] = replaySheetsOps(
+            [imported],
+            [
+                [
+                    {
+                        op: 'insertRowCol',
+                        id: imported.id,
+                        path: [],
+                        value: { type: 'row', index: 1, count: 1, direction: 'lefttop' },
+                    },
+                ],
+                [{ op: 'replace', id: imported.id, path: ['data', 4, 1], value: { v: 'Yes', m: 'Yes' } }],
+            ],
+        );
+        expect(ruleAt(edited.dataValidations, 4999, 1)).toMatchObject({ value1: 'Yes,No' });
+        const written = writtenValidations(exportXlsx([edited]));
+        expect([...written.keys()]).toEqual(['B1:B1048576', 'D3:D5']);
+        const [again] = xlsxToSheets(exportXlsx([edited]));
+        expect(Object.values(again.dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [0, 1048575], column: [1, 1] }],
+            [{ row: [2, 4], column: [3, 3] }],
+        ]);
+    });
+
     test('exports dropdown rules with quoted literals and verbatim range refs', async () => {
         const literal = dvRule({ type: 'dropdown', type2: '', value1: 'Red,Green,Blue' });
         const quoted = dvRule({ type: 'dropdown', type2: '', value1: 'say "hi",plain' });
@@ -763,11 +806,13 @@ describe('Sheets xlsx export — data validation', () => {
                     { r: 1, c: 1, v: { v: 'Red' } },
                     { r: 2, c: 1, v: { v: 'Green' } },
                 ],
-                dataVerification: { '1_1': literal, '2_1': literal, '3_1': quoted, '4_1': ref },
+                dataValidations: {
+                    literal: { ranges: [{ row: [1, 2], column: [1, 1] }], rule: literal },
+                    ...validationsByCell({ '3_1': quoted, '4_1': ref }),
+                },
             },
             { name: 'Other Sheet', celldata: [{ r: 0, c: 1, v: { v: 'Option 1' } }] },
         ];
-        // Equal rules coalesce into one rectangle.
         const written = writtenValidations(exportXlsx(sheets));
         expect(written.get('B2:B3')).toMatchObject({
             attributes: { type: 'list', allowBlank: '1' },
@@ -777,7 +822,12 @@ describe('Sheets xlsx export — data validation', () => {
         expect(written.get('B5')?.formulas).toEqual(["'Other Sheet'!$B$1:$B$5"]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].dataVerification).toEqual({ '1_1': literal, '2_1': literal, '3_1': quoted, '4_1': ref });
+        expect(rulesByCell(rt[0].dataValidations)).toEqual({
+            '1_1': literal,
+            '2_1': literal,
+            '3_1': quoted,
+            '4_1': ref,
+        });
     });
 
     test('exports numeric, text-length and date rules with reversed operators', async () => {
@@ -790,7 +840,9 @@ describe('Sheets xlsx export — data validation', () => {
             '5_0': dvRule({ type: 'date', type2: 'noLaterThan', value1: '2024-06-15' }),
             '6_0': dvRule({ type: 'date', type2: 'earlierThan', value1: '2024-03-01' }),
         };
-        const sheets: Sheet[] = [{ name: 'DV', celldata: [{ r: 0, c: 0, v: { v: 5 } }], dataVerification: rules }];
+        const sheets: Sheet[] = [
+            { name: 'DV', celldata: [{ r: 0, c: 0, v: { v: 5 } }], dataValidations: validationsByCell(rules) },
+        ];
         const written = writtenValidations(exportXlsx(sheets));
         // between is the default operator; dates are serials.
         expect(written.get('A1')).toMatchObject({ attributes: { type: 'whole' }, formulas: ['1', '10'] });
@@ -808,7 +860,7 @@ describe('Sheets xlsx export — data validation', () => {
         expect(written.get('A7')?.attributes).toMatchObject({ type: 'date', operator: 'lessThan' });
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].dataVerification).toEqual(rules);
+        expect(rulesByCell(rt[0].dataValidations)).toEqual(rules);
     });
 
     test('re-imports number_decimal as number (accepted drift) and drops NaN operands', async () => {
@@ -816,11 +868,11 @@ describe('Sheets xlsx export — data validation', () => {
             {
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 1.5 } }],
-                dataVerification: {
+                dataValidations: validationsByCell({
                     '0_0': dvRule({ type: 'number_decimal', type2: 'between', value1: '1', value2: '10' }),
                     '1_0': dvRule({ type: 'number', type2: 'moreThanThe', value1: 'abc' }),
                     '2_0': dvRule({ type: 'number', type2: 'moreThanThe', value1: '' }),
-                },
+                }),
             },
         ];
         const warnings: TransformWarning[] = [];
@@ -830,7 +882,7 @@ describe('Sheets xlsx export — data validation', () => {
         expect(warnings).toEqual([{ code: 'validations-dropped', count: 2 }]);
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].dataVerification).toEqual({
+        expect(rulesByCell(rt[0].dataValidations)).toEqual({
             '0_0': dvRule({ type: 'number', type2: 'between', value1: '1', value2: '10' }),
         });
     });
@@ -840,11 +892,11 @@ describe('Sheets xlsx export — data validation', () => {
             {
                 name: 'DV',
                 celldata: [{ r: 1, c: 1, v: { v: 'foobar' } }],
-                dataVerification: {
+                dataValidations: validationsByCell({
                     '1_1': dvRule({ type: 'text_content', type2: 'include', value1: 'foo' }),
                     '2_1': dvRule({ type: 'text_content', type2: 'exclude', value1: 'bar' }),
                     '3_1': dvRule({ type: 'text_content', type2: 'equal', value1: 'say "hi"' }),
-                },
+                }),
             },
         ];
         const written = writtenValidations(exportXlsx(sheets));
@@ -857,7 +909,7 @@ describe('Sheets xlsx export — data validation', () => {
 
         // Custom rules have no engine equivalent — accepted one-way drift (D4).
         const rt = await roundTrip(sheets);
-        expect(rt[0].dataVerification).toBeUndefined();
+        expect(rt[0].dataValidations).toBeUndefined();
     });
 
     test('skips checkbox rules while keeping cell values', async () => {
@@ -865,16 +917,16 @@ describe('Sheets xlsx export — data validation', () => {
             {
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 'done' } }],
-                dataVerification: {
+                dataValidations: validationsByCell({
                     '0_0': dvRule({ type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' }),
-                },
+                }),
             },
         ];
         const buffer = exportXlsx(sheets);
         expect(writtenValidations(buffer).size).toBe(0);
 
         const [sheet] = xlsxToSheets(buffer);
-        expect(sheet.dataVerification).toBeUndefined();
+        expect(sheet.dataValidations).toBeUndefined();
         expect(cellAt(sheet, 0, 0)?.v).toBe('done');
     });
 
@@ -891,7 +943,7 @@ describe('Sheets xlsx export — data validation', () => {
             {
                 name: 'DV',
                 celldata: [{ r: 0, c: 0, v: { v: 'Yes' } }],
-                dataVerification: { '0_0': hinted, '1_0': blocking },
+                dataValidations: validationsByCell({ '0_0': hinted, '1_0': blocking }),
             },
         ];
         const written = writtenValidations(exportXlsx(sheets));
@@ -902,7 +954,7 @@ describe('Sheets xlsx export — data validation', () => {
         expect(written.get('A2')?.attributes['errorStyle']).toBeUndefined();
 
         const rt = await roundTrip(sheets);
-        expect(rt[0].dataVerification).toEqual({ '0_0': hinted, '1_0': blocking });
+        expect(rulesByCell(rt[0].dataValidations)).toEqual({ '0_0': hinted, '1_0': blocking });
     });
 });
 

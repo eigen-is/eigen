@@ -65,3 +65,20 @@ describe('a row freeze drag', () => {
         expect(releaseRow(rows, 25)).toBeUndefined();
     });
 });
+
+describe('a freeze drag on a bare frozen type', () => {
+    test('treats it as its range form', () => {
+        const row = { type: 'row', range: { row_focus: 3, column_focus: 0 } } as const;
+        expect(releaseColumn(row)?.type).toBe('rangeBoth');
+        expect(releaseColumn(row, 56)).toEqual(row);
+        expect(releaseRow(row, 25)).toBeUndefined();
+        const column = { type: 'column', range: { row_focus: 0, column_focus: 2 } } as const;
+        expect(releaseRow(column)?.type).toBe('rangeBoth');
+        expect(releaseRow(column, 25)).toEqual(column);
+        expect(releaseColumn(column, 56)).toBeUndefined();
+        const both = { type: 'both', range: { row_focus: 1, column_focus: 2 } } as const;
+        expect(releaseColumn(both)?.type).toBe('both');
+        expect(releaseColumn(both, 56)?.type).toBe('rangeRow');
+        expect(releaseRow(both, 25)?.type).toBe('rangeColumn');
+    });
+});

@@ -14,6 +14,7 @@ import type { Context } from '../../../state/context';
 import { setCellValue } from '../../../state/modules/cell';
 import { fillFromEdge, onDropCellSelectEnd } from '../../../state/modules/drop-cell';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { validationAt } from '../../../state/modules/validation-rules';
 import type { Cell, DataVerificationRule, SingleRange } from '../../../state/types';
 import { filterPatch } from '../../../state/utils/patch';
 import { contextFactory } from '../factories/context';
@@ -162,7 +163,7 @@ describe('drag-fill carries the source cell borders', () => {
 });
 
 // Validation rules ride along with the fill in Excel and Google Sheets. updateDropCell
-// carried them on a cloneDeep of the sheet's dataVerification and never wrote the clone
+// carried them on a cloneDeep of the sheet's rules and never wrote the clone
 // back, so a dragged cell arrived with no rule — the same dead-clone shape the borders
 // above had. Source and apply ranges are disjoint by construction (onDropCellSelectEnd
 // starts the apply range one row/column past the copy block), so writing the live map
@@ -185,17 +186,16 @@ describe('drag-fill carries the source cell data validation', () => {
         const ctx = makeCtx((d) => {
             d[0][0] = { v: 'yes', m: 'yes', ct: { fa: 'General', t: 'g' } };
         }, src);
-        ctx.sheets[0].dataVerification = { '0_0': rule };
+        ctx.sheets[0].dataValidations = { v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule } };
         return ctx;
     }
 
-    it('lands the rule on every filled cell', () => {
+    it('lands the rule on every filled cell, joined to the range it repeats', () => {
         const [filled] = produceWithPatches(verifiedContext(), (ctx: Context) => {
             autoFillCell(ctx, { row: [0, 0], column: [0, 0] }, { row: [1, 2], column: [0, 0] }, 'down');
         });
 
-        expect(filled.sheets[0].dataVerification?.['1_0']).toEqual(rule);
-        expect(filled.sheets[0].dataVerification?.['2_0']).toEqual(rule);
+        expect(filled.sheets[0].dataValidations).toEqual({ v: { ranges: [{ row: [0, 2], column: [0, 0] }], rule } });
     });
 
     it('and the patch that survives filterPatch carries it, so peers and undo see it', () => {
@@ -205,7 +205,52 @@ describe('drag-fill carries the source cell data validation', () => {
         });
 
         const synced = applyPatches(base, filterPatch(patches));
-        expect(synced.sheets[0].dataVerification?.['1_0']).toEqual(rule);
+        expect(validationAt(synced.sheets[0].dataValidations, 1, 0)).toEqual(rule);
+    });
+
+    // Every filled cell looked its source's rule up again, through every rule on the sheet: 108 s here.
+    it('a fill down 10,000 rows on a sheet of 1,000 rules looks each source cell up once', () => {
+        const rows = 10_000;
+        const ctx = contextFactory({
+            currentSheetId: 'id_1',
+            selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
+            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data: grid(rows, 4) }],
+        }) as Context;
+        const elsewhere = Array.from({ length: 1000 }, (_, k) => [
+            `r${k}`,
+            { ranges: Array.from({ length: 8 }, (_, i) => ({ row: [k * 8 + i, k * 8 + i], column: [3, 3] })), rule },
+        ]);
+        ctx.sheets[0].dataValidations = {
+            ...Object.fromEntries(elsewhere),
+            v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule },
+        };
+        const started = performance.now();
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, { row: [0, 0], column: [0, 0] }, { row: [1, rows - 1], column: [0, 0] }, 'down');
+        });
+        expect(performance.now() - started).toBeLessThan(5000);
+        expect(filled.sheets[0].dataValidations?.v.ranges).toEqual([{ row: [0, rows - 1], column: [0, 0] }]);
+    });
+
+    it('a filled cell takes the rule of the cell it repeats, and one whose source has none keeps its own', () => {
+        const other: DataVerificationRule = { ...rule, value1: 'a,b' };
+        const ctx = makeCtx(() => {}, { row: [0, 1], column: [0, 1] });
+        ctx.sheets[0].dataValidations = {
+            v: { ranges: [{ row: [0, 0], column: [0, 1] }], rule },
+            own: { ranges: [{ row: [2, 5], column: [0, 1] }], rule: other },
+        };
+        const [filled] = produceWithPatches(ctx, (draft: Context) => {
+            autoFillCell(draft, { row: [0, 1], column: [0, 1] }, { row: [2, 5], column: [0, 1] }, 'down');
+        });
+        const rules = filled.sheets[0].dataValidations;
+        for (let r = 2; r <= 5; r += 1) {
+            for (let c = 0; c <= 1; c += 1) expect(validationAt(rules, r, c)).toEqual(r % 2 === 0 ? rule : other);
+        }
+        expect(rules?.v.ranges).toEqual([
+            { row: [0, 0], column: [0, 1] },
+            { row: [2, 2], column: [0, 1] },
+            { row: [4, 4], column: [0, 1] },
+        ]);
     });
 });
 

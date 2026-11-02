@@ -5,6 +5,7 @@
 import { parseRgb } from '@workspace/lib/constants/colors';
 import { parseCellKey } from '@workspace/lib/sheets';
 import { every, isNumber, isUndefined, kebabCase, map } from 'es-toolkit/compat';
+import { findSheetByName } from '../../engine/a1-notation';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { checkCellIsLocked } from '../modules';
@@ -55,12 +56,7 @@ export function getSheetIndex(ctx: Context, id: string) {
 }
 
 export function getSheetIdByName(ctx: Context, name: string) {
-    for (let i = 0; i < ctx.sheets.length; i += 1) {
-        if (ctx.sheets[i].name === name) {
-            return ctx.sheets[i].id;
-        }
-    }
-    return null;
+    return findSheetByName(ctx.sheets, name)?.id ?? null;
 }
 
 // The sheet with this id, or undefined. getSheet in the API is the one that throws for a missing sheet.

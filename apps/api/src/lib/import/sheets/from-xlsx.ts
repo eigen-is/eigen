@@ -9,6 +9,7 @@ import {
     cellWrapsText,
     DEFAULT_SHEET_COLUMN_COUNT,
     DEFAULT_SHEET_ROW_COUNT,
+    sheetNameKey,
 } from '@workspace/sheet/engine';
 import { ApiError } from '../../core/errors';
 import type { TransformWarning } from '../../document/transform/protocol';
@@ -71,7 +72,7 @@ export function readXlsx(
         const sheets: Sheet[] = [];
         // Excel refuses two sheets of one name, in any case: the first keeps it, so a formula naming it means that one,
         // and a later one is numbered as Excel numbers a copy, past every name the workbook holds.
-        const taken = new Set(book.sheets.map(({ name }) => name.toLowerCase()));
+        const taken = new Set(book.sheets.map(({ name }) => sheetNameKey(name)));
         const named = new Set<string>();
         // A chart's refs name sheets as the workbook writes them: the first of a name is the one they mean.
         const sheetIds = new Map<string, string>();
@@ -80,15 +81,15 @@ export function readXlsx(
             const part = book.pkg.zip.read(path);
             if (!part) continue;
             const id = `sheet-${sheets.length}`;
-            if (!sheetIds.has(written.toLowerCase())) sheetIds.set(written.toLowerCase(), id);
+            if (!sheetIds.has(sheetNameKey(written))) sheetIds.set(sheetNameKey(written), id);
             let name = written;
-            if (named.has(written.toLowerCase())) {
+            if (named.has(sheetNameKey(written))) {
                 let copy = 2;
-                while (taken.has(`${written} (${copy})`.toLowerCase())) copy++;
+                while (taken.has(sheetNameKey(`${written} (${copy})`))) copy++;
                 name = `${written} (${copy})`;
             }
-            named.add(name.toLowerCase());
-            taken.add(name.toLowerCase());
+            named.add(sheetNameKey(name));
+            taken.add(sheetNameKey(name));
             // The rest is parsed before the rows, so the merges and links are placed when the grid reads its cells.
             const { rest, children } = readInBatches(part, 'sheetData', 'row', reads);
             // A damaged rels part costs the external links, not the workbook.
@@ -144,8 +145,6 @@ export function readXlsx(
                     dxfs,
                     palette,
                     date1904: book.date1904,
-                    rows: grid.rows,
-                    columns: grid.columns,
                     dates: grid.dates,
                     charge,
                     chargeElements: reads.elements.charge,

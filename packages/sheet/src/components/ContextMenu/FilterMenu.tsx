@@ -25,8 +25,8 @@ import {
     getFilterColumnColors,
     getFilterColumnValues,
     getFilterConditionHiddenRows,
-    orderbydatafiler,
     saveFilter,
+    sortFilterRange,
 } from '../../state';
 
 type ColorKind = 'bgColors' | 'fcColors';
@@ -257,7 +257,7 @@ export const FilterMenu: React.FC = () => {
         (asc: boolean) => {
             if (col == null) return;
             setContext((draftCtx) => {
-                const errMsg = orderbydatafiler(draftCtx, startRow, startCol, endRow, endCol, col, asc);
+                const errMsg = sortFilterRange(draftCtx, startRow, startCol, endRow, endCol, col, asc);
                 if (errMsg != null) showAlert(errMsg);
             });
         },

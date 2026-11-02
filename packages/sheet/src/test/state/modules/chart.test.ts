@@ -376,8 +376,27 @@ describe('charts converge over real ops', () => {
         expect(charts(joiner)).toEqual(charts(insert.next.sheets));
     });
 
-    // Moving a chart's points writes away those of a series its data doesn't name, so an author ships the removes.
-    test("a row op's removes of an orphan series' points ship, and a peer and a joiner apply them", () => {
+    // Every receiver's engine shifts the chart by the op itself. An author's write of the chart it shifted would land on
+    // a receiver that also took a peer's insert, and leave the chart a row off there.
+    test('two row inserts sent at once both shift a chart, on both authors and a joiner', () => {
+        const base = workbook();
+        const insert = (count: number) => {
+            const op = { type: 'row', index: 0, count, direction: 'lefttop', id: S } as const;
+            return author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
+        };
+        const a = insert(2);
+        const b = insert(1);
+        const onA = receive(a.next, b.ops);
+        const onB = receive(b.next, a.ops);
+        for (const sheets of [onA.sheets, onB.sheets, join(base, [a.ops, b.ops])]) {
+            expect(rangeData(sheets, 0, 'c1')?.series[0].values?.row).toEqual([5, 8]);
+            expect(rangeData(sheets, 1, 't1')?.categories?.row).toEqual([6, 7]);
+        }
+    });
+
+    // Moving a chart's points writes away those of a series its data doesn't name, and every receiver's engine does the
+    // same.
+    test("a row op's removes of an orphan series' points reach a peer and a joiner", () => {
         const base = produce(workbook(), (ctx: Context) => {
             ctx.sheets[0].charts!.c1 = chart('c1', {
                 ...rangeSpec(ref(S, [2, 5])),
@@ -386,13 +405,12 @@ describe('charts converge over real ops', () => {
         });
         const op = { type: 'row', index: 4, count: 1, direction: 'lefttop', id: S } as const;
         const insert = author(base, (ctx) => insertRowCol(ctx, op), { insertRowColOp: op });
-        expect(insert.ops).toContainEqual({ op: 'remove', id: S, path: ['charts', 'c1', 'specPoints', 'gone/0'] });
         expect(Object.keys(insert.next.sheets[0].charts!.c1.specPoints)).toEqual(['s-1/4']);
         expect(charts(receive(base, insert.ops).sheets)).toEqual(charts(insert.next.sheets));
         expect(charts(join(base, [insert.ops]))).toEqual(charts(insert.next.sheets));
     });
 
-    // A row op writes a shifted chart's spec alone, so a peer's move or delete of that chart at once survives.
+    // A row op ships no chart write, since every receiver shifts the chart, so a peer's move or delete of it survives.
     test.each<[string, Op[], number[]]>([
         ['moves', [{ op: 'replace', id: T, path: ['charts', 't1', 'x'], value: 300 }], [300]],
         ['deletes', [{ op: 'remove', id: T, path: ['charts', 't1'] }], []],

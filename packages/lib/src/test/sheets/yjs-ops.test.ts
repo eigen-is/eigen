@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet } from '../../sheets/types';
+import { MAX_VALIDATIONS } from '../../sheets/validations';
 import { opToPatchOnSheets } from '../../sheets/yjs-ops';
 
 const SHEETS: Sheet[] = [
@@ -58,5 +59,76 @@ describe('opToPatchOnSheets', () => {
         ];
         const [patches] = opToPatchOnSheets(SHEETS, ops);
         expect(patches).toEqual([{ op: 'replace', value: images, path: [0, 'images'] }]);
+    });
+
+    // A peer can store anything under an id, and every reader walks an entry's ranges, so a write that would leave an
+    // entry not well formed never applies.
+    test('a validation write applies only when it leaves every entry well formed', () => {
+        const entry = {
+            ranges: [{ row: [0, 9], column: [1, 1] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const ops: Op[] = [
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'v1'], value: entry },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations', 'v1'] },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { v1: entry } },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'v2'], value: { ...entry, ranges: 'A1' } },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { v1: entry, v2: {} } },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations'] },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'v1', 'ranges'], value: [] },
+        ];
+        const [patches] = opToPatchOnSheets(SHEETS, ops);
+        expect(patches).toEqual([
+            { op: 'add', value: entry, path: [0, 'dataValidations', 'v1'] },
+            { op: 'remove', value: undefined, path: [0, 'dataValidations', 'v1'] },
+            { op: 'replace', value: { v1: entry }, path: [0, 'dataValidations'] },
+        ]);
+    });
+
+    // A whole-entry write over a rule a peer deleted would bring the rule back. Immer writes `add` for an id its base
+    // lacked, so a `replace` means the writer saw the rule, and where it is gone the delete wins.
+    test('a whole-entry replace of a rule the sheet no longer holds is dropped', () => {
+        const entry = {
+            ranges: [{ row: [0, 9], column: [1, 1] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const sheets: Sheet[] = [{ ...SHEETS[0], dataValidations: { x: entry } }];
+        const ops: Op[] = [
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'gone'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'x'], value: entry },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations', 'x'] },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'x'], value: entry },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'y'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'y'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { z: entry } },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'y'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'z'], value: entry },
+        ];
+        const [patches] = opToPatchOnSheets(sheets, ops);
+        expect(patches.map(({ op, path }) => [op, ...path])).toEqual([
+            ['replace', 0, 'dataValidations', 'x'],
+            ['remove', 0, 'dataValidations', 'x'],
+            ['add', 0, 'dataValidations', 'y'],
+            ['replace', 0, 'dataValidations', 'y'],
+            ['replace', 0, 'dataValidations'],
+            ['replace', 0, 'dataValidations', 'z'],
+        ]);
+    });
+
+    test('a new rule on a sheet that holds as many rules as a sheet may is dropped, and a changed one applies', () => {
+        const entry = {
+            ranges: [{ row: [0, 0], column: [0, 0] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const full = Object.fromEntries(Array.from({ length: MAX_VALIDATIONS }, (_, i) => [`v${i}`, entry]));
+        const sheets: Sheet[] = [{ ...SHEETS[0], dataValidations: full }];
+        const ops: Op[] = [
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'new'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'v0'], value: entry },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations', 'v1'] },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'next'], value: entry },
+        ];
+        const [patches] = opToPatchOnSheets(sheets, ops);
+        expect(patches.map(({ path }) => path[2])).toEqual(['v0', 'v1', 'next']);
     });
 });

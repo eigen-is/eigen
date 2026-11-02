@@ -1,21 +1,17 @@
+// The frozen panes as the grid shows them. initFreeze turns a sheet's frozen pane into the pane bounds that the canvas,
+// the overlays and the scroll read, and the helpers here place the overlay panes and the headers' freeze handles.
+// The sheet view calls initFreeze, for example when the sheet or its sizes change, and callers such as the headers and
+// the drag handlers use the rest.
+
+import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
 import { sortedIndex } from 'es-toolkit/compat';
 import type { Context, Freezen, GlobalCache } from '..';
 import { colLocationByIndex, getSheetIndex, rowLocationByIndex } from '..';
 
-function cutVolumn(arr: number[], cutindex: number) {
-    if (cutindex <= 0) {
-        return arr;
-    }
-    const ret = arr.slice(cutindex);
-    return ret;
-}
-
-function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
-    // get frozen type
+export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return;
-    const file = ctx.sheets[idx];
-    const { frozen } = file;
+    const { frozen } = ctx.sheets[idx];
 
     if (frozen == null) {
         delete cache.freezen;
@@ -23,79 +19,36 @@ function frozenTofreezen(ctx: Context, cache: GlobalCache, sheetId: string) {
     }
 
     const freezen: Freezen = {};
+    const range = frozen.range ?? { row_focus: 0, column_focus: 0 };
 
-    let { range } = frozen;
-    if (!range) {
-        range = {
-            row_focus: 0,
-            column_focus: 0,
-        };
-    }
-    let { type } = frozen;
-    if (type === 'row') {
-        type = 'rangeRow';
-    } else if (type === 'column') {
-        type = 'rangeColumn';
-    } else if (type === 'both') {
-        type = 'rangeBoth';
-    }
-
-    // transform to freezen
-    if (type === 'rangeRow' || type === 'rangeBoth') {
-        const scrollTop = 0;
-        let row_st = sortedIndex(ctx.visibledatarow, scrollTop);
-
-        const { row_focus } = range;
-
-        if (row_focus > row_st) {
-            row_st = row_focus;
-        }
-
-        if (row_st === -1) {
-            row_st = 0;
-        }
-
+    // The panes are measured from the top-left of the sheet, scrolled to 0.
+    if (freezesRows(frozen)) {
+        const row = Math.max(range.row_focus, 0);
         freezen.horizontal = {
             freezenhorizontaldata: {
-                pos: ctx.visibledatarow[row_st],
-                boundary: row_st + 1,
-                scroll: scrollTop,
-                cumulative: cutVolumn(ctx.visibledatarow, row_st + 1),
-                edge: ctx.visibledatarow[row_st] - 2 - scrollTop + ctx.columnHeaderHeight,
+                pos: ctx.visibledatarow[row],
+                boundary: row + 1,
+                scroll: 0,
+                cumulative: ctx.visibledatarow.slice(row + 1),
+                edge: ctx.visibledatarow[row] - 2 + ctx.columnHeaderHeight,
             },
         };
     }
-    if (type === 'rangeColumn' || type === 'rangeBoth') {
-        const scrollLeft = 0;
-        let col_st = sortedIndex(ctx.visibledatacolumn, scrollLeft);
-
-        const { column_focus } = range;
-
-        if (column_focus > col_st) {
-            col_st = column_focus;
-        }
-
-        if (col_st === -1) {
-            col_st = 0;
-        }
-
+    if (freezesColumns(frozen)) {
+        const column = Math.max(range.column_focus, 0);
         freezen.vertical = {
             freezenverticaldata: {
-                pos: ctx.visibledatacolumn[col_st],
-                boundary: col_st + 1,
-                scroll: scrollLeft,
-                cumulative: cutVolumn(ctx.visibledatacolumn, col_st + 1),
-                edge: ctx.visibledatacolumn[col_st] - 2 - scrollLeft + ctx.rowHeaderWidth,
+                pos: ctx.visibledatacolumn[column],
+                boundary: column + 1,
+                scroll: 0,
+                cumulative: ctx.visibledatacolumn.slice(column + 1),
+                edge: ctx.visibledatacolumn[column] - 2 + ctx.rowHeaderWidth,
             },
         };
     }
 
     cache.freezen ||= {};
     cache.freezen[ctx.currentSheetId] = freezen;
-}
-
-export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
-    frozenTofreezen(ctx, cache, sheetId);
 }
 
 // One body-overlay pane viewport: a fixed rect inside the cell area whose
@@ -314,34 +267,14 @@ export function scrollToFrozenRowCol(ctx: Context, freeze: Freezen | undefined) 
 
 export function getFrozenHandleTop(ctx: Context) {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (idx == null) return ctx.scrollTop;
-
-    const sheet = ctx.sheets[idx];
-    if (
-        sheet?.frozen?.type === 'row' ||
-        sheet?.frozen?.type === 'rangeRow' ||
-        sheet?.frozen?.type === 'rangeBoth' ||
-        sheet?.frozen?.type === 'both'
-    ) {
-        return rowLocationByIndex(sheet?.frozen?.range?.row_focus || 0, ctx.visibledatarow)[1] + ctx.scrollTop;
-    }
-    return ctx.scrollTop;
+    const frozen = idx == null ? undefined : ctx.sheets[idx].frozen;
+    if (!freezesRows(frozen)) return ctx.scrollTop;
+    return rowLocationByIndex(frozen?.range?.row_focus || 0, ctx.visibledatarow)[1] + ctx.scrollTop;
 }
 
 export function getFrozenHandleLeft(ctx: Context) {
     const idx = getSheetIndex(ctx, ctx.currentSheetId);
-    if (idx == null) return ctx.scrollLeft;
-
-    const sheet = ctx.sheets[idx];
-    if (
-        sheet?.frozen?.type === 'column' ||
-        sheet?.frozen?.type === 'rangeColumn' ||
-        sheet?.frozen?.type === 'rangeBoth' ||
-        sheet?.frozen?.type === 'both'
-    ) {
-        return (
-            colLocationByIndex(sheet?.frozen?.range?.column_focus || 0, ctx.visibledatacolumn)[1] - 2 + ctx.scrollLeft
-        );
-    }
-    return ctx.scrollLeft;
+    const frozen = idx == null ? undefined : ctx.sheets[idx].frozen;
+    if (!freezesColumns(frozen)) return ctx.scrollLeft;
+    return colLocationByIndex(frozen?.range?.column_focus || 0, ctx.visibledatacolumn)[1] - 2 + ctx.scrollLeft;
 }

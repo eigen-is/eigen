@@ -14,13 +14,14 @@ import type { Cell } from '../../../engine/types';
 import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { applyDataVerification } from '../../../state/modules/data-verification';
 import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
-import type { History, Op, Sheet } from '../../../state/types';
+import { clearValidations, validationAt } from '../../../state/modules/validation-rules';
+import type { DataVerificationRule, History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
@@ -431,12 +432,98 @@ describe("an open cell editor follows a peer's row or column op", () => {
             ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
         });
         s.a.ctx.formulaCache.rangestart = true;
-        const map = warmFormulaCellInfoMap(s.a.ctx);
         s.undo(s.a);
         expect(s.a.ctx.editingCellPosition).toEqual(at('B5'));
         expect(s.a.ctx.formulaCache.rangestart).toBe(true);
-        expect(s.a.ctx.formulaCache.formulaCellInfoMap).toBe(map);
     });
+});
+
+// A row step the sheet now refuses sends nothing and says why, once. Its entry leaves its stack and goes to neither,
+// so the next press steps the entry before it.
+test('an undo whose row op a read-only row refuses says why and leaves its stack', () => {
+    const s = session(workbook());
+    const readOnly = (rows: Record<number, number>) =>
+        s.edit(s.b, (ctx) => {
+            ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: rows };
+        });
+    const refused = (step: () => void, notice: string) => {
+        const sent = s.batches.length;
+        s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
+            ctx.warnDialog = undefined;
+        });
+        step();
+        expect(s.batches.length).toBe(sent);
+        expect(s.a.ctx.warnDialog).toBe(notice);
+    };
+
+    s.edit(s.a, typedAt('B2', 'typed'));
+    s.edit(s.a, ...insertRows(4, 1));
+    const [typedEntry] = s.a.history.undoList;
+    readOnly({ 4: 1 });
+    refused(() => s.undo(s.a), "Sorry, this change can't be undone anymore.");
+    expect(s.a.history).toEqual({ undoList: [typedEntry], redoList: [] });
+    s.undo(s.a);
+    expect(cellAt(s.a, 'B2')?.v).toBeUndefined();
+    expect(s.a.history).toEqual({ undoList: [], redoList: [typedEntry] });
+    expect(s.a.ctx.sheets[0].data?.length).toBe(41);
+    expectAgree(s);
+});
+
+test('a redo whose row op a read-only row refuses says why and leaves its stack', () => {
+    const s = session(workbook());
+    s.edit(s.a, ...insertRows(4, 1));
+    s.edit(s.a, typedAt('B2', 'typed'));
+    s.undo(s.a);
+    s.undo(s.a);
+    const [typedEntry] = s.a.history.redoList;
+    s.edit(s.b, (ctx) => {
+        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+    });
+    const sent = s.batches.length;
+    s.redo(s.a);
+    expect(s.batches.length).toBe(sent);
+    expect(s.a.ctx.warnDialog).toBe("Sorry, this change can't be redone anymore.");
+    expect(s.a.history).toEqual({ undoList: [], redoList: [typedEntry] });
+    s.redo(s.a);
+    expect(cellAt(s.a, 'B2')?.v).toBe('typed');
+    expect(s.a.history).toEqual({ undoList: [typedEntry], redoList: [] });
+    expect(s.a.ctx.sheets[0].data?.length).toBe(40);
+    expectAgree(s);
+});
+
+// The refused insert stays in the grid, so the undo below it lands on the row its cell moved to. B10 then holds the
+// value B9 moved down, which equals what the typing wrote, so an undo left on the old row would overwrite it.
+test('an undo below a refused row insert lands where its cell moved', () => {
+    const s = session(workbook({ B9: text('new'), B10: text('old') }));
+    s.edit(s.a, typedAt('B10', 'new'));
+    s.edit(s.a, ...insertRows(4, 1));
+    s.edit(s.b, (ctx) => {
+        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+    });
+    s.undo(s.a);
+    s.undo(s.a);
+    expect(cellAt(s.a, 'B10')?.v).toBe('new');
+    expect(cellAt(s.a, 'B11')?.v).toBe('old');
+    expect(s.a.history.redoList).toHaveLength(1);
+    expectAgree(s);
+});
+
+// The refused insert stays out of the grid, so the redo below it lands on the row its cell had before the insert.
+test('a redo below a refused row insert lands where its cell is without the insert', () => {
+    const s = session(workbook({ B10: text('old'), B11: text('old') }));
+    s.edit(s.a, ...insertRows(4, 1));
+    s.edit(s.a, typedAt('B11', 'new'));
+    s.undo(s.a);
+    s.undo(s.a);
+    s.edit(s.b, (ctx) => {
+        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+    });
+    s.redo(s.a);
+    s.redo(s.a);
+    expect(cellAt(s.a, 'B10')?.v).toBe('new');
+    expect(cellAt(s.a, 'B11')?.v).toBe('old');
+    expect(s.a.history.undoList).toHaveLength(1);
+    expectAgree(s);
 });
 
 // A joiner and the server read the stored cells of every sheet a batch doesn't name, so a row op must move the
@@ -858,6 +945,7 @@ describe('shiftEntries', () => {
     ];
     const replace = (path: Patch['path'], value?: unknown): Patch => ({ op: 'replace', path, value });
     const at = (...path: Patch['path']) => ['sheets', ONE, ...path];
+    const range = (row: number[]) => ({ row, column: [1, 1] });
 
     test.each<[string, Op, Patch, Patch | null]>([
         [
@@ -940,10 +1028,34 @@ describe('shiftEntries', () => {
             replace(at('hyperlink', '7_1'), { linkType: 'webpage' }),
         ],
         [
-            'a validation rule moves',
+            "a validation rule's ranges move, the one an insert is inside grows",
             rows(2, 2),
-            replace(at('dataVerification', '5_1'), { type: 'checkbox' }),
-            replace(at('dataVerification', '7_1'), { type: 'checkbox' }),
+            replace(at('dataValidations', 'v'), { ranges: [range([5, 6]), range([1, 3])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), { ranges: [range([7, 8]), range([1, 5])], rule: { type: 'checkbox' } }),
+        ],
+        [
+            "a sheet's whole map of validation rules moves",
+            rows(2, 2),
+            replace(at('dataValidations'), { v: { ranges: [range([5, 6])], rule: { type: 'checkbox' } } }),
+            replace(at('dataValidations'), { v: { ranges: [range([7, 8])], rule: { type: 'checkbox' } } }),
+        ],
+        [
+            'a validation rule a delete shrinks keeps what is left',
+            deletedRows(2, 3),
+            replace(at('dataValidations', 'v'), { ranges: [range([3, 6]), range([2, 3])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 4])], rule: { type: 'checkbox' } }),
+        ],
+        [
+            'a validation rule a delete takes whole drops the entry',
+            deletedRows(2, 3),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 3])], rule: { type: 'checkbox' } }),
+            null,
+        ],
+        [
+            "a validation rule's removal stays",
+            deletedRows(2, 3),
+            { op: 'remove', path: at('dataValidations', 'v') },
+            { op: 'remove', path: at('dataValidations', 'v') },
         ],
         [
             'a cell below a delete moves up',
@@ -1060,5 +1172,182 @@ describe('shiftEntries', () => {
     test('returns an entry the marker does not touch as it is', () => {
         const entry: History = { patches: [replace(at('data', 1, 1), { v: 1 })], inversePatches: [] };
         expect(shiftEntries([entry], rows(2, 2), sheets, 'undo')[0]).toBe(entry);
+    });
+});
+
+// Each validation rule is written under its own id, so two peers editing different rules keep both edits, and a peer's
+// row op moves an undo's rules with the cells they cover. Columns A and B each hold a list rule over rows 1 to 10.
+describe('validation rules on two tabs and a joiner', () => {
+    const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const TICKS: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+    const rules = (t: Tab) => t.ctx.sheets[0].dataValidations;
+    const apply = (row: number[], column: number[], rule: DataVerificationRule) => (ctx: Context) =>
+        applyDataVerification(ctx, { row, column }, rule);
+    const column = (t: Tab, c: number, rows: number) =>
+        Array.from({ length: rows }, (_, r) => validationAt(rules(t), r, c)?.type ?? null);
+    const repeat = (type: string | null, n: number) => Array<string | null>(n).fill(type);
+    function ruled() {
+        const base = workbook();
+        base.sheets[0].dataValidations = {
+            a: { ranges: [{ row: [0, 9], column: [0, 0] }], rule: LIST },
+            b: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: LIST },
+        };
+        return base;
+    }
+
+    test('two peers editing different rules at once keep both edits', () => {
+        const base = ruled();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, apply([0, 1], [0, 0], TICKS));
+        const fromB = tabEdit(b, (ctx) => clearValidations(ctx.sheets[0], { row: [5, 9], column: [1, 1] }));
+        tabReceive(a, fromB);
+        tabReceive(b, fromA);
+        expect(rules(b)).toEqual(rules(a));
+        expect(join(base, [fromA, fromB])[0].dataValidations).toEqual(rules(a));
+        expect(column(a, 0, 4)).toEqual([...repeat('checkbox', 2), ...repeat('dropdown', 2)]);
+        expect(column(a, 1, 10)).toEqual([...repeat('dropdown', 5), ...repeat(null, 5)]);
+    });
+
+    test("an undo after a peer's row insert gives the cut rule its moved cells back, and redo puts the rule back", () => {
+        const s = session(ruled());
+        const applied = [...repeat('dropdown', 6), ...repeat('checkbox', 2), ...repeat('dropdown', 4)];
+        s.edit(s.a, apply([4, 5], [0, 0], TICKS));
+        s.edit(s.b, ...insertRows(2, 2));
+        expect(column(s.a, 0, 12)).toEqual(applied);
+        s.undo(s.a);
+        expect(column(s.a, 0, 13)).toEqual([...repeat('dropdown', 12), null]);
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.redo(s.a);
+        expect(column(s.a, 0, 12)).toEqual(applied);
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+    });
+
+    test("an undo and a redo of a row insert keep a peer's later cut of the rule the insert grew", () => {
+        const s = session(ruled());
+        s.edit(s.a, ...insertRows(2, 2));
+        s.edit(s.b, (ctx) => clearValidations(ctx.sheets[0], { row: [8, 11], column: [0, 0] }));
+        s.undo(s.a);
+        const cut = [...repeat('dropdown', 6), ...repeat(null, 4)];
+        for (const t of [s.a, s.b]) expect(column(t, 0, 10)).toEqual(cut);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.redo(s.a);
+        const regrown = [...repeat('dropdown', 8), ...repeat(null, 4)];
+        for (const t of [s.a, s.b]) expect(column(t, 0, 12)).toEqual(regrown);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+    });
+
+    test('a row delete over a rule moves it on both tabs and the joiner, and its undo brings the rule back', () => {
+        const s = session(ruled());
+        s.edit(s.a, apply([4, 5], [0, 0], TICKS));
+        s.edit(s.a, ...deleteRows(3, 6));
+        expect(column(s.a, 0, 7)).toEqual([...repeat('dropdown', 6), null]);
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.undo(s.a);
+        const restored = [...repeat('dropdown', 4), ...repeat('checkbox', 2), ...repeat('dropdown', 4)];
+        expect(column(s.a, 0, 10)).toEqual(restored);
+        expect(column(s.b, 0, 10)).toEqual(restored);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+    });
+
+    // Both tabs edit before either sees the other's batch, and the log holds B's batch first.
+    function race(
+        base: Context,
+        onA: readonly [(ctx: Context) => void, Parameters<typeof tabEdit>[2]],
+        onB: (ctx: Context) => void,
+    ) {
+        const a = tab(base);
+        const b = tab(base);
+        const fromB = tabEdit(b, onB);
+        const fromA = tabEdit(a, ...onA);
+        tabReceive(a, fromB);
+        tabReceive(b, fromA);
+        return { a, b, joined: join(base, [fromB, fromA])[0].dataValidations };
+    }
+
+    // A tab whose own batch the log puts after a peer's applies the log again, so it ends as a tab that took the
+    // batches in the log's order.
+    function inLogOrder(base: Context, batches: Op[][]) {
+        const t = tab(base);
+        for (const ops of batches) tabReceive(t, ops);
+        return t;
+    }
+    const rangesOfA = (validations: Sheet['dataValidations']) => validations?.a?.ranges;
+
+    test('two row inserts sent at once leave a rule on its cells on both tabs and the joiner', () => {
+        const base = workbook({ A5: text('x'), A6: text('y') });
+        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], rule: LIST } };
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...insertRows(0, 1));
+        const fromB = tabEdit(b, ...insertRows(0, 1));
+        tabReceive(a, fromB);
+        const onB = inLogOrder(base, [fromA, fromB]);
+        expect(cellAt(a, 'A7')?.v).toBe('x');
+        for (const validations of [rules(a), rules(onB), join(base, [fromA, fromB])[0].dataValidations]) {
+            expect(rangesOfA(validations)).toEqual([{ row: [6, 7], column: [0, 0] }]);
+        }
+    });
+
+    test("a row insert sent with a peer's cut of a rule moves the cut rule on both tabs and the joiner", () => {
+        const base = ruled();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...insertRows(0, 1));
+        const fromB = tabEdit(b, (ctx) => clearValidations(ctx.sheets[0], { row: [5, 9], column: [0, 0] }));
+        tabReceive(b, fromA);
+        const onA = inLogOrder(base, [fromB, fromA]);
+        for (const validations of [rules(onA), rules(b), join(base, [fromB, fromA])[0].dataValidations]) {
+            expect(rangesOfA(validations)).toEqual([{ row: [1, 5], column: [0, 0] }]);
+        }
+    });
+
+    test("a row insert made before a peer's new rule arrived keeps that rule on both tabs and the joiner", () => {
+        const { a, b, joined } = race(ruled(), insertRows(2, 1), apply([0, 1], [3, 3], TICKS));
+        for (const validations of [rules(a), rules(b), joined]) {
+            expect(Object.values(validations ?? {}).map(({ rule }) => rule.type)).toContain('checkbox');
+        }
+        expect(joined).toEqual(rules(b));
+    });
+
+    // A inserts a row, then undoes it while B's edit is on its way, and B's batch comes first in the log.
+    function raceUndo(onB: (ctx: Context) => void, redo = false) {
+        const s = session(ruled());
+        s.edit(s.a, ...insertRows(2, 1));
+        if (redo) s.undo(s.a);
+        const fromB = tabEdit(s.b, onB);
+        const step = redo ? tabRedo(s.a) : tabUndo(s.a);
+        tabReceive(s.a, fromB);
+        tabReceive(s.b, step);
+        return { ...s, joined: join(ruled(), [...s.batches, fromB, step])[0].dataValidations };
+    }
+
+    test('an undo of a row insert keeps a rule a peer added meanwhile', () => {
+        const { a, b, joined } = raceUndo(apply([0, 1], [3, 3], TICKS));
+        for (const validations of [rules(a), rules(b), joined]) {
+            expect(Object.values(validations ?? {}).map(({ rule }) => rule.type)).toContain('checkbox');
+        }
+        expect(joined).toEqual(rules(b));
+    });
+
+    test("a row insert made before a peer's rule delete arrived leaves the rule deleted", () => {
+        const { a, b, joined } = race(ruled(), insertRows(2, 1), (ctx) =>
+            clearValidations(ctx.sheets[0], { row: [0, 9], column: [1, 1] }),
+        );
+        for (const validations of [rules(a), rules(b), joined]) expect(Object.keys(validations ?? {})).toEqual(['a']);
+        expect(joined).toEqual(rules(b));
+    });
+
+    test('an undo and a redo of a row insert leave a rule a peer deleted meanwhile deleted', () => {
+        const clearB = (ctx: Context) => clearValidations(ctx.sheets[0], { row: [0, 10], column: [1, 1] });
+        for (const redo of [false, true]) {
+            const { a, b, joined } = raceUndo(clearB, redo);
+            for (const validations of [rules(a), rules(b), joined])
+                expect(Object.keys(validations ?? {})).toEqual(['a']);
+            expect(joined).toEqual(rules(b));
+        }
     });
 });

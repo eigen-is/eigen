@@ -1,19 +1,17 @@
+// Gives a sheet every collection the editor writes into key by key: the config maps, such as merges and row heights,
+// and the images, charts and validation rules beside them. immer records the creation of a key as one `add` of the
+// whole new value, so a first write into a missing collection would ship the collection whole, and two peers' first
+// row resizes would overwrite each other. So every sheet that enters a reader, such as the editor's mount, the replay
+// base, an addSheet op or the default workbook, passes through normalizeSheetConfig first.
+
 import { isRecord } from '@workspace/lib/guards';
 import type { Sheet } from '@workspace/lib/sheets';
-import { chartsWithinEntryCap } from '@workspace/lib/sheets';
+import { chartsWithinEntryCap, wellFormedValidations } from '@workspace/lib/sheets';
 import type { ExtendedSheetConfig } from './types';
 
-// immer records the creation of a key as one `add` carrying the WHOLE new value, so a config
-// collection that does not exist yet turns the first write to it into a whole-collection op —
-// two clients each making their first row resize overwrite each other. Writers therefore emit
-// granular `['config','rowlen','2']` patches against collections that already exist, so every
-// sheet entering any consumer (initSheetData, the replay base, addSheet ops, createDefaultSheets)
-// is normalized here first; a base missing a collection makes those patches fail to resolve and
-// drops the batch. A leaf of its own so `defaults.ts` can normalize without cycling through the
-// replay machinery.
-//
-// One list — a collection missing from it silently reintroduces the clobber for its own first
-// write. `satisfies` only checks each entry is a real key; the assert below checks the reverse.
+// One list: a collection missing from it brings the overwrite back for its own first write. `satisfies` only checks
+// that each entry is a real key, and the check below it checks the reverse. The file is a leaf of its own, so the
+// default workbook can normalize without a cycle through the replay.
 export const SHEET_CONFIG_COLLECTIONS = [
     'merge',
     'rowlen',
@@ -27,10 +25,8 @@ export const SHEET_CONFIG_COLLECTIONS = [
     'borderInfo',
 ] as const satisfies readonly (keyof ExtendedSheetConfig)[];
 
-// Exhaustiveness gate: every Record-valued (collection) key of ExtendedSheetConfig must appear
-// above, or a new collection's first write returns to clobbering peers. Membership (`satisfies`)
-// does not catch an omission; this does — Exclude is non-never the moment a collection is missing,
-// and `true` stops being assignable. Scalar keys are Record-excluded, so they need no entry.
+// Every map-valued key of ExtendedSheetConfig must be in the list above. When one is missing, the Exclude below is no
+// longer never, `true` is no longer assignable, and the build fails. A scalar key is no map, so it needs no entry.
 type CollectionConfigKey = {
     [K in keyof ExtendedSheetConfig]-?: NonNullable<ExtendedSheetConfig[K]> extends Record<string, unknown> ? K : never;
 }[keyof ExtendedSheetConfig];
@@ -43,9 +39,10 @@ export function normalizeSheetConfig(sheet: Sheet) {
     // `Sheet.config` is lib's wire shape; the editor extras ride along on the same object.
     const cfg: ExtendedSheetConfig = (sheet.config ??= {});
     for (const key of SHEET_CONFIG_COLLECTIONS) cfg[key] ??= {};
-    // Images and charts live outside config but are written per key the same way. A value that is no map, or a chart
-    // past the entry cap, only a forged sheet holds: it is left out, as floatingWriteFilter leaves out a write that
-    // brings one.
+    // Images, charts and validation rules live outside config but are written per key the same way. A value that is
+    // no map, a chart past the entry cap or a rule that is not well formed only a forged sheet holds: it is left out,
+    // as the op conversion leaves out a write that brings one.
     sheet.images = isRecord(sheet.images) ? sheet.images : {};
     sheet.charts = isRecord(sheet.charts) ? chartsWithinEntryCap(sheet.charts) : {};
+    sheet.dataValidations = wellFormedValidations(sheet.dataValidations);
 }

@@ -283,11 +283,11 @@ describe('each cap', () => {
         ).toMatchObject(TOO_LARGE);
     }, 30_000);
 
-    // A validation's prompt reaches every cell it keys: a 1 MB prompt over the clamp's 100,000 cells.
-    test("a validation's prompt counts once per cell it keys", () => {
-        const prompt = `<dataValidations count="1"><dataValidation type="whole" operator="greaterThan" showInputMessage="1" prompt="${'a'.repeat(1_000_000)}" sqref="A1:CV1001"><formula1>1</formula1></dataValidation></dataValidations>`;
+    // A validation is stored once over its ranges, so a 1 MB prompt over the whole grid costs its 1 MB once.
+    test("a validation's prompt counts once, however many cells its range covers", () => {
+        const prompt = `<dataValidations count="1"><dataValidation type="whole" operator="greaterThan" showInputMessage="1" prompt="${'a'.repeat(1_000_000)}" sqref="A1:XFD1048576"><formula1>1</formula1></dataValidation></dataValidations>`;
         const result = measuredImport(xlsx({ after: prompt }));
-        expect(result).toMatchObject(TOO_LARGE);
+        expect(result).toMatchObject({ cells: [1] });
         expect(result.rssGrowth).toBeLessThan(64 * MB);
     }, 30_000);
 });

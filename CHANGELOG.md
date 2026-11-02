@@ -20,6 +20,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
 - **Scrolling in Sheets** — the grid keeps up with the scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets
+- **Validation rules in Sheets (breaking)** — an existing spreadsheet opens without its dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set the rules up again, or import the Excel file again
+- **Whole-column rules in Sheets** — a validation rule on a whole column, picked by its header or from an Excel file, covers every row, below the data too. Only rows inserted inside a rule get it
+- **Pasting over rules and links in Sheets** — cells you copy or cut in the same tab replace the validation rules and links where you paste them, as in Excel. A paste, fill or move that would break a rule into too many pieces is refused, with a notice
+- **Copying hidden rows and columns in Sheets** — a copy, cut or drag move takes them along, as in Excel, where a cut used to lose them. A copy leaves out the rows a filter hides
+- **The Sheets bar** — its format buttons fold into the **Format** menu a group at a time as the bar narrows, alignment first, as in Docs, and an open side panel counts. The menus no longer scroll sideways
+- **Sheet names** — a tab name may hold a fullwidth ： or ？, as in Excel. A refused name says why: at most 31 characters, none of `\ / ? * [ ] :`, and no `'` at either end
+- **Whole-column lookups in Sheets** — a sheet with 20,000 lookups into whole columns of 64,000 rows, such as INDEX and MATCH over `B:B`, opens about three seconds faster
 - **Emoji** — emoji draw in one monochrome emoji font, in the color of the text, in the apps and in PDF, web page and SVG downloads, so they look the same on nearly every computer. Safari still draws keycap emoji such as 1️⃣ and some joined emoji in parts
 - **Chinese and Korean text** — draws in Noto Sans SC and Noto Sans KR in the apps and in PDF, web page and SVG downloads, where a PDF printed Korean as boxes. Japanese kanji draw in their Chinese forms
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
@@ -48,6 +55,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Filters and hidden rows in Sheets** — applying, changing or clearing a filter leaves the rows you hid by hand hidden
+- **Typing after a menu in Sheets** — after a command from the Edit, View, Insert, Format or Data menu, such as inserting a row, typing and Delete work on the grid without a click first, as in Google Sheets
+- **Sheet names in formulas** — a formula finds a sheet even when its name's case differs, as in Excel, so `=data!A1` reads the tab Data. A tab can't take another tab's name in another case
+- **Formulas that didn't update in Sheets** — formulas with spaces such as `=A1 + 1`, INDEX, whole columns on another sheet, and whole columns after a row insert or a paste below the data recalculate when their cells change
+- **Pasting from WPS Office** — a table pasted from WPS keeps its cell styles, such as bold and colors
+- **Filter buttons on narrow columns** — a column narrower than its filter button keeps the button inside it, so a click opens that column's filter
 - **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
 - **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
 - **Copying items with the same name** — copying any number of items with the same name into one folder lands every one of them at once, each under its own name

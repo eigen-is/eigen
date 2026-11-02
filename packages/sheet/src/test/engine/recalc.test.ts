@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
+import { sheetFinder } from '../../engine/parser/helper/cell';
+import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,23 @@ describe('engine/recalc — recalcSheets', () => {
         expect(before[0].data![0][1]?.v).toBe('Hello world!');
         const after = recalcSheets([sheet('s1', 'Sheet1', [[rich('Bye'), formula('=A1&"!"')]])]);
         expect(after[0].data![0][1]?.v).toBe('Bye!');
+    });
+
+    // Each ref names a sheet no sheet holds, among many sheets of names as long, so a name read against each sheet in
+    // turn made the pass take seconds.
+    test('formulas of many refs to a missing sheet, among many sheets, recalc in a moment', () => {
+        const name = (base: string) => base.padEnd(31, '_');
+        const f = `=${Array.from({ length: 800 }, () => `${name('Nosuch')}!A1`).join('+')}`;
+        const sheets = Array.from({ length: 1000 }, (_, i) => sheet(`s${i}`, name(`Sheet_${i}`), [[null]]));
+        sheets[0] = sheet(
+            's0',
+            name('Sheet_0'),
+            Array.from({ length: 20 }, () => [formula(f, { v: 0 })]),
+        );
+        const started = performance.now();
+        const out = recalcSheets(sheets);
+        expect(performance.now() - started).toBeLessThan(2_000);
+        expect(out[0].data?.[0][0]?.f).toBe(f);
     });
 
     test('chained dependencies evaluate in order', () => {
@@ -83,12 +101,30 @@ describe('engine/recalc — recalcSheets', () => {
         expect(out[0].data?.[0][0]?.v).toBe('x6y');
     });
 
-    test('INDEX-carrying formula is parsed via the special-case branch and evaluates', () => {
-        // A formula calling INDEX, OFFSET or INDIRECT finds its ranges through isFunctionRange, not the tokenizer.
-        // A plain range argument records no dependency there, as in the editor: only a single-quoted endpoint does.
-        const sheets = [sheet('s1', 'Sheet1', [[num(10), num(20), formula('=INDEX(A1:B1,1,2)')]])];
+    test("a formula orders after the cells an INDEX's range argument reads", () => {
+        // A1 is scanned first, so only a recorded dependency makes it read C1's fresh 6 over the cached 0.
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=INDEX(B1:C1,1,2)'), num(10), formula('=2*3', { v: 0 })]])];
         const out = recalcSheets(sheets);
-        expect(out[0].data![0][2]?.v).toBe(20);
+        expect(out[0].data![0][0]?.v).toBe(6);
+    });
+
+    test('a formula orders after the cells a whole column or row reads, on its sheet or another', () => {
+        // Each formula is scanned before the cell it reads, whose cached 0 is stale.
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [formula('=SUM(B:B)'), formula('=2*3', { v: 0 }), formula('=SUM(Data!A:A)')],
+                [null, null, formula('=SUM(Data!2:2)')],
+                [null, null, formula('=SUM(4:4)')],
+                [formula('=4*5', { v: 0 })],
+            ]),
+            sheet('s2', 'Data', [
+                [formula('=7*1', { v: 0 }), null],
+                [num(1), formula('=8*1', { v: 0 })],
+            ]),
+        ];
+        const out = recalcSheets(sheets);
+        const sheet1 = out[0].data!;
+        expect([sheet1[0][0]?.v, sheet1[0][2]?.v, sheet1[1][2]?.v, sheet1[2][2]?.v]).toEqual([6, 8, 9, 20]);
     });
 
     test('OFFSET / INDIRECT formulas are handled without crashing (error sentinel)', () => {
@@ -378,6 +414,46 @@ describe('engine/recalc — recalcSheets', () => {
         expect(entry?.v?.v).toBe(6);
     });
 
+    test('a sheet name in another case reads that sheet, as in Excel', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=data!A1*2')]]), sheet('s2', 'Data', [[num(4)]])];
+        expect(recalcSheets(sheets)[0].data![0][0]?.v).toBe(8);
+    });
+
+    // A workbook stored before a rename compared names in any case can hold both.
+    test('in a workbook holding Data and data, each name reads its own sheet', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=data!A1'), formula('=Data!A1'), formula('=DATA!A1')]]),
+            sheet('s2', 'Data', [[num(1)]]),
+            sheet('s3', 'data', [[num(2)]]),
+        ];
+        expect(recalcSheets(sheets)[0].data?.[0].map((cell) => cell?.v)).toEqual([2, 1, 1]);
+    });
+
+    // A stored matrix may lack rows, its first among them, so a whole row reads as wide as the sheet's widest row.
+    test('a whole row reads to the last column of a sheet whose first row is short', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=SUM(Holey!2:2)'), formula('=SUM(Holey!A2:C2)')]]),
+            sheet('s2', 'Holey', [[], [num(1), num(2)]]),
+        ];
+        const [out] = recalcSheets(sheets);
+        expect([out.data![0][0]?.v, out.data![0][1]?.v]).toEqual([3, 3]);
+    });
+
+    // Excel ignores a space that isn't between two references. A zenodo workbook writes =IF((AN38+ AO38         )<>0,…)
+    // over a number and the empty text another formula gives, and caches #VALUE!, as 1 + "" is in Excel.
+    test('spaces around an operand change nothing, and a number plus empty text is #VALUE!', () => {
+        const spaced = '=IF((A1+ B1         )<>0,A1,    "")';
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), num(2), formula(spaced), formula('= A1 +B1 '), formula('=SUM( A1 , B1 )')],
+                [num(1), formula('=""'), formula(spaced.replaceAll('1', '2'))],
+            ]),
+        ];
+        const [out] = recalcSheets(sheets);
+        expect(out.data![0].slice(2).map((cell) => cell?.v)).toEqual([1, 3, 3]);
+        expect(out.data![1][2]?.v).toBe('#VALUE!');
+    });
+
     test('one poisoned formula does not kill the pass', () => {
         // =NoSheet!A1 throws ERROR_REF (unresolvable sheet name); the sibling
         // formula must still compute.
@@ -387,12 +463,42 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('past its dependency budget a recalc throws before it computes', () => {
-        // On a sheet 128 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
-        const rows = Array.from({ length: 128 }, (): (Cell | null)[] => [null, null, null, null]);
+        // On a sheet 129 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
+        const rows = Array.from({ length: 129 }, (): (Cell | null)[] => [null, null, null, null]);
         rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
         const sheets = [sheet('s1', 'Sheet1', rows)];
-        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+        expect(() => recalcSheets(sheets, { maxDependencySlots: 2 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencySlots: 3 })[0].data![0][1]?.v).toBe(1);
+    });
+
+    test('a range down every row of its sheet costs the budget one per column', () => {
+        // Data is 6,400 rows deep, so each Data!A:A would meet 100 blocks of 64 × 16.
+        const data = Array.from({ length: 6_400 }, (): (Cell | null)[] => [num(1), null]);
+        const report = Array.from({ length: 10 }, (): (Cell | null)[] => [formula('=SUM(Data!A:A)')]);
+        const sheets = [sheet('d', 'Data', data), sheet('r', 'Report', report)];
+        expect(() => recalcSheets(sheets, { maxDependencySlots: 9 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencySlots: 10 })[1].data?.[9][0]?.v).toBe(6_400);
+    });
+
+    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 links, though the
+    // index lists the column once per formula.
+    test('past its edge budget a recalc throws before it links the formulas', () => {
+        const rows = Array.from({ length: 4 }, (): (Cell | null)[] => [formula('=COUNT(A:A)')]);
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyEdges: 15 })).toThrow(RangeError);
+        expect(() => recalcSheets(sheets, { maxDependencyEdges: 16 })).not.toThrow();
+    });
+
+    // The 32 formulas in A1:A32 read B41:B42, which lies in their 64 × 16 block. So the lookup of each formula cell
+    // visits all 32 ranges and finds none covering it: 1,024 visits that make no link.
+    test('past its visit budget a recalc throws, though the ranges near the formula cells make no link', () => {
+        const rows = Array.from({ length: 64 }, (_, r): (Cell | null)[] => [
+            r < 32 ? formula('=SUM(B41:B42)') : null,
+            null,
+        ]);
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyVisits: 1_023 })).toThrow(RangeError);
+        expect(() => recalcSheets(sheets, { maxDependencyVisits: 1_024, maxDependencyEdges: 0 })).not.toThrow();
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {
@@ -422,7 +528,7 @@ describe('engine/recalc — recalcSheets', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=SUM(B1:XFD1048576)'), num(5), formula('=B1+1')]], { row: 1, column: 3 }),
         ];
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 1 })[0].data![0][0]?.v).toBe(11);
+        expect(recalcSheets(sheets, { maxDependencySlots: 1 })[0].data![0][0]?.v).toBe(11);
     });
 
     test('output carries a populated calcChain for formula cells', () => {
@@ -476,5 +582,48 @@ describe('engine/recalc — sheetsNeedRecalc', () => {
         const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
         const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]), idless]);
         expect(sheetsNeedRecalc(out)).toBe(false);
+    });
+});
+
+describe('engine/recalc — extractDependencies', () => {
+    const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
+        sheets,
+        findSheet: sheetFinder(sheets),
+        cellTextToIndexList: {},
+    });
+
+    // Each quoted sheet name is glued to the reference after it as the formula is split, never by moving the rest of
+    // the parts, so a crafted file can't make the walk quadratic.
+    test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
+        const g = walkOver([{ id: 's2', name: 'My Data', data: [[num(1)]] }]);
+        const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
+        expect(f.length).toBeGreaterThan(2_000_000);
+        const start = performance.now();
+        const deps = extractDependencies(g, f, 's1', null);
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(deps).toHaveLength(160_000);
+        expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
+    });
+
+    // A function's name is matched only where a word starts, so a long run of letters with no bracket after it is
+    // read once, not once per letter.
+    test('walks a 1 MB run of letters in well under a second', () => {
+        const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
+        const start = performance.now();
+        expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
+        expect(performance.now() - start).toBeLessThan(1_000);
+    });
+
+    test("a function's name reads as no cell, after an operator or a colon", () => {
+        const data = [[num(1), num(2)]];
+        const g = walkOver([{ id: 's1', name: 'Sheet1', data }]);
+        expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1', data)).toEqual([
+            { row: [0, 0], column: [0, 0], sheetId: 's1' },
+            { row: [1, 1], column: [1, 1], sheetId: 's1' },
+        ]);
+        expect(extractDependencies(g, '=A1:INDEX(B:B,1)', 's1', data)).toEqual([
+            { row: [0, 0], column: [0, 0], sheetId: 's1' },
+            { row: [0, 0], column: [1, 1], sheetId: 's1' },
+        ]);
     });
 });

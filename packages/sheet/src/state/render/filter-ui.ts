@@ -1,13 +1,9 @@
-// Autofilter UI: the filter-range border and the per-column buttons, drawn
-// inside every drawMain pass so freeze-region pinning and clipping match the
-// cells underneath. Geometry comes from filterOptions.items plus the shared
-// button constants — the same values the mousedown hit-test uses. Button
-// styling matches Google Sheets: a bare strainer glyph when idle, the sheets
-// app green on hover (14% wash, mirroring the --app-sheets-color-soft mix,
-// which canvas can't parse as color-mix()), and a filled green box with the
+// Autofilter UI: the filter-range border and the per-column buttons, drawn inside every drawMain
+// pass so freeze-region pinning and clipping match the cells underneath. Each button is painted in
+// its filterOptions item's rect, the one the mousedown hit test reads too. The styling is Google
+// Sheets': a bare strainer glyph when idle, a green wash on hover, and a filled green box with a
 // funnel when the column has an active filter.
 
-import { FILTER_BUTTON_HEIGHT, FILTER_BUTTON_WIDTH } from '../modules/filter';
 import { canvasColors } from './colors';
 import { HALF_PIXEL, sheetToCanvasX, sheetToCanvasY } from './geometry';
 import type { RenderPass } from './types';
@@ -38,7 +34,6 @@ export function drawFilterUI(pass: RenderPass) {
     renderCtx.rect(offsetLeft - 1, offsetTop - 1, drawWidth + 1, drawHeight + 1);
     renderCtx.clip();
 
-    // Range border (was the border-selection-handle overlay div)
     renderCtx.strokeStyle = selectionHandle;
     renderCtx.lineWidth = 1;
     renderCtx.strokeRect(
@@ -50,9 +45,9 @@ export function drawFilterUI(pass: RenderPass) {
 
     for (const item of options.items) {
         if (
-            item.left + FILTER_BUTTON_WIDTH < scrollWidth ||
+            item.left + item.width < scrollWidth ||
             item.left > scrollWidth + drawWidth ||
-            item.top + FILTER_BUTTON_HEIGHT < scrollHeight ||
+            item.top + item.height < scrollHeight ||
             item.top > scrollHeight + drawHeight
         ) {
             continue;
@@ -64,17 +59,16 @@ export function drawFilterUI(pass: RenderPass) {
         const hovered = sheetCtx.filterButtonHover === item.col;
 
         if (active) {
-            // Filled green box (opaque, covers any cell ink underneath)
+            // The box is opaque, so it covers any cell ink underneath.
             renderCtx.beginPath();
-            renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 3);
+            renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, item.width - 1, item.height - 1, 3);
             renderCtx.fillStyle = appColor;
             renderCtx.fill();
         } else if (hovered) {
-            // Background knockout first, then a 14% green wash — the canvas
-            // equivalent of --app-sheets-color-soft (color-mix doesn't parse
-            // as a canvas fillStyle).
+            // The background first, then a 14% green wash. That is the canvas version of
+            // --app-sheets-color-soft, because a canvas fillStyle can't parse color-mix().
             renderCtx.beginPath();
-            renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, FILTER_BUTTON_WIDTH - 1, FILTER_BUTTON_HEIGHT - 1, 3);
+            renderCtx.roundRect(bx + HALF_PIXEL, by + HALF_PIXEL, item.width - 1, item.height - 1, 3);
             renderCtx.fillStyle = background;
             renderCtx.fill();
             renderCtx.save();
@@ -84,26 +78,26 @@ export function drawFilterUI(pass: RenderPass) {
             renderCtx.restore();
         }
 
+        // The glyph is centered in the button. In a column at the 10px resize floor it is wider
+        // than the button, but its ink still fits inside.
+        renderCtx.save();
         if (active) {
-            // 13×13 funnel knocked out of the green box, centered
-            renderCtx.save();
-            renderCtx.translate(bx + (FILTER_BUTTON_WIDTH - 13) / 2, by + (FILTER_BUTTON_HEIGHT - 13) / 2);
+            // A 13×13 funnel knocked out of the green box.
+            renderCtx.translate(bx + (item.width - 13) / 2, by + (item.height - 13) / 2);
             renderCtx.scale(13 / 24, 13 / 24);
             renderCtx.fillStyle = background;
             renderCtx.fill(glyphs.funnel);
-            renderCtx.restore();
         } else {
-            // 12×12 strainer, centered; green on hover, muted otherwise
-            renderCtx.save();
-            renderCtx.translate(bx + (FILTER_BUTTON_WIDTH - 12) / 2, by + (FILTER_BUTTON_HEIGHT - 12) / 2);
+            // A 12×12 strainer: green on hover, muted otherwise.
+            renderCtx.translate(bx + (item.width - 12) / 2, by + (item.height - 12) / 2);
             renderCtx.scale(12 / 24, 12 / 24);
             renderCtx.strokeStyle = hovered ? appColor : mutedForeground;
             renderCtx.lineWidth = 2.5;
             renderCtx.lineCap = 'round';
             renderCtx.lineJoin = 'round';
             renderCtx.stroke(glyphs.strainer);
-            renderCtx.restore();
         }
+        renderCtx.restore();
     }
 
     renderCtx.restore();
