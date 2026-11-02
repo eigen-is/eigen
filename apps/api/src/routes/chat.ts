@@ -3,7 +3,7 @@
 // through SharedDrive, which checks the access before ChatRoom does the work.
 
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, InviteResult } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
@@ -161,7 +161,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .post(
         '/chat/:ownerId/:mountId/:chatId/messages',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<ChatMessage> => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -190,7 +190,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .patch(
         '/chat/:ownerId/:mountId/:chatId/messages/:messageId',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<ChatMessage> => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -206,7 +206,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .delete(
         '/chat/:ownerId/:mountId/:chatId/messages/:messageId',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ success: boolean }> => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -220,7 +220,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .post(
         '/chat/:ownerId/:mountId/:chatId/invite',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<InviteResult> => {
             // An invite shares the chat, which a guest may not, as on the ACL route.
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
