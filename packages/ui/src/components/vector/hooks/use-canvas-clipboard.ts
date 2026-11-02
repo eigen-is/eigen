@@ -39,6 +39,7 @@ import type {
 import {
     canvasPtToPx,
     IMAGE_CASCADE_OFFSET,
+    isTextBox,
     pasteAnchorOffset,
     readClipboardTypography,
     readElementsClipboardItem,
@@ -293,7 +294,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             for (const { index, text, fontSize, fontFamily, width } of plan.measuredText) {
                 const html = textToParagraphHtml(text);
                 healTextSize(ids[index], text, fontSize, fontFamily, (el) => {
-                    return el.type === 'rectangle' && el.html === html && el.width === width;
+                    return isTextBox(el) && el.html === html && el.width === width;
                 });
             }
 
