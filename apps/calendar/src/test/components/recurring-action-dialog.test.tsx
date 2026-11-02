@@ -1,5 +1,6 @@
 // The recurring action dialog asks which events of a series an edit or delete applies to. It starts at the first
-// option on every opening, OK hands the chosen one on and closes, and a confirm that fails keeps it open.
+// option on every opening, and a screen reader names its choices by the dialog's title. OK hands the chosen one on
+// and closes, and a confirm that fails keeps it open.
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -60,6 +61,9 @@ test('it offers the options it is given, the first one chosen', async () => {
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Delete recurring event');
     expect(labels()).toEqual(['This event', 'All events in series']);
     expect(checked()).toBe('recurring-this');
+    expect(document.querySelector('[role="dialog"] [role="radiogroup"]')?.getAttribute('aria-label')).toBe(
+        'Delete recurring event',
+    );
 });
 
 test('OK hands the chosen option on, and the dialog closes', async () => {

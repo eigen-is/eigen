@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@workspace/ui/components/textarea';
 import { AlignLeft, Calendar, Clock, MapPin } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { calendarKey } from './calendar-utils';
 import { RecurrencePicker } from './recurrence-picker';
 import { addMinutes, endAfter, roundToNext15Minutes, TimeSelect, timeToMinutes, toTimeString } from './time-select';
 
@@ -230,7 +231,7 @@ export function EventFormFields({
                         </SelectTrigger>
                         <SelectContent>
                             {calendarOptions.map((cal) => (
-                                <SelectItem key={`${cal.ownerId}:${cal.id}`} value={`${cal.ownerId}:${cal.id}`}>
+                                <SelectItem key={calendarKey(cal)} value={calendarKey(cal)}>
                                     <div className="flex items-center gap-2">
                                         <div
                                             className="h-3 w-3 rounded-full shrink-0"

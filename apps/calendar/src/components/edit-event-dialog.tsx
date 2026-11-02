@@ -1,6 +1,7 @@
 // The Edit event dialog: every field of an existing event, its guests, and the choice of which occurrences of a
 // repeating event a change applies to. The event detail dialog opens it.
 
+import { wasToasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
@@ -36,7 +37,7 @@ import {
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
-import { buildEventTimes } from './calendar-utils';
+import { buildEventTimes, calendarKey } from './calendar-utils';
 import { EventFormFields } from './event-form-fields';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
@@ -60,13 +61,13 @@ export function EditEventDialog({
     sharedCalendars: sharedCalendarsProp,
 }: EditEventDialogProps) {
     const { user } = useAuth();
-    const ownerId = user?.id || '';
+    const ownerId = user?.id ?? '';
     const eventOwnerId = ownerUserId || ownerId;
 
     const { data: fetchedCalendars = [] } = useCalendars(ownerId);
     const { data: fetchedSharedCalendars = [] } = useSharedCalendars(ownerId);
-    const calendars = calendarsProp || fetchedCalendars;
-    const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
+    const calendars = calendarsProp ?? fetchedCalendars;
+    const sharedCalendars = sharedCalendarsProp ?? fetchedSharedCalendars;
 
     const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
@@ -90,7 +91,7 @@ export function EditEventDialog({
         if (open) createdDestRef.current = false;
     }, [open]);
 
-    const selectedCal = calendarOptions.find((c) => `${c.ownerId}:${c.id}` === selectedCalKey);
+    const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
     const calendarChanged = event
         ? selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId
         : false;
@@ -119,14 +120,10 @@ export function EditEventDialog({
             setRruleString(event.rrule);
             setAttendees(heldAttendees(event, master));
 
-            const currentCal = calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId);
-            setSelectedCalKey(
-                currentCal
-                    ? `${currentCal.ownerId}:${currentCal.id}`
-                    : calendarOptions[0]
-                      ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}`
-                      : '',
-            );
+            const currentCal =
+                calendarOptions.find((c) => c.id === event.calendarId && c.ownerId === eventOwnerId) ??
+                calendarOptions[0];
+            setSelectedCalKey(currentCal ? calendarKey(currentCal) : '');
 
             if (event.allDay) {
                 const sd = event.startTime;
@@ -168,7 +165,10 @@ export function EditEventDialog({
         } else if (isPartOfSeries && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
-            doSave('all');
+            // A failed save was toasted by its mutation hook, and the dialog stays open for another try.
+            doSave('all').catch((error: unknown) => {
+                if (!wasToasted(error)) throw error;
+            });
         }
     };
 

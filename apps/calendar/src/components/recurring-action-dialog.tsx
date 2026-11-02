@@ -6,7 +6,9 @@ import { Label } from '@workspace/ui/components/label';
 import { RadioGroup, RadioGroupItem } from '@workspace/ui/components/radio-group';
 import { useState } from 'react';
 
-export type RecurringAction = 'this' | 'this-and-following' | 'all';
+const RECURRING_ACTIONS = ['this', 'this-and-following', 'all'] as const;
+
+export type RecurringAction = (typeof RECURRING_ACTIONS)[number];
 
 type RecurringActionDialogProps = {
     open: boolean;
@@ -25,16 +27,18 @@ const ACTION_LABELS: Record<RecurringAction, string> = {
 export function RecurringActionDialog({ open, onOpenChange, title, onConfirm, options }: RecurringActionDialogProps) {
     return (
         <FormDialog open={open} onOpenChange={onOpenChange} title={title} size="xs">
-            <RecurringActionForm onConfirm={onConfirm} options={options ?? ['this', 'this-and-following', 'all']} />
+            <RecurringActionForm title={title} onConfirm={onConfirm} options={options ?? RECURRING_ACTIONS} />
         </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening starts at the first option.
 function RecurringActionForm({
+    title,
     onConfirm,
     options,
 }: {
+    title: string;
     onConfirm: (action: RecurringAction) => void | Promise<void>;
     options: readonly RecurringAction[];
 }) {
@@ -42,7 +46,9 @@ function RecurringActionForm({
 
     return (
         <FormDialogForm submitLabel="OK" onSubmit={() => onConfirm(selected)}>
+            {/* Radix keeps the dialog title's id to itself, so the group repeats the title as its name. */}
             <RadioGroup
+                aria-label={title}
                 value={selected}
                 onValueChange={(value) => setSelected(options.find((option) => option === value) ?? options[0])}
                 className="space-y-2"
