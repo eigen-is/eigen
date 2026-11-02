@@ -1,3 +1,7 @@
+// What the mail routes do around a mailbox: find the user's Mail in their home, check a quota first,
+// or reach into Drive. Examples are handing a message that arrived from Postfix to its recipient, and
+// moving an attachment between Drive and a draft or a message. The work inside one mailbox stays in Mail.
+
 import { MAILBOX_TRASH } from '@workspace/lib/constants/mailboxes';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DraftAttachmentUpload, Email } from '@workspace/lib/types/mail';
@@ -8,7 +12,7 @@ import { ApiError } from '../core/errors';
 import { getSharedDrive } from '../drive';
 import { getHome } from '../home';
 import type { User } from '../user';
-import { getOrgAdmins, getUserByEmail } from '../user/';
+import { getOrgAdmins, getUserByEmail } from '../user';
 import type { Mail } from './mail-domain';
 import { attachmentTooLarge } from './mail-domain';
 

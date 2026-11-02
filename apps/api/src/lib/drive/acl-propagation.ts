@@ -10,7 +10,7 @@ import { composeShareEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { addRegistryEntry } from '../share';
 import { getTeamMembers } from '../team';
-import { getUserByEmail, isGuest } from '../user/';
+import { getUserByEmail, isGuest } from '../user';
 import { canonicalACLId } from './acl';
 
 // 'registered' skips the share email for entries that resolve to a registered user — mirror fan-out,
