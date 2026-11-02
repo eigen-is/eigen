@@ -19,11 +19,13 @@ type WatchToggle = {
     toggle: () => void;
 };
 
+type WatchTarget = { ownerId: string; mountId: string; pathId: string };
+
 // An empty pathId reads nothing, for a host that has no single item to show.
 export function useWatchToggle(ownerId: string, mountId: string, pathId: string): WatchToggle {
     const { data: status } = useIsPathWatched(ownerId, mountId, pathId);
-    const watch = useWatchPath(ownerId, mountId, pathId);
-    const unwatch = useUnwatchPath(ownerId, mountId, pathId);
+    const watch = useWatchPath();
+    const unwatch = useUnwatchPath();
 
     const direct = status?.direct ?? false;
     const label = direct
@@ -35,7 +37,7 @@ export function useWatchToggle(ownerId: string, mountId: string, pathId: string)
         direct,
         label,
         isPending: watch.isPending || unwatch.isPending,
-        toggle: () => (direct ? unwatch.mutate() : watch.mutate()),
+        toggle: () => (direct ? unwatch : watch).mutate({ ownerId, mountId, pathId }),
     };
 }
 
@@ -69,33 +71,35 @@ function useIsPathWatched(ownerId: string, mountId: string, pathId: string) {
     });
 }
 
-function useWatchPath(ownerId: string, mountId: string, pathId: string) {
+// The item comes with each call, not with the hook. A host can move on before the answer arrives, as the
+// command palette does when it closes, and the answer must still refresh the item the call was for.
+function useWatchPath() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async () => {
+        mutationFn: async ({ ownerId, mountId, pathId }: WatchTarget) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).watch.post();
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateWatches(queryClient, ownerId, mountId, pathId),
+        onSuccess: (_data, target) => invalidateWatches(queryClient, target),
         onError: onMutationError,
     });
 }
 
-function useUnwatchPath(ownerId: string, mountId: string, pathId: string) {
+function useUnwatchPath() {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async () => {
+        mutationFn: async ({ ownerId, mountId, pathId }: WatchTarget) => {
             const response = await driveApi({ ownerId })({ mountId }).path({ pathId }).watch.delete();
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateWatches(queryClient, ownerId, mountId, pathId),
+        onSuccess: (_data, target) => invalidateWatches(queryClient, target),
         onError: onMutationError,
     });
 }
 
-function invalidateWatches(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string): void {
+function invalidateWatches(queryClient: QueryClient, { ownerId, mountId, pathId }: WatchTarget): void {
     queryClient.invalidateQueries({ queryKey: driveKeys.watches(ownerId) });
     queryClient.invalidateQueries({ queryKey: driveKeys.watchesAll() });
     queryClient.invalidateQueries({ queryKey: driveKeys.pathWatched(ownerId, mountId, pathId) });
