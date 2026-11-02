@@ -178,29 +178,33 @@ Save to Drive declines a Drive file that isn't an attachment, because Drive's ow
 
 The subject may be `null` for a host whose subject is state, like the right-clicked chip. What a picker acts on is snapshotted when the row runs, because the menu that drew the row is closed by the time the picker is confirmed.
 
-A convert on an attachment opens the Save to Drive picker first, titled with the row's label and confirmed with **Save and convert**. `useConvertDocument` then runs on each file the save created. Import to Calendar opens a target picker before it imports ([CALENDAR.md](CALENDAR.md)). The overlay disables its footer while `runner.isPending`, and its focus trap stands down while `runner.isDialogOpen`.
+A convert on an attachment opens the Save to Drive picker first, titled with the row's label and confirmed with **Save and convert**. `useConvertDocument` then runs on each file the save created. Import to Calendar opens a target picker before it imports ([CALENDAR.md](CALENDAR.md)). The overlay disables its footer while `runner.isPending`.
 
 ## Save to Drive copies on the server
 
 `SaveToDrivePicker` (`packages/ui/src/components/drive/save-to-drive-picker.tsx`) is the one "where does this go" dialog. A Drive subject is copied server-side, so its bytes never travel through the browser. A mail subject is written from the message the server still holds, in one call for every part. "Download instead" falls back to browser downloads, staggered because a browser drops the later downloads of a burst fired in one tick.
 
-Siblings come from one surface, so a batch is all Drive items or all mail parts, and the first subject picks the branch. The picker renders above the overlay through `DialogContent`'s `abovePreview` prop.
+Siblings come from one surface, so a batch is all Drive items or all mail parts, and the first subject picks the branch. The picker is a Radix dialog the overlay opens, so it paints above the overlay and owns its own Escape and outside click ([§ The overlay is a Radix dialog](#the-overlay-is-a-radix-dialog-so-radix-decides-which-layer-a-key-or-a-click-is-for)).
 
 ## The overlay picks its mode from the subject
 
-`PreviewProvider` stores the subject and its siblings and portals `FilePreview` (`packages/ui/src/components/drive/file-preview.tsx`) to `<body>`. `openPreview(subject, siblings?)` takes the siblings the arrow keys page through. A Drive listing passes its folder without the `attachment` flag, so the overlay never offers to copy a folder onto itself.
+`PreviewProvider` stores the subject and its siblings and renders `FilePreview` (`packages/ui/src/components/drive/file-preview.tsx`), which portals itself to `<body>`. `openPreview(subject, siblings?)` takes the siblings the arrow keys page through. A Drive listing passes its folder without the `attachment` flag, so the overlay never offers to copy a folder onto itself.
 
 `getPreviewMode(subject)` runs the text gate of [§ Loose bytes preview as what their name says](#loose-bytes-preview-as-what-their-name-says) on the client. An image needs a mount to be resized, so only a Drive image uses `/preview`. A mail image shows its original bytes, which makes it an image only for a mime in `BROWSER_IMAGE_MIMES`. A HEIC part gets the file card rather than a broken box.
 
 `ProgressiveImage` stacks the 512 px thumbnail under the screen preview so the image shows at once. The box takes its ratio from the Drive row. A mail part has no stored size, so the box measures the image once it loads and then hugs it, and a click beside it reaches the backdrop that closes the overlay. The component is keyed on the preview URL, so a sibling never inherits the previous image's size.
 
-## The overlay's keys stand down for a layer above it
+## The overlay is a Radix dialog, so Radix decides which layer a key or a click is for
 
-Escape closes, all four arrow keys page, and Space closes the way it opened, like Finder's Quick Look. The keys listen on the document, so they must yield to a layer open above the overlay.
+The overlay opens over other modals, such as a Stickies card whose attachment it shows, and other layers open over it, such as Save to Drive, a menu or the `.eml` reader header's details popover. `FilePreview` is a Radix `Dialog` (Root, Portal, Overlay and Content), so it joins Radix's stacks like any dialog. The top layer alone gets Escape and a click outside it, and it holds the focus trap, the scroll lock and the `aria-hidden` on the rest of the page. Every layer portals to `<body>` as it opens, at the same z-50, so a later one paints above with no z-index of its own.
 
-Every layer portals to `<body>` in the order it opened, so later in the document is higher in the stack. `useDialogOpen(overlayRef)` (`packages/ui/src/hooks/use-dialog-open.ts`) asks whether a `role="dialog"` after the overlay is open. A stickies card dialog the overlay was opened from sits before it, so it doesn't count.
+A hand-rolled overlay over a Radix modal breaks all of that. The card under it keeps the focus, so Space presses a hidden button in the card. Its scroll lock cancels the wheel in the overlay, so a long text preview can't scroll. And the card takes a click on the overlay's backdrop for a click outside it, and closes too. `useFocusTrap` is only for an overlay that never opens over a Radix modal.
 
-Presence is not enough for the keydown in hand. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so by then the layer is gone. So a keydown whose target sits inside a dialog, menu or listbox after the overlay belongs to that layer. A `DialogContent` under an open preview ignores Escape, which is the overlay's to close.
+The content fills the screen, so a click on the dark backdrop lands inside the dialog, and the overlay closes itself on it. On open the focus goes to the content itself rather than to its first button, so Space closes the overlay. The overlay has no Radix trigger, so on close it gives the focus back to whatever had it when it opened, such as the attachment chip in the card.
+
+## The overlay's own keys act only on a key pressed inside it
+
+Escape is Radix's. All four arrow keys page, and Space closes the way it opened, like Finder's Quick Look. These listen on the document, and they act only when the key's target is inside the overlay. A layer open above the overlay holds the focus, so a key pressed in it is that layer's. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so whether a layer is open says nothing about the key in hand: where it was pressed does.
 
 Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs. A focused Chrome `<audio controls>` swallows every keydown, so while it has focus the X button is the only way out.
 
@@ -212,5 +216,5 @@ Space yields when focus is on a control inside the overlay, where it presses tha
 
 - [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the transform process, its admission and its benchmark
 - [EXPORT.md](EXPORT.md): the full-document renderers the previews share
-- [LAYOUT.md](LAYOUT.md): Drive's item menu, capabilities and the overlay's z-index
+- [LAYOUT.md](LAYOUT.md): Drive's item menu, capabilities and the z-index scale the overlay sits on
 - [MAIL.md](MAIL.md), [CALENDAR.md](CALENDAR.md), [CONTACTS.md](CONTACTS.md): the parsers and the imports

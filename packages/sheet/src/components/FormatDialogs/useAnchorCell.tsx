@@ -1,10 +1,11 @@
+// The cell a format applies from: the focus cell of the selection, or its top-left cell without one. The custom format
+// dialogs open on its format, and the format toolbar's swatches show its colors.
+
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Cell } from '../../engine/types';
 import { getFlowdata } from '../../state';
 
-// Cell under the selection anchor (focus, or range start without one) — seeds
-// the custom-format dialogs and drives the FormatToolbar swatches.
 export function useAnchorCell(): Cell | null | undefined {
     const { context } = useContext(WorkbookContext);
     const selection = context.selections?.[0];

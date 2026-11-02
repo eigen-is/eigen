@@ -1,216 +1,152 @@
-// Conditional formats in the editor: the rule the dialog builds for the selection, the per-cell format map the
-// painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The evaluation itself lives
-// in the engine, which the server export shares.
+// Conditional formats in the editor: the check and the write of the rule the dialog builds for the selection, the
+// per-cell format map the painter reads (getComputeMap, checkCF), and the color-scale and data-bar presets. The
+// evaluation itself lives in the engine, which the server export shares.
 
+import { eigenColor } from '@workspace/lib/constants/colors';
 import type {
     ColorGradationRule,
     ConditionalFormatConditionName,
     DataBarRule,
     DefaultConditionalFormatRule,
-    SingleRange,
 } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
+import { toA1 } from '../../engine/a1-notation';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engine/conditional-format';
 import type { CellMatrix, ConditionalFormatRule } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata } from '../context';
 import type { ConditionRulesProps } from '../types';
 import { getSheetIndex } from '../utils';
-import { getCellValue, getRangeByTxt } from './cell';
+import { getRangeByTxt } from './cell';
 import { createContextResolver } from './formula-cache';
 import { checkProtectionFormatCells } from './protection';
+import { isRealNum } from './validation';
 
-const KNOWN_CONDITION_NAMES = [
-    'greaterThan',
-    'greaterThanOrEqual',
-    'lessThan',
-    'lessThanOrEqual',
-    'equal',
-    'notEqual',
-    'textContains',
-    'between',
-    'notBetween',
-    'occurrenceDate',
-    'duplicateValue',
-    'top10',
-    'top10_percent',
-    'last10',
-    'last10_percent',
-    'aboveAverage',
-    'belowAverage',
-    'formula',
-] as const satisfies readonly ConditionalFormatConditionName[];
+// The rules the conditional formatting dialog makes. The others, such as a formula rule, come from a file or from a
+// value that reads a cell.
+export type ConditionRuleType = Exclude<
+    ConditionalFormatConditionName,
+    'greaterThanOrEqual' | 'lessThanOrEqual' | 'notEqual' | 'notBetween' | 'formula'
+>;
 
-function isKnownConditionName(s: string): s is ConditionalFormatConditionName {
-    return (KNOWN_CONDITION_NAMES as readonly string[]).includes(s);
+const SINGLE_CELL = 'Enter a single cell, such as =A1';
+const NUMBER_OR_CELL = 'Enter a number, or a cell such as =A1';
+const VALUE_OR_CELL = 'Enter a value, or a cell such as =A1';
+
+// The formulas Excel writes for a rule whose value reads a cell, with the rule's top-left cell and its typed values.
+// Like the xlsx import, the editor stores such a rule as a formula rule, so it reads the cell each time it paints.
+const REFERENCE_FORMULAS: Partial<Record<ConditionRuleType, (cell: string, values: string[]) => string>> = {
+    greaterThan: (cell, [value]) => `${cell}>${value}`,
+    lessThan: (cell, [value]) => `${cell}<${value}`,
+    equal: (cell, [value]) => `${cell}=${value}`,
+    textContains: (cell, [value]) => `NOT(ISERROR(SEARCH(${value},${cell})))`,
+    between: (cell, [lower, upper]) => `AND(${cell}>=${lower},${cell}<=${upper})`,
+};
+
+// Why the dialog's rule can't be saved, or undefined when it can. The dialog shows the reason under its fields and stays
+// open, so the check runs before setConditionRules.
+export function conditionRuleError(ctx: Context, rules: ConditionRulesProps): string | undefined {
+    const values = readRuleValues(ctx, rules);
+    return typeof values === 'string' ? values : undefined;
 }
 
-// Coerce a raw cell value (which can be any of Cell['v'] = string | number |
-// boolean | undefined) into the `(string | number)[]` shape stored on the rule.
-function toRuleValue(raw: unknown): string | number {
-    if (typeof raw === 'number' || typeof raw === 'string') return raw;
-    if (raw == null) return '';
-    return String(raw);
-}
-
-const ONLY_SINGLE_CELL = 'Only a single cell can be referenced';
-const VALUE_MUST_BE_NUMBER_OR_CELL = 'The condition value can only be a number or a single cell';
-
-// Set condition rules
+// Adds the dialog's rule over the selection, unless conditionRuleError refuses it or the sheet is protected.
 export function setConditionRules(ctx: Context, rules: ConditionRulesProps) {
-    if (!checkProtectionFormatCells(ctx)) {
-        return;
-    }
+    if (!checkProtectionFormatCells(ctx)) return;
+    const values = readRuleValues(ctx, rules);
+    const cellrange = ctx.selections ?? [];
+    const [anchor] = cellrange;
+    if (typeof values === 'string' || !anchor) return;
 
-    // The dialog seeds rules.rulesType from a substring of the rangeDialog type
-    // (`conditionRules` prefix stripped) and never validates against the engine's
-    // canonical name set. Bail out on names the engine doesn't recognize rather
-    // than persisting a rule that would silently no-op on every paint.
-    if (!isKnownConditionName(rules.rulesType)) {
-        return;
-    }
-    const conditionName = rules.rulesType;
-
-    const conditionRange: SingleRange[] = [];
-    const conditionValue: (string | number)[] = [];
-
-    if (
-        conditionName === 'greaterThan' ||
-        conditionName === 'lessThan' ||
-        conditionName === 'equal' ||
-        conditionName === 'textContains'
-    ) {
-        const rangeArr = getRangeByTxt(ctx, rules.rulesValue);
-        // check whether the condition value is a selection range
-        if (rangeArr.length > 1) {
-            const first = rangeArr[0];
-            if (!first) return;
-            const [r1, r2] = first.row;
-            const [c1, c2] = first.column;
-            if (r1 === r2 && c1 === c2) {
-                const d = getFlowdata(ctx);
-                if (!d || isNil(r1) || isNil(c1)) return;
-                conditionRange.push({ row: first.row, column: first.column });
-                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
-            } else {
-                ctx.warnDialog = ONLY_SINGLE_CELL;
-            }
-        } else if (rangeArr.length === 0) {
-            const v = rules.rulesValue;
-            if (Number.isNaN(v) || v === '') {
-                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-                return;
-            }
-            conditionValue.push(v);
-        }
-    } else if (conditionName === 'between') {
-        const v1 = rules.betweenValue.value1;
-        const v2 = rules.betweenValue.value2;
-
-        const rangeArr1 = getRangeByTxt(ctx, v1);
-        if (rangeArr1.length > 1) {
-            ctx.warnDialog = ONLY_SINGLE_CELL;
-            return;
-        }
-        if (rangeArr1.length === 1) {
-            const first = rangeArr1[0];
-            if (!first) return;
-            const [r1, r2] = first.row;
-            const [c1, c2] = first.column;
-            if (r1 === r2 && c1 === c2) {
-                const d = getFlowdata(ctx);
-                if (!d || isNil(r1) || isNil(c1)) return;
-                conditionRange.push({ row: first.row, column: first.column });
-                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
-            } else {
-                ctx.warnDialog = ONLY_SINGLE_CELL;
-                return;
-            }
-        } else if (rangeArr1.length === 0) {
-            if (Number.isNaN(v1) || v1 === '') {
-                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-                return;
-            }
-            conditionValue.push(v1);
-        }
-        const rangeArr2 = getRangeByTxt(ctx, v2);
-        if (rangeArr2.length > 1) {
-            ctx.warnDialog = ONLY_SINGLE_CELL;
-            return;
-        }
-        if (rangeArr2.length === 1) {
-            const first = rangeArr2[0];
-            if (!first) return;
-            const [r1, r2] = first.row;
-            const [c1, c2] = first.column;
-            if (r1 === r2 && c1 === c2) {
-                const d = getFlowdata(ctx);
-                if (!d || isNil(r1) || isNil(c1)) return;
-                conditionRange.push({ row: first.row, column: first.column });
-                conditionValue.push(toRuleValue(getCellValue(r1, c1, d)));
-            } else {
-                ctx.warnDialog = ONLY_SINGLE_CELL;
-                return;
-            }
-        } else if (rangeArr2.length === 0) {
-            if (Number.isNaN(v2) || v2 === '') {
-                ctx.warnDialog = VALUE_MUST_BE_NUMBER_OR_CELL;
-            } else {
-                conditionValue.push(v2);
-            }
-        }
-    } else if (conditionName === 'occurrenceDate') {
-        const v = rules.dateValue;
-        if (!v) {
-            ctx.warnDialog = 'Please select a date';
-            return;
-        }
-        conditionValue.push(v);
-    } else if (conditionName === 'duplicateValue') {
-        conditionValue.push(rules.repeatValue);
-    } else if (
-        conditionName === 'top10' ||
-        conditionName === 'top10_percent' ||
-        conditionName === 'last10' ||
-        conditionName === 'last10_percent'
-    ) {
-        const v = rules.projectValue;
-        const n = parseInt(v, 10);
-        if (n.toString() !== v || n < 1 || n > 1000) {
-            ctx.warnDialog = 'Please enter an integer between 1 and 1000';
-            return;
-        }
-        conditionValue.push(v);
-    }
-
-    const textColor = rules.textColor.check ? rules.textColor.color : null;
-    const cellColor = rules.cellColor.check ? rules.cellColor.color : null;
-
+    const formula = REFERENCE_FORMULAS[rules.rulesType];
+    const readsCell = formula && values.some(isCellReference);
+    const topLeft = toA1(anchor.row[0], anchor.column[0]);
+    const operands = values.map((value) => value.replace(/^=/, ''));
     const rule: DefaultConditionalFormatRule = {
         type: 'default',
-        cellrange: ctx.selections ?? [],
-        format: { textColor, cellColor },
-        conditionName,
-        conditionRange,
-        conditionValue,
+        cellrange,
+        format: {
+            textColor: rules.textColor.check ? rules.textColor.color : null,
+            cellColor: rules.cellColor.check ? rules.cellColor.color : null,
+        },
+        conditionName: readsCell ? 'formula' : rules.rulesType,
+        conditionRange: [],
+        conditionValue: readsCell ? [`=${formula(topLeft, operands)}`] : values,
     };
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
     const ruleArr = ctx.sheets[index].conditionalFormatRules ?? [];
     ruleArr.push(rule);
-
     ctx.sheets[index].conditionalFormatRules = ruleArr;
 }
 
-// Cache for getComputeMap — avoids recomputing the entire CF map on every
-// canvas paint / getStyleByCell call. Keyed per sheet: a single slot made every
-// A→B→A tab switch a guaranteed miss, and on a sheet carrying formula rules that
-// recompute costs seconds. Entries invalidate themselves — immer replaces `rules`
-// and `data` by reference on any edit, rule change or row/col op, so both must
-// stay in the key. Bounded by the workbook: a miss first drops every entry whose
-// sheet the current workbook no longer has.
+// The rule's values as the dialog typed them, or the message that refuses them.
+function readRuleValues(ctx: Context, rules: ConditionRulesProps): string[] | string {
+    switch (rules.rulesType) {
+        case 'greaterThan':
+        case 'lessThan':
+            return checkTypedValues(ctx, [rules.rulesValue], isRealNum, NUMBER_OR_CELL);
+        // These also compare text, so only an empty value is refused.
+        case 'equal':
+        case 'textContains':
+            return checkTypedValues(ctx, [rules.rulesValue], (v) => v !== '', VALUE_OR_CELL);
+        case 'between':
+            return checkTypedValues(
+                ctx,
+                [rules.betweenValue.value1, rules.betweenValue.value2],
+                isRealNum,
+                NUMBER_OR_CELL,
+            );
+        case 'occurrenceDate':
+            if (!rules.dateValue) return 'Select a date';
+            return [rules.dateValue];
+        case 'duplicateValue':
+            return [rules.repeatValue];
+        case 'top10':
+        case 'top10_percent':
+        case 'last10':
+        case 'last10_percent': {
+            const n = parseInt(rules.projectValue, 10);
+            if (n.toString() !== rules.projectValue || n < 1 || n > 1000) {
+                return 'Enter a whole number from 1 to 1000';
+            }
+            return [rules.projectValue];
+        }
+        default:
+            return [];
+    }
+}
+
+// As in Excel and Google Sheets, a value that starts with = names one cell, such as =A1 or =Data!A1. Any other value,
+// FY2024 included, is the value itself, and `accepts` decides whether the rule takes it.
+function checkTypedValues(
+    ctx: Context,
+    typed: string[],
+    accepts: (value: string) => boolean,
+    refusal: string,
+): string[] | string {
+    for (const value of typed) {
+        if (!isCellReference(value)) {
+            if (!accepts(value)) return refusal;
+            continue;
+        }
+        const ranges = getRangeByTxt(ctx, value.slice(1));
+        const [range] = ranges;
+        if (ranges.length !== 1 || !range || range.row[0] !== range.row[1] || range.column[0] !== range.column[1]) {
+            return SINGLE_CELL;
+        }
+    }
+    return typed;
+}
+
+function isCellReference(value: string): boolean {
+    return value.startsWith('=');
+}
+
+// The computed map per sheet, so a canvas paint doesn't evaluate every rule again. A single slot missed on every
+// switch between two sheets, which costs seconds on a sheet with formula rules. Immer replaces a sheet's rules and data
+// on any edit, so an entry is fresh while both are the same objects.
 const _cfCache = new Map<
     string,
     {
@@ -227,21 +163,14 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
     const { data } = ctx.sheets[index];
     if (isNil(data)) return null;
 
-    // Return cached result if inputs haven't changed (reference equality)
     const cached = _cfCache.get(ctx.currentSheetId);
     if (cached && cached.rules === ruleArr && cached.data === data) {
         return cached.result;
     }
 
-    // Every entry pins a whole CellMatrix and a ComputeMap, so none may outlive its
-    // usefulness: drop the ones this workbook can no longer address — sheets that
-    // were deleted, and every sheet of a workbook this session has since closed —
-    // and the ones whose sheet has moved on. Immer replaces `data`/`rules` by
-    // reference on any edit, and sheets are edited while not current routinely
-    // (cross-sheet recalc, a collab peer's edit, a row/col op), so such an entry can
-    // never hit again yet pinned its matrix until you navigated back. A miss is the
-    // moment to do it, the recompute below dwarfs the sweep, and the hot path (the
-    // hit above) never pays for it.
+    // Each entry holds a whole matrix, so a miss drops the entries that can't hit again: a sheet that is gone, such as
+    // one of a workbook this session closed, and a sheet edited since, such as by a peer or a cross-sheet recalc. The
+    // recompute below costs far more than this sweep.
     const live = new Map(ctx.sheets.map((sheet) => [sheet.id, sheet]));
     for (const [id, entry] of _cfCache) {
         const sheet = live.get(id);
@@ -250,10 +179,9 @@ export function getComputeMap(ctx: Context): ComputeMap | null {
         }
     }
 
-    // Evaluate CF formulas through the engine directly, like the HTML export.
-    // execfunction would assign ctx.calculateSheetId — painting runs against an
-    // immer-frozen context, so that throws — and would register every CF formula into
-    // the sheet's calc chain via insertUpdateFunctionGroup.
+    // Formula rules evaluate through the engine directly, as the HTML export does. execfunction would set
+    // ctx.calculateSheetId, which throws on the frozen context a paint reads, and would add every rule's formula to the
+    // sheet's calc chain.
     const computeMap = evaluateConditionalFormat(ruleArr, data, {
         evaluateFormula: createCfFormulaEvaluator(
             ctx.formulaCache.engine,
@@ -272,36 +200,46 @@ export function checkCF(r: number, c: number, computeMap: ComputeMap | null): Ce
     return null;
 }
 
-// 12 color-scale + 6 solid-data-bar presets, ported from luckysheet upstream.
-// Numbers match the preset keys COLOR_SCALE_PRESETS / DATA_BAR_PRESETS offer in
-// components/MenuBar/format-menu.tsx.
+// The color scales and data bars the Format menu offers, by the preset keys it lists. A scale's stops run from the
+// highest value to the lowest. The colors are Eigen's palette and white, the closest to the presets Excel offers;
+// where the match was in doubt, the lighter, less saturated step. A rule keeps the colors it was made with, so
+// changing one here changes only the rules made after.
+const RED = eigenColor('red', 400);
+const YELLOW = eigenColor('yellow', 200);
+const GREEN = eigenColor('emerald', 400);
+const BLUE = eigenColor('blue', 400);
+const WHITE = '#ffffff';
+
 export const CF_PRESETS: Record<string, string[]> = {
-    // 3-color gradients (max → mid → min)
-    colorGradation_1: ['#f8696b', '#ffeb84', '#63be7b'],
-    colorGradation_2: ['#63be7b', '#ffeb84', '#f8696b'],
-    colorGradation_3: ['#f8696b', '#ffffff', '#63be7b'],
-    colorGradation_4: ['#63be7b', '#ffffff', '#f8696b'],
-    colorGradation_5: ['#f8696b', '#ffffff', '#5a8ac6'],
-    colorGradation_6: ['#5a8ac6', '#ffffff', '#f8696b'],
-    // 2-color gradients (max → min)
-    colorGradation_7: ['#f8696b', '#ffffff'],
-    colorGradation_8: ['#ffffff', '#f8696b'],
-    colorGradation_9: ['#ffffff', '#63be7b'],
-    colorGradation_10: ['#63be7b', '#ffffff'],
-    colorGradation_11: ['#ffeb84', '#63be7b'],
-    colorGradation_12: ['#63be7b', '#ffeb84'],
-    // Solid data-bar colors (single bar color; negative bars hardcode red)
-    solidColorDataBar_1: ['#638ec6'],
-    solidColorDataBar_2: ['#63be7b'],
-    solidColorDataBar_3: ['#f8696b'],
-    solidColorDataBar_4: ['#ffb628'],
-    solidColorDataBar_5: ['#a3c8ff'],
-    solidColorDataBar_6: ['#a085ff'],
+    colorGradation_1: [RED, YELLOW, GREEN],
+    colorGradation_2: [GREEN, YELLOW, RED],
+    colorGradation_3: [RED, WHITE, GREEN],
+    colorGradation_4: [GREEN, WHITE, RED],
+    colorGradation_5: [RED, WHITE, BLUE],
+    colorGradation_6: [BLUE, WHITE, RED],
+    colorGradation_7: [RED, WHITE],
+    colorGradation_8: [WHITE, RED],
+    colorGradation_9: [WHITE, GREEN],
+    colorGradation_10: [GREEN, WHITE],
+    colorGradation_11: [YELLOW, GREEN],
+    colorGradation_12: [GREEN, YELLOW],
+    // A data bar has one color. A negative value's bar is always red.
+    solidColorDataBar_1: [BLUE],
+    solidColorDataBar_2: [GREEN],
+    solidColorDataBar_3: [RED],
+    solidColorDataBar_4: [eigenColor('amber', 400)],
+    solidColorDataBar_5: [eigenColor('blue', 300)],
+    solidColorDataBar_6: [eigenColor('violet', 400)],
 };
 
 export function clearSheetRules(ctx: Context) {
     if (!checkProtectionFormatCells(ctx)) return;
     getSheet(ctx).conditionalFormatRules = [];
+}
+
+export function deleteSheetRule(ctx: Context, ruleIndex: number) {
+    if (!checkProtectionFormatCells(ctx)) return;
+    getSheet(ctx).conditionalFormatRules?.splice(ruleIndex, 1);
 }
 
 export function applyColorScalePreset(ctx: Context, presetKey: string) {

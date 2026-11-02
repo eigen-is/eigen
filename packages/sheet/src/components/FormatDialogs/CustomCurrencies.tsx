@@ -1,87 +1,68 @@
 // The Custom currencies dialog: a currency symbol and a layout, such as symbol first with two decimals, built
 // into a number format with buildCurrencyPattern and applied to the selection.
 
-import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
-import { cn } from '@workspace/ui/lib/utils';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
-import { useDialog } from '../../hooks/useDialog';
-import { CURRENCIES, handleNumberFormat } from '../../state';
+import { CURRENCIES } from '../../state';
+import { FormatDialog, PresetList, PresetRow } from './format-dialog';
 import type { CurrencyVariantId } from './format-pattern';
-import { buildCurrencyPattern, CURRENCY_VARIANTS } from './format-pattern';
+import { buildCurrencyPattern, CURRENCY_VARIANT_IDS } from './format-pattern';
+
+type Currency = (typeof CURRENCIES)[number];
+
+// The euro first, then the rest by name, each with 1000.12 in its own layout.
+const LISTED_CURRENCIES = [...CURRENCIES]
+    .sort((a, b) => {
+        if (a.name === 'EUR') return -1;
+        if (b.name === 'EUR') return 1;
+        return a.name.localeCompare(b.name);
+    })
+    .map((currency) => ({
+        ...currency,
+        example: update(
+            buildCurrencyPattern(currency.value, currency.pos === 'after' ? 'symbolLast' : 'symbolFirst'),
+            1000.12,
+        ),
+    }));
 
 export function CustomCurrencies() {
-    const { setContext, refs, settings } = useContext(WorkbookContext);
-    const { hideDialog } = useDialog();
+    const { settings } = useContext(WorkbookContext);
 
     const [symbol, setSymbol] = useState(settings.currency);
     const [variantId, setVariantId] = useState<CurrencyVariantId>('symbolFirst');
     const [selectedName, setSelectedName] = useState<string | null>(
         () => CURRENCIES.find((c) => c.value === settings.currency)?.name ?? null,
     );
-    // The field holds the active symbol, but only user-typed text filters the
-    // list — a prefilled or clicked symbol keeps the full list visible.
+    // The field holds the active symbol, and only text the user typed filters the list. A prefilled or picked symbol
+    // keeps the whole list in view.
     const [query, setQuery] = useState('');
 
-    const allCurrencies = useMemo(
-        () =>
-            [...CURRENCIES]
-                .sort((a, b) => {
-                    if (a.name === 'EUR') return -1;
-                    if (b.name === 'EUR') return 1;
-                    return a.name.localeCompare(b.name);
-                })
-                .map((c) => ({
-                    ...c,
-                    example: update(
-                        buildCurrencyPattern(c.value, c.pos === 'after' ? 'symbolLast' : 'symbolFirst'),
-                        1000.12,
-                    ),
-                })),
-        [],
-    );
-
     const needle = query.trim().toLowerCase();
-    const currencies = needle ? allCurrencies.filter((c) => c.name.toLowerCase().includes(needle)) : allCurrencies;
+    const currencies = needle
+        ? LISTED_CURRENCIES.filter((c) => c.name.toLowerCase().includes(needle))
+        : LISTED_CURRENCIES;
 
-    const selectCurrency = (currency: { name: string; pos?: string; value: string }) => {
+    // A picked currency takes its own side of the number and keeps the rounding chosen.
+    const selectCurrency = (currency: Currency) => {
         const rounded = variantId === 'symbolFirstRounded' || variantId === 'symbolLastRounded';
+        const after = currency.pos === 'after';
         setSymbol(currency.value);
         setQuery('');
         setSelectedName(currency.name);
         setVariantId(
-            currency.pos === 'after'
-                ? rounded
-                    ? 'symbolLastRounded'
-                    : 'symbolLast'
-                : rounded
-                  ? 'symbolFirstRounded'
-                  : 'symbolFirst',
+            rounded ? (after ? 'symbolLastRounded' : 'symbolFirstRounded') : after ? 'symbolLast' : 'symbolFirst',
         );
     };
 
-    const apply = () => {
-        const fa = buildCurrencyPattern(symbol, variantId);
-        setContext((ctx) => {
-            const cellInput = refs.cellInput.current;
-            if (!cellInput) return;
-            handleNumberFormat(ctx, cellInput, fa);
-        });
-        hideDialog();
-    };
-
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4">
-            <DialogHeader>
-                <DialogTitle>Custom currencies</DialogTitle>
-            </DialogHeader>
-            <div className="flex items-center gap-2 shrink-0">
+        <FormatDialog title="Custom currencies" pattern={buildCurrencyPattern(symbol, variantId)} canSubmit={!!symbol}>
+            <div className="flex items-center gap-2">
                 <Input
                     className="flex-1"
+                    aria-label="Currency symbol"
                     value={symbol}
                     onChange={(e) => {
                         setSymbol(e.target.value);
@@ -89,12 +70,18 @@ export function CustomCurrencies() {
                         setSelectedName(null);
                     }}
                 />
-                <Select value={variantId} onValueChange={(v) => setVariantId(v as CurrencyVariantId)}>
+                <Select
+                    value={variantId}
+                    onValueChange={(value) => {
+                        const id = CURRENCY_VARIANT_IDS.find((variant) => variant === value);
+                        if (id) setVariantId(id);
+                    }}
+                >
                     <SelectTrigger className="w-40">
                         <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                        {CURRENCY_VARIANTS.map(({ id }) => (
+                        {CURRENCY_VARIANT_IDS.map((id) => (
                             <SelectItem value={id} key={id}>
                                 {symbol ? update(buildCurrencyPattern(symbol, id), 1000) : ''}
                             </SelectItem>
@@ -102,30 +89,18 @@ export function CustomCurrencies() {
                     </SelectContent>
                 </Select>
             </div>
-            <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
+            <PresetList>
                 {currencies.map((currency) => (
-                    <div
-                        className={cn(
-                            'flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
-                            currency.name === selectedName && 'eigen-list-item-active',
-                        )}
+                    <PresetRow
                         key={currency.name}
-                        onClick={() => selectCurrency(currency)}
-                        tabIndex={0}
+                        active={currency.name === selectedName}
+                        onPick={() => selectCurrency(currency)}
                     >
                         <span>{currency.name}</span>
                         <span className="text-muted-foreground">{currency.example}</span>
-                    </div>
+                    </PresetRow>
                 ))}
-            </div>
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    Cancel
-                </Button>
-                <Button size="sm" disabled={!symbol} onClick={apply}>
-                    Apply
-                </Button>
-            </DialogFooter>
-        </div>
+            </PresetList>
+        </FormatDialog>
     );
 }

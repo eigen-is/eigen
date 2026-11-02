@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { EIGEN_COLORS, eigenColor } from '@workspace/lib/constants/colors';
 import type { Context } from '../../index';
 import {
     applyColorScalePreset,
@@ -19,6 +20,26 @@ describe('CF_PRESETS', () => {
         for (let i = 1; i <= 6; i++) {
             expect(CF_PRESETS[`solidColorDataBar_${i}`]).toHaveLength(1);
         }
+    });
+
+    it('maps the Excel greens and blues to the lighter palette steps', () => {
+        expect(CF_PRESETS.colorGradation_1).toEqual([
+            eigenColor('red', 400),
+            eigenColor('yellow', 200),
+            eigenColor('emerald', 400),
+        ]);
+        expect(CF_PRESETS.colorGradation_5[2]).toBe(eigenColor('blue', 400));
+        expect(CF_PRESETS.solidColorDataBar_1).toEqual([eigenColor('blue', 400)]);
+        expect(CF_PRESETS.solidColorDataBar_2).toEqual([eigenColor('emerald', 400)]);
+    });
+
+    it('offers only colors of the Eigen palette, and white', () => {
+        const palette = new Set([...EIGEN_COLORS.flat().map((color) => color.value), '#ffffff']);
+        expect(
+            Object.values(CF_PRESETS)
+                .flat()
+                .filter((color) => !palette.has(color)),
+        ).toEqual([]);
     });
 });
 

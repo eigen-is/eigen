@@ -28,7 +28,6 @@ async function openMenu(props: { subject: FileSubject | null; group?: FileAction
         run: (action: FileAction) => ran.push(action),
         openPicker: () => {},
         dialogs: null,
-        isDialogOpen: false,
         isPending: false,
     };
     const container = document.createElement('div');

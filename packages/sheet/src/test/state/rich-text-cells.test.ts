@@ -13,7 +13,7 @@ import { getDropdownList, validateCellData } from '../../state/modules/data-veri
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';
-import { orderbydata, sortSelection } from '../../state/modules/sort';
+import { sortRows, sortSelection } from '../../state/modules/sort';
 import { autoSelectionFormula, handleMerge } from '../../state/modules/toolbar';
 import type { GlobalCache } from '../../state/types';
 import { contextFactory, selectionFactory } from './factories/context';
@@ -103,14 +103,14 @@ describe('readers of a rich cell', () => {
     });
 
     test('sort orders rich cells by their text and takes a rich first row into the range', () => {
-        const { sortedData } = orderbydata(true, 0, [[rich('Cherry')], [plain('apple')], [rich('Banana')]]);
+        const { sortedData } = sortRows(true, 0, [[rich('Cherry')], [plain('apple')], [rich('Banana')]]);
         expect(sortedData.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
 
         const ctx = sheetContext(
             [[rich('Cherry')], [plain('apple')], [rich('Banana')]],
             selectionFactory([0, 2], [0, 0], 0, 0),
         );
-        sortSelection(ctx, true, 0);
+        sortSelection(ctx, true);
         expect(ctx.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
     });
 

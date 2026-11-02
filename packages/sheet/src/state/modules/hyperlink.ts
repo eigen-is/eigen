@@ -96,7 +96,7 @@ export function removeHyperlink(ctx: Context, r: number, c: number) {
 }
 
 export function showLinkCard(ctx: Context, r: number, c: number, isEditing = false, isMouseDown = false) {
-    if (ctx.linkCard?.selectingCellRange) return;
+    if (ctx.rangePickerOpen) return;
     if (`${r}_${c}` === ctx.linkCard?.rc) return;
     const link = getCellHyperlink(ctx, r, c);
     const cell = getFlowdata(ctx)?.[r]?.[c];
@@ -158,13 +158,18 @@ export function goToLink(ctx: Context, r: number, c: number, linkType: string, l
     ctx.linkCard = undefined;
 }
 
+// A space anywhere between the scheme and the first /, ? or #.
+const HOST_WITH_SPACE = /^[^/?#]*:\/*[^/?#]*\s/;
+
 export function isLinkValid(linkType: string, linkAddress: string) {
     if (!linkAddress) return { isValid: false, tooltip: '' };
     if (linkType === 'webpage') {
         // Valid means "navigation would open it": the same resolveWebLink gate
-        // goToLink uses, plus a structural parse — one fact, one place.
+        // goToLink uses, plus a structural parse — one fact, one place. Chrome's
+        // parser escapes a space in the host name instead of refusing it, so a
+        // space before the path is refused here by hand.
         const address = resolveWebLink(linkAddress);
-        if (address == null || !URL.canParse(address)) {
+        if (address == null || !URL.canParse(address) || HOST_WITH_SPACE.test(address)) {
             return { isValid: false, tooltip: 'Please enter a valid link' };
         }
     }

@@ -16,7 +16,7 @@ import { ChevronDown, ChevronRight, Filter as FilterIcon } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { useAlert } from '../../hooks/useAlert';
+import { useDialog } from '../../hooks/useDialog';
 import type { Context, FilterColor, FilterConditionName, FilterDate, FilterValue } from '../../state';
 import {
     clearFilter,
@@ -177,7 +177,7 @@ export const FilterMenu: React.FC = () => {
     const [conditionValues, setConditionValues] = useState<[string, string]>(['', '']);
     const [showSubMenu, setShowSubMenu] = useState(false);
     const subMenuCloseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     contextRef.current = context;
 
     // Bridge the gap between the trigger and the portaled PopoverContent so the cursor
@@ -258,10 +258,10 @@ export const FilterMenu: React.FC = () => {
             if (col == null) return;
             setContext((draftCtx) => {
                 const errMsg = sortFilterRange(draftCtx, startRow, startCol, endRow, endCol, col, asc);
-                if (errMsg != null) showAlert(errMsg);
+                if (errMsg != null) showNotice(errMsg);
             });
         },
-        [col, setContext, startRow, startCol, endRow, endCol, showAlert],
+        [col, setContext, startRow, startCol, endRow, endCol, showNotice],
     );
 
     useEffect(() => {

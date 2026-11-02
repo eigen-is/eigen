@@ -14,7 +14,7 @@ import { ChevronDown } from 'lucide-react';
 import type React from 'react';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { useAlert } from '../../hooks/useAlert';
+import { useDialog } from '../../hooks/useDialog';
 import type { Sheet } from '../../state';
 import {
     api,
@@ -27,8 +27,11 @@ import {
     sheetOrder,
 } from '../../state';
 
-const NO_MORE_SHEET =
-    'The workbook contains at least one visual worksheet. To delete the selected worksheet, please insert a new worksheet or show a hidden worksheet.';
+// The workbook always shows one sheet, so its last shown sheet can't be hidden or deleted.
+const LAST_SHEET_DELETE =
+    'A workbook always shows at least one sheet. To delete this sheet, add a sheet or show a hidden one first.';
+const LAST_SHEET_HIDE =
+    'A workbook always shows at least one sheet. To hide this sheet, add a sheet or show a hidden one first.';
 
 type Props = {
     id: string;
@@ -42,7 +45,7 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
     const [menuOpen, setMenuOpen] = useState(false);
     const editable = useRef<HTMLSpanElement>(null);
     const [dragOver, setDragOver] = useState(false);
-    const { showAlert, hideAlert } = useAlert();
+    const { showNotice } = useDialog();
 
     useEffect(() => {
         if (!editable.current) return;
@@ -58,17 +61,18 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
         editable.current.dataset.oldText = editable.current.innerText;
     }, [editing]);
 
+    // A refused name throws out of the write, which then applies nothing, and the notice opens outside the recipe.
     const onBlur = useCallback(() => {
-        setContext((draftCtx) => {
-            if (!editable.current) return;
+        const input = editable.current;
+        if (input) {
             try {
-                editSheetName(draftCtx, editable.current);
+                setContext((draftCtx) => editSheetName(draftCtx, input));
             } catch (e) {
-                if (e instanceof Error) showAlert(e.message);
+                if (e instanceof Error) showNotice(e.message);
             }
-        });
+        }
         setEditing(false);
-    }, [setContext, showAlert]);
+    }, [setContext, showNotice]);
 
     const onKeyDown = useCallback((e: React.KeyboardEvent<HTMLSpanElement>) => {
         // The blur may open a notice whose OK button takes the focus at once, and the browser would send this Enter's
@@ -123,15 +127,17 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
             setContext((ctx) => {
                 let currentOrder = -1;
                 const sorted = ctx.sheets.slice().sort((a, b) => sheetOrder(a) - sheetOrder(b));
-                for (const [i, _sheet] of sorted.entries()) {
-                    _sheet.order = i;
-                    if (_sheet.id === id) currentOrder = i;
+                for (const [i, s] of sorted.entries()) {
+                    s.order = i;
+                    if (s.id === id) currentOrder = i;
                 }
                 api.setSheetOrder(ctx, { [id]: currentOrder + delta });
             });
         },
         [context.allowEdit, setContext, id],
     );
+
+    const isLastShownSheet = context.sheets.filter((s) => s.hide !== 1).length < 2;
 
     const menuItems = (
         <MenuSections
@@ -171,11 +177,8 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                     <DropdownMenuItem
                         onClick={() => {
                             if (context.allowEdit === false) return;
-                            setContext((ctx) => {
-                                const shownSheets = ctx.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
-                                if (shownSheets.length > 1) api.hideSheet(ctx, id);
-                                else showAlert(NO_MORE_SHEET, 'ok');
-                            });
+                            if (isLastShownSheet) showNotice(LAST_SHEET_HIDE);
+                            else setContext((ctx) => api.hideSheet(ctx, id));
                         }}
                     >
                         Hide
@@ -192,14 +195,12 @@ export const SheetItem: React.FC<Props> = ({ id, sheet, isDropPlaceholder }) => 
                 <DropdownMenuItem
                     variant="destructive"
                     onClick={() => {
-                        const shownSheets = context.sheets.filter((s) => s.hide === undefined || s.hide !== 1);
-                        if (context.sheets.length < 2 || shownSheets.length < 2) {
-                            showAlert(NO_MORE_SHEET, 'ok');
+                        if (isLastShownSheet) {
+                            showNotice(LAST_SHEET_DELETE);
                             return;
                         }
-                        showAlert(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
+                        showNotice(`Delete the sheet "${sheet.name}"?`, 'yesno', () => {
                             setContext((ctx) => deleteSheet(ctx, id), { deleteSheetOp: { id } });
-                            hideAlert();
                         });
                     }}
                 >

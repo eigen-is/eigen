@@ -6,9 +6,8 @@
 // re-introduced string shows up as a failing test rather than an empty tab.
 
 import { describe, expect, test } from 'bun:test';
-import { FUNCTION_CATEGORIES } from '../../../components/InsertFunctionDialog';
 import formulaFunction from '../../../engine/parser/evaluate-by-operator/operator/formula-function';
-import { FUNCTION_LIST } from '../../../state/modules/function-list';
+import { FUNCTION_CATEGORIES, FUNCTION_LIST } from '../../../state/modules/function-list';
 
 // Categories the dialog has no tab for, so their functions are search-only.
 // Tracked in docs/SHEETS-TODO.md § Code debt, not fixed here.
@@ -21,16 +20,15 @@ describe('FUNCTION_LIST categories', () => {
     });
 
     test('every category id is a dialog tab or a known tab-less one', () => {
-        const known = new Set([...FUNCTION_CATEGORIES.map((c) => c.t), ...CATEGORIES_WITHOUT_A_TAB]);
+        const known = new Set([...FUNCTION_CATEGORIES.map((c) => c.id), ...CATEGORIES_WITHOUT_A_TAB]);
         const orphans = [...new Set(FUNCTION_LIST.filter((fn) => !known.has(fn.t)).map((fn) => fn.t))];
         expect(orphans).toEqual([]);
     });
 
     test('UNIQUE is reachable under the Array category, not only by search', () => {
-        const array = FUNCTION_CATEGORIES.find((c) => c.n === 'Array');
-        expect(array).toBeDefined();
-        // The dialog's own predicate (InsertFunctionDialog: `v.t === selectedType`).
-        const names = FUNCTION_LIST.filter((fn) => fn.t === array!.t).map((fn) => fn.n);
+        const array = FUNCTION_CATEGORIES.find((c) => c.name === 'Array');
+        // The dialog's own predicate: an entry is listed under a category when its `t` is that category's.
+        const names = FUNCTION_LIST.filter((fn) => fn.t === array?.id).map((fn) => fn.n);
         expect(names).toContain('UNIQUE');
     });
 });

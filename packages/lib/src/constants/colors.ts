@@ -258,6 +258,10 @@ export const EIGEN_STICKIES_COLOR_ROW = 1;
 export const EIGEN_COLORS: EigenColor[][] = EIGEN_COLORS_MAP.map((col, i) =>
     col.map((hex, s) => ({ label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex })),
 );
+// One palette color by its name and step, such as eigenColor('red', 400), for code that offers a fixed color.
+export function eigenColor(name: (typeof EIGEN_COLOR_NAMES)[number], step: (typeof EIGEN_COLOR_STEPS)[number]): string {
+    return EIGEN_COLORS_MAP[EIGEN_COLOR_NAMES.indexOf(name)][EIGEN_COLOR_STEPS.indexOf(step)];
+}
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map((col) => col[EIGEN_ACCENT_COLOR_ROW]);
 // The order calendars, labels, chart series and presence hand the accents out in. Pink, Eigen's accent, comes first;
 // each next one is the furthest (CIEDE2000) from those before it for normal vision and simulated deuteranopia, then

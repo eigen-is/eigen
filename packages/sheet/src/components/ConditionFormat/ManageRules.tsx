@@ -1,34 +1,23 @@
-// The Manage rules dialog: the current sheet's conditional-format rules, each with its range, a plain-English
-// description and a swatch of its style, and a delete button per rule.
+// The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules, each with its
+// range, a plain-English description and a swatch of its style. Its delete button per rule removes the rule at once,
+// unless the sheet is protected, so the dialog is a list with only Close in its footer.
 
-import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
-import { columnIndexToLabel } from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogFooter } from '@workspace/ui/components/dialog';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { X } from 'lucide-react';
-import { useContext, useMemo } from 'react';
+import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { useDialog } from '../../hooks/useDialog';
-import { findSheet } from '../../state';
+import { rangeToA1 } from '../../engine/a1-notation';
+import { useDialogProps } from '../../hooks/useDialog';
+import { deleteSheetRule, findSheet } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
-function formatRange(range: SingleRange): string {
-    const c1 = columnIndexToLabel(range.column[0]);
-    const c2 = columnIndexToLabel(range.column[1]);
-    const r1 = range.row[0] + 1;
-    const r2 = range.row[1] + 1;
-    if (r1 === r2 && c1 === c2) return `${c1}${r1}`;
-    return `${c1}${r1}:${c2}${r2}`;
-}
-
-function formatRanges(ranges: SingleRange[]): string {
-    return ranges.map(formatRange).join(', ');
-}
-
+// A rule the dialog made lists under the label it was made with. The others come from a file or from a value that reads
+// a cell, such as a formula rule.
 const RULE_LABELS: Record<string, string> = {
-    // Menu-created rules list under the RULE_COPY name they were created with.
     ...Object.fromEntries(Object.entries(RULE_COPY).map(([name, copy]) => [name, copy.label])),
-    // Engine condition names with no menu entry — xlsx import and formula rules.
     greaterThanOrEqual: 'Greater than or equal to',
     lessThanOrEqual: 'Less than or equal to',
     notEqual: 'Not equal to',
@@ -49,6 +38,7 @@ function describeDefaultRule(rule: DefaultConditionalFormatRule): string {
         case 'notEqual':
         case 'textContains':
         case 'occurrenceDate':
+        case 'formula':
             return values[0] != null ? `${label} ${values[0]}` : label;
         case 'between':
         case 'notBetween':
@@ -116,44 +106,31 @@ function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
 
 export function ManageRules() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { hideDialog } = useDialog();
-
-    const rules = useMemo(() => {
-        return findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
-    }, [context]);
-
-    const deleteRule = (ruleIndex: number) => {
-        setContext((ctx) => {
-            const arr = findSheet(ctx, ctx.currentSheetId)?.conditionalFormatRules;
-            if (arr) arr.splice(ruleIndex, 1);
-        });
-    };
+    const dialogProps = useDialogProps();
+    const rules = findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4">
-            <DialogHeader>
-                <DialogTitle>Conditional formatting rules</DialogTitle>
-            </DialogHeader>
-
+        <FormDialog {...dialogProps} title="Manage rules" size="md">
             {rules.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
             ) : (
-                <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto divide-y divide-border">
+                <div className="max-h-[40vh] overflow-y-auto border border-border rounded-md divide-y divide-border">
                     {rules.map((rule, i) => (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: rules list is stable within the dialog lifecycle
+                        // biome-ignore lint/suspicious/noArrayIndexKey: a rule has no id, and a row keeps no state for a delete to misplace
                         <div key={i} className="flex items-center gap-3 px-3 py-2 text-sm">
                             <RuleSwatch rule={rule} />
                             <div className="flex-1 min-w-0">
                                 <div className="font-medium truncate">{describeRule(rule)}</div>
                                 <div className="text-xs text-muted-foreground truncate">
-                                    {formatRanges(rule.cellrange)}
+                                    {rule.cellrange.map((range) => rangeToA1(range)).join(', ')}
                                 </div>
                             </div>
                             <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Delete rule"
                                 className="h-7 w-7 shrink-0"
-                                onClick={() => deleteRule(i)}
+                                onClick={() => setContext((ctx) => deleteSheetRule(ctx, i))}
                             >
                                 <X className="h-3.5 w-3.5" />
                             </Button>
@@ -162,11 +139,7 @@ export function ManageRules() {
                 </div>
             )}
 
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={hideDialog}>
-                    Close
-                </Button>
-            </DialogFooter>
-        </div>
+            <DialogFooter showCloseButton />
+        </FormDialog>
     );
 }

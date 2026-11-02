@@ -14,24 +14,24 @@ Sorting rearranges your rows by the values in a chosen column. Filtering hides r
 
 ### Quick sort
 
-1. Select a cell, or highlight the range you want to sort.
+1. Highlight the range you want to sort.
 2. Open the **Data** menu and hover over **Sort range**.
 3. Choose **Ascending** to sort A to Z (or smallest to largest), or **Descending** to sort Z to A (or largest to smallest).
 
-Sheets sorts the rows inside your selection. If you select a single cell, Sheets finds the continuous block of data around it and sorts that.
+**Sort range** works on one selected range, so it stays grayed out until exactly one range is selected. Sheets sorts by the first column of your selection. It sorts the rows from the first to the last one with a value in that column, the first row included, so empty rows above or below them stay where they are. To keep a header row in place, use **Custom sort**. You can also right-click a cell in the range and choose **Sort range A → Z** or **Sort range Z → A**.
 
 ### Custom sort
 
 **Custom sort** lets you choose which column to sort by, and whether your data has a header row.
 
-1. Select any cell in your data, or highlight the range.
+1. Highlight the range you want to sort.
 2. Open the **Data** menu, hover over **Sort range**, and click **Custom sort**.
-3. Tick **Data has a header row** if the first row contains column names. Sheets will exclude that row from sorting and use the column names in the **Sort by** dropdown.
+3. Tick **Data has a header row** if the first row contains column names. Sheets leaves that row in place and uses the column names in the **Sort by** dropdown.
 4. Choose the column to sort by from the **Sort by** dropdown.
 5. Select **Ascending** or **Descending**.
 6. Click **Sort**.
 
-You can also reach **Custom sort** by right-clicking a cell and choosing **Sort**.
+As with a quick sort, the rows that move are those from the first to the last one with a value in the first column of your selection.
 
 <div class="eigen-callout">
 
@@ -50,7 +50,7 @@ A filter adds a dropdown arrow to each column header in your data. Click an arro
 
 A dropdown arrow appears in each header cell of the data range. The range is highlighted with a blue border.
 
-You can also right-click a cell and choose **Filter** to create a filter in one step.
+You can also right-click a cell and choose **Create a filter**.
 
 ### Choose which rows to show
 

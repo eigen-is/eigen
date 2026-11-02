@@ -122,6 +122,8 @@ A properties panel has no Delete button. An object's Delete is its menu's last r
 
 Pink `#f6339a`, the accent row of the pink column in `packages/lib/src/constants/colors.ts`, is Eigen's accent color. It comes first in `EIGEN_ACCENT_COLORS_SHUFFLED`, the order calendars, labels, chart series and presence hand the accents out in, so what Eigen picks for a user starts in its own color: a new account's first calendar and a chart's first series. A new deck's title slide opens on it too. Rose and fuchsia sit close to it, so they come late in that order ([CHARTS.md](CHARTS.md) has the reasoning).
 
+A fixed color mapped onto the palette (`eigenColor(name, step)`, as the sheet's color scales and data bars do in `CF_PRESETS`) takes the nearest palette color by OKLab distance, and where the choice is in doubt the lighter, less saturated step, because the originals are muted.
+
 ## A choice is a submenu with a check
 
 **A row that shows a current option or an on state draws a check on its left, and nothing else does.** Google's menus work this way (View › Mode, Format › Line & paragraph spacing, View › Show ruler), so a user reads every Eigen menu the same way, and a screen reader hears each row as checked or not.
@@ -188,7 +190,9 @@ Icon buttons with a tooltip are `TooltipButton`. When hover icons would change t
 
 Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDisplay()` for tooltip labels. Manual listeners stay for stateful navigation (`use-keyboard-list-navigation.ts`) and for editors that own their keys (Tiptap, the canvas keymap in [CANVAS.md](CANVAS.md)). Mod+K is a raw window listener rather than a `useHotkey`, so the palette opens from inside a text field too. A `'*'` chord needs a capture-phase listener, and `'Shift+8'` never matches.
 
-**A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key pressed on a dialog button otherwise acts on the document behind it: Delete on a confirm button deleting the canvas selection, `#` in Mail's location picker trashing the message. The hook watches the DOM for an open `role="dialog"` or `role="alertdialog"`, so it keeps no registry. An overlay that is a dialog itself (the file preview, Mail's cheat sheet) registers its keys ungated. A bar menu leaves the page live, so its keys reach the document too: the canvas also folds in `useMenuOpen()`, or ArrowRight in File nudges the selected shape and Delete deletes it. The grid needs neither, since it reads only the keys pressed inside the workbook and an open menu holds the focus in its portal.
+**A document-level keymap folds `useDialogOpen()` into its `enabled`.** The library's own guard covers text fields only, so a key pressed on a dialog button otherwise acts on the document behind it: Delete on a confirm button deleting the canvas selection, `#` in Mail's location picker trashing the message. The hook watches the DOM for an open `role="dialog"` or `role="alertdialog"`, so it keeps no registry. An overlay that is a dialog itself, such as Mail's cheat sheet, registers its keys ungated. The file preview is a Radix dialog itself, so its keys act only on a key pressed inside it ([PREVIEWS.md](PREVIEWS.md#the-overlays-own-keys-act-only-on-a-key-pressed-inside-it)). A bar menu leaves the page live, so its keys reach the document too: the canvas also folds in `useMenuOpen()`, or ArrowRight in File nudges the selected shape and Delete deletes it. The grid needs neither, since it reads only the keys pressed inside the workbook and an open menu holds the focus in its portal.
+
+**Two keymaps may register the same key, and their gates keep them apart.** The canvas's nudges and the file preview's paging both register the arrow keys on the document, and the canvas's are off while a dialog, the preview included, is open. The `@tanstack/hotkeys` core under `@tanstack/react-hotkeys` 0.1.3 counts every second registration of a key as a conflict, a disabled one included, and warns each time one registers, which `useHotkey` does on every `enabled` flip. So `EigenApp`'s `HotkeysProvider` passes `conflictBehavior: 'allow'` to every `useHotkey`. A new keymap that shares a key needs a gate of its own: the library no longer warns about the overlap.
 
 **A suggestion input inside a dialog is a combobox that says when its list is open.** Radix dismisses a dialog from a document capture listener, which runs before any React handler. So `DialogContent` leaves Escape alone when it comes from a `role="combobox"` with `aria-expanded="true"`, and the input's own keydown closes the list. `ChatMessageInput` and `ContactAutosuggest` set both; a new suggestion input sets them too. cmdk's input is skipped: it says expanded always, and its list is the dialog.
 
@@ -200,15 +204,15 @@ Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDis
 | Docs figure layers | -1 to 2 | a figure behind the text (-1) or in front of it (1), and its grips above both (2), in the page's stacking context |
 | In-content floating UI | 10 | inline autocompletes, suggestion lists |
 | Sheet canvas overlays | 8 to 30 | selection, freeze handles, scrollbars, all under `cellArea` |
-| Portaled UI | 50 | shadcn and Radix dropdowns, popovers, dialogs |
-| Full-screen overlay | 100 | `FilePreview`, slides `PresentMode` |
-| Above the overlay | 200 | `DialogContent` with `abovePreview`; `MessageView`'s details popover in the `.eml` quick look |
+| Portaled UI | 50 | shadcn and Radix dropdowns, popovers, dialogs, tooltips; `FilePreview` |
+| Inline full-screen overlay | 100 | slides `PresentMode` |
 | Toaster | library | Sonner stacks itself |
 
 - **App components set no z-index.** They use layout instead: a flex sibling (slides) or `absolute` inside a parent that makes a stacking context (docs, `relative overflow-hidden`). Side panels belong here.
 - `position: relative` alone makes no stacking context. It takes a z-index other than `auto`, or `transform`, `opacity` below 1, `filter`, `isolation: isolate` or `will-change`. To contain children's z-indices, add `isolation: isolate`.
 - Don't raise a menu above shadcn's z-50. If a portaled menu is covered, lower whatever covers it.
-- **Anything above 50 carries a comment** saying why. A layer at 200 is a `role="dialog"` after the overlay in `<body>`, which is how the overlay under it knows to stand its own keys down ([PREVIEWS.md](PREVIEWS.md#the-overlays-keys-stand-down-for-a-layer-above-it)).
+- **Portaled layers stack by document order.** Each portals to `<body>` as it opens, so at the same z-50 the later one paints above. The file preview is a Radix dialog too, so a dialog, a select list or a tooltip opened over it lands above it ([PREVIEWS.md](PREVIEWS.md#the-overlay-is-a-radix-dialog-so-radix-decides-which-layer-a-key-or-a-click-is-for)).
+- **Anything above 50 carries a comment** saying why. Present mode is at 100 because it renders inside the app shell, not on `<body>`, and must cover the shell's own portals.
 - Overlays inside the sheet's `cellArea` stay at 30 or below, so the sheet's portaled menus land above them at 50.
 
 ## Buttons navigate here, links in content open a new tab

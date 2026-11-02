@@ -11,7 +11,6 @@ import {
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { CHART_RANGE_REFUSALS } from '../../engine/chart-range';
-import { useAlert } from '../../hooks/useAlert';
 import { useDialog } from '../../hooks/useDialog';
 import {
     addSheet,
@@ -24,7 +23,7 @@ import {
 } from '../../state';
 import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
-// The Auto SUM functions after SUM, which has its own handler.
+// The functions of the Auto SUM submenu, each with its menu label.
 const AUTO_SUM_FUNCTIONS = [
     { formula: 'SUM', label: 'Sum (SUM)' },
     { formula: 'AVERAGE', label: 'Average' },
@@ -35,14 +34,13 @@ const AUTO_SUM_FUNCTIONS = [
 
 export function InsertMenu() {
     const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
-    const { showDialog, hideDialog } = useDialog();
+    const { showDialog, showNotice } = useDialog();
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
     const columnFocus = selection?.column_focus;
 
-    const last = context.selections?.[context.selections.length - 1];
+    const last = context.selections?.at(-1);
     const commentRow = last?.row_focus ?? last?.row[0] ?? 0;
     const commentCol = last?.column_focus ?? last?.column[0] ?? 0;
 
@@ -60,14 +58,13 @@ export function InsertMenu() {
         setContext(
             (draftCtx) => {
                 const error = tryInsertRowCol(draftCtx, insertRowColOp);
-                if (error) showAlert(error, 'ok');
+                if (error) showNotice(error);
             },
             { insertRowColOp },
         );
     };
 
-    const fd = getFlowdata(context);
-    const commentCell = fd?.[commentRow]?.[commentCol];
+    const commentCell = getFlowdata(context)?.[commentRow]?.[commentCol];
     const hasComment = (commentCell?.commentCardIds?.length ?? 0) > 0;
 
     return (
@@ -119,7 +116,7 @@ export function InsertMenu() {
                 onClick={() =>
                     setContext((draftCtx) => {
                         const refusal = insertChartFromSelection(draftCtx, crypto.randomUUID());
-                        if (refusal) showAlert(CHART_RANGE_REFUSALS[refusal], 'ok');
+                        if (refusal) showNotice(CHART_RANGE_REFUSALS[refusal]);
                     })
                 }
             >
@@ -161,8 +158,8 @@ export function InsertMenu() {
                         </DropdownMenuItem>
                     ))}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog onCancel={hideDialog} />)}>
-                        Learn more...
+                    <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog />)}>
+                        More functions…
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>

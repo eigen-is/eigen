@@ -26,8 +26,6 @@ afterAll(() => fetchSpy.mockRestore());
 const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { DriveItemNameDialog } = await import('../../../components/drive/drive-item-name-dialog');
-const { ABOVE_PREVIEW_Z } = await import('../../../components/dialog');
-const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
 
 // A mutation hook toasts its failure before the dialog sees it, and the dialog drops only a toasted error.
 const toasted = (message: string) => {
@@ -80,14 +78,6 @@ async function openNewFolder() {
     ({ unmount } = await renderInDocument(createElement(Harness)));
 }
 
-// A file preview is open, as when Save to Drive's picker opens New folder over it.
-async function openNewFolderOverPreview() {
-    const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
-    ({ unmount } = await renderInDocument(
-        createElement(PreviewContext.Provider, { value: preview }, createElement(Harness)),
-    ));
-}
-
 const dialog = () => document.querySelector('[role="dialog"]');
 const button = (label: string) =>
     [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
@@ -128,15 +118,6 @@ test('New folder shows a labelled name field, Cancel and Create', async () => {
     expect(dialog()?.textContent).toContain('Location');
     expect(button('Cancel')).toBeDefined();
     expect(button('Create')).toBeDefined();
-});
-
-test('over an open file preview the dialog lifts above it, and Escape closes the dialog', async () => {
-    await openNewFolderOverPreview();
-    expect(dialog()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
-    await act(async () => {
-        nameField().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
-    });
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('Create waits for a name with more than spaces', async () => {

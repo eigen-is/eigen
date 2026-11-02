@@ -17,14 +17,11 @@ import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
-    ConditionRulesProps,
-    DataRegulationProps,
     FilterEntry,
     FilterOptions,
     GlobalCache,
     LinkCardProps,
     Presence,
-    RangeDialogProps,
     Rect,
     SearchHighlight,
     Selection,
@@ -66,15 +63,14 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    rangeDialog: RangeDialogProps; // coordinate range mouse selection
-    // warning dialog
+    // Whether a range picker is open. While it is, the cell editor and the link card keep out of the way of the pick.
+    rangePickerOpen: boolean;
+    // A notice for the overlay to show, such as why a protected sheet refused an edit. A write sets it, and the
+    // overlay opens the notice and clears it.
     warnDialog?: string;
     currency?: string;
-    // The rule the data-validation dialog edits, before it is applied.
-    validationDraft: DataRegulationProps;
     // Whether a list cell's drop-down is open.
     validationListOpen?: boolean;
-    conditionRules: ConditionRulesProps; // conditional formatting
 
     filterContextMenu?: {
         x: number;
@@ -223,41 +219,11 @@ export function defaultContext(refs: RefValues): Context {
 
         currentSheetId: '',
         calculateSheetId: '',
-        // warning dialog
         warnDialog: undefined,
         currency: '€',
-        rangeDialog: {
-            show: false,
-            rangeTxt: '',
-            type: '',
-            singleSelect: false,
-        },
-
-        validationDraft: {
-            type: '',
-            type2: '',
-            rangeTxt: '',
-            value1: '',
-            value2: '',
-            validity: '',
-            remote: false,
-            prohibitInput: false,
-            hintShow: false,
-            hintValue: '',
-        },
+        rangePickerOpen: false,
 
         validationListOpen: false,
-
-        conditionRules: {
-            rulesType: '',
-            rulesValue: '',
-            textColor: { check: true, color: '#000000' },
-            cellColor: { check: true, color: '#000000' },
-            betweenValue: { value1: '', value2: '' },
-            dateValue: '',
-            repeatValue: '0',
-            projectValue: '10',
-        },
 
         visibledatarow: [],
         visibledatacolumn: [],

@@ -1,3 +1,7 @@
+// One mail message, drawn the same way wherever its fields came from, such as the mail reader's stored message or the
+// `.eml` quick look's served payload: the subject, the sender line with a popover of every address, the chips the host
+// passes in and the body, whose remote images wait until the viewer loads them. It takes data in and fetches nothing.
+
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
 import { flattenAddresses, NO_SUBJECT, stripRemoteContent } from '@workspace/lib/mail';
@@ -5,11 +9,8 @@ import type { AddressObject } from '@workspace/lib/types/mail';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
-import { cn } from '../../lib/utils';
 import { Button } from '../button';
-import { ABOVE_PREVIEW_Z } from '../dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
-import { useOptionalPreview } from '../preview-provider/preview-context';
 import { Separator } from '../separator';
 import { ShadowContent } from '../shadow-content';
 import { UserAvatar } from '../user/user-avatar';
@@ -44,8 +45,6 @@ type MessageViewProps = {
     onLoadRemoteImages?: () => void;
 };
 
-// One message, drawn the same way wherever its fields came from: the mail reader's stored message and the
-// `.eml` quick look's served payload (docs/MAIL.md). Data in; it fetches nothing and acts on nothing.
 export function MessageView({
     subject,
     from,
@@ -171,14 +170,14 @@ type HeaderFields = Pick<MessageViewProps, 'subject' | 'from' | 'replyTo' | 'to'
 
 function MailHeaderDetails({ header }: { header: HeaderFields }) {
     const rows: { label: string; node: ReactNode }[] = [];
-    if (header.from) rows.push({ label: 'from', node: formatContactObjects(header.from) });
-    if (header.replyTo) rows.push({ label: 'reply-to', node: formatContactObjects(header.replyTo) });
-    if (header.to) rows.push({ label: 'to', node: formatContactObjects(header.to) });
-    if (header.cc) rows.push({ label: 'cc', node: formatContactObjects(header.cc) });
-    if (header.bcc) rows.push({ label: 'bcc', node: formatContactObjects(header.bcc) });
-    rows.push({ label: 'date', node: <span className="text-foreground">{header.formattedDate}</span> });
+    if (header.from) rows.push({ label: 'From', node: formatContactObjects(header.from) });
+    if (header.replyTo) rows.push({ label: 'Reply-to', node: formatContactObjects(header.replyTo) });
+    if (header.to) rows.push({ label: 'To', node: formatContactObjects(header.to) });
+    if (header.cc) rows.push({ label: 'Cc', node: formatContactObjects(header.cc) });
+    if (header.bcc) rows.push({ label: 'Bcc', node: formatContactObjects(header.bcc) });
+    rows.push({ label: 'Date', node: <span className="text-foreground">{header.formattedDate}</span> });
     if (header.subject)
-        rows.push({ label: 'subject', node: <span className="text-foreground">{header.subject}</span> });
+        rows.push({ label: 'Subject', node: <span className="text-foreground">{header.subject}</span> });
 
     return (
         <div className="text-sm">
@@ -193,10 +192,6 @@ function MailHeaderDetails({ header }: { header: HeaderFields }) {
 }
 
 function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean }) {
-    // Drawn inside the full-screen quick look (z-100), the details popover has to clear it the way a
-    // dialog does (LAYOUT.md § One z-index scale, and app code sets none); the reader draws it under no
-    // overlay at all.
-    const preview = useOptionalPreview();
     const recipients = [
         ...collectAddresses(header.to),
         ...collectAddresses(header.cc),
@@ -226,17 +221,14 @@ function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean
                                     type="button"
                                     className="flex items-center gap-1 min-w-0 hover:text-foreground rounded cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
-                                    <span className="truncate">to: {summaryNames.join(', ')}</span>
+                                    <span className="truncate">To: {summaryNames.join(', ')}</span>
                                     <ChevronDown className="h-3 w-3 shrink-0" />
                                 </button>
                             </PopoverTrigger>
                             <PopoverContent
                                 align="start"
                                 collisionPadding={8}
-                                className={cn(
-                                    'w-[28rem] max-w-[calc(100vw-2rem)]',
-                                    preview?.isPreviewOpen && ABOVE_PREVIEW_Z,
-                                )}
+                                className="w-[28rem] max-w-[calc(100vw-2rem)]"
                             >
                                 <MailHeaderDetails header={header} />
                             </PopoverContent>

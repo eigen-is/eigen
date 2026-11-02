@@ -1,24 +1,26 @@
+// Focus for a hand-rolled full-screen overlay that is no Radix dialog, such as the landing page's media
+// preview. It moves the focus into the overlay on open, keeps Tab cycling inside it, and gives the focus back
+// to whatever had it before the overlay opened. It joins none of Radix's stacks, so a Radix dialog under it
+// keeps its own focus trap and scroll lock: an overlay that can open over one is a Radix dialog itself.
+
 import type { RefObject } from 'react';
 import { useEffect } from 'react';
 
-// Modal focus management for the hand-rolled full-screen overlays (FilePreview, MediaPreview)
-// that can't be Radix Dialogs because of their z-index / pointer-down choreography. Moves focus
-// into the container on open, keeps Tab cycling inside it, and restores focus to the element that
-// was focused before it opened. `active` suspends the trap while a nested modal (a Radix dialog
-// portaled elsewhere in the DOM) owns focus, so the two don't fight over it.
 const FOCUSABLE_SELECTOR =
     'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), video[controls], audio[controls], [tabindex]:not([tabindex="-1"])';
 
-export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) {
+export function useFocusTrap(ref: RefObject<HTMLElement | null>) {
     // Capture the trigger on mount (before focus moves in) and restore it on unmount.
     useEffect(() => {
-        const previouslyFocused = document.activeElement as HTMLElement | null;
-        return () => previouslyFocused?.focus();
+        const previouslyFocused = document.activeElement;
+        return () => {
+            if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+        };
     }, []);
 
     useEffect(() => {
         const container = ref.current;
-        if (!active || !container) return;
+        if (!container) return;
 
         if (!container.contains(document.activeElement)) container.focus();
 
@@ -50,5 +52,5 @@ export function useFocusTrap(ref: RefObject<HTMLElement | null>, active = true) 
 
         container.addEventListener('keydown', handleKeyDown);
         return () => container.removeEventListener('keydown', handleKeyDown);
-    }, [ref, active]);
+    }, [ref]);
 }

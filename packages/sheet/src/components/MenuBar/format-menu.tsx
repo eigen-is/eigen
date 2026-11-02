@@ -17,7 +17,7 @@ import { ColorPickerMenuItem } from '@workspace/ui/components/media';
 import { Fragment, useContext, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog } from '../../hooks/useDialog';
-import type { RunStyle } from '../../state';
+import type { ConditionRuleType, RunStyle } from '../../state';
 import {
     applyColorScalePreset,
     applyDataBarPreset,
@@ -43,7 +43,6 @@ import {
     SHEET_HOTKEYS,
     updateFormat,
 } from '../../state';
-import type { ConditionRuleType } from '../ConditionFormat/ConditionRules';
 import { ConditionRules, RULE_COPY } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 import { CustomCurrencies } from '../FormatDialogs/CustomCurrencies';
@@ -516,19 +515,20 @@ const ITEM_SELECTION_RULES: ConditionRuleItem[] = [
     { text: 'belowAverage', value: 'Below' },
 ];
 
+// Each label names the stops in the order the swatch draws them: the color of the highest value first.
 const COLOR_SCALE_PRESETS = [
-    { key: 'colorGradation_1', label: 'Green-yellow-red color gradation' },
-    { key: 'colorGradation_2', label: 'Red-yellow-green color gradation' },
-    { key: 'colorGradation_3', label: 'Green-white-red color gradation' },
-    { key: 'colorGradation_4', label: 'Red-white-green color gradation' },
-    { key: 'colorGradation_5', label: 'Blue-white-red color gradation' },
-    { key: 'colorGradation_6', label: 'Red-white-blue color gradation' },
-    { key: 'colorGradation_7', label: 'White-red color gradation' },
-    { key: 'colorGradation_8', label: 'Red-white color gradation' },
-    { key: 'colorGradation_9', label: 'Green-white color gradation' },
-    { key: 'colorGradation_10', label: 'White-green color gradation' },
-    { key: 'colorGradation_11', label: 'Green-yellow color gradation' },
-    { key: 'colorGradation_12', label: 'Yellow-green color gradation' },
+    { key: 'colorGradation_1', label: 'Red-yellow-green color gradation' },
+    { key: 'colorGradation_2', label: 'Green-yellow-red color gradation' },
+    { key: 'colorGradation_3', label: 'Red-white-green color gradation' },
+    { key: 'colorGradation_4', label: 'Green-white-red color gradation' },
+    { key: 'colorGradation_5', label: 'Red-white-blue color gradation' },
+    { key: 'colorGradation_6', label: 'Blue-white-red color gradation' },
+    { key: 'colorGradation_7', label: 'Red-white color gradation' },
+    { key: 'colorGradation_8', label: 'White-red color gradation' },
+    { key: 'colorGradation_9', label: 'White-green color gradation' },
+    { key: 'colorGradation_10', label: 'Green-white color gradation' },
+    { key: 'colorGradation_11', label: 'Yellow-green color gradation' },
+    { key: 'colorGradation_12', label: 'Green-yellow color gradation' },
 ];
 
 const DATA_BAR_PRESETS = [
@@ -630,7 +630,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Management rules</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
@@ -643,11 +643,7 @@ function ConditionalFormattingSubmenu() {
                                 });
                             }}
                         >
-                            Delete sheet rule
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
-                            Management rules
+                            Delete sheet rules
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
