@@ -1055,7 +1055,7 @@ export class Drive {
         if (path.type !== DRIVE_TYPE_CHAT) {
             throw new ApiError(404, 'Chat not found');
         }
-        return new ChatRoom(this, this.home, path).init();
+        return ChatRoom.open(this, this.home, path);
     }
 
     // The comment index on the server holds who is assigned, so the history row is written here and
@@ -1250,6 +1250,17 @@ export class Drive {
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
         return this.getMount(mountId).openDatabase(config, pathId);
+    }
+
+    // Runs fn with the database open, such as a chat room's data.db for one request. It closes after
+    // a quiet minute.
+    public async withDatabase<S extends SchemaType, T>(
+        mountId: string,
+        config: DatabaseConfig<S>,
+        pathId: string,
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
+        return this.getMount(mountId).withDatabase(config, pathId, fn);
     }
 
     // An open collab document holds its data.db for as long as it is open.

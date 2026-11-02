@@ -28,13 +28,13 @@ import * as schema from './schema';
 import { broadcastCommentIndexUpdated, buildChatEvent } from './sse-events';
 
 export class ChatRoom {
-    private containerPath: DrivePath | null = null;
-    private db!: BunSQLiteDatabase<typeof schema>;
-
-    public constructor(
+    private constructor(
         private readonly drive: Drive,
         private readonly home: Home,
         private readonly path: DrivePath,
+        private readonly dataDbId: string,
+        // The document a comment thread belongs to. A chat on its own has none.
+        private readonly containerPath: DrivePath | null,
     ) {}
 
     public static async create(drive: Drive, mountId: string, roomId: string): Promise<void> {
@@ -44,32 +44,24 @@ export class ChatRoom {
         await drive.createFolder(mountId, roomId, 'media');
     }
 
-    public async init(): Promise<ChatRoom> {
-        let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
-        if (!dataDbPath) {
-            // Drive.getChat builds a new ChatRoom for every request. Two first requests at once would each
+    // Finds the room's data.db, and creates it when it is missing. It opens nothing: each method below
+    // opens data.db for its own queries.
+    public static async open(drive: Drive, home: Home, path: DrivePath): Promise<ChatRoom> {
+        let dataDb = await drive.getChildByName(path.mountId, path.id, 'data.db');
+        if (!dataDb) {
+            // Drive.getChat opens a new ChatRoom for every request. Two first requests at once would each
             // create a data.db, so the create runs under the chat's lock and checks again there.
-            dataDbPath = await this.drive.withPathLock(this.path.mountId, this.path.id, async () => {
-                const existing = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
+            dataDb = await drive.withPathLock(path.mountId, path.id, async () => {
+                const existing = await drive.getChildByName(path.mountId, path.id, 'data.db');
                 if (existing) return existing;
-                await ChatRoom.create(this.drive, this.path.mountId, this.path.id);
-                const created = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
-                if (!created) throw new ApiError(500, `Failed to create data.db in ${this.path.name}`);
+                await ChatRoom.create(drive, path.mountId, path.id);
+                const created = await drive.getChildByName(path.mountId, path.id, 'data.db');
+                if (!created) throw new ApiError(500, `Failed to create data.db in ${path.name}`);
                 return created;
             });
         }
-
-        // The open may wait for a download from S3, and the container lookup reads only the local
-        // metadata. Neither needs the other, so they run at the same time.
-        const dataDbId = dataDbPath.id;
-        const [managedDb, containerPath] = await Promise.all([
-            this.drive.openDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, dataDbId),
-            this.drive.findContainerPath(this.path.mountId, this.path.parentId ?? ''),
-        ]);
-        this.db = managedDb.db;
-        this.containerPath = containerPath;
-
-        return this;
+        const containerPath = await drive.findContainerPath(path.mountId, path.parentId ?? '');
+        return new ChatRoom(drive, home, path, dataDb.id, containerPath);
     }
 
     public async postMessage(
@@ -116,15 +108,31 @@ export class ChatRoom {
         const now = new Date();
         const attachmentData = attachments && attachments.length > 0 ? attachments : null;
 
-        await this.db.insert(schema.messages).values({
-            id,
-            authorEmail,
-            type,
-            content,
-            attachments: attachmentData,
-            whisperTo: whisperTo ?? null,
-            replyTo: replyTo ?? null,
-            createdAt: now,
+        // A comment thread inside a document keeps the document's comment index up to date.
+        const indexed = this.containerPath !== null && type !== 'whisper';
+        // Everything below that reads the room is read here too, so data.db is held only this long.
+        const { participantRows, recentText } = await this.withDb(async (db) => {
+            await db.insert(schema.messages).values({
+                id,
+                authorEmail,
+                type,
+                content,
+                attachments: attachmentData,
+                whisperTo: whisperTo ?? null,
+                replyTo: replyTo ?? null,
+                createdAt: now,
+            });
+            return {
+                participantRows:
+                    type === 'message' || type === 'emote'
+                        ? await db
+                              .selectDistinct({ authorEmail: schema.messages.authorEmail })
+                              .from(schema.messages)
+                              .where(isNull(schema.messages.deletedAt))
+                              .all()
+                        : [],
+                recentText: indexed ? await buildRecentText(db) : '',
+            };
         });
 
         const message: ChatMessage = {
@@ -148,15 +156,18 @@ export class ChatRoom {
         // one, so no other tab misses such an event.
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_POSTED, type === 'system' ? [] : members);
 
-        // A comment thread inside a document keeps the document's comment index up to date.
-        if (this.containerPath && type !== 'whisper') {
-            await this.updateCommentIndex(async (index) => {
-                await index.ensureComment(this.path.name, { createdBy: authorEmail });
-                await index.updateActivity(this.path.name, authorEmail);
-                for (const email of extractMentionedEmails(content)) {
-                    await index.addMention(this.path.name, email);
-                }
-            }, members);
+        if (indexed) {
+            await this.updateCommentIndex(
+                async (index) => {
+                    await index.ensureComment(this.path.name, { createdBy: authorEmail });
+                    await index.updateActivity(this.path.name, authorEmail);
+                    for (const email of extractMentionedEmails(content)) {
+                        await index.addMention(this.path.name, email);
+                    }
+                },
+                recentText,
+                members,
+            );
         }
 
         if (type !== 'system') {
@@ -254,12 +265,7 @@ export class ChatRoom {
                     if (recipientUser) notify([recipientUser.id], activity);
                 }
             } else if (type === 'message' || type === 'emote') {
-                const rows = await this.db
-                    .selectDistinct({ authorEmail: schema.messages.authorEmail })
-                    .from(schema.messages)
-                    .where(isNull(schema.messages.deletedAt))
-                    .all();
-                const participantEmails = new Set<string>(rows.map((row) => row.authorEmail.toLowerCase()));
+                const participantEmails = new Set<string>(participantRows.map((row) => row.authorEmail.toLowerCase()));
                 participantEmails.add(this.home.user.email.toLowerCase());
                 participantEmails.delete(authorEmail.toLowerCase());
 
@@ -304,21 +310,23 @@ export class ChatRoom {
     }
 
     public async getMessagesForUser(userEmail: string, limit = 50, beforeId?: string): Promise<ChatMessage[]> {
-        const before = beforeId
-            ? await this.db
-                  .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
-                  .from(schema.messages)
-                  .where(eq(schema.messages.id, beforeId))
-                  .get()
-            : undefined;
-        if (beforeId && !before) return [];
-        const rows = await this.db
-            .select()
-            .from(schema.messages)
-            .where(before && schema.olderThan(before))
-            .orderBy(...schema.NEWEST_FIRST)
-            .limit(limit)
-            .all();
+        const rows = await this.withDb(async (db) => {
+            const before = beforeId
+                ? await db
+                      .select({ createdAt: schema.messages.createdAt, rowid: sql<number>`rowid` })
+                      .from(schema.messages)
+                      .where(eq(schema.messages.id, beforeId))
+                      .get()
+                : undefined;
+            if (beforeId && !before) return [];
+            return db
+                .select()
+                .from(schema.messages)
+                .where(before && schema.olderThan(before))
+                .orderBy(...schema.NEWEST_FIRST)
+                .limit(limit)
+                .all();
+        });
 
         const viewerEmail = userEmail.toLowerCase();
         return rows.reverse().map((msg) => {
@@ -350,13 +358,18 @@ export class ChatRoom {
     }
 
     public async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
-        const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-        if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
-            throw new ApiError(404, 'Message not found or not owned');
-        }
-
         const now = new Date();
-        await this.db.update(schema.messages).set({ content, editedAt: now }).where(eq(schema.messages.id, messageId));
+        const { existing, recentText } = await this.withDb(async (db) => {
+            const existing = await db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
+            if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
+                throw new ApiError(404, 'Message not found or not owned');
+            }
+            await db.update(schema.messages).set({ content, editedAt: now }).where(eq(schema.messages.id, messageId));
+            return {
+                existing,
+                recentText: this.containerPath && existing.type !== 'whisper' ? await buildRecentText(db) : '',
+            };
+        });
 
         const updated = { ...existing, content, editedAt: now };
 
@@ -364,28 +377,36 @@ export class ChatRoom {
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_EDITED, members);
 
         if (this.containerPath && existing.type !== 'whisper') {
-            await this.updateCommentIndex(async (index) => {
-                await index.updateActivity(this.path.name, existing.authorEmail, false);
-                for (const email of extractMentionedEmails(content)) {
-                    await index.addMention(this.path.name, email);
-                }
-            }, members);
+            await this.updateCommentIndex(
+                async (index) => {
+                    await index.updateActivity(this.path.name, existing.authorEmail, false);
+                    for (const email of extractMentionedEmails(content)) {
+                        await index.addMention(this.path.name, email);
+                    }
+                },
+                recentText,
+                members,
+            );
         }
 
         return updated;
     }
 
     public async deleteMessage(messageId: string, userEmail: string): Promise<void> {
-        const existing = await this.db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
-        if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
-            throw new ApiError(404, 'Message not found or not owned');
-        }
-
-        const now = new Date();
-        await this.db
-            .update(schema.messages)
-            .set({ deletedAt: now, content: '' })
-            .where(eq(schema.messages.id, messageId));
+        const { existing, recentText } = await this.withDb(async (db) => {
+            const existing = await db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
+            if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
+                throw new ApiError(404, 'Message not found or not owned');
+            }
+            await db
+                .update(schema.messages)
+                .set({ deletedAt: new Date(), content: '' })
+                .where(eq(schema.messages.id, messageId));
+            return {
+                existing,
+                recentText: this.containerPath && existing.type !== 'whisper' ? await buildRecentText(db) : '',
+            };
+        });
 
         if (existing.attachments) {
             // An attachment is a file name in this chat's own media folder. It is looked up only there, so a
@@ -404,9 +425,7 @@ export class ChatRoom {
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_DELETED, members);
 
         if (this.containerPath && existing.type !== 'whisper') {
-            await this.updateCommentIndex(async (index) => {
-                await index.decrementCount(this.path.name);
-            }, members);
+            await this.updateCommentIndex((index) => index.decrementCount(this.path.name), recentText, members);
         }
     }
 
@@ -423,15 +442,25 @@ export class ChatRoom {
         });
     }
 
+    // Runs every query of one call on data.db, held open for just that long. The callers read all
+    // they need inside fn, so nothing in fn waits on another lock or opens data.db a second time.
+    private async withDb<T>(fn: (db: BunSQLiteDatabase<typeof schema>) => Promise<T>): Promise<T> {
+        return this.drive.withDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, this.dataDbId, (managed) =>
+            fn(managed.db),
+        );
+    }
+
+    // recentText is the thread's newest text, which the caller read from data.db.
     private async updateCommentIndex(
         fn: (index: CommentIndex) => Promise<void>,
+        recentText: string,
         members: EffectiveMember[],
     ): Promise<void> {
         if (!this.containerPath) return;
         try {
             const index = await openCommentIndex(this.drive, this.containerPath);
             await fn(index);
-            await index.setRecentText(this.path.name, await this.buildRecentText());
+            await index.setRecentText(this.path.name, recentText);
 
             // Nobody waits for it, the same as for the message event.
             broadcastCommentIndexUpdated(
@@ -445,29 +474,29 @@ export class ChatRoom {
             console.error('Failed to update comment index:', error);
         }
     }
+}
 
-    // The newest text of the thread, newest first, for the comment index. It is built again in full on
-    // every write, so a deleted message leaves it and an edit never shows twice. Threads are short.
-    private async buildRecentText(): Promise<string> {
-        const rows = await this.db
-            .select({
-                type: schema.messages.type,
-                content: schema.messages.content,
-                authorEmail: schema.messages.authorEmail,
-            })
-            .from(schema.messages)
-            .where(and(schema.SEARCHABLE_MESSAGES, ne(schema.messages.content, '')))
-            .orderBy(...schema.NEWEST_FIRST)
-            // Every row adds at least one character, because empty messages are left out above. So this
-            // many rows always fill the cap, and the query needn't read the whole thread.
-            .limit(RECENT_TEXT_CAP)
-            .all();
-        let text = '';
-        for (const row of rows) {
-            const content = await searchableMessageText(row);
-            text = text ? `${text}\n${content}` : content;
-            if (text.length >= RECENT_TEXT_CAP) break;
-        }
-        return text.slice(0, RECENT_TEXT_CAP);
+// The newest text of the thread, newest first, for the comment index. It is built again in full on
+// every write, so a deleted message leaves it and an edit never shows twice. Threads are short.
+async function buildRecentText(db: BunSQLiteDatabase<typeof schema>): Promise<string> {
+    const rows = await db
+        .select({
+            type: schema.messages.type,
+            content: schema.messages.content,
+            authorEmail: schema.messages.authorEmail,
+        })
+        .from(schema.messages)
+        .where(and(schema.SEARCHABLE_MESSAGES, ne(schema.messages.content, '')))
+        .orderBy(...schema.NEWEST_FIRST)
+        // Every row adds at least one character, because empty messages are left out above. So this
+        // many rows always fill the cap, and the query needn't read the whole thread.
+        .limit(RECENT_TEXT_CAP)
+        .all();
+    let text = '';
+    for (const row of rows) {
+        const content = await searchableMessageText(row);
+        text = text ? `${text}\n${content}` : content;
+        if (text.length >= RECENT_TEXT_CAP) break;
     }
+    return text.slice(0, RECENT_TEXT_CAP);
 }
