@@ -27,6 +27,7 @@ import type {
     Range,
     SingleRange,
 } from '../engine/types';
+import type { ConditionRuleType } from './modules/condition-format';
 import type { PatchOptions } from './utils';
 
 // Re-exported so state code needn't know where each type lives. The cell and range shapes
@@ -194,7 +195,7 @@ export type DataRegulationProps = {
 };
 
 export type ConditionRulesProps = {
-    rulesType: string;
+    rulesType: ConditionRuleType;
     rulesValue: string;
     textColor: { check: boolean; color: string };
     cellColor: { check: boolean; color: string };

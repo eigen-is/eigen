@@ -17,9 +17,9 @@ import { DATE_FORMAT_PRESETS } from '../../state';
 import { FormatDialog, PatternPreview, PresetList, PresetRow } from './format-dialog';
 import type { FormatSegment } from './format-pattern';
 import {
+    DATE_TOKEN_IDS,
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
-    getDateToken,
     previewPattern,
     serializeSegments,
     tokenizePattern,
@@ -41,7 +41,7 @@ function TokenChip({
     onVariantChange: (pattern: string) => void;
     onDelete: () => void;
 }) {
-    const token = getDateToken(segment.token);
+    const token = DATE_TOKENS[segment.token];
     const variant = token.variants.find((v) => v.pattern === segment.pattern);
 
     return (
@@ -126,21 +126,21 @@ export function CustomDateTimeFormats() {
                                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                                         {label}
                                     </DropdownMenuLabel>
-                                    {DATE_TOKENS.filter((t) => t.group === group).map((token) => (
+                                    {DATE_TOKEN_IDS.filter((id) => DATE_TOKENS[id].group === group).map((id) => (
                                         <DropdownMenuItem
-                                            key={token.id}
+                                            key={id}
                                             onClick={() =>
                                                 setSegments((prev) => [
                                                     ...prev,
                                                     {
                                                         kind: 'token',
-                                                        token: token.id,
-                                                        pattern: token.insertPattern,
+                                                        token: id,
+                                                        pattern: DATE_TOKENS[id].insertPattern,
                                                     },
                                                 ])
                                             }
                                         >
-                                            {token.label}
+                                            {DATE_TOKENS[id].label}
                                         </DropdownMenuItem>
                                     ))}
                                 </div>
