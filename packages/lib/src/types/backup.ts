@@ -1,3 +1,6 @@
+// The backup types the API and the Admin app share: the levels and reasons a backup has, the manifest inside a home
+// or server archive, the record kept beside a server archive, and the jobs that make, verify, restore and upload them.
+
 import type { MountConfig } from './mount';
 
 // One file inside a backup archive. sha256 is over the exact bytes on disk, so a verify pass can

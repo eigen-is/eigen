@@ -1,3 +1,6 @@
+// The parts every backup row in the Admin app shares, such as a home's archive or a server archive: the row with its
+// date, detail line, badges and buttons, and the badge and lines that say how the archive's verify went.
+
 import { formatDateTime } from '@workspace/lib/date';
 import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { Badge } from '@workspace/ui/components/badge';
