@@ -19,7 +19,8 @@ import {
 installTransferHarness();
 
 const CALENDAR = 'cal-1';
-const TEAM = 'team_t1';
+// Homes are parsed, so a team id reads like the real thing: a 32-character id behind `team_`.
+const TEAM = `team_${'t1'.padEnd(32, '0')}`;
 
 // The Eden client, stubbed to the one call the drive-import path makes.
 let driveImportResult: ImportCountsResult = { imported: 2, skipped: 1, failed: 0 };
@@ -102,8 +103,38 @@ describe('useImportCalendar', () => {
             sourceMountId: 'm1',
             sourcePathId: 'p1',
         });
-        expect(toasts.at(-1)).toBe('success: Imported 2 events, skipped 1 duplicate');
+        expect(toasts.at(-1)).toBe('success: Imported 2 events. 1 was already in your calendars.');
         expect(hasKey(invalidated, calendarKeys.events(OWNER))).toBe(true);
+    });
+
+    // A UID any calendar of the home holds is skipped, so the toast says where the skipped events already are.
+    test('the skipped events are named as already in the home’s calendars, after the other counts', async () => {
+        const { act } = await import('react');
+        const { useImportCalendar } = await import('../../../../core/calendar/hooks/use-transfer');
+        const { queryClient } = trackingClient();
+        const { latest, unmount } = await renderHook(() => useImportCalendar(), queryClient);
+        const importInto = (ownerId: string) =>
+            act(async () => {
+                await latest.mutateAsync({
+                    ownerId,
+                    calendarId: CALENDAR,
+                    drive: { sourceOwnerId: OWNER, sourceMountId: 'm1', sourcePathId: 'p1' },
+                });
+            });
+
+        driveImportResult = { imported: 0, skipped: 2, failed: 0 };
+        await importInto(OWNER);
+        expect(toasts.at(-1)).toBe('success: Imported 0 events. 2 were already in your calendars.');
+
+        await importInto(TEAM);
+        expect(toasts.at(-1)).toBe('success: Imported 0 events. 2 were already in this team’s calendars.');
+
+        driveImportResult = { imported: 3, skipped: 1, failed: 1 };
+        await importInto(OWNER);
+        await unmount();
+        driveImportResult = { imported: 2, skipped: 1, failed: 0 };
+
+        expect(toasts.at(-1)).toBe('success: Imported 3 events, 1 unreadable. 1 was already in your calendars.');
     });
 
     test('a team calendar takes the file into the team home, and that is the home that goes stale', async () => {
@@ -432,14 +463,12 @@ describe('useImportToCalendar', () => {
 });
 
 describe('isTransferableCalendarHome', () => {
-    // Homes are parsed, so these read like the real thing: a 32-character id, a team one behind `team_`.
-    const REAL_TEAM = `team_${'t1'.padEnd(32, '0')}`;
     const MATE = 'ada'.padEnd(32, '0');
 
     test('the viewer’s own home and a team’s take a file; another user’s shared calendar does not', async () => {
         const { isTransferableCalendarHome } = await import('../../../../core/calendar/hooks/use-transfer');
         expect(isTransferableCalendarHome(OWNER, OWNER)).toBe(true);
-        expect(isTransferableCalendarHome(REAL_TEAM, OWNER)).toBe(true);
+        expect(isTransferableCalendarHome(TEAM, OWNER)).toBe(true);
         expect(isTransferableCalendarHome(MATE, OWNER)).toBe(false);
     });
 });

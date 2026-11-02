@@ -1,6 +1,6 @@
 // The hooks that move events in and out of a calendar: the .ics export, and imports from a file on the device, from
 // a mail part or chat attachment, or into a new calendar. Each import reports its counts with the wording every
-// counted import shares.
+// counted import shares, and says the events it skipped are already in the home's calendars.
 
 import type { QueryClient } from '@tanstack/react-query';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -42,10 +42,12 @@ export function useExportCalendar() {
 type ImportCalendarTargetIds = { ownerId: string; calendarId: string };
 
 // One landing place for every import path: the events are in the calendar, so the open range refreshes, and the
-// counts are reported in the wording every counted import shares.
+// counts are reported in the wording every counted import shares. A skipped event's UID is already in one of the
+// target home's calendars, and a team calendar's import checks the team's calendars, not the viewer's.
 function reportImport(queryClient: QueryClient, ownerId: string, result: ImportCountsResult): void {
     invalidateEventList(queryClient, ownerId);
-    reportImportCounts(result, 'event');
+    const alreadyIn = parseOwnerId(ownerId).type === 'team' ? 'this team’s calendars' : 'your calendars';
+    reportImportCounts(result, 'event', alreadyIn);
 }
 
 // The file the user picked off their own disk, posted as the raw body the route reads as one iCalendar stream.
