@@ -17,6 +17,7 @@ import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { useState } from 'react';
 import { Button } from '../button';
+import { ABOVE_PREVIEW_Z } from '../dialog';
 import { FormDialog, FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
 import { Label } from '../label';
@@ -50,13 +51,24 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
             size="sm"
             abovePreview={preview?.isPreviewOpen}
         >
-            {source && <ImportToCalendarForm source={source} fileName={fileName} />}
+            {source && (
+                <ImportToCalendarForm source={source} fileName={fileName} abovePreview={!!preview?.isPreviewOpen} />
+            )}
         </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening asks for the calendars and starts from the defaults.
-function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; fileName: string }) {
+// The list opens in a portal at z-50, so over a preview it is lifted with the dialog or it would open behind it.
+function ImportToCalendarForm({
+    source,
+    fileName,
+    abovePreview,
+}: {
+    source: FileImportSource;
+    fileName: string;
+    abovePreview: boolean;
+}) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const { data: calendars, isError, refetch } = useCalendars(ownerId);
@@ -116,7 +128,7 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
                         <SelectTrigger className="w-full">
                             <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className={abovePreview ? ABOVE_PREVIEW_Z : undefined}>
                             <SelectGroup>
                                 <SelectLabel>My calendars</SelectLabel>
                                 {ownTargets.map(renderTarget)}
