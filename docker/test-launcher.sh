@@ -23,8 +23,8 @@
 #     launcher alone, with the registry or the build .env.production names;
 #   - the group and mode every start gives .env.production and backups/ first, except on Docker Desktop, the line it
 #     prints when other users share the install folder's group, and the mode of a step's log;
-#   - what status passes the CLI about backups/, the files of an unfinished update, the newest build of main, and its
-#     folder, and the Light backups in backups/ it names;
+#   - what status passes the CLI about backups/, what restores kept aside, the files of an unfinished update, the
+#     newest build of main, and its folder, and the Light backups in backups/ it names;
 #   - the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
 #
 # Usage:  ./docker/test-launcher.sh
@@ -853,21 +853,23 @@ for SHELL_NAME in dash busybox host; do
     mkdir -p "$FIX/release/backups" "$FIX/release/.eigen" "$FIX/channel/.eigen"
     : >"$FIX/release/backups/server-manual-full-20260101-000000.tar"
     echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
+    mkdir "$FIX/release/data.pre-restore-20260101-000000"
     STUB_LATEST=0.2.99 STUB_LABEL_VERSION=0.2.100 launch release status
-    rm -r "$FIX/release/backups" "$FIX/release/.eigen/bundle"
+    rm -r "$FIX/release/backups" "$FIX/release/.eigen/bundle" "$FIX/release/data.pre-restore-20260101-000000"
     # --services spans lines of the call log.
     if printf '%s\n' "$CALLS" | grep -q " status --install=$FIX/release --services=" &&
         printf '%s\n' "$CALLS" | grep -q ' --backups=server-manual-full-20260101-000000.tar ' &&
+        printf '%s\n' "$CALLS" | grep -q ' --kept-aside=data.pre-restore-20260101-000000 ' &&
         printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234)$'; then
-        ok "$SHELL_NAME: status passes the folder, what backups/ holds, and the build the files were written from"
+        ok "$SHELL_NAME: status passes the folder, what backups/ holds, what restores kept aside, and the build the files were written from"
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     echo ghcr.io/eigen-is/eigen/api@sha256:aaa >"$FIX/channel/.eigen/bundle"
     launch channel status
     rm "$FIX/channel/.eigen/bundle"
-    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q -- '--files'; then
-        ok "$SHELL_NAME: status passes no files when they are of the api image .env.production pins"
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q -e '--files' -e '--kept-aside'; then
+        ok "$SHELL_NAME: status passes no files when they are of the api image .env.production pins, and nothing kept aside when there is none"
     else
         fail "$SHELL_NAME: status with the files of the pinned image: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi

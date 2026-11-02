@@ -166,6 +166,29 @@ describe('the Backup row', () => {
         expect((await status(`--backups=${listing.slice(2).join('\n')}`)).stdout).not.toContain('Light');
     });
 
+    test('is followed by a row naming what restores kept aside in the install folder, running or not, and how to delete it', async () => {
+        backup = {
+            scheduleEnabled: false,
+            newest: null,
+            scheduledFailure: null,
+            scheduledNotUploaded: null,
+            warned: null,
+            newestGoodAt: null,
+            running: [],
+        };
+        const kept = ['data.pre-restore-20260101-000000', '.env.production.pre-restore-20260101-000000'];
+        const row = `▲  Kept aside   2 copies of what a restore replaced: ${kept.join(', ')}; once all is well, sudo rm -rf data.pre-restore-* .env.production.pre-restore-* deletes them`;
+        const running = await runCli(
+            ['status', '--services=eigen-api\trunning\thealthy', `--kept-aside=${kept.join('\n')}`],
+            { env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET } },
+        );
+        expect(running.stdout).toContain(`\n${row}\n`);
+        expect((await status(`--kept-aside=${kept[0]}`)).stdout).toContain(
+            'Kept aside  1 copy of what a restore replaced: ',
+        );
+        expect((await status()).stdout).not.toContain('Kept aside');
+    });
+
     test('names the newest archive, its age and size', async () => {
         const newest = archive('scheduled', hoursAgo(3));
         const row = await backupRow({

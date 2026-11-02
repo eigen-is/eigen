@@ -111,6 +111,8 @@ Check that all is well, then delete what was kept aside:
 sudo rm -rf data.pre-restore-<date>-<time> .env.production.pre-restore-<date>-<time>
 ```
 
+Each copy of `data/` is as large as your data was. Until you delete them, `./eigen status` lists what restores kept aside, with the command that deletes them.
+
 The question also says whether the backup holds `.env.production`, the key that signs your mail, and the mail server's certificate. A backup made in the ten minutes after that certificate was renewed can miss it, and one of a server without hosted mail has neither. What a backup does not hold, the restore keeps as the server has it.
 
 A user or team that failed during the backup is not in it, and the question names them. After a restore, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
