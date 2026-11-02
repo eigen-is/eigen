@@ -111,7 +111,6 @@ const REJECTED: [name: string, recipe: (ctx: Context) => void][] = [
             ctx.copyState = {
                 dataSheetId: ctx.currentSheetId,
                 copyRange: [{ row: [0, 0], column: [0, 0] }],
-                RowlChange: false,
             };
             ctx.selections = undefined;
             handlePasteByClick(ctx, 'internal');

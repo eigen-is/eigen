@@ -1043,7 +1043,7 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
 // ranges comes along, hidden ones too, as in Excel. With leaveFiltered, the rows an active filter hides stay out,
 // because Excel copies only what a filter shows. Ranges side by side share their rows, and ranges above each
 // other share their columns.
-export type CarriedLines = { sheetId: string; rows: number[]; columns: number[] };
+export type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
 
 export function carriedLines(
     ctx: Context,
@@ -1075,15 +1075,18 @@ export function carriedLines(
 // format painter cuts its last tiles short at the edge of the selection.
 export type CarryTile = { row: number; column: number; height: number; width: number };
 
+// One cell a carry lands: a copy of the source cell, the cell it replaces, and where it lands and came from.
+type LandingCell = { source: Cell | null; replaced: Cell | null; r: number; c: number; sr: number; sc: number };
+
 // Lands the carried block on the current sheet once per tile: every cell with its border, validation rule, link
-// and merge. land decides what of a source cell lands, given a copy of it and the cell it replaces, so a copy can
-// move a formula and the format painter can keep the destination's value. The source is read before anything is
-// written, so a tile over the source reads the cells as they were. A cut then clears the source.
+// and merge. land decides what of a source cell lands, so a copy can move a formula and the format painter can keep
+// the destination's value. The source is read before anything is written, so a tile over the source reads the cells
+// as they were. A cut then clears the source.
 export function carryCells(
     ctx: Context,
     lines: CarriedLines,
     tiles: readonly CarryTile[],
-    land: (source: Cell | null, replaced: Cell | null, r: number, c: number, sr: number, sc: number) => Cell | null,
+    land: (cell: LandingCell) => Cell | null,
     { cut = false, links = true }: { cut?: boolean; links?: boolean } = {},
 ) {
     const { rows, columns } = lines;
@@ -1145,7 +1148,7 @@ export function carryCells(
                     if (replaced.mc.rs != null) delete merge[`${replaced.mc.r}_${replaced.mc.c}`];
                     delete replaced.mc;
                 }
-                let cell = land(cloneDeep(cells[i][j]), replaced, r, c, sr, sc);
+                let cell = land({ source: cloneDeep(cells[i][j]), replaced, r, c, sr, sc });
                 const sourceMc = cells[i][j]?.mc;
                 if (cell?.mc && sourceMc) {
                     if (cell.mc.rs != null) {

@@ -308,7 +308,7 @@ export function pasteHandlerOfPaintModel(ctx: Context, copyRange: Context['copyS
         ctx,
         lines,
         tiles,
-        (value, replaced) => {
+        ({ source: value, replaced }) => {
             // The destination keeps its value and takes the source's formats.
             const cell = replaced ?? {};
             if (cell.ct?.t === 'inlineStr' && value) {
@@ -1228,20 +1228,9 @@ export function rangeValueToClipboard(
 }
 
 export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
-    const cfg = getSheetConfig(ctx);
-
     ctx.formulaRangeSelections = [];
-    // Copy range
     const copyRange = [];
-    let RowlChange = false;
-
     for (const range of ctx.selections ?? []) {
-        for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-            if (cfg?.rowhidden?.[r] == null && cfg?.rowlen != null && r in cfg.rowlen) {
-                RowlChange = true;
-            }
-        }
-
         ctx.formulaRangeSelections.push({
             row: range.row,
             column: range.column,
@@ -1253,7 +1242,6 @@ export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     ctx.copyState = {
         dataSheetId: ctx.currentSheetId,
         copyRange,
-        RowlChange,
     };
 
     const cpdata = rangeValueToClipboard(ctx, ctx.currentSheetId, ctx.selections, { cut });

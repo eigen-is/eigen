@@ -14,7 +14,7 @@ import type { Cell, CellMatrix, SingleRange } from '../../engine/types';
 import { setRowHeight } from '../api';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
-import { getFlowdata, getSheetConfig } from '../context';
+import { getFlowdata, getSheetConfig, updateContextWithSheetData } from '../context';
 import { carrySides } from '../modules/border';
 import type { CarriedLines, CarryTile } from '../modules/cell';
 import { carriedLines, carryCells, getQKBorder, setCellValue } from '../modules/cell';
@@ -30,8 +30,8 @@ import { getSheetIndex, isAllowEdit } from '../utils';
 type CutPasteSide = { sheetId: string; range: SingleRange };
 
 // After a cut has landed: evaluate the moved formulas where they now live, queue the formulas that read either
-// range, and reflow the rows when a row height changed. The target is the sheet on screen.
-function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, RowlChange: boolean) {
+// range, and lay the grid out again when the paste grew it. The target is the sheet on screen.
+function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, grew: boolean) {
     const d = getFlowdata(ctx);
     if (!d) return;
 
@@ -69,17 +69,7 @@ function postPasteCut(ctx: Context, source: CutPasteSide, target: CutPasteSide, 
         }
     }
 
-    if (RowlChange) {
-        const cfg = getSheetConfig(ctx);
-        ctx.visibledatarow = [];
-        ctx.rh_height = 0;
-
-        for (let i = 0; i < d.length; i += 1) {
-            if (cfg?.rowhidden?.[i] == null) ctx.rh_height += cfg?.rowlen?.[i] ?? ctx.defaultrowlen;
-            ctx.visibledatarow.push(ctx.rh_height);
-        }
-        ctx.rh_height += 80;
-    }
+    if (grew) updateContextWithSheetData(ctx, d);
 
     ctx.selections = [{ row: target.range.row, column: target.range.column }];
 
@@ -304,7 +294,8 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         expandRowsAndColumns(sheet, addr, addc);
     }
 
-    carryCells(ctx, lines, [{ row: minh, column: minc, height: copyh, width: copyc }], (cell) => cell, { cut: true });
+    const tile = { row: minh, column: minc, height: copyh, width: copyc };
+    carryCells(ctx, lines, [tile], ({ source }) => source, { cut: true });
 
     last.row = [minh, maxh];
     last.column = [minc, maxc];
@@ -341,7 +332,7 @@ function pasteHandlerOfCutPaste(ctx: Context, copyRange: Context['copyState']) {
         ctx,
         { sheetId: copySheetId, range: sourceRange },
         { sheetId: ctx.currentSheetId, range: targetRange },
-        addr > 0 || addc > 0 || copyRange.RowlChange,
+        addr > 0 || addc > 0,
     );
 }
 
@@ -409,7 +400,7 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyRange: Context['copyState']) 
 
     // A copy of several ranges pastes the values of its formulas, not the formulas.
     const several = copyRange.copyRange.length > 1;
-    carryCells(ctx, lines, tiles, (cell, _replaced, r, c, sr, sc) => {
+    carryCells(ctx, lines, tiles, ({ source: cell, r, c, sr, sc }) => {
         if (cell?.f == null) return cell;
         if (several) {
             delete cell.f;
