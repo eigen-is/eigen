@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Op, Sheet } from '../../sheets/types';
+import { MAX_VALIDATIONS } from '../../sheets/validations';
 import { opToPatchOnSheets } from '../../sheets/yjs-ops';
 
 const SHEETS: Sheet[] = [
@@ -112,5 +113,22 @@ describe('opToPatchOnSheets', () => {
             ['replace', 0, 'dataValidations'],
             ['replace', 0, 'dataValidations', 'z'],
         ]);
+    });
+
+    test('a new rule on a sheet that holds as many rules as a sheet may is dropped, and a changed one applies', () => {
+        const entry = {
+            ranges: [{ row: [0, 0], column: [0, 0] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const full = Object.fromEntries(Array.from({ length: MAX_VALIDATIONS }, (_, i) => [`v${i}`, entry]));
+        const sheets: Sheet[] = [{ ...SHEETS[0], dataValidations: full }];
+        const ops: Op[] = [
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'new'], value: entry },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'v0'], value: entry },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations', 'v1'] },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'next'], value: entry },
+        ];
+        const [patches] = opToPatchOnSheets(sheets, ops);
+        expect(patches.map(({ path }) => path[2])).toEqual(['v0', 'v1', 'next']);
     });
 });

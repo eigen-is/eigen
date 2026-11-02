@@ -3,7 +3,7 @@
 // also takes cells out of the rules and puts a rule on cells, for writers such as the validation dialog, a paste and
 // a fill. A cell has at most one rule, so putting a rule on cells first takes them out of every other rule.
 
-import { coalescedRanges, compareValidationIds } from '@workspace/lib/sheets';
+import { coalescedRanges, compareValidationIds, rangesOverlap } from '@workspace/lib/sheets';
 import { cfSplitRange } from '../../engine/conditional-format';
 import type { DataVerificationRule, Sheet, SheetValidation, SingleRange } from '../types';
 
@@ -36,7 +36,7 @@ export function validationLookup(
 ): (r: number, c: number) => DataVerificationRule | undefined {
     const inView: [string, SheetValidation][] = [];
     for (const [id, { ranges, rule }] of Object.entries(validations ?? {})) {
-        const near = ranges.filter((range) => overlaps(range, window));
+        const near = ranges.filter((range) => rangesOverlap(range, window));
         if (near.length > 0) inView.push([id, { ranges: near, rule }]);
     }
     inView.sort(([a], [b]) => compareValidationIds(b, a));
@@ -52,7 +52,7 @@ export function validationLookup(
 export function clearValidations(sheet: Sheet, area: SingleRange) {
     const validations = (sheet.dataValidations ??= {});
     for (const [id, entry] of Object.entries(validations)) {
-        if (!entry.ranges.some((range) => overlaps(range, area))) continue;
+        if (!entry.ranges.some((range) => rangesOverlap(range, area))) continue;
         const ranges = entry.ranges.flatMap((range) => cfSplitRange(range, area, area, 'restPart'));
         if (ranges.length > 0) validations[id] = { ...entry, ranges };
         else delete validations[id];
@@ -71,8 +71,4 @@ export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRu
 
 function covers(range: SingleRange, r: number, c: number) {
     return r >= range.row[0] && r <= range.row[1] && c >= range.column[0] && c <= range.column[1];
-}
-
-function overlaps(a: SingleRange, b: SingleRange) {
-    return a.row[0] <= b.row[1] && b.row[0] <= a.row[1] && a.column[0] <= b.column[1] && b.column[0] <= a.column[1];
 }

@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { SingleRange } from '../../sheets/types';
-import { coalescedRanges, MAX_VALIDATION_RANGES, wellFormedValidations } from '../../sheets/validations';
+import {
+    coalescedRanges,
+    MAX_VALIDATION_RANGES,
+    MAX_VALIDATIONS,
+    wellFormedValidations,
+} from '../../sheets/validations';
 
 const RULE = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
 const cell = (r: number, c: number): SingleRange => ({ row: [r, r], column: [c, c] });
@@ -32,6 +37,16 @@ describe('wellFormedValidations', () => {
         const kept = wellFormedValidations({ big: { ranges, rule: RULE }, capped: { ranges: capped, rule: RULE } });
         expect(performance.now() - started).toBeLessThan(100);
         expect(Object.keys(kept)).toEqual(['capped']);
+    });
+
+    test('keeps the lowest ids of a sheet with more rules than a sheet may hold', () => {
+        const rules = Object.fromEntries(
+            Array.from({ length: MAX_VALIDATIONS + 2 }, (_, i) => [`v${i}`, { ranges: [cell(i, 0)], rule: RULE }]),
+        );
+        const kept = Object.keys(wellFormedValidations(rules));
+        expect(kept).toHaveLength(MAX_VALIDATIONS);
+        expect(kept).not.toContain(`v${MAX_VALIDATIONS + 1}`);
+        expect(kept).toContain('v0');
     });
 
     // A numeric prompt made the xlsx export throw, and an object one would crash the hint card.

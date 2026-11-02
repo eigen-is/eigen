@@ -7,7 +7,7 @@ import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
 import { floatingWriteFilter } from './floating';
 import type { Op, Sheet } from './types';
-import { isSheetValidation, isSheetValidations } from './validations';
+import { isSheetValidation, isSheetValidations, MAX_VALIDATIONS } from './validations';
 
 // The patches, and the sheet and row ops left for the caller to apply.
 export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
@@ -51,7 +51,8 @@ function isValidationWrite(op: Op): boolean {
 
 // Follows the rule ids each sheet holds through a batch, and says whether a validation write applies. A `replace` of
 // one rule means its writer saw the rule, because immer writes `add` for an id its base lacked. So where a peer
-// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike.
+// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike. A new rule
+// on a sheet that holds MAX_VALIDATIONS is dropped too.
 function validationIds(sheets: readonly Sheet[]): (sheet: number, op: Op) => boolean {
     const held = new Map<number, Set<string>>();
     return (sheet, { op, path, value }) => {
@@ -64,6 +65,7 @@ function validationIds(sheets: readonly Sheet[]): (sheet: number, op: Op) => boo
         if (!ids) held.set(sheet, (ids = new Set(Object.keys(sheets[sheet].dataValidations ?? {}))));
         const key = String(id);
         if (op === 'replace' && !ids.has(key)) return false;
+        if (op === 'add' && !ids.has(key) && ids.size >= MAX_VALIDATIONS) return false;
         if (op === 'remove') ids.delete(key);
         else ids.add(key);
         return true;

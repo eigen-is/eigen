@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { MAX_VALIDATION_RANGES } from '@workspace/lib/sheets';
+import { MAX_VALIDATION_RANGES, MAX_VALIDATIONS } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../lib/document/transform/protocol';
 import { cellKey } from '../../../lib/import/sheets/cells';
 import { readRules } from '../../../lib/import/sheets/rules';
@@ -606,6 +606,14 @@ describe('a data validation', () => {
         });
         expect(lost).toEqual(['validations-dropped']);
         expect(Object.values(dataValidations ?? {}).map(({ rule }) => rule.value1)).toEqual(['y']);
+    });
+
+    test('the validations past the rules a sheet may hold are counted and left out', () => {
+        const lost: CountedWarningCode[] = [];
+        const rules = Array.from({ length: MAX_VALIDATIONS + 2 }, (_, i) => list(`A${i + 1}`, '"x"'));
+        const { dataValidations } = read(dv(...rules), { lost: (code) => lost.push(code) });
+        expect(lost).toEqual(['validations-dropped', 'validations-dropped']);
+        expect(Object.keys(dataValidations ?? {})).toHaveLength(MAX_VALIDATIONS);
     });
 });
 
