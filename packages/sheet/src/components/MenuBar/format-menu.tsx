@@ -554,7 +554,7 @@ function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
 
 function ConditionalFormattingSubmenu() {
     const { setContext } = useContext(WorkbookContext);
-    const { showDialog } = useDialog();
+    const { showFormDialog } = useDialog();
 
     return (
         <DropdownMenuSub>
@@ -567,7 +567,7 @@ function ConditionalFormattingSubmenu() {
                             <DropdownMenuItem
                                 key={v.text}
                                 onClick={() => {
-                                    showDialog(<ConditionRules type={v.text} />);
+                                    showFormDialog(<ConditionRules type={v.text} />);
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
@@ -586,7 +586,7 @@ function ConditionalFormattingSubmenu() {
                             <DropdownMenuItem
                                 key={v.text}
                                 onClick={() => {
-                                    showDialog(<ConditionRules type={v.text} />);
+                                    showFormDialog(<ConditionRules type={v.text} />);
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
@@ -630,7 +630,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Management rules</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
@@ -646,8 +646,8 @@ function ConditionalFormattingSubmenu() {
                             Delete sheet rule
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
-                            Management rules
+                        <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>
+                            Manage rules
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>

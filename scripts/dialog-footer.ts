@@ -5,7 +5,7 @@
 
 import type { SourceFile } from './unused-primitives';
 
-// The dialogs that draw their own footer: they are not a form, or not yet moved onto FormDialog.
+// The dialogs that draw their own footer, because they are not a form.
 export const OWN_DIALOG_FOOTER = new Set([
     'apps/calendar/src/components/event-detail-dialog.tsx', // actions, no fields
     'apps/docs/src/components/docs/word-count-dialog.tsx', // information only, in a FormDialog shell
@@ -13,10 +13,8 @@ export const OWN_DIALOG_FOOTER = new Set([
     'apps/mail/src/components/mail/email-draft.tsx', // an alert with one OK button
     'apps/mail/src/components/mail/mail-shortcuts-dialog.tsx', // information only
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
-    // Sheet dialogs not yet moved onto FormDialog.
-    'packages/sheet/src/components/CellRangeDialog/index.tsx',
-    'packages/sheet/src/components/ConditionFormat/ConditionRules.tsx',
-    'packages/sheet/src/components/ConditionFormat/ManageRules.tsx',
+    'packages/sheet/src/components/CellRangeDialog/index.tsx', // a non-modal range picker over the grid
+    'packages/sheet/src/components/ConditionFormat/ManageRules.tsx', // a list, in a FormDialog shell
     'packages/sheet/src/hooks/useDialog.tsx', // a notice or a yes or no
     'packages/ui/src/components/cards/card-form.tsx', // the edit view a card dialog swaps in for its view
     'packages/ui/src/components/charts/chart-data-dialog.tsx', // a grid

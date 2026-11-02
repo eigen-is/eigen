@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, formatting, conditional formatting, color]
 related: [sheets/format-cells]
 order: 70
-updated: 2026-06-08
+updated: 2026-11-02
 ---
 
 Conditional formatting changes the color of a cell whenever its value meets a rule you set. You can highlight cells that cross a threshold, pick out duplicates, or color a whole range with a gradient that reflects the spread of values.
@@ -24,7 +24,7 @@ Highlight rules apply a text color or background color to cells that match a spe
    - **Date is**: pick a date.
    - **Duplicate value**: flag duplicate or unique values in the selection.
 4. In the dialog that opens, set the colors you want to apply. Tick **Text color** to change the text color, or **Cell color** to fill the background, then click the color swatch next to each to pick a color.
-5. Click **OK**.
+5. Click **OK**. If the value can't be used, such as text where the rule needs a number, the dialog stays open and says why under the field.
 
 ## Add an item selection rule
 
@@ -33,7 +33,7 @@ Item selection rules highlight the top or bottom values in a range, or cells abo
 1. Select the cells you want to format.
 2. Open the **Format** menu, choose **Conditional formatting**, then point to **Item selection rules**.
 3. Choose a condition: **Top 10**, **Top 10%**, **Last 10**, **Last 10%**, **Above average**, or **Below average**.
-4. For the top/bottom rules, change the number in the dialog if you want more or fewer items highlighted.
+4. For the top/bottom rules, change the number in the dialog if you want more or fewer items highlighted. It takes a whole number from 1 to 1000.
 5. Set the colors and click **OK**.
 
 ## Apply a color scale
@@ -54,6 +54,6 @@ A data bar draws a colored bar inside each cell proportional to its value.
 
 ## View and delete rules
 
-To see all the rules on the current sheet, open **Format → Conditional formatting → Management rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. Click the **×** next to a rule to delete it.
+To see all the rules on the current sheet, open **Format → Conditional formatting → Manage rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. Click the **×** next to a rule to delete it.
 
 To remove all conditional formatting from the current sheet at once, open **Format → Conditional formatting → Delete rule → Delete sheet rule**.
