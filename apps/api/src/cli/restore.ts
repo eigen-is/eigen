@@ -109,9 +109,9 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
   --check-data       While Eigen runs, as the API's user: check that this build opens every database in data/ as
                      it is, then ask to go back to it. ./eigen rollback runs it with the build it goes back to`;
 
-type Flags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
+type RestoreFlags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
-export async function restore(archive: string | undefined, flags: Flags): Promise<void> {
+export async function restore(archive: string | undefined, flags: RestoreFlags): Promise<void> {
     const modes = [flags.stage, flags.staged, flags.swap, flags.env, flags['check-data']].filter(Boolean).length;
     if (modes !== 1 || (!flags.stage && !flags.env && archive !== undefined)) {
         return refuseUsage(
@@ -257,7 +257,7 @@ function readRecord<T>(file: string, is: (value: unknown) => value is T): T | nu
     return is(value) ? value : null;
 }
 
-async function stage(archive: string | undefined, flags: Flags): Promise<void> {
+async function stage(archive: string | undefined, flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     if (!archive) return ui.fail('Name the archive to restore.', 'Pick a server archive in backups/.');
     const archivePath = archive.includes('/') ? archive : join(backupsDirPath(), archive);
@@ -487,7 +487,7 @@ async function printStaged(): Promise<void> {
 // gets the verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips
 // the safety copies, which no home opens, and the container databases of an s3 mount, which live in the bucket. The
 // launcher says what to do when it fails.
-async function checkData(flags: Flags): Promise<void> {
+async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
     const homeKinds = [USER_HOMES_DIR, TEAM_HOMES_DIR, ORG_HOMES_DIR, GUEST_HOMES_DIR];
