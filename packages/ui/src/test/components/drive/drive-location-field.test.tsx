@@ -70,6 +70,8 @@ const click = (target: Element) =>
 test('the bar is a button named for what it does, which Enter, Space and a click toggle', async () => {
     ({ unmount } = await renderInDocument(createElement(Host)));
     expect(toggle().getAttribute('aria-label')).toBe('Change location');
+    // Its focus ring draws inside the bar, so a picker that scrolls doesn't clip it.
+    expect(toggle().classList.contains('focus-visible:after:ring-inset')).toBe(true);
     expect(expanded()).toBe('false');
     await act(async () => pressKey(toggle(), 'Enter'));
     expect(expanded()).toBe('true');

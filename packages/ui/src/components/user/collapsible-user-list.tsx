@@ -7,7 +7,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { InfoBlock } from '../info-block';
+import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 
 type CollapsibleUserListProps = {
     title: string;
@@ -48,14 +48,13 @@ export function CollapsibleUserList({
         );
     }
 
-    // The actions come after the trigger and are positioned too, so they paint above its stretched hit area. The
-    // focus ring sits inside the bar, because a list in a scrolling container would clip a ring outside it.
+    // The actions come after the trigger and are positioned too, so they paint above its stretched hit area.
     return (
         <Collapsible open={open} onOpenChange={setOpen} className={className}>
             <InfoBlock className="relative px-2 py-1.5">
                 <Header
                     title={
-                        <CollapsibleTrigger className="cursor-pointer text-left outline-none after:absolute after:inset-0 after:rounded-md focus-visible:after:ring-[3px] focus-visible:after:ring-ring/50 focus-visible:after:ring-inset">
+                        <CollapsibleTrigger className={cn(STRETCHED_TRIGGER_CLASS, 'text-left')}>
                             {title}
                         </CollapsibleTrigger>
                     }
