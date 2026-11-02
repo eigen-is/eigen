@@ -4,7 +4,6 @@
 import type { JSONContent } from '@tiptap/core';
 import { readHexColor } from '@workspace/lib/constants/colors';
 import { CELL_BORDER_SIDES, columnFit, MIN_TABLE_COLUMN_PX, readBorder } from '@workspace/lib/docs/eigendoc';
-import { cssColorToHex } from '../../../document/colors';
 import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
     BORDER_EIGHTHS_PER_PX,
@@ -123,9 +122,9 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const colspan = owner?.colspan ?? 1;
             const width = spanWidth(column, colspan);
             // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's gray.
-            const own = readHexColor(owner?.node.attrs?.['backgroundColor']);
             const fill =
-                (own && cssColorToHex(own)) ?? (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
+                readHexColor(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
+                (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
             // A cell over columns without a width has none either: the grid lays it out, and the reader reads it back unset.
             const tcW = widths.slice(column, column + colspan).every((known) => known === undefined)
                 ? `<w:tcW w:w="0" w:type="${NO_STORED_WIDTH}"/>`
@@ -168,11 +167,10 @@ function tcBorders(node: JSONContent): string {
     const sideXml = (side: (typeof BORDER_SIDES)[number], value: unknown) => {
         const border = readBorder(value);
         if (border === 'none') return `<w:${side} w:val="nil"/>`;
-        const color = border && cssColorToHex(border.color);
-        if (!border || !color) return bordersXml([side], { [side]: TABLE_LOOK.border });
+        if (!border) return bordersXml([side], { [side]: TABLE_LOOK.border });
         const [val] = WORD_BORDER_STYLES[border.style];
         const sz = Math.round(border.width * BORDER_EIGHTHS_PER_PX);
-        return `<w:${side} w:val="${val}" w:sz="${sz}" w:space="0" w:color="${color}"/>`;
+        return `<w:${side} w:val="${val}" w:sz="${sz}" w:space="0" w:color="${border.color.slice(1).toUpperCase()}"/>`;
     };
     const attrs = node.attrs ?? {};
     return `<w:tcBorders>${sideXml('top', attrs['borderTop'])}${sideXml('left', attrs['borderLeft'])}${sideXml('bottom', attrs['borderBottom'])}${sideXml('right', attrs['borderRight'])}</w:tcBorders>`;
