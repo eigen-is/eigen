@@ -560,3 +560,29 @@ describe('a rule a peer deleted', () => {
         expect(sheet.dataValidations).toEqual({});
     });
 });
+
+// A peer can write anything as a sheet's matrix or one of its rows, and every reader of the replay walks the matrix.
+// Such a write is dropped, so one op can't make the workbook unreadable, and the cells of its batch still arrive.
+describe('a write that would leave the matrix or a row no array', () => {
+    const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+    test.each([
+        ['a row written as null', ['data', 0], null],
+        ['a row written as text', ['data', 1], 'x'],
+        ['the matrix written as text', ['data'], 'x'],
+        ['the matrix written as a number', ['data'], 5],
+    ])('%s', (_, path, value) => {
+        const base: Sheet = { id: 's1', name: 'Sheet1', order: 0, celldata: [], row: 3, column: 2, config: {} };
+        const [sheet] = replaySheetsOps(
+            [base],
+            [
+                [
+                    { op: 'replace', id: 's1', path: ['data', 2, 0], value: cell('a') },
+                    { op: 'replace', id: 's1', path, value },
+                ],
+            ],
+        );
+        expect(sheet.data?.length).toBe(3);
+        expect(sheet.data?.every((row) => Array.isArray(row))).toBe(true);
+        expect(sheet.celldata).toEqual([{ r: 2, c: 0, v: cell('a') }]);
+    });
+});
