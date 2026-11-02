@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { PageSetup } from '@workspace/lib/docs/eigendoc';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { collapseSeparators } from '@workspace/ui/test/menu-rows';
+import { pressEnter } from '@workspace/ui/test/press-enter';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 import { withBrowserFrames } from '../../fixtures/browser-frames';
 
@@ -134,6 +135,12 @@ const openMenuEntries = () =>
         ].map((entry) => (entry.getAttribute('role') === 'separator' ? '—' : entry.textContent?.trim())),
     );
 
+// The rows of the open choices that are checked.
+const checkedItems = () =>
+    [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
+        item.textContent?.trim(),
+    );
+
 // A menu trigger by its text, or by its name when it is an icon.
 const menuTrigger = (label: string) =>
     [...document.querySelectorAll('button[aria-haspopup="menu"]')].find(
@@ -235,9 +242,9 @@ test('Format › Text puts Size after the scripts as Google does, then inline co
     await openMenu('Format');
     await openSubmenu('Text');
     expect(openMenuEntries()).toEqual([
-        'Bold',
-        'Italic',
-        'Underline',
+        expect.stringMatching(/^Bold/),
+        expect.stringMatching(/^Italic/),
+        expect.stringMatching(/^Underline/),
         'Strikethrough',
         'Superscript',
         'Subscript',
@@ -248,6 +255,25 @@ test('Format › Text puts Size after the scripts as Google does, then inline co
         '—',
         'Text color',
         'Highlight color',
+    ]);
+});
+
+// The menu and the icon row name one key each, so neither drifts from the other.
+test("Format › Text names Bold's, Italic's and Underline's keys as the icon row's tooltips do", async () => {
+    await render(1920, true);
+    const tooltipKeys = ['Bold', 'Italic', 'Underline'].map((name) =>
+        document
+            .querySelector(`button[aria-label^="${name} ("]`)
+            ?.getAttribute('aria-label')
+            ?.slice(name.length + 2, -1),
+    );
+    expect(tooltipKeys).toEqual([formatForDisplay('Mod+B'), formatForDisplay('Mod+I'), formatForDisplay('Mod+U')]);
+    await openMenu('Format');
+    await openSubmenu('Text');
+    expect(openMenuEntries().slice(0, 3)).toEqual([
+        `Bold${tooltipKeys[0]}`,
+        `Italic${tooltipKeys[1]}`,
+        `Underline${tooltipKeys[2]}`,
     ]);
 });
 
@@ -391,6 +417,25 @@ test('Format › Align and indent lists the alignments, then the indents, as Goo
         '—',
         'Indentation options…',
     ]);
+});
+
+// The alignment is a choice, as the icon row's Align dropdown draws it: the paragraph's own is checked.
+test("Format › Align and indent checks the paragraph's alignment, and a pick aligns it", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', attrs: { textAlign: 'center' }, content: [{ type: 'text', text: 'a' }] }],
+    });
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Align and indent');
+    expect(checkedItems()).toEqual(['Center']);
+
+    const right = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'Right',
+    );
+    await act(async () => right?.click());
+    expect(editor.state.doc.firstChild?.attrs['textAlign']).toBe('right');
 });
 
 const formatted = (...attrs: Record<string, unknown>[]) => ({
@@ -599,11 +644,7 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
 
     await openMenu('Align');
     expect(openMenuEntries()).toEqual(['Left', 'Center', 'Right', 'Justified']);
-    const checked = () =>
-        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
-            item.textContent?.trim(),
-        );
-    expect(checked()).toEqual(['Left']);
+    expect(checkedItems()).toEqual(['Left']);
 
     const justified = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
         (item) => item.textContent?.trim() === 'Justified',
@@ -613,7 +654,7 @@ test("the row's one Align dropdown marks the paragraph's alignment and Justified
     expect(alignIcon()).toMatch(/text-align-justify/);
 
     await openMenu('Align');
-    expect(checked()).toEqual(['Justified']);
+    expect(checkedItems()).toEqual(['Justified']);
 });
 
 test('a range of mixed alignments checks no Align item and draws Left', async () => {
@@ -769,11 +810,7 @@ test('Format › Image › In front of text places the selected image and checks
     await render(390, true);
     await openMenu('Format');
     await openSubmenu('Image');
-    const checked = () =>
-        [...document.querySelectorAll('[role="menuitemradio"][aria-checked="true"]')].map((item) =>
-            item.textContent?.trim(),
-        );
-    expect(checked()).toEqual(['In line']);
+    expect(checkedItems()).toEqual(['In line']);
 
     const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
         (item) => item.textContent?.trim() === 'In front of text',
@@ -813,6 +850,47 @@ test('in a table cell, Format › Image offers no place in front of or behind th
     await openMenu('Format');
     await openSubmenu('Image');
     expect(openMenuEntries()).toEqual(['Replace image', '—', 'In line', 'Wrap left', 'Wrap right']);
+});
+
+// A phone has no Text box panel either, so Format › Text box holds the box's layouts, its own checked, and its fill.
+test("Format › Text box checks the box's layout among the layouts, then Fill, and In front of text places it", async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [
+            {
+                type: 'paragraph',
+                content: [
+                    { type: 'text', text: 'a' },
+                    {
+                        type: 'textBox',
+                        attrs: { id: 'b', width: 200 },
+                        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Box' }] }],
+                    },
+                ],
+            },
+        ],
+    });
+    editor.commands.setNodeSelection(2);
+    await render(1920, true);
+    await openMenu('Format');
+    await openSubmenu('Text box');
+    expect(openMenuEntries()).toEqual([
+        'In line',
+        'Wrap left',
+        'Wrap right',
+        'Behind text',
+        'In front of text',
+        '—',
+        'Fill',
+    ]);
+    expect(checkedItems()).toEqual(['In line']);
+
+    const front = [...document.querySelectorAll<HTMLElement>('[role="menuitemradio"]')].find(
+        (item) => item.textContent?.trim() === 'In front of text',
+    );
+    await act(async () => front?.click());
+    // A positioned box leads its paragraph.
+    expect(editor.state.doc.nodeAt(1)?.attrs['layout']).toBe('front');
 });
 
 test('Format › Headers and footers puts the caret in the header', async () => {
@@ -1074,6 +1152,141 @@ test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the e
     expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
+const linkField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input');
+const dialogButton = (label: string) =>
+    [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
+
+async function openLinkDialog() {
+    const icon = document.querySelector<HTMLButtonElement>('[role="toolbar"] button[aria-label="Add link"]');
+    await act(async () => icon?.click());
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe('Add link');
+}
+
+async function typeLink(url: string) {
+    const input = linkField();
+    await act(async () => {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(input, url);
+        input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+}
+
+test('Add link stays off until a URL is typed, and Enter links the selected text', async () => {
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ab' }] }],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 3 });
+    await render(1920, true);
+    await openLinkDialog();
+    expect(dialogButton('Add link')?.disabled).toBe(true);
+    await typeLink('https://eigen.is');
+    expect(dialogButton('Add link')?.disabled).toBe(false);
+    await act(async () => {
+        const input = linkField();
+        if (!input) throw new Error('no URL field');
+        pressEnter(input);
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+        { type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is' }) },
+    ]);
+});
+
+test('a URL typed and then cancelled is gone the next time Add link opens', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openLinkDialog();
+    await typeLink('https://eigen.is');
+    await act(async () => dialogButton('Cancel')?.click());
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    await openLinkDialog();
+    expect(linkField()?.value).toBe('');
+});
+
+// The field is trimmed, so a URL pasted with the spaces around it links, and spaces alone are no URL.
+test('Add link trims the URL, at the caret and on a selection, and spaces alone keep it off', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openLinkDialog();
+    await typeLink('   ');
+    expect(dialogButton('Add link')?.disabled).toBe(true);
+    await typeLink('  https://eigen.is  ');
+    await act(async () => dialogButton('Add link')?.click());
+    expect(editor.getJSON().content?.[0]?.content?.[0]).toEqual({
+        type: 'text',
+        text: 'https://eigen.is',
+        marks: [{ type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is' }) }],
+    });
+
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ab' }] }],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 3 });
+    await openLinkDialog();
+    await typeLink(' https://eigen.is/help\t');
+    await act(async () => dialogButton('Add link')?.click());
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+        { type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is/help' }) },
+    ]);
+});
+
+// Each dialog the toolbar opens hands the focus back to the editor as it closes, the way Page setup does above, so the
+// next keystroke types in the doc and not on a trigger.
+const openToolbarDialog = {
+    'Add link': async () => {
+        editor.commands.setContent(ONE_PARAGRAPH);
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openLinkDialog();
+        await typeLink('https://eigen.is');
+    },
+    'Restart numbering': async () => {
+        editor.commands.setContent(orderedList({ start: 1, type: null }));
+        editor.commands.setTextSelection(3);
+        await render(1920, true);
+        await openMenu('Format');
+        await openSubmenu('Bullets and numbering');
+        await openSubmenu('List options');
+        await withBrowserFrames(() => clickItem('Restart numbering'));
+    },
+    'Custom spacing': async () => {
+        await openSpacing(formatted({}));
+        await withBrowserFrames(() => clickItem('Custom spacing…'));
+    },
+    'Indentation options': async () => {
+        editor.commands.setContent(formatted({}));
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openMenu('Format');
+        await openSubmenu('Align and indent');
+        await withBrowserFrames(() => clickItem('Indentation options…'));
+    },
+};
+
+test.each([
+    ['Add link', 'Add link'],
+    ['Add link', 'Cancel'],
+    ['Restart numbering', 'OK'],
+    ['Restart numbering', 'Cancel'],
+    ['Custom spacing', 'Apply'],
+    ['Custom spacing', 'Cancel'],
+    ['Indentation options', 'Apply'],
+    ['Indentation options', 'Cancel'],
+] as const)('%s closed with %s gives focus back to the editor', async (title, label) => {
+    await openToolbarDialog[title]();
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe(title);
+    const button = dialogButton(label);
+    if (!button) throw new Error(`no ${label} button`);
+    await withBrowserFrames(async () => {
+        await act(async () => button.click());
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement === editor.view.dom).toBe(true);
+});
+
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
 
 const listItem = (text: string) => ({
@@ -1188,7 +1401,6 @@ async function restartAtCaret(startAt: string) {
         (button) => button.textContent === 'OK',
     );
     await act(async () => ok?.click());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 }
 
@@ -1252,7 +1464,6 @@ test.each([true, false])('Tools › Word count counts the whole doc for a caret 
         (button) => button.textContent === 'OK',
     );
     await act(async () => ok?.click());
-    await act(() => new Promise((resolve) => setTimeout(resolve, 50)));
     expect(document.querySelector('[role="dialog"]')).toBeNull();
 });
 
@@ -1437,15 +1648,12 @@ test('Insert › Equation follows Chart and inserts once the menu has closed', a
     await openMenu('Insert');
     expect(openMenuEntries().slice(0, 5)).toEqual(['Link', 'Image', 'Chart', 'Equation', 'Horizontal rule']);
 
-    await clickItem('Equation');
-    for (let tick = 0; tick < 50 && onInsertEquation.mock.calls.length === 0; tick++) {
-        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
+    await withBrowserFrames(() => clickItem('Equation'));
     expect(menuOpenAtInsert).toEqual([false]);
 });
 
 // Word's Insert › Text box, after Chart; the box goes in once the menu has closed, so its editor keeps the focus.
-test('Insert › Text box follows Chart, inserts once the menu has closed, and is greyed in a story', async () => {
+test('Insert › Text box follows Chart and inserts once the menu has closed', async () => {
     const menuOpenAtInsert: boolean[] = [];
     const onInsertTextBox = mock(() => {
         menuOpenAtInsert.push(document.querySelector('[role="menu"]') !== null);
@@ -1453,10 +1661,7 @@ test('Insert › Text box follows Chart, inserts once the menu has closed, and i
     await render(1920, true, { onInsertTextBox });
     await openMenu('Insert');
     expect(openMenuEntries().slice(0, 4)).toEqual(['Link', 'Image', 'Chart', 'Text box']);
-    await clickItem('Text box');
-    for (let tick = 0; tick < 50 && onInsertTextBox.mock.calls.length === 0; tick++) {
-        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
+    await withBrowserFrames(() => clickItem('Text box'));
     expect(menuOpenAtInsert).toEqual([false]);
 });
 
@@ -1614,10 +1819,7 @@ test('Insert › Page elements › Footnote ends the submenu and inserts once th
     await openMenu('Insert');
     await openSubmenu('Page elements');
     expect(openMenuEntries().at(-1)?.startsWith('Footnote')).toBe(true);
-    await act(async () => footnoteItem()?.click());
-    for (let tick = 0; tick < 50 && onInsertFootnote.mock.calls.length === 0; tick++) {
-        await act(() => new Promise((resolve) => setTimeout(resolve, 10)));
-    }
+    await withBrowserFrames(() => act(async () => footnoteItem()?.click()));
     expect(onInsertFootnote).toHaveBeenCalledTimes(1);
 });
 

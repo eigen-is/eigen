@@ -7,10 +7,12 @@ import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     isFigureFrameNode,
     isPositioned,
+    MAX_HEADING_LEVEL,
     readFigureFrameAttrs,
     readParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
-import type { Border, RunFace } from '../../../document/looks';
+import { readIntIn } from '@workspace/lib/guards';
+import type { RunFace, WordBorder } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
     CODE_BLOCK_LOOK,
@@ -64,7 +66,7 @@ export type ParagraphProps = {
     keepNext?: true;
     keepLines?: true;
     numPr?: NumberingRef;
-    pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], Border>>;
+    pBdr?: Partial<Record<(typeof BORDER_SIDES)[number], WordBorder>>;
     shading?: string;
     // A right tab, at its position in twips and with its leader, which a table of contents entry ends its page number on.
     rightTab?: RightTab;
@@ -122,7 +124,7 @@ export function pPrXml(props: ParagraphProps): string {
 
 export function bordersXml<Side extends string>(
     sides: readonly Side[],
-    borders: Partial<Record<Side, Border>>,
+    borders: Partial<Record<Side, WordBorder>>,
 ): string {
     return sides
         .map((side) => {
@@ -161,7 +163,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     [
         'heading',
         (node, context) => {
-            const level = clampInt(node.attrs?.['level'], 1, 6, 1);
+            const level = readIntIn(node.attrs?.['level'], 1, MAX_HEADING_LEVEL) ?? 1;
             const { sizePt } = textMetrics(`.eigen-prose h${level}`, context.pkg.normal.size);
             const firstMargin = context.firstInFlow
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
@@ -225,7 +227,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             const type = node.attrs?.['type'];
             const format =
                 (typeof type === 'string' && LIST_FORMATS.get(type)) || untypedListFormat(context.orderedListsAround);
-            return listOf(node, context, 'ol', { format, start: clampInt(node.attrs?.['start'], 0, 32767, 1) });
+            return listOf(node, context, 'ol', { format, start: readIntIn(node.attrs?.['start'], 0, 32767) ?? 1 });
         },
     ],
     ['taskList', (node, context) => listOf(node, context, 'ul', undefined)],
@@ -604,10 +606,4 @@ function codeLines(tree: HastNode, pkg: Package): string[] {
 function justification(node: JSONContent): string | undefined {
     const textAlign = node.attrs?.['textAlign'];
     return typeof textAlign === 'string' ? JUSTIFICATION.get(textAlign) : undefined;
-}
-
-export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-    return typeof value === 'number' && Number.isFinite(value)
-        ? Math.min(max, Math.max(min, Math.round(value)))
-        : fallback;
 }

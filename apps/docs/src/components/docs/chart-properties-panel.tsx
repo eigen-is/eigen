@@ -4,15 +4,9 @@
 
 import type { Editor } from '@tiptap/react';
 import { useEditorState } from '@tiptap/react';
-import {
-    CHART_DEFAULT_SIZE,
-    chartSpecWrites,
-    isInlineSketchCapped,
-    readChartLook,
-    readChartSpec,
-} from '@workspace/lib/charts';
+import { chartSpecWrites, isInlineSketchCapped, readChartLook, readChartSpec } from '@workspace/lib/charts';
 import type { ChartAttrs } from '@workspace/lib/docs/eigendoc';
-import { figurePlacement, readChartAttrs } from '@workspace/lib/docs/eigendoc';
+import { chartBox, figurePlacement, readChartAttrs } from '@workspace/lib/docs/eigendoc';
 import { CHART_SPEC_PART_KEYS } from '@workspace/lib/types/chart';
 import { ChartSections, InlineChartDataDialog } from '@workspace/ui/components/charts';
 import {
@@ -46,8 +40,7 @@ function useSelectedChart(editor: Editor) {
                 parts: Object.fromEntries(CHART_SPEC_PART_KEYS.map((key) => [key, attrs[key]])),
                 ...figurePlacement(attrs),
                 caption: attrs.caption || '',
-                width: attrs.width ?? CHART_DEFAULT_SIZE.width,
-                height: attrs.height ?? CHART_DEFAULT_SIZE.height,
+                ...chartBox(attrs),
                 look: readChartLook(attrs),
                 locked: isAspectLocked(e.state, 'chart'),
                 inFlowOnly: selectionDrawsInLine(e),

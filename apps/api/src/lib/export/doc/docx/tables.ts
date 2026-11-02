@@ -2,13 +2,9 @@
 // with its fill and, in a table where any cell stores sides of its own, all four of its sides.
 
 import type { JSONContent } from '@tiptap/core';
-import {
-    CELL_BORDER_SIDES,
-    columnFit,
-    MIN_TABLE_COLUMN_PX,
-    readCellBackground,
-    readCellBorder,
-} from '@workspace/lib/docs/eigendoc';
+import { readHexColor } from '@workspace/lib/constants/colors';
+import { CELL_BORDER_SIDES, columnFit, isWidth, MIN_TABLE_COLUMN_PX, readBorder } from '@workspace/lib/docs/eigendoc';
+import { readIntIn } from '@workspace/lib/guards';
 import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
     BORDER_EIGHTHS_PER_PX,
@@ -22,7 +18,7 @@ import {
 } from '../../../ooxml/wordml';
 import type { Context } from './package';
 import type { Block } from './paragraphs';
-import { blocksOf, blocksXml, bordersXml, clampInt, paragraphXml, textProps } from './paragraphs';
+import { blocksOf, blocksXml, bordersXml, paragraphXml, textProps } from './paragraphs';
 import type { StyleDef } from './styles';
 
 const CELL_TYPES = new Set(['tableCell', 'tableHeader']);
@@ -73,18 +69,15 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
                 cut = true;
                 continue;
             }
-            const colspan = clampInt(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS - column, 1);
-            cut ||= clampInt(node.attrs?.['colspan'], 1, Number.MAX_SAFE_INTEGER, 1) > colspan;
-            const rowspan = clampInt(node.attrs?.['rowspan'], 1, rows.length - rowIndex, 1);
+            const colspan = readIntIn(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS - column) ?? 1;
+            cut ||= (readIntIn(node.attrs?.['colspan'], 1, Number.MAX_SAFE_INTEGER) ?? 1) > colspan;
+            const rowspan = readIntIn(node.attrs?.['rowspan'], 1, rows.length - rowIndex) ?? 1;
             const colwidth = node.attrs?.['colwidth'];
             const cell = { node, content: [...(node.content ?? [])], column, colspan, rowspan };
             for (let k = 0; k < colspan; k++) {
                 const width: unknown = Array.isArray(colwidth) ? colwidth[k] : undefined;
                 // At most MAX_COLWIDTH_PX, so 63 of them sum to a number and the ratios between them stay.
-                widths[column + k] ??=
-                    typeof width === 'number' && Number.isFinite(width) && width > 0
-                        ? Math.min(width, MAX_COLWIDTH_PX)
-                        : undefined;
+                widths[column + k] ??= isWidth(width) ? Math.min(width, MAX_COLWIDTH_PX) : undefined;
                 carry[column + k] = rowspan;
                 holders[column + k] = cell;
             }
@@ -98,7 +91,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
     if (cut) context.pkg.lost('tables-simplified');
     // Word resolves a cell's own side against the table's, so a table whose cells store sides writes every cell's.
     const ownSides = grid.some((cells) =>
-        cells.some((cell) => CELL_BORDER_SIDES.some(([name]) => readCellBorder(cell.node.attrs?.[name]))),
+        cells.some((cell) => CELL_BORDER_SIDES.some(([name]) => readBorder(cell.node.attrs?.[name]))),
     );
 
     // A page-less doc's table in the body, outside a list or a quote, keeps its widths, as the editor draws it past the
@@ -128,7 +121,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             const width = spanWidth(column, colspan);
             // Word draws a fill per cell, so a merge's covered cells carry it too; a cell's own wins over a header's gray.
             const fill =
-                readCellBackground(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
+                readHexColor(owner?.node.attrs?.['backgroundColor'])?.slice(1).toUpperCase() ??
                 (owner?.node.type === 'tableHeader' ? HEADER_CELL_LOOK.fill : undefined);
             // A cell over columns without a width has none either: the grid lays it out, and the reader reads it back unset.
             const tcW = widths.slice(column, column + colspan).every((known) => known === undefined)
@@ -170,7 +163,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
 // A cell's four sides, in tcBorders' order: a side it stores none of is Eigen's gray, and none is nil.
 function tcBorders(node: JSONContent): string {
     const sideXml = (side: (typeof BORDER_SIDES)[number], value: unknown) => {
-        const border = readCellBorder(value);
+        const border = readBorder(value);
         if (border === 'none') return `<w:${side} w:val="nil"/>`;
         if (!border) return bordersXml([side], { [side]: TABLE_LOOK.border });
         const [val] = WORD_BORDER_STYLES[border.style];

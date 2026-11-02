@@ -5,12 +5,34 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { isFigureFrameNode, mmToPx, pageTwips } from '@workspace/lib/docs/eigendoc';
+import {
+    heightAtWidth,
+    isFigureFrameNode,
+    MAX_PAPER_PX,
+    mmToPx,
+    pageTwips,
+    readFrameSide,
+} from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
 import { blipEmbeds, diagramDrawingId, diagramTextBodies, IMAGE_MIME_BY_EXTENSION } from '../../ooxml/drawingml';
-import { A_NS, C_NS, DGM_NS, DSP_NS, EMU_PER_PX, isOn, O_NS, PIC_NS, R_NS, V_NS, W_NS, WP_NS } from '../../ooxml/ooxml';
+import {
+    A_NS,
+    C_NS,
+    DGM_NS,
+    DSP_NS,
+    EMU_PER_PX,
+    isAlternateContent,
+    isOn,
+    O_NS,
+    PIC_NS,
+    R_NS,
+    V_NS,
+    W_NS,
+    WP_NS,
+    WPG_NS,
+} from '../../ooxml/ooxml';
 import {
     CHART_NOT_IMPORTED,
     chartCost,
@@ -23,11 +45,11 @@ import { EMU_PER_TWIP, FLOATING_WRAPS } from '../../ooxml/wordml';
 import { declaredImageType, IMAGE_TYPES, mediaPart, PICTURE_NOT_IMPORTED } from '../image-types';
 import type { Item, ParagraphItem } from './assemble';
 import { inlineText, isCaptionLike, isFigureOnly, paraOf } from './assemble';
-import { descendants, floatSide, roundedInt, vmlPx, vmlStyle } from './package';
+import { descendants, extentOf, floatSide, loneGraphic, roundedInt, vmlPx, vmlStyle, wordAlternative } from './package';
 import type { Reader, Scope } from './paragraphs';
 import { readBlocks } from './paragraphs';
 import type { RunContext } from './runs';
-import { loneTextBox, paintsBox, readTextBox, readVmlTextBox, textBoxScope } from './text-boxes';
+import { loneTextBox, paintsBox, readTextBox, readVmlTextBox, textBoxScope, textBoxWidth } from './text-boxes';
 
 // A chart part as the doc holds it: the parts of the spec the node stores, with the part its look is read from at each
 // drawing's size, or the lines a chart left out leaves in its place; and its title, which a band or a note keeps.
@@ -48,18 +70,18 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             continue;
         }
         const extent = xmlChild(frame, WP_NS, 'extent');
-        const pictures = descendants(frame, PIC_NS, 'pic');
-        const charts = chartsIn(frame, extent);
-        const layout = anchored ? anchorPlacement(frame, reader, context) : {};
+        const { pictures, charts } = graphicsIn(frame, extent);
         // A picture in front of or behind the text may span the paper.
-        const room = layout.offsetX === undefined ? reader.columnPx : Math.floor(mmToPx(reader.page.width));
+        const over = anchored && overText(frame, context);
+        const room = over ? paperPx(reader) : reader.columnPx;
+        const layout = anchored ? anchorPlacement(frame, reader, context, over, room) : {};
         // Only the body holds a chart or a text box: a band's schema has neither and a note's Insert leaves both out, so
         // there a chart keeps its title and a box its paragraphs.
         const inBody = context.scope.story === 'body';
         const docPr = xmlChild(frame, WP_NS, 'docPr');
         const alt = (docPr && (xmlAttr(docPr, '', 'descr') || xmlAttr(docPr, '', 'title'))) || null;
         const figures: JSONContent[] = [];
-        for (const picture of pictures) {
+        for (const { element: picture, ext, scale } of pictures) {
             const [blip] = descendants(picture, A_NS, 'blip');
             const [svg, raster] = blipEmbeds(blip);
             const name =
@@ -75,17 +97,15 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
                 if (svg || raster || outside) pictureLeftOut(reader, context, outside ? alt : null);
                 continue;
             }
-            const ext = pictures.length === 1 ? extent : descendants(picture, A_NS, 'ext')[0];
-            const cx = roundedInt(ext && xmlAttr(ext, '', 'cx'));
-            const cy = roundedInt(ext && xmlAttr(ext, '', 'cy'));
+            const { cx, cy } = drawnExtent(ext, scale);
             const size = cx ? pictureSize(cx / EMU_PER_PX, cy ? cy / EMU_PER_PX : null, room) : NO_SIZE;
             figures.push({ type: 'figure', attrs: { mediaName: name, alt, ...size, ...layout } });
             if (anchored && inBand) reader.lost('band-images-unanchored');
         }
-        for (const [reference, ext] of charts) {
+        for (const { element: reference, ext, scale } of charts) {
             const chart = readDocxChart(reader, reference, context.scope);
             if (inBody && 'parts' in chart) {
-                const { emuPerPx, ...size } = chartSize(ext, room);
+                const { emuPerPx, ...size } = chartSize(drawnExtent(ext, scale), room);
                 const look = readChartPartLook(chart.root, { theme: reader.colors, emuPerPx, host: 'docx' });
                 figures.push({ type: 'chart', attrs: { ...chart.parts, ...look, ...size, ...layout } });
                 continue;
@@ -117,11 +137,27 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             tail.every(isCaptionLike) &&
             !(shape && paintsBox(reader, shape))
         ) {
-            // An unpainted box around a picture is the picture: its place and size are the box's.
+            // An unpainted box around a picture or a chart is that node: its place and width are the box's, and the
+            // node keeps its shape, its sides in whole px as pictureSize rounds them. A picture of no known size takes
+            // its own height once it loads.
             if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
-            figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, caption } });
+            const ownWidth = readFrameSide(boxedFigure.attrs?.['width']);
+            const ownHeight = readFrameSide(boxedFigure.attrs?.['height']);
+            const own = ownWidth && ownHeight ? { width: ownWidth, height: ownHeight } : undefined;
+            // A tall node at the box's width could be taller than the largest paper, so it gets only the width that
+            // keeps it within that height.
+            const boxWidth = textBoxWidth(extent, room);
+            const width = own ? Math.min(boxWidth, (own.width * MAX_PAPER_PX) / own.height) : boxWidth;
+            const height = own ? heightAtWidth(own, width) : null;
+            const size = shape
+                ? {
+                      width: readFrameSide(Math.round(width)),
+                      height: readFrameSide(height && Math.max(1, Math.round(height))),
+                  }
+                : {};
+            figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, ...size, caption } });
         } else if (shape) {
             const box = readTextBox(reader, shape, extent, layout, room, boxed);
             if (box) figures.push(box);
@@ -187,16 +223,15 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
     }
 }
 
-// A part the package gives no type takes its extension's, as Word reads one. Only a type of the allowlist is stored.
-function imageType(reader: Reader, path: string): string | undefined {
-    if (reader.pkg.contentTypeOf(path)) return declaredImageType(reader.pkg, path);
-    return IMAGE_MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
-}
-
 // One media file per image part, named in encounter order. A part that is missing or of no image type, whose bytes
-// don't read, or that is past the pictures' caps has none.
+// don't read, or that is past the pictures' caps has none. A part the package gives no type takes its extension's, as
+// Word reads one; only a type of the allowlist is stored.
 function pictureName(reader: Reader, path: string | undefined): string | undefined {
-    const part = path && mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
+    if (!path) return undefined;
+    const type = reader.pkg.contentTypeOf(path)
+        ? declaredImageType(reader.pkg, path)
+        : IMAGE_MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
+    const part = mediaPart(reader.pkg.zip, path, type, IMAGE_TYPES);
     return part && reader.files.name(part);
 }
 
@@ -223,12 +258,13 @@ function partPath(id: string | undefined, scope: Scope): string | undefined {
 }
 
 // A picture's size in px off the extent Word drew it at, stretched or not: the width capped at `columnPx`, and the
-// height scaled with it. One with no extent takes its own size once it loads.
+// height scaled with it. Each side goes through readFrameSide, as the figure reads it, so no side past the largest
+// paper is stored. One with no extent takes its own size once it loads.
 function pictureSize(width: number, height: number | null, columnPx: number): Pick<FigureAttrs, 'width' | 'height'> {
     const scale = Math.min(1, columnPx / width);
     return {
-        width: Math.min(columnPx, Math.max(1, Math.round(width))),
-        height: height ? Math.max(1, Math.round(height * scale)) : null,
+        width: readFrameSide(Math.min(columnPx, Math.max(1, Math.round(width)))),
+        height: height ? readFrameSide(Math.max(1, Math.round(height * scale))) : null,
     };
 }
 
@@ -236,22 +272,59 @@ const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: nu
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
-// Each chart a drawing shows with the a:ext it is drawn at: alone, the drawing's extent; in a group or a canvas, its own
-// graphicFrame's. A text box's content is its own paragraphs', read with them.
-function chartsIn(frame: XmlElement, extent: XmlElement | undefined): [XmlElement, XmlElement | undefined][] {
-    const charts: [XmlElement, XmlElement | undefined][] = [];
-    const stack: [XmlElement, XmlElement | undefined][] = [[frame, extent]];
+// How much a drawing's groups scale what they hold, on each axis.
+type Scale = { x: number; y: number };
+
+// A picture or a chart a drawing shows, with the a:ext it is laid out at and the scale its groups draw that at.
+type Graphic = { element: XmlElement; ext: XmlElement | undefined; scale: Scale };
+
+// The pictures and the charts a drawing shows, in document order. A graphic alone in its drawing is drawn at the
+// drawing's extent. One in a group or a canvas has its own a:ext: a picture's is in its spPr, because the blip's extLst
+// holds an a:ext too, and a chart's is in its graphicFrame. A text box's content is its own paragraphs', read with them,
+// and of an mc:AlternateContent only the branch Word reads counts.
+function graphicsIn(frame: XmlElement, extent: XmlElement | undefined): { pictures: Graphic[]; charts: Graphic[] } {
+    const lone = loneGraphic(frame);
+    const pictures: Graphic[] = [];
+    const charts: Graphic[] = [];
+    const stack: Graphic[] = [{ element: frame, ext: extent, scale: { x: 1, y: 1 } }];
     for (let next = stack.pop(); next; next = stack.pop()) {
-        const [element, ext] = next;
-        if (hasXmlName(element, C_NS, 'chart')) charts.push(next);
+        const { element, ext, scale } = next;
+        if (hasXmlName(element, PIC_NS, 'pic')) {
+            const spPr = xmlChild(element, PIC_NS, 'spPr');
+            const xfrm = spPr && xmlChild(spPr, A_NS, 'xfrm');
+            pictures.push({ element, ext: element === lone ? extent : xfrm && xmlChild(xfrm, A_NS, 'ext'), scale });
+        } else if (hasXmlName(element, C_NS, 'chart')) charts.push(next);
         else if (!hasXmlName(element, W_NS, 'txbxContent')) {
             const xfrm =
                 element.local === 'graphicFrame' && xmlElements(element).find((child) => child.local === 'xfrm');
             const own = xfrm ? xmlChild(xfrm, A_NS, 'ext') : ext;
-            for (const child of xmlElements(element).reverse()) stack.push([child, own]);
+            const inner = groupScale(element, scale);
+            const children = isAlternateContent(element) ? wordAlternative(element) : xmlElements(element);
+            for (const child of children.reverse()) stack.push({ element: child, ext: own, scale: inner });
         }
     }
-    return charts;
+    return { pictures, charts };
+}
+
+// A group lays out what it holds in its a:chExt and draws that at its a:ext, so each axis scales by ext over chExt, as
+// Word draws a resized group. A group inside another multiplies its scale by the outer one's. A group that gives no
+// size on an axis scales nothing on it. A canvas is no group: it places what it holds in plain EMU.
+function groupScale(element: XmlElement, outer: Scale): Scale {
+    const spPr = xmlChild(element, WPG_NS, 'grpSpPr');
+    const xfrm = spPr && xmlChild(spPr, A_NS, 'xfrm');
+    if (!xfrm) return outer;
+    const drawn = extentOf(xmlChild(xfrm, A_NS, 'ext'));
+    const laid = extentOf(xmlChild(xfrm, A_NS, 'chExt'));
+    const ratio = (side: number, child: number) => (side > 0 && child > 0 ? side / child : 1);
+    return { x: outer.x * ratio(drawn.cx, laid.cx), y: outer.y * ratio(drawn.cy, laid.cy) };
+}
+
+// The size in whole EMU a graphic is drawn at: its a:ext times its groups' scale. Nested groups in a hostile file can
+// multiply a side past what a number holds. Such a side is 0, which every caller reads as no size.
+function drawnExtent(ext: XmlElement | undefined, scale: Scale): { cx: number; cy: number } {
+    const { cx, cy } = extentOf(ext);
+    const side = (emu: number, by: number) => (Number.isFinite(emu * by) ? Math.round(emu * by) : 0);
+    return { cx: side(cx, scale.x), cy: side(cy, scale.y) };
 }
 
 // The chart a c:chart names, read once per part: its spec, or the words for a chart the reader can't draw, a part
@@ -273,9 +346,10 @@ function readDocxChart(reader: Reader, reference: XmlElement, scope: Scope): Doc
 
 // Its drawn size, shrunk to the text column and to the node's largest side, keeping its shape, and the EMU one px of
 // that size is drawn at in the file.
-function chartSize(ext: XmlElement | undefined, columnPx: number): { width: number; height: number; emuPerPx: number } {
-    const cx = roundedInt(ext && xmlAttr(ext, '', 'cx')) ?? 0;
-    const cy = roundedInt(ext && xmlAttr(ext, '', 'cy')) ?? 0;
+function chartSize(
+    { cx, cy }: { cx: number; cy: number },
+    columnPx: number,
+): { width: number; height: number; emuPerPx: number } {
     const drawn = cx > 0 && cy > 0;
     const { width, height } = drawn ? { width: cx / EMU_PER_PX, height: cy / EMU_PER_PX } : CHART_DEFAULT_SIZE;
     const scale = Math.min(1, columnPx / width, CHART_MAX_SIDE / height);
@@ -323,34 +397,33 @@ function onShapeFill(scope: Scope): Scope {
     return { ...scope, onFill: true, inShape: true };
 }
 
-// Where Word places an anchor, as the doc holds it. Wrapped beside the text, it sits on the side its alignment or its
-// offset puts it. Over or under the text, alone in its anchor and in the body outside a table, it is in front of or
-// behind the text, at its offsets from the text column and from the paragraph's first line, which placeAnchors counts
-// from the paragraph's box. Any other is a block, aligned if Word aligns it.
-function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext): FigureFrameAttrs {
-    const { story, tables } = context.scope;
+// Where Word places an anchor, as the doc holds it, `room` being the px its drawing may take. Wrapped beside the text,
+// it sits on the side its alignment or its offset puts it. In front of or behind the text, as `over` says, it is at its
+// offsets from the text column and from the paragraph's first line, which placeAnchors counts from the paragraph's box.
+// Any other is a block, aligned if Word aligns it.
+function anchorPlacement(
+    anchor: XmlElement,
+    reader: Reader,
+    context: RunContext,
+    over: boolean,
+    room: number,
+): FigureFrameAttrs {
+    const { story } = context.scope;
     const wrapped = xmlElements(anchor).some((child) => child.ns === WP_NS && FLOATING_WRAPS.has(child.local));
     const positionH = xmlChild(anchor, WP_NS, 'positionH');
     const align = positionH && xmlChild(positionH, WP_NS, 'align');
     const offset = positionH && xmlChild(positionH, WP_NS, 'posOffset');
-    const extent = xmlChild(anchor, WP_NS, 'extent');
-    const cx = roundedInt(extent && xmlAttr(extent, '', 'cx')) ?? 0;
+    const drawn = drawnWidth(anchor, room);
     const area = areaOf(reader, positionH && xmlAttr(positionH, '', 'relativeFrom'));
-    const placed = align ? alignedIn(xmlText(align).trim(), area.width, cx) : roundedInt(offset && xmlText(offset));
-    // The offset from the text column's left edge, kept on the paper.
-    const { width, margin } = pageTwips(reader.page);
-    const marginLeft = margin.left * EMU_PER_TWIP;
-    const x = Math.min(Math.max(area.start + (placed ?? 0), -marginLeft), width * EMU_PER_TWIP - marginLeft - cx);
-    // One anchor has one place, so only a lone picture or chart can take it. A group's or a canvas's pictures would
-    // stack there, and its text boxes and shapes would draw elsewhere.
-    const graphic = xmlChild(anchor, A_NS, 'graphic');
-    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
-    const [only, ...others] = data ? xmlElements(data) : [];
-    const lone =
-        !!only &&
-        others.length === 0 &&
-        (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
-    if (xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !context.scope.box) {
+    const placed = align ? alignedIn(xmlText(align).trim(), area.width, drawn) : roundedInt(offset && xmlText(offset));
+    // The offset from the text column's left edge, kept on the paper's whole px, which a drawing is sized to.
+    const marginLeft = pageTwips(reader.page).margin.left * EMU_PER_TWIP;
+    const cx = drawn ?? 0;
+    const x = Math.min(
+        Math.max(area.start + (placed ?? 0), -marginLeft),
+        paperPx(reader) * EMU_PER_PX - marginLeft - cx,
+    );
+    if (over) {
         const layout = isOn(xmlAttr(anchor, '', 'behindDoc')) ? 'behind' : 'front';
         return { layout, offsetX: x / EMU_PER_PX, offsetY: lineOffset(anchor, context) };
     }
@@ -360,6 +433,36 @@ function anchorPlacement(anchor: XmlElement, reader: Reader, context: RunContext
     // A block takes the side or the center its alignment names. Inside and outside align it to neither.
     if (named === 'center') return { alignment: named };
     return named === undefined || named === side ? { alignment: side } : {};
+}
+
+// The paper's width in whole px, the most a drawing in front of or behind the text may span.
+function paperPx(reader: Reader): number {
+    return Math.floor(mmToPx(reader.page.width));
+}
+
+// Whether an anchor is in front of or behind the text: over or under it, alone in its anchor, and in the body outside a
+// table. One anchor has one place, so only a lone picture, chart or text box can take it. A group's or a canvas's
+// pictures would stack there, and its text boxes and shapes would draw elsewhere.
+function overText(anchor: XmlElement, context: RunContext): boolean {
+    const { story, tables, box } = context.scope;
+    const only = loneGraphic(anchor);
+    const lone =
+        !!only &&
+        (hasXmlName(only, PIC_NS, 'pic') || hasXmlName(only, C_NS, 'chart') || loneTextBox(anchor) !== undefined);
+    return !!xmlChild(anchor, WP_NS, 'wrapNone') && lone && story === 'body' && tables === 0 && !box;
+}
+
+// The width in EMU an anchor's drawing is stored at, given `room` px. Each kind's width comes from the function that
+// sizes its node, so the anchor is aligned and kept on the paper by the width it draws at. A picture with no extent
+// takes its own size once it loads, so its width is unknown here.
+function drawnWidth(anchor: XmlElement, room: number): number | undefined {
+    const extent = xmlChild(anchor, WP_NS, 'extent');
+    const only = loneGraphic(anchor);
+    if (only && hasXmlName(only, C_NS, 'chart')) return chartSize(extentOf(extent), room).width * EMU_PER_PX;
+    if (loneTextBox(anchor)) return textBoxWidth(extent, room) * EMU_PER_PX;
+    const { cx } = extentOf(extent);
+    const width = cx ? pictureSize(cx / EMU_PER_PX, null, room).width : null;
+    return width ? width * EMU_PER_PX : undefined;
 }
 
 // The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at
@@ -377,8 +480,10 @@ function areaOf(reader: Reader, relativeFrom: string | undefined): { start: numb
     return { start: 0, width: column };
 }
 
-// Where an alignment puts a picture `cx` wide in an area, from its start.
-function alignedIn(align: string, area: number, cx: number): number {
+// Where an alignment puts a drawing `cx` wide in an area, from its start. One of a width not yet known sits at the
+// start, as aligned left, so it can't overhang the area's end.
+function alignedIn(align: string, area: number, cx: number | undefined): number {
+    if (cx === undefined) return 0;
     if (align === 'center') return (area - cx) / 2;
     return align === 'right' || align === 'outside' ? area - cx : 0;
 }

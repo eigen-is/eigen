@@ -6,8 +6,9 @@
 // not be imported until the globals are in place — which is also why they are dynamic imports at all:
 // a static `import` hoists above this call.
 
-import { afterAll } from 'bun:test';
+import { afterAll, afterEach, beforeAll } from 'bun:test';
 import { Window } from 'happy-dom';
+import { loadReact, unmountAllRoots } from './render-in-document';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -105,6 +106,12 @@ export function installHappyDom(options: HappyDomOptions = {}): Window {
         return 0;
     });
     borrow('cancelAnimationFrame', () => {});
+
+    // React loads before the first test, outside its timeout. Every root renderInDocument made is gone before the next
+    // test, even one whose test timed out before it could unmount it.
+    const react = loadReact();
+    beforeAll(() => react);
+    afterEach(unmountAllRoots);
 
     afterAll(async () => {
         // floating-ui positions asynchronously; let its pending work finish while the DOM is still there.

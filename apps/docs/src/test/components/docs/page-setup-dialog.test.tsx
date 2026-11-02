@@ -24,8 +24,11 @@ function control(label: string): HTMLElement | null {
 }
 
 const dialog = () => document.querySelector('[role="dialog"]');
+// A footer button, apart from the corner X, which a screen reader calls Close too.
 const button = (label: string) =>
-    [...(dialog()?.querySelectorAll<HTMLButtonElement>('button') ?? [])].find((b) => b.textContent === label);
+    [...(dialog()?.querySelectorAll<HTMLButtonElement>('[data-slot="dialog-footer"] button') ?? [])].find(
+        (b) => b.textContent === label,
+    );
 // Radix portals the open list to the body.
 const options = () =>
     [...document.querySelectorAll('[data-slot="select-content"] [role="option"]')].map((option) => ({

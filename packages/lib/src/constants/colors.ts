@@ -1,7 +1,7 @@
 // Eigen's color palette, based on Tailwind's colors, with the pink column's accent row as Eigen's accent, and the
 // one reader of a written color. Readers such as a sheet cell's fill, a doc's text color and the Office exports
-// check a hex with isHexColor, read its channels with hexChannels and read an rgb() with parseRgb, so they agree on
-// what a color is.
+// check a hex with isHexColor, read a stored #rrggbb with readHexColor, read its channels with hexChannels and read an
+// rgb() with parseRgb, so they agree on what a color is.
 
 export type EigenColor = {
     label: string;
@@ -331,6 +331,13 @@ export function lightenColor(hex: string, amount: number): string {
 // counts, such as six for a doc's text color.
 export function isHexColor(value: string, digits: readonly (3 | 4 | 6 | 8)[]): boolean {
     return /^#[0-9a-f]+$/i.test(value) && digits.some((count) => value.length === count + 1);
+}
+
+// A stored #rrggbb color, such as a table cell's or a text box's fill, in lower case. A peer or a paste can write any
+// value, and it lands in a style and a docx, so anything else reads as null.
+export function readHexColor(value: unknown): string | null {
+    const color = typeof value === 'string' ? value.toLowerCase() : '';
+    return isHexColor(color, [6]) ? color : null;
 }
 
 export type ColorChannels = { red: number; green: number; blue: number; alpha: number };

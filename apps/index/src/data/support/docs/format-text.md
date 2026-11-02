@@ -6,7 +6,7 @@ category: Editing
 tags: [docs, formatting, fonts, font size, headings, normal text, lists, numbering, color, alignment, indent, line spacing, caps]
 related: [docs/clear-formatting, docs/create-and-edit]
 order: 30
-updated: 2026-10-23
+updated: 2026-11-02
 ---
 
 Docs has a full formatting toolbar above the editor. You can change the font and its size, set headings, make text bold or italic, pick a color, align paragraphs, and build lists, all without leaving the page.
@@ -68,7 +68,7 @@ Select the text you want to change, then click the button in the toolbar:
 
 Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside styled text, the button appears highlighted, so you can see what is active.
 
-For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline** it has **Strikethrough**, **Superscript**, **Subscript**, and **Inline code**. Choose a style again on the same selection to remove it.
+For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline**, which show the same shortcuts, it has **Strikethrough**, **Superscript**, **Subscript**, and **Inline code**. Choose a style again on the same selection to remove it.
 
 ## Set text in capitals
 
@@ -103,7 +103,7 @@ Alignment applies to the whole paragraph the cursor is in, or to all paragraphs 
 - **Right**
 - **Justified**: stretches each line to both margins, except the last line of the paragraph.
 
-Click the **Align** button in the toolbar, which shows the current alignment, and choose one. The current alignment is marked in the list. You can also open **Format**, then **Align and indent**, and choose **Left**, **Center**, **Right**, or **Justified**.
+Click the **Align** button in the toolbar, which shows the current alignment, and choose one. The current alignment is marked in the list. You can also open **Format**, then **Align and indent**, and choose **Left**, **Center**, **Right**, or **Justified**. That list marks the current alignment too.
 
 ## Indent a paragraph
 

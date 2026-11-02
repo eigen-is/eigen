@@ -1,6 +1,10 @@
+// The guest list of the event dialogs: a field that adds a guest by address or from the contacts it suggests, and the
+// guests below it with their reply and a button that removes one. Inviting yourself is refused with a note. The
+// dialog owns the list and saves it with the event.
+
 import type { Attendee } from '@workspace/lib/types/calendar';
+import { TooltipButton } from '@workspace/ui';
 import { Badge } from '@workspace/ui/components/badge';
-import { Button } from '@workspace/ui/components/button';
 import { ATTENDEE_STATUS_ICON, ATTENDEE_STATUS_LABEL } from '@workspace/ui/components/calendar';
 import { ContactAddRow, useContactInput } from '@workspace/ui/components/contacts';
 import { UserItem } from '@workspace/ui/components/user';
@@ -57,14 +61,13 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                                         <StatusIcon className="h-3 w-3" />
                                         {ATTENDEE_STATUS_LABEL[attendee.status]}
                                     </Badge>
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
+                                    <TooltipButton
+                                        icon={XIcon}
+                                        tooltipText={`Remove ${attendee.email}`}
+                                        type="button"
+                                        className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
                                         onClick={() => removeAttendee(attendee.email)}
-                                    >
-                                        <XIcon className="h-3 w-3" />
-                                    </Button>
+                                    />
                                 </div>
                             </div>
                         );
