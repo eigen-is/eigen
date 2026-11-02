@@ -24,7 +24,7 @@ import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFold
 import { ARCHIVE_MANIFEST_FILE, getBackupsDir, SERVER_ARCHIVE_SERVER_MEMBER } from '../../lib/backup/paths';
 import { stageBytesNeeded } from '../../lib/backup/restore-server';
 import { startServerBackup } from '../../lib/backup/server-job';
-import { lockDataDir } from '../../lib/config/data-lock';
+import { DATA_LEASE_FILE, lockDataDir, writeLease } from '../../lib/config/data-lock';
 import { homeDirUnder, PATHS, SERVER_DATABASES, SERVER_RUNTIME_FILES } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
@@ -1235,6 +1235,43 @@ describe('restore --stage and --swap', () => {
             } finally {
                 other.close();
             }
+            expect((await swap(dir)).code).toBe(0);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    // An API on another kernel, such as the Mac host beside the container, holds no file lock the swap can see.
+    test(
+        'a swap with a live lease in data/server is refused before anything moves',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            const leaseFile = join(dir, 'data/server', DATA_LEASE_FILE);
+            const startedAt = new Date().toISOString();
+            const heartbeat = () =>
+                writeLease(leaseFile, {
+                    id: 'remote-id',
+                    host: 'other-machine',
+                    kernel: 'other-kernel',
+                    pid: 4242,
+                    platform: 'darwin',
+                    startedAt,
+                    heartbeatAt: new Date().toISOString(),
+                });
+            heartbeat();
+            const remote = setInterval(heartbeat, 50);
+            try {
+                const result = await swap(dir);
+                expect(result.code).toBe(1);
+                expect(result.stderr).toContain('other-machine');
+                expect(result.stderr).toContain('4242');
+                expect(readFileSync(join(dir, 'data/home/old/notes.txt'), 'utf8')).toBe('kept aside\n');
+                expect(existsSync(join(dir, SWAP_MARKER))).toBe(false);
+                expect(asideDirs(dir)).toEqual([]);
+            } finally {
+                clearInterval(remote);
+            }
+            rmSync(leaseFile);
             expect((await swap(dir)).code).toBe(0);
         },
         JOB_TIMEOUT_MS,

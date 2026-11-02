@@ -3,6 +3,7 @@
 
 import { MAX_REQUEST_BODY_BYTES } from '@workspace/lib/constants/mount';
 import { app } from './app';
+import { releaseInstanceLease } from './instance-lock';
 import { drainBackupJobs } from './lib/backup/jobs';
 import { recoverBackupsAfterRestart } from './lib/backup/recovery';
 import { isProduction } from './lib/config/env';
@@ -75,6 +76,7 @@ async function gracefulShutdown(signal: string) {
     // of the close are queued and before metadata.db closes.
     setShutdownDrainDeadline(Date.now() + SHUTDOWN_DRAIN_BUDGET_MS);
     await shutdownAllHomes();
+    releaseInstanceLease();
     console.log('All homes shut down, exiting.');
     process.exit(0);
 }
