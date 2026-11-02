@@ -18,7 +18,7 @@ import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
-import { validationAt } from '../../state/modules/validation-rules';
+import { ValidationLimitError, validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
 import { author, join } from './factories/collab';
 import { contextFactory, workbookContextFactory } from './factories/context';
@@ -564,6 +564,32 @@ describe('a carried rule lands as ranges', () => {
         });
         expect(performance.now() - started).toBeLessThan(2000);
         expect(Object.keys(sheet(next).dataValidations ?? {})).toEqual(['v']);
+    });
+
+    // A1 holds a rule and A2 none, so each tile lands the rule on every other row: more ranges than a rule may hold,
+    // which a peer, the server and a reload would drop. So the paste is refused whole.
+    test('a paste that would leave a rule more ranges than a rule may hold is refused', () => {
+        const rows = 20_000;
+        const ctx = workbookContextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                {
+                    name: 'sheet',
+                    id: 'id_1',
+                    order: 0,
+                    data: Array.from({ length: rows }, () => [null, null, null, null]),
+                    dataValidations: { v: { ranges: [{ row: [0, 0], column: [0, 0] }], rule: rule(0, 0) } },
+                },
+            ],
+            selections: [{ row: [0, 1], column: [0, 0], row_focus: 0, column_focus: 0 }],
+        });
+        const refused = () =>
+            author(ctx, (draft) => {
+                handleCopy(draft);
+                draft.selections = [{ row: [0, rows - 1], column: [2, 2], row_focus: 0, column_focus: 2 }];
+                handlePasteByClick(draft, 'internal');
+            });
+        expect(refused).toThrow(ValidationLimitError);
     });
 
     test('a move takes the rule along on its sheet', () => {

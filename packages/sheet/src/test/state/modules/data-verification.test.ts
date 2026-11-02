@@ -5,7 +5,12 @@
 // the format validateCellData parses via isdatetime + dayjs.
 
 import { describe, expect, test } from 'bun:test';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import {
+    MAX_VALIDATION_RANGES,
+    MAX_VALIDATIONS,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
 import type { Context } from '../../../state/context';
 import {
     applyDataVerification,
@@ -27,7 +32,13 @@ import {
     validateCellData,
     validationRange,
 } from '../../../state/modules/data-verification';
-import { validationAt, validationLookup } from '../../../state/modules/validation-rules';
+import {
+    addValidation,
+    clearValidations,
+    ValidationLimitError,
+    validationAt,
+    validationLookup,
+} from '../../../state/modules/validation-rules';
 import type { Cell, DataRegulationProps, DataVerificationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { cellsWithRules, validationsByCell } from '../factories/validations';
@@ -318,6 +329,36 @@ describe('the rule over a cell', () => {
 });
 
 // The dialog's range box names a column header's selection as B:B, and a whole column runs to the grid's last row.
+// Every peer, the server and a reload drop a rule past the caps, so a writer refuses an edit that would make one.
+describe('a write past the caps', () => {
+    const rule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+
+    test('a clear that would split a rule past the ranges a rule may hold throws', () => {
+        const ctx = contextFactory() as Context;
+        const [sheet] = ctx.sheets;
+        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [0, 2] }));
+        sheet.dataValidations = { v: { ranges: rows, rule } };
+        expect(() => clearValidations(sheet, { row: [0, 0], column: [1, 1] })).toThrow(ValidationLimitError);
+        clearValidations(sheet, { row: [0, 0], column: [0, 0] });
+        expect(sheet.dataValidations.v.ranges).toHaveLength(MAX_VALIDATION_RANGES);
+    });
+
+    test('a new rule on a sheet that holds as many rules as a sheet may throws, and a grown one does not', () => {
+        const ctx = contextFactory() as Context;
+        const [sheet] = ctx.sheets;
+        sheet.dataValidations = Object.fromEntries(
+            Array.from({ length: MAX_VALIDATIONS }, (_, i) => [
+                `v${i}`,
+                { ranges: [{ row: [i, i], column: [0, 0] }], rule },
+            ]),
+        );
+        const range = { row: [0, 0], column: [5, 5] };
+        expect(() => addValidation(sheet, 'new', rule, [range])).toThrow(ValidationLimitError);
+        addValidation(sheet, 'v0', rule, [range]);
+        expect(sheet.dataValidations.v0.ranges).toContainEqual(range);
+    });
+});
+
 describe('validationRange', () => {
     test('a whole column runs to the last row of the grid, and a whole row to its last column', () => {
         const ctx = contextFactory() as Context;

@@ -23,6 +23,7 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
+import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { RefValues, SetContextOptions } from '../../context';
@@ -59,6 +60,7 @@ import {
     selectionCache,
     sheetChartClipboardItem,
     undoEntry,
+    ValidationLimitError,
     warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
@@ -188,17 +190,39 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     ctx.scrollTop = globalCache.current.scrollTop;
                 };
 
+                // An edit that would make a validation rule too complex is refused whole: nothing of it applies, and
+                // the user sees why. A formula it evaluated may have reached the engine's map, which learns the sheets
+                // again.
+                const refuse = (e: unknown) => {
+                    if (!(e instanceof ValidationLimitError)) throw e;
+                    base.formulaCache.resetEngine();
+                    warmFormulaCellInfoMapOnIdle(getContext);
+                    commit(
+                        produce(base, (ctx) => {
+                            ctx.warnDialog = e.message;
+                        }),
+                    );
+                };
+
                 // A write that records no history, such as a drag that moves the selection, skips the patches, which
                 // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
-                    commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    try {
+                        commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    } catch (e) {
+                        refuse(e);
+                    }
                     return;
                 }
 
-                const [result, patches, inversePatches] = produceWithPatches(
-                    base,
-                    concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
-                );
+                let edit: readonly [Context, Patch[], Patch[]];
+                try {
+                    edit = produceWithPatches(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh));
+                } catch (e) {
+                    refuse(e);
+                    return;
+                }
+                const [result, patches, inversePatches] = edit;
                 commit(result);
                 if (patches.length === 0) return;
                 const filteredPatches = filterPatch(patches);
@@ -232,7 +256,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 }
                 onOp?.(patchToOp(result, filteredPatches, entry.options));
             },
-            [commit, onOp],
+            [commit, getContext, onOp],
         );
 
         const handleUndo = useCallback(() => {
@@ -613,6 +637,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     try {
                                         handlePaste(draftCtx, syntheticEvent);
                                     } catch (err) {
+                                        if (err instanceof ValidationLimitError) throw err;
                                         console.error(err);
                                     }
                                 });
@@ -651,6 +676,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         try {
                             handlePaste(draftCtx, e);
                         } catch (err) {
+                            if (err instanceof ValidationLimitError) throw err;
                             console.error(err);
                         }
                     });

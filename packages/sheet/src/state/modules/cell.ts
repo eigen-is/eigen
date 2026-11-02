@@ -1118,6 +1118,22 @@ export function carryCells(
     rules.sort(([a], [b]) => compareValidationIds(a, b));
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
+    // The rules move before any cell, so a carry that would make a rule too complex throws before land evaluates a
+    // formula. A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first,
+    // so a block pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself,
+    // and on another sheet they become a rule of their own.
+    if (cut) clearValidations(from, block);
+    const landing = tiles.map(({ row, column, height, width }) => ({
+        row: [row, row + height - 1],
+        column: [column, column + width - 1],
+    }));
+    for (const area of coalescedRanges(landing)) clearValidations(to, area);
+    for (const [id, { ranges, rule }] of rules) {
+        const landed = tiles.flatMap((tile) => ranges.flatMap((range) => landedRanges(range, lines, tile)));
+        if (landed.length === 0) continue;
+        addValidation(to, lines.sheetId === ctx.currentSheetId ? id : crypto.randomUUID(), rule, landed);
+    }
+
     if (cut) {
         for (const r of rows) {
             for (const c of columns) {
@@ -1128,16 +1144,8 @@ export function carryCells(
                 delete from.hyperlink?.[`${r}_${c}`];
             }
         }
-        clearValidations(from, block);
     }
 
-    // A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first, so a block
-    // pasted down a column clears the rules once.
-    const landing = tiles.map(({ row, column, height, width }) => ({
-        row: [row, row + height - 1],
-        column: [column, column + width - 1],
-    }));
-    for (const area of coalescedRanges(landing)) clearValidations(to, area);
     const cfg = (to.config ??= {});
     const merge = (cfg.merge ??= {});
     const borderInfo = (cfg.borderInfo ??= {});
@@ -1181,13 +1189,6 @@ export function carryCells(
                 d[r][c] = cell;
             }
         }
-    }
-    // A rule lands on the cells its source cells landed on. On the same sheet those join the rule itself, and on
-    // another sheet they become a rule of their own.
-    for (const [id, { ranges, rule }] of rules) {
-        const landed = tiles.flatMap((tile) => ranges.flatMap((range) => landedRanges(range, lines, tile)));
-        if (landed.length === 0) continue;
-        addValidation(to, lines.sheetId === ctx.currentSheetId ? id : crypto.randomUUID(), rule, landed);
     }
 }
 

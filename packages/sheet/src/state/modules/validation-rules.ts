@@ -3,7 +3,13 @@
 // also takes cells out of the rules and puts a rule on cells, for writers such as the validation dialog, a paste and
 // a fill. A cell has at most one rule, so putting a rule on cells first takes them out of every other rule.
 
-import { coalescedRanges, compareValidationIds, rangesOverlap } from '@workspace/lib/sheets';
+import {
+    coalescedRanges,
+    compareValidationIds,
+    MAX_VALIDATION_RANGES,
+    MAX_VALIDATIONS,
+    rangesOverlap,
+} from '@workspace/lib/sheets';
 import { cfSplitRange } from '../../engine/conditional-format';
 import type { DataVerificationRule, Sheet, SheetValidation, SingleRange } from '../types';
 
@@ -43,8 +49,9 @@ export function validationLookup(
         for (const { row, column } of ranges) {
             for (let r = Math.max(row[0], top); r <= Math.min(row[1], bottom); r += 1) {
                 const from = (r - top) * width - left;
-                for (let c = Math.max(column[0], left); c <= Math.min(column[1], right); c += 1)
+                for (let c = Math.max(column[0], left); c <= Math.min(column[1], right); c += 1) {
                     inView[from + c] = rule;
+                }
             }
         }
     }
@@ -57,6 +64,16 @@ export function validationLookup(
     };
 }
 
+// A writer throws this where an edit would leave a rule with more ranges than a rule may hold, or a sheet with more
+// rules than a sheet may hold. Every peer, the server and a reload would drop such a rule, so the Workbook refuses
+// the whole edit instead, and shows the message.
+export class ValidationLimitError extends Error {
+    public constructor() {
+        super('This edit would make a data validation rule too complex.');
+        this.name = 'ValidationLimitError';
+    }
+}
+
 // Takes an area out of every rule on the sheet, and drops a rule left with no cell. A changed rule is written whole
 // under its id: a write into its ranges alone would fail where a peer deleted the rule meanwhile, and take the rest
 // of its batch with it.
@@ -65,6 +82,7 @@ export function clearValidations(sheet: Sheet, area: SingleRange) {
     for (const [id, entry] of Object.entries(validations)) {
         if (!entry.ranges.some((range) => rangesOverlap(range, area))) continue;
         const ranges = entry.ranges.flatMap((range) => cfSplitRange(range, area, area, 'restPart'));
+        if (ranges.length > MAX_VALIDATION_RANGES) throw new ValidationLimitError();
         if (ranges.length > 0) validations[id] = { ...entry, ranges };
         else delete validations[id];
     }
@@ -77,7 +95,10 @@ export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRu
     for (const range of landed) clearValidations(sheet, range);
     const validations = (sheet.dataValidations ??= {});
     const entry = validations[id];
-    validations[id] = { ranges: coalescedRanges([...(entry?.ranges ?? []), ...landed]), rule: entry?.rule ?? rule };
+    const joined = coalescedRanges([...(entry?.ranges ?? []), ...landed]);
+    if (joined.length > MAX_VALIDATION_RANGES) throw new ValidationLimitError();
+    if (!entry && Object.keys(validations).length >= MAX_VALIDATIONS) throw new ValidationLimitError();
+    validations[id] = { ranges: joined, rule: entry?.rule ?? rule };
 }
 
 function covers(range: SingleRange, r: number, c: number) {
