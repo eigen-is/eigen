@@ -67,15 +67,15 @@ type CanvasClipboardParams = {
     // any other, so it is measured and created with this table. Otherwise ⌘V and the Text tool would disagree.
     styleDefaults: StyleDefaults;
     // The scene in z-order, its background and the selection: what a copy writes.
-    ordered: VectorElement[];
+    ordered: readonly VectorElement[];
     meta: VectorMeta;
-    selectedIds: string[];
+    selectedIds: readonly string[];
     setSelectedIds: (ids: string[]) => void;
     // The canvas's writers. Its addElements stamps the active frame over the caller's fields, so a pasted element lands
     // in the frame it is pasted into, never the one it was copied from.
     addElements: (partials: NewVectorElement[]) => string[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
-    updateElementUntracked: (id: string, fields: VectorElementPatch) => void;
+    updateElementsUntracked: (patches: { id: string; fields: VectorElementPatch }[]) => void;
     deleteElements: (ids: string[]) => void;
     deleteElementsUntracked: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
@@ -90,11 +90,12 @@ type CanvasClipboardParams = {
 
 export function useCanvasClipboard(params: CanvasClipboardParams) {
     const { canEdit, textEditingRef, containerRef, viewport, frameId, styleDefaults, ordered, meta } = params;
-    const { selectedIds, setSelectedIds, addElements, updateElements, updateElementUntracked } = params;
+    const { selectedIds, setSelectedIds, addElements, updateElements, updateElementsUntracked } = params;
     const { deleteElements, deleteElementsUntracked, undoManager, viewportCenterScene } = params;
     const { insertImageFiles, mediaFolderId, resolveMediaPath, resolveMediaUrl, uploadFile } = params;
 
-    // The live scene, for a heal that lands after the render that started it.
+    // The latest rendered scene, for a heal that lands after the render that started it. It can trail the Y.Doc for a
+    // moment, and the next render brings it up to date.
     const orderedRef = useRef(ordered);
     orderedRef.current = ordered;
 
@@ -151,29 +152,33 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             setSelectedIds(ids);
 
             // A box measured before the slices of its text loaded holds the fallback's size, so it is measured again
-            // once they have. The write is untracked, so the paste stays one undo step, and ⌘Z removes the box whole.
-            // A box whose text, font or width changed since the paste was edited or resized, and that edit owns its
-            // size. The heal writes the height too, because the fit only grows: a fallback that wrapped the text grew
-            // the box. The height is what textBoxFitHeight asks of a box with none yet: the text plus the inset and the
-            // border.
-            for (const { index, text, font, width } of plan.measuredText) {
-                if (isVectorFontLoaded(text, font)) continue;
-                const id = ids[index];
-                const html = textToParagraphHtml(text);
-                measureLoadedVectorText(text, font)
-                    .then((size) => {
-                        const el = orderedRef.current.find((x) => x.id === id);
-                        if (!el || !isTextBox(el) || el.html !== html || el.width !== width) return;
-                        if (!FONT_FIELDS.every((field) => el[field] === font[field])) return;
-                        const healed = {
-                            width: textBoxWidth(size.width),
-                            height: textBoxFitHeight({ ...el, height: 0 }, size.height) ?? el.height,
-                        };
-                        if (healed.width !== el.width || healed.height !== el.height)
-                            updateElementUntracked(id, healed);
-                    })
-                    .catch(() => {});
-            }
+            // once they have. Every box is written in one transaction once all the loads settle, because each write
+            // reads the whole scene again. The write is untracked, so the paste stays one undo step, and ⌘Z removes the
+            // box whole. A box whose text, font or width changed since the paste has been edited or resized, and that
+            // edit owns its size, so it is left alone. The heal writes the height too, because the fit only grows: a
+            // fallback that wrapped the text grew the box. The height is what textBoxFitHeight asks of a box with none
+            // yet: the text plus the inset and the border.
+            const unloaded = plan.measuredText.filter(({ text, font }) => !isVectorFontLoaded(text, font));
+            const measures = Promise.allSettled(unloaded.map(({ text, font }) => measureLoadedVectorText(text, font)));
+            measures.then((results) => {
+                const byId = new Map(orderedRef.current.map((el) => [el.id, el]));
+                const patches: { id: string; fields: VectorElementPatch }[] = [];
+                for (const [i, { index, text, font, width }] of unloaded.entries()) {
+                    const result = results[i];
+                    const el = byId.get(ids[index]);
+                    if (result.status === 'rejected' || !el || !isTextBox(el)) continue;
+                    if (el.html !== textToParagraphHtml(text) || el.width !== width) continue;
+                    if (!FONT_FIELDS.every((field) => el[field] === font[field])) continue;
+                    const healed = {
+                        width: textBoxWidth(result.value.width),
+                        height: textBoxFitHeight({ ...el, height: 0 }, result.value.height) ?? el.height,
+                    };
+                    if (healed.width !== el.width || healed.height !== el.height) {
+                        patches.push({ id: el.id, fields: healed });
+                    }
+                }
+                if (patches.length > 0) updateElementsUntracked(patches);
+            });
 
             // An image from another media folder is fetched from its source and uploaded into ours. Its pending name
             // is then swapped for the real one, or the element is dropped when the upload fails. A forged payload can
@@ -194,7 +199,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     ).catch(() => null);
                     // Untracked, so the swap is no undo step of its own and one ⌘Z takes back the whole paste. A redo
                     // adds the element back under its pending name, as every optimistic insert does.
-                    if (result) updateElementUntracked(id, { mediaName: result.mediaName });
+                    if (result) updateElementsUntracked([{ id, fields: { mediaName: result.mediaName } }]);
                     else deleteElementsUntracked([id]);
                 }
                 return drain();
@@ -209,7 +214,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             undoManager,
             mediaFolderId,
             uploadFile,
-            updateElementUntracked,
+            updateElementsUntracked,
             deleteElementsUntracked,
         ],
     );
@@ -404,8 +409,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             .catch(() => {});
     };
     const onMenuPaste = () => {
-        // ⌘V asks canEdit, and so does this. The menu opens only when the user can edit, but a write must never depend on
-        // a caller remembering that.
+        // ⌘V asks canEdit, and so does this. The menu opens only when the user can edit, but a write must never
+        // depend on a caller remembering that.
         if (!canEdit) return;
         (async () => {
             const data = await readEigenClipboardAsync();

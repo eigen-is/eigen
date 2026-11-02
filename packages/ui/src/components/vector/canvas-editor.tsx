@@ -877,7 +877,7 @@ export function CanvasEditor({
         setSelectedIds,
         addElements,
         updateElements,
-        updateElementUntracked,
+        updateElementsUntracked,
         deleteElements,
         deleteElementsUntracked,
         undoManager,

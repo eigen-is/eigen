@@ -116,7 +116,7 @@ describe("⌘V of another app's items", () => {
                 setSelectedIds: noop,
                 addElements,
                 updateElements: noop,
-                updateElementUntracked: noop,
+                updateElementsUntracked: noop,
                 deleteElements: noop,
                 deleteElementsUntracked: noop,
                 undoManager: null,

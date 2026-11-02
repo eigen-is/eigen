@@ -532,6 +532,22 @@ test('a pasted box restyled before its slices load keeps the size it has', async
     expect(textBox()).toEqual({ width: 50, height: oneLine });
 });
 
+// Each write reads the whole scene again, and a paste can carry hundreds of text items.
+test("another app's text items are written in one transaction once their slices load", async () => {
+    await render();
+    await paste((event) =>
+        writeEigenClipboard(event, {
+            version: 1,
+            items: ['茶 tea', 'tea', 'eat'].map((text) => ({ type: 'text', text, width: 1, height: 1 })),
+        }),
+    );
+    const writes = countWrites();
+
+    await loadSlices();
+    const widths = readVectorFromDoc(doc).elements.flatMap((el) => (el.type === 'rectangle' ? [el.width] : []));
+    expect({ widths, writes: writes.count }).toEqual({ widths: [100, 60, 60], writes: 1 });
+});
+
 // A fallback as wide as the face measures the same size, so the heal has nothing to correct.
 test('a pasted box whose late measure matches its size is not written again', async () => {
     fallbackAdvance = 20;
