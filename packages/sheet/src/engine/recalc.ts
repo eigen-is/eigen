@@ -220,8 +220,10 @@ export function extractDependencies(
 ): FormulaDependency[] {
     const dependencies: FormulaDependency[] = [];
     for (const token of tokenize(formula)) {
-        if (token.length < 2 || !iscelldata(token)) continue;
-        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, token.trim(), sheetId, data);
+        // A token keeps the spaces around it, as in `=A1 + B1`.
+        const reference = token.trim();
+        if (reference.length < 2 || !iscelldata(reference)) continue;
+        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference, sheetId, data);
         if (range != null) dependencies.push(range);
     }
     return dependencies;

@@ -110,6 +110,8 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
     });
     const cases: [string, FormulaDependency[]][] = [
         ['=A1+B2', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
+        ['= A1 + B2', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
+        ['=SUM( A1:B3 , Data!A1 )', [on('s1', [0, 2], [0, 1]), on('s2', [0, 0], [0, 0])]],
         ['=SUM(A1:B3)', [on('s1', [0, 2], [0, 1])]],
         ['=SUM(B3:A1)', [on('s1', [0, 2], [0, 1])]],
         ['=Data!B2*2', [on('s2', [1, 1], [1, 1])]],

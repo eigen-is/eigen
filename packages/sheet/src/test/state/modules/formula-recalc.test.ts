@@ -273,8 +273,9 @@ describe('execFunctionGroup — index-driven recalc', () => {
 
 // A function's arguments are inputs like any other part of the formula, so INDEX's range and OFFSET's reference
 // recompute their cell, and so does a whole column or row on the formula's sheet or another. The engine has no OFFSET,
-// and reads no range that ends on a call, so those two cells show the engine's error once an input changes.
-describe('updateCell — the formulas that read an edited cell through a function or a whole column', () => {
+// and reads no range that ends on a call, so those two cells show the engine's error once an input changes. A space
+// around a reference, as a person types one, changes nothing.
+describe('updateCell — the formulas that read an edited cell through a function, a whole column or a space', () => {
     const num = (v: number): Cell => ({ v, m: String(v) });
 
     it('recomputes each of them', () => {
@@ -293,6 +294,7 @@ describe('updateCell — the formulas that read an edited cell through a functio
             [4, 3, '=SUM(1:1)', 4],
             [5, 3, '=SUM(Data!A:A)', 6],
             [5, 2, '=SUM(Data!1:1)', 1],
+            [0, 2, '=A1 + 1', 2],
         ];
         for (const [r, c, f, v] of formulas) sheet1[r][c] = { f, v, m: String(v) };
         const data = grid(3, 3);
@@ -317,11 +319,11 @@ describe('updateCell — the formulas that read an edited cell through a functio
 
         cellModule.updateCell(ctx, 0, 0, null, 10);
         groupValuesRefresh(ctx);
-        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '22', '6', '1']);
+        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '6', '1', '11']);
 
         ctx.currentSheetId = 's2';
         cellModule.updateCell(ctx, 0, 0, null, 10);
         groupValuesRefresh(ctx);
-        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '22', '15', '10']);
+        expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '15', '10', '11']);
     });
 });
