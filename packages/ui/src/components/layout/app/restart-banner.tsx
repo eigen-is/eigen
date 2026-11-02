@@ -27,8 +27,8 @@ const ROLLBACK_WORDS = {
 export function RestartBanner() {
     const { notice, streamDown } = useRestartNotice();
     if (!notice) return null;
-    // Keyed by the time it was announced, so a new notice starts its countdown from a fresh clock, and one whose
-    // deadline moved keeps the status region a screen reader already knows.
+    // Keyed by heardAt, the time it was announced, so a new notice starts its countdown from a fresh clock. A repeat
+    // of the same notice keeps heardAt, and with it the status region a screen reader already knows.
     return <RestartBroadcast key={notice.heardAt} notice={notice} streamDown={streamDown} />;
 }
 

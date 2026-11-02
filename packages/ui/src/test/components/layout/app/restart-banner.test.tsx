@@ -103,7 +103,7 @@ test('with the stream down and the time of a rollback come, Eigen is going back'
 });
 
 // A screen reader keeps reading a status region it already knows. One put in fresh would be read out from the start.
-test('a notice whose deadline moves keeps its status region', async () => {
+test('a notice heard again with the same heardAt keeps its status region', async () => {
     await show({ notice: update(600_000), streamDown: false });
     const region = container.querySelector('[role="status"]');
     await show({ notice: update(590_000), streamDown: false });

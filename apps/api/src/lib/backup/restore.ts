@@ -239,7 +239,8 @@ async function replaceHomeFolder<Judged>(
     parkOnFailure: (stamp: string) => string,
 ): Promise<Judged> {
     const restoreDir = buildRestoreStagingDir(homeDir, jobId);
-    // Set when the rollback below could not put the home back. Its notes then stay for the next boot to finish it.
+    // Set when the rollback below could not put the home back. Its notes and its mark then stay, for the next boot
+    // to finish it.
     let homeOutOfPlace = false;
     try {
         const { install, judged } = await prepare();
@@ -289,7 +290,9 @@ async function replaceHomeFolder<Judged>(
             }
         } finally {
             // The job is over. A failed install put the home back, or left the notes that let the next boot do it.
-            clearHomeRestoring(ownerId);
+            // A home left out of place stays marked until then: a request would open it at its empty path and make
+            // a new home folder there, which the boot could not park under the name the rollback already took.
+            if (!homeOutOfPlace) clearHomeRestoring(ownerId);
         }
         return judged;
     } finally {

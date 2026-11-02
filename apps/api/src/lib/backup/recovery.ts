@@ -173,8 +173,17 @@ function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => s
     // before its trash was re-dated. It goes aside under the name the marker gives, exactly as a
     // failure the job itself caught would have left it. Nothing is deleted, whether or not there
     // is a copy to put back afterwards.
+    const parked = path.join(path.dirname(homeDir), marker.parkName);
+    // A folder already there under that name, such as the one a failed rollback parked, takes no rename on top of
+    // it. Both stay for the operator, because a throw here would stop the server from starting at all.
+    if (fs.existsSync(homeDir) && fs.existsSync(parked)) {
+        console.error(
+            `[backup] a restore of ${marker.ownerId} was interrupted, but ${marker.parkName} is already there: ${path.basename(homeDir)}, ${marker.parkName} and ${marker.preRestoreName ?? 'no safety copy'} are left as they are`,
+        );
+        return;
+    }
     if (fs.existsSync(homeDir)) {
-        fs.renameSync(homeDir, path.join(path.dirname(homeDir), marker.parkName));
+        fs.renameSync(homeDir, parked);
         console.error(
             `[backup] a restore of ${marker.ownerId} was interrupted mid-install: the folder it was installing is ${marker.parkName}`,
         );

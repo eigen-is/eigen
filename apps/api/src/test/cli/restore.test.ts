@@ -2,6 +2,7 @@ import { Database } from 'bun:sqlite';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     chmodSync,
+    chownSync,
     copyFileSync,
     cpSync,
     existsSync,
@@ -859,8 +860,26 @@ describe('restore --stage and --swap', () => {
         JOB_TIMEOUT_MS,
     );
 
+    // Docker Desktop shows every file of a bind mount as the reading container's user, root in the swap, so a file
+    // the stage wrote may not show its uid. Only root can give a file another owner to show it.
+    test.skipIf(process.getuid?.() !== 0)(
+        'a staged DKIM key that shows another owner than the stage is still swapped in',
+        async () => {
+            const dir = install();
+            expect((await stage(dir, basename(fullArchive))).code).toBe(0);
+            chownSync(join(dir, 'data/.restoring/data/dkim/eigen.txt'), 4321, 4321);
+            const swapped = await swap(dir);
+            expect(swapped.stderr).toBe('');
+            expect(swapped.code).toBe(0);
+            expect(readFileSync(join(dir, 'data/dkim/eigen.private'), 'utf8')).toBe(DKIM_KEY);
+            // With no file here to take after, it keeps the owner it showed.
+            expect(statSync(join(dir, 'data/dkim/eigen.txt')).uid).toBe(4321);
+        },
+        JOB_TIMEOUT_MS,
+    );
+
     test(
-        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file or link',
+        'root copies only files and folders of the DKIM key and TLS certificate here, and no setuid file, link or huge file',
         async () => {
             const crafted = await craft(fullArchive, {
                 drop: (name) => name.startsWith('certs/'),
@@ -875,6 +894,11 @@ describe('restore --stage and --swap', () => {
                     'is setuid',
                 ],
                 [(certs: string) => symlinkSync('/etc/passwd', join(certs, 'key.pem')), 'is a link'],
+                // Root reads a file whole, so a planted huge one could run the swap out of memory.
+                [
+                    (certs: string) => writeFileSync(join(certs, 'key.pem'), Buffer.alloc(1024 * 1024 + 1)),
+                    'is bigger than a key or a certificate',
+                ],
             ] as const) {
                 const dir = install();
                 mkdirSync(join(dir, 'data/certs'));

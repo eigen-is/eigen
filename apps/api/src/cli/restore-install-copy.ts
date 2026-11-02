@@ -13,7 +13,7 @@ import {
     mkdirSync,
     openSync,
     readdirSync,
-    readFileSync,
+    readSync,
     rmSync,
     statSync,
     writeFileSync,
@@ -27,11 +27,14 @@ import type { Ui } from './ui';
 // Where root makes the copies, until the swap moves them in.
 export const INSTALL_COPIES = '.eigen/restore-install';
 
+// A key or a certificate fits in this many times over. A bigger file was planted, and root reads each file whole.
+const MAX_COPIED_FILE_BYTES = 1024 * 1024;
+
 // What the swap renames before the staged tree becomes data/, and after.
 type InstallRenames = Record<'out' | 'in', [string, string][]>;
 
-// The owner and permission bits an entry root copies gets, or why it is refused.
-type CopyOwner = (rel: string, found: Stats) => (Owner & { mode: number }) | string;
+// The owner and permission bits an entry root copies gets.
+type CopyOwner = (rel: string, found: Stats) => Owner & { mode: number };
 
 // The DKIM key and the TLS certificate keep the owners and modes the mail containers gave the ones here, such as a key
 // that root owns and group 1000 reads. Returns the renames that move the archive's folder out of the staged tree,
@@ -49,9 +52,7 @@ export function copyInstallFolders(ui: Ui, archive: string, stagedData: string):
         const [staged, here, copy] = [join(stagedData, dir), join(DATA, dir), join(INSTALL_COPIES, dir)];
         const fromArchive = lstatSync(staged, { throwIfNoEntry: false }) !== undefined;
         if (!fromArchive && !lstatSync(here, { throwIfNoEntry: false })) continue;
-        const refused = fromArchive
-            ? copyFolder(staged, copy, ownedLike(here, stage))
-            : copyFolder(here, copy, ownOwner);
+        const refused = fromArchive ? copyFolder(staged, copy, ownedLike(here)) : copyFolder(here, copy, ownOwner);
         if (refused) {
             ui.fail(
                 `${archive} cannot be swapped in: ${refused}.`,
@@ -67,11 +68,10 @@ export function copyInstallFolders(ui: Ui, archive: string, stagedData: string):
 // An entry here keeps its own owner and mode.
 const ownOwner: CopyOwner = (_, found) => ({ uid: found.uid, gid: found.gid, mode: found.mode & 0o777 });
 
-// A file the stage wrote gets the owner and mode of the one it replaces here, or keeps its own when there is none.
-// Only the stage's own files are copied: one of anybody else in the staged tree was put there.
-function ownedLike(here: string, stage: Stats): CopyOwner {
+// A file from the archive gets the owner and mode of the one it replaces here, or keeps its own when there is none.
+// Its own owner says nothing of who wrote it: Docker Desktop shows every file of a bind mount as the reader's.
+function ownedLike(here: string): CopyOwner {
     return (rel, found) => {
-        if (found.uid !== stage.uid) return 'is not what the stage wrote';
         const replaced = lstatSync(join(here, rel), { throwIfNoEntry: false });
         const same = replaced && replaced.isFile() === found.isFile() && replaced.isDirectory() === found.isDirectory();
         return ownOwner(rel, same ? replaced : found);
@@ -79,9 +79,10 @@ function ownedLike(here: string, stage: Stats): CopyOwner {
 }
 
 // Root's copy of the folder `from` into `to`, which must not exist yet. Each entry gets the owner and mode `ownerOf`
-// gives it, without a setuid, setgid or sticky bit. A file is read through a descriptor of the file the walk found,
-// so a path swapped for a link meanwhile is not read. A link, a device, a FIFO or a socket, and a setuid or setgid
-// file, are refused with the reason.
+// gives it, without a setuid, setgid or sticky bit. A link, a device, a FIFO or a socket, a setuid or setgid file and
+// a file bigger than a key are refused with the reason. A file is opened without following a link and must be the
+// file the walk found, so a file swapped for a link meanwhile is not read. A folder is not guarded that way: one
+// swapped for a link between its check and its listing leads the walk to wherever the link points.
 function copyFolder(from: string, to: string, ownerOf: CopyOwner, rel = ''): string | null {
     const path = join(from, rel);
     const target = join(to, rel);
@@ -95,25 +96,33 @@ function copyFolder(from: string, to: string, ownerOf: CopyOwner, rel = ''): str
     } else if (found.isFile()) {
         if (found.mode & 0o6000) return `${path} is setuid or setgid`;
         const bytes = readFound(path, found);
-        if (!bytes) return `${path} changed while it was copied`;
+        if (typeof bytes === 'string') return `${path} ${bytes}`;
         writeFileSync(target, bytes, { mode: 0o600, flag: 'wx' });
     } else {
         return `${path} is ${found.isSymbolicLink() ? 'a link' : 'not a file or a folder'}`;
     }
     const owner = ownerOf(rel, found);
-    if (typeof owner === 'string') return `${path} ${owner}`;
     ownAs(target, owner);
     // A folder's mode last, as one without write permission takes no files.
     chmodSync(target, owner.mode);
     return null;
 }
 
-// The bytes of the file at `path`, or null when it is no longer the file `found` describes.
-function readFound(path: string, found: Stats): Buffer | null {
+// The bytes of the file at `path`, or why they are not copied. The read stops one byte past the cap, so a file that
+// grows while it is read is refused as well.
+function readFound(path: string, found: Stats): Buffer | string {
     const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     try {
         const opened = fstatSync(fd);
-        return opened.ino === found.ino && opened.dev === found.dev ? readFileSync(fd) : null;
+        if (opened.ino !== found.ino || opened.dev !== found.dev) return 'changed while it was copied';
+        const bytes = Buffer.alloc(MAX_COPIED_FILE_BYTES + 1);
+        let length = 0;
+        while (length < bytes.length) {
+            const read = readSync(fd, bytes, length, bytes.length - length, length);
+            if (read === 0) break;
+            length += read;
+        }
+        return length > MAX_COPIED_FILE_BYTES ? 'is bigger than a key or a certificate' : bytes.subarray(0, length);
     } finally {
         closeSync(fd);
     }
