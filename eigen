@@ -1219,15 +1219,6 @@ restore_fresh() {
     exec ./eigen restore "$@"
 }
 
-# release_name <name>: a release ./eigen update can go to: a version, latest, or main, the only channel. A version is
-# VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
-release_name() {
-    case $1 in
-        latest | main | [0-9]*.[0-9]*.[0-9]*) return 0 ;;
-        *) return 1 ;;
-    esac
-}
-
 update() {
     target='' check=0 accept='' pulled=0 full='' saved='' no_backup='' previous=''
     help_flag update "$@"
@@ -1282,6 +1273,15 @@ update() {
     fi
     if [ "$check" = 0 ] && [ "$pulled" != 1 ]; then lock; fi
     if [ "$pulled" = 1 ]; then update_apply; else update_get; fi
+}
+
+# release_name <name>: a release ./eigen update can go to: a version, latest, or main, the only channel. A version is
+# VERSION_PATTERN in apps/api/src/cli/install.ts, loosely.
+release_name() {
+    case $1 in
+        latest | main | [0-9]*.[0-9]*.[0-9]*) return 0 ;;
+        *) return 1 ;;
+    esac
 }
 
 # The part the launcher the operator typed runs, while Eigen runs on: get the new version, check it, and hand over to
