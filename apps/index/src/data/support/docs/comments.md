@@ -6,7 +6,7 @@ category: Collaboration
 tags: [docs, comments, collaboration, review]
 related: [docs/share-a-document, docs/create-and-edit]
 order: 80
-updated: 2026-10-23
+updated: 2026-11-02
 ---
 
 Comments let you leave a note on any piece of text or image in a document. Each comment has its own thread, so collaborators can reply, discuss, and resolve it without touching the document itself.
@@ -33,6 +33,8 @@ To comment on an equation, click it and press the shortcut. The **Title** starts
 Click the **Comments** button (the speech bubble icon) in the top-right corner of the toolbar. A number badge shows how many open comments the document has.
 
 The sidebar lists every comment anchored to the document. Click a comment to jump to its location in the text and open the thread.
+
+A red dot on a comment means it has something new for you: a reply in a thread you've written in, a mention, or an assignment. Opening the comment clears the dot.
 
 ## Filter and find comments
 
