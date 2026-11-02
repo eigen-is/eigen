@@ -205,7 +205,7 @@ PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # killed, its container too, and exits 137, which fails the check and leaves the suite going. Without a terminal, the
 # container's shell writes the launcher's stdout and stderr into $FIX itself: docker run can lose what a short-lived
 # container printed, and a refusal check once saw exit 2 with its usage missing. What docker says itself joins ERR.
-# LAUNCH_GROUP=<file> is the /etc/group of a container shell; the host's own launch ignores it.
+# LAUNCH_GROUP=<file> and LAUNCH_PASSWD=<file> are the /etc/group and /etc/passwd of a container shell; the host's own launch ignores them.
 launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() run name var pid deadline
     shift
@@ -229,6 +229,7 @@ launch() {
         run=(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir"
             -e PATH="$PATH_IN")
         if [ -n "${LAUNCH_GROUP:-}" ]; then run+=(-v "$LAUNCH_GROUP:/etc/group:ro"); fi
+        if [ -n "${LAUNCH_PASSWD:-}" ]; then run+=(-v "$LAUNCH_PASSWD:/etc/passwd:ro"); fi
         # docker run passes the TERM on to the shell in the container, which exec makes the launcher's own.
         if [ "${LAUNCH_TTY:-0}" = 1 ]; then
             run+=(-t "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@")
@@ -490,6 +491,15 @@ for SHELL_NAME in dash busybox host; do
                 ok "$SHELL_NAME: in a group that lists another member, restart leaves backups/ as it is and says so"
             else
                 fail "$SHELL_NAME: restart in group 4242 with a member: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+            fi
+            printf 'root:x:0:0::/root:/bin/sh\nother:x:2000:4242::/home/other:/bin/sh\n' >"$FIX/passwd"
+            printf 'root:x:0:\nteam:x:4242:\n' >"$FIX/group"
+            LAUNCH_GROUP=$FIX/group LAUNCH_PASSWD=$FIX/passwd launch release restart
+            if [ "$CODE" = 0 ] && shared release && printf '%s\n' "$CALLS" | grep -q -- "fi sh $" &&
+                printf '%s\n' "$OUT" | grep -qF "▲  Other users of this host share this folder's group, 4242, so backups/ stays open to them."; then
+                ok "$SHELL_NAME: in a group another user has as primary group, restart leaves backups/ as it is and says so"
+            else
+                fail "$SHELL_NAME: restart in group 4242 with a primary user: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
             fi
         fi
         regroup release "$FIX_GID"

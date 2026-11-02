@@ -517,13 +517,16 @@ share_env() {
 }
 
 # backups_group: the group of the install folder, which is the operator's, or nothing when other users of the host share
-# it. A gid below 1000 other than root's is a system's shared group, such as users.
+# it. A gid below 1000 other than root's is a system's shared group, such as users. So is one that lists another member,
+# or that another user has as primary group.
 backups_group() {
     gid=${EIGEN_OWNER#*:}
     if [ "$gid" != 0 ] && [ "$gid" -lt 1000 ]; then return 0; fi
     owner=$(ls -ld . | awk '{ print $3 }')
     members=$({ getent group "$gid" || grep "^[^:]*:[^:]*:$gid:" /etc/group; } 2>/dev/null | cut -d: -f4)
     if printf '%s\n' "$members" | tr ',' '\n' | grep -qvx -e "$owner" -e ''; then return 0; fi
+    primary=$({ getent passwd || cat /etc/passwd; } 2>/dev/null | awk -F: -v gid="$gid" '$4 == gid { print $1 }')
+    if printf '%s\n' "$primary" | grep -qvx -e "$owner" -e ''; then return 0; fi
     printf '%s\n' "$gid"
 }
 
