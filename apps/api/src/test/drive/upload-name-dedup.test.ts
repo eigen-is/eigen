@@ -10,6 +10,7 @@ import {
     driveGet,
     drivePost,
     driveUpload,
+    driveUploadMultiple,
     TEST_PNG_BYTES,
 } from '../setup';
 
@@ -57,6 +58,15 @@ describe('upload route name dedup', () => {
             expect(names.toSorted()).toEqual(freeNames('screenshot', '.png', 1, 16).toSorted());
         },
     );
+
+    // The files of one request land at once, so each needs its own name there too.
+    test('same-named files in one upload request all land, with distinct names', async () => {
+        const user = await createTestUserOnStorage('local-fullnames', 'Upload Batch');
+        const root = await driveGet<DrivePath>(user.sessionToken, user.id, MOUNT, 'root');
+        const files = Array.from({ length: 4 }, (_, n) => new File([`${n}`], 'same.txt'));
+        const landed = await driveUploadMultiple(user.sessionToken, user.id, MOUNT, root.id, files);
+        expect(landed.map((p) => p.name).toSorted()).toEqual(freeNames('same', '.txt', 1, 4).toSorted());
+    });
 });
 
 // A create that never ends, such as a copy the client stopped reading, keeps its own name only. A name

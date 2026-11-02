@@ -424,25 +424,28 @@ export class Drive {
         }
 
         const streamed = await streamFilesToTemp(mount, request, maxSize);
+        // The files land at once, each under a free name of its own. A file that fails leaves its temp
+        // file behind, so it goes here. A file that landed hands its temp file to its thumbnail job.
+        const settled = await Promise.allSettled(
+            streamed.map((file) =>
+                finalizeUpload(this, mount, {
+                    parentId,
+                    name: file.fileName,
+                    mimeType: file.mimeType,
+                    size: file.size,
+                    hash: file.hash,
+                    tempId: file.tempId,
+                    user,
+                }).catch(async (e: unknown) => {
+                    await mount.cleanupTemp(file.tempId);
+                    throw e;
+                }),
+            ),
+        );
         const uploaded: DrivePath[] = [];
-        for (const [index, result] of streamed.entries()) {
-            try {
-                uploaded.push(
-                    await finalizeUpload(this, mount, {
-                        parentId,
-                        name: result.fileName,
-                        mimeType: result.mimeType,
-                        size: result.size,
-                        hash: result.hash,
-                        tempId: result.tempId,
-                        user,
-                    }),
-                );
-            } catch (e) {
-                // The temp files of this file and of every file after it are still there.
-                await Promise.all(streamed.slice(index).map((r) => mount.cleanupTemp(r.tempId)));
-                throw e;
-            }
+        for (const result of settled) {
+            if (result.status === 'rejected') throw result.reason;
+            uploaded.push(result.value);
         }
 
         // Watchers hear about the batch once. The notification is tagged on the folder, so the

@@ -196,7 +196,7 @@ describe('Version restore under degraded storage', () => {
 });
 
 describe('Drive.uploadFiles under degraded storage', () => {
-    test('a failed PUT removes the temp of every file streamed after it', async () => {
+    test('a failed PUT leaves no temp file behind, of any file in the request', async () => {
         const form = new FormData();
         form.append('file', new File(['a'], 'first.txt'));
         form.append('file', new File(['b'], 'second.txt'));
