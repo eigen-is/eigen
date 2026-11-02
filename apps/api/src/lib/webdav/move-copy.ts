@@ -135,17 +135,23 @@ export async function handleCopy(args: {
         verb: 'COPY',
     });
 
-    if (destExisting) {
-        await drive.deletePath(args.mountId, destExisting.id, args.user);
-        drive.lockManager.releaseAllForPath(destExisting.id);
-    }
+    // A deep copy can outlast the home's idle timeout, so it holds the home until it lands.
+    const release = drive.holdHome();
+    try {
+        if (destExisting) {
+            await drive.deletePath(args.mountId, destExisting.id, args.user);
+            drive.lockManager.releaseAllForPath(destExisting.id);
+        }
 
-    // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
-    // itself but NOT its members. Files are unaffected (they have no children).
-    if (args.depth === '0' && src.type !== 'file') {
-        await drive.createFolder(args.mountId, destParent.id, newName, args.user);
-    } else {
-        await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
+        // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
+        // itself but NOT its members. Files are unaffected (they have no children).
+        if (args.depth === '0' && src.type !== 'file') {
+            await drive.createFolder(args.mountId, destParent.id, newName, args.user);
+        } else {
+            await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
+        }
+        return new Response(null, { status: destExisting ? 204 : 201 });
+    } finally {
+        release();
     }
-    return new Response(null, { status: destExisting ? 204 : 201 });
 }

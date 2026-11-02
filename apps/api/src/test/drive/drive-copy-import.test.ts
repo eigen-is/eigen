@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types';
 import { getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
 import { copyPathAcross, copySize } from '../../lib/drive/copy-across';
@@ -12,6 +12,7 @@ import {
     createTestUser,
     driveGet,
     drivePost,
+    drivePut,
     driveUpload,
     findOrFail,
     getTestContext,
@@ -324,6 +325,74 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             const copiedNames = (await home.drive.getFolderContents(mountId, copied.id)).map((c) => c.name);
             expect(copiedNames).toContain('data.db');
             expect(copiedNames).not.toContain('versions');
+        });
+
+        // A copy into another owner's home can outlast both homes' idle timeout. It holds each until it ends, so
+        // neither closes its databases under the copy.
+        describe('a copy that outlasts the idle timeout', () => {
+            const USER_IDLE_MS = 5 * 60_000;
+
+            afterEach(() => jest.useRealTimers());
+
+            test('lands in a folder another owner shared, and both homes idle after it', async () => {
+                const id = crypto.randomUUID();
+                const writer = await createTestUser(`copy-hold-writer-${id}@test.eigen.is`, 'pw-12345678', 'W');
+                const owner = await createTestUser(`copy-hold-owner-${id}@test.eigen.is`, 'pw-12345678', 'O');
+                const ownerRoot = await driveGet(owner.sessionToken, owner.id, mountId, 'root');
+                const shared = await drivePost<DrivePath>(
+                    owner.sessionToken,
+                    owner.id,
+                    mountId,
+                    `folder/${ownerRoot.id}`,
+                    {
+                        folderName: 'shared-for-copy',
+                    },
+                );
+                await drivePut(owner.sessionToken, owner.id, mountId, `path/${shared.id}/acl`, {
+                    add: [{ id: writer.email, read: true, write: true }],
+                });
+                const writerRoot = await driveGet(writer.sessionToken, writer.id, mountId, 'root');
+                const source = await driveUpload<DrivePath>(
+                    writer.sessionToken,
+                    writer.id,
+                    mountId,
+                    writerRoot.id,
+                    new File(['slow-copy'], 'slow-copy.txt', { type: 'text/plain' }),
+                );
+
+                const sourceHome = await getHome(writer.id);
+                const targetHome = await getHome(owner.id);
+                const download = sourceHome.drive.downloadFile.bind(sourceHome.drive);
+                let closingMidCopy: boolean[] | undefined;
+                // The copy reads the source between its checks and its write, which is where the clock jumps.
+                const slowDownload = spyOn(sourceHome.drive, 'downloadFile').mockImplementation(
+                    async (sourceMountId, pathId) => {
+                        jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                        closingMidCopy = [sourceHome.closing, targetHome.closing];
+                        return download(sourceMountId, pathId);
+                    },
+                );
+                jest.useFakeTimers();
+                // A request re-arms the idle on the fake clock, so only the copy's holds can keep the homes past it.
+                sourceHome.touch();
+                targetHome.touch();
+                try {
+                    const res = await copyFile(writer.sessionToken, writer.id, mountId, source.id, {
+                        targetOwnerId: owner.id,
+                        targetMountId: mountId,
+                        targetParentId: shared.id,
+                    });
+                    expect((await assertJson<DrivePath>(res)).size).toBe('slow-copy'.length);
+                } finally {
+                    slowDownload.mockRestore();
+                }
+                expect(closingMidCopy).toEqual([false, false]);
+
+                jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                expect([sourceHome.closing, targetHome.closing]).toEqual([true, true]);
+                jest.useRealTimers();
+                await Promise.all([sourceHome.close(), targetHome.close()]);
+            });
         });
     });
 
