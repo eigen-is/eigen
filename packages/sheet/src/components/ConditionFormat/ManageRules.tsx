@@ -1,14 +1,16 @@
-// The Manage rules dialog: the current sheet's conditional-format rules, each with its range, a plain-English
-// description and a swatch of its style, and a delete button per rule.
+// The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules, each with its
+// range, a plain-English description and a swatch of its style. Its delete button per rule removes the rule at once,
+// so the dialog is a list with only Close in its footer.
 
 import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { DialogFooter } from '@workspace/ui/components/dialog';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { X } from 'lucide-react';
-import { useContext, useMemo } from 'react';
+import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { useDialog } from '../../hooks/useDialog';
+import { useDialogProps } from '../../hooks/useDialog';
 import { findSheet } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
@@ -116,11 +118,8 @@ function RuleSwatch({ rule }: { rule: ConditionalFormatRule }) {
 
 export function ManageRules() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { hideDialog } = useDialog();
-
-    const rules = useMemo(() => {
-        return findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
-    }, [context]);
+    const dialogProps = useDialogProps();
+    const rules = findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
 
     const deleteRule = (ruleIndex: number) => {
         setContext((ctx) => {
@@ -130,17 +129,13 @@ export function ManageRules() {
     };
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4">
-            <DialogHeader>
-                <DialogTitle>Conditional formatting rules</DialogTitle>
-            </DialogHeader>
-
+        <FormDialog {...dialogProps} title="Conditional formatting rules" size="md">
             {rules.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
             ) : (
-                <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto divide-y divide-border">
+                <div className="max-h-[40vh] overflow-y-auto border border-border rounded-md divide-y divide-border">
                     {rules.map((rule, i) => (
-                        // biome-ignore lint/suspicious/noArrayIndexKey: rules list is stable within the dialog lifecycle
+                        // biome-ignore lint/suspicious/noArrayIndexKey: a rule has no id, and a row keeps no state for a delete to misplace
                         <div key={i} className="flex items-center gap-3 px-3 py-2 text-sm">
                             <RuleSwatch rule={rule} />
                             <div className="flex-1 min-w-0">
@@ -163,11 +158,7 @@ export function ManageRules() {
                 </div>
             )}
 
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={hideDialog}>
-                    Close
-                </Button>
-            </DialogFooter>
-        </div>
+            <DialogFooter showCloseButton />
+        </FormDialog>
     );
 }

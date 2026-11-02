@@ -554,7 +554,7 @@ function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
 
 function ConditionalFormattingSubmenu() {
     const { setContext } = useContext(WorkbookContext);
-    const { showDialog, showFormDialog } = useDialog();
+    const { showFormDialog } = useDialog();
 
     return (
         <DropdownMenuSub>
@@ -630,7 +630,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Management rules</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>Management rules</DropdownMenuItem>
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
@@ -646,7 +646,7 @@ function ConditionalFormattingSubmenu() {
                             Delete sheet rule
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>
+                        <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>
                             Management rules
                         </DropdownMenuItem>
                     </DropdownMenuSubContent>

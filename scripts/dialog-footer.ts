@@ -13,9 +13,9 @@ export const OWN_DIALOG_FOOTER = new Set([
     'apps/mail/src/components/mail/email-draft.tsx', // an alert with one OK button
     'apps/mail/src/components/mail/mail-shortcuts-dialog.tsx', // information only
     'apps/mail/src/components/mail/share-and-send-dialog.tsx', // three actions
+    'packages/sheet/src/components/ConditionFormat/ManageRules.tsx', // a list, in a FormDialog shell
     // Sheet dialogs not yet moved onto FormDialog.
     'packages/sheet/src/components/CellRangeDialog/index.tsx',
-    'packages/sheet/src/components/ConditionFormat/ManageRules.tsx',
     'packages/sheet/src/components/DataVerification/index.tsx',
     'packages/sheet/src/components/FormatDialogs/CustomCurrencies.tsx',
     'packages/sheet/src/components/FormatDialogs/CustomDateTimeFormats.tsx',
