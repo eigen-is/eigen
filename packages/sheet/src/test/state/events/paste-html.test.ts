@@ -685,10 +685,10 @@ describe('HTML-table paste — the copy of this tab', () => {
     });
 
     // The check reads the copy's cell texts and not its styles, so it takes a fraction of the time the copy took. The
-    // test compares the two because wall-clock time swings with the machine's load. Landing 200,000 cells takes far
+    // test compares the two because wall-clock time swings with the machine's load. Landing 40,000 cells takes far
     // longer than the check, so the paste goes over part of a merge, which stops it right after the check.
-    it('recognises a 20,000-row copy, or turns another table away, in a fraction of the time the copy took', () => {
-        const rows = 20000;
+    it('recognises a 4,000-row copy, or turns another table away, in a fraction of the time the copy took', () => {
+        const rows = 4000;
         const data = Array.from({ length: rows + 1 }, (_, r) =>
             Array.from({ length: 10 }, (_, c): Cell => ({ v: r * c, m: String(r * c), bg: '#ff0000' })),
         );

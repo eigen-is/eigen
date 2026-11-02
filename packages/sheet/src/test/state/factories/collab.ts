@@ -10,7 +10,7 @@ import { replaySheetsOps } from '../../../engine';
 import type { Context } from '../../../state/context';
 import { FormulaCache } from '../../../state/modules/formula-cache';
 import { groupValuesRefresh } from '../../../state/modules/formula-exec';
-import { pushEntry, recordEntry, redoEntry, undoEntry } from '../../../state/modules/history';
+import { pushEntry, recordEntry, redoEntry, stepNewestEntry, undoEntry } from '../../../state/modules/history';
 import type { History, Op } from '../../../state/types';
 import type { PatchOptions } from '../../../state/utils/patch';
 import { filterPatch, opToPatch, patchToOp } from '../../../state/utils/patch';
@@ -100,21 +100,17 @@ export function tabReceive(t: Tab, ops: Op[]) {
 
 // Workbook's handleUndo and handleRedo: the entry changes stacks, and the pure step makes the context and the batch.
 export function tabUndo(t: Tab): Op[] {
-    const entry = t.history.undoList.pop();
-    if (!entry) return [];
-    t.history.redoList.push(entry);
-    const { ctx, ops } = undoEntry(t.ctx, entry);
-    t.ctx = ctx;
-    return ops;
+    const step = stepNewestEntry(t.ctx, t.history.undoList, t.history.redoList, undoEntry);
+    if (!step) return [];
+    t.ctx = step.ctx;
+    return step.ops;
 }
 
 export function tabRedo(t: Tab): Op[] {
-    const entry = t.history.redoList.pop();
-    if (!entry) return [];
-    t.history.undoList.push(entry);
-    const { ctx, ops } = redoEntry(t.ctx, entry);
-    t.ctx = ctx;
-    return ops;
+    const step = stepNewestEntry(t.ctx, t.history.redoList, t.history.undoList, redoEntry);
+    if (!step) return [];
+    t.ctx = step.ctx;
+    return step.ops;
 }
 
 // A joiner decodes the stored snapshot, stored cells and no matrix, and replays the batches on it, as a browser that

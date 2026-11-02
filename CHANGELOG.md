@@ -17,7 +17,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Scrolling in Sheets** — the grid keeps up with the scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets
 - **Validation rules in Sheets (breaking)** — an existing spreadsheet opens without its dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set the rules up again, or import the Excel file again
 - **Whole-column rules in Sheets** — a validation rule on a whole column, picked by its header or from an Excel file, covers every row, below the data too. Only rows inserted inside a rule get it
-- **Pasting over rules and links in Sheets** — cells you copy or cut in the same tab replace the validation rules and links where you paste them, as in Excel, so a copied cell without one clears the destination's
+- **Pasting over rules and links in Sheets** — cells you copy or cut in the same tab replace the validation rules and links where you paste them, as in Excel. A paste, fill or move that would break a rule into too many pieces is refused, with a notice
 - **Copying hidden rows and columns in Sheets** — a copy, cut or drag move takes them along, as in Excel, where a cut used to lose them. A copy leaves out the rows a filter hides
 - **The Sheets bar** — its format buttons fold into the **Format** menu a group at a time as the bar narrows, alignment first, as in Docs, and an open side panel counts. The menus no longer scroll sideways
 - **Sheet names** — a tab name may hold a fullwidth ： or ？, as in Excel. A refused name says why: at most 31 characters, none of `\ / ? * [ ] :`, and no `'` at either end
@@ -39,6 +39,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
 - **Filters and hidden rows in Sheets** — applying, changing or clearing a filter leaves the rows you hid by hand hidden
+- **Sheet names in formulas** — a formula finds a sheet even when its name's case differs, as in Excel, so `=data!A1` reads the tab Data. A tab can't take another tab's name in another case
 - **Formulas that didn't update in Sheets** — formulas with spaces such as `=A1 + 1`, INDEX, whole columns on another sheet, and whole columns after a row insert or a paste below the data recalculate when their cells change
 - **Pasting from WPS Office** — a table pasted from WPS keeps its cell styles, such as bold and colors
 - **Filter buttons on narrow columns** — a column narrower than its filter button keeps the button inside it, so a click opens that column's filter

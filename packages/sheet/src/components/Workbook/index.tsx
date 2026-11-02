@@ -40,6 +40,7 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
+    endPointerDrag,
     ensureSheetIndex,
     filterPatch,
     getFlowdata,
@@ -49,7 +50,6 @@ import {
     handlePaste,
     initSheetData,
     initSheetIndex,
-    insertRowCol,
     pasteChart,
     patchToOp,
     pushEntry,
@@ -59,6 +59,7 @@ import {
     SHEET_HOTKEYS,
     selectionCache,
     sheetChartClipboardItem,
+    stepNewestEntry,
     undoEntry,
     ValidationLimitError,
     warmFormulaCellInfoMapOnIdle,
@@ -193,13 +194,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                 // An edit that would make a validation rule too complex is refused whole: nothing of it applies, and
                 // the user sees why. A formula it evaluated may have reached the engine's map, which learns the sheets
-                // again.
+                // again. A mouse-up's edit still ends its drag.
                 const refuse = (e: unknown) => {
                     if (!(e instanceof ValidationLimitError)) throw e;
                     base.formulaCache.resetEngine();
                     warmFormulaCellInfoMapOnIdle(getContext);
                     commit(
-                        produce(base, (ctx) => {
+                        produce(base, (ctx: Context) => {
+                            endPointerDrag(ctx);
                             ctx.warnDialog = e.message;
                         }),
                     );
@@ -263,23 +265,19 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const handleUndo = useCallback(() => {
             if (contextRef.current.allowEdit === false) return;
             const { undoList, redoList } = globalCache.current;
-            const entry = undoList.pop();
-            if (!entry) return;
-            redoList.push(entry);
-            const { ctx, ops } = undoEntry(contextRef.current, entry);
-            commit(ctx);
-            if (ops.length > 0) onOp?.(ops);
+            const step = stepNewestEntry(contextRef.current, undoList, redoList, undoEntry);
+            if (!step) return;
+            commit(step.ctx);
+            if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
         const handleRedo = useCallback(() => {
             if (contextRef.current.allowEdit === false) return;
             const { undoList, redoList } = globalCache.current;
-            const entry = redoList.pop();
-            if (!entry) return;
-            undoList.push(entry);
-            const { ctx, ops } = redoEntry(contextRef.current, entry);
-            commit(ctx);
-            if (ops.length > 0) onOp?.(ops);
+            const step = stepNewestEntry(contextRef.current, redoList, undoList, redoEntry);
+            if (!step) return;
+            commit(step.ctx);
+            if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
         useEffect(() => {
@@ -649,32 +647,8 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         }
                     }
 
-                    const txtdata = paste.html || paste.text;
-                    // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML
-                    // and a live element's innerHTML loads <img> and fires its onerror even detached.
-                    const trList = new DOMParser().parseFromString(txtdata, 'text/html').querySelectorAll('table tr');
-                    const rowCount = getFlowdata(ctx)?.length ?? 0;
-                    const range = ctx.selections;
-                    const firstRow = range?.[0]?.row[0];
-                    const rowToBeAdded = firstRow == null ? 0 : trList.length + firstRow - rowCount;
-                    if (rowToBeAdded > 0) {
-                        const insertRowColOp: SetContextOptions['insertRowColOp'] = {
-                            type: 'row',
-                            index: rowCount - 1,
-                            count: rowToBeAdded,
-                            direction: 'rightbottom',
-                            id: ctx.currentSheetId,
-                        };
-                        setContextWithProduce(
-                            (draftCtx) => {
-                                insertRowCol(draftCtx, insertRowColOp);
-                                draftCtx.selections = range;
-                            },
-                            {
-                                insertRowColOp,
-                            },
-                        );
-                    }
+                    // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste
+                    // adds none.
                     setContextWithProduce((draftCtx) => {
                         try {
                             handlePaste(draftCtx, e);
