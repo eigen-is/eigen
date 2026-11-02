@@ -11,6 +11,7 @@ export {
     quoteSheetName,
     rangeToA1,
     rowIndexToLabel,
+    SHEET_NAME_END_QUOTES,
     SHEET_NAME_FORBIDDEN,
     sheetNameKey,
     toA1,

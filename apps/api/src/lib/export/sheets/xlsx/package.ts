@@ -3,7 +3,13 @@
 
 import type { Sheet } from '@workspace/lib/sheets';
 import { escapeXml, stripNonXmlChars } from '@workspace/lib/xml';
-import { MAX_SHEET_NAME_LENGTH, quoteSheetName, rangeToA1, SHEET_NAME_FORBIDDEN } from '@workspace/sheet/engine';
+import {
+    MAX_SHEET_NAME_LENGTH,
+    quoteSheetName,
+    rangeToA1,
+    SHEET_NAME_END_QUOTES,
+    SHEET_NAME_FORBIDDEN,
+} from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
 import { R_NS, SML_NS } from '../../../ooxml/ooxml';
 import { cut } from './strings';
@@ -44,10 +50,10 @@ export function workbookXml(sheets: Sheet[], names: string[], ids: string[], act
     ].join('');
 }
 
-// Excel refuses a name past 31 characters, holding \ / ? * [ ] :, starting or ending with a quote, empty, History, or
-// one another sheet holds in any case. A name it takes is kept, the first of a name keeping it; any other is repaired
-// and, when that clashes, numbered as Excel numbers a copy, past every name the workbook holds. Formulas naming a
-// repaired sheet keep the name they had.
+// Excel refuses a name that breaks the sheet-name rule, an empty one, History, and one another sheet holds in any case.
+// A name it takes is kept, and the first sheet holding a name keeps it. Any other name is repaired, and when that
+// clashes it is numbered as Excel numbers a copy, past every name the workbook holds. Formulas naming a repaired sheet
+// keep the name they had.
 export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] {
     const taken = new Set(['history']);
     const kept = sheets.map(({ name }) => {
@@ -71,5 +77,5 @@ export function sheetNames(sheets: Pick<Sheet, 'name'>[], lost: Lost): string[] 
 
 function legalName(name: string): string {
     const replaced = stripNonXmlChars(name).replace(SHEET_NAME_FORBIDDEN, '_');
-    return cut(replaced, MAX_SHEET_NAME_LENGTH).replace(/^'+|'+$/g, '');
+    return cut(replaced, MAX_SHEET_NAME_LENGTH).replace(SHEET_NAME_END_QUOTES, '');
 }
