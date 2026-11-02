@@ -11,6 +11,8 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
 import { getAvatarsDir } from '../config/paths';
+import { isNewerBuild } from '../config/release';
+import { getPublicConfig } from '../config/server-config';
 import { ApiError } from '../core';
 import { rotateHomeDataEpoch } from '../home/data-epoch';
 import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-home';
@@ -74,6 +76,15 @@ export async function restoreHome(
             // already have cost the user their open pages.
             const incomplete = incompleteReason(manifest);
             if (incomplete) throw new ApiError(400, `${artifactName} ${incomplete}`);
+            // The database check after the install misses the documents of an s3 mount, which go to the bucket.
+            const { version } = getPublicConfig();
+            if (isNewerBuild(manifest.appVersion, version)) {
+                throw new ApiError(
+                    400,
+                    `${artifactName} was made by Eigen ${manifest.appVersion}, newer than this server (${version}): ` +
+                        'restore it on a server at least as new',
+                );
+            }
             requireVerified(await verifyFolder(folder, onProgress), artifactName);
             // Read before the first write, since nothing takes an auth row back: a shares.json that does not read
             // would otherwise leave a deleted user signed in to an empty home.

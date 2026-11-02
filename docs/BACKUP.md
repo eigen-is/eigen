@@ -201,7 +201,7 @@ A marker lost to a torn write, or one missing a field, does nothing, and the hom
 
 ## A restore refuses databases from a newer server
 
-Every restored database is checked against the schema this build supports, and one from a newer server is refused with both versions named. Without it the archive would pass `quick_check` and then fail the home on its next load. So restore onto a server at least as new as the one that wrote the archive.
+Every restored database is checked against the schema this build supports, and one from a newer server is refused with both versions named. Without it the archive would pass `quick_check` and then fail the home on its next load. The check reads only the files on this disk, so the documents of an `s3` mount, which go to the bucket, would pass it unread. So both restores also refuse an archive whose manifest names a newer Eigen than this one (`isNewerBuild` in `apps/api/src/lib/config/release.ts`), the per-home one before it takes the home. So restore onto a server at least as new as the one that wrote the archive.
 
 ## The whole-server backup runs inside the API
 

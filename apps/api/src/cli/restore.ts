@@ -65,12 +65,12 @@ import {
     TEAM_HOMES_DIR,
     USER_HOMES_DIR,
 } from '../lib/config/paths';
-import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
+import { API_IMAGE_KEY, isNewerBuild, PIN_KEYS } from '../lib/config/release';
 import { SHARE_REGISTRY_DB_CONFIG } from '../lib/share/db-config';
 import { WAITLIST_DB_CONFIG } from '../lib/waitlist/db-config';
 import { readEnvFile } from './env-file';
 import type { Owner } from './install';
-import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
+import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
 import type { Ui } from './ui';
 import { createUi, glyphLine, refuseUsage } from './ui';
 
@@ -292,8 +292,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     if (read.verify.status !== 'verified') {
         return refuse(`${name} is damaged: ${describeFailures(read.verify)}.`, 'Restore another archive.');
     }
-    // Bun.semver.order throws on what is not a version.
-    if (!VERSION_PATTERN.test(manifest.appVersion) || Bun.semver.order(manifest.appVersion, VERSION) > 0) {
+    if (isNewerBuild(manifest.appVersion, VERSION)) {
         return refuse(
             `${name} is an archive of Eigen ${manifest.appVersion}; this install runs ${VERSION}.`,
             'Update first, then restore.',

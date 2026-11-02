@@ -1,5 +1,5 @@
-// What a release is made of, for the CLI that pins it and the server backup that records the pins.
-// IMAGES in ./eigen.
+// What a release is made of, for the CLI that pins it and the server backup that records the pins, and which of two
+// releases is the newer. IMAGES in ./eigen.
 const IMAGE_NAMES = ['api', 'frontend', 'postfix', 'dovecot', 'unbound'] as const;
 // The keys of the pins the launcher resolves on the host, where the Docker socket is; PINS in ./eigen holds them as
 // key=value lines.
@@ -7,3 +7,14 @@ const imageKey = (name: (typeof IMAGE_NAMES)[number]) => `EIGEN_${name.toUpperCa
 export const PIN_KEYS = ['EIGEN_REGISTRY', 'EIGEN_VERSION', ...IMAGE_NAMES.map(imageKey)];
 // The build a pinned install runs.
 export const API_IMAGE_KEY = imageKey('api');
+
+// Whether Eigen `appVersion`, such as the build an archive was made by, is newer than `version`. Its databases may then
+// carry a schema that `version` cannot open, which a restore does not check file by file everywhere, so every restore
+// refuses it. What is not a version counts as newer: Bun.semver.order throws on it.
+export function isNewerBuild(appVersion: string, version: string): boolean {
+    try {
+        return Bun.semver.order(appVersion, version) > 0;
+    } catch {
+        return true;
+    }
+}

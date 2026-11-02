@@ -1464,7 +1464,7 @@ describe('Backup round trip of a home that stores files by name', () => {
     });
 });
 
-describe('Backup restore of one home starts the trash over', () => {
+describe('Backup restore of one home judges, then takes the home', () => {
     let user: TestUser;
     let mountId: string;
     let rootId: string;
@@ -1507,6 +1507,29 @@ describe('Backup restore of one home starts the trash over', () => {
             db.close();
         }
     }
+
+    // Never evicted, nothing moved aside or parked, no tab told to reload.
+    async function expectUntouched(home: Home, epoch: string): Promise<void> {
+        expect(await getHome(user.id)).toBe(home);
+        expect(safetyCopies(user.id, PRE_RESTORE_SUFFIX)).toEqual([]);
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        expect(getDataEpoch(user.id)).toBe(epoch);
+    }
+
+    test('an archive of a newer Eigen is refused before the home is taken', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 60_000), (manifest) => {
+            manifest.appVersion = '999.0.0';
+        });
+        const home = await getHome(user.id);
+        const epoch = getDataEpoch(user.id);
+
+        await expect(restoreHome(artifact, user.id, `restore-newer-app-${Date.now()}`)).rejects.toThrow(
+            `${artifact} was made by Eigen 999.0.0`,
+        );
+
+        await expectUntouched(home, epoch);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
 
     test('a restore, and a restore of the copy it left, start the trash over', async () => {
         const homeDir = join(TEST_DATA_DIR, 'home', user.id);
