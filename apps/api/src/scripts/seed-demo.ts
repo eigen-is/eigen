@@ -524,7 +524,6 @@ async function main(): Promise<void> {
         // Comment threads are chats inside the container's chat/ subfolder (see assertCommentChatExists).
         const chatFolder = await teamDrive.getChildByName(teamMountId, docPath.id, 'chat');
         if (!chatFolder) throw new Error(`chat/ subfolder missing for ${docPath.name}`);
-        const collab = await teamDrive.getCollabDocument(teamMountId, docPath.id);
         const docJson = htmlToDocJson(docSchema(), doc.html);
         const cards: { spec: (typeof doc.comments)[number]; card: CommentCard; chatName: string }[] = [];
         for (const comment of doc.comments) {
@@ -550,8 +549,10 @@ async function main(): Promise<void> {
             }
             cards.push({ spec: comment, card, chatName: chat.name });
         }
-        // The doc's one write, with the anchored marks; cards land in the comments Y.Map the
-        // panel renders from. Both persist through the live collab doc.
+        // The doc's one write, with the anchored marks. The cards land in the comments Y.Map the panel renders
+        // from. The collab doc opens right before the write, because a document that no socket joins closes a
+        // minute after its open, and a write after that close is lost.
+        const collab = await teamDrive.getCollabDocument(teamMountId, docPath.id);
         const marked = prosemirrorJSONToYDoc(docSchema(), docJson, 'default');
         commitEigendocImport(collab.doc, {
             update: Y.encodeStateAsUpdate(marked),
@@ -645,7 +646,6 @@ async function main(): Promise<void> {
     await teamDrive.createFolder(teamMountId, boardPath.id, 'chat', boardAuthor);
     teamDocs.set(KANBAN.name, boardPath);
     const boardId = boardPath.id;
-    const board = await teamDrive.getCollabDocument(teamMountId, boardId);
 
     // Card chat threads: same pattern as doc comments — a real chat inside the container's chat/
     // subfolder, seeded by the card's creator persona and linked back onto the card by name.
@@ -684,6 +684,7 @@ async function main(): Promise<void> {
     // so the board resolves author names under any MAIL_DOMAIN. Every card also gets the shared
     // default card color, its chat link, and a createdAt relative to seed time.
     const boardCreatedAt = Date.now() - 14 * 86_400_000;
+    const board = await teamDrive.getCollabDocument(teamMountId, boardId);
     board.doc.transact(() => {
         for (const rootName of ['tasks', 'columns']) {
             for (const [, entry] of getItemMapRoot(board.doc, rootName)) {
