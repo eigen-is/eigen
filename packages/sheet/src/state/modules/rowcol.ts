@@ -1,7 +1,7 @@
-// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts the cells, merges and
-// formulas of every sheet (applySheetsInsertRowCol, applySheetsDeleteRowCol). This module writes that result back
-// into the editor's draft, then shifts what the engine leaves alone, such as the filter, read-only rows, the calc
-// chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
+// Row and column inserts, deletes, hides and unhides on the open workbook. The engine shifts what every reader of the
+// workbook sees, such as the cells, the formulas and the validation rules (applySheetsInsertRowCol). This module
+// writes that result back into the editor's draft, then shifts what the engine leaves alone, such as the links, the
+// calc chain and the selection. A local edit, a peer's op and an undo all come through here. It also tells the editors
 // and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
@@ -11,8 +11,6 @@ import {
     applySheetsInsertRowCol,
     shiftCellKeyedForDelete,
     shiftCellKeyedForInsert,
-    shiftKeyedMapForDelete,
-    shiftKeyedMapForInsert,
     shiftRangeForDelete,
     shiftRangeForInsert,
 } from '../../engine/rowcol';
@@ -21,7 +19,6 @@ import type { Context } from '../context';
 import { getSheetConfig } from '../context';
 import type { CalcChainEntry, Sheet } from '../types';
 import { getSheetIndex } from '../utils';
-import { shiftFilterForDelete, shiftFilterForInsert } from './filter-shift';
 
 export function insertRowCol(
     ctx: Context,
@@ -41,16 +38,6 @@ export function insertRowCol(
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
 
-    // The engine refuses an op on a read-only row or column, but it does not move them.
-    // They move here, by the same rule as hidden rows and columns.
-    const { config } = sheet;
-    if (type === 'row' && config?.rowReadOnly) {
-        config.rowReadOnly = shiftKeyedMapForInsert(config.rowReadOnly, index, count, direction);
-    }
-    if (type === 'column' && config?.colReadOnly) {
-        config.colReadOnly = shiftKeyedMapForInsert(config.colReadOnly, index, count, direction);
-    }
-
     sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).map((rule) => ({
         ...rule,
         cellrange: shiftRangeForInsert(rule.cellrange, op),
@@ -62,8 +49,6 @@ export function insertRowCol(
     sheet.calcChain = (sheet.calcChain ?? []).map((entry) =>
         type === 'row' ? { ...entry, r: shift(entry.r) } : { ...entry, c: shift(entry.c) },
     );
-    shiftFilterForInsert(sheet, op);
-    shiftFrozenFocus(sheet, type, shift);
 
     sheet.hyperlink = shiftCellKeyedForInsert(sheet.hyperlink, type, index, count, direction);
 
@@ -98,16 +83,6 @@ export function deleteRowCol(
     if (sheetIndex == null) return;
     const sheet = ctx.sheets[sheetIndex];
 
-    // The engine refuses an op on a read-only row or column, but it does not move them.
-    // They move here, by the same rule as hidden rows and columns.
-    const { config } = sheet;
-    if (type === 'row' && config?.rowReadOnly) {
-        config.rowReadOnly = shiftKeyedMapForDelete(config.rowReadOnly, start, end);
-    }
-    if (type === 'column' && config?.colReadOnly) {
-        config.colReadOnly = shiftKeyedMapForDelete(config.colReadOnly, start, end);
-    }
-
     sheet.alternateFormatRules = (sheet.alternateFormatRules ?? []).flatMap((rule) => {
         const cellrange = shiftRangeForDelete(rule.cellrange, op);
         return cellrange ? [{ ...rule, cellrange }] : [];
@@ -123,8 +98,6 @@ export function deleteRowCol(
         }
     }
     sheet.calcChain = calcChain;
-    shiftFilterForDelete(sheet, op);
-    shiftFrozenFocus(sheet, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
 
     sheet.hyperlink = shiftCellKeyedForDelete(sheet.hyperlink, type, start, end);
     if (!fromBatch) ctx.selections = undefined;
@@ -232,16 +205,4 @@ function writeBackSheets(ctx: Context, sheets: Sheet[]) {
             }
         }
     }
-}
-
-// Writes `frozen` whole, never a field inside it. A peer's unfreeze removes `frozen`, and a write into a field
-// that is gone would not apply.
-function shiftFrozenFocus(sheet: Sheet, type: 'row' | 'column', shift: (focus: number) => number) {
-    const { frozen } = sheet;
-    if (!frozen?.range) return;
-    const ranged = type === 'row' ? frozen.type === 'rangeRow' : frozen.type === 'rangeColumn';
-    if (!ranged && frozen.type !== 'rangeBoth') return;
-    const axis = type === 'row' ? 'row_focus' : 'column_focus';
-    const focus = shift(frozen.range[axis]);
-    if (focus !== frozen.range[axis]) sheet.frozen = { ...frozen, range: { ...frozen.range, [axis]: focus } };
 }

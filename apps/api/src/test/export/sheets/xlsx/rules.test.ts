@@ -6,7 +6,7 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { MAX_VALIDATION_RANGES, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
@@ -324,6 +324,52 @@ describe('a data validation', () => {
                 expect(ruleAt(read.dataValidations, r, c)).toEqual(ruleAt(dataValidations, r, c));
             }
         }
+    });
+
+    // Many small ranges over many others, every pair close, which a check per pair made take seconds.
+    test('two rules of as many ranges as a rule may hold, close together, cut in a moment and read back', () => {
+        const list = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
+        const cells = (from: number) =>
+            Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({
+                row: [from + 2 * i, from + 2 * i],
+                column: [1, 1],
+            }));
+        const dataValidations = {
+            'validation-1': { ranges: cells(0), rule: list },
+            'validation-2': { ranges: cells(1), rule: list },
+        };
+        const started = performance.now();
+        const { lost, ...read } = roundTrip({ dataValidations });
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(lost).toEqual([]);
+        for (const r of [0, 1, 2 * MAX_VALIDATION_RANGES - 1]) {
+            expect(ruleAt(read.dataValidations, r, 1)).toEqual(ruleAt(dataValidations, r, 1));
+        }
+    });
+
+    // A cut can split each of a rule's ranges in two, and the importer drops a rule of more ranges than a rule may
+    // hold. So the export joins what it cut, and drops and counts a rule still past the cap.
+    test('a rule the cuts leave with more ranges than a rule may hold is dropped and counted', () => {
+        const list = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
+        const rows = Array.from({ length: MAX_VALIDATION_RANGES }, (_, r) => ({ row: [r, r], column: [0, 9] }));
+        const cuts = Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({ row: [2 * i, 2 * i], column: [4, 4] }));
+        const column = [{ row: [0, 2 * MAX_VALIDATION_RANGES - 1], column: [4, 4] }];
+        const cut = roundTrip({
+            dataValidations: {
+                'validation-1': { ranges: rows, rule: list },
+                'validation-2': { ranges: cuts, rule: list },
+            },
+        });
+        expect(cut.lost).toEqual(['validations-dropped']);
+        expect(Object.keys(cut.dataValidations ?? {})).toHaveLength(1);
+        const rejoined = roundTrip({
+            dataValidations: {
+                'validation-1': { ranges: rows, rule: list },
+                'validation-2': { ranges: column, rule: list },
+            },
+        });
+        expect(rejoined.lost).toEqual([]);
+        expect(rejoined.xml).toContain('sqref="A1:D8192 F1:J8192"');
     });
 
     test('a whole-column rule writes the whole column, and reads back as one', () => {

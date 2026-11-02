@@ -7,9 +7,11 @@
 
 import { describe, expect, test } from 'bun:test';
 import type { Sheet as LibSheet, SheetWithCalcChain } from '@workspace/lib/sheets';
+import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import { replaySheetsOps, withMaterializedData } from '../../../engine';
 import { normalizeSheetConfig } from '../../../engine/sheet-config';
+import type { ShiftedSheet } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { undoEntry } from '../../../state/modules/history';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
@@ -45,8 +47,8 @@ function richContext(): Context {
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
                 calcChain: [{ r: 2, c: 1, id: 'id_1' }],
-                // The hyperlinks are shifted only in the state layer, and the validation rules ship whole as well,
-                // so they prove the metadata ops carry every field a receiver needs.
+                // The hyperlinks are shifted only in the state layer, so they prove the metadata ops carry every
+                // field a receiver needs. The validation rules ship nothing and prove the replay moves them itself.
                 hyperlink: { '2_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } },
                 dataValidations: {
                     v: {
@@ -101,15 +103,13 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink']));
-        // Each validation rule the insert moved ships under its own id, so a rule a peer added meanwhile survives.
-        expect(metaPaths).not.toContain('dataValidations');
-        const moved = ops.filter((op) => op.path[0] === 'dataValidations').map((op) => op.path);
-        expect(moved).toEqual(Object.keys(next.sheets[0].dataValidations ?? {}).map((id) => ['dataValidations', id]));
+        expect(ops.find((op) => op.path[0] === 'hyperlink')?.value).toEqual(next.sheets[0].hyperlink);
+        // Every receiver's engine moves the config, with its merges, and the validation rules itself, so the insert
+        // ships neither, and no merge stamp a peer's row op could leave unresolved.
+        expect(ops.filter((op) => op.path[0] === 'dataValidations' || op.path[0] === 'config')).toEqual([]);
+        expect(ops.filter((op) => op.path.at(-1) === 'mc')).toEqual([]);
         // Every receiver derives the sheet's size from its cells, so the size does not ship.
         expect(metaPaths).not.toContain('row');
-        const configOp = ops.find((op) => op.path[0] === 'config');
-        expect(configOp?.value).toEqual(next.sheets[0].config);
         // calcChain scales with formula count and every consumer re-derives it,
         // so a plain insert must not ship it.
         expect(metaPaths).not.toContain('calcChain');
@@ -352,5 +352,184 @@ describe('two row ops sent at once keep the sheet size in step with its cells', 
         const onB = receive(b.next, a.ops).sheets[0];
         const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
         for (const sheet of [onA, onB, joined]) expect(size(sheet)).toEqual(grid(sheet));
+    });
+});
+
+// A whole-column rule already runs to the grid's last row, so an insert inside it leaves it as it was. The insert
+// then writes no rule, so the undo entry holds none, and an undo has none to put back over a peer's edit.
+test('a row insert inside a whole-column rule writes no rule', () => {
+    const base = produce(richContext(), (ctx: Context) => {
+        ctx.sheets[0].dataValidations = {
+            column: {
+                ranges: [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [0, 0] }],
+                rule: { type: 'dropdown', type2: '', value1: 'a,b', value2: '' },
+            },
+        };
+    });
+    const op = author(base, (ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
+    expect([...op.patches, ...op.inverse].filter(({ path }) => path[2] === 'dataValidations')).toEqual([]);
+});
+
+// A peer can send any value in a row op, and a sheet can refuse one, such as an insert into a read-only row. A peer and
+// a joiner then skip the whole batch alike, so no other op of it lands on rows the op did not move.
+describe('a malformed or refused row op skips its whole batch', () => {
+    const write: Op = { op: 'replace', id: 'id_1', path: ['data', 0, 0], value: { v: 'x', m: 'x' } };
+    const insert = (value: Record<string, unknown>): Op => ({
+        op: 'insertRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type: 'row', index: 1, count: 1, direction: 'lefttop', ...value },
+    });
+    const remove = (value: Record<string, unknown>): Op => ({
+        op: 'deleteRowCol',
+        id: 'id_1',
+        path: [],
+        value: { type: 'row', start: 1, end: 1, ...value },
+    });
+    const cases: [string, Op][] = [
+        ['a negative index', insert({ index: -1 })],
+        ['a fractional index', insert({ index: 0.5 })],
+        ['an index past the grid', insert({ index: 2 ** 31 })],
+        ['a count of zero', insert({ count: 0 })],
+        ['a NaN count', insert({ count: Number.NaN })],
+        ['a fractional count', insert({ count: 1.5 })],
+        ['a negative start', remove({ start: -1 })],
+        ['a start past its end', remove({ start: 2, end: 1 })],
+        ['a fractional end', remove({ end: 1.5 })],
+        ['a NaN end', remove({ end: Number.NaN })],
+        ['an insert into a read-only row', insert({})],
+    ];
+
+    test.each(cases)('%s', (_, op) => {
+        const base = produce(richContext(), (ctx: Context) => {
+            const { config } = ctx.sheets[0];
+            if (config) config.rowReadOnly = { 1: 1 };
+        });
+        const [joined] = join(base, [[op, write]]).map(withMaterializedData);
+        for (const sheet of [receive(base, [op, write]).sheets[0], joined]) {
+            expect(sheet.data?.length).toBe(4);
+            expect(sheet.data?.[0]?.[0]?.v).toBe(1);
+        }
+    });
+});
+
+// Every receiver's engine moves the merges and the conditional formats, and stamps the merges' cells again. So two
+// row ops sent at once on a sheet with a merge both apply, on both tabs and for a joiner, and the merge and the
+// format stay on their cells. The log holds A's batch first.
+describe('two row ops sent at once on a sheet with a merge', () => {
+    const inserted = { type: 'row', index: 0, count: 1, direction: 'lefttop', id: 'id_1' } as const;
+    const deleted = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;
+    const cases = [
+        ['two inserts', { insertRowColOp: inserted }, 6, 5],
+        ['a delete and an insert', { deleteRowColOp: deleted }, 4, 3],
+    ] as const;
+    const run = (options: PatchOptions) => (ctx: Context) => {
+        if (options.insertRowColOp) insertRowCol(ctx, options.insertRowColOp);
+        else if (options.deleteRowColOp) deleteRowCol(ctx, options.deleteRowColOp);
+    };
+
+    test.each(cases)('%s', (_, first, rows, mergeRow) => {
+        const base = produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].conditionalFormatRules = [
+                {
+                    type: 'default',
+                    cellrange: [{ row: [3, 3], column: [2, 3] }],
+                    format: { cellColor: '#ff0000' },
+                    conditionName: 'greaterThan',
+                    conditionValue: [0],
+                },
+            ];
+        });
+        const a = author(base, run(first), first);
+        const b = author(base, run({ insertRowColOp: inserted }), { insertRowColOp: inserted });
+        const onA = receive(a.next, b.ops).sheets[0];
+        const onB = receive(receive(base, a.ops), b.ops).sheets[0];
+        const [joined] = join(base, [a.ops, b.ops]).map(withMaterializedData);
+        const merge = { r: mergeRow, c: 2, rs: 1, cs: 2 };
+        for (const sheet of [onA, onB, joined]) {
+            expect(sheet.data?.length).toBe(rows);
+            expect(sheet.config?.merge).toEqual({ [`${mergeRow}_2`]: merge });
+            expect(sheet.data?.[mergeRow]?.[2]?.mc).toEqual(merge);
+            expect(sheet.data?.[mergeRow]?.[3]?.mc).toEqual({ r: mergeRow, c: 2 });
+            expect(sheet.conditionalFormatRules?.[0].cellrange).toEqual([
+                { row: [mergeRow, mergeRow], column: [2, 3] },
+            ]);
+        }
+    });
+});
+
+// Every receiver's engine moves the frozen pane and the filter with the rows, so a row op sent with a peer's freeze,
+// filter or unfreeze leaves the same pane and filter on the author, the peer and a joiner. The log holds the peer's
+// batch first, and the author's tab then applies the log again in that order.
+describe("a row op sent with a peer's freeze or filter", () => {
+    const rows = { type: 'row', index: 0, count: 2, direction: 'lefttop', id: 'id_1' } as const;
+    const columns = { ...rows, type: 'column' } as const;
+    const freezeAndFilter = (ctx: Context) => {
+        const [sheet] = ctx.sheets;
+        sheet.frozen = { type: 'rangeBoth', range: { row_focus: 1, column_focus: 1 } };
+        sheet.filterRange = { row: [1, 3], column: [0, 1] };
+        sheet.filter = { 0: { rowhidden: { 2: 0 }, optionstate: true, str: 1, edr: 3, cindex: 0, stc: 0, edc: 1 } };
+    };
+    function race(peer: (ctx: Context) => void, options: PatchOptions, base = richContext()) {
+        const { insertRowColOp, deleteRowColOp } = options;
+        const run = (ctx: Context) => {
+            if (insertRowColOp) insertRowCol(ctx, insertRowColOp);
+            else if (deleteRowColOp) deleteRowCol(ctx, deleteRowColOp);
+        };
+        const op = author(base, run, options);
+        const fromPeer = author(base, peer);
+        const onAuthor = receive(receive(base, fromPeer.ops), op.ops).sheets[0];
+        const onPeer = receive(fromPeer.next, op.ops).sheets[0];
+        const [joined] = join(base, [fromPeer.ops, op.ops]);
+        return [onAuthor, onPeer, joined];
+    }
+    const pane = ({ frozen, filterRange, filter }: ShiftedSheet) => ({ frozen, filterRange, filter });
+
+    test('a row insert moves the pane and the filter a peer set', () => {
+        for (const sheet of race(freezeAndFilter, { insertRowColOp: rows })) {
+            expect(pane(sheet)).toEqual({
+                frozen: { type: 'rangeBoth', range: { row_focus: 3, column_focus: 1 } },
+                filterRange: { row: [3, 5], column: [0, 1] },
+                filter: { 0: { rowhidden: { 4: 0 }, optionstate: true, str: 3, edr: 5, cindex: 0, stc: 0, edc: 1 } },
+            });
+        }
+    });
+
+    test('a column insert moves the pane and the filter a peer set', () => {
+        for (const sheet of race(freezeAndFilter, { insertRowColOp: columns })) {
+            expect(pane(sheet)).toEqual({
+                frozen: { type: 'rangeBoth', range: { row_focus: 1, column_focus: 3 } },
+                filterRange: { row: [1, 3], column: [2, 3] },
+                filter: { 0: { rowhidden: { 2: 0 }, optionstate: true, str: 1, edr: 3, cindex: 2, stc: 2, edc: 3 } },
+            });
+        }
+    });
+
+    test('a row delete moves the pane and the filter a peer set', () => {
+        const deleted = { type: 'row', start: 0, end: 0, id: 'id_1' } as const;
+        for (const sheet of race(freezeAndFilter, { deleteRowColOp: deleted })) {
+            expect(pane(sheet)).toEqual({
+                frozen: { type: 'rangeBoth', range: { row_focus: 0, column_focus: 1 } },
+                filterRange: { row: [0, 2], column: [0, 1] },
+                filter: { 0: { rowhidden: { 1: 0 }, optionstate: true, str: 0, edr: 2, cindex: 0, stc: 0, edc: 1 } },
+            });
+        }
+    });
+
+    test('a row insert leaves a pane a peer removed removed', () => {
+        const frozen = produce(richContext(), freezeAndFilter);
+        const unfreeze = (ctx: Context) => {
+            delete ctx.sheets[0].frozen;
+        };
+        for (const sheet of race(unfreeze, { insertRowColOp: rows }, frozen)) expect(sheet.frozen).toBeUndefined();
+    });
+
+    test('a row insert moves a pane of a bare type that has a range', () => {
+        const base = produce(richContext(), (ctx: Context) => {
+            ctx.sheets[0].frozen = { type: 'both', range: { row_focus: 1, column_focus: 1 } };
+        });
+        for (const sheet of race(() => {}, { insertRowColOp: rows }, base)) {
+            expect(sheet.frozen).toEqual({ type: 'both', range: { row_focus: 3, column_focus: 1 } });
+        }
     });
 });

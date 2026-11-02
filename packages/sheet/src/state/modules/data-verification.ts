@@ -4,9 +4,8 @@
 // Which rule covers a cell is the rule store's to say (validationAt).
 
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
-import { isNil } from 'es-toolkit/compat';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
-import { iscelldata } from '../../engine/formula-utils';
+import { iscelldata, matrixWidth } from '../../engine/formula-utils';
 import type { Cell } from '../../engine/types';
 import type { CellMatrix, Context, DataVerificationRule, SingleRange } from '..';
 import {
@@ -101,7 +100,6 @@ export function getDropdownList(ctx: Context, txt: string) {
     return list;
 }
 
-// Data validation
 export function validateCellData(ctx: Context, item: DataVerificationRule, cellValue: CellValueForValidation) {
     const { type, type2, value1, value2 } = item;
     if (type === 'dropdown') {
@@ -273,9 +271,7 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
 export const CHECKBOX_CHECKED_VALUE = booleanDisplay(true);
 export const CHECKBOX_UNCHECKED_VALUE = booleanDisplay(false);
 
-// Box side in px. Painted on the canvas (render/cells.ts) and hit-tested in the
-// mousedown path (events/mouse-cell.ts) from the same checkboxRect geometry —
-// same split as the filter button's FILTER_BUTTON_* constants.
+// The tick box's side in px. The painter and the hit test both place it through checkboxRect, so they agree.
 export const CHECKBOX_SIZE = 10;
 // Gap between the box and the label a custom-value rule keeps.
 export const CHECKBOX_LABEL_GAP = 4;
@@ -291,8 +287,7 @@ export type CellGlyphRect = { x: number; y: number; size: number };
 // The one construction of that box, from the cell's own bounds. The 1px top
 // inset and the 2px the width and height give up are the grid lines the cell
 // must not paint over — what the painter has always clipped and laid text out
-// to. The hit test used to rebuild the box without the inset, so the top
-// painted row of a tick box did not respond to a click and one row below it did.
+// to. The hit test reads the same box, so the top row a tick box paints answers a click.
 export function cellTextBox(left: number, top: number, right: number, bottom: number): Rect {
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
@@ -438,7 +433,7 @@ export function applyDataVerification(ctx: Context, range: SingleRange, item: Da
     if (item.type !== 'checkbox') return;
     const seededRange = {
         row: [range.row[0], Math.min(range.row[1], d.length - 1)],
-        column: [range.column[0], Math.min(range.column[1], (d[0]?.length ?? 0) - 1)],
+        column: [range.column[0], Math.min(range.column[1], matrixWidth(d) - 1)],
     };
     let seeded = false;
     for (let r = seededRange.row[0]; r <= seededRange.row[1]; r += 1) {
@@ -661,48 +656,27 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     jfrefreshgrid(ctx, null, undefined);
 }
 
-// input data validation
+// Checks the dialog's draft before it applies, and says what is wrong through the warning dialog.
 export function confirmMessage(ctx: Context): boolean {
-    const range = getRangeByTxt(ctx, ctx.validationDraft.rangeTxt);
-    if (range.length === 0) {
+    if (getRangeByTxt(ctx, ctx.validationDraft.rangeTxt).length === 0) {
         ctx.warnDialog = 'The selection operation has not been performed yet';
         return false;
     }
-    let str = range[range.length - 1]?.row[0];
-    let edr = range[range.length - 1]?.row[1];
-    let stc = range[range.length - 1]?.column[0];
-    let edc = range[range.length - 1]?.column[1];
-    const d = getFlowdata(ctx);
-    if (!d || isNil(str) || isNil(edr) || isNil(stc) || isNil(edc)) return false;
-    if (str < 0) {
-        str = 0;
-    }
-    if (edr > d.length - 1) {
-        edr = d.length - 1;
-    }
-    if (stc < 0) {
-        stc = 0;
-    }
-    if (edc > d[0].length - 1) {
-        edc = d[0].length - 1;
-    }
-    const regulation = ctx.validationDraft;
-    const verifacationT = regulation.type;
-    const { value1, value2, type2 } = regulation;
-    // check if the value is a number
+    if (!getFlowdata(ctx)) return false;
+    const { type, value1, value2, type2 } = ctx.validationDraft;
     const v1 = parseFloat(value1).toString() !== 'NaN';
     const v2 = parseFloat(value2).toString() !== 'NaN';
-    if (verifacationT === 'dropdown') {
+    if (type === 'dropdown') {
         if (!value1) {
             ctx.warnDialog = 'The drop-down list option cannot be empty';
             return false;
         }
-    } else if (verifacationT === 'checkbox') {
+    } else if (type === 'checkbox') {
         if (!value1 || !value2) {
             ctx.warnDialog = 'Checkbox content cannot be empty';
             return false;
         }
-    } else if (verifacationT === 'number' || verifacationT === 'number_integer' || verifacationT === 'number_decimal') {
+    } else if (type === 'number' || type === 'number_integer' || type === 'number_decimal') {
         if (!v1) {
             ctx.warnDialog = 'The value entered is not a numeric type';
             return false;
@@ -717,12 +691,12 @@ export function confirmMessage(ctx: Context): boolean {
                 return false;
             }
         }
-    } else if (verifacationT === 'text_content') {
+    } else if (type === 'text_content') {
         if (!value1) {
             ctx.warnDialog = 'The text content cannot be empty';
             return false;
         }
-    } else if (verifacationT === 'text_length') {
+    } else if (type === 'text_length') {
         if (!v1) {
             ctx.warnDialog = 'The value entered is not a numeric type';
             return false;
@@ -745,7 +719,7 @@ export function confirmMessage(ctx: Context): boolean {
                 return false;
             }
         }
-    } else if (verifacationT === 'date') {
+    } else if (type === 'date') {
         if (!isdatetime(value1)) {
             ctx.warnDialog = 'The value entered is not a date type';
             return false;

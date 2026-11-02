@@ -324,10 +324,9 @@ describe('replaySheetsOps', () => {
         expect(result[0].celldata).toEqual([{ r: 1, c: 0, v: { v: 'a', m: 'a', ct: { fa: 'General', t: 'g' } } }]);
     });
 
-    test('engine readOnly throw is caught and op skipped on the replay path', () => {
-        // The engine throws RowColError as a UI-layer signal. On the BE replay
-        // path they must not propagate, or every export/preview crashes when an
-        // op queue happens to target a readOnly row.
+    test('an insert into a read-only row skips its whole batch on the replay path', () => {
+        // The engine refuses the insert with a RowColError. The replay must not crash on it, or every export and
+        // preview would, and the batch's other ops were written for the rows the insert would have moved.
         const sheet: Sheet & { config?: EditorSheetConfigExtras } = {
             id: 's1',
             name: 'Sheet1',
@@ -347,9 +346,8 @@ describe('replaySheetsOps', () => {
             ],
         ];
         const result = replaySheetsOps([sheet], ops);
-        // Row insert was skipped (no shift), but the companion patch still applied.
         expect(result[0].data!.length).toBe(1);
-        expect(result[0].data![0][0]?.v).toBe('b');
+        expect(result[0].data![0][0]?.v).toBe('a');
     });
 
     test('cell op beyond the celldata extent applies over the default editor grid', () => {
@@ -560,5 +558,31 @@ describe('a rule a peer deleted', () => {
             ],
         );
         expect(sheet.dataValidations).toEqual({});
+    });
+});
+
+// A peer can write anything as a sheet's matrix or one of its rows, and every reader of the replay walks the matrix.
+// Such a write is dropped, so one op can't make the workbook unreadable, and the cells of its batch still arrive.
+describe('a write that would leave the matrix or a row no array', () => {
+    const cell = (v: string) => ({ v, m: v, ct: { fa: 'General', t: 'g' } });
+    test.each([
+        ['a row written as null', ['data', 0], null],
+        ['a row written as text', ['data', 1], 'x'],
+        ['the matrix written as text', ['data'], 'x'],
+        ['the matrix written as a number', ['data'], 5],
+    ])('%s', (_, path, value) => {
+        const base: Sheet = { id: 's1', name: 'Sheet1', order: 0, celldata: [], row: 3, column: 2, config: {} };
+        const [sheet] = replaySheetsOps(
+            [base],
+            [
+                [
+                    { op: 'replace', id: 's1', path: ['data', 2, 0], value: cell('a') },
+                    { op: 'replace', id: 's1', path, value },
+                ],
+            ],
+        );
+        expect(sheet.data?.length).toBe(3);
+        expect(sheet.data?.every((row) => Array.isArray(row))).toBe(true);
+        expect(sheet.celldata).toEqual([{ r: 2, c: 0, v: cell('a') }]);
     });
 });

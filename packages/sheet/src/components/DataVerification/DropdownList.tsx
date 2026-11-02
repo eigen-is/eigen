@@ -1,3 +1,7 @@
+// The list a drop-down validation rule offers, opened from the chevron the grid paints on the focus cell. Picking an
+// item writes it into the cell, and a rule that allows several values toggles each one in a comma-separated list. The
+// menu hangs off a hidden anchor the hit test moves to the cell, and the selection overlay mounts it.
+
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,

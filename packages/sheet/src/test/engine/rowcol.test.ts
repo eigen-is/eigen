@@ -8,17 +8,13 @@ import { createCfFormulaEvaluator, evaluateConditionalFormat } from '../../engin
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { FormulaEngine } from '../../engine/formula-engine';
 import { applySheetsDeleteRowCol, applySheetsInsertRowCol, RowColError } from '../../engine/rowcol';
-import type { EditorSheetConfigExtras, SingleRange } from '../../engine/types';
+import type { EditorSheetConfigExtras, ShiftedSheet, SingleRange } from '../../engine/types';
 import type { Span } from './range-oracle';
 import { expectedDelete, expectedInsert, SPANS } from './range-oracle';
 
-// Sheet shape with the editor-runtime extras the engine passes through but lib's
-// canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the
-// filter state-only field). frozen lives on the lib Sheet.
-type TestSheet = Sheet & {
-    config?: SheetConfig & EditorSheetConfigExtras;
-    filter?: unknown;
-};
+// The sheet the engine shifts, with the editor's config extras lib's SheetConfig doesn't type, such as the
+// read-only guards.
+type TestSheet = ShiftedSheet & { config?: SheetConfig & EditorSheetConfigExtras };
 
 const cell = (v: string | number) => ({ v, m: String(v), ct: { fa: 'General', t: 'g' } });
 
@@ -637,8 +633,8 @@ function getThrownCode(fn: () => void): string | undefined {
     return undefined;
 }
 
-describe('applySheetsInsertRowCol — passthrough', () => {
-    test('state-only fields on input pass through engine unchanged', () => {
+describe('applySheetsInsertRowCol — frozen pane and filter', () => {
+    test('a row insert above them moves the frozen pane and the filter with their rows', () => {
         const sheets: TestSheet[] = [
             {
                 id: 's1',
@@ -646,20 +642,23 @@ describe('applySheetsInsertRowCol — passthrough', () => {
                 order: 0,
                 data: [[cell('a')], [cell('b')]],
                 config: {},
-                frozen: { type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } },
-                filter: { '0': { cindex: 0, str: 0, edr: 1, rowhidden: {} } },
+                frozen: { type: 'rangeRow', range: { row_focus: 1, column_focus: 0 } },
+                filterRange: { row: [0, 1], column: [0, 0] },
+                filter: { 0: { cindex: 0, str: 0, edr: 1, stc: 0, edc: 0, optionstate: true, rowhidden: { 1: 0 } } },
             },
         ];
-        const result = applySheetsInsertRowCol(sheets, {
+        const [result] = applySheetsInsertRowCol(sheets, {
             type: 'row',
             index: 0,
             count: 1,
             direction: 'lefttop',
             id: 's1',
         });
-        // Engine doesn't iterate these — they survive cloneDeep unchanged.
-        expect(result[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } });
-        expect(result[0].filter).toBeDefined();
+        expect(result.frozen).toEqual({ type: 'rangeRow', range: { row_focus: 2, column_focus: 0 } });
+        expect(result.filterRange).toEqual({ row: [1, 2], column: [0, 0] });
+        expect(result.filter?.[0]).toMatchObject({ str: 1, edr: 2, rowhidden: { 2: 0 } });
+        expect(result.config?.rowhidden).toEqual({ 2: 0 });
+        expect(sheets[0].config?.rowhidden).toBeUndefined();
     });
 });
 

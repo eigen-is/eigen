@@ -245,7 +245,7 @@ export function onCellsMoveEnd(
         { cut: true },
     );
 
-    // A rule over the moved cells moves with them.
+    // A conditional format over the moved cells moves with them.
     const rules = getSheet(ctx).conditionalFormatRules ?? [];
     for (let i = 0; i < rules.length; i += 1) {
         const cellrange = rules[i].cellrange.flatMap((range) =>

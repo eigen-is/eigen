@@ -1901,6 +1901,8 @@ export function updateDropCell(ctx: Context) {
     // The cells each validation rule fills, by the rule's id: a filled cell takes the rule of the cell it repeats, as
     // in Excel and Google. They land once the fill is done, one write per rule.
     const filledRules = new Map<string, SingleRange[]>();
+    // The rule of each source cell, looked up once: a long fill repeats a few source cells many times.
+    const sourceRules = new Map<string, string | undefined>();
 
     // Null only at module init, never on a real fill.
     const direction = dropCellCache.direction ?? 'down';
@@ -1987,7 +1989,11 @@ export function updateDropCell(ctx: Context) {
 
             carrySides(cfg.borderInfo, row, col, borderInfoCompute[`${bd_r}_${bd_c}`]);
 
-            const ruleId = validationEntryAt(file.dataValidations, bd_r, bd_c)?.[0];
+            const sourceKey = `${bd_r}_${bd_c}`;
+            if (!sourceRules.has(sourceKey)) {
+                sourceRules.set(sourceKey, validationEntryAt(file.dataValidations, bd_r, bd_c)?.[0]);
+            }
+            const ruleId = sourceRules.get(sourceKey);
             if (ruleId) {
                 const cells = filledRules.get(ruleId) ?? [];
                 cells.push({ row: [row, row], column: [col, col] });

@@ -7,7 +7,7 @@ import type { Patch } from 'immer';
 import { isRecord } from '../core/guards';
 import { floatingWriteFilter } from './floating';
 import type { Op, Sheet } from './types';
-import { isSheetValidation, isSheetValidations } from './validations';
+import { isSheetValidation, isSheetValidations, MAX_VALIDATIONS } from './validations';
 
 // The patches, and the sheet and row ops left for the caller to apply.
 export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
@@ -26,6 +26,9 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         if (!op.id) continue;
         // An images array, which no per-object write resolves on, is dropped.
         if (op.path.length === 1 && op.path[0] === 'images' && !isRecord(op.value)) continue;
+        // Every reader walks a sheet's matrix and its rows, so a write that would leave either no array is dropped.
+        const writesMatrixOrRow = op.path.length === 1 || (op.path.length === 2 && typeof op.path[1] === 'number');
+        if (op.path[0] === 'data' && kind !== 'remove' && writesMatrixOrRow && !Array.isArray(op.value)) continue;
         // The per-cell validation rules of the builds before rules were kept per range are dropped. Nothing reads them,
         // and a write into them fails on a sheet without them, which would roll back the cells of its batch too.
         if (op.path[0] === 'dataVerification') continue;
@@ -48,8 +51,9 @@ function isValidationWrite(op: Op): boolean {
 
 // Follows the rule ids each sheet holds through a batch, and says whether a validation write applies. A `replace` of
 // one rule means its writer saw the rule, because immer writes `add` for an id its base lacked. So where a peer
-// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike.
-function validationIds(sheets: Sheet[]): (sheet: number, op: Op) => boolean {
+// deleted the rule first, the replace is dropped and the delete wins, on every tab and in the replay alike. A new rule
+// on a sheet that holds MAX_VALIDATIONS is dropped too.
+function validationIds(sheets: readonly Sheet[]): (sheet: number, op: Op) => boolean {
     const held = new Map<number, Set<string>>();
     return (sheet, { op, path, value }) => {
         const [, id] = path;
@@ -61,6 +65,7 @@ function validationIds(sheets: Sheet[]): (sheet: number, op: Op) => boolean {
         if (!ids) held.set(sheet, (ids = new Set(Object.keys(sheets[sheet].dataValidations ?? {}))));
         const key = String(id);
         if (op === 'replace' && !ids.has(key)) return false;
+        if (op === 'add' && !ids.has(key) && ids.size >= MAX_VALIDATIONS) return false;
         if (op === 'remove') ids.delete(key);
         else ids.add(key);
         return true;

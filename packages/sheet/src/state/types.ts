@@ -21,6 +21,9 @@ import type {
     CellMatrix,
     CellWithRowAndCol,
     EditorSheetConfigExtras,
+    FilterCondition,
+    FilterConditionName,
+    FilterEntry,
     Range,
     SingleRange,
 } from '../engine/types';
@@ -37,6 +40,9 @@ export type {
     CellWithRowAndCol,
     ConditionalFormatRule,
     DataVerificationRule,
+    FilterCondition,
+    FilterConditionName,
+    FilterEntry,
     MergeCell,
     Op,
     Range,
@@ -114,52 +120,6 @@ export type SheetConfig = LibSheetConfig &
     EditorSheetConfigExtras & {
         authority?: SheetAuthority;
     };
-
-// Filter-by-condition rule names. The names overlapping conditional formatting
-// reuse the CF conditionNames (greaterThan, lessThan, equal, between, …); each
-// maps 1:1 onto a label in `FILTER_CONDITION_ITEMS` (`state/modules/filter.ts`).
-// `values` carries the rule's operands: none for is(Not)Empty, one for
-// text/date/compare rules, two for (not)between.
-export type FilterConditionName =
-    | 'isEmpty'
-    | 'isNotEmpty'
-    | 'textContains'
-    | 'textNotContains'
-    | 'textStartsWith'
-    | 'textEndsWith'
-    | 'textEquals'
-    | 'dateEqual'
-    | 'dateBefore'
-    | 'dateAfter'
-    | 'greaterThan'
-    | 'greaterThanOrEqual'
-    | 'lessThan'
-    | 'lessThanOrEqual'
-    | 'equal'
-    | 'notEqual'
-    | 'between'
-    | 'notBetween';
-
-export type FilterCondition = {
-    conditionName: FilterConditionName;
-    values: string[];
-};
-
-// One column's filter. Every writer sets every field. `byCondition` is set when the column
-// filters by a condition instead of by values or color. Fields an older snapshot stored, which
-// nothing reads any more, pass through the index signature.
-export type FilterEntry = {
-    byCondition?: FilterCondition;
-    // Legacy data and a peer's op can leave it out on an entry that hides no rows.
-    rowhidden?: Record<string, number>;
-    optionstate: boolean;
-    str: number;
-    edr: number;
-    cindex: number;
-    stc: number;
-    edc: number;
-    [key: string]: unknown;
-};
 
 // Alternate-format placeholder entry. The feature never landed; rowcol shifts
 // the cellrange but nothing ever reads the entries.

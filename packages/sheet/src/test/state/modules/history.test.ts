@@ -1137,6 +1137,20 @@ describe('validation rules on two tabs and a joiner', () => {
         expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
     });
 
+    test("an undo and a redo of a row insert keep a peer's later cut of the rule the insert grew", () => {
+        const s = session(ruled());
+        s.edit(s.a, ...insertRows(2, 2));
+        s.edit(s.b, (ctx) => clearValidations(ctx.sheets[0], { row: [8, 11], column: [0, 0] }));
+        s.undo(s.a);
+        const cut = [...repeat('dropdown', 6), ...repeat(null, 4)];
+        for (const t of [s.a, s.b]) expect(column(t, 0, 10)).toEqual(cut);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.redo(s.a);
+        const regrown = [...repeat('dropdown', 8), ...repeat(null, 4)];
+        for (const t of [s.a, s.b]) expect(column(t, 0, 12)).toEqual(regrown);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+    });
+
     test('a row delete over a rule moves it on both tabs and the joiner, and its undo brings the rule back', () => {
         const s = session(ruled());
         s.edit(s.a, apply([4, 5], [0, 0], TICKS));
@@ -1165,6 +1179,43 @@ describe('validation rules on two tabs and a joiner', () => {
         tabReceive(b, fromA);
         return { a, b, joined: join(base, [fromB, fromA])[0].dataValidations };
     }
+
+    // A tab whose own batch the log puts after a peer's applies the log again, so it ends as a tab that took the
+    // batches in the log's order.
+    function inLogOrder(base: Context, batches: Op[][]) {
+        const t = tab(base);
+        for (const ops of batches) tabReceive(t, ops);
+        return t;
+    }
+    const rangesOfA = (validations: Sheet['dataValidations']) => validations?.a?.ranges;
+
+    test('two row inserts sent at once leave a rule on its cells on both tabs and the joiner', () => {
+        const base = workbook({ A5: text('x'), A6: text('y') });
+        base.sheets[0].dataValidations = { a: { ranges: [{ row: [4, 5], column: [0, 0] }], rule: LIST } };
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...insertRows(0, 1));
+        const fromB = tabEdit(b, ...insertRows(0, 1));
+        tabReceive(a, fromB);
+        const onB = inLogOrder(base, [fromA, fromB]);
+        expect(cellAt(a, 'A7')?.v).toBe('x');
+        for (const validations of [rules(a), rules(onB), join(base, [fromA, fromB])[0].dataValidations]) {
+            expect(rangesOfA(validations)).toEqual([{ row: [6, 7], column: [0, 0] }]);
+        }
+    });
+
+    test("a row insert sent with a peer's cut of a rule moves the cut rule on both tabs and the joiner", () => {
+        const base = ruled();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, ...insertRows(0, 1));
+        const fromB = tabEdit(b, (ctx) => clearValidations(ctx.sheets[0], { row: [5, 9], column: [0, 0] }));
+        tabReceive(b, fromA);
+        const onA = inLogOrder(base, [fromB, fromA]);
+        for (const validations of [rules(onA), rules(b), join(base, [fromB, fromA])[0].dataValidations]) {
+            expect(rangesOfA(validations)).toEqual([{ row: [1, 5], column: [0, 0] }]);
+        }
+    });
 
     test("a row insert made before a peer's new rule arrived keeps that rule on both tabs and the joiner", () => {
         const { a, b, joined } = race(ruled(), insertRows(2, 1), apply([0, 1], [3, 3], TICKS));
