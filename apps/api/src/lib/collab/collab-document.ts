@@ -1,8 +1,9 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
 // Server-side writers, such as an import or a version restore, edit the same Y.Doc, so their changes reach every
-// editor too. The Drive opens each document once, however many sockets connect, and closes it a while after the last
-// one leaves. A workbook first saves a version, then folds its op log into its snapshot.
+// editor too. The Drive opens each document once, however many sockets connect. It closes it a while after the last
+// socket leaves, or after an open that no socket joins. A workbook first saves a version, then folds its op log into
+// its snapshot.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -41,7 +42,7 @@ const COMPRESS_FRAME_MIN_BYTES = 1024;
 
 // Typing fires many updates a second, so Modified is stamped at most once a minute.
 const TOUCH_THROTTLE_MS = 60_000;
-// The wait between the last unsubscribe and the close. A reload or a y-websocket retry within it
+// How long a document with no socket stays open. A reload or a y-websocket retry within it
 // reattaches to the loaded document instead of loading it again.
 export const CLOSE_LINGER_MS = 60_000;
 // The origin of a compaction's swap. It changes what is stored, not what the workbook shows, so it moves no Modified time.
@@ -49,33 +50,6 @@ const COMPACTION_ORIGIN = Symbol('compaction');
 // One 'edited' history row per user per window. The window lives in memory, so a document that closes
 // and opens again within it records an extra row. That is cheaper than storing the window.
 const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
-
-function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
-    const encoder = encoding.createEncoder();
-    encoding.writeVarUint(encoder, messageType);
-    write(encoder);
-    return encoding.toUint8Array(encoder);
-}
-
-function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
-    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
-}
-
-// Yjs and awareness hand back whatever origin the change was made with. A socket means a peer made
-// it, anything else means the server did.
-function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
-    return origin !== null && typeof origin === 'object' && 'readyState' in origin;
-}
-
-// A client may publish presence for itself only, so the `user` in its awareness state must carry the
-// session user's id. The display name is the client's choice. A state without a `user`, such as the
-// empty one of the handshake, claims no identity.
-function awarenessIdentityMatches(state: unknown, userId: string): boolean {
-    if (!isRecord(state)) return true;
-    const identity = state['user'];
-    if (identity === undefined || identity === null) return true;
-    return isRecord(identity) && identity['userId'] === userId;
-}
 
 export class CollabDocument {
     public readonly doc = new Y.Doc();
@@ -170,6 +144,9 @@ export class CollabDocument {
             },
         );
 
+        // A server-side writer, such as an import, opens a document that no socket may ever join. The
+        // linger closes that one too, and a socket that subscribes cancels it.
+        this.scheduleClose();
         return this;
     }
 
@@ -429,4 +406,31 @@ export class CollabDocument {
         this.editRecordedAtByUser.set(user.id, now);
         this.drive.recordFileEvent(this.path.mountId, this.path.id, user, { eventType: 'edited' }).catch(() => {});
     }
+}
+
+function encodeFrame(messageType: number, write: (encoder: encoding.Encoder) => void): Uint8Array {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, messageType);
+    write(encoder);
+    return encoding.toUint8Array(encoder);
+}
+
+function sendFrame(conn: ServerWebSocket<unknown>, message: Uint8Array): void {
+    conn.send(Buffer.from(message), message.byteLength >= COMPRESS_FRAME_MIN_BYTES);
+}
+
+// Yjs and awareness hand back whatever origin the change was made with. A socket means a peer made
+// it, anything else means the server did.
+function isConnection(origin: unknown): origin is ServerWebSocket<unknown> {
+    return origin !== null && typeof origin === 'object' && 'readyState' in origin;
+}
+
+// A client may publish presence for itself only, so the `user` in its awareness state must carry the
+// session user's id. The display name is the client's choice. A state without a `user`, such as the
+// empty one of the handshake, claims no identity.
+function awarenessIdentityMatches(state: unknown, userId: string): boolean {
+    if (!isRecord(state)) return true;
+    const identity = state['user'];
+    if (identity === undefined || identity === null) return true;
+    return isRecord(identity) && identity['userId'] === userId;
 }

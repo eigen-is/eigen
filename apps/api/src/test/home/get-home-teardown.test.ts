@@ -1,5 +1,7 @@
 import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
+import { PATHS } from '../../lib/config/paths';
+import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
 import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
 import { getTestContext } from '../setup';
@@ -88,6 +90,25 @@ describe('getHome teardown race', () => {
         const next = await getHome(userId);
         expect(next).not.toBe(home);
         await evictHome(userId);
+    });
+
+    // A database a closed home handed out would never be closed, and the next home would open the same file again.
+    test('a closed home refuses to open a database', async () => {
+        const userId = await createHomeUser('closed-refuses-db@test.eigen.is');
+        const home = await getHome(userId);
+
+        await home.close();
+        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, PATHS.DRIVE.SHARED_DB)).rejects.toThrow('Home is closing');
+    });
+
+    // The close takes its list of databases to close part way through, so one opened meanwhile could be missed.
+    test('a home that is closing refuses to open a database', async () => {
+        const userId = await createHomeUser('closing-refuses-db@test.eigen.is');
+        const home = await getHome(userId);
+
+        const closing = home.close();
+        await expect(home.getLocalDatabase(SHARED_DB_CONFIG, 'probe.db')).rejects.toThrow('Home is closing');
+        await closing;
     });
 
     test('an owner whose home fails to build is not left in the cache', async () => {

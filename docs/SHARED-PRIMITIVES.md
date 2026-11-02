@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2074 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2076 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -238,7 +238,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (303)
+## Hooks (304)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -334,6 +334,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useResolveComment` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-comments.ts |
 | `useStartChatWith` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat.ts |
 | `useUnreadChatIds` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
+| `useUnreadCommentChatNames` | `@workspace/lib/chat` | packages/lib/src/core/chat/hooks/use-chat-unread.ts |
 | `useCollabDoc` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab-doc.ts |
 | `useCollabDocumentInfo` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-collab.ts |
 | `useYjsUndoHotkeys` | `@workspace/lib/collab` | packages/lib/src/core/collab/hooks/use-yjs-undo-hotkeys.ts |
@@ -992,7 +993,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1118)
+## Utilities & constants (1119)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1367,6 +1368,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `formatTime` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `formatTimeAgo` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
 | `isToday` | `@workspace/lib/date` | packages/lib/src/core/date.ts |
+| `deepMerge` | `@workspace/lib/deep-merge` | packages/lib/src/core/deep-merge.ts |
 | `applyPreserveCase` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/preserve-case.ts |
 | `buildSearchRegex` | `@workspace/lib/doc-search` | packages/lib/src/doc-search/build-search-regex.ts |
 | `attributeSearchText` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/search-text.ts |

@@ -10,7 +10,7 @@ export type DocCommentSearchHalf = Pick<NonNullable<DocCommentSearch>, 'docKey' 
 // docs). The app pairs it with its own `reveal` (stickies: chatName → cardId → setOpenCardId; docs:
 // comments panel + scroll) to publish a DocCommentSearch. Caching is the palette's job — the IN
 // COMMENTS provider wraps `search` in TanStack Query, keyed by docKey + q. Matches only the recent
-// ~8 KB tail of each thread (see comments.db v3).
+// 8192 characters of each thread.
 export function useDocCommentSearchHalf(ownerId: string, mountId: string, pathId: string): DocCommentSearchHalf {
     return useMemo(
         () => ({

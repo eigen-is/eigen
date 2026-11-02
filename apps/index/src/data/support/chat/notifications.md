@@ -5,14 +5,14 @@ type: how-to
 tags: [chat, notifications, unread, mentions]
 related: [chat/get-started, chat/mentions]
 order: 100
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Chat tells you about new messages in two ways: unread dots on room names in the sidebar, and notifications in the bell menu at the top of the screen.
 
 ## Unread dots in the sidebar
 
-When a room has new messages since you last opened it, a small dot appears on the room's icon in the sidebar. This works for both your personal rooms and for rooms listed under **Team chats**.
+When someone posts in a room you've written in, or mentions you in a room, a small dot appears on the room's icon in the sidebar. This works for both your personal rooms and for rooms listed under **Team chats**.
 
 Opening the room clears the dot. Chat marks the room as read automatically as soon as you view it.
 

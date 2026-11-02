@@ -7,6 +7,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
+- **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
 
 ### Changed
 
@@ -31,6 +32,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 
 ## [0.4.1] - 2026-10-28
 
