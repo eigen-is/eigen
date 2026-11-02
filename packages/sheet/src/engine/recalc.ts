@@ -72,13 +72,18 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// `maxDependencySlots` bounds what the formulas' ranges cost the dependency index (dependencySlots), and
-// `maxCellsRead` what their evaluation reads (each range read, cut to its sheet, costs its cells): past either the
-// recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
-// both for an untrusted workbook; without them there is no bound.
+// Three budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
+// work. `maxDependencySlots` bounds the slots the dependency index lists the formulas' ranges in (dependencySlots).
+// `maxDependencyEdges` bounds the links between the formulas, one for each formula and formula cell it reads.
+// `maxCellsRead` bounds the cells their evaluation reads, each range read cut to its sheet. So many ranges over a large
+// sheet can't cost minutes and gigabytes. The server passes all three, and without them there is no bound.
 export function recalcSheets(
     sheets: readonly Sheet[],
-    { maxDependencySlots = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
+    {
+        maxDependencySlots = Number.POSITIVE_INFINITY,
+        maxDependencyEdges = Number.POSITIVE_INFINITY,
+        maxCellsRead = Number.POSITIVE_INFINITY,
+    } = {},
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
@@ -143,17 +148,27 @@ export function recalcSheets(
         return finalize(byId, sheets, calcChainBySheet);
     }
 
-    // 3. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
+    // 3. Weigh the links before making them. A whole column read by every formula in it costs the index one slot per
+    //    formula, but the formulas square: 20,000 `=COUNT(A:A)` make 400 million links, minutes and gigabytes to build.
+    if (Number.isFinite(maxDependencyEdges)) {
+        let edges = 0;
+        for (const info of allInfos) {
+            edges += depIndex.countDependents(info.id, info.r, info.c);
+            if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
+        }
+    }
+
+    // 4. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
     for (const info of allInfos) {
         for (const depKey of depIndex.dependentsOf(info.id, info.r, info.c)) {
             info.parents[depKey] = 1;
         }
     }
 
-    // 4. Order them. A cycle neither throws nor hangs.
+    // 5. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
 
-    // 5. Evaluate in order. A computed value reaches the formulas downstream through the engine's
+    // 6. Evaluate in order. A computed value reaches the formulas downstream through the engine's
     //    execFunctionGlobalData, which it reads before the resolver, and the resolver reads the matrices the pass writes.
     //    Volatiles keep their value. Each cell is guarded, so one poisoned formula never stops the pass.
     const engine = new FormulaEngine({ maxCellsRead });
@@ -190,7 +205,7 @@ export function recalcSheets(
     }
     overRead();
 
-    // 6. Write celldata from the computed data, and stamp each sheet's calcChain.
+    // 7. Write celldata from the computed data, and stamp each sheet's calcChain.
     return finalize(byId, sheets, calcChainBySheet);
 }
 

@@ -63,7 +63,7 @@ describe("the formulas' ranges", () => {
         const budgets: unknown[] = [];
         mock.module('@workspace/sheet/engine', () => ({
             ...original,
-            recalcSheets: (sheets: Sheet[], options?: { maxDependencySlots?: number; maxCellsRead?: number }) => {
+            recalcSheets: (sheets: Sheet[], options?: Parameters<typeof original.recalcSheets>[1]) => {
                 budgets.push(options);
                 return original.recalcSheets(sheets, options);
             },

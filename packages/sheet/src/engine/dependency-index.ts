@@ -160,11 +160,7 @@ export class DependencyIndex {
         if (cached != null) return cached;
 
         const pointKeys = this.points.get(sheetId)?.get(packed);
-        const nearby = [
-            this.buckets.blocks.get(sheetId)?.get(Math.floor(r / ROW_BLOCK) * BLOCK_PACK + Math.floor(c / COL_BLOCK)),
-            this.buckets.columns.get(sheetId)?.get(c),
-            this.buckets.rows.get(sheetId)?.get(r),
-        ];
+        const nearby = this.nearby(sheetId, r, c);
 
         // With no range nearby the point bucket is the answer. It is safe to hand out, because every change to it
         // clears the query cache.
@@ -185,6 +181,27 @@ export class DependencyIndex {
         }
         sheetCache.set(packed, result);
         return result;
+    }
+
+    // How many formulas read (r, c), a formula that reads the cell through two of its ranges counted twice. It builds
+    // nothing, so recalc can weigh the whole graph before it links it.
+    public countDependents(sheetId: string, r: number, c: number): number {
+        let count = this.points.get(sheetId)?.get(r * CELL_PACK + c)?.length ?? 0;
+        for (const entries of this.nearby(sheetId, r, c)) {
+            for (const entry of entries ?? []) {
+                if (r >= entry.r0 && r <= entry.r1 && c >= entry.c0 && c <= entry.c1) count += 1;
+            }
+        }
+        return count;
+    }
+
+    // The ranges listed in the block, the column and the row of (r, c).
+    private nearby(sheetId: string, r: number, c: number): (RangeEntry[] | undefined)[] {
+        return [
+            this.buckets.blocks.get(sheetId)?.get(Math.floor(r / ROW_BLOCK) * BLOCK_PACK + Math.floor(c / COL_BLOCK)),
+            this.buckets.columns.get(sheetId)?.get(c),
+            this.buckets.rows.get(sheetId)?.get(r),
+        ];
     }
 }
 

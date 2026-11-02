@@ -437,6 +437,15 @@ describe('engine/recalc — recalcSheets', () => {
         expect(recalcSheets(sheets, { maxDependencySlots: 10 })[1].data?.[9][0]?.v).toBe(6_400);
     });
 
+    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 edges, though the
+    // index lists the column once per formula.
+    test('past its edge budget a recalc throws before it links the formulas', () => {
+        const rows = Array.from({ length: 4 }, (): (Cell | null)[] => [formula('=COUNT(A:A)')]);
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyEdges: 15 })).toThrow(RangeError);
+        expect(() => recalcSheets(sheets, { maxDependencyEdges: 16 })).not.toThrow();
+    });
+
     test('past its budget of cells read a recalc throws, before it reads them', () => {
         // SUM(A1:A3) reads 3 cells, SUM(A1:A2) 2.
         const sheets = [
