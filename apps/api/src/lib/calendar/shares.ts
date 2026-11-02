@@ -15,7 +15,7 @@ import { dbRowToSharedCalendar } from './mappers';
 import * as schema from './schema';
 import { buildCalendarEvent } from './sse-events';
 
-// Rows only, so no sharing write takes the write lock (docs/CALENDAR.md § Sharing is pushed, and team calendars are off by default).
+// These functions only write share rows, so no sharing write takes the calendar's write lock.
 
 export function getSharedCalendars(calendar: Calendar): SharedCalendar[] {
     return calendar.db.select().from(schema.sharedCalendars).all().map(dbRowToSharedCalendar);
@@ -33,7 +33,7 @@ export function updateSharedCalendar(
         .update(schema.sharedCalendars)
         .set({
             color: input.color !== undefined ? input.color : existing.color,
-            visible: input.visible !== undefined ? input.visible : existing.visible,
+            visible: input.visible ?? existing.visible,
             updatedAt: sql`unixepoch()`,
         })
         .where(eq(schema.sharedCalendars.id, id))
@@ -103,13 +103,15 @@ export function receiveShare(
     }
 
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
-    calendar.home.notifications?.persist({
-        type: 'calendar-share',
-        actorEmail,
-        title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
-        body: calendarName,
-        tag: `calendar-share:${calendarId}:${ownerUserId}`,
-    });
+    if (calendar.home.hasNotifications) {
+        calendar.home.notifications.persist({
+            type: 'calendar-share',
+            actorEmail,
+            title: `${actorDisplayName(actorName, actorEmail)} shared a calendar`,
+            body: calendarName,
+            tag: `calendar-share:${calendarId}:${ownerUserId}`,
+        });
+    }
 }
 
 export function removeShare(
@@ -124,12 +126,14 @@ export function removeShare(
 
     calendar.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, existing.id)).run();
     calendar.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UNSHARED, ownerUserId));
-    calendar.home.notifications?.persist({
-        type: 'calendar-unshare',
-        actorEmail,
-        title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
-        body: existing.calendarName,
-    });
+    if (calendar.home.hasNotifications) {
+        calendar.home.notifications.persist({
+            type: 'calendar-unshare',
+            actorEmail,
+            title: `${actorDisplayName(actorName, actorEmail)} removed your access`,
+            body: existing.calendarName,
+        });
+    }
 }
 
 // The silent half of receiveShare: reconciliation brings an entry in line without notifying the user again.

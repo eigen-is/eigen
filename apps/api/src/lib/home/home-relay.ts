@@ -162,8 +162,8 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
                     members.map((member) => member.id),
                     message,
                 );
-            } else {
-                home.notifications?.persist(message.notification);
+            } else if (home.hasNotifications) {
+                home.notifications.persist(message.notification);
             }
             break;
     }

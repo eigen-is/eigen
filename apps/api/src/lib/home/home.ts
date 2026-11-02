@@ -14,7 +14,7 @@ import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
 import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../core';
-import { LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
+import { ApiError, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
 import type { NotificationCenter } from '../notification-center/notification-center';
@@ -28,7 +28,8 @@ export class Home {
     public readonly fs: LocalFilesystem;
     public settings!: JsonStore<HomeSettings>;
 
-    // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined.
+    // Which parts exist depends on the kind of home. A part the home doesn't have stays undefined,
+    // and its getter answers 404.
     protected _drive?: Drive;
     protected _contacts?: Contacts;
     protected _mail?: Mail;
@@ -56,53 +57,62 @@ export class Home {
 
     public get drive(): Drive {
         this.touch();
-        return this._drive!;
+        if (!this._drive) throw new ApiError(404, 'Drive not available');
+        return this._drive;
     }
 
     public get contacts(): Contacts {
         this.touch();
-        return this._contacts!;
+        if (!this._contacts) throw new ApiError(404, 'Contacts not available');
+        return this._contacts;
     }
 
     public get mail(): Mail {
         this.touch();
-        return this._mail!;
+        if (!this._mail) throw new ApiError(404, 'Mail not available');
+        return this._mail;
     }
 
     public get calendar(): Calendar {
         this.touch();
-        return this._calendar!;
+        if (!this._calendar) throw new ApiError(404, 'Calendar not available');
+        return this._calendar;
     }
 
     public get notifications(): NotificationCenter {
         this.touch();
-        return this._notifications!;
+        if (!this._notifications) throw new ApiError(404, 'Notifications not available');
+        return this._notifications;
     }
 
     public get hasCalendar(): boolean {
         return !!this._calendar;
     }
 
+    public get hasNotifications(): boolean {
+        return !!this._notifications;
+    }
+
     public get closing(): boolean {
         return this._closing;
     }
 
-    public init(autoCreateDefaultMount = false): Promise<this> {
-        return (this.initPromise ??= this.runInit(autoCreateDefaultMount));
+    public init(): Promise<this> {
+        return (this.initPromise ??= this.runInit());
     }
 
-    private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
+    private async runInit(): Promise<this> {
         try {
             // A crash between writing a settings file's staged copy and its rename leaves the copy behind.
             await this.fs
                 .sweepAtomicTemps('.', STALE_TEMP_MAX_AGE_MS)
                 .catch((err) => console.error(`[Home] Sweeping staged files failed for ${this.user.id}:`, err));
-            await time('Home.init.settings', () => this.settings.load());
+            await time('Home.init.settings', () => this.loadSettings());
 
             // allSettled waits for every part. Promise.all would return at the first failure while
             // the other parts are still opening databases and starting timers, and those would leak.
             const results = await Promise.allSettled([
-                time('Home.init.drive', async () => this._drive?.init(autoCreateDefaultMount)),
+                time('Home.init.drive', async () => this._drive?.init()),
                 time('Home.init.contacts', async () => this._contacts?.init()),
                 time('Home.init.mail', async () => this._mail?.init()),
                 time('Home.init.calendar', async () => this._calendar?.init()),
@@ -118,6 +128,11 @@ export class Home {
             await this.close();
             throw err;
         }
+    }
+
+    // A kind of home may fill in missing settings here, before its parts read them.
+    protected async loadSettings(): Promise<void> {
+        await this.settings.load();
     }
 
     // Runs once, however often it is called: closing the same database files twice is unsafe.

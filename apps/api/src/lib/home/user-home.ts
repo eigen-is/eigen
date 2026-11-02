@@ -1,6 +1,6 @@
 // A user home holds everything one person keeps on this server, such as their files, mail, calendar
-// and notifications. Before its parts open, it makes sure the user has a default drive, sized by the
-// server settings, so a new user can upload files right away.
+// and notifications. When the user's settings name no default drive yet, it saves one there before
+// the parts open, sized by the server settings, so a new user can upload files right away.
 
 import type { UserSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
@@ -28,8 +28,8 @@ export class UserHome extends Home {
         this._notifications = new NotificationCenter(this);
     }
 
-    public override async init(): Promise<this> {
-        await this.settings.load();
+    protected override async loadSettings(): Promise<void> {
+        await super.loadSettings();
         if (!this.settings.get().mounts?.['default']) {
             const serverSettings = getServerSettings();
             await this.settings.set({
@@ -42,6 +42,5 @@ export class UserHome extends Home {
                 },
             });
         }
-        return super.init(true);
     }
 }

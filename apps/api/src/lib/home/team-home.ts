@@ -42,11 +42,11 @@ export class TeamHome extends Home {
     }
 
     public override get calendar(): Calendar {
-        this.touch();
+        const calendar = super.calendar;
         if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
-        return this._calendar!;
+        return calendar;
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.
