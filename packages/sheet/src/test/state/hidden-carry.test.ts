@@ -12,7 +12,7 @@ import type { DataVerificationRule } from '@workspace/lib/sheets';
 import type { Context } from '../../state/context';
 import { handleCopy } from '../../state/events/copy';
 import { handlePasteByClick } from '../../state/events/paste';
-import { handleCut } from '../../state/modules/clipboard';
+import { consumePendingCopy, handleCut } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
@@ -309,6 +309,17 @@ describe('a range with a row an active filter hides', () => {
         const ctx = makeCtx({ filtered: true });
         const text = rangeValueToClipboard(ctx, 'id_1', source())?.cellText;
         expect(text?.split('\n')).toEqual(['r0c0\tr0c1\tr0c2\t', 'r2c0\tr2c1\tr2c2\tr2c3', '\tr3c1\tr3c2\tr3c3']);
+    });
+
+    test("a cut's clipboard holds the filtered row its paste moves", () => {
+        const ctx = makeCtx({ filtered: true });
+        handleCut(ctx);
+        expect(consumePendingCopy()?.cellText.split('\n')).toEqual([
+            'r0c0\tr0c1\tr0c2\t',
+            'r1c0\tr1c1\tr1c2\tr1c3',
+            'r2c0\tr2c1\tr2c2\tr2c3',
+            '\tr3c1\tr3c2\tr3c3',
+        ]);
     });
 
     // A1:A3 has the filtered row inside it, and A2:A3 has it as its first row. Either way the table keeps its shape.

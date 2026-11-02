@@ -2,9 +2,7 @@ import type { Context } from '../context';
 import { handleCopy } from '../events/copy';
 
 export function handleCut(ctx: Context) {
-    if (handleCopy(ctx)) {
-        ctx.pasteIsCut = true;
-    }
+    handleCopy(ctx, { cut: true });
 }
 
 // Pending copy data — set by the copy handler, consumed by the native copy event listener

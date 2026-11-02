@@ -1109,6 +1109,7 @@ export function rangeValueToClipboard(
     ctx: Context,
     sheetId: string,
     ranges?: Range,
+    { cut = false }: { cut?: boolean } = {},
 ): { html: string; text: string; cellText: string } | null {
     const idx = getSheetIndex(ctx, sheetId);
     if (idx == null) return null;
@@ -1121,8 +1122,9 @@ export function rangeValueToClipboard(
         rect[2] = Math.min(rect[2], range.column[0]);
         rect[3] = Math.max(rect[3], range.column[1]);
     }
-    // The clipboard holds the cells a paste in this tab would land, hidden ones too.
-    const { rows: rowIndexArr, columns: colIndexArr } = carriedLines(ctx, sheetId, ranges ?? [], true);
+    // The clipboard holds the cells a paste in this tab would land, hidden ones too. A cut lands the rows a filter
+    // hides as well.
+    const { rows: rowIndexArr, columns: colIndexArr } = carriedLines(ctx, sheetId, ranges ?? [], !cut);
 
     // A td spans its merge, so the perimeter is read off the master.
     const borderInfoCompute = mergedBorderSides(sheet.config?.borderInfo, sheet.config?.merge, rect);
@@ -1225,7 +1227,7 @@ export function rangeValueToClipboard(
     };
 }
 
-export function copy(ctx: Context) {
+export function copy(ctx: Context, { cut = false }: { cut?: boolean } = {}) {
     const cfg = getSheetConfig(ctx);
 
     ctx.formulaRangeSelections = [];
@@ -1254,7 +1256,7 @@ export function copy(ctx: Context) {
         RowlChange,
     };
 
-    const cpdata = rangeValueToClipboard(ctx, ctx.currentSheetId, ctx.selections);
+    const cpdata = rangeValueToClipboard(ctx, ctx.currentSheetId, ctx.selections, { cut });
 
     if (cpdata) {
         ctx.iscopyself = true;
