@@ -30,8 +30,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
 - **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
+- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at. A picture in a drawing group keeps its own size, and older Word drawings keep their colors and wrap side
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
-- **Dialogs in Calendar** — Enter in a new event's title saves it, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
+- **Dialogs in Calendar** — Enter in a new event's title saves it, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
+- **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
+- **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
+- **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
