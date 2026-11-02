@@ -3,7 +3,8 @@
 // over the server's own functions, and startControlSocket opens the socket at boot with mode 0600.
 
 import * as fs from 'node:fs';
-import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
+import { ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { getBackupJob, isServerJob } from '../lib/backup/jobs';
 import type { ControlBackupJob } from '../lib/backup/server-job';

@@ -2,10 +2,7 @@ export { validateACLEntries } from './acl';
 export type { BackupMountSettings } from './backup';
 export {
     BACKUP_FORMAT_VERSION,
-    BACKUP_LEVELS,
-    BACKUP_REASONS,
     canUploadServerArchive,
-    FULL_BACKUP_LEVELS,
     incompleteReason,
     isCompleteArchive,
     ON_DEMAND_BACKUP_REASONS,

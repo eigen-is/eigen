@@ -5,8 +5,8 @@
 // There is no download: an archive leaves the machine by scp or the bucket, never through a browser.
 
 import type { ServerArchiveList } from '@workspace/lib/types/backup';
+import { FULL_BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
-import { FULL_BACKUP_LEVELS } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
 import { requireOwner } from '../lib/auth/access';
 import { hasS3Mounts } from '../lib/backup/enumerate-homes';

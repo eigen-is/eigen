@@ -22,14 +22,11 @@ import {
     BACKUP_LEVELS,
     BACKUP_REASONS,
     BACKUP_VERIFY_STATUSES,
-    FULL_BACKUP_LEVELS,
 } from '../types/backup';
 import type { MountConfig, S3Config } from '../types/mount';
 import { parseOwnerId } from '../types/owner';
 import { BACKUP_OWNER_ID } from './backup-names';
 import { isStringList, isStringRecord, parseJson } from './json';
-
-export { BACKUP_LEVELS, BACKUP_REASONS, FULL_BACKUP_LEVELS };
 
 // A mount id becomes a path segment, as an owner id does, so it keeps to the same characters.
 const BACKUP_MOUNT_ID = BACKUP_OWNER_ID;
