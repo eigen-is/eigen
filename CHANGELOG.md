@@ -23,6 +23,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
 - **Text boxes in PowerPoint files** — a text box aligned to the top downloads set to resize the shape to fit its text, and a rectangle set that way in a PowerPoint file comes in as a text box
+- **Enter in Drive and Admin dialogs** — Enter saves in New folder, Rename, Email collaborators, Import to Calendar, a team's mounts and the bucket safety window. While a save runs, Cancel and Escape wait, and a failure keeps the dialog open with what you typed. The Word, Excel and PowerPoint import choice does the same
 
 ### Fixed
 
@@ -35,6 +36,8 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
 - **Dialogs in Calendar** — Enter in a new event's title saves it, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
+- **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
+- **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
 - **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
