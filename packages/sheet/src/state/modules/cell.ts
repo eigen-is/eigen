@@ -1132,9 +1132,13 @@ export function carryCells(
                 const c = tile.column + j;
                 const sc = columns[j];
                 const sourceKey = `${sr}_${sc}`;
+                const key = `${r}_${c}`;
                 carrySides(borderInfo, r, c, borders[sourceKey]);
-                if (rules[sourceKey]) (to.dataVerification ??= {})[`${r}_${c}`] = cloneDeep(rules[sourceKey]);
-                if (links && linkMap[sourceKey]) (to.hyperlink ??= {})[`${r}_${c}`] = cloneDeep(linkMap[sourceKey]);
+                // A source cell without a rule or a link takes the destination's away, as Excel does.
+                if (rules[sourceKey]) (to.dataVerification ??= {})[key] = cloneDeep(rules[sourceKey]);
+                else delete to.dataVerification?.[key];
+                if (links && linkMap[sourceKey]) (to.hyperlink ??= {})[key] = cloneDeep(linkMap[sourceKey]);
+                else if (links) delete to.hyperlink?.[key];
 
                 const replaced = d[r][c];
                 if (replaced?.mc) {
@@ -1148,7 +1152,7 @@ export function carryCells(
                         const rs = carriedSpan(rows, i, tile.height - i, sr, cell.mc.rs);
                         const cs = carriedSpan(columns, j, tile.width - j, sc, cell.mc.cs ?? 1);
                         cell.mc = { r, c, rs, cs };
-                        merge[`${r}_${c}`] = { r, c, rs, cs };
+                        merge[key] = { r, c, rs, cs };
                         anchors[`${sourceMc.r}_${sourceMc.c}`] = [r, c];
                     } else {
                         // A merge whose first cell a filter left out lands as plain cells.

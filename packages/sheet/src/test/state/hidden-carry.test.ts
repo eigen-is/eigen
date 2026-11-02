@@ -16,7 +16,7 @@ import { handleCut } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
-import type { Cell, GlobalCache, Selection } from '../../state/types';
+import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
 import { author, join } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
@@ -324,6 +324,45 @@ describe('a range with a row an active filter hides', () => {
             ['', 'r2c1', 'r2c2', 'r2c3'],
             ['r3c0', 'r3c1', 'r3c2', 'r3c3'],
         ]);
+    });
+});
+
+// H7 takes B1, which has no rule and no link, and M12 is outside the paste. Both have a rule and a link of their own.
+describe('a paste over cells with a rule and a link of their own', () => {
+    function makeOwnCtx() {
+        const ctx = makeCtx();
+        const s = sheet(ctx);
+        for (const [r, c] of [
+            [6, 7],
+            [11, 11],
+        ]) {
+            (s.dataVerification ??= {})[key(r, c)] = rule(r, c);
+            (s.hyperlink ??= {})[key(r, c)] = link(r, c);
+        }
+        return ctx;
+    }
+
+    // A write of a whole map would undo a peer's concurrent rule or link on another cell.
+    const wholeMapWrites = (ops: Op[]) =>
+        ops.filter((op) => op.path.length === 1 && ['dataVerification', 'hyperlink'].includes(String(op.path[0])));
+
+    test("a copy takes the source cell's lack of both, and writes only the cells it lands on", () => {
+        const { next, ops } = author(makeOwnCtx(), (ctx) => paste(ctx, false));
+        const s = sheet(next);
+        expect(s.dataVerification?.[key(6, 7)]).toBeUndefined();
+        expect(s.hyperlink?.[key(6, 7)]).toBeUndefined();
+        expect(s.dataVerification?.[key(11, 11)]).toEqual(rule(11, 11));
+        expect(s.hyperlink?.[key(11, 11)]).toEqual(link(11, 11));
+        expect(wholeMapWrites(ops)).toEqual([]);
+    });
+
+    test("the format painter takes the source cell's lack of a rule, and leaves the link", () => {
+        const { next, ops } = author(makeOwnCtx(), paint);
+        const s = sheet(next);
+        expect(s.dataVerification?.[key(6, 7)]).toBeUndefined();
+        expect(s.hyperlink?.[key(6, 7)]).toEqual(link(6, 7));
+        expect(s.dataVerification?.[key(11, 11)]).toEqual(rule(11, 11));
+        expect(wholeMapWrites(ops)).toEqual([]);
     });
 });
 
