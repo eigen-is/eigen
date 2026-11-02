@@ -6,7 +6,7 @@ category: Basics
 tags: [sheets, cells, data, editing, keyboard, formula-bar]
 related: [sheets/get-started, sheets/create-and-edit, sheets/formulas]
 order: 30
-updated: 2026-10-27
+updated: 2026-11-02
 ---
 
 You can enter text, numbers, and formulas into any cell in Sheets, then edit or clear them at any time. Changes are saved automatically.
@@ -59,7 +59,9 @@ To copy the top row of a selection into the rows below it, or its left column in
 - Press **Ctrl+D** (Mac: **⌘D**) to fill down through the selected rows.
 - Press **Ctrl+R** (Mac: **⌘R**) to fill right across the selected columns.
 
-Sheets copies each cell whole: its value or formula, formatting, borders, data validation, and conditional formatting. When filling formulas, Sheets adjusts relative cell references automatically. An empty source cell clears the cells it fills.
+Sheets copies each cell's value or formula, formatting, and borders. When filling formulas, Sheets adjusts relative cell references automatically. An empty source cell clears the value, formatting, and borders of the cells it fills.
+
+A filled cell also takes the data validation of its source cell. Where the source cell has none, the filled cell keeps its own. Conditional formatting on the source cells spreads over the cells you fill.
 
 ## Undo and redo
 
