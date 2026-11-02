@@ -29,6 +29,7 @@ import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
 import { convertToDocument, importIntoDocument } from '../lib/import/import-document';
+import { isNameTakenError } from '../lib/mount/helpers';
 import { foldName } from '../lib/mount/names';
 import {
     assertEmlPreviewable,
@@ -57,6 +58,10 @@ import {
 // One cap for every free-text share note (collaborator email + access request), so a single
 // oversized body can't be persisted or mailed.
 const MAX_SHARE_MESSAGE_LENGTH = 12000;
+
+// How often a copy picks a new free name after another create took the one it picked. Each parallel
+// copy of one name into one folder can cost the others one attempt.
+const COPY_NAME_ATTEMPTS = 5;
 
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
@@ -202,22 +207,35 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
             const desired = (body.name ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
-            const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
-            const used = new Set(siblings.map((s) => foldName(s.name)));
-            const finalName = used.has(foldName(desired)) ? getUniqueFileName(desired, used) : desired;
-
-            if (sameMount) {
-                return await sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, finalName, user);
+            // Two copies into one folder at once can both pick the same free name. The one that creates
+            // second gets a 409, so it reads the folder again and picks the next free name.
+            for (let attempt = 1; ; attempt++) {
+                const siblings = await targetDrive.getFolderContents(body.targetMountId, body.targetParentId);
+                const used = new Set(siblings.map((s) => foldName(s.name)));
+                const finalName = used.has(foldName(desired)) ? getUniqueFileName(desired, used) : desired;
+                try {
+                    if (sameMount) {
+                        return await sourceDrive.copyPath(
+                            params.mountId,
+                            params.pathId,
+                            body.targetParentId,
+                            finalName,
+                            user,
+                        );
+                    }
+                    return await copyPathAcross(
+                        sourceDrive,
+                        src,
+                        targetDrive,
+                        body.targetMountId,
+                        body.targetParentId,
+                        finalName,
+                        user,
+                    );
+                } catch (e) {
+                    if (attempt === COPY_NAME_ATTEMPTS || !isNameTakenError(e, finalName)) throw e;
+                }
             }
-            return await copyPathAcross(
-                sourceDrive,
-                src,
-                targetDrive,
-                body.targetMountId,
-                body.targetParentId,
-                finalName,
-                user,
-            );
         },
         {
             body: t.Object({

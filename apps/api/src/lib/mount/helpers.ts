@@ -50,6 +50,12 @@ export function nameTakenError(name: string): ApiError {
     return new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
 }
 
+// Whether a create of this name failed only because a sibling took the name first, so the caller can
+// pick another name and try again.
+export function isNameTakenError(e: unknown, name: string): boolean {
+    return e instanceof ApiError && e.status === 409 && e.message === nameTakenError(name).message;
+}
+
 // What a write to a paths row throws when it raced another write. The unique index on the parent and
 // the lower-case name of live rows refuses a second sibling of one name. That is the same 409 that
 // assertUniqueName gives. The check matches the index by name, so a clash on the id stays a real error.
