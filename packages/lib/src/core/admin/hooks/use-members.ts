@@ -1,6 +1,6 @@
 // The Admin app's hooks for an organization's members: list them, change a member's role, create a user, delete a
 // user and reset a password. Members and their roles come from better-auth's organization plugin. Creating a user and
-// setting a user's own role go through its admin plugin. Deleting and resetting go through the settings API.
+// setting the user-level role that `useIsAdmin` reads go through its admin plugin. Deleting and resetting use the API.
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';

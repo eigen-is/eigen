@@ -55,6 +55,13 @@ const idle = {
 };
 const notExporting = { exportCalendar: mock(async () => {}), isExporting: false };
 const notFromOthers = () => false;
+let isFromOthers: (event: CalendarEventOccurrence) => boolean = notFromOthers;
+const rsvp = {
+    mutate: mock((_input: unknown) => {}),
+    mutateAsync: mock(async (_input: unknown) => {}),
+    isPending: false,
+};
+const deleteEvent = { mutateAsync: mock(async (_input: unknown) => {}), isPending: false };
 // Copies, because mock.module rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 const realCalendar = { ...(await import('@workspace/lib/calendar')) };
@@ -66,12 +73,12 @@ mock.module('@workspace/lib/calendar', () => ({
     useSharedCalendars: () => sharedCalendars,
     useUpdateEvent: () => idle,
     useCreateEvent: () => idle,
-    useDeleteEvent: () => idle,
+    useDeleteEvent: () => deleteEvent,
     useMoveEvent: () => idle,
-    useRsvp: () => idle,
+    useRsvp: () => rsvp,
     useExportCalendar: () => notExporting,
     useEvent: () => noMaster,
-    useIsInvitationFromOthers: () => notFromOthers,
+    useIsInvitationFromOthers: () => isFromOthers,
 }));
 mock.module('@workspace/lib/contacts', () => ({
     ...realContacts,
@@ -87,11 +94,16 @@ const { act, createElement } = await import('react');
 const { EventDetailDialog } = await import('../../components/event-detail-dialog');
 
 let unmount = async () => {};
-afterEach(() => unmount());
+afterEach(async () => {
+    await unmount();
+    isFromOthers = notFromOthers;
+    rsvp.mutateAsync.mockClear();
+    deleteEvent.mutateAsync.mockClear();
+});
 
-async function open() {
+async function open(event: CalendarEventOccurrence = dentist) {
     ({ unmount } = await renderInDocument(
-        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event: dentist, calendar: work }),
+        createElement(EventDetailDialog, { open: true, onOpenChange: () => {}, event, calendar: work }),
     ));
 }
 
@@ -113,4 +125,26 @@ test('the button named Delete event asks to delete it', async () => {
     await open();
     await click('Delete event');
     expect(dialogTitles()).toEqual(['Delete event']);
+});
+
+test('deleting this and following occurrences of an invitation declines them and keeps the series', async () => {
+    isFromOthers = () => true;
+    await open({ ...dentist, rrule: 'FREQ=WEEKLY' });
+    await click('Delete event');
+    await act(async () => {
+        document.querySelector<HTMLElement>('[role="dialog"] label[for="recurring-this-and-following"]')?.click();
+    });
+    await act(async () => {
+        const ok = [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
+            (button) => button.textContent === 'OK',
+        );
+        ok?.click();
+    });
+    expect(rsvp.mutateAsync).toHaveBeenCalledTimes(1);
+    expect(rsvp.mutateAsync.mock.calls[0]?.[0]).toMatchObject({
+        status: 'declined',
+        scope: 'this-and-following',
+        remove: true,
+    });
+    expect(deleteEvent.mutateAsync).not.toHaveBeenCalled();
 });
