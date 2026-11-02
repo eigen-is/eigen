@@ -17,6 +17,7 @@ mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session,
 const { QueryClient, QueryClientProvider } = await import('@tanstack/react-query');
 const { act, createElement, Fragment, useState } = await import('react');
 const { createRoot } = await import('react-dom/client');
+const { flushSync } = await import('react-dom');
 const { Popover, PopoverContent, PopoverTrigger } = await import('../../../components/popover');
 const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
 const { FilePreview } = await import('../../../components/drive/file-preview');
@@ -225,14 +226,21 @@ async function mountStickiesChain() {
                 new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
             );
         });
-    // Radix waits for the click before it closes a layer, so the whole press goes in.
-    const press = async (target: Element | null | undefined) => {
+    // Radix waits for the click before it closes a layer, so the whole press goes in. In a browser, React renders what
+    // a click changed before the click reaches the document, where Radix listens, so a layer the click closed is gone
+    // by then. A dispatched click runs every listener first, so the body renders it, as the browser would.
+    const press = async (target: Element | null | undefined, pointerType = 'mouse') => {
         if (!target) throw new Error('nothing to press');
+        const render = () => flushSync(() => {});
+        document.body.addEventListener('click', render);
         await act(async () => {
-            target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
-            target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0 }));
+            target.dispatchEvent(
+                new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, pointerType }),
+            );
+            target.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, button: 0, pointerType }));
             target.dispatchEvent(new MouseEvent('click', { bubbles: true, button: 0 }));
         });
+        document.body.removeEventListener('click', render);
         await settle();
     };
     await settle();
@@ -315,17 +323,25 @@ test('a menu opened in a dialog over the preview portals after both, and its Esc
     await unmount();
 });
 
-// In a browser React closes the preview before the click reaches the document, where Radix decides whether the card
-// was clicked outside, so a card that heard the press would find no preview over it and close. Dispatched from a test,
-// React closes it later, so what is pinned is that the card never hears the press at all.
-test('Stickies: a press on the preview’s backdrop closes the preview, and the card under it never hears it', async () => {
-    const { card, preview, press, unmount } = await mountStickiesChain();
-    await press(preview());
-    expect(preview()).toBeNull();
-    expect(card.pressedOutside).toBe(0);
-    expect(card.closed).toBe(0);
-    await unmount();
-});
+// The preview is gone by the time the press reaches the document, so the card under it is the top layer again there.
+// Radix decides at the pointerdown, while the preview still covers the card, that the press is not the card's, for a
+// click and a tap alike, so the card never hears it.
+for (const pointerType of ['mouse', 'touch']) {
+    for (const control of ['backdrop', 'X'] as const) {
+        test(`Stickies: a ${pointerType} press on the preview’s ${control} closes the preview, and the card under it never hears it`, async () => {
+            const { card, preview, press, unmount } = await mountStickiesChain();
+            const overlay = preview();
+            await press(
+                control === 'backdrop' ? overlay : overlay?.querySelector('button[title="Close (Esc)"]'),
+                pointerType,
+            );
+            expect(preview()).toBeNull();
+            expect(card.pressedOutside).toBe(0);
+            expect(card.closed).toBe(0);
+            await unmount();
+        });
+    }
+}
 
 test('Stickies: the preview over a card holds the focus, its Tab and its wheel', async () => {
     const { preview, unmount } = await mountStickiesChain();
