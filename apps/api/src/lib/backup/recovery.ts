@@ -89,6 +89,17 @@ export function recoverInterruptedRestores(): void {
     }
 }
 
+// The home that notes beside the homes speak of: the owner's folder in the homes folder they sit in. The path they
+// were written with must end in that same folder and its homes folder. Its start may differ, so a data folder moved
+// since, such as to another disk, still recovers.
+function homeBesideNotes(homesDir: string, marker: RestoringMarker): string | null {
+    const homeDir = homeDirUnder(path.dirname(homesDir), marker.ownerId);
+    if (path.dirname(homeDir) !== homesDir) return null;
+    const sameName = path.basename(marker.homeDir) === path.basename(homeDir);
+    const sameKind = path.basename(path.dirname(marker.homeDir)) === path.basename(homesDir);
+    return sameName && sameKind ? homeDir : null;
+}
+
 // The marker goes before the rest of its folder. A kill partway through removing the folder could otherwise leave it
 // without the completion note beside it, and a later boot would undo a restore whose home has served since.
 function dropRestoringMarker(restoreDir: string): void {
@@ -110,22 +121,34 @@ function recoverOlderBuildRestores(): void {
     }
 }
 
-// The home that notes beside the homes speak of: the owner's folder in the homes folder they sit in. The path they
-// were written with must end in that same folder and its homes folder. Its start may differ, so a data folder moved
-// since, such as to another disk, still recovers.
-function homeBesideNotes(homesDir: string, marker: RestoringMarker): string | null {
-    const homeDir = homeDirUnder(path.dirname(homesDir), marker.ownerId);
-    if (path.dirname(homeDir) !== homesDir) return null;
-    const sameName = path.basename(marker.homeDir) === path.basename(homeDir);
-    const sameKind = path.basename(path.dirname(marker.homeDir)) === path.basename(homesDir);
-    return sameName && sameKind ? homeDir : null;
-}
-
 // An older build's notes are in the backups folder, apart from the homes, so the path they name must be the owner's
 // home in this data folder exactly.
 function homeInDataRoot(marker: RestoringMarker): string | null {
     const homeDir = homeDirUnder(getDataRoot(), marker.ownerId);
     return marker.homeDir === homeDir ? homeDir : null;
+}
+
+// A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, so other users of the host read
+// password hashes and keys out of them. A build of 0.4.1 or before wrote a server archive's sidecar that way too.
+// Each gets the mode every archive and record is written with now. A file the API's user does not own, such as one an
+// operator copied in as root, is named and left as it is, since the server must still start.
+function closeArchives(): void {
+    const dir = backupsDirPath();
+    if (!fs.existsSync(dir)) return;
+    for (const name of fs.readdirSync(dir)) {
+        const homeArchive = name.endsWith(SIDECAR_SUFFIX) ? name.slice(0, -SIDECAR_SUFFIX.length) : name;
+        const serverArchive = name.endsWith(SERVER_SIDECAR_SUFFIX)
+            ? name.slice(0, -SERVER_SIDECAR_SUFFIX.length)
+            : name;
+        if (!parseBackupArtifactName(homeArchive) && !parseServerArchiveName(serverArchive)) continue;
+        const file = path.join(dir, name);
+        try {
+            // A chmod follows a symlink to wherever it points, so only a regular file is closed.
+            if (fs.lstatSync(file).isFile()) fs.chmodSync(file, ARCHIVE_MODE);
+        } catch (error) {
+            console.error(`[backup] could not close ${name} to other users: ${describeError(error)}`);
+        }
+    }
 }
 
 // A restore killed anywhere between the move-aside and the last install step left the home's path
@@ -166,29 +189,6 @@ function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => s
     console.error(
         `[backup] a restore of ${marker.ownerId} was interrupted: ${marker.preRestoreName} is back in place as the home folder`,
     );
-}
-
-// A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, so other users of the host read
-// password hashes and keys out of them. A build of 0.4.1 or before wrote a server archive's sidecar that way too.
-// Each gets the mode every archive and record is written with now. A file the API's user does not own, such as one an
-// operator copied in as root, is named and left as it is, since the server must still start.
-function closeArchives(): void {
-    const dir = backupsDirPath();
-    if (!fs.existsSync(dir)) return;
-    for (const name of fs.readdirSync(dir)) {
-        const homeArchive = name.endsWith(SIDECAR_SUFFIX) ? name.slice(0, -SIDECAR_SUFFIX.length) : name;
-        const serverArchive = name.endsWith(SERVER_SIDECAR_SUFFIX)
-            ? name.slice(0, -SERVER_SIDECAR_SUFFIX.length)
-            : name;
-        if (!parseBackupArtifactName(homeArchive) && !parseServerArchiveName(serverArchive)) continue;
-        const file = path.join(dir, name);
-        try {
-            // A chmod follows a symlink to wherever it points, so only a regular file is closed.
-            if (fs.lstatSync(file).isFile()) fs.chmodSync(file, ARCHIVE_MODE);
-        } catch (error) {
-            console.error(`[backup] could not close ${name} to other users: ${describeError(error)}`);
-        }
-    }
 }
 
 // The marker survived a crash and names folders this then renames, so it is read as untrusted input. Its owner must

@@ -52,11 +52,7 @@ export type ServerArchiveFile = {
 // reconcile drops.
 type NotReplayed = { settled: number; missing: number };
 
-// The manifest of each archive inside a server archive, the server member's and every home's, by member name. Each
-// is the last entry of its member, so reading one decompresses the whole member. The stage reads them once, for its
-// room check, and bounds each unpack by them.
-export type MemberManifests = ReadonlyMap<string, BackupManifest>;
-
+// What every member's step of the stage shares. `boundOf` is the most one member's unpack may write.
 type StageContext = {
     dataDir: string;
     unpackDir: string;
@@ -65,6 +61,11 @@ type StageContext = {
     now: number;
     boundOf: (member: HashedArchiveMember) => Promise<UnpackBound>;
 };
+
+// The manifest of each archive inside a server archive, the server member's and every home's, by member name. Each
+// is the last entry of its member, so reading one decompresses the whole member. The stage reads them once, for its
+// room check, and bounds each unpack by them.
+export type MemberManifests = ReadonlyMap<string, BackupManifest>;
 
 export async function readMemberManifests({ manifest, members }: ServerArchiveFile): Promise<MemberManifests> {
     const manifests = new Map<string, BackupManifest>();

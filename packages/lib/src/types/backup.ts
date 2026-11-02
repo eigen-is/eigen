@@ -1,5 +1,6 @@
-// The backup types the API and the Admin app share: the levels and reasons a backup has, the manifest inside a home
-// or server archive, the record kept beside a server archive, and the jobs that make, verify, restore and upload them.
+// The backup types the API and the Admin app share, such as the levels and reasons a backup has, the manifest inside a
+// home or server archive, the record kept beside a server archive, and the jobs that make, verify, restore and upload
+// them.
 
 import type { MountConfig } from './mount';
 
@@ -161,8 +162,8 @@ export type BackupJob = {
     // `upload` sends a server archive to the backup bucket, as a server backup ends or on the owner's click.
     kind: 'backup' | 'verify' | 'restore' | 'server-backup' | 'upload';
     ownerId: string;
-    // The admin who started it: a home job's notifications go to their home. Absent for the scheduler
-    // and the CLI; a server job alerts the org owner. A home job's pokes go to every admin, a server job's to the owner.
+    // The admin who started it: a home job's notifications go to their home. Absent for the scheduler and the CLI;
+    // a server job alerts the org owner. A home job's pokes go to every admin, a server job's to the owner.
     startedBy?: string;
     state: (typeof BACKUP_JOB_STATES)[number];
     progress: { step: string; done: number; total: number };
@@ -181,8 +182,8 @@ export type BackupJob = {
 // How a job's steps report into its `progress`: the step they are on, and how far they are through it.
 export type BackupProgress = (step: string, done: number, total: number) => void;
 
-// One artifact in the backups folder as the admin pane sees it. `manifest` is null for an artifact
-// with no sidecar (one copied in by hand) — the list never opens an archive to find out.
+// One artifact in the backups folder as the admin pane sees it. `manifest` is null for an artifact with no sidecar,
+// such as one copied in by hand: the list never opens an archive to find out.
 export type BackupArtifact = {
     name: string;
     bytes: number;

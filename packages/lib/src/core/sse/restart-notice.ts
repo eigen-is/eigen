@@ -1,7 +1,7 @@
-// What the tab knows about a restart the server announced, such as the one before an update: the notice it last
-// heard, with its deadline and the time it was announced on this tab's clock, and whether its event stream is down. The stream fills it, through
+// What the tab knows about a restart the server announced, such as the one before an update. It holds the notice it
+// last heard, dated on this tab's clock, and whether the tab's event stream is down. The stream fills it, through
 // handleSSEvent and useSSE, and the banner reads it through useRestartNotice. A tab that holds a due notice while its
-// stream is down knows the server is updating, not broken.
+// stream is down knows the server is restarting, not broken.
 
 import type { RestartNoticeState, SSEvent } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';

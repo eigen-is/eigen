@@ -229,7 +229,8 @@ type PreparedHome<Judged> = { install: InstallHome; judged: Judged };
 // The moves every restore is made of: judge the replacement while the home still serves, so a refusal costs nobody a
 // page, then take the home from everyone, put its folder aside, install the replacement, and on a failure put both
 // folders back, deleting nothing. The marker written here is the only note the next boot reads of an interrupted
-// restore, so recoverInterruptedRestores covers every kind. It hands back what the preparing step judged.
+// restore, so recoverInterruptedRestores covers every kind, and a rollback that failed too. It hands back what the
+// preparing step judged.
 async function replaceHomeFolder<Judged>(
     ownerId: string,
     homeDir: string,
@@ -287,7 +288,7 @@ async function replaceHomeFolder<Judged>(
                 throw error;
             }
         } finally {
-            // Whatever happened is over, and a failed install put the home back itself.
+            // The job is over. A failed install put the home back, or left the notes that let the next boot do it.
             clearHomeRestoring(ownerId);
         }
         return judged;
