@@ -44,7 +44,15 @@ export function ContactAddRow({
                     onEmptyEnter={onEmptyEnter}
                 />
             </div>
-            <Button type="button" size="icon" variant="outline" className="ml-2" onClick={onSubmit} disabled={!value}>
+            <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="ml-2"
+                aria-label="Add"
+                onClick={onSubmit}
+                disabled={!value}
+            >
                 <Plus className="h-4 w-4" />
             </Button>
         </div>

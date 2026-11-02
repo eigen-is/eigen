@@ -1,5 +1,6 @@
 // A contact add row often sits inside a form, such as Calendar's New event or Edit calendar. Adding a person there,
-// with Enter in the field or with the + button, adds that person and leaves the form unsubmitted.
+// with Enter in the field or with the + button, adds that person and leaves the form unsubmitted. The + is named
+// Add, for a screen reader.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { pressEnter } from '../../press-enter';
@@ -44,9 +45,11 @@ test('Enter in the field adds the person and submits nothing', async () => {
     expect(onFormSubmit).not.toHaveBeenCalled();
 });
 
-test('the + button adds the person and submits nothing', async () => {
+test('the + button is named Add, and adds the person and submits nothing', async () => {
     await render();
-    await act(async () => document.querySelector<HTMLButtonElement>('form button')?.click());
+    const add = document.querySelector<HTMLButtonElement>('form button[aria-label="Add"]');
+    if (!add) throw new Error('the row has no button named Add');
+    await act(async () => add.click());
     expect(onAdd).toHaveBeenCalledTimes(1);
     expect(onFormSubmit).not.toHaveBeenCalled();
 });
