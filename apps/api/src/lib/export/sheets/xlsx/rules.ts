@@ -209,18 +209,22 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
 // counted, since the importer would drop it.
 function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
     const kept: Record<string, SheetValidation> = {};
-    // The ranges of every rule above the one being cut, walked from the highest id down.
-    const above: SingleRange[] = [];
-    for (const id of Object.keys(rules).sort((a, b) => compareValidationIds(b, a))) {
+    // Every rule's ranges in one lookup, each with its rule's place from the highest id down, so a range finds the
+    // ranges of the higher rules that overlap it.
+    const ids = Object.keys(rules).sort((a, b) => compareValidationIds(b, a));
+    const overlapping = overlapLookup(
+        ids.flatMap((id, place) => rules[id].ranges.map((range) => ({ ...range, place }))),
+    );
+    for (const [place, id] of ids.entries()) {
         const { ranges } = rules[id];
-        const bounds = boundsOf(ranges);
-        const near = above.filter((higher) => rangesOverlap(higher, bounds));
-        let cut = ranges;
-        if (near.length > 0) {
-            const overlapping = overlapLookup(near);
-            cut = coalescedRanges(ranges.flatMap((range) => cutOut(range, overlapping(range))));
-        }
-        for (const range of ranges) above.push(range);
+        let cuts = false;
+        const pieces = ranges.flatMap((range) => {
+            const above = overlapping(range).filter((other) => other.place < place);
+            if (above.length === 0) return [range];
+            cuts = true;
+            return cutOut(range, above);
+        });
+        const cut = cuts ? coalescedRanges(pieces) : ranges;
         if (cut.length > MAX_VALIDATION_RANGES) lost('validations-dropped');
         else if (cut.length > 0) kept[id] = { ...rules[id], ranges: cut };
     }
@@ -234,7 +238,7 @@ const SHORT_RANGE_ROWS = 64;
 // The ranges that overlap a range, found without a check against every range. The short ones are sorted by their
 // first row, so a binary search finds the few that start near the range. The tall ones, such as a whole column, are
 // few, and each is checked.
-function overlapLookup(ranges: readonly SingleRange[]): (range: SingleRange) => SingleRange[] {
+function overlapLookup<R extends SingleRange>(ranges: readonly R[]): (range: SingleRange) => R[] {
     const tall = ranges.filter(({ row }) => row[1] - row[0] >= SHORT_RANGE_ROWS);
     const short = ranges.filter(({ row }) => row[1] - row[0] < SHORT_RANGE_ROWS).sort((a, b) => a.row[0] - b.row[0]);
     return (range) => {
@@ -263,16 +267,6 @@ function cutOut(range: SingleRange, above: readonly SingleRange[]): SingleRange[
         );
     }
     return pieces;
-}
-
-// The smallest range around a rule's ranges. A spread would overflow the stack on a rule of many ranges.
-function boundsOf(ranges: readonly SingleRange[]): SingleRange {
-    const bounds = { row: [...ranges[0].row], column: [...ranges[0].column] };
-    for (const { row, column } of ranges) {
-        bounds.row = [Math.min(bounds.row[0], row[0]), Math.max(bounds.row[1], row[1])];
-        bounds.column = [Math.min(bounds.column[0], column[0]), Math.max(bounds.column[1], column[1])];
-    }
-    return bounds;
 }
 
 function promptOf(rule: DataVerificationRule): string {

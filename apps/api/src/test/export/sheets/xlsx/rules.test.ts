@@ -347,6 +347,32 @@ describe('a data validation', () => {
         }
     });
 
+    // Every rule's ranges spread over the rows of all the others, so each rule is near every range of every higher one,
+    // which a check of each rule against those ranges made take seconds.
+    test('as many rules as a sheet may hold, spread over each other, cut in a moment and read back', () => {
+        const list = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
+        const count = 1024;
+        const dataValidations = Object.fromEntries(
+            Array.from({ length: count }, (_, k) => [
+                `validation-${k + 1}`,
+                {
+                    ranges: Array.from({ length: 64 }, (_, i) => ({
+                        row: [count * i + k, count * i + k],
+                        column: [1, 1],
+                    })),
+                    rule: list,
+                },
+            ]),
+        );
+        const started = performance.now();
+        const { lost, ...read } = roundTrip({ dataValidations });
+        expect(performance.now() - started).toBeLessThan(1000);
+        expect(lost).toEqual([]);
+        for (const r of [0, count - 1, count * 64 - 1]) {
+            expect(ruleAt(read.dataValidations, r, 1)).toEqual(ruleAt(dataValidations, r, 1));
+        }
+    });
+
     // A cut can split each of a rule's ranges in two, and the importer drops a rule of more ranges than a rule may
     // hold. So the export joins what it cut, and drops and counts a rule still past the cap.
     test('a rule the cuts leave with more ranges than a rule may hold is dropped and counted', () => {
