@@ -8,9 +8,9 @@ import type { VectorTool } from '../hooks/use-tool';
 
 const CREATING_ID = '__creating__';
 
-// The tools a box drag creates with: the box kinds, and the Text tool, which drags out a text box. The literal tuple
-// gives CreatingState a narrow type, so creatingElement composes each element without a cast. `isBoxTool` answers for
-// the kinds from the registry's `creation` capability, and the registry test pins the two against each other.
+// The tools a box drag creates with: the box kinds, and the Text tool, which drags out a text box. The narrow union
+// lets creatingElement compose each element without a cast. `isBoxTool` answers for the kinds from the registry's
+// `creation` capability, and the registry test pins the two against each other.
 type BoxTool = 'rectangle' | 'diamond' | 'ellipse' | 'text';
 
 export function isBoxTool(tool: VectorTool): tool is BoxTool {

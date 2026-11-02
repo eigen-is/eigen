@@ -18,7 +18,7 @@ import {
 } from '@workspace/lib/vector';
 import { memo, useRef } from 'react';
 import type { FitHeight } from './text-fit';
-import { useRichTextAutoFit } from './text-fit';
+import { useTextBoxAutoFit } from './text-fit';
 
 type ElementLayerProps = {
     el: VectorElement;
@@ -28,8 +28,8 @@ type ElementLayerProps = {
     // An in-place editor for this element. While present the layer takes pointer events and the kind's
     // own text body is not drawn — the editor IS what the user reads — but its box paint still is.
     children?: React.ReactNode;
-    // Rich text's height follows its text: pass a writer and the layer measures its own body and fits
-    // the box (text-fit.ts). Omitted by every read-only surface — a thumbnail must not write.
+    // A text box's height follows its text: with a writer, the layer measures its own body and fits the box. Every
+    // read-only surface omits it, because a thumbnail must not write.
     onFitHeight?: FitHeight;
     // Set by a read-only copy of the canvas, so its defs' ids stay apart from the canvas's (layerContent).
     idScope?: string;
@@ -151,7 +151,7 @@ export const ElementLayer = memo(function ElementLayer({
     const hostRef = useRef<HTMLDivElement>(null);
     // Hosting the in-place editor IS the user typing in this box, which is what makes its growth
     // part of their edit rather than bookkeeping.
-    useRichTextAutoFit(hostRef, el, onFitHeight, !!children);
+    useTextBoxAutoFit(hostRef, el, onFitHeight, !!children);
     const content = useLayerBody(el, resolveMedia, byId, idScope);
     if (!content) return null;
     const style = layerStyle(placeLayer(el, content));

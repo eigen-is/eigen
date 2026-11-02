@@ -2,12 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import * as Y from 'yjs';
 import { serializeFill, solidFill } from '../../../vector/fill';
 import {
-    baseDefaultsFor,
     ELEMENT_KINDS,
+    isTextBox,
     richTextCssText,
-    richTextFitHeight,
     SLIDES_STYLE_DEFAULTS,
-    VECTOR_STYLE_DEFAULTS,
+    textBoxFitHeight,
 } from '../../../vector/kinds';
 import { readElementFromFields, readVectorFromDoc } from '../../../vector/read-vector';
 import type { VectorRectangleElement } from '../../../vector/types';
@@ -36,6 +35,13 @@ describe('the text box is a rectangle that fits its text', () => {
         expect(read('yes')).toBe(false);
     });
 
+    test('isTextBox answers for a rectangle with autoFit only', () => {
+        expect(isTextBox(textBox({ id: 't' }))).toBe(true);
+        expect(isTextBox(shape({ id: 'r', type: 'rectangle', autoFit: false }))).toBe(false);
+        expect(isTextBox(shape({ id: 'e', type: 'ellipse' }))).toBe(false);
+        expect(isTextBox({ type: 'rectangle', autoFit: true })).toBe(true);
+    });
+
     test('a new autoFit rectangle starts with the text box look, a new rectangle with the shape look', () => {
         const doc = new Y.Doc();
         writeElementInDoc(doc, { type: 'rectangle', autoFit: true }, 'a0', SLIDES_STYLE_DEFAULTS, 'text');
@@ -57,7 +63,6 @@ describe('the text box is a rectangle that fits its text', () => {
             padding: 10,
             strokeColor: SLIDES_STYLE_DEFAULTS.strokeColor,
         });
-        expect(baseDefaultsFor('rectangle', VECTOR_STYLE_DEFAULTS, true).strokeColor).toBe('transparent');
     });
 
     test('an empty text box still renders its text body, and no backdrop while unpainted', () => {
@@ -153,34 +158,34 @@ describe('text box paint', () => {
 // chrome cases below add one back.
 const box = (over: Partial<VectorRectangleElement>) => textBox({ id: 't', strokeColor: 'transparent', ...over });
 
-describe('richTextFitHeight', () => {
+describe('textBoxFitHeight', () => {
     test('grows to the measured text', () => {
-        expect(richTextFitHeight(box({ height: 40 }), 180)).toBe(180);
+        expect(textBoxFitHeight(box({ height: 40 }), 180)).toBe(180);
     });
 
     test("never shrinks: the stored height is the user's minimum, not a maximum", () => {
         // A taller box than its text is deliberate — it is what verticalAlign aligns within, and a
         // manual resize is how the user sets it.
-        expect(richTextFitHeight(box({ height: 400 }), 24)).toBeNull();
-        expect(richTextFitHeight(box({ height: 400, verticalAlign: 'center' }), 24)).toBeNull();
+        expect(textBoxFitHeight(box({ height: 400 }), 24)).toBeNull();
+        expect(textBoxFitHeight(box({ height: 400, verticalAlign: 'center' }), 24)).toBeNull();
     });
 
     test('a sub-pixel shortfall writes nothing (the loop guard every peer shares)', () => {
-        expect(richTextFitHeight(box({ height: 40 }), 40)).toBeNull();
-        expect(richTextFitHeight(box({ height: 40 }), 39.4)).toBeNull();
-        expect(richTextFitHeight(box({ height: 40 }), 40.2)).toBeNull();
+        expect(textBoxFitHeight(box({ height: 40 }), 40)).toBeNull();
+        expect(textBoxFitHeight(box({ height: 40 }), 39.4)).toBeNull();
+        expect(textBoxFitHeight(box({ height: 40 }), 40.2)).toBeNull();
     });
 
     test('rounds up, so the last line is never clipped by a fraction', () => {
-        expect(richTextFitHeight(box({ height: 40 }), 120.2)).toBe(121);
+        expect(textBoxFitHeight(box({ height: 40 }), 120.2)).toBe(121);
     });
 
     test('the inset rides inside the stored border box', () => {
-        expect(richTextFitHeight(box({ height: 40, padding: 20 }), 100)).toBe(140);
+        expect(textBoxFitHeight(box({ height: 40, padding: 20 }), 100)).toBe(140);
     });
 
     test('a painted border counts twice; a transparent one not at all', () => {
-        expect(richTextFitHeight(box({ height: 40, strokeColor: '#000000', strokeWidth: 4 }), 100)).toBe(108);
-        expect(richTextFitHeight(box({ height: 40, strokeWidth: 4 }), 100)).toBe(100);
+        expect(textBoxFitHeight(box({ height: 40, strokeColor: '#000000', strokeWidth: 4 }), 100)).toBe(108);
+        expect(textBoxFitHeight(box({ height: 40, strokeWidth: 4 }), 100)).toBe(100);
     });
 });

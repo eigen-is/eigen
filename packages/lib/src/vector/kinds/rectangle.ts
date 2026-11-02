@@ -9,7 +9,7 @@ import { boxCenter, hitTestBox, rotatePoint } from '../geometry';
 import { cornerRadius, rectOutline } from '../outline';
 import type { VectorRectangleElement } from '../types';
 import { CORNERS, DEFAULT_CORNERS, DEFAULT_SHAPE_TEXT_PROPS, DEFAULT_TEXT_BOX_PROPS } from '../types';
-import type { BasePaintDefaults } from './kind';
+import type { StyleDefaults } from './kind';
 import { BOX_CAPABILITIES, boxAimLines, defineKind, readBoxShape } from './kind';
 import { bool, oneOf } from './read-fields';
 import { renderRoughShape } from './render-utils';
@@ -18,9 +18,6 @@ import { hasText, plainText, richTextCssText, textRender, textualDefaults } from
 // Excalidraw shrinks a rectangle's projection diagonals by 15px at each end
 // (getDiagonalsForBindableElement) — the focus points behave oddly right at the corners.
 const DIAGONAL_SHRINK = 15;
-
-// A new text box paints no border until the user picks a color, where a new rectangle draws one in ink.
-export const TEXT_BOX_BASE_DEFAULTS: BasePaintDefaults = { strokeColor: 'transparent' };
 
 export const rectangleKind = defineKind<VectorRectangleElement>({
     type: 'rectangle',
@@ -70,14 +67,26 @@ export const rectangleKind = defineKind<VectorRectangleElement>({
     searchText: plainText,
 });
 
-// A text box's height GROWS with the text in it: whatever renders it measures its body and writes the fit
-// back when the text needs more room than the box has. The stored height is the user's MINIMUM, never
-// a maximum — extra height is how a box is vertically aligned (`verticalAlign` has nothing to work
-// with otherwise), so nothing ever shrinks a box automatically; a manual resize sets the new minimum.
-// `contentHeight` is the body's own extent; the stored height is the border box, so the inset and the
-// border ride inside it. null = the box is already tall enough, which is also the loop guard: every
-// peer measures the same box, and only a real (>= 1px) shortfall is ever written.
-export function richTextFitHeight(el: VectorRectangleElement, contentHeight: number): number | null {
+// Whether an element is a text box: a rectangle with `autoFit`. Generic, so a new element's partial narrows too.
+export function isTextBox<T extends { type: string; autoFit?: boolean }>(
+    el: T,
+): el is T & { type: 'rectangle'; autoFit: true } {
+    return el.type === 'rectangle' && el.autoFit === true;
+}
+
+// What a new text box starts with over a new rectangle. It paints no border until the user picks a color, where a new
+// rectangle draws one in ink. Its text starts at the top left, flush with its edge.
+export function textBoxOverrides(style: StyleDefaults) {
+    return { strokeColor: 'transparent', ...textualDefaults(style, DEFAULT_TEXT_BOX_PROPS), autoFit: true };
+}
+
+// A text box's height grows with its text. Whatever renders the box measures its body and writes the fit back when the
+// text needs more room than the box has. The stored height is the user's minimum, never a maximum: extra height is what
+// `verticalAlign` works with, so nothing shrinks a box by itself, and a manual resize sets a new minimum. `contentHeight`
+// is the body's own extent, and the stored height is the border box, so the inset and the border ride inside it. It
+// returns null when the box is tall enough. That is also the loop guard: every peer measures the same box, and only a
+// shortfall of 1 px or more is written.
+export function textBoxFitHeight(el: VectorRectangleElement, contentHeight: number): number | null {
     const needed = contentHeight + 2 * el.padding + (isBordered(el) ? 2 * el.strokeWidth : 0);
     // A sub-pixel shortfall is left alone: the body overflows visibly rather than clipping, so writing
     // for it would only cost every peer a round of updates.

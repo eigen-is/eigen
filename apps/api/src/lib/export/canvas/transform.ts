@@ -1,6 +1,6 @@
 // The standalone document for pages of compositor layers, such as a deck's HTML and PDF and a drawing's PDF, so they
-// share one @page rule, one font block and one reset. Also a deck's HTML and PDF export, one page per frame. Runs in
-// the transform process, so it reaches no Mount and no preview cache.
+// share one @page rule, one font block and one reset. It also runs a deck's HTML and PDF export, one page per frame. It
+// runs in the transform process, so it reaches no Mount and no preview cache.
 
 import { ptToPx } from '@workspace/lib/docs/eigendoc';
 import type { MediaResolver } from '@workspace/lib/vector';
@@ -45,8 +45,8 @@ export function canvasHtmlDocument(options: CanvasDocumentOptions): string {
     // blank page in WeasyPrint. Callers guarantee at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
-    // A rich-text box's raw HTML was filtered at the scene; the builder sanitizes the assembled body. No ADD_TAGS: the
-    // compositor emits ordinary HTML, never a foreignObject.
+    // The raw HTML of each text box and shape was filtered at the scene; the builder sanitizes the assembled body. No
+    // ADD_TAGS: the compositor emits ordinary HTML, never a foreignObject.
     const body = rendered.join('');
     const css = pdf ? pdfCss(width, height) : screenCss(width);
     return exportHtmlDocument({
@@ -65,8 +65,8 @@ export async function renderEigenslidesHtml(
     title: string,
     loadMedia: ExportMediaLoader,
 ): Promise<ExportTransformResult & { warnings: TransformWarning[] }> {
-    // Rich text is filtered per element before the compositor lays it out, so a <style> block in a
-    // text box cannot reach the document — which carries the generated @font-face rules of its own.
+    // Each element's text is filtered before the compositor lays it out, so a <style> block in it cannot reach the
+    // document, which carries its own generated @font-face rules.
     const scene = sanitizeSceneHtml(readVectorFromDoc(doc));
     const dataUriMap = toDataUriMap(await loadMedia(sceneMediaNames(scene)));
     const resolveMedia: MediaResolver = (mediaName) => dataUriMap.get(mediaName) ?? null;
@@ -85,8 +85,8 @@ export async function renderEigenslidesHtml(
     return { data: toTransferableText(html), warnings: [] };
 }
 
-// The reset zeroes every padding, which would otherwise pull a rich-text box's list markers outside
-// its box — canvas-text.css puts that one back.
+// The reset zeroes every padding, which would otherwise pull the list markers of a text box or a shape
+// outside its box — canvas-text.css puts that one back.
 const SHARED_CSS = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 img { display: block; max-width: 100%; }

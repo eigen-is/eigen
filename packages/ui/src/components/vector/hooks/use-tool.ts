@@ -8,7 +8,7 @@ import { CREATION_TOOL_TYPES } from '@workspace/lib/vector';
 import type { LucideIcon } from 'lucide-react';
 import { Eraser, MousePointer2, Type } from 'lucide-react';
 import { useState } from 'react';
-import { ELEMENT_KIND_UI } from '../kinds';
+import { ELEMENT_KIND_UI, TEXT_BOX_LABEL } from '../kinds';
 
 export type VectorTool = 'select' | 'text' | 'eraser' | VectorElementType;
 
@@ -34,7 +34,7 @@ export const VECTOR_TOOLS: VectorToolEntry[] = [
         const { icon, label, shortcut } = ELEMENT_KIND_UI[type];
         return { tool: type, icon, label, shortcut: shortcut?.letter, digit: shortcut?.digit, inserts: true };
     }),
-    { tool: 'text', icon: Type, label: 'Text', shortcut: 'T', digit: '8', inserts: true },
+    { tool: 'text', icon: Type, label: TEXT_BOX_LABEL, shortcut: 'T', digit: '8', inserts: true },
     { tool: 'eraser', icon: Eraser, label: 'Eraser', shortcut: 'E', digit: '0', inserts: false },
 ];
 

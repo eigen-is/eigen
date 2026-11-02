@@ -23,11 +23,12 @@ import { pathKind } from './path';
 import { pieKind } from './pie';
 import type { YMapLike } from './read-fields';
 import { isYMapLike } from './read-fields';
-import { rectangleKind, TEXT_BOX_BASE_DEFAULTS } from './rectangle';
+import { isTextBox, rectangleKind } from './rectangle';
+import { hasText } from './textual';
 
 export type { RenderOutput, StyleDefaults } from './kind';
 export { NEW_TEXT_BOX_SIZE, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
-export { richTextFitHeight } from './rectangle';
+export { isTextBox, textBoxFitHeight } from './rectangle';
 // The text block every kind with text shares. The in-place editor paints its box with the SAME string the
 // renderer emits (richTextCssText), so the two cannot drift.
 export { hasText, richTextCssText, textualDefaults } from './textual';
@@ -84,24 +85,26 @@ export function isTextual(el: VectorElement): el is VectorTextualElement {
     return capabilitiesOf(el).text;
 }
 
+// The elements that draw a text body: a text box always, even empty, because it grows to fit it, and any other element
+// with text once it holds some. An export writes a body for exactly these.
+export function drawsTextBody(el: VectorElement): el is VectorTextualElement {
+    return isTextual(el) && (isTextBox(el) || hasText(el));
+}
+
 // The registry answers the vocabulary question too, so a stored `type` is validated against the one
 // table. hasOwn, not `in`: `'constructor' in ELEMENT_KINDS` is true and would dispatch to Object's.
 export function isVectorElementType(v: unknown): v is VectorElementType {
     return typeof v === 'string' && Object.hasOwn(ELEMENT_KINDS, v);
 }
 
-// The shared base props a NEW element of this kind is created with, under the kind's own overrides —
-// the two the creation path spreads before the kind's own fields. A reset that reads this table restores
-// exactly what creation gave: an image's border resets to none, a rectangle's to the shared ink color, and
-// a text box's (`autoFit`) to none.
+// The shared base props a new element of this kind is created with, under the kind's own overrides, such as an
+// image's border, which starts as none. The creation paths and the previews spread it before the kind's own fields.
 export function baseDefaultsFor(
     type: VectorElementType,
     style: StyleDefaults,
-    autoFit = false,
 ): Pick<VectorElementBase, keyof typeof DEFAULT_ELEMENT_PROPS> {
-    const own = type === 'rectangle' && autoFit ? TEXT_BOX_BASE_DEFAULTS : ELEMENT_KINDS[type].baseDefaults;
     // The shared table's roughness is the READER's 0; a new element is as sketchy as its host says.
-    return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...own };
+    return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...ELEMENT_KINDS[type].baseDefaults };
 }
 
 // The kinds a tool can create, in toolbar order — VECTOR_TOOLS derives its kind tools from this instead of

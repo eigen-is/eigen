@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2065 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2067 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -986,7 +986,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1115)
+## Utilities & constants (1117)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1806,6 +1806,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToSegment` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `drawsTextBody` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `EDGES_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `EIGEN_MEDIA_SCHEME` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
@@ -1864,6 +1865,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isSafeMediaName` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
+| `isTextBox` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `isTextual` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `isTransparentColor` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isTransparentFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
@@ -1957,7 +1959,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rewriteEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `RICH_TEXT_CLASS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
-| `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `richTextSvg` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
@@ -2003,6 +2004,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
 | `textBoxDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
+| `textBoxFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `textualDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
 | `topmostIndex` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |

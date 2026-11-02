@@ -204,13 +204,12 @@ export function sanitizeExportMedia(media: ExportMedia[]): ExportMedia[] {
     });
 }
 
-// A rich-text box's `html` is a schemaless collaborator string, and the canvas mounts it through the
-// LightEditor sanitizer — so every renderer of one filters to that same set (@workspace/lib/html), and
-// there is a single answer to what a text box can hold. DOMPurify's own profile is far wider: a <table>,
-// an <img src="data:…"> or a <style> a peer wrote would be invisible on every live client yet rendered
-// in the .svg/.html download, the PDF and the drive hero — and a <style> element styles whatever embeds
-// the box rather than the box itself. The assembled document cannot forbid <style> instead: it carries
-// the generated @font-face block.
+// The `html` of a text box or a shape is a schemaless collaborator string, and the canvas mounts it through the
+// LightEditor sanitizer. So every renderer of it filters to that same set (@workspace/lib/html), and there is one answer
+// to what its text can hold. DOMPurify's own profile is far wider. A <table>, an <img src="data:…"> or a <style> a peer
+// wrote would be invisible on every live client, yet rendered in the .svg and .html downloads, the PDF and the drive
+// hero. A <style> element would also style whatever embeds the box rather than the box itself. The assembled document
+// cannot forbid <style> instead, because it carries the generated @font-face block.
 const LIGHT_EDITOR_ONLY: SanitizeConfig = {
     ALLOWED_TAGS: LIGHT_EDITOR_TAGS,
     ALLOWED_ATTR: LIGHT_EDITOR_ATTRS,

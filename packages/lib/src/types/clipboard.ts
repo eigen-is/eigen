@@ -60,11 +60,11 @@ export type EigenClipboardImageItem = {
     angle?: number; // degrees, clockwise
 };
 
-// A canvas selection as NATIVE elements: whole stored records (the ELEMENT_FIELDS scalars), so a
-// canvas→canvas paste restores exactly what was copied, including every field a future kind adds. Consumers that cannot place elements ignore this item and read the image / text items beside
-// it, or the `svg` flavor. Coordinates are the STORED ones (scene coordinates on an infinite canvas,
-// frame-relative inside a frame) — the one item type that carries position, because a canvas paste is
-// placed RELATIVE to where the set was copied from, not "at the app's default spot".
+// A canvas selection as native elements: whole stored records (the ELEMENT_FIELDS scalars), so a canvas-to-canvas
+// paste restores exactly what was copied, including every field a future kind adds. A consumer that cannot place
+// elements ignores this item and reads the image and text items beside it, or the `svg` flavor. Coordinates are the
+// stored ones: scene coordinates on an infinite canvas, relative to the frame inside a frame. It is the one item that
+// carries a position, because a canvas paste is placed relative to where the set was copied from.
 export type EigenClipboardElementsItem = {
     type: 'elements';
     elements: Record<string, string | number | boolean>[];

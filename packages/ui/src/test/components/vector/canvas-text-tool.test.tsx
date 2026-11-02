@@ -100,14 +100,17 @@ function surface(): HTMLElement {
     return found;
 }
 
+async function pointer(type: string, clientX: number, clientY: number) {
+    await act(async () =>
+        surface().dispatchEvent(
+            new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerId: 1, clientX, clientY }),
+        ),
+    );
+}
+
 async function click(clientX: number, clientY: number) {
-    for (const type of ['pointerdown', 'pointerup']) {
-        await act(async () =>
-            surface().dispatchEvent(
-                new PointerEvent(type, { bubbles: true, cancelable: true, button: 0, pointerId: 1, clientX, clientY }),
-            ),
-        );
-    }
+    await pointer('pointerdown', clientX, clientY);
+    await pointer('pointerup', clientX, clientY);
 }
 
 async function doubleClick(clientX: number, clientY: number) {
@@ -139,6 +142,33 @@ test('a click with the Text tool places an empty text box and opens its editor',
     // A press outside the box closes the editor, and the box with no text is gone.
     await click(900, 900);
     expect(elements()).toEqual([]);
+});
+
+test('a drag with the Text tool commits a text box of the dragged size and opens its editor', async () => {
+    await render('text');
+    await pointer('pointerdown', 200, 200);
+    await pointer('pointermove', 400, 260);
+    await pointer('pointermove', 500, 350);
+    await pointer('pointerup', 500, 350);
+    expect(elements()).toEqual([
+        expect.objectContaining({
+            type: 'rectangle',
+            autoFit: true,
+            width: 300,
+            height: 150,
+            strokeColor: 'transparent',
+        }),
+    ]);
+    expect(editorOpen()).toBe(true);
+});
+
+test('a double-click on empty canvas opens a new text box there', async () => {
+    await render('select');
+    await doubleClick(200, 200);
+    expect(elements()).toEqual([
+        expect.objectContaining({ type: 'rectangle', autoFit: true, ...NEW_TEXT_BOX_SIZE, html: '' }),
+    ]);
+    expect(editorOpen()).toBe(true);
 });
 
 test('an empty rectangle without fill or border stays when its editor closes', async () => {
