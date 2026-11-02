@@ -743,7 +743,8 @@ describe('restore --stage and --swap', () => {
                     madeHere.close();
                 }
             }
-            // A mount the archive has and this home no longer does: its files come back with no bytes.
+            // A mount the archive has and this home no longer does: its files come back, and the bucket may still hold
+            // their objects, so they are not counted as deleted.
             rmSync(join(mountsOf(s3User.id), S3_MOUNT_ID), { recursive: true });
             // A live metadata.db that does not read leaves its home uncounted, which the operator is told.
             writeFileSync(join(firstMount(ctx.charlie.user.id), 'metadata.db'), 'not a database');
@@ -756,7 +757,7 @@ describe('restore --stage and --swap', () => {
                 [
                     `▲  ${ctx.bob.user.name}: 2 files made since drop out of Drive`,
                     `▲  ${ctx.charlie.user.name}: files not counted, as a metadata.db does not read`,
-                    `▲  ${s3User.name}: 1 deleted since comes back without its bytes`,
+                    `▲  ${s3User.name}: 1 file of a mount removed since may not open`,
                     `▲  ${teamName}: 1 file made since drops out of Drive`,
                     '▲  Real Shape: 2 files made since drop out of Drive, 1 renamed, moved or trashed since does not open, 1 deleted since comes back without its bytes',
                 ].sort(),

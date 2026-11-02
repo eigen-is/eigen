@@ -56,12 +56,13 @@ type NotReplayed = { settled: number; missing: number };
 
 // The files of a home here that a Light swap leaves out of Drive or puts back without their bytes: `created` since the
 // backup, which have no row in it; `moved`, renamed, moved or trashed since on a mount that stores files by name,
-// whose row names a path their bytes left; and `deleted` for good since, whose row comes back. The stage prints them
-// per home before it asks to swap, and a home whose count is null as not counted.
-type LostFiles = { created: number; moved: number; deleted: number };
+// whose row names a path their bytes left; `deleted` for good since, whose row comes back; and `unmounted`, those of a
+// mount removed since, whose rows come back and may not open. The stage prints them per home before it asks to swap,
+// and a home whose count is null as not counted.
+type LostFiles = { created: number; moved: number; deleted: number; unmounted: number };
 type StagedArchive = NotReplayed & { lost: { home: string; count: LostFiles | null }[] };
 
-const NOTHING_LOST: LostFiles = { created: 0, moved: 0, deleted: 0 };
+const NOTHING_LOST: LostFiles = { created: 0, moved: 0, deleted: 0, unmounted: 0 };
 
 type StageContext = {
     dataDir: string;
@@ -124,7 +125,7 @@ export async function stageServerArchive(
         const { settled, missing, lost } = await stageHome(archive, home, context);
         staged.settled += settled;
         staged.missing += missing;
-        if (!lost || lost.created || lost.moved || lost.deleted) staged.lost.push({ home: home.name, count: lost });
+        if (!lost || Object.values(lost).some(Boolean)) staged.lost.push({ home: home.name, count: lost });
     }
     fs.rmSync(context.unpackDir, { recursive: true, force: true });
     return staged;
@@ -279,17 +280,20 @@ function readMetadata<T>(mountDir: string, read: (db: Database) => T, otherwise:
     }
 }
 
-// Against each mount of the home, here or in the archive: a mount only here drops out of Drive whole, and one only in
-// the archive comes back without its bytes. A folder is not counted, and neither is anything inside a document, such
-// as its databases, media and versions: a document made or renamed since counts once, and every file in a folder
-// renamed since counts. A home that is not here yet is not counted, since the stage already said it comes back without
-// its files. Null when a metadata.db does not read: the count must not come out lower than the loss.
+// Against each mount of the home, here or in the archive: a mount only here drops out of Drive whole. The files of one
+// only in the archive come back and may not open, but they are not `deleted`: an s3 mount's objects may still be in
+// its bucket. A folder is not counted, and neither is anything inside a document, such as its databases, media and
+// versions: a document made or renamed since counts once, and every file in a folder renamed since counts. A home that
+// is not here yet is not counted, since the stage already said it comes back without its files. Null when a
+// metadata.db does not read: the count must not come out lower than the loss.
 function countLostFiles(homeDir: string, liveHomeDir: string, mounts: BackupManifest['mounts']): LostFiles | null {
     if (!fs.existsSync(liveHomeDir)) return NOTHING_LOST;
-    const lost: LostFiles = { created: 0, moved: 0, deleted: 0 };
+    const lost: LostFiles = { ...NOTHING_LOST };
     const archivedMounts = new Map(mounts.map((summary) => [summary.id, summary.storageType]));
     for (const id of new Set([...archivedMounts.keys(), ...mountIdsIn(liveHomeDir)])) {
-        const live = mountRows(path.join(liveHomeDir, PATHS.DRIVE.ROOT, id));
+        const liveMountDir = path.join(liveHomeDir, PATHS.DRIVE.ROOT, id);
+        const isGone = !fs.existsSync(path.join(liveMountDir, PATHS.DRIVE.METADATA_DB));
+        const live = mountRows(liveMountDir);
         const archived = archivedMounts.has(id) ? mountRows(requireMountDir(homeDir, id)) : [];
         if (!live || !archived) return null;
         const liveById = new Map(live.map((row) => [row.id, row]));
@@ -304,7 +308,9 @@ function countLostFiles(homeDir: string, liveHomeDir: string, mounts: BackupMani
             }
         }
         for (const row of archived) {
-            if (isCounted(row, archivedById) && !liveById.has(row.id)) lost.deleted++;
+            if (!isCounted(row, archivedById) || liveById.has(row.id)) continue;
+            if (isGone) lost.unmounted++;
+            else lost.deleted++;
         }
     }
     return lost;

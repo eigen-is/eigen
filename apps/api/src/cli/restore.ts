@@ -400,6 +400,11 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
                       'deleted since comes back without its bytes',
                       'deleted since come back without their bytes',
                   ),
+                  ...clause(
+                      count.unmounted,
+                      'file of a mount removed since may not open',
+                      'files of a mount removed since may not open',
+                  ),
               ]
             : ['files not counted, as a metadata.db does not read'];
         console.log(glyphLine('warn', `${home}: ${clauses.join(', ')}`));

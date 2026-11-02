@@ -127,6 +127,7 @@ A Light backup holds no files and no mail. Its restore puts back the accounts, t
 - Files and documents made since the backup no longer show in Drive. Their content stays on disk.
 - On drives that store files by their names, the default **Local (full names)**, a file renamed, moved, or put in the Trash since shows at its old place and does not open. Its content is under the new name, or in the trash folder.
 - A file deleted for good since comes back without its content.
+- The files of a drive removed since come back in Drive, and may not open.
 - Calendars and contacts go back to the time of the backup.
 - Mail stays as it is now.
 - The folder of a user or team made since the backup, which has no account any more, moves to `data.pre-restore-<date>-<time>`. Before it stops Eigen, the restore names these folders and asks again whether to go on. A no leaves everything as it was.
