@@ -3,6 +3,7 @@
 // reaches those options through. Every item acts on the editor the toolbar follows: the body's, a band's being edited
 // or the open story's. The icon row's Align dropdown draws its options from here too.
 
+import type { Hotkey } from '@tanstack/react-hotkeys';
 import { formatForDisplay } from '@tanstack/react-hotkeys';
 import type { Editor } from '@tiptap/react';
 import { EIGEN_FONTS, getFontFamily } from '@workspace/lib/constants/fonts';
@@ -80,6 +81,15 @@ import type { PageNumberPreset } from './page-numbers';
 import { PageNumberItems } from './page-numbers';
 import { paragraphStylesIn } from './paragraph-styles';
 import { tableMenuSections } from './table-menu-sections';
+
+// The keys the editor binds for commands that Format and the icon row both offer, so the menu's rows and the row's
+// tooltips name the same ones.
+export const FORMAT_HOTKEYS = {
+    bold: 'Mod+B',
+    italic: 'Mod+I',
+    underline: 'Mod+U',
+    clearFormatting: 'Mod+\\',
+} as const satisfies Record<string, Hotkey>;
 
 // How a menu row draws an option: its icon, then its name.
 type MenuLook = { label: string; icon: LucideIcon };
@@ -171,12 +181,15 @@ export const FormatMenu = ({
             <DropdownMenuSubContent>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
                     <Bold className="h-4 w-4" /> Bold
+                    <DropdownMenuShortcut>{formatForDisplay(FORMAT_HOTKEYS.bold)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleItalic().run()}>
                     <Italic className="h-4 w-4" /> Italic
+                    <DropdownMenuShortcut>{formatForDisplay(FORMAT_HOTKEYS.italic)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleUnderline().run()}>
                     <Underline className="h-4 w-4" /> Underline
+                    <DropdownMenuShortcut>{formatForDisplay(FORMAT_HOTKEYS.underline)}</DropdownMenuShortcut>
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleStrike().run()}>
                     <Strikethrough className="h-4 w-4" /> Strikethrough
@@ -286,17 +299,11 @@ export const FormatMenu = ({
                 <AlignLeft className="h-4 w-4" /> Align and indent
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
-                {TEXT_ALIGNS.map((alignment) => {
-                    const { label, icon: Icon } = ALIGNMENT_LOOK[alignment];
-                    return (
-                        <DropdownMenuItem
-                            key={alignment}
-                            onClick={() => editor.chain().focus().setTextAlign(alignment).run()}
-                        >
-                            <Icon className="h-4 w-4" /> {label}
-                        </DropdownMenuItem>
-                    );
-                })}
+                <ChoiceMenuItems
+                    value={active.alignment}
+                    options={TEXT_ALIGNS.map((alignment) => lookOption(alignment, ALIGNMENT_LOOK[alignment]))}
+                    onChange={(alignment) => editor.chain().focus().setTextAlign(alignment).run()}
+                />
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => editor.chain().focus().stepIndent(1).run()}>
                     <ListIndentIncrease className="h-4 w-4" /> Increase indent
@@ -473,7 +480,7 @@ export const FormatMenu = ({
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={clearFormatting}>
             <RemoveFormatting className="h-4 w-4" /> Clear formatting
-            <DropdownMenuShortcut>{formatForDisplay('Mod+\\')}</DropdownMenuShortcut>
+            <DropdownMenuShortcut>{formatForDisplay(FORMAT_HOTKEYS.clearFormatting)}</DropdownMenuShortcut>
         </DropdownMenuItem>
     </AppBarMenu>
 );

@@ -64,7 +64,7 @@ import {
 import { useState } from 'react';
 import { runClipboardCommand } from './clipboard';
 import { CustomSpacingDialog } from './custom-spacing-dialog';
-import { ALIGNMENT_LOOK, FormatMenu, lookOption } from './format-menu';
+import { ALIGNMENT_LOOK, FORMAT_HOTKEYS, FormatMenu, lookOption } from './format-menu';
 import { useToolbarState } from './hooks/use-toolbar-state';
 import { IndentationOptionsDialog } from './indentation-options-dialog';
 import { InsertMenu } from './insert-menu';
@@ -406,21 +406,21 @@ export const EditorToolbar = ({
                             <div className="flex items-center gap-0.5">
                                 <TooltipButton
                                     icon={Bold}
-                                    tooltipText={`Bold (${formatForDisplay('Mod+B')})`}
+                                    tooltipText={`Bold (${formatForDisplay(FORMAT_HOTKEYS.bold)})`}
                                     active={active.bold}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleBold().run()}
                                 />
                                 <TooltipButton
                                     icon={Italic}
-                                    tooltipText={`Italic (${formatForDisplay('Mod+I')})`}
+                                    tooltipText={`Italic (${formatForDisplay(FORMAT_HOTKEYS.italic)})`}
                                     active={active.italic}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleItalic().run()}
                                 />
                                 <TooltipButton
                                     icon={Underline}
-                                    tooltipText={`Underline (${formatForDisplay('Mod+U')})`}
+                                    tooltipText={`Underline (${formatForDisplay(FORMAT_HOTKEYS.underline)})`}
                                     active={active.underline}
                                     preventFocusLoss
                                     onClick={() => editor.chain().focus().toggleUnderline().run()}
@@ -543,7 +543,7 @@ export const EditorToolbar = ({
 
                                     <TooltipButton
                                         icon={RemoveFormatting}
-                                        tooltipText={`Clear formatting (${formatForDisplay('Mod+\\')})`}
+                                        tooltipText={`Clear formatting (${formatForDisplay(FORMAT_HOTKEYS.clearFormatting)})`}
                                         onClick={clearFormatting}
                                     />
                                 </>
