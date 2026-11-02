@@ -57,7 +57,7 @@ const MOUNT_PATH_COLUMNS = {
     hash: paths.hash,
 };
 
-type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
+export type MountPathRow = Pick<typeof paths.$inferSelect, keyof typeof MOUNT_PATH_COLUMNS>;
 
 // The databases a mount owns inside an archive: a container's data.db/comments.db and the versions/
 // snapshots of one, each with the container type behind it.
@@ -140,6 +140,15 @@ export function managedDbContainer(row: MountPathRow, byId: ReadonlyMap<string, 
         return container && isDocumentType(container.type) ? container : null;
     }
     return CONTAINER_DB_NAMES.has(row.name) && isDocumentType(parent.type) ? parent : null;
+}
+
+// Whether a row sits inside a document, such as its databases, media, chat threads and versions. Drive shows the
+// document as one item, whatever it holds.
+export function insideDocument(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): boolean {
+    for (const parent of ancestors(row, byId)) {
+        if (isDocumentType(parent.type)) return true;
+    }
+    return false;
 }
 
 // The rows no path builder can place, by their chain or by a part a path cannot hold: the capture leaves them out of

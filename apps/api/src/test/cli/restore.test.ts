@@ -364,6 +364,7 @@ let alice: TestUser;
 let aliceMountId: string;
 let trashedId: string;
 let teamOwner: string;
+let teamName: string;
 let s3User: TestUser;
 let s3Mount: Mount;
 let s3Fault: FaultStorage;
@@ -378,7 +379,8 @@ beforeAll(async () => {
     ctx = await getTestContext();
     alice = ctx.alice.user;
     for (const user of [ctx.alice.user, ctx.bob.user, ctx.charlie.user]) await getHome(user.id);
-    teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, `Restore CLI Team ${Date.now()}`));
+    teamName = `Restore CLI Team ${Date.now()}`;
+    teamOwner = teamOwnerId(await createTeam(ctx, getServerConfig()!.orgId, teamName));
     await getHome(teamOwner);
     realShape = await realShapeHome();
 
@@ -596,10 +598,11 @@ describe('restore --stage and --swap', () => {
             mkdirSync(join(dir, 'data/home/old.pre-restore-20260101-000000'));
 
             const staged = await stage(dir, basename(lightArchive));
-            // A live metadata.db that does not read is no reason to refuse: its files go uncounted, and it says so.
+            // A live metadata.db that does not read is no reason to refuse: its home goes uncounted, and it says so.
             expect(staged.stderr).toContain(
-                'metadata.db does not read (file is not a database): its files are not counted',
+                'metadata.db does not read (file is not a database): the files of its home are not counted',
             );
+            expect(staged.stdout).toContain(`${alice.name}: files not counted`);
             expect(staged.code).toBe(0);
             const swapped = await swap(dir);
             expect(swapped.code).toBe(0);
@@ -665,29 +668,47 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light stage counts, per home, the files that will not come back, and asks before the swap',
+        'a Light stage counts, per home and over every mount, the files that will not come back, and asks before the swap',
         async () => {
             const dir = install();
             rmSync(join(dir, 'data/home/old'), { recursive: true });
             await stageAndSwap(dir, basename(fullArchive));
-            // Since the backup: a file and a folder made, and a file renamed, on the by-name mount.
-            const byName = openMountMetadata(join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db'));
+            const insert = (db: Database, id: string, type: string, parentId: string) =>
+                db.run(
+                    'INSERT INTO paths (id, file, name, type, parentId, ownerId, mimeType) SELECT ?, ?, ?, ?, ?, ownerId, mimeType FROM paths WHERE parentId IS NULL',
+                    [id, id, id, type, parentId],
+                );
+            const rootOf = (db: Database) =>
+                db.query<{ id: string }, []>('SELECT id FROM paths WHERE parentId IS NULL').get()!.id;
+            const mountsOf = (ownerId: string) => join(homeDirOf(dir, ownerId), PATHS.DRIVE.ROOT);
+            const firstMount = (ownerId: string) => {
+                const [mount] = readdirSync(mountsOf(ownerId), { withFileTypes: true }).filter((entry) =>
+                    entry.isDirectory(),
+                );
+                return join(mountsOf(ownerId), mount.name);
+            };
+
+            // On the by-name mount since the backup: a file, a folder, and a document with an image in it made, a file
+            // renamed, and a trashed one deleted for good.
+            const byName = openMountMetadata(join(mountsOf(realShape.user.id), 'default/metadata.db'));
             try {
-                const copy = (id: string, name: string, type: string) =>
-                    byName.run(
-                        'INSERT INTO paths (id, file, name, type, parentId, ownerId, mimeType) SELECT ?, ?, ?, ?, parentId, ownerId, mimeType FROM paths WHERE id = ?',
-                        [id, name, name, type, realShape.ids.renamed],
-                    );
-                copy('made-since', 'made-since.txt', 'file');
-                copy('folder-since', 'Folder since', 'folder');
+                const parent = byName
+                    .query<{ parentId: string }, [string]>('SELECT parentId FROM paths WHERE id = ?')
+                    .get(realShape.ids.renamed)!.parentId;
+                insert(byName, 'made-since.txt', 'file', parent);
+                insert(byName, 'Folder since', 'folder', parent);
+                insert(byName, 'Doc since.eigendoc', 'doc', rootOf(byName));
+                insert(byName, 'media', 'folder', 'Doc since.eigendoc');
+                insert(byName, 'picture.png', 'file', 'media');
                 byName.run("UPDATE paths SET name = 'final-2.txt', file = 'final-2.txt' WHERE id = ?", [
                     realShape.ids.renamed,
                 ]);
+                byName.run('DELETE FROM paths WHERE id = ?', [realShape.ids.trashed]);
             } finally {
                 byName.close();
             }
             // On an id-keyed mount a move keeps the key, so the file still opens.
-            const byId = openMountMetadata(join(homeDirOf(dir, alice.id), 'mounts', aliceMountId, 'metadata.db'));
+            const byId = openMountMetadata(join(mountsOf(alice.id), aliceMountId, 'metadata.db'));
             try {
                 byId.run(
                     "INSERT INTO paths (id, file, name, type, parentId, ownerId, mimeType) SELECT 'moved-into', 'moved-into', 'Moved into', 'folder', parentId, ownerId, mimeType FROM paths WHERE name = 'kept.txt'",
@@ -696,14 +717,42 @@ describe('restore --stage and --swap', () => {
             } finally {
                 byId.close();
             }
+            // A mount made here since, which the archive does not have: all of it drops out of Drive. A team home
+            // counts like a user's.
+            const bobMetadata = readFileSync(join(firstMount(ctx.bob.user.id), 'metadata.db'));
+            for (const [ownerId, files] of [
+                [ctx.bob.user.id, ['one.txt', 'two.txt']],
+                [teamOwner, ['team-since.txt']],
+            ] as const) {
+                const liveOnly = join(mountsOf(ownerId), 'live-only');
+                mkdirSync(liveOnly, { recursive: true });
+                writeFileSync(join(liveOnly, 'metadata.db'), bobMetadata);
+                const madeHere = openMountMetadata(join(liveOnly, 'metadata.db'));
+                try {
+                    madeHere.run('DELETE FROM paths WHERE parentId IS NOT NULL');
+                    for (const id of files) insert(madeHere, id, 'file', rootOf(madeHere));
+                } finally {
+                    madeHere.close();
+                }
+            }
+            // A mount the archive has and this home no longer does: its files come back with no bytes.
+            rmSync(join(mountsOf(s3User.id), S3_MOUNT_ID), { recursive: true });
+            // A live metadata.db that does not read leaves its home uncounted, which the operator is told.
+            writeFileSync(join(firstMount(ctx.charlie.user.id), 'metadata.db'), 'not a database');
 
             const declined = await restoreCli(dir, [basename(lightArchive), '--stage'], { input: 'y\nn\n' });
-            expect(declined.stderr).toBe('');
+            expect(declined.stderr).toContain('metadata.db does not read (file is not a database)');
             expect(declined.code).toBe(DECLINED);
-            const lost = declined.stdout.split('\n').filter((line) => line.includes('made since'));
-            expect(lost).toEqual([
-                '▲  Real Shape: 1 file(s) made since drop out of Drive, 1 renamed, moved or trashed since do not open',
-            ]);
+            const lost = declined.stdout.split('\n').filter((line) => / since | not counted/.test(line));
+            expect(lost.sort()).toEqual(
+                [
+                    `▲  ${ctx.bob.user.name}: 2 files made since drop out of Drive`,
+                    `▲  ${ctx.charlie.user.name}: files not counted, as a metadata.db does not read`,
+                    `▲  ${s3User.name}: 1 deleted since comes back without its bytes`,
+                    `▲  ${teamName}: 1 file made since drops out of Drive`,
+                    '▲  Real Shape: 2 files made since drop out of Drive, 1 renamed, moved or trashed since does not open, 1 deleted since comes back without its bytes',
+                ].sort(),
+            );
             expect(declined.stdout).toContain(`Swap ${basename(lightArchive)} in?`);
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
         },

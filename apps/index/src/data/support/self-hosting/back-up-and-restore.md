@@ -100,7 +100,7 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 
 `./eigen restore` then does three things:
 
-1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. Then it unpacks it, still while Eigen runs. For a Light backup it then counts, for each user and team, the files made since, which will not show in Drive, and the files renamed, moved, or put in the Trash since, which will not open. When there are any, it asks again.
+1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. Then it unpacks it, still while Eigen runs. For a Light backup it then counts, for each user and team, the files made since, which will not show in Drive, the files renamed, moved, or put in the Trash since, which will not open, and the files deleted for good since, which come back without their content. A document counts once, whatever it holds. When there are any, or when it could not count them, it asks again.
 2. It stops Eigen, moves the current `data/` and `.env.production` aside as `data.pre-restore-<date>-<time>` and `.env.production.pre-restore-<date>-<time>`, and puts the backup in their place.
 3. It starts Eigen again, on the version that made the backup.
 

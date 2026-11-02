@@ -383,14 +383,26 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         manifest.level === 'light'
             ? enumerateHomes(join(restoring, RESTORING_DATA_DIR, SERVER_DIR, SERVER_DATABASES.users))
             : { orphans: [] };
-    // Their bytes stay on disk, or in the bucket, and the live databases go aside.
-    for (const { home, created, moved } of staged.lost) {
-        console.log(
-            glyphLine(
-                'warn',
-                `${home}: ${created} file(s) made since drop out of Drive, ${moved} renamed, moved or trashed since do not open`,
-            ),
-        );
+    // A file that drops out of Drive keeps its bytes on disk, or in the bucket, and the live databases go aside.
+    const clause = (count: number, one: string, many: string) =>
+        count ? [`${count} ${count === 1 ? one : many}`] : [];
+    for (const { home, count } of staged.lost) {
+        const clauses = count
+            ? [
+                  ...clause(count.created, 'file made since drops out of Drive', 'files made since drop out of Drive'),
+                  ...clause(
+                      count.moved,
+                      'renamed, moved or trashed since does not open',
+                      'renamed, moved or trashed since do not open',
+                  ),
+                  ...clause(
+                      count.deleted,
+                      'deleted since comes back without its bytes',
+                      'deleted since come back without their bytes',
+                  ),
+              ]
+            : ['files not counted, as a metadata.db does not read'];
+        console.log(glyphLine('warn', `${home}: ${clauses.join(', ')}`));
     }
     if (orphans.length) {
         console.log(glyphLine('warn', `Homes no account in the archive owns go aside: ${orphans.join(', ')}`));
