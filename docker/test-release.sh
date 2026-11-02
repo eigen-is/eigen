@@ -387,7 +387,7 @@ upgrade_published() {
     level=$(docker run --rm "$(api_image)" update-check --from "$PUBLISHED" --level </dev/null | sed -n 's/^level=//p' || :)
     # A breaking release may convert what a light archive leaves out, whatever the CLI answers.
     [ -z "$breaking" ] || [ "$level" = full ] || fail "$RELEASE is breaking, but update-check --level answers '$level', not full"
-    saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+    saved=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update" 2>/dev/null || true)
     if [[ $saved == server-pre-update-$level-*.tar ]] && backups | grep -qxF "$saved"; then
         ok ".eigen/last-update names backups/$saved, made on $PUBLISHED before the update"
     else
@@ -501,7 +501,7 @@ if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release"
 else
     fail "./eigen update exited $CODE"
 fi
-saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+saved=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update" 2>/dev/null || true)
 manual=$(sed -n 's/^archive=//p' "$SCRATCH/running-backup.log")
 if [ "$backed_up" != 0 ] || [ -z "$manual" ] || [[ $saved != server-pre-update-light-*.tar ]] ||
     ! says "Saved before the update: backups/$saved"; then
@@ -656,7 +656,7 @@ unchanged() {
 }
 
 # The backup the update to $BREAKING made of $PREVIOUS.
-archive=$(scratch_run cat "$INSTALL/.eigen/last-update")
+archive=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update")
 # Only the registry has the images of $PREVIOUS now.
 for name in $IMAGES; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
