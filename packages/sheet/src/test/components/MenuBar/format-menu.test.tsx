@@ -91,3 +91,10 @@ test('Format › Conditional formatting › Manage rules opens the rules list as
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
     expect(dialogTitles()).toEqual(['Manage rules']);
 });
+
+test('Format › Conditional formatting › Delete rule holds only Delete sheet rules', async () => {
+    const container = await mountWorkbook();
+    await openConditionalFormatting(container);
+    await openSubmenu('Delete rule');
+    expect(actionRows()).toEqual(['Delete sheet rules']);
+});
