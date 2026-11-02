@@ -347,6 +347,11 @@ columns() {
     printf '%s\n' "$width"
 }
 
+# duration <seconds>: as the spinner and the countdown show it, such as 45s or 2m 5s.
+duration() {
+    if [ "$1" -ge 60 ]; then echo "$(($1 / 60))m $(($1 % 60))s"; else echo "${1}s"; fi
+}
+
 # step <while running> <when done> <on failure> <command…>: one line per step, its output in $LOG, under a spinner on a
 # terminal. set -m gives the job its own process group, so Ctrl-C stops all of it.
 step() {
@@ -371,9 +376,7 @@ step() {
         while kill -0 "$job" 2>/dev/null; do
             case $((frame % 4)) in 0) glyph=◒ ;; 1) glyph=◐ ;; 2) glyph=◓ ;; *) glyph=◑ ;; esac
             frame=$((frame + 1))
-            seconds=$(($(date +%s) - started))
-            elapsed=${seconds}s
-            if [ "$seconds" -ge 60 ]; then elapsed="$((seconds / 60))m $((seconds % 60))s"; fi
+            elapsed=$(duration $(($(date +%s) - started)))
             width=$(columns)
             # A wrapped line would break the redraw. BuildKit's "#12 3.45 …" loses its step number and timestamp.
             line=$(tail -n 20 "$LOG" 2>/dev/null | awk -v width=$((width - 4)) '{
@@ -760,12 +763,11 @@ countdown() {
     trap 'if [ -t 1 ]; then printf "\r\033[K" || :; fi
         say "$RED" "■" "The wait was cancelled. Eigen runs on as it was." >&2; exit 130' INT TERM
     while [ "$left" -gt 0 ]; do
-        remaining=${left}s
-        if [ "$left" -ge 60 ]; then remaining="$((left / 60))m $((left % 60))s"; fi
-        line="Restarts in $remaining, at $RESTART_AT. Ctrl+C cancels."
+        line="Restarts in $(duration "$left"), at $RESTART_AT. Ctrl+C cancels."
         if [ -t 1 ]; then
             # A line that wraps leaves a line a second: \r only goes back to the start of the last one.
-            if [ "$(columns)" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$(($(columns) - 4))"); fi
+            width=$(columns)
+            if [ "$width" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$((width - 4))"); fi
             printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
         elif [ "$left" = "$IN_SECONDS" ]; then
             say "$ACCENT" '◆' "$line"
@@ -1143,11 +1145,7 @@ backup() {
         esac
     done
     if [ -n "$s3" ]; then
-        if [ "$level" = light ]; then
-            printf 'A light backup holds no files, so it takes no --s3.\n\n' >&2
-            command_usage backup >&2
-            exit 2
-        fi
+        if [ "$level" = light ]; then refuse_usage backup "A light backup holds no files, so it takes no --s3."; fi
         level='full-s3'
     fi
     need_install
