@@ -67,6 +67,8 @@ export function resolveCellRange(
         const match = reference.match(SHEET_REFERENCE);
         if (match == null) return null;
         const [, startSheet, start, endSheet, end] = match;
+        // A1:Data!B2 names a sheet on its end only, which the engine can't read as a range.
+        if (startSheet == null) return null;
         const sheetName = unquoteSheetName(startSheet);
         // The engine reads Data!A1:'Data'!B2 as one sheet's range, so only the names count, quoted or not.
         if (endSheet != null && unquoteSheetName(endSheet) !== sheetName) return null;
