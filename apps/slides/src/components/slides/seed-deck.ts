@@ -1,9 +1,8 @@
-// A deck always has at least one slide. Creating a deck writes no Yjs content (Drive.create provisions data.db,
-// comments.db, media/ and chat/ and nothing else), so the first writer to open an empty deck seeds it. One transact, so
-// a fresh deck arrives as one atom; under a non-null origin, so ⌘Z cannot empty it (docs/CANVAS.md § One discrete op is
-// one undo step). The records go through the shared writer (write-vector.ts), so a seeded deck cannot drift from an
-// authored one. Its two ids are FIXED rather than fresh: two peers can open the same empty deck at the same moment and
-// both seed it, and the same keys make those two writes converge on one title slide instead of two.
+// A deck always has at least one slide. Creating a deck writes no Yjs content, so the first writer to open an empty
+// deck seeds its title slide, in one transaction under its own origin, so it arrives as one update and ⌘Z cannot
+// empty the deck. The records go through the shared writer, so a seeded deck cannot drift from an authored one. Their
+// ids are fixed rather than fresh: two peers that open the same empty deck at once both seed it, and the same keys
+// make those writes converge on one title slide instead of two.
 
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { VectorElementPatch } from '@workspace/lib/vector';
@@ -58,7 +57,7 @@ export function seedDeck(doc: Y.Doc): void {
         if (!doc.getMap('meta').has('slideWidth')) updateMetaInDoc(doc, { slideWidth: DEFAULT_SCENE_META.slideWidth });
         writeElementInDoc(
             doc,
-            { type: 'richtext', frameId: SEED_FRAME_ID, ...WELCOME },
+            { type: 'rectangle', autoFit: true, frameId: SEED_FRAME_ID, ...WELCOME },
             index,
             SLIDES_STYLE_DEFAULTS,
             SEED_ELEMENT_ID,

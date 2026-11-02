@@ -14,6 +14,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Changed
 
+- **Text boxes in Vector and Slides (breaking)** — a text box saved by an earlier version disappears when its drawing or deck opens. Text inside shapes stays
 - **Open tabs after an update** — every open Eigen tab reloads by itself once the updated server is back, so no tab keeps running the old version. Anything a tab had not saved yet is lost, such as text typed while the server was down or a half-written comment
 - **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
@@ -28,6 +29,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Open**, **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
 - **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
 - **The File menu of a document** — a document shared with you offers **Remove shared item**, and **Share** is hidden when you can't share it
+- **Text boxes in PowerPoint files** — a text box aligned to the top downloads set to resize the shape to fit its text, and a rectangle set that way in a PowerPoint file comes in as a text box
 
 ### Fixed
 
@@ -56,6 +58,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
 - **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
 - **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
+- **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
+- **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
+- **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
 - **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 
 ## [0.4.1] - 2026-10-28

@@ -7,6 +7,7 @@ import { escapeHtml } from '@workspace/lib/html';
 import type {
     Arrowhead,
     NewVectorElement,
+    ObjectFit,
     StrokeStyle,
     StyleDefaults,
     VectorElementPatch,
@@ -34,6 +35,7 @@ import {
     drawingLines,
     isSideways,
     lineWidthEmu,
+    percent,
     strokeStyleOf,
 } from '../../ooxml/drawingml';
 import {
@@ -293,7 +295,8 @@ function readShape(walk: Walk, leaf: Leaf): void {
     const textOnTop = () =>
         text &&
         push(walk, {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             ...textBox,
             ...text,
             ...NO_STROKE,
@@ -308,11 +311,14 @@ function readShape(walk: Walk, leaf: Leaf): void {
             textOnTop();
         }
     };
-    // A placeholder such as a title or a footer is a text box too. A text box grows with its text, where a rectangle
-    // lets it spill.
-    const textBoxed = own !== undefined || marked;
-    if (framed && textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
-        push(walk, { type: 'richtext', ...textBox, ...framed, ...paint, corners: 'straight' });
+    // A placeholder such as a title or a footer is a text box too, and so is a body that grows its shape to its text.
+    // A text box grows with its text, where a rectangle lets it spill.
+    const bodyPr = body && childOf(body, A_NS, 'bodyPr');
+    const grows = bodyPr !== undefined && childOf(bodyPr, A_NS, 'spAutoFit') !== undefined;
+    // An empty one marked txBox comes back too while it paints, since the export marks every text box.
+    const textBoxed = framed ? own !== undefined || marked || grows : marked && painted;
+    if (textBoxed && !textAt && kind?.type === 'rectangle' && kind.corners === 'straight')
+        push(walk, { type: 'rectangle', autoFit: true, ...textBox, ...framed, ...paint, corners: 'straight' });
     else if (kind) shapeAndText(kind);
     else if (geometry === 'pie') shapeAndText({ type: 'pie', ...pieAngles(shaped?.geom, placed) });
     else if (linear) {
@@ -396,10 +402,26 @@ function readPicture(
         ...box,
         ...strokeOf(lines, walk, lost),
         mediaName,
-        objectFit: 'fill',
+        objectFit: objectFitOf(blipFill, lost),
         // PowerPoint's crop to a rounded rectangle, as the pptx export writes a picture's curved corners.
         corners: chain.find((link) => link.geometry !== undefined)?.geometry === 'roundRect' ? 'curved' : 'straight',
     });
+}
+
+// The pptx export fits a picture with a crop centered on one axis. A negative crop reaches past the picture to
+// contain it, and a positive one cuts into it to cover it. The reader never decodes a picture, so it can't check the
+// crop against the picture's aspect, and it reads any such crop as that fit. A side that doesn't read counts as
+// uncropped. Any other crop draws the picture uncropped and is counted.
+function objectFitOf(blipFill: XmlElement | undefined, lost: Lost): ObjectFit {
+    const rect = blipFill && childOf(blipFill, A_NS, 'srcRect');
+    if (!rect) return 'fill';
+    const [l, t, r, b] = ['l', 't', 'r', 'b'].map((side) => percent(xmlAttr(rect, '', side)) ?? 0);
+    if (l === 0 && t === 0 && r === 0 && b === 0) return 'fill';
+    const inset = t === 0 && b === 0 && l === r ? l : l === 0 && r === 0 && t === b ? t : undefined;
+    if (inset !== undefined && inset < 0) return 'contain';
+    if (inset !== undefined && inset < 0.5) return 'cover';
+    lost('crops-dropped');
+    return 'fill';
 }
 
 // A chart the reader draws becomes a chart, and a SmartArt graphic the shapes of the drawing PowerPoint cached of it.
@@ -452,7 +474,8 @@ function droppedBox(walk: Walk, shape: XmlElement, what: Dropped, box: Box, line
     const color = textColorOf(walk.inheritance.theme.colors);
     // Unfilled, so a title or text it overlaps stays readable, as PowerPoint's chart plot area is see-through.
     push(walk, {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         ...box,
         html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(''),
         fill: TRANSPARENT_FILL_JSON,
@@ -480,8 +503,8 @@ const TRANSPARENT_FILL_JSON = PPTX_STYLE.fill;
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 const NO_STROKE: Stroke = { strokeColor: TRANSPARENT_COLOR, strokeWidth: PPTX_STYLE.strokeWidth, strokeStyle: 'solid' };
 
-// The first fill the chain states, a placeholder's own before its layout's and master's; else p:style's fillRef, its
-// color the style matrix entry's phClr.
+// The first fill the chain states, a placeholder's own before its layout's and master's. Without one, the fill is
+// p:style's fillRef, whose phClr is that style's color.
 function fillOf(
     chain: ShapeProperties[],
     walk: Walk,
@@ -537,8 +560,8 @@ const LINES = new Set(['line', 'straightConnector1']);
 
 const outlines = cachedBy<string, GeometryPath[] | undefined>();
 
-// A custGeom's or preset's paths in the shape's own extents, its guides' w and h, mirrored as it lands; worked out once
-// for its geometry however many slides show it.
+// A custGeom's or preset's paths in the shape's own extents, which are its guides' w and h, mirrored as the shape
+// lands. They are worked out once per geometry, however many slides show it.
 function outlineOf(
     geom: XmlElement | undefined,
     geometry: string,
@@ -735,8 +758,9 @@ function place(placeIn: Place, xfrm: Xfrm): Placed {
     };
 }
 
-// A box wholly off the slide (a master's guide or note, copied onto every slide) would be stored unseen past the frame,
-// which the canvas clips, or drawn in the bands beside a letterboxed slide; a box a group scaled past a double is none.
+// Whether a box is on the slide. A box wholly off it, such as a master's guide or note copied onto every slide, would
+// be stored unseen past the frame, which the canvas clips, or drawn in the bands beside a letterboxed slide. A box a
+// group scaled past what a double holds is on no slide.
 function onSlide(box: Box, deck: DeckWalk): boolean {
     if (![box.x, box.y, box.width, box.height].every(Number.isFinite)) return false;
     const r = (box.angle * Math.PI) / 180;

@@ -1,16 +1,16 @@
 import { describe, expect, test } from 'bun:test';
-import { distanceToElement, elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
-import { elbowRoute } from '../../vector/elbow-route';
-import { solidFill } from '../../vector/fill';
-import type { Point } from '../../vector/geometry';
 import {
     bindingAnchor,
     boundEndpoint,
     elbowAnchorScene,
     followBindings,
-    linearLocalToScene,
     normalizeFixedPoint,
-} from '../../vector/geometry';
+} from '../../vector/binding';
+import { distanceToElement, elbowBindPoint, redockBindingsForElbow } from '../../vector/elbow-heading';
+import { elbowRoute } from '../../vector/elbow-route';
+import { solidFill } from '../../vector/fill';
+import type { Point } from '../../vector/geometry';
+import { linearLocalToScene } from '../../vector/geometry';
 import { textualDefaults, VECTOR_STYLE_DEFAULTS } from '../../vector/kinds';
 import { parsePoints } from '../../vector/points';
 import type {
@@ -37,6 +37,7 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     roughness: 1,
     seed: 1,
     corners: 'straight',
+    autoFit: false,
     strokeWidth: 2,
 };
 

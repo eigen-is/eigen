@@ -1,7 +1,6 @@
-// The one writer of the stored canvas shape — the counterpart of read-vector.ts. Fresh ids, the seed
-// rule, the element and frame records and the live topmost index, over a plain Y.Doc: the editor's
-// add path, the deck seeder, the demo seeder and the server's deck writer all write through here.
-// React-free, so the API's transform process runs it too.
+// The one writer of the stored canvas shape, the counterpart of the reader: fresh ids, the seed rule, the element and
+// frame records and the live topmost index, over a plain Y.Doc. Every caller that adds to a canvas writes through
+// here, such as the editor's add path and the deck seeders. It is React-free, so the API's transform process runs it.
 
 import { nanoid } from 'nanoid';
 import * as Y from 'yjs';
@@ -9,7 +8,14 @@ import { isValidFractionalIndex, keysAfter, orderByFractionalIndex } from './fra
 import type { VectorFrame } from './frames';
 import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS } from './frames';
 import type { StyleDefaults } from './kinds';
-import { baseDefaultsFor, ELEMENT_KINDS, storedElementFields, storedFields } from './kinds';
+import {
+    baseDefaultsFor,
+    ELEMENT_KINDS,
+    isTextBox,
+    storedElementFields,
+    storedFields,
+    textBoxOverrides,
+} from './kinds';
 import type { NewVectorElement, VectorElementType } from './types';
 
 export function newElementId(): string {
@@ -20,27 +26,29 @@ export function newFrameId(): string {
     return `fr-${nanoid(10)}`;
 }
 
-// A fresh roughjs jitter seed. One source: the creation paths, the duplicate pass and the draw drafts
-// must draw from the same range or a preview pops on release.
+// A new roughjs jitter seed. Every path that creates an element and every draw preview takes its seed from this one
+// range, so a preview doesn't change its look when the user lets go.
 export function randomSeed(): number {
     return 1 + Math.floor(Math.random() * (2 ** 31 - 1));
 }
 
-// The shared base props under the kind's own fields straight from the registry, styled by the HOST's
-// table (vector draws rough and hatched, slides flat and solid) — a new kind needs no entry here, and a
-// new host only a table. The base paint sits under the kind's overrides: rich text and images use the
-// stroke as a border, so a fresh one is unframed until the user picks a stroke color. The panel's reset
-// rows read baseDefaultsFor too, so a reset restores what creation gave.
+// A new element's fields: the shared base, with the kind's own base overrides, under the kind's own fields. The
+// host's style table styles both, so a new kind needs no entry here and a new host needs only a table.
 export function kindDefaults<T extends VectorElementType>(type: T, style: StyleDefaults) {
     return { ...baseDefaultsFor(type, style), ...ELEMENT_KINDS[type].defaults(style) };
 }
 
-// One element into the doc's `elements` map at the given fractional index, under the kind's defaults
-// and the host's style table. Honors a caller-supplied seed so a drag-create preview and its committed
-// element share the same roughjs jitter (no visual pop on release). A caller-supplied `id` is the
-// seeders': two peers seeding one empty deck write the same key, so they converge on one element
-// instead of two. Nested in a live transact it joins that one, so a caller's origin and single-atom
-// guarantee both survive.
+// A new text box: a new rectangle under the text box's own overrides. It lives here and not beside those overrides,
+// because it reads the registry's defaults and a kind module must not reach the registry.
+export function textBoxDefaults(style: StyleDefaults) {
+    return { ...kindDefaults('rectangle', style), ...textBoxOverrides(style) };
+}
+
+// One element into the doc's `elements` map at the given fractional index, under its kind's defaults in the host's
+// style table, or a text box's. A caller-supplied seed lets a drag-create preview and its committed element share one
+// roughjs jitter, so nothing pops on release. A caller-supplied `id` is the seeders': two peers seeding one empty deck
+// write the same key, so they converge on one element instead of two. Nested in a live transact it joins that one, so
+// a caller's origin and single-atom guarantee both survive.
 export function writeElementInDoc(
     doc: Y.Doc,
     partial: NewVectorElement,
@@ -55,7 +63,7 @@ export function writeElementInDoc(
         width: 0,
         height: 0,
         angle: 0,
-        ...kindDefaults(partial.type, style),
+        ...(isTextBox(partial) ? textBoxDefaults(style) : kindDefaults(partial.type, style)),
         ...partial,
         id,
         type: partial.type,
@@ -68,9 +76,9 @@ export function writeElementInDoc(
     return id;
 }
 
-// The whole frame record, through the FRAME_FIELDS allow-list — width/height come from the deck's
-// slide size, so a stored size can never become a second source of truth for it. An unstated background is the shared
-// DEFAULT_FRAME_BACKGROUND; a caller copying an existing frame passes its own. Joins a live transact.
+// The whole frame record, through the FRAME_FIELDS allow-list. A frame stores no size, because the deck's slide size
+// is the one truth for it. A frame with no background gets DEFAULT_FRAME_BACKGROUND, and a caller copying a frame
+// passes its own. Inside a live transact it joins that one.
 export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: string }): void {
     const map = new Y.Map<unknown>();
     const record = { name: '', background: DEFAULT_FRAME_BACKGROUND, ...frame };
@@ -78,9 +86,9 @@ export function writeFrameInDoc(doc: Y.Doc, frame: Partial<VectorFrame> & { id: 
     doc.transact(() => doc.getMap('frames').set(frame.id, map));
 }
 
-// Live topmost fractional index in an `elements` or `frames` map. Skips non-map entries and malformed
-// index strings — a corrupt peer write must not make generateKeyBetween throw and brick adding
-// (read-vector heals them on read).
+// The topmost fractional index in an `elements` or `frames` map. It skips entries that are not maps and indexes that
+// don't parse, because a corrupt peer write must not make generateKeyBetween throw and stop every add. The reader
+// heals those on read.
 export function topmostIndex(map: Y.Map<unknown>): string | null {
     let topmost: string | null = null;
     for (const value of map.values()) {
@@ -92,17 +100,17 @@ export function topmostIndex(map: Y.Map<unknown>): string | null {
     return topmost;
 }
 
-// `count` keys that land frames directly after `afterId`, in order: at the front for null, at the end when it is
-// unknown. `excludeId` drops the frame being moved from the order it is placed into. The editor's new slide, duplicate
-// and move place one; Import… places a file's slides after the current one. Frames sharing the anchor's key, two peers'
-// new slides after one slide, sort by id, and the keys go above all of them (keysAfter, as a z-order move places).
+// `count` keys that place frames right after `afterId`, in order. A null `afterId` places them first, and an unknown
+// one places them last. `excludeId` leaves out the frame being moved. Two peers may each add a slide after the same
+// slide, so frames can share a key. Those sort by id, and the new keys go above all of them, as keysAfter places a
+// z-order move.
 export function frameKeysAfter(
     framesMap: Y.Map<unknown>,
     afterId: string | null,
     count: number,
     excludeId?: string,
 ): string[] {
-    // The frames in stored order, a shared key ordered by id; malformed entries skipped, as topmostIndex does.
+    // The frames in stored order. Malformed entries are skipped, as in topmostIndex.
     const frames: { id: string; index: string }[] = [];
     for (const value of framesMap.values()) {
         if (!(value instanceof Y.Map)) continue;

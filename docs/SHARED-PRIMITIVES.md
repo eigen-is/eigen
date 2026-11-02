@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2084 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2088 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -546,7 +546,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (442)
+## Types (441)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -927,7 +927,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorPathElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorPieElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorRectangleElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
-| `VectorRichTextElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorScene` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorShapeElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `VectorTextualElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -993,7 +992,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1127)
+## Utilities & constants (1132)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1761,7 +1760,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `validateEmailTarget` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `validatePasswordStrength` | `@workspace/lib/validation` | packages/lib/src/validation/password.ts |
 | `validateUsername` | `@workspace/lib/validation` | packages/lib/src/validation/username.ts |
-| `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `anchorToScene` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `applyResize` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `arrangeBoundingBox` | `@workspace/lib/vector` | packages/lib/src/vector/arrange.ts |
 | `ARROW_LABEL_PAD` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1778,11 +1777,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BASE_ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `baseDefaultsFor` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `bezierAt` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `bindingAnchor` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `bindingGap` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `boundEndpoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `bindingAnchor` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
+| `bindingDistance` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
+| `bindingGap` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
+| `boundEndpoint` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
+| `boundShape` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `boxCenter` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `buildElementsClipboardItem` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `canvasImageName` | `@workspace/lib/vector` | packages/lib/src/vector/canvas-image.ts |
@@ -1815,25 +1814,26 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_LINEAR_ROUNDNESS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_OBJECT_FIT` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_PADDING` | `@workspace/lib/vector` | packages/lib/src/vector/scene-to-svg.ts |
-| `DEFAULT_RICHTEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SCENE_META` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEFAULT_SHAPE_TEXT_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
+| `DEFAULT_TEXT_BOX_PROPS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `DEG_TO_RAD` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `diamondOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `distance` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToPolyline` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `distanceToSegment` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
+| `drawsTextBody` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `DUPLICATE_OFFSET` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `EDGES_OPTIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `EIGEN_MEDIA_SCHEME` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `eigenMediaHref` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
-| `elbowAnchorScene` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `elbowAnchorScene` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `elbowBindPoint` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
 | `elbowRoute` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `elbowRoutingContext` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-route.ts |
 | `ELEMENT_FIELDS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `ELEMENT_KINDS` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
-| `elementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `elementBounds` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `elementForCommentCard` | `@workspace/lib/vector` | packages/lib/src/vector/comments.ts |
 | `elementLayer` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `elementsInFrame` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -1843,8 +1843,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FILL_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `fitFrameViewport` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
 | `fitImageSize` | `@workspace/lib/vector` | packages/lib/src/vector/image-fit.ts |
-| `focusSnapPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `focusSnapPoint` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
+| `followBindings` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `FONT_STYLES` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FONT_WEIGHTS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `FRAME_CARD_BORDER` | `@workspace/lib/vector` | packages/lib/src/vector/viewport.ts |
@@ -1869,7 +1869,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `HIT_THRESHOLD_SCREEN` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestBox` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestDiamond` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `hitTestElement` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `hitTestEllipse` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitTestLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `hitThresholdScreen` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1881,6 +1881,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isColorToken` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isLinearElement` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `isSafeMediaName` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
+| `isTextBox` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `isTextual` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `isTransparentColor` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `isTransparentFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
@@ -1919,7 +1920,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `newElementId` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `newFrameId` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `normalizeAngle` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `normalizeFixedPoint` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `normalizeLinear` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `NUDGE_STEP_LARGE` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
@@ -1927,12 +1928,13 @@ rather than inlining `queryClient.invalidateQueries`.
 | `OBJECT_FITS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `oneOf` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/read-fields.ts |
 | `orderByFractionalIndex` | `@workspace/lib/vector` | packages/lib/src/vector/fractional-index.ts |
+| `ORIGIN` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `outlineContains` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `outlineDistance` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `outlineHits` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `outlineIntersections` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `outlineIntersections` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `outlinePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `outlinePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `outlinePoint` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `paintsNothing` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/index.ts |
 | `parseBackgroundFill` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |
 | `parseBinding` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
@@ -1952,7 +1954,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `pointInPolygon` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `pointsBounds` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `polylineOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
-| `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `projectFixedPointOntoDiagonal` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `prop` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `randomSeed` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `readClipboardTypography` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
@@ -1963,7 +1965,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `reanchorElements` | `@workspace/lib/vector` | packages/lib/src/vector/clipboard.ts |
 | `rectOutline` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `redockBindingsForElbow` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-heading.ts |
-| `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `remapBinding` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `renderChartSpecSvg` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/chart-render.ts |
 | `renormalize` | `@workspace/lib/vector` | packages/lib/src/vector/elbow-pins.ts |
 | `replaceEigenMediaHrefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
@@ -1973,7 +1975,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `rewriteEigenMediaRefs` | `@workspace/lib/vector` | packages/lib/src/vector/media-refs.ts |
 | `RICH_TEXT_CLASS` | `@workspace/lib/vector` | packages/lib/src/vector/scene-layers.ts |
 | `richTextCssText` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
-| `richTextFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/richtext.ts |
 | `richTextSvg` | `@workspace/lib/vector` | packages/lib/src/vector/rich-text-svg.ts |
 | `rotatePoint` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
 | `round` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
@@ -1996,7 +1997,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `serializePath` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `serializePoints` | `@workspace/lib/vector` | packages/lib/src/vector/points.ts |
 | `serializePressures` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
-| `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/geometry.ts |
+| `shapeAnchorPoints` | `@workspace/lib/vector` | packages/lib/src/vector/binding.ts |
 | `sharpDiamondOffset` | `@workspace/lib/vector` | packages/lib/src/vector/outline.ts |
 | `SLIDE_SIZE_KEYS` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
 | `SLIDE_SIZES` | `@workspace/lib/vector` | packages/lib/src/vector/frames.ts |
@@ -2018,6 +2019,9 @@ rather than inlining `queryClient.invalidateQueries`.
 | `TEXT_ALIGNS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_DECORATIONS` | `@workspace/lib/vector` | packages/lib/src/vector/types.ts |
 | `TEXT_WIDTH_RANGES` | `@workspace/lib/vector` | packages/lib/src/vector/text-width.ts |
+| `textBoxDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
+| `textBoxFitHeight` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
+| `textBoxOverrides` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/rectangle.ts |
 | `textualDefaults` | `@workspace/lib/vector` | packages/lib/src/vector/kinds/textual.ts |
 | `topmostIndex` | `@workspace/lib/vector` | packages/lib/src/vector/write-vector.ts |
 | `TRANSPARENT_COLOR` | `@workspace/lib/vector` | packages/lib/src/vector/fill.ts |

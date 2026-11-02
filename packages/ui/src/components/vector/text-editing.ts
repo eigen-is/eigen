@@ -1,12 +1,9 @@
-// The text-editing SESSION model + its pure builders, factored out of canvas-editor.tsx so the canvas
-// only DISPATCHES (the ground-rule that the canvas file must not grow). A session drives the TextOverlay
-// and is committed back by the canvas' commitEditing.
-//
-// The arrow label is the only plain-text path left on the canvas: the session edits a live arrow's label
-// field in place (the arrow already exists), so commit writes `text` + `labelWidth`, empty clears both,
-// and it never deletes the arrow. Rich text gets its own in-place editor.
+// The arrow label's editing session: where the label editor opens and what it starts with. The canvas starts one when
+// an arrow is opened, such as by a double-click, draws it with TextOverlay and commits it in commitEditing. It edits the
+// label of an arrow that already exists, so the commit writes its text only and never deletes the arrow. Rich text has
+// an editor of its own, inside the element's layer.
 
-import type { Point, TextAlign, VectorArrowElement } from '@workspace/lib/vector';
+import type { Point, VectorArrowElement } from '@workspace/lib/vector';
 import { arrowLabelBox, arrowLabelCenter, linearLocalToScene } from '@workspace/lib/vector';
 
 export type EditingState = {
@@ -20,20 +17,17 @@ export type EditingState = {
     text: string;
     fontSize: number;
     fontFamily: string;
-    textAlign: TextAlign;
     strokeColor: string;
 };
 
-// An arrow's label (select-tool double-click), centered on the label anchor — the polyline's
-// index-midpoint in the arrow's local frame, mapped to the scene. The box is the committed
-// label rect (empty when the arrow has no label yet), so the overlay rotates with the arrow exactly as
-// the rendered label does. The label is always centered, so no textAlign choice. `route` (the derived
-// elbow polyline) overrides the stored endpoints so an elbow arrow's overlay opens on its routed
-// midpoint. null for a degenerate arrow (< 2 points) with no label anchor.
+// The session opens on the label's anchor, the middle of the polyline, mapped from the arrow's frame to the scene.
+// Its box is the stored label's, or empty while the arrow has none, so the editor turns with the arrow just as the
+// drawn label does. An elbow arrow passes its derived `route`, so the editor opens on the middle of the route. Null
+// for an arrow of fewer than 2 points, which has no anchor.
 export function arrowLabelEditing(el: VectorArrowElement, route?: Point[]): EditingState | null {
     const center = arrowLabelCenter(el, route);
     if (!center) return null;
-    const label = arrowLabelBox(el, route); // null until the arrow carries a label
+    const label = arrowLabelBox(el, route);
     const width = label?.width ?? 0;
     const height = label?.height ?? 0;
     const scene = linearLocalToScene(el, center);
@@ -48,7 +42,6 @@ export function arrowLabelEditing(el: VectorArrowElement, route?: Point[]): Edit
         text: el.text,
         fontSize: el.fontSize,
         fontFamily: el.fontFamily,
-        textAlign: 'center',
         strokeColor: el.strokeColor,
     };
 }

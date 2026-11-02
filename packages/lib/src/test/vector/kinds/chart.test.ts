@@ -18,7 +18,7 @@ import { readElementFromFields } from '../../../vector/read-vector';
 import { elementToSvg } from '../../../vector/scene-to-svg';
 import type { VectorChartElement, VectorElement } from '../../../vector/types';
 import { DEFAULT_ELEMENT_PROPS, prop } from '../../../vector/types';
-import { chart, richtext } from '../element-factories';
+import { chart, textBox } from '../element-factories';
 
 const specOf = (over: Partial<ChartSpec> = {}, type: ChartType = 'column'): ChartSpec => ({
     ...sampleChartSpec(type),
@@ -297,7 +297,7 @@ describe('chart text', () => {
         expect(families(serif)).toEqual(new Set(['Source Serif 4']));
         expect(families(chart({ id: 'c2', specData: 'nope' }))).toEqual(new Set());
         expect(families(chart({ id: 'c3' }, RANGE_SPEC))).toEqual(new Set());
-        expect(families(richtext({ id: 't1', html: '<p>Hi</p>', fontFamily: 'JetBrains Mono' }))).toEqual(
+        expect(families(textBox({ id: 't1', html: '<p>Hi</p>', fontFamily: 'JetBrains Mono' }))).toEqual(
             new Set(['JetBrains Mono']),
         );
     });

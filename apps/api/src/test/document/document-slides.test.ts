@@ -71,7 +71,13 @@ function existingDeck(): Y.Doc {
     doc.transact(() => {
         writeFrameInDoc(doc, { id: 't1', index: 'a0' });
         writeFrameInDoc(doc, { id: 't2', index: 'a5' });
-        writeElementInDoc(doc, { type: 'richtext', frameId: 't1', ...BOX }, 'a0', SLIDES_STYLE_DEFAULTS, 'old1');
+        writeElementInDoc(
+            doc,
+            { type: 'rectangle', autoFit: true, frameId: 't1', ...BOX },
+            'a0',
+            SLIDES_STYLE_DEFAULTS,
+            'old1',
+        );
         writeElementInDoc(doc, { type: 'diamond', frameId: 't2', ...BOX }, 'a9', SLIDES_STYLE_DEFAULTS, 'old2');
         doc.getMap('meta').set('background', '#ffffff');
     });

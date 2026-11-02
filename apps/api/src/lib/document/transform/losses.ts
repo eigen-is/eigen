@@ -38,6 +38,7 @@ const LOSSES: Record<CountedWarningCode, { noun: OneAndMany; what: Outcome }> = 
     'objects-dropped': { noun: ['embedded object', 'embedded objects'], what: 'dropped' },
     'images-dropped': { noun: ['picture', 'pictures'], what: 'dropped' },
     'mirrors-dropped': { noun: ["picture's flip", "pictures' flips"], what: 'dropped' },
+    'crops-dropped': { noun: ["picture's crop", "pictures' crops"], what: 'dropped' },
     'bands-cut': { noun: ['header or footer', 'headers or footers'], what: 'cut' },
     'sheets-left-out': { noun: ['sheet', 'sheets'], what: 'dropped' },
     'sheets-cut': { noun: ['sheet', 'sheets'], what: 'cut' },

@@ -9,7 +9,7 @@ import { convertToShapes, ELEMENT_KINDS } from '../../../vector/kinds';
 import { chartToElements } from '../../../vector/kinds/chart-convert';
 import { chartElementLayout, renderChartSvg } from '../../../vector/kinds/chart-render';
 import { elementGroupOpen, svgTextLine } from '../../../vector/kinds/render-utils';
-import type { VectorChartElement, VectorElement, VectorRichTextElement } from '../../../vector/types';
+import type { VectorChartElement, VectorElement, VectorRectangleElement } from '../../../vector/types';
 import { chart, shape } from '../element-factories';
 
 const SOLID = serializeFill({ type: 'solid', color: '#fffbe6', style: 'cross-hatch' });
@@ -37,10 +37,11 @@ function layoutOf(el: VectorChartElement) {
     return layout;
 }
 
-const labelsOf = (elements: VectorElement[]): VectorRichTextElement[] =>
-    elements.filter((el): el is VectorRichTextElement => el.type === 'richtext');
+const isLabel = (el: VectorElement): el is VectorRectangleElement => el.type === 'rectangle' && el.autoFit;
 
-const shapesOf = (elements: VectorElement[]): VectorElement[] => elements.filter((el) => el.type !== 'richtext');
+const labelsOf = (elements: VectorElement[]): VectorRectangleElement[] => elements.filter(isLabel);
+
+const shapesOf = (elements: VectorElement[]): VectorElement[] => elements.filter((el) => !isLabel(el));
 
 const typesById = (elements: VectorElement[], key: string): string[] =>
     elements.filter((el) => el.id.includes(`:${key}`)).map((el) => el.type);
@@ -177,7 +178,7 @@ describe('chartToElements', () => {
             fill: serializeFill(TRANSPARENT_FILL),
             strokeColor: 'transparent',
         });
-        expect(ELEMENT_KINDS.richtext.render(title, {})).toMatchObject({ svg: '' });
+        expect(ELEMENT_KINDS.rectangle.render(title, {})).toMatchObject({ svg: '' });
     });
 
     test('the converted shapes draw exactly what the painter drew, the labels aside', () => {

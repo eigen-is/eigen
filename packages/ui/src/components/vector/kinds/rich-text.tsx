@@ -1,7 +1,7 @@
-// Rich text's UI entry for every element that holds text, a text box or a closed shape: the in-place editor the
-// canvas mounts inside the element's own layer, and the typography rows. It is one home for "how does text look",
-// so the deck shell and the drawing app cannot drift. The box background is the generic Fill row, its border the
-// generic Stroke row; this section is the text itself.
+// Rich text's UI for every element that holds text, such as a text box or a closed shape: the in-place editor the
+// canvas mounts inside the element's own layer, and the panel's typography rows. It is the one place that decides how
+// text looks, so no two hosts drift. The box's background and border are the generic Fill and Stroke rows; this
+// section is the text itself.
 
 import type { Editor } from '@tiptap/react';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
@@ -41,19 +41,18 @@ type InPlaceEditorProps = {
     onExit: () => void;
 };
 
-// The box the user types in IS the box the renderer paints: same CSS string, applied through
-// setAttribute because React's `style` prop takes an object and an object form of the builder would be a
-// second source of truth for the typography (the paint is the layer's roughjs backdrop, behind this box).
-// Every keystroke writes `html` straight through, so the session coalesces into one undo step and peers
-// see it live.
+// The box the user types in is styled by the same CSS string as the box the renderer paints. It is applied through
+// setAttribute, because React's `style` prop takes an object, and an object form of that string would be a second
+// source of truth for the typography. The paint is the layer's backdrop, behind this box. Every keystroke writes
+// `html` straight through, so the session is one undo step and peers see it live.
 export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEditorProps) {
     const boxRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<Editor | null>(null);
-    // Not a state mirror: the element's own paint/typography, re-applied when a panel row changes it
-    // mid-session. React never manages this attribute, so nothing fights over it.
+    // Not a state mirror: the element's own typography, applied again when a panel row changes it mid-session. React
+    // never manages this attribute, so nothing fights over it.
     const css = richTextCssText(element);
-    // LightEditor reads `content` once, at creation — and the parent re-renders on every keystroke, so
-    // sanitizing in the render body would re-parse a body of up to MAX_HTML_BYTES each time.
+    // LightEditor reads `content` once, at creation. The parent re-renders on every keystroke, so sanitizing in the
+    // render body would parse up to MAX_HTML_BYTES again each time.
     const initialHtml = useMemo(() => sanitizeToLightEditorHtml(element.html), []);
     // Layout effect, not an effect: the box would otherwise paint once unstyled before the CSS lands,
     // flashing the text at the app's font on every session open.
@@ -91,16 +90,14 @@ export function RichTextInPlaceEditor({ element, onChange, onExit }: InPlaceEdit
             }}
         >
             <LightEditor
-                // The OTHER mount seam for stored rich text (element-layer.tsx is the painted one), so
-                // it sanitizes too: `html` reaches us verbatim from a hostile peer's Y.Doc write, and a
-                // session would otherwise re-serialize it as trusted markup.
+                // The other place stored rich text is mounted, besides the painted layer, so it is sanitized here
+                // too. Its `html` arrives as any peer wrote it, and a session would store it again as trusted markup.
                 content={initialHtml}
                 onChange={(html) => onChange({ html })}
                 toolbar="floating"
                 proseStyle={false}
-                // The rendered body's class, so the descendant rules an inline style cannot reach (list
-                // markers, paragraph spacing) apply WHILE typing too: the box the user types in is the
-                // box the renderer paints, and the auto-fit measures one height for both.
+                // The rendered body's class, so the rules an inline style cannot reach, such as list markers and
+                // paragraph spacing, apply while typing too. The text fit then measures one height for both boxes.
                 className={`${RICH_TEXT_CLASS} min-h-0 break-words`}
                 containerClassName="relative flex flex-col w-full"
                 onReady={({ editor }) => {

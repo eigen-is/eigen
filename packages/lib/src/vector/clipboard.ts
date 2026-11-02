@@ -8,9 +8,9 @@ import { DUPLICATE_OFFSET, getElementsBounds } from './geometry';
 import { storedElementFields } from './kinds';
 import { letterSpacingField, lineHeightField, oneOf } from './kinds/read-fields';
 import { readElementFromFields } from './read-vector';
-import type { VectorElement, VectorRichTextElement } from './types';
+import type { Textual, VectorElement } from './types';
 import {
-    DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_TEXT_BOX_PROPS,
     FONT_STYLES,
     FONT_WEIGHTS,
     TEXT_ALIGNS,
@@ -101,15 +101,15 @@ export function pasteAnchorOffset(
 export function readClipboardTypography(
     typo: EigenClipboardTypography,
 ): Pick<
-    VectorRichTextElement,
+    Textual,
     'textAlign' | 'fontWeight' | 'fontStyle' | 'textDecoration' | 'verticalAlign' | 'letterSpacing' | 'lineHeight'
 > {
     return {
-        textAlign: oneOf(typo.textAlign, TEXT_ALIGNS, DEFAULT_RICHTEXT_PROPS.textAlign),
-        fontWeight: oneOf(typo.fontWeight, FONT_WEIGHTS, DEFAULT_RICHTEXT_PROPS.fontWeight),
-        fontStyle: oneOf(typo.fontStyle, FONT_STYLES, DEFAULT_RICHTEXT_PROPS.fontStyle),
-        textDecoration: oneOf(typo.textDecoration, TEXT_DECORATIONS, DEFAULT_RICHTEXT_PROPS.textDecoration),
-        verticalAlign: oneOf(typo.verticalAlign, VERTICAL_ALIGNS, DEFAULT_RICHTEXT_PROPS.verticalAlign),
+        textAlign: oneOf(typo.textAlign, TEXT_ALIGNS, DEFAULT_TEXT_BOX_PROPS.textAlign),
+        fontWeight: oneOf(typo.fontWeight, FONT_WEIGHTS, DEFAULT_TEXT_BOX_PROPS.fontWeight),
+        fontStyle: oneOf(typo.fontStyle, FONT_STYLES, DEFAULT_TEXT_BOX_PROPS.fontStyle),
+        textDecoration: oneOf(typo.textDecoration, TEXT_DECORATIONS, DEFAULT_TEXT_BOX_PROPS.textDecoration),
+        verticalAlign: oneOf(typo.verticalAlign, VERTICAL_ALIGNS, DEFAULT_TEXT_BOX_PROPS.verticalAlign),
         letterSpacing: letterSpacingField(typo.letterSpacing),
         lineHeight: lineHeightField(typo.lineHeight),
     };
