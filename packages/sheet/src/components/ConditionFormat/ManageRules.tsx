@@ -152,6 +152,7 @@ export function ManageRules() {
                             <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="Delete rule"
                                 className="h-7 w-7 shrink-0"
                                 onClick={() => deleteRule(i)}
                             >
