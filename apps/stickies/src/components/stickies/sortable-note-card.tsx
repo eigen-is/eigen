@@ -1,3 +1,7 @@
+// One card on a Stickies board as a draggable item: the NoteCard with its replies, status, assignee and unread
+// dot, wired to dnd-kit so it can be dragged, opened with a click that didn't move, or long-pressed for its menu
+// on touch. A peer working on the card outlines it in their color and shows their name.
+
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { CommentCard } from '@workspace/lib/types/comments';
@@ -12,6 +16,7 @@ import type { CardPeer } from './hooks/use-stickies-presence';
 type SortableNoteCardProps = {
     card: CommentCard;
     replyCount?: number;
+    unread: boolean;
     resolved?: boolean;
     assigneeEmail?: string | null;
     canWrite?: boolean;
@@ -26,6 +31,7 @@ type SortableNoteCardProps = {
 export const SortableNoteCard = memo(function SortableNoteCard({
     card,
     replyCount,
+    unread,
     resolved,
     assigneeEmail,
     canWrite = true,
@@ -91,6 +97,7 @@ export const SortableNoteCard = memo(function SortableNoteCard({
                 description={card.description}
                 color={card.color}
                 replyCount={replyCount}
+                unread={unread}
                 resolved={resolved}
                 assigneeEmail={assigneeEmail}
                 coverThumbnailUrl={coverThumbnailUrl}

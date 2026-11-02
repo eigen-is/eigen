@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { beforeAll, describe, expect, test } from 'bun:test';
 import type { ChatMessage, CommentEntry, DrivePath } from '@workspace/lib/types';
+import type { DocCommentMatch } from '@workspace/lib/types/doc-search';
 import type { FileEvent } from '@workspace/lib/types/file-history';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
@@ -109,7 +110,6 @@ describe('Comment Index', () => {
             expect(comments[0].chatName).toBe('discussion-1.eigenchat');
             expect(comments[0].status).toBe('open');
             expect(comments[0].lastAuthorEmail).toBe(ctx.alice.user.email);
-            expect(comments[0].lastMessageSnippet).toBe('First comment message');
             expect(comments[0].messageCount).toBe(1);
         });
 
@@ -120,11 +120,11 @@ describe('Comment Index', () => {
 
             const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
             const comments = await assertJson<CommentEntry[]>(res);
-            expect(comments[0].lastMessageSnippet).toBe('Follow-up message');
             expect(comments[0].messageCount).toBe(2);
         });
 
-        // The search text and the creator stay on the server: no client reads them, and the text is ~8 KB a thread.
+        // The search text and the creator stay on the server. No client reads them, and the text can be
+        // RECENT_TEXT_CAP characters a thread.
         test('the list ships the panel fields only', async () => {
             const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, docId, 'comments');
             const comments = await assertJson<CommentEntry[]>(res);
@@ -134,7 +134,6 @@ describe('Comment Index', () => {
                 'createdAt',
                 'lastActivityAt',
                 'lastAuthorEmail',
-                'lastMessageSnippet',
                 'messageCount',
                 'resolvedAt',
                 'resolvedBy',
@@ -285,8 +284,7 @@ describe('Comment Index', () => {
             );
         });
 
-        test('edit updates snippet', async () => {
-            // Get messages to find the last one
+        test('an edit does not count as a new message', async () => {
             const messages = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/chat/${ctx.alice.user.id}/${mountId}/${editChatId}/messages`,
@@ -294,8 +292,7 @@ describe('Comment Index', () => {
             const msgs = await assertJson<ChatMessage[]>(messages);
             const lastMsg = msgs[msgs.length - 1];
 
-            // Edit the last message
-            await authedRequest(
+            const edit = await authedRequest(
                 ctx.alice.user.sessionToken,
                 `/chat/${ctx.alice.user.id}/${mountId}/${editChatId}/messages/${lastMsg.id}`,
                 {
@@ -304,10 +301,21 @@ describe('Comment Index', () => {
                     body: JSON.stringify({ content: 'edited content' }),
                 },
             );
+            expect(edit.ok).toBe(true);
 
             const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, editDocId, 'comments');
             const comments = await assertJson<CommentEntry[]>(res);
-            expect(comments[0].lastMessageSnippet).toBe('edited content');
+            expect(comments[0].messageCount).toBe(2);
+            const matches = await assertJson<DocCommentMatch[]>(
+                await collabGet(
+                    ctx.alice.user.sessionToken,
+                    ctx.alice.user.id,
+                    mountId,
+                    editDocId,
+                    'comments/search?q=edited',
+                ),
+            );
+            expect(matches.map((m) => m.id)).toEqual(['edit-chat.eigenchat']);
         });
 
         test('delete decrements count', async () => {
@@ -462,7 +470,6 @@ describe('Comment Index', () => {
             expect(comments[0].chatName).toBe('whisper-chat.eigenchat');
             expect(comments[0].messageCount).toBe(0);
             expect(comments[0].lastAuthorEmail).toBeNull();
-            expect(comments[0].lastMessageSnippet).toBeNull();
         });
     });
 
@@ -497,56 +504,6 @@ describe('Comment Index', () => {
             );
             const msgs = await assertJson<ChatMessage[]>(messages);
             expect(msgs.length).toBeGreaterThanOrEqual(1);
-        });
-    });
-
-    describe('snippet truncation', () => {
-        let doc4Id: string;
-
-        beforeAll(async () => {
-            const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
-            const doc4 = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${root.id}/create/doc`,
-                { fileName: 'truncation-doc' },
-            );
-            doc4Id = doc4.id;
-
-            const contents = await driveGet<DrivePath[]>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${doc4Id}`,
-            );
-            const chatFolder = findOrFail(contents, (p: DrivePath) => p.name === 'chat');
-
-            const chat = await drivePost<DrivePath>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `folder/${chatFolder.id}/create/chat`,
-                { fileName: 'long-msg' },
-            );
-
-            // Post a very long message
-            const longContent = 'A'.repeat(500);
-            await chatPost<ChatMessage>(
-                ctx.alice.user.sessionToken,
-                ctx.alice.user.id,
-                mountId,
-                `${chat.id}/messages`,
-                {
-                    content: longContent,
-                },
-            );
-        });
-
-        test('snippet is truncated to 100 chars', async () => {
-            const res = await collabGet(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, doc4Id, 'comments');
-            const comments = await assertJson<CommentEntry[]>(res);
-            expect(comments[0].lastMessageSnippet).toHaveLength(100);
         });
     });
 

@@ -4,6 +4,7 @@
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { horizontalListSortingStrategy, SortableContext } from '@dnd-kit/sortable';
 import { useAuth } from '@workspace/lib/auth';
+import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import { getIdArray, getItemMapRoot, useYjsUndoHotkeys } from '@workspace/lib/collab';
 import {
     findCardIdByChatName,
@@ -47,7 +48,17 @@ import type { ColumnItem } from './types';
 
 // Rendered inside the DragOverlay (and therefore inside MediaResolverProvider) — the
 // useAttachmentMeta context read only works below the provider StickiesBoard renders.
-function OverlayNoteCard({ card, entry, isMobile }: { card: CommentCard; entry?: CommentEntry; isMobile: boolean }) {
+function OverlayNoteCard({
+    card,
+    entry,
+    unread,
+    isMobile,
+}: {
+    card: CommentCard;
+    entry?: CommentEntry;
+    unread: boolean;
+    isMobile: boolean;
+}) {
     const { coverThumbnailUrl, attachmentCount } = useAttachmentMeta(card.attachments);
     return (
         <NoteCard
@@ -55,6 +66,7 @@ function OverlayNoteCard({ card, entry, isMobile }: { card: CommentCard; entry?:
             description={card.description}
             color={card.color}
             replyCount={entry?.messageCount}
+            unread={unread}
             resolved={entry?.status === 'resolved'}
             coverThumbnailUrl={coverThumbnailUrl}
             attachmentCount={attachmentCount}
@@ -162,6 +174,7 @@ export function StickiesBoard({
         for (const c of allComments) map.set(c.chatName, c);
         return map;
     }, [allComments]);
+    const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
 
     // Presence: the card the local user is "working on" — the open edit dialog's card, else the card
     // being dragged. Published to awareness; peers render it as a colored outline + name chip.
@@ -296,7 +309,8 @@ export function StickiesBoard({
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem as CommentCard;
             const entry = card.chatName ? entryByChatName.get(card.chatName) : undefined;
-            return <OverlayNoteCard card={card} entry={entry} isMobile={isMobile} />;
+            const unread = !!card.chatName && unreadChatNames.has(card.chatName);
+            return <OverlayNoteCard card={card} entry={entry} unread={unread} isMobile={isMobile} />;
         }
 
         if (dragState.activeType === 'column') {
@@ -306,6 +320,7 @@ export function StickiesBoard({
                     column={column}
                     cards={column.taskIds.map((taskId) => cards[taskId])}
                     entryByChatName={entryByChatName}
+                    unreadChatNames={unreadChatNames}
                     canWrite={canWrite}
                     onAddCard={handleAddCard}
                     onEditColumn={handleEditColumn}
@@ -401,6 +416,7 @@ export function StickiesBoard({
                                                                 column={column}
                                                                 cards={columnCards[columnId]}
                                                                 entryByChatName={entryByChatName}
+                                                                unreadChatNames={unreadChatNames}
                                                                 canWrite={canWrite}
                                                                 onAddCard={handleAddCard}
                                                                 onEditColumn={handleEditColumn}

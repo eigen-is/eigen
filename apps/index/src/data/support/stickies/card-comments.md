@@ -5,7 +5,7 @@ type: how-to
 tags: [stickies, comments, cards, discussion, collaboration]
 related: [stickies/add-and-edit-cards, stickies/get-started]
 order: 80
-updated: 2026-09-13
+updated: 2026-11-02
 ---
 
 Every card on a Stickies board has a built-in comment thread. You can use it to ask questions, post updates, or keep a record of decisions, all in one place alongside the card itself.
@@ -21,6 +21,10 @@ You can also open the thread from the context menu: right-click any card and cho
 ## Reply count
 
 When a card has at least one message, a small reply count appears at the bottom of the card face, for example "3 replies". This lets you see at a glance which cards have active discussion without opening them.
+
+## Unread dot
+
+A red dot in a card's top-right corner means the card has something new for you: a reply in a thread you've written in, a mention, or an assignment to you. Opening the card clears the dot, and so does reading the notification in the bell menu.
 
 ## Who can comment
 

@@ -7,10 +7,9 @@ import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { MountSettings, TeamSettings } from '@workspace/lib/types/settings';
 import { Calendar } from '../calendar/calendar';
 import { getTeamDataPath, PATHS } from '../config/paths';
-import { getServerSettings, mapStorageType } from '../config/server-settings';
 import { ApiError, JsonStore } from '../core';
 import { Drive } from '../drive';
-import { createMountConfig } from '../mount';
+import { createMountConfig, newMountSettings } from '../mount';
 import { checkS3Connection } from '../storage';
 import { getTeamMembers } from '../team';
 import type { User } from '../user';
@@ -42,11 +41,11 @@ export class TeamHome extends Home {
     }
 
     public override get calendar(): Calendar {
-        this.touch();
+        const calendar = super.calendar;
         if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
-        return this._calendar!;
+        return calendar;
     }
 
     // A team home has no notification center, so a notification relayed to it goes to these members instead.
@@ -64,23 +63,21 @@ export class TeamHome extends Home {
         maxSizeMB?: number;
         s3Config?: S3Config;
     }): Promise<{ id: string } & MountSettings> {
-        const serverSettings = getServerSettings();
-        const resolvedType = input.storageType ?? mapStorageType(serverSettings.defaults.mount.storageType);
+        const defaults = newMountSettings();
+        const mountSettings: MountSettings = {
+            ...defaults,
+            storageType: input.storageType ?? defaults.storageType,
+            maxSizeMB: input.maxSizeMB ?? defaults.maxSizeMB,
+            name: input.name,
+            s3Config: input.s3Config,
+        };
 
-        if (resolvedType === 's3' && input.s3Config) {
+        if (mountSettings.storageType === 's3' && input.s3Config) {
             const s3Result = await checkS3Connection(input.s3Config);
             if (!s3Result.ok) throw new ApiError(400, `S3 connection failed: ${s3Result.message}`);
         }
 
         const mountId = crypto.randomUUID().slice(0, 8);
-        const mountSettings: MountSettings = {
-            storageType: resolvedType,
-            maxSizeMB: input.maxSizeMB ?? serverSettings.quotas.defaultMountMaxSizeMB,
-            enabled: true,
-            name: input.name,
-            s3Config: input.s3Config,
-        };
-
         await this.settings.set({ mounts: { [mountId]: mountSettings } });
 
         const config = createMountConfig(mountId, mountSettings);

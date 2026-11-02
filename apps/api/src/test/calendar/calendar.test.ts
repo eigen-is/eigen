@@ -809,6 +809,30 @@ describe('Calendar', () => {
             expect(found.permission).toBe('read');
         });
 
+        test("an update to Bob's entry changes only the fields he sent", async () => {
+            const shared = await assertJson<SharedCalendar[]>(
+                await authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared`),
+            );
+            const entry = findOrFail(shared, (s) => s.calendarId === sharedCalendarId);
+            const put = (id: string, body: Record<string, unknown>) =>
+                authedRequest(ctx.bob.user.sessionToken, `/calendar/${ctx.bob.user.id}/shared/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                });
+
+            const colored = await assertJson<SharedCalendar>(await put(entry.id, { color: '#34a853' }));
+            expect(colored.color).toBe('#34a853');
+            expect(colored.visible).toBe(entry.visible);
+            const hidden = await assertJson<SharedCalendar>(await put(entry.id, { visible: false }));
+            expect(hidden.color).toBe('#34a853');
+            expect(hidden.visible).toBe(false);
+            const reset = await assertJson<SharedCalendar>(await put(entry.id, { color: null, visible: true }));
+            expect(reset.color).toBeNull();
+            expect(reset.visible).toBe(true);
+            expect((await put(crypto.randomUUID(), { visible: true })).status).toBe(404);
+        });
+
         test('Bob gets a calendar-share notification with the actor display name', async () => {
             const notifs = await assertJson<Notification[]>(
                 await authedRequest(ctx.bob.user.sessionToken, `/notifications/${ctx.bob.user.id}`),
@@ -816,6 +840,20 @@ describe('Calendar', () => {
             const shared = notifs.find((n) => n.tag === `calendar-share:${sharedCalendarId}:${ctx.alice.user.id}`);
             expect(shared?.title).toBe(`${ctx.alice.user.name} shared a calendar`);
             expect(shared?.body).toBe('Shared Cal');
+        });
+
+        test('a share notice with no actor names nobody', async () => {
+            const bobHome = await getHome(ctx.bob.user.id);
+            const calendarId = crypto.randomUUID();
+            const persist = spyOn(bobHome.notifications, 'persist');
+            try {
+                await bobHome.calendar.receiveShare(ctx.alice.user.id, calendarId, 'Actorless Cal', 'read');
+                await bobHome.calendar.removeShare(ctx.alice.user.id, calendarId);
+                const notices = persist.mock.calls.map((call) => call[0]).filter((n) => n.body === 'Actorless Cal');
+                expect(notices.map((n) => n.title)).toEqual(['Calendar shared with you', 'Access removed']);
+            } finally {
+                persist.mockRestore();
+            }
         });
 
         test('Bob can read events from shared calendar', async () => {
