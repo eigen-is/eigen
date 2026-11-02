@@ -20,50 +20,26 @@ export async function copyPathAcross(
     name: string,
     user: User,
 ): Promise<DrivePath> {
-    if (!isContainerType(src.type)) {
-        return copyFileAcross(source, src, target, destMountId, destParentId, name, user);
-    }
-    // A document's open database is written to storage first, so the copy gets its latest edits.
-    if (src.type !== DRIVE_TYPE_FOLDER) await source.flushContainerDb(src.mountId, src.id);
-    const created = await target.createFolder(destMountId, destParentId, name, user, src.type);
-    // A copy that fails part way moves its folder to the trash, so each retry does not leave another
-    // half-built one. The source is untouched and the folder holds only this copy, so there is nothing
-    // to keep. The trash is the only delete a drive offers here, and it tells the tabs that saw the
-    // folder appear.
+    // The walk creates the top folder before anything else, so it is the first one here.
+    const createdFolderIds: string[] = [];
     try {
-        await copyChildrenAcross(source, src, target, destMountId, created.id, user);
+        return await copyTreeAcross(source, src, target, destMountId, destParentId, name, user, createdFolderIds);
     } catch (e) {
-        await target.deletePath(destMountId, created.id, user).catch((cleanupErr: unknown) => {
-            console.warn(`[copy] Could not trash the failed copy ${created.id}:`, cleanupErr);
-        });
+        // A copy that fails part way moves its folder to the trash, so each retry does not leave another
+        // half-built one. The source is untouched and the folder holds only this copy, so there is nothing
+        // to keep. The trash is the only delete a drive offers here, and it tells the tabs that saw the
+        // folder appear.
+        const topId = createdFolderIds[0];
+        if (topId) {
+            await target.deletePath(destMountId, topId, user).catch((cleanupErr: unknown) => {
+                console.warn(`[copy] Could not trash the failed copy ${topId}:`, cleanupErr);
+            });
+        }
         throw e;
     }
-    return created;
 }
 
-// The walk below the top folder. It cleans up nothing itself: the trash of the top folder takes it all.
-async function copyChildrenAcross(
-    source: DriveLike,
-    folder: DrivePath,
-    target: DriveLike,
-    destMountId: string,
-    destFolderId: string,
-    user: User,
-): Promise<void> {
-    const isEigenDoc = folder.type !== DRIVE_TYPE_FOLDER;
-    for (const child of await source.getFolderContents(folder.mountId, folder.id)) {
-        if (isEigenDoc && isVersionsFolder(child)) continue;
-        if (!isContainerType(child.type)) {
-            await copyFileAcross(source, child, target, destMountId, destFolderId, child.name, user);
-            continue;
-        }
-        if (child.type !== DRIVE_TYPE_FOLDER) await source.flushContainerDb(child.mountId, child.id);
-        const created = await target.createFolder(destMountId, destFolderId, child.name, user, child.type);
-        await copyChildrenAcross(source, child, target, destMountId, created.id, user);
-    }
-}
-
-async function copyFileAcross(
+async function copyTreeAcross(
     source: DriveLike,
     src: DrivePath,
     target: DriveLike,
@@ -71,7 +47,21 @@ async function copyFileAcross(
     destParentId: string,
     name: string,
     user: User,
+    createdFolderIds: string[],
 ): Promise<DrivePath> {
+    if (isContainerType(src.type)) {
+        const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
+        // A document's open database is written to storage first, so the copy gets its latest edits.
+        if (isEigenDoc) await source.flushContainerDb(src.mountId, src.id);
+        const created = await target.createFolder(destMountId, destParentId, name, user, src.type);
+        createdFolderIds.push(created.id);
+        for (const child of await source.getFolderContents(src.mountId, src.id)) {
+            if (isEigenDoc && isVersionsFolder(child)) continue;
+            await copyTreeAcross(source, child, target, destMountId, created.id, child.name, user, createdFolderIds);
+        }
+        return created;
+    }
+
     const file = await source.downloadFile(src.mountId, src.id);
     if (!file) throw storageGone();
     return target.createFileFromData(destMountId, destParentId, name, src.mimeType, file, user);

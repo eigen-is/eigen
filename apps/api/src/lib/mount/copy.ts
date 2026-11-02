@@ -20,6 +20,31 @@ export async function copyPath(
     name: string,
     actor?: { id: string; email: string },
 ): Promise<DrivePath> {
+    // The walk creates the top folder before anything else, so it is the first one here.
+    const createdFolderIds: string[] = [];
+    try {
+        return await copyTree(mount, srcPathId, destParentId, name, createdFolderIds, actor);
+    } catch (e) {
+        // A copy that fails part way removes its folder, so each retry does not leave another half-built
+        // one. The source is untouched and the folder holds only this copy, so there is nothing to keep.
+        const topId = createdFolderIds[0];
+        if (topId) {
+            await mount.deletePath(topId).catch((cleanupErr: unknown) => {
+                console.warn(`[copy] Could not remove the failed copy ${topId}:`, cleanupErr);
+            });
+        }
+        throw e;
+    }
+}
+
+async function copyTree(
+    mount: Mount,
+    srcPathId: string,
+    destParentId: string,
+    name: string,
+    createdFolderIds: string[],
+    actor?: { id: string; email: string },
+): Promise<DrivePath> {
     const src = await mount.getActivePath(srcPathId);
     const copiedFrom = {
         sourceOwnerId: mount.history.ownerId,
@@ -31,21 +56,13 @@ export async function copyPath(
         const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
         if (isEigenDoc) await mount.flushContainerDb(srcPathId);
         const newId = await mount.createFolder(destParentId, name, src.type);
+        createdFolderIds.push(newId);
         if (actor) {
             mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }
-        // A copy that fails part way removes its folder, so each retry does not leave another half-built
-        // one. The source is untouched and the folder holds only this copy, so there is nothing to keep.
-        try {
-            for (const child of await mount.listFolder(srcPathId)) {
-                if (isEigenDoc && isVersionsFolder(child)) continue;
-                await copyPath(mount, child.id, newId, child.name, actor);
-            }
-        } catch (e) {
-            await mount.deletePath(newId).catch((cleanupErr: unknown) => {
-                console.warn(`[copy] Could not remove the failed copy ${newId}:`, cleanupErr);
-            });
-            throw e;
+        for (const child of await mount.listFolder(srcPathId)) {
+            if (isEigenDoc && isVersionsFolder(child)) continue;
+            await copyTree(mount, child.id, newId, child.name, createdFolderIds, actor);
         }
         // The data.db arrives as plain bytes, so no sync tells search about the new document. It is
         // marked for the reindexer here instead.

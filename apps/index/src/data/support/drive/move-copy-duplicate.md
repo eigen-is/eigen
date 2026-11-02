@@ -40,7 +40,7 @@ When the copy is done, a message says **1 item copied** (or **3 items copied**, 
 
 If some of the items fail, a message says how many and why, and the **Copy to** dialog stays open with only those items left. Click **Copy here** again to retry them. The ones that already copied are not copied a second time.
 
-Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to, while a single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied behind. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents, but the copy starts its own version history rather than inheriting the original's.
+Copying a folder copies everything inside it. A folder or a document only needs to fit in the free space of the drive you copy it to, while a single file must also be within the upload size limit. A folder that fails part way leaves nothing half-copied in the folder you picked. If you were copying to another drive, the unfinished folder goes to that drive's Trash. Copying a document, spreadsheet, presentation, board, or drawing gives you a working file with the same contents, but the copy starts its own version history rather than inheriting the original's.
 
 ## Duplicate a file in place
 
