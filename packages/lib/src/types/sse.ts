@@ -1,7 +1,8 @@
 // The events the server sends on a tab's event stream, shared by the API that builds them and the
 // handlers in the browser that read them. An event carries the ids a handler needs to know which queries
 // to refetch, and rarely data, such as a notification's display text or the home's data epochs. A new event type
-// gets its name in SSEventType and its shape in the SSEvent union.
+// gets its name in SSEventType and its shape in the SSEvent union. The restart notice also has the shape a tab keeps
+// it in for its banner.
 
 import type { RESTART_REASONS } from '../validation/restart';
 import type { NotificationType } from './notification';
@@ -150,3 +151,9 @@ export type SSEventRestartNotice = {
     type: typeof SSEventType.SERVER_RESTART_NOTICE;
     notice: { reason: RestartReason; msLeft: number; message: string | null } | null;
 };
+
+// A restart notice as a tab holds it: its deadline and the time the tab first heard it, both on the tab's own clock.
+export type HeldRestartNotice = { reason: RestartReason; message: string | null; deadline: number; heardAt: number };
+
+// What the tab's restart banner reads: the notice it holds, and whether its event stream is down.
+export type RestartNoticeState = { notice: HeldRestartNotice | null; streamDown: boolean };

@@ -1,3 +1,6 @@
+// The strip at the foot of every page on a demo server, which tells a visitor the workspace is shared and resets
+// every hour. AppShell renders it. It shows nothing on a server that is not in demo mode.
+
 import { useAuth } from '@workspace/lib/auth';
 import { usePublicConfig } from '@workspace/lib/public';
 

@@ -1,7 +1,8 @@
 // AppShell is the page frame of every Eigen app: the top bar, the sidebar and the main column.
 // It owns the layout state that useLayout() hands to the app, such as the app name, the document
 // title and whether the sidebar is open. For a signed-in user it also mounts the command palette
-// and the create dialogs the palette opens.
+// and the create dialogs the palette opens. At its foot sit the strips that speak to every app,
+// such as the warning of a restart the server announced.
 
 import { Outlet } from '@tanstack/react-router';
 import { openMailComposeWith } from '@workspace/lib/api';
@@ -25,6 +26,7 @@ import { CommandPalette } from './command-palette/command-palette';
 import { usePaletteShortcuts } from './command-palette/use-palette-shortcuts';
 import { DemoBanner } from './demo-banner';
 import { LayoutContext } from './layout-context';
+import { RestartBanner } from './restart-banner';
 import { Topbar } from './topbar';
 
 type AppShellProps = {
@@ -54,13 +56,12 @@ export function AppShell({
 
     const effectiveSidebarMode = sidebar && !sidebarHidden ? sidebarMode : 'none';
 
-    // On mobile the sidebar renders as a full-width column in place of <main>. Hide main
-    // via CSS instead of unmounting so editors keep Yjs/WS state and lists keep scroll.
+    // On mobile the open sidebar takes the place of <main>. Main is hidden, not unmounted, so an
+    // editor keeps its collab connection and a list keeps its scroll position.
     const sidebarColumnShown = isMobile && sidebarOpen && effectiveSidebarMode === 'collapsible';
 
-    // Memoize so the context value keeps a stable identity across AppShell
-    // re-renders (resize, sidebar toggle, title changes) — without it every
-    // useLayout() consumer re-renders on each render. useState setters are stable.
+    // A stable context value, so a resize or a new title does not re-render every useLayout()
+    // caller. The useState setters never change, so they need no place in the dependencies.
     const layoutValue = useMemo(
         () => ({
             appName,
@@ -99,25 +100,24 @@ export function AppShell({
                         {children ?? <Outlet />}
                     </main>
                 </div>
+                <RestartBanner />
                 <DemoBanner />
             </div>
         </LayoutContext.Provider>
     );
 }
 
-// What `ctx.openDriveCreate(kind)` puts on the wire. `null` = no dialog open;
-// an EigenDocType opens DriveCreateEigenDoc; 'folder' opens DriveCreateFolder.
+// The create dialog the palette asked for with openDriveCreate, or null when none is open.
 type CreateDialogKind = EigenDocType | 'folder' | null;
 
-// AppShell is used by both EigenApp-wrapped apps (mail/drive/docs/…) and the
-// index app's marketing routes (blog/support), which don't mount the
-// CommandPaletteProvider + PreviewProvider stack. Render nothing in the latter
-// case so PaletteRunnerInner can use the required hooks without guards.
+// The index app's public pages, such as the blog, render AppShell without EigenApp, so they have
+// no command palette or preview provider. There this renders nothing, which lets
+// PaletteRunnerInner read both providers without a check.
 function PaletteRunner() {
     const palette = useOptionalCommandPalette();
     const preview = useOptionalPreview();
     const auth = useAuth();
-    // Palette is signed-in-only: skip Inner for anonymous visitors so Mod+K never binds.
+    // The palette is for signed-in users only, so for a visitor Mod+K does nothing.
     if (!palette || !preview || !auth.isAuthenticated) return null;
     return <PaletteRunnerInner />;
 }
@@ -131,8 +131,8 @@ function PaletteRunnerInner() {
     const mailEnabled = useMailEnabled();
     const [createDialog, setCreateDialog] = useState<CreateDialogKind>(null);
 
-    // The palette hands out DrivePaths; the overlay takes subjects. Memoized because ctx below
-    // republishes on every identity change.
+    // The palette hands out drive paths, and the preview takes subjects. It is memoized because
+    // the palette context below is rebuilt whenever one of its parts changes.
     const openPathPreview = useCallback((path: DrivePath) => openPreview(subjectFromPath(path)), [openPreview]);
 
     const toggleTheme = useCallback(() => setTheme(theme === 'dark' ? 'light' : 'dark'), [theme, setTheme]);
@@ -151,9 +151,8 @@ function PaletteRunnerInner() {
             navigate: (url) => {
                 window.location.href = url;
             },
-            // Open the same shared dialogs the Drive sidebar's New menu uses
-            // (drive-new-menu.tsx). The dialog's DriveLocationPicker lets the user
-            // pick where to create.
+            // The same create dialogs as the New menu in the Drive sidebar. The dialog asks
+            // the user where to create.
             openDriveCreate: (kind) => setCreateDialog(kind),
             openMailComposeWith,
             openPreview: openPathPreview,

@@ -10,6 +10,7 @@ import type {
     SSEventTypeName,
 } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
+import { readRestartNotice } from '../../../core/sse/restart-notice';
 import { handleSSEvent } from '../../../core/sse/sse-handlers';
 import { installHappyDom } from '../../happy-dom';
 import { invalidatedBy } from '../../invalidation';
@@ -91,14 +92,14 @@ const SAMPLES: { [T in SSEventTypeName]: SSEvent & { type: T } } = {
     },
 };
 
-// An event acts when it refetches a query, or, for the epochs, when the tab records the epochs it heard. The restart
-// notice changes no query: its handler, the banner's store, comes with the banner.
+// An event acts when it refetches a query, when the tab records the epochs it heard, or, for the restart notice, when
+// the banner's store holds what it said.
 test('every event type reaches a handler that acts on it', () => {
     for (const event of Object.values(SAMPLES)) {
-        if (event.type === SSEventType.SERVER_RESTART_NOTICE) continue;
         window.sessionStorage.clear();
+        const notice = readRestartNotice();
         const keys = invalidatedBy((queryClient) => handleSSEvent(event, queryClient, OWNER));
-        const acted = keys.length > 0 || window.sessionStorage.length > 0;
+        const acted = keys.length > 0 || window.sessionStorage.length > 0 || readRestartNotice() !== notice;
         expect({ type: event.type, acted }).toEqual({ type: event.type, acted: true });
     }
 });
