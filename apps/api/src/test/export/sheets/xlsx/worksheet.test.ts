@@ -10,7 +10,7 @@ function partOf(sheet: Sheet, options: { selected?: boolean; names?: Map<string,
     const record = (code: CountedWarningCode) => lost.push(code);
     const part = worksheetPart(sheet, {
         name: options.names?.get(sheet.name) ?? sheet.name,
-        names: options.names ?? new Map(),
+        writtenName: (name) => options.names?.get(name),
         selected: options.selected ?? false,
         drawing: options.drawing,
         styles: styleRegistry(record),

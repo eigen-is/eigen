@@ -125,6 +125,30 @@ describe('an xlsx export read back by the import', () => {
         expect(sheet.hyperlink).toEqual({ '0_0': { linkType: 'sheet', linkAddress: 'tbl1.2' } });
     });
 
+    // The editor follows a link to a sheet's name in another case to that sheet, so the file names the sheet as the
+    // workbook writes it, a repaired name too.
+    test("a link to a sheet's name in another case names the sheet as the workbook writes it", async () => {
+        const bytes = exportXlsx([
+            { name: 'History', celldata: [{ r: 0, c: 0, v: { v: 1 } }] },
+            {
+                name: 'Index',
+                celldata: [
+                    { r: 0, c: 0, v: { v: 'sheet' } },
+                    { r: 1, c: 0, v: { v: 'range' } },
+                ],
+                hyperlink: {
+                    '0_0': { linkType: 'sheet', linkAddress: 'history' },
+                    '1_0': { linkType: 'cellrange', linkAddress: 'history!B2' },
+                },
+            },
+        ]);
+        const locations = [...entry(bytes, 'xl/worksheets/sheet2.xml').matchAll(/location="([^"]*)"/g)];
+        expect(locations.map(([, location]) => location)).toEqual([
+            '&apos;History (2)&apos;!A1',
+            '&apos;History (2)&apos;!B2',
+        ]);
+    });
+
     test('keeps a rich string its runs', async () => {
         const runs = [
             { v: 'Hello ', bl: 1, fc: '#FF0000' },
