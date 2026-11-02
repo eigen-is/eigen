@@ -144,7 +144,9 @@ export const DATE_TOKENS: DateToken[] = [
 ];
 
 export function getDateToken(id: DateTokenId): DateToken {
-    return DATE_TOKENS.find((t) => t.id === id)!;
+    const token = DATE_TOKENS.find((t) => t.id === id);
+    if (!token) throw new Error(`No date token ${id}`);
+    return token;
 }
 
 // Tue 1930-08-05 13:30:30 as an Excel serial — the fixed preview sample, chosen
@@ -290,7 +292,8 @@ export function buildCurrencyPattern(symbol: string, variantId: CurrencyVariantI
     // (kr, Lek, din, …) would be parsed as format tokens, so quote them.
     const cleaned = symbol.replaceAll('"', '');
     const literal = /^\p{Sc}+$/u.test(cleaned) ? cleaned : `"${cleaned}"`;
-    const variant = CURRENCY_VARIANTS.find((v) => v.id === variantId)!;
+    const variant = CURRENCY_VARIANTS.find((v) => v.id === variantId);
+    if (!variant) throw new Error(`No currency variant ${variantId}`);
     return variant.symbolFirst ? `${literal}${variant.mask}` : `${variant.mask}${literal}`;
 }
 
