@@ -1,10 +1,12 @@
-// How a peer's row or column op moves this tab's pending undos. The engine moves the cells, merges, links and sizes of
-// the sheet the op names, and the formula text that points at it on every sheet; shiftEntries moves an undo entry's
-// paths and values the same way, so an undo lands where its cell now is. Callers such as the Workbook's applyOp run it
-// for each such op in a peer's batch, and undo's repair reads a RowColMove to find where a cell was before an op.
+// How a peer's row or column op moves this tab's pending undos. The op moves what sits on the rows of the sheet it
+// names, such as cells, merges and validation rules, and the formula text that points at it on every sheet.
+// shiftEntries moves an undo entry's paths and values the same way, so an undo lands where its cell now is. The
+// Workbook's applyOp runs it for each such op in a peer's batch, and undo's repair reads a RowColMove to find where a
+// cell was before an op.
 
 import type { MergeCell, SheetChart } from '@workspace/lib/sheets';
 import type { Patch } from 'immer';
+import { sheetFinder } from '../../engine/a1-notation';
 import { mapChartRefs } from '../../engine/chart-data';
 import { functionStrChange } from '../../engine/formula-shift';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
@@ -18,9 +20,12 @@ import {
     shiftKeyedMapForInsert,
     shiftMergeForDelete,
     shiftMergeForInsert,
+    shiftRangeForDelete,
+    shiftRangeForInsert,
+    shiftValidations,
 } from '../../engine/rowcol';
-import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
-import type { History, Op, Sheet } from '../types';
+import type { CalcChainEntry, Cell, CellMatrix, SingleRange } from '../../engine/types';
+import type { History, Op, Sheet, SheetValidation } from '../types';
 import type { PatchOptions } from '../utils';
 import { inverseRowColOptions } from '../utils';
 
@@ -32,10 +37,17 @@ type RowColMove = {
     to: (index: number) => number | null;
     // Where an index the op left was before it, or null for a row or column the op inserts.
     from: (index: number) => number | null;
-    formula: (text: string, sheetName: string, onTargetSheet: boolean) => string;
+    formula: (
+        text: string,
+        sheetName: string,
+        onTargetSheet: boolean,
+        findSheet: (name: string) => Sheet | undefined,
+    ) => string;
     merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
     keyed: (map: Record<string, number>) => Record<string, number>;
     cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
+    // Where a range ends up, or null for one the op deletes.
+    range: (range: SingleRange) => SingleRange | null;
     sheets: <S extends Sheet>(sheets: S[]) => S[];
 };
 
@@ -54,11 +66,12 @@ function insertMove(op: InsertRowColOp): RowColMove {
         type,
         to: (i) => (i < at ? i : i + count),
         from: (i) => (i < at ? i : i < at + count ? null : i - count),
-        formula: (text, name, onTargetSheet) =>
-            functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet),
+        formula: (text, name, onTargetSheet, findSheet) =>
+            functionStrChange(text, 'add', axisName(type), direction, index, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
         keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
         cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
+        range: (range) => shiftRangeForInsert(range, op),
         sheets: (sheets) => applySheetsInsertRowCol(sheets, op),
     };
 }
@@ -71,17 +84,18 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
         type,
         to: (i) => (i < start ? i : i > end ? i - count : null),
         from: (i) => (i < start ? i : i + count),
-        formula: (text, name, onTargetSheet) =>
-            functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet),
+        formula: (text, name, onTargetSheet, findSheet) =>
+            functionStrChange(text, 'del', axisName(type), null, start, count, name, onTargetSheet, findSheet),
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
         keyed: (map) => shiftKeyedMapForDelete(map, start, end),
         cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
+        range: (range) => shiftRangeForDelete(range, op),
         sheets: (sheets) => applySheetsDeleteRowCol(sheets, op),
     };
 }
 
-// A peer's row or column op moves your entries' cells, merges, borders, links, validation and row or column sizes on
-// its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
+// A peer's row or column op moves your entries' cells, merges, borders, links, validation rules and row or column sizes
+// on its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
 // meaningless is dropped: one that writes inside deleted rows or columns or cuts a merge, a range or a whole config on
 // the op's sheet, a chart's data on that sheet, or your own row or column op there.
 //
@@ -124,12 +138,14 @@ class Shifter {
     private readonly move: RowColMove;
     private readonly name: string;
     private readonly sheets: Sheet[];
+    private readonly findSheet: (name: string) => Sheet | undefined;
 
     public constructor(move: RowColMove, name: string, sheets: Sheet[]) {
         this.id = move.id;
         this.move = move;
         this.name = name;
         this.sheets = sheets;
+        this.findSheet = sheetFinder(sheets);
     }
 
     public entry(entry: History): History | null {
@@ -163,7 +179,8 @@ class Shifter {
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
-        if (field === 'hyperlink' || field === 'dataVerification') return this.cellKeyed(patch, rest);
+        if (field === 'hyperlink') return this.cellKeyed(patch, rest);
+        if (field === 'dataValidations') return this.validations(patch, rest);
         if (field === 'calcChain') return this.calcChain(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
@@ -349,8 +366,8 @@ class Shifter {
         return Object.keys(moved).length === Object.keys(value).length ? { ...patch, value: moved } : null;
     }
 
-    // An "r_c" key at the head of `rest`, such as a border, a link or a validation rule, or a whole map of them, such
-    // as a sheet's first link.
+    // An "r_c" key at the head of `rest`, such as a border or a link, or a whole map of them, such as a sheet's first
+    // link.
     private cellKeyed(patch: Patch, [key, ...below]: (string | number)[]): Patch | null {
         if (key == null) {
             if (!('value' in patch) || patch.value == null) return patch;
@@ -362,6 +379,17 @@ class Shifter {
         if (moved == null) return null;
         const depth = patch.path.length - below.length - 1;
         return at(patch, [...patch.path.slice(0, depth), moved, ...below], patch.value);
+    }
+
+    // A validation rule, or a sheet's whole map of them, which the editor writes whole. Its ranges move as the
+    // engine moves the live ones. A rule the op leaves with no range drops the entry, as a write into deleted rows does.
+    private validations(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
+        if (!('value' in patch) || patch.value == null) return patch;
+        if (below.length > 0) return null;
+        const map: Record<string, SheetValidation> = id == null ? patch.value : { [id]: patch.value };
+        const moved = shiftValidations(map, this.move.range);
+        if (Object.keys(moved).length < Object.keys(map).length) return null;
+        return at(patch, patch.path, id == null ? moved : moved[id]);
     }
 
     // The recalc list names each formula cell by its place, so an entry moves with its cell. A whole list moves as one
@@ -390,7 +418,7 @@ class Shifter {
 
     private formula(f: string, onTargetSheet: boolean): string {
         const text = f.startsWith('=') ? f.slice(1) : f;
-        const shifted = `=${this.move.formula(text, this.name, onTargetSheet)}`;
+        const shifted = `=${this.move.formula(text, this.name, onTargetSheet, this.findSheet)}`;
         return shifted === f ? f : shifted;
     }
 

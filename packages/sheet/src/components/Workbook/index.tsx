@@ -23,6 +23,7 @@ import type {
 } from '@workspace/lib/types/clipboard';
 import { isTypingTarget } from '@workspace/ui/hooks/is-typing-target';
 import { cloneDeep, isEqual } from 'es-toolkit/compat';
+import type { Patch } from 'immer';
 import { enablePatches, produce, produceWithPatches } from 'immer';
 import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import type { RefValues, SetContextOptions } from '../../context';
@@ -39,6 +40,7 @@ import {
     defaultContext,
     defaultSettings,
     deleteActiveObject,
+    endPointerDrag,
     ensureSheetIndex,
     filterPatch,
     getFlowdata,
@@ -48,7 +50,6 @@ import {
     handlePaste,
     initSheetData,
     initSheetIndex,
-    insertRowCol,
     pasteChart,
     patchToOp,
     pushEntry,
@@ -58,13 +59,15 @@ import {
     SHEET_HOTKEYS,
     selectionCache,
     sheetChartClipboardItem,
+    stepNewestEntry,
     undoEntry,
+    ValidationLimitError,
     warmFormulaCellInfoMapOnIdle,
 } from '../../state';
 import { consumePendingCopy } from '../../state/modules/clipboard';
 import { FilterMenu } from '../ContextMenu/FilterMenu';
 import { FxEditor } from '../FxEditor';
-import { MenuBar } from '../MenuBar';
+import { WorkbookMenuBar } from '../MenuBar';
 import { Sheet } from '../Sheet';
 import { SheetTab } from '../SheetTab';
 import { generateAPIs } from './api';
@@ -140,6 +143,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const canvas = useRef<HTMLCanvasElement>(null);
         const cellArea = useRef<HTMLDivElement>(null);
         const workbookContainer = useRef<HTMLDivElement>(null);
+        const menuBar = useRef<HTMLDivElement>(null);
 
         const refs: RefValues = useMemo(
             () => ({
@@ -166,7 +170,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(
-            () => Object.assign(cloneDeep(defaultSettings), props) as Required<Settings>,
+            () => Object.assign(cloneDeep(defaultSettings), props),
             [...Object.values(props)],
         );
 
@@ -188,17 +192,40 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     ctx.scrollTop = globalCache.current.scrollTop;
                 };
 
+                // An edit that would make a validation rule too complex is refused whole: nothing of it applies, and
+                // the user sees why. A formula it evaluated may have reached the engine's map, which learns the sheets
+                // again. A mouse-up's edit still ends its drag.
+                const refuse = (e: unknown) => {
+                    if (!(e instanceof ValidationLimitError)) throw e;
+                    base.formulaCache.resetEngine();
+                    warmFormulaCellInfoMapOnIdle(getContext);
+                    commit(
+                        produce(base, (ctx: Context) => {
+                            endPointerDrag(ctx);
+                            ctx.warnDialog = e.message;
+                        }),
+                    );
+                };
+
                 // A write that records no history, such as a drag that moves the selection, skips the patches, which
                 // cost time on every change and which the selection would never ship anyway.
                 if (options.noHistory) {
-                    commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    try {
+                        commit(produce(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)));
+                    } catch (e) {
+                        refuse(e);
+                    }
                     return;
                 }
 
-                const [result, patches, inversePatches] = produceWithPatches(
-                    base,
-                    concatProducer(syncScroll, recipe, triggerGroupValuesRefresh),
-                );
+                let edit: readonly [Context, Patch[], Patch[]];
+                try {
+                    edit = produceWithPatches(base, concatProducer(syncScroll, recipe, triggerGroupValuesRefresh));
+                } catch (e) {
+                    refuse(e);
+                    return;
+                }
+                const [result, patches, inversePatches] = edit;
                 commit(result);
                 if (patches.length === 0) return;
                 const filteredPatches = filterPatch(patches);
@@ -232,29 +259,25 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 }
                 onOp?.(patchToOp(result, filteredPatches, entry.options));
             },
-            [commit, onOp],
+            [commit, getContext, onOp],
         );
 
         const handleUndo = useCallback(() => {
             if (contextRef.current.allowEdit === false) return;
             const { undoList, redoList } = globalCache.current;
-            const entry = undoList.pop();
-            if (!entry) return;
-            redoList.push(entry);
-            const { ctx, ops } = undoEntry(contextRef.current, entry);
-            commit(ctx);
-            if (ops.length > 0) onOp?.(ops);
+            const step = stepNewestEntry(contextRef.current, undoList, redoList, undoEntry);
+            if (!step) return;
+            commit(step.ctx);
+            if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
         const handleRedo = useCallback(() => {
             if (contextRef.current.allowEdit === false) return;
             const { undoList, redoList } = globalCache.current;
-            const entry = redoList.pop();
-            if (!entry) return;
-            undoList.push(entry);
-            const { ctx, ops } = redoEntry(contextRef.current, entry);
-            commit(ctx);
-            if (ops.length > 0) onOp?.(ops);
+            const step = stepNewestEntry(contextRef.current, redoList, undoList, redoEntry);
+            if (!step) return;
+            commit(step.ctx);
+            if (step.ops.length > 0) onOp?.(step.ops);
         }, [commit, onOp]);
 
         useEffect(() => {
@@ -413,11 +436,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {
-                // Portaled UI (menus, popovers, dialogs) renders outside this div but still
-                // bubbles keydown through the React tree. The grid only owns keys from its
-                // own DOM subtree — without this, menu roving moves the selection and the
-                // handler's tail steals focus out of the open menu.
-                if (!e.currentTarget.contains(e.target as Node)) return;
+                // The grid owns only the keys from its own part of the page. Portalled menus, popovers and dialogs
+                // render outside this div, but their keydown still bubbles here through the React tree, where it
+                // would move the selection and take the focus out of an open menu.
+                if (!(e.target instanceof Node && e.currentTarget.contains(e.target))) return;
                 const { nativeEvent } = e;
                 // Undo and redo run ahead of the grid's handler, because a write must not start another write
                 // inside its recipe, and handleUndo and handleRedo are writes. An open cell editor leaves them to
@@ -440,6 +462,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         return;
                     }
                 }
+                // The bar sits inside this div, and its other keys are its own: the Enter or Space that opens one of
+                // its menus would open the cell editor too.
+                if (menuBar.current?.contains(e.target)) return;
                 setContextWithProduce((draftCtx) => {
                     const input = cellInput.current;
                     if (!input) return;
@@ -613,6 +638,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     try {
                                         handlePaste(draftCtx, syntheticEvent);
                                     } catch (err) {
+                                        if (err instanceof ValidationLimitError) throw err;
                                         console.error(err);
                                     }
                                 });
@@ -621,36 +647,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         }
                     }
 
-                    const txtdata = paste.html || paste.text;
-                    // Parse into an inert document, never a live <div>: txtdata is OS clipboard HTML
-                    // and a live element's innerHTML loads <img> and fires its onerror even detached.
-                    const trList = new DOMParser().parseFromString(txtdata, 'text/html').querySelectorAll('table tr');
-                    const rowCount = getFlowdata(ctx)?.length ?? 0;
-                    const range = ctx.selections;
-                    const firstRow = range?.[0]?.row[0];
-                    const rowToBeAdded = firstRow == null ? 0 : trList.length + firstRow - rowCount;
-                    if (rowToBeAdded > 0) {
-                        const insertRowColOp: SetContextOptions['insertRowColOp'] = {
-                            type: 'row',
-                            index: rowCount - 1,
-                            count: rowToBeAdded,
-                            direction: 'rightbottom',
-                            id: ctx.currentSheetId,
-                        };
-                        setContextWithProduce(
-                            (draftCtx) => {
-                                insertRowCol(draftCtx, insertRowColOp);
-                                draftCtx.selections = range;
-                            },
-                            {
-                                insertRowColOp,
-                            },
-                        );
-                    }
+                    // A paste past the grid's last row adds the rows it needs in its own edit, so a refused paste
+                    // adds none.
                     setContextWithProduce((draftCtx) => {
                         try {
                             handlePaste(draftCtx, e);
                         } catch (err) {
+                            if (err instanceof ValidationLimitError) throw err;
                             console.error(err);
                         }
                     });
@@ -722,7 +725,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         </section>
                         <div className="w-full">
                             {mergedSettings.showToolbar && (
-                                <MenuBar leftItems={toolbarLeftItems} rightItems={toolbarRightItems} />
+                                <WorkbookMenuBar
+                                    ref={menuBar}
+                                    leftItems={toolbarLeftItems}
+                                    rightItems={toolbarRightItems}
+                                />
                             )}
                             {mergedSettings.showFormulaBar && <FxEditor />}
                         </div>

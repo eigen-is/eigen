@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { MAX_VALIDATION_RANGES, MAX_VALIDATIONS } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../lib/document/transform/protocol';
 import { cellKey } from '../../../lib/import/sheets/cells';
 import { readRules } from '../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../lib/import/sheets/styles';
 import { parseOoxml } from '../../../lib/ooxml/ooxml';
+import { rulesByCell } from '../../fixtures/validations';
 import { SML, sheetXml } from '../../fixtures/xlsx';
 
 // A worksheet's conditional formats and data validations, Excel 2010's extensions besides, and each rule's output
@@ -27,8 +29,6 @@ const DXFS = readDxfs(
 );
 
 type Options = {
-    rows?: number;
-    columns?: number;
     date1904?: boolean;
     charge?: (cells: number, text: number) => void;
     chargeElements?: (count: number) => void;
@@ -43,8 +43,6 @@ function read(after: string, options: Options = {}) {
         dxfs: DXFS,
         palette: PALETTE,
         date1904: options.date1904 ?? false,
-        rows: options.rows ?? 10,
-        columns: options.columns ?? 5,
         charge: options.charge ?? ((cells, text) => charged.push({ cells, text })),
         chargeElements: options.chargeElements ?? (() => {}),
         lost: options.lost ?? (() => {}),
@@ -52,6 +50,12 @@ function read(after: string, options: Options = {}) {
         dates: new Set((options.dates ?? []).map(([r, c]) => cellKey(r, c))),
     });
     return { ...rules, charged };
+}
+
+// The rule over each cell the validations read cover, for a check cell by cell.
+function readByCell(after: string, options: Options = {}) {
+    const { dataValidations, ...rest } = read(after, options);
+    return { ...rest, rules: rulesByCell(dataValidations) };
 }
 
 const cf = (sqref: string, ...rules: string[]) =>
@@ -403,7 +407,7 @@ describe('a data validation', () => {
         `<dataValidation type="list" allowBlank="1" sqref="${sqref}"${attributes}><formula1>${formula}</formula1></dataValidation>`;
 
     test('a literal list is a dropdown on every cell of its ranges', () => {
-        const { dataVerification } = read(dv(list('B2:B3 D1', '"Red,Green,Blue"')));
+        const { rules } = readByCell(dv(list('B2:B3 D1', '"Red,Green,Blue"')));
         const expected = {
             type: 'dropdown',
             type2: '',
@@ -413,11 +417,11 @@ describe('a data validation', () => {
             hintShow: false,
             hintValue: '',
         };
-        expect(dataVerification).toEqual({ '1_1': expected, '2_1': expected, '0_3': expected });
+        expect(rules).toEqual({ '1_1': expected, '2_1': expected, '0_3': expected });
     });
 
     test('a list over a range keeps the reference; a defined name, an empty list or a custom rule is dropped', () => {
-        const { dataVerification } = read(
+        const { rules } = readByCell(
             dv(
                 list('A1', "'Other Sheet'!$B$1:$B$5"),
                 list('A2', '=$C$1:$C$3'),
@@ -430,15 +434,15 @@ describe('a data validation', () => {
                 '<dataValidation type="constructor" sqref="A7"><formula1>1</formula1></dataValidation>',
             ),
         );
-        expect(Object.keys(dataVerification ?? {})).toEqual(['0_0', '1_0']);
-        expect(dataVerification?.['0_0'].value1).toBe("'Other Sheet'!$B$1:$B$5");
-        expect(dataVerification?.['1_0'].value1).toBe('$C$1:$C$3');
+        expect(Object.keys(rules)).toEqual(['0_0', '1_0']);
+        expect(rules?.['0_0'].value1).toBe("'Other Sheet'!$B$1:$B$5");
+        expect(rules?.['1_0'].value1).toBe('$C$1:$C$3');
     });
 
     // The reader hands each sheet its names' inliner; a name left as written is still no list.
     test('a list or a bound from a defined name reads what the name refers to, as a formula rule does', () => {
         const names: Record<string, string> = { Colours: 'Lists!$A$1:$A$3', Most: '10' };
-        const { dataVerification, conditionalFormatRules } = read(
+        const { rules, conditionalFormatRules } = readByCell(
             `${cf('A1', '<cfRule type="expression" dxfId="0" priority="1"><formula>A1&gt;Most</formula></cfRule>')}${dv(
                 list('A1', 'Colours'),
                 list('A2', 'Unknown'),
@@ -446,9 +450,9 @@ describe('a data validation', () => {
             )}`,
             { inline: (formula) => formula.replace(/[A-Z][a-z]+$/, (name) => names[name] ?? name) },
         );
-        expect(Object.keys(dataVerification ?? {})).toEqual(['0_0', '2_0']);
-        expect(dataVerification?.['0_0'].value1).toBe('Lists!$A$1:$A$3');
-        expect(dataVerification?.['2_0'].value1).toBe('10');
+        expect(Object.keys(rules)).toEqual(['0_0', '2_0']);
+        expect(rules?.['0_0'].value1).toBe('Lists!$A$1:$A$3');
+        expect(rules?.['2_0'].value1).toBe('10');
         expect(conditionalFormatRules?.map((rule) => rule.type === 'default' && rule.conditionValue)).toEqual([
             ['=A1>10'],
         ]);
@@ -470,7 +474,7 @@ describe('a data validation', () => {
     });
 
     test('numbers, lengths and dates map onto the engine types and operators', () => {
-        const { dataVerification } = read(
+        const { rules } = readByCell(
             dv(
                 '<dataValidation type="whole" sqref="A1"><formula1>1</formula1><formula2>10.7</formula2></dataValidation>',
                 '<dataValidation type="decimal" operator="greaterThan" sqref="A2"><formula1>2.5</formula1></dataValidation>',
@@ -482,7 +486,7 @@ describe('a data validation', () => {
                 '<dataValidation type="whole" operator="sideways" sqref="A8"><formula1>1</formula1></dataValidation>',
             ),
         );
-        expect(dataVerification).toMatchObject({
+        expect(rules).toMatchObject({
             '0_0': { type: 'number_integer', type2: 'between', value1: '1', value2: '10' },
             // Excel's decimal takes any number, as the engine's number does; its number_decimal refuses an integer.
             '1_0': { type: 'number', type2: 'moreThanThe', value1: '2.5', value2: '' },
@@ -490,21 +494,21 @@ describe('a data validation', () => {
             '3_0': { type: 'date', type2: 'between', value1: '2024-01-01', value2: '2024-12-31' },
             '4_0': { type: 'date', type2: 'laterThan', value1: '2024-06-15', value2: '' },
         });
-        expect(Object.keys(dataVerification ?? {})).toHaveLength(5);
+        expect(Object.keys(rules)).toHaveLength(5);
     });
 
     test("a 1904 workbook's date serial counts from 1904", () => {
-        const { dataVerification } = read(
+        const { rules } = readByCell(
             dv(
                 '<dataValidation type="date" operator="lessThan" sqref="A1"><formula1>43830</formula1></dataValidation>',
             ),
             { date1904: true },
         );
-        expect(dataVerification?.['0_0']).toMatchObject({ type2: 'earlierThan', value1: '2024-01-01' });
+        expect(rules?.['0_0']).toMatchObject({ type2: 'earlierThan', value1: '2024-01-01' });
     });
 
     test('a prompt shows when asked to, and an error stops the value unless it only warns', () => {
-        const { dataVerification } = read(
+        const { rules } = readByCell(
             dv(
                 list('A1', '"Yes,No"', ' showInputMessage="1" promptTitle="Pick" prompt="Choose Yes or No"'),
                 list('A2', '"Yes,No"', ' showErrorMessage="true" error="Invalid"'),
@@ -513,7 +517,7 @@ describe('a data validation', () => {
                 list('A5', '"Yes,No"', ' prompt="Hidden"'),
             ),
         );
-        expect(dataVerification).toMatchObject({
+        expect(rules).toMatchObject({
             '0_0': { hintShow: true, hintValue: 'Choose Yes or No', prohibitInput: false },
             '1_0': { hintShow: false, hintValue: '', prohibitInput: true },
             '2_0': { prohibitInput: false },
@@ -522,60 +526,94 @@ describe('a data validation', () => {
         });
     });
 
-    test('stops a margin past the cells, and a later rule on a cell wins', () => {
-        const { dataVerification } = read(
-            dv(list('C1:C5000', '"Yes,No"'), list('A1:XFD1', '"x"'), list('C2 B5:A4', '"Later"')),
-            { rows: 5, columns: 3 },
+    test('reads a whole column or row whole, one range each, and the last of two rules on a cell wins', () => {
+        const { dataValidations } = read(
+            dv(list('C1:C1048576', '"Yes,No"'), list('A1:XFD1', '"x"'), list('C2 B5:A4', '"Later"')),
         );
-        const keys = Object.keys(dataVerification ?? {});
-        expect(dataVerification?.['1004_2']).toMatchObject({ value1: 'Yes,No' });
-        expect(dataVerification?.['1005_2']).toBeUndefined();
-        expect(dataVerification?.['0_102']).toMatchObject({ value1: 'x' });
-        expect(dataVerification?.['0_103']).toBeUndefined();
-        expect(dataVerification?.['1_2']).toMatchObject({ value1: 'Later' });
-        expect(dataVerification?.['3_0']).toMatchObject({ value1: 'Later' });
-        expect(dataVerification?.['4_1']).toMatchObject({ value1: 'Later' });
-        expect(keys).toHaveLength(1005 + 102 + 4);
+        expect(Object.values(dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [0, 1048575], column: [2, 2] }],
+            [{ row: [0, 0], column: [0, 16383] }],
+            [
+                { row: [1, 1], column: [2, 2] },
+                { row: [3, 4], column: [0, 1] },
+            ],
+        ]);
+        const last = (r: number, c: number) =>
+            Object.entries(dataValidations ?? {})
+                .filter(([, { ranges }]) =>
+                    ranges.some(({ row, column }) => r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1]),
+                )
+                .map(([id]) => id)
+                .at(-1);
+        expect(last(1, 2)).toBe('validation-3');
+        expect(last(5000, 2)).toBe('validation-1');
+        expect(last(0, 2)).toBe('validation-2');
     });
 
     test("Excel 2010's lists name their source and ranges in its own elements", () => {
-        const { dataVerification } = read(
+        const { rules } = readByCell(
             dv(list('A1', '"a,b"')) +
                 extension(
                     `<x14:dataValidations count="2"><x14:dataValidation type="list" allowBlank="1" showInputMessage="1" prompt="From lists"><x14:formula1><xm:f>lists!$A$2:$A$22</xm:f></x14:formula1><xm:sqref>E2:E3 A1</xm:sqref></x14:dataValidation><x14:dataValidation type="whole"><x14:formula1><xm:f>1</xm:f></x14:formula1><x14:formula2><xm:f>9</xm:f></x14:formula2><xm:sqref>F1</xm:sqref></x14:dataValidation></x14:dataValidations>`,
                 ),
         );
         const fromLists = { type: 'dropdown', value1: 'lists!$A$2:$A$22', hintShow: true, hintValue: 'From lists' };
-        expect(dataVerification).toMatchObject({
+        expect(rules).toMatchObject({
             '0_0': fromLists,
             '1_4': fromLists,
             '2_4': fromLists,
             '0_5': { type: 'number_integer', type2: 'between', value1: '1', value2: '9' },
         });
-        expect(Object.keys(dataVerification ?? {})).toHaveLength(4);
+        expect(Object.keys(rules)).toHaveLength(4);
     });
 
-    test('each range is charged its cells past the clamp, and its list and prompt per cell, before a key is built', () => {
+    test('each range is charged one cell and the rule its text, before the rule is built', () => {
         const { charged } = read(
             dv(
                 list('A1:B2 Z9000 C1', '"Yes,No"', ' showInputMessage="1" prompt="Pick"'),
                 '<dataValidation type="custom" sqref="A1:XFD1048576"><formula1>1</formula1></dataValidation>',
             ),
-            { rows: 2, columns: 2 },
         );
         expect(charged).toEqual([
-            { cells: 4, text: 4 * 10 },
-            { cells: 1, text: 10 },
+            { cells: 0, text: 10 },
+            { cells: 1, text: 0 },
+            { cells: 1, text: 0 },
+            { cells: 1, text: 0 },
         ]);
         const refusal = new Error('over budget');
         expect(() =>
             read(dv(list('A1:XFD1048576', '"x"')), {
                 charge: (cells) => {
-                    expect(cells).toBe(1010 * 105);
-                    throw refusal;
+                    if (cells > 0) throw refusal;
                 },
             }),
         ).toThrow(refusal);
+    });
+
+    // A crafted file can repeat one reference by the thousand. The rule keeps each cell once.
+    test('a sqref that repeats or stacks its ranges reads as the fewest ranges that cover them', () => {
+        const { dataValidations } = read(dv(list(`${'B2 '.repeat(5000)}B3 B4:B6 C2:C6`, '"x"')));
+        expect(Object.values(dataValidations ?? {}).map(({ ranges }) => ranges)).toEqual([
+            [{ row: [1, 5], column: [1, 2] }],
+        ]);
+    });
+
+    test('a validation over more separate ranges than a rule may hold is counted and left out', () => {
+        const lost: CountedWarningCode[] = [];
+        const apart = Array.from({ length: MAX_VALIDATION_RANGES + 1 }, (_, i) => `A${2 * i + 1}`).join(' ');
+        const { dataValidations } = read(dv(list(apart, '"x"'), list('C1', '"y"')), {
+            lost: (code) => lost.push(code),
+        });
+        expect(lost).toEqual(['validations-dropped']);
+        expect(Object.values(dataValidations ?? {}).map(({ rule }) => rule.value1)).toEqual(['y']);
+    });
+
+    test('the validations past the rules a sheet may hold are counted and left out', () => {
+        const lost: CountedWarningCode[] = [];
+        const rules = Array.from({ length: MAX_VALIDATIONS + 2 }, (_, i) => list(`A${i + 1}`, '"x"'));
+        const { dataValidations } = read(dv(...rules), { lost: (code) => lost.push(code) });
+        expect(lost).toEqual(['validations-dropped', 'validations-dropped']);
+        expect(Object.keys(dataValidations ?? {})).toHaveLength(MAX_VALIDATIONS);
     });
 });
 
@@ -586,8 +624,6 @@ test('a sheet without rules has none', () => {
             dxfs: [],
             palette: [],
             date1904: false,
-            rows: 0,
-            columns: 0,
             charge: () => {},
             chargeElements: () => {},
             lost: () => {},

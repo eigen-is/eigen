@@ -15,7 +15,7 @@ const { WorkbookContext } = await import('../../../context');
 const { useCellEditorRefocus } = await import('../../../hooks/useCellEditorRefocus');
 const { useEditorSelectionStyle } = await import('../../../hooks/useEditorSelectionStyle');
 const { InputBox } = await import('../../../components/SheetOverlay/InputBox');
-const { MenuBar } = await import('../../../components/MenuBar');
+const { WorkbookMenuBar } = await import('../../../components/MenuBar');
 const { committedRuns, defaultContext, defaultSettings, FormulaCache } = await import('../../../state');
 type Context = import('../../../state').Context;
 
@@ -96,7 +96,7 @@ async function openEditor(html: string) {
                 createElement(
                     Fragment,
                     null,
-                    createElement(MenuBar),
+                    createElement(WorkbookMenuBar),
                     createElement(InputBox),
                     createElement(RefocusProbe),
                     createElement(CaretStyleProbe),

@@ -1,8 +1,6 @@
-// Canonical sheet data shapes shared between the sheet engine, the editor's
-// state layer, and the apps/api backend. Lives here (not in the sheet package)
-// because sheet depends on @workspace/lib, not the other way around — keeping these
-// in lib avoids a workspace cycle and lets the backend import them without pulling
-// in React.
+// The stored shapes of a workbook, such as a cell, a sheet and its frozen pane, and the few helpers that read them.
+// The sheet engine, the editor and the API all use them. They live in lib because the sheet package depends on lib,
+// not the other way around, so the backend can import them without React.
 
 import type { ChartLook, SheetChartSpecParts } from '../types/chart';
 
@@ -56,12 +54,9 @@ export type CellWithRowAndCol = {
     v: Cell | null;
 };
 
-// Sheet operation produced by the editor's state layer (immer patch-to-op step)
-// and consumed by both the sheet runtime and the apps/api document reader.
-// Lives in lib so the BE can replay ops without pulling in the state barrel.
-// `value` stays `any` because the legacy state/ utils (patch.ts, Workbook/api.ts)
-// pass it as Cell, Sheet, RowColOp, calcChain, … without a discriminator; tightening
-// is part of TODO #1 (enable biome on state/).
+// One edit to a workbook, made by the editor from immer's patches and replayed by the editor and the API.
+// `value` stays `any` because the editor passes a cell, a sheet, a row or column op or a calc chain through it,
+// with no field that says which.
 export type Op = {
     op: 'replace' | 'remove' | 'add' | 'insertRowCol' | 'deleteRowCol' | 'addSheet' | 'deleteSheet';
     id?: string;
@@ -88,8 +83,7 @@ export type CellBorderSides = {
     b?: BorderSide;
     s?: BorderSide;
 };
-// Toolbar border layouts, expanded into per-cell sides at write time
-// (state/modules/border.ts). Listed here so consumers narrow via `type === '…'`.
+// The toolbar's border layouts, which the editor expands into each cell's own sides when it writes them.
 export type BorderType =
     | 'border-all'
     | 'border-slash'
@@ -136,7 +130,7 @@ export type SheetFloatingObject = {
 };
 
 // `mediaName` names the file in the document's `media/` folder, which the editor and the server renderers resolve at
-// render time (docs/MEDIA-REFERENCES.md).
+// render time.
 export type SheetImage = SheetFloatingObject & { mediaName: string };
 
 // The spec is stored a field per part, a keyed part a record of an entry's JSON per key, read only through readChartSpec
@@ -144,24 +138,17 @@ export type SheetImage = SheetFloatingObject & { mediaName: string };
 // and read through readChartLook, flat where unset.
 export type SheetChart = SheetFloatingObject & Partial<ChartLook> & SheetChartSpecParts;
 
-// Per-cell data-validation rule, produced by the editor's state layer
-// (state/modules/data-verification.ts) and consumed by the canvas painter
-// (red-triangle indicator + checkbox draw). Keyed by `${row}_${col}` on
-// `Sheet.dataVerification`.
+// A data-validation rule, such as a list or a number check. A sheet holds each one with the ranges it covers
+// (SheetValidation). The editor writes it, and the canvas painter reads it for the list chevron and the tick box.
 //
-// `value1` carries the encoded payload as a string regardless of `type`:
-// comma-separated list for `dropdown`, numeric literal for the `number*` and
-// `text_length` variants, "selected" label for `checkbox`, ISO date for `date`.
-// `value2` is only populated for `between`/`notBetween` ranges and by
-// `checkbox` (its not-selected label) and is otherwise blank. A tick box stores
-// no checked flag — the cell value answers that (see `isCheckboxChecked`).
-// `hintShow` + `hintValue` drive the cell-focus hint popup. `prohibitInput`
-// blocks the input when validation fails (read by `updateCell` in cell.ts).
+// `value1` is a string whatever the type: the list's items, comma-separated, or a range, for a dropdown, a number for
+// the number and text-length checks, the checked value for a tick box and a YYYY-MM-DD date for a date check.
+// `value2` holds the upper bound of a between or not-between check, and a tick box's unchecked value. A tick box
+// stores no checked flag: the cell's value says whether it is checked (isCheckboxChecked). `hintShow` and `hintValue`
+// make the prompt a selected cell shows, and `prohibitInput` refuses a value that fails the check (updateCell).
 //
-// `type` and `type2` are `string` rather than a narrow union: the producer in
-// `components/DataVerification/index.tsx` assigns via Radix Select's
-// `onValueChange(value: string)` and threading a union through the dialog
-// requires runtime narrowing at every callback. Known values today:
+// `type` and `type2` are `string` rather than a narrow union: the `DataVerification` dialog assigns them from Radix
+// Select's `onValueChange(value: string)`, and a union would need narrowing at every callback. Known values:
 // type  ∈ dropdown | checkbox | number | number_integer | number_decimal |
 //         text_content | text_length | date
 // type2 ∈ between | notBetween | equal | notEqualTo | moreThanThe | lessThan |
@@ -175,13 +162,16 @@ export type DataVerificationRule = {
     hintShow?: boolean;
     hintValue?: string;
     prohibitInput?: boolean;
-    // Editor-side draft fields preserved on the stored rule because the
-    // `DataVerification` dialog spreads `regulation` into the saved item. They
-    // have no effect at validation time but must be permitted by the type.
+    // Fields of the dialog's draft that land on the stored rule, because the dialog saves its whole draft. Only the
+    // dialog reads them back, when it opens on a cell of the rule.
     rangeTxt?: string;
     validity?: string;
     remote?: boolean;
 };
+
+// One rule over its ranges, stored under an id in `Sheet.dataValidations`, as a conditional format keeps its
+// `cellrange`. A cell has at most one rule, so applying a rule takes its cells out of every other entry.
+export type SheetValidation = { ranges: SingleRange[]; rule: DataVerificationRule };
 
 export type SheetConfig = {
     merge?: Record<string, MergeCell>;
@@ -192,9 +182,8 @@ export type SheetConfig = {
     borderInfo?: Record<string, CellBorderSides>;
 };
 
-// Conditional-format rule shape, produced by the editor's state layer
-// (state/modules/condition-format.ts) and consumed by the engine's
-// `evaluateConditionalFormat` (canvas painter + apps/api HTML export).
+// A conditional-format rule. The editor writes it, and the engine's `evaluateConditionalFormat` reads it for the
+// canvas painter and the API's HTML export.
 export type ConditionalFormatConditionName =
     | 'greaterThan'
     | 'greaterThanOrEqual'
@@ -230,8 +219,8 @@ export type DefaultConditionalFormatRule = CFRuleBase & {
 
 export type ConditionalFormatRule = DataBarRule | ColorGradationRule | IconsRule | DefaultConditionalFormatRule;
 
-// Dependency-graph node for a formula cell. The engine stamps `r`/`c`/`id`; the editor's
-// ordering layer adds `index`. Never persisted (snapshot-codec regenerates the chain on decode).
+// A formula cell in the dependency graph. The engine stamps `r`, `c` and `id`, and the editor's ordering adds
+// `index`. It is never stored: decoding a snapshot builds the chain again.
 export type CalcChainEntry = {
     r: number;
     c: number;
@@ -257,27 +246,22 @@ export type Sheet = {
     column?: number;
     showGridLines?: boolean | number;
     conditionalFormatRules?: ConditionalFormatRule[];
-    // Frozen panes. `row_focus`/`column_focus` are the 0-based index of the LAST
-    // frozen row/column. The bare 'row'|'column'|'both' forms are aliases the
-    // editor normalizes to the 'range*' forms at consume time (the range applies
-    // either way — see state/modules/freeze.ts::frozenTofreezen).
+    // Frozen panes. `row_focus` and `column_focus` are the 0-based index of the last frozen row and column.
+    // A bare type such as 'row' freezes the same axes as its range form, and its range applies the same way.
     frozen?: {
         type: 'row' | 'column' | 'both' | 'rangeRow' | 'rangeColumn' | 'rangeBoth';
         range?: { row_focus: number; column_focus: number };
     };
-    // Autofilter span — the rectangle whose header row renders the filter dropdown
-    // buttons. Per-column criteria live on the editor-only `filter` field (sheet's
-    // state/types.ts); a criteria-less filter — what a fresh enable writes and all
-    // the xlsx importer emits — is just this range.
+    // The autofilter's range, whose header row shows the filter buttons. Each column's criteria live on the
+    // editor-only `filter` field. A filter without criteria, which a fresh enable and the xlsx importer write, is
+    // only this range.
     filterRange?: SingleRange;
-    // Data-validation rules keyed "r_c" (0-based). Written by the editor's
-    // DataVerification dialog and the xlsx importer; the runtime (cell focus,
-    // updateCell, canvas painter) reads them straight off the sheet.
-    dataVerification?: Record<string, DataVerificationRule>;
-    // Hyperlinks keyed "r_c" (0-based). Written by the editor's LinkEditCard
-    // (saveHyperlink) and the xlsx importer; read by the link preview card and
-    // goToLink navigation. The linked cell carries the `hl` backref. linkType
-    // ∈ webpage | sheet | cellrange (state/modules/hyperlink.ts).
+    // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
+    // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
+    dataValidations?: Record<string, SheetValidation>;
+    // Hyperlinks keyed "r_c" (0-based). The editor's `saveHyperlink` and the xlsx importer write them, and the link
+    // card and `goToLink` read them. The linked cell carries the `hl` backref. `linkType` is webpage, sheet or
+    // cellrange.
     hyperlink?: Record<string, { linkType: string; linkAddress: string }>;
     // Floating images and charts by id. Materialized like the config collections, because each object is
     // written as its own key and a first write to a missing map would ship the whole map.
@@ -287,3 +271,15 @@ export type Sheet = {
 
 // The editor-runtime Sheet: the wire shape plus the calc chain the reader gate keys off.
 export type SheetWithCalcChain = Sheet & { calcChain?: CalcChainEntry[] };
+
+// Whether a frozen pane freezes rows: 'row', 'both', and their range forms 'rangeRow' and 'rangeBoth'.
+export function freezesRows(frozen: Sheet['frozen']): boolean {
+    const type = frozen?.type;
+    return type === 'row' || type === 'both' || type === 'rangeRow' || type === 'rangeBoth';
+}
+
+// Whether a frozen pane freezes columns: 'column', 'both', and their range forms 'rangeColumn' and 'rangeBoth'.
+export function freezesColumns(frozen: Sheet['frozen']): boolean {
+    const type = frozen?.type;
+    return type === 'column' || type === 'both' || type === 'rangeColumn' || type === 'rangeBoth';
+}

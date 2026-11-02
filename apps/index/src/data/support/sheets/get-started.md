@@ -7,7 +7,7 @@ tags: [sheets, getting-started, spreadsheet, grid]
 related: [sheets/create-and-edit, sheets/enter-and-edit-data, sheets/formulas]
 crossSections: [getting-started]
 order: 10
-updated: 2026-06-08
+updated: 2026-11-02
 ---
 
 Sheets is Eigen's spreadsheet editor. You can create a spreadsheet from scratch, import an Excel file, enter data and formulas, and share the result with other people. Everything saves as you work, so there is nothing to click when you are done.
@@ -26,7 +26,7 @@ You can also create one from inside an open spreadsheet. Open the **File** menu 
 
 When a spreadsheet is open, the editor has three main areas:
 
-- The **menu bar** across the top: **File**, **Edit**, **View**, **Insert**, **Format**, and **Data** menus, plus a row of quick-format buttons in the center.
+- The **menu bar** across the top: **File**, **Edit**, **View**, **Insert**, **Format**, and **Data** menus, plus a row of quick-format buttons in the center. On a narrow bar those fold into the **Format** menu.
 - A narrow bar just below the menus: on the left it shows the address of the selected cell (such as `A1`), and on the right it shows the cell's value or formula. Click that bar to edit a cell's content directly there.
 - The **grid**: the rows and columns where you enter data. Columns are labeled A, B, C and rows are numbered 1, 2, 3. The cell at the intersection of column B and row 3 is called `B3`.
 

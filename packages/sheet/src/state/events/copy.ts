@@ -1,5 +1,5 @@
-// A copy of the grid's selection, from ⌘C or a menu. handleCopy refuses a range that cuts through a merged
-// cell, or several ranges when conditional formats would not survive the paste, and hands the rest to copy.
+// A copy or a cut of the grid's selection, from ⌘C, ⌘X or a menu. handleCopy refuses a range that cuts through a
+// merged cell, or several ranges when conditional formats would not survive the paste, and hands the rest to copy.
 
 import { isEmpty, isNil } from 'es-toolkit/compat';
 import { cancelPaintModel, checkCF, getComputeMap } from '..';
@@ -9,7 +9,7 @@ import { getSheetConfig } from '../context';
 import { copy, selectIsOverlap } from '../modules/selection';
 import { hasPartMC } from '../modules/validation';
 
-export function handleCopy(ctx: Context): boolean {
+export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}): boolean {
     // if format-painter is active during copy, cancel it
     if (ctx.formatPainterOn) {
         cancelPaintModel(ctx);
@@ -100,8 +100,11 @@ export function handleCopy(ctx: Context): boolean {
         }
     }
 
-    copy(ctx);
-
-    ctx.pasteIsCut = false;
+    copy(ctx, { cut });
+    ctx.pasteIsCut = cut;
     return true;
+}
+
+export function handleCut(ctx: Context) {
+    handleCopy(ctx, { cut: true });
 }

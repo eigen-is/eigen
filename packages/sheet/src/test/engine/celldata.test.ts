@@ -25,6 +25,14 @@ describe('dataToCelldata', () => {
         ]);
     });
 
+    test('skips a row that is no array, as a peer may store', () => {
+        const data = JSON.parse('[[{"v": 1}], null, "x", [null, {"v": 2}]]');
+        expect(dataToCelldata(data)).toEqual([
+            { r: 0, c: 0, v: { v: 1 } },
+            { r: 3, c: 1, v: { v: 2 } },
+        ]);
+    });
+
     test('preserves cell value identity (no clone)', () => {
         const c = cell('a');
         const out = dataToCelldata([[c]]);

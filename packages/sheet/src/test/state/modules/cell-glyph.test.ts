@@ -11,6 +11,7 @@ import { cellGlyphAt, cellIndicatorRect } from '../../../state/modules/cell-glyp
 import { cellTextBox, dropdownChevronRect } from '../../../state/modules/data-verification';
 import type { DataVerificationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
+import { validationsByCell } from '../factories/validations';
 
 const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
 const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
@@ -29,7 +30,7 @@ describe('cellIndicatorRect', () => {
 describe('cellGlyphAt', () => {
     test('the list chevron, on the same rect the painter uses', () => {
         const ctx = contextFactory({ selections: [] }) as Context;
-        ctx.sheets[0].dataVerification = { '0_0': LIST_RULE };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': LIST_RULE });
         const glyph = dropdownChevronRect(A1_BOX)!;
         expect(cellGlyphAt(ctx, glyph.x + glyph.size - 1, glyph.y + glyph.size - 1)).toBe('dropdown');
         // Left of the finger-sized hit box: plain cell.
@@ -39,7 +40,7 @@ describe('cellGlyphAt', () => {
     test('the tick box', () => {
         const ctx = contextFactory({ selections: [] }) as Context;
         ctx.sheets[0].data![0][0] = { v: false, m: 'FALSE', ct: { fa: 'General', t: 'b' } };
-        ctx.sheets[0].dataVerification = { '0_0': TICK_BOX };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': TICK_BOX });
         expect(cellGlyphAt(ctx, 36, 10)).toBe('checkbox');
         expect(cellGlyphAt(ctx, 5, 10)).toBeUndefined();
     });
@@ -56,7 +57,7 @@ describe('cellGlyphAt', () => {
     test('the invalid-value triangle in the top-left corner, only while the value fails its rule', () => {
         const ctx = contextFactory({ selections: [] }) as Context;
         ctx.sheets[0].data![0][0] = { v: 1, m: '1' };
-        ctx.sheets[0].dataVerification = { '0_0': NUMBER_RULE };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': NUMBER_RULE });
         expect(cellGlyphAt(ctx, 1, 5)).toBe('invalid');
 
         ctx.sheets[0].data![0][0] = { v: 5, m: '5' };
@@ -65,7 +66,7 @@ describe('cellGlyphAt', () => {
 
     test('an empty validated cell paints no invalid mark, so it answers none', () => {
         const ctx = contextFactory({ selections: [] }) as Context;
-        ctx.sheets[0].dataVerification = { '0_0': NUMBER_RULE };
+        ctx.sheets[0].dataValidations = validationsByCell({ '0_0': NUMBER_RULE });
         expect(cellGlyphAt(ctx, 1, 5)).toBeUndefined();
     });
 

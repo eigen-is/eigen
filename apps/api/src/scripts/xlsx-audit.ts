@@ -22,20 +22,28 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import type { Cell, DataVerificationRule, Sheet, SingleRange } from '@workspace/lib/sheets';
+import {
+    cellFontName,
+    coalescedRanges,
+    compareValidationIds,
+    rangesOverlap,
+    SHEET_DEFAULT_FONT,
+    SHEET_DEFAULT_FONT_SIZE,
+} from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
-import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
+import { parseA1Range, rangeToA1, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/document/transform/peak-rss';
 import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
 import type { OfficeMedia } from '../lib/export/export-image';
 import { sheetNames } from '../lib/export/sheets/xlsx/package';
+import { cut } from '../lib/export/sheets/xlsx/strings';
 import type { writeXlsx } from '../lib/export/sheets/xlsx/to-xlsx';
 import type { xlsxToSheets } from '../lib/import/sheets/from-xlsx';
 import { CONTENT_TYPES_NS, PACKAGE_RELATIONSHIPS_NS, R_NS, SML_NS } from '../lib/ooxml/ooxml';
 import { uriReference } from '../lib/ooxml/opc';
-import { MAX_FORMULA_STRING_LENGTH, SPREADSHEETML } from '../lib/ooxml/spreadsheetml';
+import { MAX_FORMULA_STRING_LENGTH, MAX_PROMPT_LENGTH, SPREADSHEETML } from '../lib/ooxml/spreadsheetml';
 import type { ZipWriteEntry } from '../lib/ooxml/zip';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../lib/ooxml/zip';
 import type {
@@ -120,7 +128,7 @@ const SHEET_FIELDS = [
     'showGridLines',
     'filterRange',
     'hyperlink',
-    'dataVerification',
+    'dataValidations',
     'conditionalFormatRules',
     'images',
     'charts',
@@ -264,7 +272,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         if (sheet.showGridLines === false || sheet.showGridLines === 0) bump(counts, 'gridlinesOff');
         if (sheet.filterRange) bump(counts, 'filters');
         bump(counts, 'conditionalFormats', sheet.conditionalFormatRules?.length ?? 0);
-        bump(counts, 'validations', size(sheet.dataVerification));
+        bump(counts, 'validations', size(sheet.dataValidations));
         bump(counts, 'hyperlinks', size(sheet.hyperlink));
         bump(counts, 'images', size(sheet.images));
         bump(counts, 'charts', size(sheet.charts));
@@ -982,9 +990,11 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
                 const configB = new Map<string, unknown>(Object.entries(sheetB.config ?? {}));
                 for (const key of new Set([...configA.keys(), ...configB.keys()]))
                     keyed(key, sheet, configA.get(key), configB.get(key));
-            } else if (field === 'hyperlink' || field === 'dataVerification' || field === 'conditionalFormatRules')
-                keyed(field, sheet, x, y);
-            else if (field === 'charts') {
+            } else if (field === 'hyperlink' || field === 'conditionalFormatRules') keyed(field, sheet, x, y);
+            else if (field === 'dataValidations') {
+                for (const difference of validationDifferences(sheetA.dataValidations, sheetB.dataValidations))
+                    note(field, sheet, difference.at, difference.a, difference.b);
+            } else if (field === 'charts') {
                 // A chart's parts compared as one spec, its series ids by place.
                 const spec = (value: unknown) =>
                     Object.values(isRecord(value) ? value : {}).map((chart: unknown) =>
@@ -1014,6 +1024,96 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
         }
     }
     return differences;
+}
+
+// The cells whose rule two sheets' validations give differently, one difference for each pair of rules. Each side is
+// read as the editor reads a cell: of the rules that cover it, the highest id wins. Each import numbers its rules
+// afresh, so the sides compare by the rule each cell gets, never by ids or ranges. The walk starts from the block
+// around every range and cuts a block in two at a range's edge until each side gives the whole block one rule. So a
+// large block no edge crosses, such as most of a sheet-wide rule, is read once.
+function validationDifferences(
+    a: Sheet['dataValidations'],
+    b: Sheet['dataValidations'],
+): { at: string; a?: DataVerificationRule; b?: DataVerificationRule }[] {
+    // Each side's ranges, each with its rule's place in id order, so the highest place wins a cell.
+    const [rankedA, rankedB] = [a ?? {}, b ?? {}].map((rules) =>
+        Object.keys(rules)
+            .sort(compareValidationIds)
+            .flatMap((id, rank) => rules[id].ranges.map((range) => ({ range, rank, rule: rules[id].rule }))),
+    );
+    const all = [...rankedA, ...rankedB];
+    if (all.length === 0) return [];
+    const around = { row: [...all[0].range.row], column: [...all[0].range.column] };
+    for (const { range } of all) {
+        around.row = [Math.min(around.row[0], range.row[0]), Math.max(around.row[1], range.row[1])];
+        around.column = [Math.min(around.column[0], range.column[0]), Math.max(around.column[1], range.column[1])];
+    }
+    const pairs = new Map<string, { a?: DataVerificationRule; b?: DataVerificationRule; blocks: SingleRange[] }>();
+    const walk = (block: SingleRange, inA: readonly RankedRange[], inB: readonly RankedRange[]) => {
+        const pair = { a: blockRule(block, inA), b: blockRule(block, inB) };
+        if (pair.a && pair.b) {
+            const [x, y] = [canonical(pair.a.rule ?? null), canonical(pair.b.rule ?? null)];
+            if (x === y) return;
+            const held = pairs.get(`${x} ${y}`);
+            if (held) held.blocks.push(block);
+            else pairs.set(`${x} ${y}`, { a: pair.a.rule, b: pair.b.rule, blocks: [block] });
+            return;
+        }
+        for (const half of halves(block, [...inA, ...inB])) {
+            const meets = ({ range }: RankedRange) => rangesOverlap(range, half);
+            walk(half, inA.filter(meets), inB.filter(meets));
+        }
+    };
+    walk(around, rankedA, rankedB);
+    return [...pairs.values()].map(({ blocks, ...pair }) => ({
+        at: coalescedRanges(blocks)
+            .map((range) => rangeToA1(range))
+            .join(' '),
+        ...pair,
+    }));
+}
+
+type RankedRange = { range: SingleRange; rank: number; rule: DataVerificationRule };
+
+// The rule one side gives every cell of a block, with no rule when no range meets it, or undefined when its cells get
+// different rules. Every range given meets the block. The highest place wins a cell, so the block is one rule's when a
+// range of the highest place covers it whole.
+function blockRule(block: SingleRange, ranked: readonly RankedRange[]): { rule?: DataVerificationRule } | undefined {
+    if (ranked.length === 0) return {};
+    let top = 0;
+    for (const { rank } of ranked) top = Math.max(top, rank);
+    const covering = ranked.find(
+        ({ range, rank }) =>
+            rank === top &&
+            range.row[0] <= block.row[0] &&
+            range.row[1] >= block.row[1] &&
+            range.column[0] <= block.column[0] &&
+            range.column[1] >= block.column[1],
+    );
+    return covering && { rule: covering.rule };
+}
+
+// A block cut in two at the middle one of the range edges inside it, along the axis more edges cross. A block whose
+// cells get different rules always has such an edge: a range of the highest place meets it without covering it.
+function halves(block: SingleRange, ranked: readonly RankedRange[]): SingleRange[] {
+    const inside = (axis: 'row' | 'column') =>
+        [...new Set(ranked.flatMap(({ range }) => [range[axis][0], range[axis][1] + 1]))]
+            .filter((edge) => edge > block[axis][0] && edge <= block[axis][1])
+            .sort((x, y) => x - y);
+    const rows = inside('row');
+    const columns = inside('column');
+    if (rows.length >= columns.length) {
+        const edge = rows[rows.length >> 1];
+        return [
+            { row: [block.row[0], edge - 1], column: block.column },
+            { row: [edge, block.row[1]], column: block.column },
+        ];
+    }
+    const edge = columns[columns.length >> 1];
+    return [
+        { row: block.row, column: [block.column[0], edge - 1] },
+        { row: block.row, column: [edge, block.column[1]] },
+    ];
 }
 
 // A sheet's pictures in paint order, by place, their media by order of first use, as an import names both afresh, and
@@ -1117,7 +1217,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'list ranges absolute',
         why: "A list's range is written absolute, as the engine reads one list for every cell where Excel would shift a relative ref",
         matches: ({ feature, a, b }) =>
-            feature === 'dataVerification' &&
+            feature === 'dataValidations' &&
             isRecord(a) &&
             isRecord(b) &&
             a['type'] === 'dropdown' &&
@@ -1130,13 +1230,31 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'list validations too long',
         why: 'Excel holds a list literal of at most 255 characters; a longer one is dropped and counted (validations-dropped)',
         matches: ({ feature, a, b }, { warnings }) =>
-            feature === 'dataVerification' &&
+            feature === 'dataValidations' &&
             warnings.has('validations-dropped') &&
             b === undefined &&
             isRecord(a) &&
             a['type'] === 'dropdown' &&
             typeof a['value1'] === 'string' &&
             a['value1'].length > MAX_FORMULA_STRING_LENGTH,
+    },
+    {
+        kind: 'validations dropped',
+        why: "A rule Excel can't hold, or one the cuts of higher rules leave with more ranges than a rule may hold, is dropped and counted (validations-dropped), so its cells come back without a rule",
+        matches: ({ feature, a, b }, { warnings }) =>
+            feature === 'dataValidations' && warnings.has('validations-dropped') && isRecord(a) && b === undefined,
+    },
+    {
+        kind: 'validation prompts cut',
+        why: 'Excel holds a validation prompt of at most 255 characters; a longer one is cut and counted (validation-prompts-cut)',
+        matches: ({ feature, a, b }, { warnings }) =>
+            feature === 'dataValidations' &&
+            warnings.has('validation-prompts-cut') &&
+            isRecord(a) &&
+            isRecord(b) &&
+            typeof a['hintValue'] === 'string' &&
+            a['hintValue'].length > MAX_PROMPT_LENGTH &&
+            canonical(b) === canonical({ ...a, hintValue: cut(a['hintValue'], MAX_PROMPT_LENGTH) }),
     },
     {
         kind: 'sheet names repaired',

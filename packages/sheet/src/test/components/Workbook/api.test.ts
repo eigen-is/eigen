@@ -283,7 +283,7 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
         expect(join(ctx, [ops])[1].data?.length).toBe(5);
     });
 
-    it('skips an insert into a read-only row and applies the rest, as the replay does', () => {
+    it('skips the whole batch of an insert into a read-only row, as the replay does', () => {
         const ops: Op[] = [
             {
                 op: 'insertRowCol',
@@ -297,14 +297,15 @@ describe('applyOp and a joiner agree on the batch shapes that once disagreed', (
             draft.sheets[0].config = { rowReadOnly: { 1: 1 } };
         });
         const [joiner] = join(ctx, [ops]);
-        expect(joiner.data?.[0][0]?.v).toBe(9);
-        expect(applyPeerOps(ctx, ops).sheets[0].data).toEqual(joiner.data);
+        const [live] = applyPeerOps(ctx, ops).sheets;
+        expect(live.data && dataToCelldata(live.data)).toEqual(joiner.celldata);
+        expect(joiner.celldata?.find(({ r, c }) => r === 0 && c === 0)?.v?.v).toBe(5);
     });
 });
 
-// The replay skips a sheet or row op whose value has the wrong shape and applies the rest of the batch. A live client
-// must skip the same ops, or it keeps a row or a sheet that every joiner, and the compacted log, lacks. The sheet adds
-// it does take must end with the same cells on both paths.
+// The replay skips a sheet add whose value has the wrong shape and applies the rest of the batch, and skips the whole
+// batch of a row op with one. A live client must do the same, or it keeps a row or a sheet that every joiner, and the
+// compacted log, lacks. The sheet adds it does take must end with the same cells on both paths.
 describe('applyOp and a joiner skip the same malformed sheet and row ops', () => {
     const grid = (sheets: Pick<LibSheet, 'id' | 'name' | 'data' | 'celldata' | 'row' | 'column'>[]) =>
         sheets.map((s) => ({

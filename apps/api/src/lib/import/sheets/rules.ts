@@ -1,6 +1,6 @@
 // A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
 // the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
-// emits is charged before it is built: the ranges a format holds, the cells a validation keys and their text.
+// emits is charged before it is built: the ranges a format or a validation holds, and their text.
 
 import { formatInputDate } from '@workspace/lib/date';
 import type {
@@ -11,7 +11,13 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import {
+    coalescedRanges,
+    MAX_VALIDATION_RANGES,
+    MAX_VALIDATIONS,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
 import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
@@ -39,17 +45,15 @@ export type RulesContext = {
     dxfs: DxfLook[];
     palette: ThemePalette;
     date1904: boolean;
-    // The span of the grid's cells.
-    rows: number;
-    columns: number;
     // A 1904 workbook's date cells, by cellKey.
     dates: ReadonlySet<number>;
-    // Throws past the budget: a range or a key counts as a cell, text as its characters.
+    // Throws past the budget. Each range counts as one cell, and text as its characters.
     charge(cells: number, text: number): void;
     // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
     chargeElements(count: number): void;
-    // Counts a rule left out: a conditional format or a validation the engine has no rule for, or a conditional format
-    // over no range of the grid.
+    // Counts a rule left out: a conditional format or a validation the engine has no rule for, a conditional format
+    // over no range of the grid, or a validation over more ranges than a rule may hold or past the rules a sheet may
+    // hold.
     lost: Lost;
     // Writes the workbook's defined names into a rule's formula, so a list from a name reads the name's range.
     inline(formula: string): string;
@@ -58,7 +62,7 @@ export type RulesContext = {
 export function readRules(
     rest: XmlElement | undefined,
     context: RulesContext,
-): Pick<Sheet, 'conditionalFormatRules' | 'dataVerification'> {
+): Pick<Sheet, 'conditionalFormatRules' | 'dataValidations'> {
     if (!rest) return {};
     const extensions = (name: string) =>
         xmlChildren(rest, SML_NS, 'extLst')
@@ -141,7 +145,7 @@ export function readRules(
             },
         },
     ];
-    const dataVerification: NonNullable<Sheet['dataVerification']> = {};
+    const dataValidations: NonNullable<Sheet['dataValidations']> = {};
     for (const { validations, sqrefOf, formulaOf } of validationLists) {
         for (const validation of validations) {
             const rule = mapDataValidation(
@@ -155,23 +159,29 @@ export function readRules(
                 if ((xmlAttr(validation, '', 'type') ?? 'none') !== 'none') context.lost('validations-dropped');
                 continue;
             }
-            const text = rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length;
-            for (const { row, column } of rangesOf(sqrefOf(validation) ?? '', context)) {
-                const bottom = Math.min(row[1], context.rows + DV_ROW_MARGIN - 1);
-                const right = Math.min(column[1], context.columns + DV_COL_MARGIN - 1);
-                if (row[0] > bottom || column[0] > right) continue;
-                const cells = (bottom - row[0] + 1) * (right - column[0] + 1);
-                context.charge(cells, cells * text);
-                // One rule for every key, as the editor sets a range's: nothing edits a rule in place.
-                for (let r = row[0]; r <= bottom; r++)
-                    for (let c = column[0]; c <= right; c++) dataVerification[`${r}_${c}`] = rule;
+            // A rule is stored once over its ranges, so its text is charged once, and each range as one cell.
+            context.charge(0, rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length);
+            const ranges: SingleRange[] = [];
+            for (const range of rangesOf(sqrefOf(validation) ?? '', context)) {
+                context.charge(1, 0);
+                ranges.push(range);
             }
+            if (ranges.length === 0) continue;
+            // A sqref may repeat or stack its ranges, so the rule keeps the fewest that cover the same cells. More
+            // than a rule may hold leaves the rule out, as a peer's would be.
+            const covered = coalescedRanges(ranges);
+            if (covered.length > MAX_VALIDATION_RANGES || Object.keys(dataValidations).length >= MAX_VALIDATIONS) {
+                context.lost('validations-dropped');
+                continue;
+            }
+            // Numbered in the file's order: a fresh sheet holds no other rule.
+            dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = { ranges: covered, rule };
         }
     }
 
     return {
         ...(formats.length > 0 && { conditionalFormatRules: formats.map(({ format }) => format) }),
-        ...(Object.keys(dataVerification).length > 0 && { dataVerification }),
+        ...(Object.keys(dataValidations).length > 0 && { dataValidations }),
     };
 }
 
@@ -327,12 +337,6 @@ function extractSearchText(formula: string | undefined): string | null {
     const match = formula.match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
     return match ? match[1].replace(/""/g, '"') : null;
 }
-
-// Real workbooks often validate a whole column ("D2:D1048576"), but the grid covers only the cells. A rule for every
-// cell of the column would put hundreds of MB of validations into the snapshot. So a validation stops this far past
-// the cells. The margins are wide, because empty rows below the data that are validated for entry are common.
-const DV_ROW_MARGIN = 1000;
-const DV_COL_MARGIN = 100;
 
 function mapDataValidation(
     validation: XmlElement,

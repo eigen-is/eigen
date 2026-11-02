@@ -1,13 +1,20 @@
-// The workbook's sheet list in the editor: adding, deleting and switching sheets, giving a sheet its cell matrix, and
-// the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so does a
-// peer's batch through applyOpBatch.
+// The workbook's sheet list in the editor: adding, renaming, deleting and switching sheets, giving a sheet its cell
+// matrix, and the per-sheet view the grid paints. Menus and the sheet tabs call these inside an edit's recipe, and so
+// does a peer's batch through applyOpBatch.
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
-import { MAX_SHEET_NAME_LENGTH } from '../../engine/a1-notation';
+import {
+    MAX_SHEET_NAME_LENGTH,
+    SHEET_NAME_END_QUOTES,
+    SHEET_NAME_FORBIDDEN,
+    SHEET_NAME_RULE,
+    sheetNameKey,
+} from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
+import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { firstVisibleSheetId, updateContextWithSheetData } from '../context';
 import type { Sheet } from '../types';
@@ -38,7 +45,7 @@ export function changeSheet(ctx: Context, id: string) {
     };
 
     cancelNormalSelected(ctx);
-    ctx.dataVerificationDropDownList = false;
+    ctx.validationListOpen = false;
     ctx.activeObject = undefined;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;
@@ -155,6 +162,9 @@ export function deleteSheet(
     if (arrIndex == null) return;
 
     const [deleted] = ctx.sheets.splice(arrIndex, 1);
+    // The formula map and its resolved references still read the deleted sheet under its name, which a sheet added
+    // later may take.
+    ctx.formulaCache.formulaCellInfoMap = null;
     if (fromBatch) return;
     shiftSheetOrders(ctx.sheets, sheetOrder(deleted), -1);
     if (id === ctx.currentSheetId) leaveCurrentSheet(ctx);
@@ -170,6 +180,8 @@ export function shiftSheetOrders(sheets: Sheet[], at: number, by: 1 | -1) {
     }
 }
 
+// Renames the current sheet to the text its tab holds. A name it refuses puts the old text back in the tab and throws
+// the reason, which the tab shows in a notice.
 export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (ctx.allowEdit === false) {
@@ -185,29 +197,32 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
         throw new Error('Sheet name cannot be empty');
     }
 
+    // `search` ignores the global pattern's lastIndex, which `test` would carry from one call into the next.
     if (
         txt.length > MAX_SHEET_NAME_LENGTH ||
-        txt.charAt(0) === "'" ||
-        txt.charAt(txt.length - 1) === "'" ||
-        /[：:\\/？?*[\]]+/.test(txt)
+        txt.search(SHEET_NAME_END_QUOTES) !== -1 ||
+        txt.search(SHEET_NAME_FORBIDDEN) !== -1
     ) {
         editable.innerText = oldtxt;
-        throw new Error('The name cannot contain:[ ] :  ? * / \' "');
+        throw new Error(SHEET_NAME_RULE);
     }
 
-    if (index == null) return;
+    if (index == null || ctx.sheets[index].name === txt) return;
 
-    if (ctx.sheets.some((sheet, i) => i !== index && sheet.name === txt)) {
+    if (ctx.sheets.some((sheet, i) => i !== index && sheetNameKey(sheet.name) === sheetNameKey(txt))) {
         editable.innerText = oldtxt;
-        return;
+        throw new Error('Another sheet already has this name');
     }
 
     ctx.sheets[index].name = txt;
+    // A formula's sheet name may now read this sheet, or no sheet.
+    ctx.formulaCache.formulaCellInfoMap = null;
 }
 
 // Grows the current grid for a paste that runs past its last row or column. The sheet's size grows with it, because a
 // stored snapshot keeps the size and a reader builds the grid at that size.
-export function expandRowsAndColumns(sheet: Sheet, rowsToAdd: number, columnsToAdd: number) {
+export function expandRowsAndColumns(ctx: Context, rowsToAdd: number, columnsToAdd: number) {
+    const sheet = getSheet(ctx);
     const { data } = sheet;
     if (!data || (rowsToAdd <= 0 && columnsToAdd <= 0)) return;
 
@@ -228,4 +243,6 @@ export function expandRowsAndColumns(sheet: Sheet, rowsToAdd: number, columnsToA
     for (let r = 0; r < rowsToAdd; r += 1) data.push(times(columns, () => null));
     sheet.row = data.length;
     sheet.column = columns;
+    // A whole column or row in the formula map still ends where the grid ended, as after a row insert.
+    ctx.formulaCache.formulaCellInfoMap = null;
 }

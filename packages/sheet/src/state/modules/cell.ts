@@ -1,11 +1,19 @@
 // Reads and writes of single cells in the open sheet, such as a cell's value, its display text and the
 // CSS the editor box shows it in. updateCell commits the cell editor or the formula bar into the matrix:
 // it runs the formula engine, data validation and the row's auto height. Range helpers that read cells,
-// such as getRangeByTxt, live here too.
+// such as getRangeByTxt, live here too, and carryCells, which lands a block of cells for a copy, a cut, a
+// move or the format painter.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import type { BorderSide, MergeCell } from '@workspace/lib/sheets';
-import { cellFontName, columnIndexToLabel, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
+import type { BorderSide, MergeCell, SheetValidation } from '@workspace/lib/sheets';
+import {
+    cellFontName,
+    coalescedRanges,
+    columnIndexToLabel,
+    compareValidationIds,
+    rangesOverlap,
+    SHEET_DEFAULT_FONT_SIZE,
+} from '@workspace/lib/sheets';
 import { cloneDeep, isNil, isNumber, isPlainObject, isString } from 'es-toolkit/compat';
 import type { CellFormatStyle, ComputeMap } from '../../engine/conditional-format';
 import {
@@ -23,8 +31,9 @@ import type { Cell, CellMatrix, FormulaDependency } from '../../engine/types';
 import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
-import type { Range, RangeOrWholeAxis, Selection } from '../types';
+import type { Range, RangeOrWholeAxis, Selection, SingleRange } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
+import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
 import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
@@ -42,6 +51,7 @@ import {
 } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
+import { addValidation, clearValidations, validationAt } from './validation-rules';
 
 // Returns the cell attribute value, normalized to a default when missing. Result is a
 // value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
@@ -136,7 +146,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
 }
 
 // `v` covers every shape callers feed in: scalar (string/number/boolean), Cell-like patch
-// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, dataVerification,
+// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, data validation,
 // the public API, etc. — keeping the parameter shape here is the project-wide escape hatch.
 // biome-ignore lint/suspicious/noExplicitAny: cross-cutting setter, callers pass scalars and Cell-like patches indistinguishably
 export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix | null | undefined, v: any) {
@@ -545,15 +555,11 @@ export function updateCell(
 
     // Data validation: block input when the entered data is invalid
     const sheet = getSheet(ctx);
-    const { dataVerification } = sheet;
-    if (!isNil(dataVerification)) {
-        const dvItem = dataVerification[`${r}_${c}`];
-        if (!isNil(dvItem) && dvItem.prohibitInput && !validateCellData(ctx, dvItem, inputText)) {
-            cancelNormalSelected(ctx);
-            ctx.warnDialog = describeValidationRule(dvItem, 'invalid');
-
-            return;
-        }
+    const rule = validationAt(sheet.dataValidations, r, c);
+    if (rule?.prohibitInput && !validateCellData(ctx, rule, inputText)) {
+        cancelNormalSelected(ctx);
+        ctx.warnDialog = describeValidationRule(rule, 'invalid');
+        return;
     }
 
     let curv = flowdata[r][c];
@@ -1035,6 +1041,184 @@ export function getdatabyselection(ctx: Context, range: Selection | undefined, s
         data.push(row);
     }
     return data;
+}
+
+// The rows and columns a copy, cut, move or the format painter carries, in order. Every row and column of the
+// ranges comes along, hidden ones too, as in Excel. With leaveFiltered, the rows an active filter hides stay out,
+// because Excel copies only what a filter shows. Ranges side by side share their rows, and ranges above each
+// other share their columns.
+type CarriedLines = { sheetId: string; rows: readonly number[]; columns: readonly number[] };
+
+export function carriedLines(
+    ctx: Context,
+    sheetId: string,
+    ranges: readonly SingleRange[],
+    leaveFiltered: boolean,
+): CarriedLines {
+    const sheet = getSheet(ctx, { id: sheetId });
+    // A filter entry lists the rows it hides. A row the user has shown again since is not hidden any more.
+    const filtered = new Set<number>();
+    const rowhidden = sheet.config?.rowhidden ?? {};
+    for (const entry of leaveFiltered ? Object.values(sheet.filter ?? {}) : []) {
+        for (const r of Object.keys(entry.rowhidden ?? {})) {
+            if (r in rowhidden) filtered.add(Number(r));
+        }
+    }
+    const rows = new Set<number>();
+    const columns = new Set<number>();
+    for (const { row, column } of ranges) {
+        for (let r = row[0]; r <= row[1]; r += 1) {
+            if (!filtered.has(r)) rows.add(r);
+        }
+        for (let c = column[0]; c <= column[1]; c += 1) columns.add(c);
+    }
+    return { sheetId, rows: [...rows], columns: [...columns] };
+}
+
+// One place a carried block lands: its top-left cell, and how many of its rows and columns land there. The
+// format painter cuts its last tiles short at the edge of the selection.
+export type CarryTile = { row: number; column: number; height: number; width: number };
+
+// One cell a carry lands: a copy of the source cell, the cell it replaces, and where it lands and came from.
+type LandingCell = { source: Cell | null; replaced: Cell | null; r: number; c: number; sr: number; sc: number };
+
+// Lands the carried block on the current sheet once per tile: every cell with its border, validation rule, link
+// and merge. land decides what of a source cell lands, so a copy can move a formula and the format painter can keep
+// the destination's value. The source is read before anything is written, so a tile over the source reads the cells
+// as they were. A cut then clears the source.
+export function carryCells(
+    ctx: Context,
+    lines: CarriedLines,
+    tiles: readonly CarryTile[],
+    land: (cell: LandingCell) => Cell | null,
+    { cut = false, links = true }: { cut?: boolean; links?: boolean } = {},
+) {
+    const { rows, columns } = lines;
+    const from = getSheet(ctx, { id: lines.sheetId });
+    const to = getSheet(ctx);
+    const source = from.data;
+    const d = to.data;
+    if (!source || !d || rows.length === 0 || columns.length === 0) return;
+
+    const cells = rows.map((r) => columns.map((c) => cloneDeep(source[r]?.[c] ?? null)));
+    // A spread would overflow the stack on a whole column, so the bounds are folded.
+    const lowest = (line: number, next: number) => Math.min(line, next);
+    const highest = (line: number, next: number) => Math.max(line, next);
+    const [top, bottom] = [rows.reduce(lowest), rows.reduce(highest)];
+    const [left, right] = [columns.reduce(lowest), columns.reduce(highest)];
+    const block = { row: [top, bottom], column: [left, right] };
+    const borders = getBorderInfoCompute(ctx, lines.sheetId, [top, bottom, left, right]);
+    // Only the rules over the carried block land. A rule lands over the rules before it, so they go in the lookup's
+    // order, and where two overlap the landed cell takes the rule its source cell shows.
+    const rules: [string, SheetValidation][] = [];
+    for (const [id, { ranges, rule }] of Object.entries(from.dataValidations ?? {})) {
+        const near = ranges.filter((range) => rangesOverlap(range, block));
+        if (near.length > 0) rules.push([id, cloneDeep({ ranges: near, rule })]);
+    }
+    rules.sort(([a], [b]) => compareValidationIds(a, b));
+    const linkMap = cloneDeep(from.hyperlink) ?? {};
+
+    // The rules move before any cell, so a carry that would make a rule too complex throws before land evaluates a
+    // formula. A source cell without a rule takes the destination's away, as Excel does. The tiles are joined first,
+    // so a block pasted down a column clears the rules once. On the same sheet the landed cells join the rule itself,
+    // and on another sheet they become a rule of their own.
+    if (cut) clearValidations(from, block);
+    const landing = tiles.map(({ row, column, height, width }) => ({
+        row: [row, row + height - 1],
+        column: [column, column + width - 1],
+    }));
+    for (const area of coalescedRanges(landing)) clearValidations(to, area);
+    for (const [id, { ranges, rule }] of rules) {
+        const landed = tiles.flatMap((tile) => ranges.flatMap((range) => landedRanges(range, lines, tile)));
+        if (landed.length === 0) continue;
+        addValidation(to, lines.sheetId === ctx.currentSheetId ? id : crypto.randomUUID(), rule, landed);
+    }
+
+    if (cut) {
+        for (const r of rows) {
+            for (const c of columns) {
+                const mc = source[r][c]?.mc;
+                if (mc?.rs != null) delete from.config?.merge?.[`${mc.r}_${mc.c}`];
+                source[r][c] = null;
+                delete from.config?.borderInfo?.[`${r}_${c}`];
+                delete from.hyperlink?.[`${r}_${c}`];
+            }
+        }
+    }
+
+    const cfg = (to.config ??= {});
+    const merge = (cfg.merge ??= {});
+    const borderInfo = (cfg.borderInfo ??= {});
+    for (const tile of tiles) {
+        // Where each merge's first cell landed, keyed by where it was, for the merge's other cells to point at.
+        const anchors: Record<string, [number, number]> = {};
+        for (let i = 0; i < tile.height; i += 1) {
+            const r = tile.row + i;
+            const sr = rows[i];
+            for (let j = 0; j < tile.width; j += 1) {
+                const c = tile.column + j;
+                const sc = columns[j];
+                const sourceKey = `${sr}_${sc}`;
+                const key = `${r}_${c}`;
+                carrySides(borderInfo, r, c, borders[sourceKey]);
+                // A source cell without a link takes the destination's away, as Excel does.
+                if (links && linkMap[sourceKey]) (to.hyperlink ??= {})[key] = cloneDeep(linkMap[sourceKey]);
+                else if (links) delete to.hyperlink?.[key];
+
+                const replaced = d[r][c];
+                if (replaced?.mc) {
+                    if (replaced.mc.rs != null) delete merge[`${replaced.mc.r}_${replaced.mc.c}`];
+                    delete replaced.mc;
+                }
+                let cell = land({ source: cloneDeep(cells[i][j]), replaced, r, c, sr, sc });
+                const sourceMc = cells[i][j]?.mc;
+                if (cell?.mc && sourceMc) {
+                    if (cell.mc.rs != null) {
+                        const rs = carriedSpan(rows, i, tile.height - i, sr, cell.mc.rs);
+                        const cs = carriedSpan(columns, j, tile.width - j, sc, cell.mc.cs ?? 1);
+                        cell.mc = { r, c, rs, cs };
+                        merge[key] = { r, c, rs, cs };
+                        anchors[`${sourceMc.r}_${sourceMc.c}`] = [r, c];
+                    } else {
+                        // A merge whose first cell a filter left out lands as plain cells.
+                        const anchor = anchors[`${sourceMc.r}_${sourceMc.c}`];
+                        if (anchor) cell = { mc: { r: anchor[0], c: anchor[1] } };
+                        else delete cell.mc;
+                    }
+                }
+                d[r][c] = cell;
+            }
+        }
+    }
+}
+
+// Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A whole
+// block lands as one range. A filtered copy splits a range where the filter left rows out, and a tile the format
+// painter cut short takes only its first rows and columns.
+export function landedRanges(range: SingleRange, lines: CarriedLines, tile: CarryTile): SingleRange[] {
+    const rows = landedRuns(lines.rows.slice(0, tile.height), range.row, tile.row);
+    const columns = landedRuns(lines.columns.slice(0, tile.width), range.column, tile.column);
+    return rows.flatMap((row) => columns.map((column) => ({ row, column })));
+}
+
+// The runs of carried lines between first and last, as the lines they land on counted from start.
+function landedRuns(lines: readonly number[], [first, last]: readonly number[], start: number): number[][] {
+    const runs: number[][] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+        if (lines[i] < first || lines[i] > last) continue;
+        const run = runs.at(-1);
+        if (run && run[1] === start + i - 1) run[1] = start + i;
+        else runs.push([start + i, start + i]);
+    }
+    return runs;
+}
+
+// How many carried lines from index i fall inside a merge's span, counting at most limit of them. A merge closes up
+// where a filtered copy left rows out, and stops at the edge of its tile.
+export function carriedSpan(lines: readonly number[], i: number, limit: number, start: number, span: number) {
+    let n = 0;
+    while (n < limit && lines[i + n] >= start && lines[i + n] < start + span) n += 1;
+    return n;
 }
 
 export function setEditingCell(ctx: Context, row_index: number, col_index: number) {

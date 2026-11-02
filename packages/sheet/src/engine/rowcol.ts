@@ -1,17 +1,25 @@
-// Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, merges, borders, row heights,
-// column widths, conditional formats and size of the sheet the op names, and the formula text and chart ranges on every
-// sheet that point at it. It runs wherever such an op applies, for example in the editor's own insert and in the
-// server's replay of the op log. The shifters for one kind of map are exported for code that moves the same maps, such
-// as the undo stacks.
+// Inserting and deleting rows and columns on plain sheets, without the DOM: the cells, the config with its merges,
+// borders and row heights, the conditional formats, validation rules, frozen pane, filter and size of the sheet the
+// op names, and the formula text and chart ranges on every sheet that point at it. It runs wherever such an op
+// applies, for example in the editor's own insert and in the server's replay of the op log. The shifters for one kind
+// of map are exported for code that moves the same maps, such as the undo stacks.
 
-import type { CellMatrix, MergeCell, Sheet, SheetChart } from '@workspace/lib/sheets';
-import { cloneSides, parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import type { CellMatrix, MergeCell, Sheet, SheetChart, SheetValidation } from '@workspace/lib/sheets';
+import {
+    cloneSides,
+    freezesColumns,
+    freezesRows,
+    parseCellKey,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
 import type { CellRangeRef } from '@workspace/lib/types/chart';
+import { sheetFinder } from './a1-notation';
 import { mapChartRefs } from './chart-data';
 import { withCfRanges } from './conditional-format';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from './defaults';
 import { functionStrChange } from './formula-shift';
-import type { ExtendedSheetConfig, SingleRange } from './types';
+import type { ExtendedSheetConfig, FilterEntry, ShiftedSheet, SingleRange } from './types';
 
 export type InsertRowColOp = {
     type: 'row' | 'column';
@@ -31,7 +39,7 @@ export type DeleteRowColOp = {
 export type RowColErrorCode = 'readOnly' | 'maxExceeded';
 
 // The engine refuses a row or column op with this error. The editor's menus read its `code` to tell the user why.
-// The replay and a peer's applyOp catch it and skip the op.
+// The replay and a peer's applyOp skip the op's whole batch.
 export class RowColError extends Error {
     public readonly code: RowColErrorCode;
 
@@ -44,9 +52,13 @@ export class RowColError extends Error {
 
 type AxisRange = { row: readonly number[]; column: readonly number[] };
 
-// Excel's rule for a range across an insert: an insert at or before its first row (or column)
-// moves it, one inside grows it, one right after leaves it. The same range comes back unmoved.
-// CF, alternate formats and chart refs all shift through this pair.
+// Excel's rule for a range across an insert: an insert at or before its first row (or column) moves it, one inside
+// grows it, one right after leaves it. Conditional formats, validation rules, alternate formats and chart refs all
+// shift through this pair.
+//
+// A range stops at the grid's last row or column, as Excel's does. So a whole-column rule still ends there after an
+// insert, and a chart ref stays one readChartSpec accepts. A range the insert leaves as it was comes back as the same
+// object, so its owner writes nothing.
 export function shiftRangeForInsert<R extends AxisRange>(
     range: R,
     op: Pick<InsertRowColOp, 'type' | 'index' | 'count' | 'direction'>,
@@ -54,7 +66,10 @@ export function shiftRangeForInsert<R extends AxisRange>(
     const insertAt = op.direction === 'lefttop' ? op.index : op.index + 1;
     const [start, end] = op.type === 'row' ? range.row : range.column;
     if (insertAt > end) return range;
-    const span: [number, number] = insertAt <= start ? [start + op.count, end + op.count] : [start, end + op.count];
+    const last = (op.type === 'row' ? REFERENCE_ROW_COUNT : REFERENCE_COLUMN_COUNT) - 1;
+    const moved = (line: number) => Math.min(line + op.count, last);
+    const span: [number, number] = insertAt <= start ? [moved(start), moved(end)] : [start, moved(end)];
+    if (span[0] === start && span[1] === end) return range;
     return op.type === 'row' ? { ...range, row: span } : { ...range, column: span };
 }
 
@@ -98,19 +113,19 @@ function runsAlong(ref: CellRangeRef, type: 'row' | 'column'): boolean {
     return type === 'row' ? ref.column[0] === ref.column[1] : ref.row[0] === ref.row[1];
 }
 
-// Generic over S, so the editor's wider sheet, with its filter, frozen panes and validation, keeps its type. The engine
+// Generic over S, so the editor's wider sheet, with its filter and frozen panes, keeps its type. The engine
 // reads only the plain sheet's fields, and its shallow copies keep the rest.
 //
 // Nothing is deep-cloned. Rows an op doesn't touch, and for a column op the cells, are reused as they are. In the
 // editor the inputs are immer drafts, so untouched rows keep their old objects, and a row insert on a large sheet
 // doesn't walk every cell.
-export function applySheetsInsertRowCol<S extends Sheet>(sheets: S[], op: InsertRowColOp): S[] {
+export function applySheetsInsertRowCol<S extends ShiftedSheet>(sheets: S[], op: InsertRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
     return applyInsert(sheets, targetIndex, op);
 }
 
-export function applySheetsDeleteRowCol<S extends Sheet>(sheets: S[], op: DeleteRowColOp): S[] {
+export function applySheetsDeleteRowCol<S extends ShiftedSheet>(sheets: S[], op: DeleteRowColOp): S[] {
     const targetIndex = sheets.findIndex((s) => s.id === op.id);
     if (targetIndex === -1) return sheets;
     return applyDelete(sheets, targetIndex, op);
@@ -282,6 +297,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
     op: 'add' | 'del',
 ): S[] {
     const targetName = sheets[targetIndex].name;
+    const findSheet = sheetFinder(sheets);
     return sheets.map((sheet, sheetIndex) => {
         const shift = (txt: string) =>
             functionStrChange(
@@ -293,6 +309,7 @@ function shiftFormulasAcrossSheets<S extends Sheet>(
                 count,
                 targetName,
                 sheetIndex === targetIndex,
+                findSheet,
             );
 
         let newSheet = sheet;
@@ -403,7 +420,7 @@ export function shiftKeyedMapForDelete(
     return shifted;
 }
 
-function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
+function applyInsert<S extends ShiftedSheet>(sheets: S[], targetIndex: number, op: InsertRowColOp): S[] {
     const target = sheets[targetIndex];
     const cfg: ExtendedSheetConfig = target.config ?? {};
     const data = target.data;
@@ -431,6 +448,8 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForInsert(cfg.rowlen, op.index, count, op.direction);
         if (cfg.customHeight != null)
             newCfg.customHeight = shiftKeyedMapForInsert(cfg.customHeight, op.index, count, op.direction);
+        if (cfg.rowReadOnly != null)
+            newCfg.rowReadOnly = shiftKeyedMapForInsert(cfg.rowReadOnly, op.index, count, op.direction);
 
         const cols = newData[0]?.length ?? 0;
         const blank = () => new Array<null>(cols).fill(null);
@@ -445,6 +464,8 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
             newCfg.columnlen = shiftKeyedMapForInsert(cfg.columnlen, op.index, count, op.direction);
         if (cfg.customWidth != null)
             newCfg.customWidth = shiftKeyedMapForInsert(cfg.customWidth, op.index, count, op.direction);
+        if (cfg.colReadOnly != null)
+            newCfg.colReadOnly = shiftKeyedMapForInsert(cfg.colReadOnly, op.index, count, op.direction);
 
         const blanks = new Array<null>(count).fill(null);
         for (const row of newData) {
@@ -462,6 +483,12 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
             cellrange: cf.cellrange.map((range) => shiftRangeForInsert(range, op)),
         }));
     }
+    if (target.dataValidations != null) {
+        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForInsert(range, op));
+    }
+    const frozen = shiftFrozen(target.frozen, op.type, (focus) => (focus >= insertAt ? focus + count : focus));
+    if (frozen !== target.frozen) newTarget.frozen = frozen;
+    shiftFilterForInsert(newTarget, newCfg, op);
 
     const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
@@ -472,27 +499,15 @@ function applyInsert<S extends Sheet>(sheets: S[], targetIndex: number, op: Inse
         count,
         'add',
     );
-    // An insert stops a chart ref at the grid's last row or column: readChartSpec refuses a ref past
-    // it, which would leave the chart unreadable for good.
-    const lastRow = REFERENCE_ROW_COUNT - 1;
-    const lastColumn = REFERENCE_COLUMN_COUNT - 1;
     return shiftChartsAcrossSheets(
         shifted,
         op.id,
-        (ref) => {
-            const moved = shiftRangeForInsert(ref, op);
-            if (moved.row[1] <= lastRow && moved.column[1] <= lastColumn) return moved;
-            return {
-                ...moved,
-                row: [Math.min(moved.row[0], lastRow), Math.min(moved.row[1], lastRow)],
-                column: [Math.min(moved.column[0], lastColumn), Math.min(moved.column[1], lastColumn)],
-            };
-        },
+        (ref) => shiftRangeForInsert(ref, op),
         (ref) => pointsForInsert(ref, op),
     );
 }
 
-function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
+function applyDelete<S extends ShiftedSheet>(sheets: S[], targetIndex: number, op: DeleteRowColOp): S[] {
     const target = sheets[targetIndex];
     const data = target.data;
     if (!data) return sheets;
@@ -523,12 +538,14 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         if (cfg.rowhidden != null) newCfg.rowhidden = shiftKeyedMapForDelete(cfg.rowhidden, op.start, op.end);
         if (cfg.rowlen != null) newCfg.rowlen = shiftKeyedMapForDelete(cfg.rowlen, op.start, op.end);
         if (cfg.customHeight != null) newCfg.customHeight = shiftKeyedMapForDelete(cfg.customHeight, op.start, op.end);
+        if (cfg.rowReadOnly != null) newCfg.rowReadOnly = shiftKeyedMapForDelete(cfg.rowReadOnly, op.start, op.end);
 
         newData.splice(op.start, removeCount);
     } else {
         if (cfg.colhidden != null) newCfg.colhidden = shiftKeyedMapForDelete(cfg.colhidden, op.start, op.end);
         if (cfg.columnlen != null) newCfg.columnlen = shiftKeyedMapForDelete(cfg.columnlen, op.start, op.end);
         if (cfg.customWidth != null) newCfg.customWidth = shiftKeyedMapForDelete(cfg.customWidth, op.start, op.end);
+        if (cfg.colReadOnly != null) newCfg.colReadOnly = shiftKeyedMapForDelete(cfg.colReadOnly, op.start, op.end);
 
         for (const row of newData) row.splice(op.start, removeCount);
     }
@@ -557,6 +574,14 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         }
         newTarget.conditionalFormatRules = newCFarr;
     }
+    if (target.dataValidations != null) {
+        newTarget.dataValidations = shiftValidations(target.dataValidations, (range) => shiftRangeForDelete(range, op));
+    }
+    const frozen = shiftFrozen(target.frozen, op.type, (focus) =>
+        focus >= op.start ? focus - (Math.min(op.end, focus) - op.start + 1) : focus,
+    );
+    if (frozen !== target.frozen) newTarget.frozen = frozen;
+    shiftFilterForDelete(newTarget, newCfg, op);
 
     const shifted = shiftFormulasAcrossSheets(
         [...sheets.slice(0, targetIndex), newTarget, ...sheets.slice(targetIndex + 1)],
@@ -573,6 +598,99 @@ function applyDelete<S extends Sheet>(sheets: S[], targetIndex: number, op: Dele
         (ref) => shiftRangeForDelete(ref, op),
         (ref) => pointsForDelete(ref, op),
     );
+}
+
+// Moves every validation rule's ranges, and drops a rule left with none. A rule whose ranges stay where they were is
+// kept as the same object, and so is the map when no rule moved.
+export function shiftValidations(
+    validations: Readonly<Record<string, SheetValidation>>,
+    shift: (range: SingleRange) => SingleRange | null,
+): Record<string, SheetValidation> {
+    let shifted: Record<string, SheetValidation> | null = null;
+    for (const [id, entry] of Object.entries(validations)) {
+        const ranges = entry.ranges.flatMap((range) => shift(range) ?? []);
+        if (ranges.length === entry.ranges.length && ranges.every((range, i) => range === entry.ranges[i])) continue;
+        shifted ??= { ...validations };
+        if (ranges.length > 0) shifted[id] = { ...entry, ranges };
+        else delete shifted[id];
+    }
+    return shifted ?? validations;
+}
+
+// The frozen pane, moved whole: a peer's unfreeze removes `frozen`, and a write into a field that is gone would not
+// apply. A bare type such as 'both' with a range freezes as its range form does, so it moves too.
+function shiftFrozen(frozen: Sheet['frozen'], type: 'row' | 'column', shift: (focus: number) => number) {
+    if (!frozen?.range || !(type === 'row' ? freezesRows(frozen) : freezesColumns(frozen))) return frozen;
+    const axis = type === 'row' ? 'row_focus' : 'column_focus';
+    const focus = shift(frozen.range[axis]);
+    return focus === frozen.range[axis] ? frozen : { ...frozen, range: { ...frozen.range, [axis]: focus } };
+}
+
+// The filter moves with the rows: its range, the column each entry sits on and the rows each entry hides. An entry is
+// keyed by its column's offset from the filter's first column, so a column op re-keys the entries.
+function shiftFilterForInsert(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op: InsertRowColOp) {
+    const { filterRange, filter } = sheet;
+    if (!filterRange?.row) return;
+    const { type, index, count, direction } = op;
+    const range = shiftRangeForInsert(filterRange, op);
+    const insertAt = direction === 'lefttop' ? index : index + 1;
+    const shifted: Record<string, FilterEntry> = {};
+    for (const [key, entry] of Object.entries(filter ?? {})) {
+        if (type === 'row') {
+            const rowhidden = shiftKeyedMapForInsert(entry.rowhidden ?? {}, index, count, direction);
+            shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
+        } else {
+            const cindex = entry.cindex >= insertAt ? entry.cindex + count : entry.cindex;
+            shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
+        }
+    }
+    writeFilter(sheet, cfg, range, filter && shifted);
+}
+
+// Deleting the filter's first row, the header that holds its buttons, removes the filter. A column delete keeps the
+// filter while any of its columns are left.
+function shiftFilterForDelete(sheet: ShiftedSheet, cfg: ExtendedSheetConfig, op: DeleteRowColOp) {
+    const { filterRange, filter } = sheet;
+    if (!filterRange?.row) return;
+    const { type, start, end } = op;
+    const deletesHeader = type === 'row' && filterRange.row[0] >= start && filterRange.row[0] <= end;
+    const range = deletesHeader ? null : shiftRangeForDelete(filterRange, op);
+    if (!range) {
+        writeFilter(sheet, cfg, undefined, undefined);
+        return;
+    }
+    const shifted: Record<string, FilterEntry> = {};
+    for (const [key, entry] of Object.entries(filter ?? {})) {
+        if (type === 'row') {
+            const rowhidden = shiftKeyedMapForDelete(entry.rowhidden ?? {}, start, end);
+            if (Object.keys(rowhidden).length > 0) {
+                shifted[key] = { ...entry, rowhidden, str: range.row[0], edr: range.row[1] };
+            }
+        } else if (entry.cindex < start) {
+            shifted[entry.cindex - range.column[0]] = { ...entry, edc: range.column[1] };
+        } else if (entry.cindex > end) {
+            const cindex = entry.cindex - (end - start + 1);
+            shifted[cindex - range.column[0]] = { ...entry, cindex, stc: range.column[0], edc: range.column[1] };
+        }
+    }
+    writeFilter(sheet, cfg, range, Object.keys(shifted).length > 0 ? shifted : undefined);
+}
+
+// The rows a filter hides are hidden rows of the sheet too. The sheet and its config are the op's own copies, but
+// the hidden-row map may still be the one the sheet had before the op, so it is copied before a write.
+function writeFilter(
+    sheet: ShiftedSheet,
+    cfg: ExtendedSheetConfig,
+    range: SingleRange | undefined,
+    filter: Record<string, FilterEntry> | undefined,
+) {
+    sheet.filterRange = range;
+    sheet.filter = filter;
+    if (!filter) return;
+    const hidden = Object.values(filter).flatMap((entry) => Object.keys(entry.rowhidden ?? {}));
+    if (cfg.rowhidden && hidden.every((row) => cfg.rowhidden?.[row] != null)) return;
+    cfg.rowhidden = { ...cfg.rowhidden };
+    for (const row of hidden) cfg.rowhidden[row] = 0;
 }
 
 // The merge map alone doesn't draw a merge: each of its cells points at the corner, and the corner holds the size.

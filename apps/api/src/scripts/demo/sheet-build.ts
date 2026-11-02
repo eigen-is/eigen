@@ -11,9 +11,9 @@ import type {
     CellBorderSides,
     CellWithRowAndCol,
     ConditionalFormatRule,
-    DataVerificationRule,
     Sheet,
     SheetChart,
+    SheetValidation,
     SingleRange,
 } from '@workspace/lib/sheets';
 import { encodeSheetsSnapshot, nextFloatingIndex, sheetFloatingBox, writeSheetsSnapshot } from '@workspace/lib/sheets';
@@ -70,22 +70,21 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
             conditionValue: [0],
         }),
     );
-    // A list rule on every cell of its range, keyed by the cell as the editor's dialog writes it.
-    const dataVerification: Record<string, DataVerificationRule> = {};
-    for (const { range: a1, options } of spec.dropdowns ?? []) {
-        const { row, column } = range(a1);
-        const rule: DataVerificationRule = {
-            type: 'dropdown',
-            type2: '',
-            value1: options.join(','),
-            value2: '',
-            prohibitInput: false,
-            hintShow: false,
-            hintValue: '',
+    // A list rule over its range, numbered as the charts below are.
+    const dataValidations: Record<string, SheetValidation> = {};
+    for (const [i, { range: a1, options }] of (spec.dropdowns ?? []).entries()) {
+        dataValidations[`validation-${i + 1}`] = {
+            ranges: [range(a1)],
+            rule: {
+                type: 'dropdown',
+                type2: '',
+                value1: options.join(','),
+                value2: '',
+                prohibitInput: false,
+                hintShow: false,
+                hintValue: '',
+            },
         };
-        for (let r = row[0]; r <= row[1]; r++) {
-            for (let c = column[0]; c <= column[1]; c++) dataVerification[`${r}_${c}`] = { ...rule };
-        }
     }
 
     const charts: Record<string, SheetChart> = {};
@@ -99,7 +98,7 @@ function buildSheet(spec: SheetSpec, order: number, ids: Map<string, string>): S
             borderInfo,
         },
         conditionalFormatRules: [...dataBars, ...belowZero],
-        dataVerification,
+        dataValidations,
         charts,
     };
     // Each chart is a one-series range chart at Insert's default size, stacked above the ones before it, as a second

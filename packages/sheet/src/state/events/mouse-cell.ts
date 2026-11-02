@@ -25,12 +25,11 @@ import {
 import { cancelFunctionrangeSelected, mergeBorder, mergeMoveMain, setEditingCell, updateCell } from '../modules/cell';
 import type { CellGlyph } from '../modules/cell-glyph';
 import { cellGlyphAt } from '../modules/cell-glyph';
-import { FILTER_BUTTON_HEIGHT, getFilterButtonAtPosition } from '../modules/filter';
+import { getFilterButtonAtPosition } from '../modules/filter';
 import { showLinkCard } from '../modules/hyperlink';
 import { colLocation, colLocationByIndex, rowLocation, rowLocationByIndex } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
 import { normalizeSelection } from '../modules/selection';
-import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
 import { isAllowEdit } from '../utils';
 import { extendSelectionGeometry } from './mouse-drag';
@@ -122,7 +121,7 @@ export function handleCellAreaMouseDown(
                 // Viewport-space anchor from the click's offset inside the button —
                 // freeze-correct by construction (click and button share a region).
                 x: rect.left + mouseX - (x - filterButton.left),
-                y: rect.top + mouseY - (y - filterButton.top) + FILTER_BUTTON_HEIGHT,
+                y: rect.top + mouseY - (y - filterButton.top) + filterButton.height,
                 col: filterButton.col,
                 startRow,
                 endRow,
@@ -174,7 +173,6 @@ export function handleCellAreaMouseDown(
         checkboxChange(ctx, row_index, col_index);
     }
 
-    // Data verification: cell focus
     cellFocus(ctx, row_index, col_index);
 
     // A click on the painted list chevron opens the dropdown in one go, the way
@@ -187,7 +185,7 @@ export function handleCellAreaMouseDown(
         isAllowEdit(ctx) &&
         isDropdownChevronClick(ctx, row_index, col_index, textBox, x, y)
     ) {
-        ctx.dataVerificationDropDownList = true;
+        ctx.validationListOpen = true;
     }
 
     // If clicked cell is not in viewport, request a programmatic scroll to reveal
@@ -205,28 +203,17 @@ export function handleCellAreaMouseDown(
         }
     }
 
-    // Right-click handling
     if (e.button === 2) {
-        // If right-click is inside selection, stop mousedown handling
-        const isInSelection = ctx.selections?.some(
-            (obj_s) =>
-                obj_s.row != null &&
-                row_index >= obj_s.row[0] &&
-                row_index <= obj_s.row[1] &&
-                col_index >= obj_s.column[0] &&
-                col_index <= obj_s.column[1],
-        );
-        if (isInSelection) return;
+        // A right-click inside the selection keeps it for the menu.
+        if (inSelection(ctx, row_index, col_index)) return;
     }
 
     ctx.scrolling = true;
 
-    // Formula-related
     if (ctx.editingCellPosition.length > 0) {
         if (takesFormulaReference(ctx)) {
-            // Formula range selection
-            let rowseleted = [row_index, row_index_ed];
-            let columnseleted = [col_index, col_index_ed];
+            let rowSelected = [row_index, row_index_ed];
+            let columnSelected = [col_index, col_index_ed];
 
             let left = col_pre;
             let width = col - col_pre - 1;
@@ -238,7 +225,7 @@ export function handleCellAreaMouseDown(
 
                 top = 0;
                 height = 0;
-                rowseleted = [];
+                rowSelected = [];
 
                 if (
                     last == null ||
@@ -260,15 +247,13 @@ export function handleCellAreaMouseDown(
                 );
                 top = rowGeom.start;
                 height = rowGeom.span;
-                rowseleted = rowGeom.selected;
+                rowSelected = rowGeom.selected;
 
-                // Column axis kept inline: unlike the other copies this site guards
-                // `last.column` / `last.column_focus` lazily inside two arms (the
-                // preamble above only null-checks the row fields), so an early
-                // `return` here can't be expressed through extendSelectionGeometry.
+                // The column axis can't use extendSelectionGeometry. Two of its arms need
+                // last.column and last.column_focus and return without them, and the third doesn't.
                 left = 0;
                 width = 0;
-                columnseleted = [];
+                columnSelected = [];
                 if (last.left > col_pre) {
                     left = col_pre;
                     width = last.left + last.width - col_pre;
@@ -277,11 +262,11 @@ export function handleCellAreaMouseDown(
                         last.column[1] = last.column_focus;
                     }
 
-                    columnseleted = [col_index, last.column[1]];
+                    columnSelected = [col_index, last.column[1]];
                 } else if (last.left === col_pre) {
                     left = col_pre;
                     width = last.left + last.width - col_pre;
-                    columnseleted = [col_index, last.column[0]];
+                    columnSelected = [col_index, last.column[0]];
                 } else {
                     left = last.left;
                     width = col - last.left - 1;
@@ -291,16 +276,16 @@ export function handleCellAreaMouseDown(
                         last.column[0] = last.column_focus;
                     }
 
-                    columnseleted = [last.column[0], col_index];
+                    columnSelected = [last.column[0], col_index];
                 }
 
-                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
+                const changeparam = mergeMoveMain(ctx, columnSelected, rowSelected, top, height, left, width);
                 if (changeparam != null) {
-                    [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                    [columnSelected, rowSelected, top, height, left, width] = changeparam;
                 }
 
-                last.row = rowseleted;
-                last.column = columnseleted;
+                last.row = rowSelected;
+                last.column = columnSelected;
 
                 last.left_move = left;
                 last.width_move = width;
@@ -317,7 +302,7 @@ export function handleCellAreaMouseDown(
                 }
 
                 if (vText.length > 0) {
-                    const lastWord = vText.substring(vText.length - 1, 1);
+                    const lastWord = vText.slice(-1);
                     if (lastWord !== ',' && lastWord !== '=' && lastWord !== '(') {
                         vText += ',';
                     }
@@ -334,7 +319,6 @@ export function handleCellAreaMouseDown(
                     const rangeIndex = anchorParent && siblings ? Array.from<Node>(siblings).indexOf(anchorParent) : -1;
                     ctx.formulaCache.functionRangeIndex = [rangeIndex, currSelection.anchorOffset];
 
-                    /* Re-add closing parenthesis before display */
                     cellInput.innerHTML = vText;
 
                     cancelFunctionrangeSelected(ctx);
@@ -349,7 +333,6 @@ export function handleCellAreaMouseDown(
 
                 rangeHightlightselected(ctx, cellInput);
 
-                // Then proceed with new range selection
                 israngeseleciton(ctx);
                 ctx.formulaCache.func_selectedrange = {
                     left,
@@ -360,8 +343,8 @@ export function handleCellAreaMouseDown(
                     width_move: width,
                     top_move: top,
                     height_move: height,
-                    row: rowseleted,
-                    column: columnseleted,
+                    row: rowSelected,
+                    column: columnSelected,
                     row_focus: row_index,
                     column_focus: col_index,
                 };
@@ -375,8 +358,8 @@ export function handleCellAreaMouseDown(
                     width_move: width,
                     top_move: top,
                     height_move: height,
-                    row: rowseleted,
-                    column: columnseleted,
+                    row: rowSelected,
+                    column: columnSelected,
                     row_focus: row_index,
                     column_focus: col_index,
                 };
@@ -386,8 +369,8 @@ export function handleCellAreaMouseDown(
                 ctx,
                 cellInput,
                 {
-                    row: rowseleted,
-                    column: columnseleted,
+                    row: rowSelected,
+                    column: columnSelected,
                 },
                 fxInput,
             );
@@ -420,7 +403,7 @@ export function handleCellAreaMouseDown(
     if (ctx.selectionActive) {
         if (e.shiftKey) {
             // Shift+click: select range
-            const last = ctx.selections?.[ctx.selections.length - 1]; // last selection
+            const last = ctx.selections?.[ctx.selections.length - 1];
             if (
                 last &&
                 last.top != null &&
@@ -441,7 +424,7 @@ export function handleCellAreaMouseDown(
                 );
                 let top = rowGeom.start;
                 let height = rowGeom.span;
-                let rowseleted = rowGeom.selected;
+                let rowSelected = rowGeom.selected;
                 const colGeom = extendSelectionGeometry(
                     last.left,
                     last.width,
@@ -453,13 +436,13 @@ export function handleCellAreaMouseDown(
                 );
                 let left = colGeom.start;
                 let width = colGeom.span;
-                let columnseleted = colGeom.selected;
-                const changeparam = mergeMoveMain(ctx, columnseleted, rowseleted, top, height, left, width);
+                let columnSelected = colGeom.selected;
+                const changeparam = mergeMoveMain(ctx, columnSelected, rowSelected, top, height, left, width);
                 if (changeparam != null) {
-                    [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                    [columnSelected, rowSelected, top, height, left, width] = changeparam;
                 }
-                last.row = rowseleted;
-                last.column = columnseleted;
+                last.row = rowSelected;
+                last.column = columnSelected;
                 last.left_move = left;
                 last.width_move = width;
                 last.top_move = top;
@@ -497,7 +480,6 @@ export function handleCellAreaMouseDown(
                 });
             }
         } else {
-            // eslint-disable-next-line prefer-const
             ctx.selections = [
                 {
                     left: col_pre,
@@ -514,8 +496,6 @@ export function handleCellAreaMouseDown(
                     column_focus: col_index,
                 },
             ];
-
-            // Update cell format icon
         }
     }
 
@@ -525,7 +505,6 @@ export function handleCellAreaMouseDown(
 export function handleCellAreaDoubleClick(
     ctx: Context,
     globalCache: GlobalCache,
-    _settings: Settings,
     e: MouseEvent,
     container: HTMLElement,
 ) {
@@ -540,9 +519,7 @@ export function handleCellAreaDoubleClick(
     ) {
         return;
     }
-    // Editing disabled (view only)
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     const rect = container.getBoundingClientRect();
     const mouseX = e.pageX - rect.left;
@@ -583,6 +560,20 @@ export function handleCellAreaDoubleClick(
     setEditingCell(ctx, row_index, col_index);
 }
 
+// True when a selection holds the cell at (row, column). A null row asks about a whole column, and a null column about a
+// whole row, which a selection of whole rows or whole columns across it doesn't hold.
+function inSelection(ctx: Context, row: number | null, column: number | null): boolean {
+    return (
+        ctx.selections?.some(
+            (selection) =>
+                (row == null ? !selection.row_select : row >= selection.row[0] && row <= selection.row[1]) &&
+                (column == null
+                    ? !selection.column_select
+                    : column >= selection.column[0] && column <= selection.column[1]),
+        ) ?? false
+    );
+}
+
 // Coords-plus-modifiers shape so both a real right-click (MouseEvent) and a long-press (touch,
 // synthetic point) can drive the same select-cell-then-open flow. The caller preventDefaults.
 type ContextMenuPoint = { pageX: number; pageY: number; metaKey?: boolean; ctrlKey?: boolean };
@@ -621,30 +612,21 @@ export function handleContextMenu(
         const col = col_location[1];
         const col_pre = col_location[0];
         const col_index = col_location[2];
-        // If right-click is inside selection, skip selection handling
-        const isInSelection = ctx.selections?.some(
-            (obj_s) =>
-                obj_s.row != null &&
-                row_index >= obj_s.row[0] &&
-                row_index <= obj_s.row[1] &&
-                col_index >= obj_s.column[0] &&
-                col_index <= obj_s.column[1],
-        );
+        // A right-click inside the selection keeps it for the menu.
+        const isInSelection = inSelection(ctx, row_index, col_index);
         if (!isInSelection && (point.metaKey || point.ctrlKey)) {
-            // Add to selection
             if (flowdata[row_index][col_index]?.mc) {
-                // Handle merged cell
                 const changeparam = mergeMoveMain(
                     ctx,
                     [col_index, col_index],
                     [row_index, row_index],
                     row_pre,
-                    row,
+                    row - row_pre - 1,
                     col_pre,
-                    col,
+                    col - col_pre - 1,
                 );
                 if (changeparam != null) {
-                    const [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                    const [columnSelected, rowSelected, top, height, left, width] = changeparam;
                     ctx.selections?.push({
                         left,
                         width: width - 1,
@@ -654,10 +636,10 @@ export function handleContextMenu(
                         width_move: width,
                         top_move: top,
                         height_move: height,
-                        row: rowseleted,
-                        column: columnseleted,
-                        row_focus: rowseleted[0],
-                        column_focus: columnseleted[0],
+                        row: rowSelected,
+                        column: columnSelected,
+                        row_focus: rowSelected[0],
+                        column_focus: columnSelected[0],
                     });
                     return;
                 }
@@ -682,18 +664,17 @@ export function handleContextMenu(
         const row_index_ed = row_index;
         const col_index_ed = col_index;
         if (flowdata[row_index][col_index]?.mc) {
-            // Handle merged cell
             const changeparam = mergeMoveMain(
                 ctx,
                 [col_index, col_index],
                 [row_index, row_index],
                 row_pre,
-                row,
+                row - row_pre - 1,
                 col_pre,
-                col,
+                col - col_pre - 1,
             );
             if (changeparam != null) {
-                const [columnseleted, rowseleted, top, height, left, width] = changeparam;
+                const [columnSelected, rowSelected, top, height, left, width] = changeparam;
                 ctx.selections = [
                     {
                         left,
@@ -704,10 +685,10 @@ export function handleContextMenu(
                         width_move: width,
                         top_move: top,
                         height_move: height,
-                        row: rowseleted,
-                        column: columnseleted,
-                        row_focus: rowseleted[0],
-                        column_focus: columnseleted[0],
+                        row: rowSelected,
+                        column: columnSelected,
+                        row_focus: rowSelected[0],
+                        column_focus: columnSelected[0],
                     },
                 ];
                 return;
@@ -744,19 +725,13 @@ export function handleContextMenu(
         const row = row_location[1];
         const row_pre = row_location[0];
         const row_index = row_location[2];
-        // If right-click is inside selection, skip selection handling
-        const isInSelection = ctx.selections?.some(
-            (obj_s) =>
-                obj_s.row != null && row_index >= obj_s.row[0] && row_index <= obj_s.row[1] && !obj_s.column_select,
-        );
-
-        if (isInSelection) return;
+        if (inSelection(ctx, row_index, null)) return;
         const col_index = ctx.visibledatacolumn.length - 1;
         const col = ctx.visibledatacolumn[col_index];
         const col_pre = 0;
         const top = row_pre;
         const height = row - row_pre - 1;
-        const rowseleted = [row_index, row_index];
+        const rowSelected = [row_index, row_index];
         ctx.selections = [];
         ctx.selections.push({
             left: colLocationByIndex(0, ctx.visibledatacolumn)[0],
@@ -768,7 +743,7 @@ export function handleContextMenu(
             width_move: col - col_pre - 1,
             top_move: top,
             height_move: height,
-            row: rowseleted,
+            row: rowSelected,
             column: [0, col_index],
             row_focus: row_index,
             column_focus: 0,
@@ -792,16 +767,10 @@ export function handleContextMenu(
         const col = col_location[1];
         const col_pre = col_location[0];
         const col_index = col_location[2];
-        // If right-click is inside selection, skip selection handling
-        const isInSelection = ctx.selections?.some(
-            (obj_s) =>
-                obj_s.row != null && col_index >= obj_s.column[0] && col_index <= obj_s.column[1] && !obj_s.row_select,
-        );
-
-        if (isInSelection) return;
+        if (inSelection(ctx, null, col_index)) return;
         const left = col_pre;
         const width = col - col_pre - 1;
-        const columnseleted = [col_index, col_index];
+        const columnSelected = [col_index, col_index];
         ctx.selections = [];
         ctx.selections.push({
             left,
@@ -813,7 +782,7 @@ export function handleContextMenu(
             top_move: row_pre,
             height_move: row - row_pre - 1,
             row: [0, row_index],
-            column: columnseleted,
+            column: columnSelected,
             row_focus: 0,
             column_focus: col_index,
             column_select: true,

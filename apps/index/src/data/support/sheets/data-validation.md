@@ -5,7 +5,7 @@ type: how-to
 tags: [sheets, data-validation, dropdown, rules]
 related: [sheets/enter-and-edit-data, sheets/conditional-formatting]
 order: 50
-updated: 2026-09-13
+updated: 2026-11-02
 ---
 
 Data validation lets you control what goes into a cell. You can add a dropdown list so people pick from a fixed set of options, or write a rule that rejects a value if it falls outside a range, does not match a pattern, or fails another condition.
@@ -16,6 +16,8 @@ Data validation lets you control what goes into a cell. You can add a dropdown l
 2. Open the **Data** menu and click **Data verification**.
 
 The dialog shows the current selection in the **Cell range** field. You can type a different range there, or click the grid icon next to it to select a range with the mouse.
+
+If you selected a whole column by clicking its header letter, the field shows it as `B:B`, and the rule covers every row of that column, including the rows below your data. A whole row shows as `2:2`.
 
 ## Add a dropdown list
 
@@ -72,8 +74,16 @@ Two checkboxes at the bottom of the dialog apply to every validation type:
 
 The rule is removed from those cells.
 
+## Rules when you paste or insert
+
+When you copy or cut cells and paste them in the same browser tab, their rules come along. They replace the rules of the cells you paste over, and a copied cell without a rule removes the rule where it lands.
+
+A row or column you insert inside a rule's range gets the rule. One you insert above or right below the range doesn't.
+
+An edit that would break one rule into too many separate pieces isn't made. Pasting a cell with a rule and one without down a long column does that, since the rule would land on every other row. Sheets leaves the sheet as it was and shows "This edit would make a data validation rule too complex." The same goes for a fill, a move and the format painter.
+
 <div class="eigen-callout">
 
-Validation rules travel with the cell when you copy and paste it.
+A spreadsheet whose rules were set up in an older version of Eigen opens without its dropdowns, checkboxes and other rules. Every cell keeps its value. Set the rules up again, or import the original Excel file again.
 
 </div>

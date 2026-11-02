@@ -10,8 +10,11 @@ export function dataToCelldata(data: CellMatrix | undefined): CellWithRowAndCol[
     const celldata: CellWithRowAndCol[] = [];
     if (!data) return celldata;
     for (let r = 0; r < data.length; r += 1) {
-        for (let c = 0; c < data[r].length; c += 1) {
-            const v = data[r][c];
+        // A peer's write can leave a row no array, and the rest of the sheet still reads.
+        const row = data[r];
+        if (!Array.isArray(row)) continue;
+        for (let c = 0; c < row.length; c += 1) {
+            const v = row[c];
             if (v != null) celldata.push({ r, c, v });
         }
     }

@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2088 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2097 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -546,7 +546,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (441)
+## Types (442)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -629,6 +629,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `SheetFloatingKind` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `SheetFloatingObject` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetImage` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `SheetValidation` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SheetWithCalcChain` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SingleRange` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `SettingWithCopy` | `@workspace/lib/space` | packages/lib/src/core/space/hooks/use-setting-with-copy.ts |
@@ -992,7 +993,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1132)
+## Utilities & constants (1140)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1581,8 +1582,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `cellFontSize` | `@workspace/lib/sheets` | packages/lib/src/sheets/fonts.ts |
 | `chartsWithinEntryCap` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `cloneSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `coalescedRanges` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `columnIndexToLabel` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
 | `columnLabelToIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/labels.ts |
+| `compareValidationIds` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `decodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `decodeSheetsWorkbook` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `encodeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
@@ -1590,12 +1593,17 @@ rather than inlining `queryClient.invalidateQueries`.
 | `floatingItems` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `floatingWriteFilter` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `forEachInRect` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `freezesColumns` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `freezesRows` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
+| `MAX_VALIDATION_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `nextFloatingIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `readSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `readSheetsSnapshotJson` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
@@ -1616,6 +1624,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `sheetsStateMap` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `sheetTrackAt` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
 | `stampSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
+| `wellFormedValidations` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `writeSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `fetchImportBlob` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
 | `postImportBytes` | `@workspace/lib/transfer` | packages/lib/src/core/transfer.ts |
