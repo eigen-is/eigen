@@ -1,6 +1,8 @@
 // Sorting has two layers: the pure `orderbydata` comparator (numeric, 'en' text,
 // nulls last) and `sortSelection`, which picks the range then delegates. These
-// pin that a leading CJK cell sorts like any other value — no header-guessing.
+// pin which rows the sort covers: a leading CJK cell sorts like any other value
+// with no header-guessing, a header row stays only when the caller says so, and
+// a merged cell stops the sort.
 
 import { describe, expect, test } from 'bun:test';
 import type { Cell } from '../../../engine/types';
@@ -77,4 +79,17 @@ describe('sortSelection — a header row', () => {
     test('sorts with the rest when none is passed', () => {
         expect(sorted()).toEqual(['a', 'b', 'c', 'Name']);
     });
+});
+
+test('sortSelection leaves a range that holds a merged cell as it is', () => {
+    const data: (Cell | null)[][] = [
+        [cell('b'), { ...cell(2), mc: { r: 0, c: 1, rs: 2, cs: 1 } }],
+        [cell('a'), { mc: { r: 0, c: 1 } }],
+    ];
+    const ctx = contextFactory({
+        selections: selectionFactory([0, 1], [0, 1], 0, 0),
+        sheets: [{ name: 'sheet', id: 'id_1', data, order: 0 }],
+    }) as Context;
+    sortSelection(ctx, true, 0);
+    expect(ctx.sheets[0].data?.map((row) => row[0]?.v)).toEqual(['b', 'a']);
 });
