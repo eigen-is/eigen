@@ -10,6 +10,7 @@ import type {
     MergeCell,
     Op,
     SheetChart,
+    SheetValidation,
 } from '@workspace/lib/sheets';
 import type { ChartSpecTexts } from '@workspace/lib/types/chart';
 import type { Patch as ImmerPatch } from 'immer';
@@ -39,6 +40,7 @@ export type {
     MergeCell,
     Op,
     Range,
+    SheetValidation,
     SingleRange,
 };
 

@@ -389,9 +389,12 @@ describe.skipIf(!runSlow)('seed-demo', () => {
                         rule.type === 'default' && rule.conditionName === 'lessThan' && rule.conditionValue[0] === 0,
                 ),
             ).toBe(true);
-            const dropdowns = Object.values(budgetSheet.dataVerification ?? {});
-            expect(dropdowns.length).toBe(10);
-            for (const rule of dropdowns) expect(rule.type).toBe('dropdown');
+            const dropdowns = Object.values(budgetSheet.dataValidations ?? {});
+            expect(dropdowns.map(({ ranges }) => ranges)).toEqual([
+                [{ row: [3, 6], column: [2, 2] }],
+                [{ row: [10, 15], column: [2, 2] }],
+            ]);
+            for (const { rule } of dropdowns) expect(rule.type).toBe('dropdown');
             const charts = Object.values(chartsSheet.charts ?? {}).map((chart) => readChartSpec(chart).spec);
             expect(charts.map((spec) => spec?.chart.type).sort()).toEqual(['column', 'pie']);
             for (const spec of charts) {

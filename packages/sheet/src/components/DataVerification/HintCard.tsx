@@ -12,7 +12,7 @@ export function ValidationHintCard() {
 
     const hint = useMemo(() => {
         // The open list hangs over the same corner the card does.
-        if (context.dataVerificationDropDownList) return undefined;
+        if (context.validationListOpen) return undefined;
         const last = context.selections?.[context.selections.length - 1];
         const r = last?.row_focus;
         const c = last?.column_focus;

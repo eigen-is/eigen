@@ -18,6 +18,7 @@ import type {
     SheetImage,
     SheetWithCalcChain,
 } from './types';
+import { wellFormedValidations } from './validations';
 
 const FORMAT = 'eigensheets/2';
 
@@ -33,14 +34,19 @@ type EncodedContent = string | number | boolean | Record<string, unknown>;
 // [row, col, borderIndex], one for each `config.borderInfo` key.
 type EncodedBorder = [number, number, number];
 
-type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'charts'> & {
+type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'charts' | 'dataValidations'> & {
     config?: Omit<SheetConfig, 'borderInfo'>;
     cells?: EncodedCell[];
     borderCells?: EncodedBorder[];
-    // Floating images and charts are a few small records per sheet, so they are written as they are. An empty map is
-    // left out, and the decoder adds it back.
+    // Floating images, charts and validation rules are a few small records per sheet, so they are written as they
+    // are. An empty map is left out, and the decoder adds it back. The validations are read as unknown, since the
+    // decoder keeps only the entries that are well formed.
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
+    dataValidations?: unknown;
+    // The per-cell validation rules of the builds before rules were kept per range. Sheets keep no backward
+    // compatibility, so the decoder drops them.
+    dataVerification?: unknown;
 };
 
 type SnapshotV2 = {
@@ -70,11 +76,13 @@ export function encodeSheetsSnapshot(sheets: Sheet[], opts: { computed: boolean 
             config,
             images,
             charts,
+            dataValidations,
             ...rest
         } = sheet;
         const out: EncodedSheet = { ...rest };
         if (images && Object.keys(images).length > 0) out.images = images;
         if (charts && Object.keys(charts).length > 0) out.charts = charts;
+        if (dataValidations && Object.keys(dataValidations).length > 0) out.dataValidations = dataValidations;
 
         // The dense matrix is never written, but where it exists it holds the latest cells. An editor edit writes
         // `data` and leaves `celldata` stale, so the cells come from `data`, as they do at the end of a replay.
@@ -129,13 +137,24 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     // that hides the problem.
     if (f !== FORMAT) throw unknownFormat(f);
     const decoded = sheets.map((encoded) => {
-        const { cells, borderCells, config, images, charts, ...rest } = encoded;
-        // Every sheet gets both maps, even empty ones. The editor writes each image or chart under its own key, and
-        // that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the entry cap.
+        const {
+            cells,
+            borderCells,
+            config,
+            images,
+            charts,
+            dataValidations,
+            dataVerification: _old,
+            ...rest
+        } = encoded;
+        // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
+        // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
+        // entry cap and a validation that is not well formed.
         const sheet: RuntimeSheet = {
             ...rest,
             images: isRecord(images) ? images : {},
             charts: isRecord(charts) ? chartsWithinEntryCap(charts) : {},
+            dataValidations: wellFormedValidations(dataValidations),
         };
 
         if (cells) {

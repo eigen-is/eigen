@@ -144,8 +144,6 @@ export function readXlsx(
                     dxfs,
                     palette,
                     date1904: book.date1904,
-                    rows: grid.rows,
-                    columns: grid.columns,
                     dates: grid.dates,
                     charge,
                     chargeElements: reads.elements.charge,

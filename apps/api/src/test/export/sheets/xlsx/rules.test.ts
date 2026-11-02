@@ -6,12 +6,14 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
+import { REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
 import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { readRules } from '../../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../../lib/import/sheets/styles';
 import { parseOoxml } from '../../../../lib/ooxml/ooxml';
+import { rulesByCell, validationsByCell } from '../../../fixtures/validations';
 import { sheetXml } from '../../../fixtures/xlsx';
 
 // A sheet's conditional formats and data validations, written and read back through the reader, with the dxfs the
@@ -26,8 +28,6 @@ function roundTrip(sheet: Partial<Sheet>) {
         dxfs: looks,
         palette: [],
         date1904: false,
-        rows: 100,
-        columns: 26,
         charge: () => {},
         chargeElements: () => {},
         lost: () => {},
@@ -207,7 +207,7 @@ describe('a conditional format', () => {
 
     test('a sheet without rules writes nothing', () => {
         expect(roundTrip({}).xml).toBe('');
-        expect(roundTrip({ conditionalFormatRules: [], dataVerification: {} }).xml).toBe('');
+        expect(roundTrip({ conditionalFormatRules: [], dataValidations: {} }).xml).toBe('');
     });
 });
 
@@ -241,10 +241,10 @@ describe('a data validation', () => {
                 hintValue: 'Not "3" & <b>',
             }),
         ];
-        const dataVerification = Object.fromEntries(rules.map((rule, row) => [`${row}_0`, rule]));
-        const { lost, ...read } = roundTrip({ dataVerification });
+        const dataValidations = validationsByCell(Object.fromEntries(rules.map((rule, row) => [`${row}_0`, rule])));
+        const { lost, ...read } = roundTrip({ dataValidations });
         expect(lost).toEqual([]);
-        expect(read.dataVerification).toEqual(
+        expect(rulesByCell(read.dataValidations)).toEqual(
             Object.fromEntries(
                 rules.map((rule, row) => [
                     `${row}_0`,
@@ -256,7 +256,7 @@ describe('a data validation', () => {
 
     test("Excel's canonical forms: dates as serials, a list's range absolute, allowBlank, a prompt", () => {
         const { xml } = roundTrip({
-            dataVerification: {
+            dataValidations: validationsByCell({
                 '0_0': validation({ type: 'date', type2: 'between', value1: '2026-01-05', value2: '2026-12-31' }),
                 '1_0': validation({
                     type: 'dropdown',
@@ -272,7 +272,7 @@ describe('a data validation', () => {
                     hintShow: true,
                     hintValue: 'Over a half',
                 }),
-            },
+            }),
         });
         expect(xml).toBe(
             '<dataValidations count="3">' +
@@ -283,52 +283,76 @@ describe('a data validation', () => {
         );
     });
 
-    test("a rule's cells coalesce into rectangles, one element a rule, ordered by their first cell", () => {
+    test('one element a rule over its ranges, the ranges and the rules in order of their top-left cells', () => {
         const list = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
         const number = validation({});
-        const dataVerification: Record<string, DataVerificationRule> = {};
-        // An L of the list: B2:C4 and B5, beside a column of numbers broken by a gap.
-        for (let r = 1; r <= 3; r++) for (let c = 1; c <= 2; c++) dataVerification[`${r}_${c}`] = { ...list };
-        dataVerification['4_1'] = { ...list };
-        for (const r of [0, 1, 2, 5]) dataVerification[`${r}_4`] = { ...number };
-        const { xml, ...read } = roundTrip({ dataVerification });
+        // An L of the list, B5 and B2:C4, beside a column of numbers broken by a gap.
+        const dataValidations = {
+            list: {
+                ranges: [
+                    { row: [4, 4], column: [1, 1] },
+                    { row: [1, 3], column: [1, 2] },
+                ],
+                rule: list,
+            },
+            numbers: {
+                ranges: [
+                    { row: [0, 2], column: [4, 4] },
+                    { row: [5, 5], column: [4, 4] },
+                ],
+                rule: number,
+            },
+        };
+        const { xml, ...read } = roundTrip({ dataValidations });
         expect([...xml.matchAll(/sqref="([^"]*)"/g)].map(([, sqref]) => sqref)).toEqual(['E1:E3 E6', 'B2:C4 B5']);
-        expect(read.dataVerification).toEqual(dataVerification);
+        expect(rulesByCell(read.dataValidations)).toEqual(rulesByCell(dataValidations));
     });
 
-    test('a tick-box text rule is a custom formula on the first cell; the reader drops custom rules', () => {
-        const { xml, dataVerification, lost } = roundTrip({
-            dataVerification: {
-                '2_1': validation({ type: 'text_content', type2: 'include', value1: 'a"b', value2: '' }),
-                '3_1': validation({ type: 'text_content', type2: 'include', value1: 'a"b', value2: '' }),
+    test('a whole-column rule writes the whole column, and reads back as one', () => {
+        const list = validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' });
+        const ranges = [{ row: [0, REFERENCE_ROW_COUNT - 1], column: [1, 1] }];
+        const { xml, ...read } = roundTrip({ dataValidations: { v: { ranges, rule: list } } });
+        expect(xml).toContain(`sqref="B1:B${REFERENCE_ROW_COUNT}"`);
+        expect(Object.values(read.dataValidations ?? {})).toEqual([{ ranges, rule: list }]);
+    });
+
+    test('a text rule is a custom formula on the first cell; the reader drops custom rules', () => {
+        const { xml, dataValidations, lost } = roundTrip({
+            dataValidations: {
+                v: {
+                    ranges: [{ row: [2, 3], column: [1, 1] }],
+                    rule: validation({ type: 'text_content', type2: 'include', value1: 'a"b', value2: '' }),
+                },
             },
         });
         expect(xml).toContain(
             '<dataValidation type="custom" allowBlank="1" sqref="B3:B4"><formula1>ISNUMBER(SEARCH(&quot;a&quot;&quot;b&quot;,B3))</formula1></dataValidation>',
         );
-        expect(dataVerification).toBeUndefined();
+        expect(dataValidations).toBeUndefined();
         expect(lost).toEqual([]);
     });
 
     test('what Excel cannot hold is dropped, counted once a rule; a long prompt is cut and counted', () => {
         const checkbox = validation({ type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' });
-        const { dataVerification, lost } = roundTrip({
-            dataVerification: {
-                '0_0': checkbox,
-                '1_0': { ...checkbox },
-                '2_0': validation({ type: 'validity', type2: '', value1: 'phone', value2: '' }),
-                '3_0': validation({ type: 'dropdown', type2: '', value1: 'x'.repeat(256), value2: '' }),
-                '4_0': validation({ type: 'number', type2: 'between', value1: 'abc' }),
-                '5_0': validation({ type: 'date', type2: 'laterThan', value1: 'soon', value2: '' }),
-                '6_0': validation({ type: 'number', type2: 'include' }),
-                '7_0': validation({ type: 'dropdown', type2: '', value1: 'x'.repeat(255), value2: '' }),
-                '8_0': validation({ type: 'number', type2: 'equal', hintShow: true, hintValue: 'p'.repeat(300) }),
-                // Shaped like a cell past Excel's last column: a defined name an older import kept.
-                '9_0': validation({ type: 'dropdown', type2: '', value1: 'UkRegion2', value2: '' }),
+        const { dataValidations, lost } = roundTrip({
+            dataValidations: {
+                ...validationsByCell({
+                    '2_0': validation({ type: 'validity', type2: '', value1: 'phone', value2: '' }),
+                    '3_0': validation({ type: 'dropdown', type2: '', value1: 'x'.repeat(256), value2: '' }),
+                    '4_0': validation({ type: 'number', type2: 'between', value1: 'abc' }),
+                    '5_0': validation({ type: 'date', type2: 'laterThan', value1: 'soon', value2: '' }),
+                    '6_0': validation({ type: 'number', type2: 'include' }),
+                    '7_0': validation({ type: 'dropdown', type2: '', value1: 'x'.repeat(255), value2: '' }),
+                    '8_0': validation({ type: 'number', type2: 'equal', hintShow: true, hintValue: 'p'.repeat(300) }),
+                    // Shaped like a cell past Excel's last column: a defined name an older import kept.
+                    '9_0': validation({ type: 'dropdown', type2: '', value1: 'UkRegion2', value2: '' }),
+                }),
+                ticks: { ranges: [{ row: [0, 1], column: [0, 0] }], rule: checkbox },
             },
         });
-        expect(Object.keys(dataVerification ?? {})).toEqual(['7_0', '8_0']);
-        expect(dataVerification?.['8_0']?.hintValue).toBe('p'.repeat(255));
+        const kept = rulesByCell(dataValidations);
+        expect(Object.keys(kept)).toEqual(['7_0', '8_0']);
+        expect(kept['8_0']?.hintValue).toBe('p'.repeat(255));
         expect(lost).toEqual([
             ...Array(6).fill('validations-dropped'),
             'validation-prompts-cut',
@@ -338,19 +362,19 @@ describe('a data validation', () => {
 
     test("a prompt is cut before a surrogate pair's halves, never between them", () => {
         const prompt = `${'p'.repeat(254)}😀`;
-        const { xml, dataVerification, lost } = roundTrip({
-            dataVerification: {
+        const { xml, dataValidations, lost } = roundTrip({
+            dataValidations: validationsByCell({
                 '0_0': validation({ type: 'number', type2: 'equal', hintShow: true, hintValue: prompt }),
-            },
+            }),
         });
-        expect(dataVerification?.['0_0']?.hintValue).toBe('p'.repeat(254));
+        expect(rulesByCell(dataValidations)['0_0']?.hintValue).toBe('p'.repeat(254));
         expect(xml).not.toContain('&#xD83D;');
         expect(lost).toEqual(['validation-prompts-cut']);
     });
 
     test('conditional formats come before validations, as CT_Worksheet orders them', () => {
         const { xml } = roundTrip({
-            dataVerification: { '0_0': validation({}) },
+            dataValidations: validationsByCell({ '0_0': validation({}) }),
             conditionalFormatRules: [condition('greaterThan', ['1'])],
         });
         expect(xml.indexOf('<conditionalFormatting')).toBe(0);

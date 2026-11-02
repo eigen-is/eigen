@@ -4,7 +4,7 @@
 import type { ComputeMap } from '../../engine/conditional-format';
 import type { CellMatrix } from '../../engine/types';
 import type { Context } from '../context';
-import type { Sheet } from '../types';
+import type { DataVerificationRule } from '../types';
 
 // Overflow map: per-row map of cell-column → the source-cell that overflows
 // into this column (text wraps across adjacent empty cells).
@@ -42,9 +42,8 @@ export type RenderPass = {
     colEnd: number;
     flowdata: CellMatrix;
     cfCompute: ComputeMap | null;
-    // The current sheet's validation rules, resolved once per pass — the
-    // current sheet cannot change mid-frame.
-    dataVerification: Sheet['dataVerification'];
+    // The rule over a cell of the current sheet, built once per pass from the rules in view (validationLookup).
+    validationAt: (r: number, c: number) => DataVerificationRule | undefined;
     cellOverflowMap: CellOverflowMap;
     drawGridLines: boolean;
     // The cells add their grid lines here, and drawMain strokes them all at once. That saves thousands of

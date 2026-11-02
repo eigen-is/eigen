@@ -17,10 +17,12 @@ import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard, selectionCache } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';
+import { validationAt } from '../../state/modules/validation-rules';
 import type { Cell, GlobalCache, Op, Selection } from '../../state/types';
 import { author, join } from './factories/collab';
 import { contextFactory } from './factories/context';
 import { gridElements, withGridGeometry } from './factories/grid-dom';
+import { validationsByCell } from './factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -73,7 +75,7 @@ function makeCtx({ filtered = false } = {}): Context {
     data[3][0] = { mc: { r: 2, c: 0 } };
     for (const [r, c] of MARKED) data[r][c] = { ...cellAt(r, c), hl: { r, c, id: 'id_1' } };
     const borderInfo = Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, { t: SIDE, l: SIDE }]));
-    const dataVerification = Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, rule(r, c)]));
+    const dataValidations = validationsByCell(Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, rule(r, c)])));
     const hyperlink = Object.fromEntries(MARKED.map(([r, c]) => [`${r}_${c}`, link(r, c)]));
     const ctx = withGridGeometry(
         contextFactory({
@@ -92,7 +94,7 @@ function makeCtx({ filtered = false } = {}): Context {
                             '2_0': { r: 2, c: 0, rs: 2, cs: 1 },
                         },
                     },
-                    dataVerification,
+                    dataValidations,
                     hyperlink,
                     ...(filtered && {
                         filterRange: { row: [0, 3], column: [0, 3] },
@@ -157,7 +159,7 @@ function expectCarriedWhole(ctx: Context, { links = true } = {}) {
     const s = sheet(ctx);
     for (const [r, c] of MARKED) {
         expect(s.config?.borderInfo?.[key(r + 6, c + 6)]).toEqual({ t: SIDE, l: SIDE });
-        expect(s.dataVerification?.[key(r + 6, c + 6)]).toEqual(rule(r, c));
+        expect(validationAt(s.dataValidations, r + 6, c + 6)).toEqual(rule(r, c));
         expect(s.hyperlink?.[key(r + 6, c + 6)]).toEqual(links ? link(r, c) : undefined);
     }
     // Nothing lands on the cell beside a marked one, as an index one off would.
@@ -167,7 +169,7 @@ function expectCarriedWhole(ctx: Context, { links = true } = {}) {
         [8, 9],
     ]) {
         expect(s.config?.borderInfo?.[key(r, c)]).toBeUndefined();
-        expect(s.dataVerification?.[key(r, c)]).toBeUndefined();
+        expect(validationAt(s.dataValidations, r, c)).toBeUndefined();
         expect(s.hyperlink?.[key(r, c)]).toBeUndefined();
     }
     expect(s.config?.merge?.[key(6, 8)]).toEqual({ r: 6, c: 8, rs: 1, cs: 2 });
@@ -199,7 +201,7 @@ function expectSourceCleared(ctx: Context) {
     for (let r = 0; r < 4; r += 1) for (let c = 0; c < 4; c += 1) expect(s.data?.[r][c]).toBeNull();
     for (const [r, c] of MARKED) {
         expect(s.config?.borderInfo?.[key(r, c)]).toBeUndefined();
-        expect(s.dataVerification?.[key(r, c)]).toBeUndefined();
+        expect(validationAt(s.dataValidations, r, c)).toBeUndefined();
         expect(s.hyperlink?.[key(r, c)]).toBeUndefined();
     }
     expect(s.config?.merge?.[key(0, 2)]).toBeUndefined();
@@ -278,10 +280,10 @@ describe('a range with a row an active filter hides', () => {
         expect(s.config?.borderInfo?.[key(7, 8)]).toEqual({ t: SIDE, l: SIDE });
         expect(s.config?.borderInfo?.[key(7, 7)]).toBeUndefined();
         expect(s.config?.borderInfo?.[key(8, 8)]).toBeUndefined();
-        expect(s.dataVerification?.[key(6, 6)]).toEqual(rule(0, 0));
-        expect(s.dataVerification?.[key(7, 8)]).toEqual(rule(2, 2));
-        expect(s.dataVerification?.[key(7, 7)]).toBeUndefined();
-        expect(s.dataVerification?.[key(8, 8)]).toBeUndefined();
+        expect(validationAt(s.dataValidations, 6, 6)).toEqual(rule(0, 0));
+        expect(validationAt(s.dataValidations, 7, 8)).toEqual(rule(2, 2));
+        expect(validationAt(s.dataValidations, 7, 7)).toBeUndefined();
+        expect(validationAt(s.dataValidations, 8, 8)).toBeUndefined();
         expect(s.hyperlink?.[key(6, 6)]).toEqual(links ? link(0, 0) : undefined);
         expect(s.hyperlink?.[key(7, 8)]).toEqual(links ? link(2, 2) : undefined);
         expect(s.hyperlink?.[key(7, 7)]).toBeUndefined();
@@ -358,7 +360,7 @@ describe('a paste of the clipboard in the same tab', () => {
         const ctx = makeCtx({ filtered });
         handleCopy(ctx);
         pasteFromClipboard(ctx);
-        expect(sheet(ctx).dataVerification?.[key(6, 6)]).toEqual(rule(0, 0));
+        expect(validationAt(sheet(ctx).dataValidations, 6, 6)).toEqual(rule(0, 0));
         expect(sheet(ctx).hyperlink?.[key(6, 6)]).toEqual(link(0, 0));
     });
 
@@ -380,7 +382,7 @@ describe('a paste over cells with a rule and a link of their own', () => {
             [6, 7],
             [11, 11],
         ]) {
-            (s.dataVerification ??= {})[key(r, c)] = rule(r, c);
+            (s.dataValidations ??= {})[key(r, c)] = { ranges: [{ row: [r, r], column: [c, c] }], rule: rule(r, c) };
             (s.hyperlink ??= {})[key(r, c)] = link(r, c);
         }
         return ctx;
@@ -388,14 +390,14 @@ describe('a paste over cells with a rule and a link of their own', () => {
 
     // A write of a whole map would undo a peer's concurrent rule or link on another cell.
     const wholeMapWrites = (ops: Op[]) =>
-        ops.filter((op) => op.path.length === 1 && ['dataVerification', 'hyperlink'].includes(String(op.path[0])));
+        ops.filter((op) => op.path.length === 1 && ['dataValidations', 'hyperlink'].includes(String(op.path[0])));
 
     test("a copy takes the source cell's lack of both, and writes only the cells it lands on", () => {
         const { next, ops } = author(makeOwnCtx(), (ctx) => paste(ctx, false));
         const s = sheet(next);
-        expect(s.dataVerification?.[key(6, 7)]).toBeUndefined();
+        expect(validationAt(s.dataValidations, 6, 7)).toBeUndefined();
         expect(s.hyperlink?.[key(6, 7)]).toBeUndefined();
-        expect(s.dataVerification?.[key(11, 11)]).toEqual(rule(11, 11));
+        expect(validationAt(s.dataValidations, 11, 11)).toEqual(rule(11, 11));
         expect(s.hyperlink?.[key(11, 11)]).toEqual(link(11, 11));
         expect(wholeMapWrites(ops)).toEqual([]);
     });
@@ -403,10 +405,88 @@ describe('a paste over cells with a rule and a link of their own', () => {
     test("the format painter takes the source cell's lack of a rule, and leaves the link", () => {
         const { next, ops } = author(makeOwnCtx(), paint);
         const s = sheet(next);
-        expect(s.dataVerification?.[key(6, 7)]).toBeUndefined();
+        expect(validationAt(s.dataValidations, 6, 7)).toBeUndefined();
         expect(s.hyperlink?.[key(6, 7)]).toEqual(link(6, 7));
-        expect(s.dataVerification?.[key(11, 11)]).toEqual(rule(11, 11));
+        expect(validationAt(s.dataValidations, 11, 11)).toEqual(rule(11, 11));
         expect(wholeMapWrites(ops)).toEqual([]);
+    });
+});
+
+// A rule is stored once over its ranges. Column A's rule covers A1:A4, and a wider one covers F6:L12, under the paste.
+describe('a carried rule lands as ranges', () => {
+    function rangesCtx() {
+        const ctx = makeCtx();
+        sheet(ctx).dataValidations = {
+            column: { ranges: [{ row: [0, 3], column: [0, 0] }], rule: rule(9, 9) },
+            wide: { ranges: [{ row: [5, 11], column: [5, 11] }], rule: rule(8, 8) },
+        };
+        ctx.sheets.push({ name: 'other', id: 'id_2', order: 1, data: emptyGrid(), config: {}, dataValidations: {} });
+        return ctx;
+    }
+    const toOtherSheet = (ctx: Context) => {
+        ctx.currentSheetId = 'id_2';
+    };
+
+    test('a copy on its own sheet adds the landed range to the rule, and cuts the rule it lands on', () => {
+        const { next, ops } = author(rangesCtx(), (ctx) => paste(ctx, false));
+        expect(sheet(next).dataValidations).toEqual({
+            column: {
+                ranges: [
+                    { row: [0, 3], column: [0, 0] },
+                    { row: [6, 9], column: [6, 6] },
+                ],
+                rule: rule(9, 9),
+            },
+            wide: {
+                ranges: [
+                    { row: [5, 5], column: [5, 11] },
+                    { row: [6, 9], column: [5, 5] },
+                    { row: [6, 9], column: [10, 11] },
+                    { row: [10, 11], column: [5, 11] },
+                ],
+                rule: rule(8, 8),
+            },
+        });
+        const paths = ops.filter((op) => op.path[0] === 'dataValidations').map((op) => op.path);
+        expect(paths).toEqual(
+            expect.arrayContaining([
+                ['dataValidations', 'column'],
+                ['dataValidations', 'wide'],
+            ]),
+        );
+        expect(paths.every((path) => path.length === 2)).toBe(true);
+    });
+
+    test('a copy onto another sheet makes a rule of its own there', () => {
+        const ctx = rangesCtx();
+        handleCopy(ctx);
+        toOtherSheet(ctx);
+        ctx.selections = destination();
+        handlePasteByClick(ctx, 'internal');
+        expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
+            { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
+        ]);
+        expect(Object.keys(sheet(ctx).dataValidations ?? {})).toEqual(['column', 'wide']);
+    });
+
+    test('a cut onto another sheet takes the rule off the cells it cut', () => {
+        const ctx = rangesCtx();
+        handleCut(ctx);
+        toOtherSheet(ctx);
+        ctx.selections = destination();
+        handlePasteByClick(ctx, 'internal');
+        expect(Object.values(ctx.sheets[1].dataValidations ?? {})).toEqual([
+            { ranges: [{ row: [6, 9], column: [6, 6] }], rule: rule(9, 9) },
+        ]);
+        expect(Object.keys(sheet(ctx).dataValidations ?? {})).toEqual(['wide']);
+    });
+
+    test('a move takes the rule along on its sheet', () => {
+        const ctx = rangesCtx();
+        move(ctx);
+        const { column } = sheet(ctx).dataValidations ?? {};
+        expect(column?.ranges).toEqual([{ row: [6, 9], column: [6, 6] }]);
+        expect(validationAt(sheet(ctx).dataValidations, 7, 7)).toBeUndefined();
     });
 });
 

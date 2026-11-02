@@ -18,9 +18,12 @@ import {
     shiftKeyedMapForInsert,
     shiftMergeForDelete,
     shiftMergeForInsert,
+    shiftRangeForDelete,
+    shiftRangeForInsert,
+    shiftValidations,
 } from '../../engine/rowcol';
-import type { CalcChainEntry, Cell, CellMatrix } from '../../engine/types';
-import type { History, Op, Sheet } from '../types';
+import type { CalcChainEntry, Cell, CellMatrix, SingleRange } from '../../engine/types';
+import type { History, Op, Sheet, SheetValidation } from '../types';
 import type { PatchOptions } from '../utils';
 import { inverseRowColOptions } from '../utils';
 
@@ -36,6 +39,8 @@ type RowColMove = {
     merge: (merge: Record<string, MergeCell>) => Record<string, MergeCell>;
     keyed: (map: Record<string, number>) => Record<string, number>;
     cellKeyed: <T>(map: Record<string, T>) => Record<string, T>;
+    // Where a range ends up, or null for one the op deletes.
+    range: (range: SingleRange) => SingleRange | null;
     sheets: <S extends Sheet>(sheets: S[]) => S[];
 };
 
@@ -59,6 +64,7 @@ function insertMove(op: InsertRowColOp): RowColMove {
         merge: (merge) => shiftMergeForInsert({ merge }, type, index, count, direction),
         keyed: (map) => shiftKeyedMapForInsert(map, index, count, direction),
         cellKeyed: (map) => shiftCellKeyedForInsert(map, type, index, count, direction),
+        range: (range) => shiftRangeForInsert(range, op),
         sheets: (sheets) => applySheetsInsertRowCol(sheets, op),
     };
 }
@@ -76,12 +82,13 @@ function deleteMove(op: DeleteRowColOp): RowColMove {
         merge: (merge) => shiftMergeForDelete({ merge }, type, start, count),
         keyed: (map) => shiftKeyedMapForDelete(map, start, end),
         cellKeyed: (map) => shiftCellKeyedForDelete(map, type, start, end),
+        range: (range) => shiftRangeForDelete(range, op),
         sheets: (sheets) => applySheetsDeleteRowCol(sheets, op),
     };
 }
 
-// A peer's row or column op moves your entries' cells, merges, borders, links, validation and row or column sizes on
-// its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
+// A peer's row or column op moves your entries' cells, merges, borders, links, validation rules and row or column sizes
+// on its sheet, and the formula text that points at it on any sheet, a deleted sheet's included. An entry the op makes
 // meaningless is dropped: one that writes inside deleted rows or columns or cuts a merge, a range or a whole config on
 // the op's sheet, a chart's data on that sheet, or your own row or column op there.
 //
@@ -163,7 +170,8 @@ class Shifter {
         if (sheet !== this.id) return field === 'data' ? this.otherSheetData(patch, rest.length) : patch;
         if (field === 'data') return this.dataPatch(patch, rest);
         if (field === 'config') return this.configPatch(patch, rest);
-        if (field === 'hyperlink' || field === 'dataVerification') return this.cellKeyed(patch, rest);
+        if (field === 'hyperlink') return this.cellKeyed(patch, rest);
+        if (field === 'dataValidations') return this.validations(patch, rest);
         if (field === 'calcChain') return this.calcChain(patch, rest);
         return POSITION_FREE_FIELDS.has(field) ? patch : null;
     }
@@ -362,6 +370,17 @@ class Shifter {
         if (moved == null) return null;
         const depth = patch.path.length - below.length - 1;
         return at(patch, [...patch.path.slice(0, depth), moved, ...below], patch.value);
+    }
+
+    // A validation rule, or a sheet's whole map of them, which the editor writes whole. Its ranges move as the
+    // engine moves the live ones. A rule the op leaves with no range drops the entry, as a write into deleted rows does.
+    private validations(patch: Patch, [id, ...below]: (string | number)[]): Patch | null {
+        if (!('value' in patch) || patch.value == null) return patch;
+        if (below.length > 0) return null;
+        const map: Record<string, SheetValidation> = id == null ? patch.value : { [id]: patch.value };
+        const moved = shiftValidations(map, this.move.range);
+        if (Object.keys(moved).length < Object.keys(map).length) return null;
+        return at(patch, patch.path, id == null ? moved : moved[id]);
     }
 
     // The recalc list names each formula cell by its place, so an entry moves with its cell. A whole list moves as one

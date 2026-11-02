@@ -44,6 +44,7 @@ import {
 } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
+import { addValidation, clearValidations, validationAt } from './validation-rules';
 
 // Returns the cell attribute value, normalized to a default when missing. Result is a
 // value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
@@ -138,7 +139,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
 }
 
 // `v` covers every shape callers feed in: scalar (string/number/boolean), Cell-like patch
-// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, dataVerification,
+// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, data validation,
 // the public API, etc. — keeping the parameter shape here is the project-wide escape hatch.
 // biome-ignore lint/suspicious/noExplicitAny: cross-cutting setter, callers pass scalars and Cell-like patches indistinguishably
 export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix | null | undefined, v: any) {
@@ -547,15 +548,11 @@ export function updateCell(
 
     // Data validation: block input when the entered data is invalid
     const sheet = getSheet(ctx);
-    const { dataVerification } = sheet;
-    if (!isNil(dataVerification)) {
-        const dvItem = dataVerification[`${r}_${c}`];
-        if (!isNil(dvItem) && dvItem.prohibitInput && !validateCellData(ctx, dvItem, inputText)) {
-            cancelNormalSelected(ctx);
-            ctx.warnDialog = describeValidationRule(dvItem, 'invalid');
-
-            return;
-        }
+    const rule = validationAt(sheet.dataValidations, r, c);
+    if (rule?.prohibitInput && !validateCellData(ctx, rule, inputText)) {
+        cancelNormalSelected(ctx);
+        ctx.warnDialog = describeValidationRule(rule, 'invalid');
+        return;
     }
 
     let curv = flowdata[r][c];
@@ -1106,7 +1103,7 @@ export function carryCells(
         columns.reduce(lowest),
         columns.reduce(highest),
     ]);
-    const rules = cloneDeep(from.dataVerification) ?? {};
+    const rules = Object.entries(cloneDeep(from.dataValidations) ?? {});
     const linkMap = cloneDeep(from.hyperlink) ?? {};
 
     if (cut) {
@@ -1116,16 +1113,24 @@ export function carryCells(
                 if (mc?.rs != null) delete from.config?.merge?.[`${mc.r}_${mc.c}`];
                 source[r][c] = null;
                 delete from.config?.borderInfo?.[`${r}_${c}`];
-                delete from.dataVerification?.[`${r}_${c}`];
                 delete from.hyperlink?.[`${r}_${c}`];
             }
         }
+        clearValidations(from, {
+            row: [rows.reduce(lowest), rows.reduce(highest)],
+            column: [columns.reduce(lowest), columns.reduce(highest)],
+        });
     }
 
     const cfg = (to.config ??= {});
     const merge = (cfg.merge ??= {});
     const borderInfo = (cfg.borderInfo ??= {});
     for (const tile of tiles) {
+        // A source cell without a rule takes the destination's away, as Excel does.
+        clearValidations(to, {
+            row: [tile.row, tile.row + tile.height - 1],
+            column: [tile.column, tile.column + tile.width - 1],
+        });
         // Where each merge's first cell landed, keyed by where it was, for the merge's other cells to point at.
         const anchors: Record<string, [number, number]> = {};
         for (let i = 0; i < tile.height; i += 1) {
@@ -1137,9 +1142,7 @@ export function carryCells(
                 const sourceKey = `${sr}_${sc}`;
                 const key = `${r}_${c}`;
                 carrySides(borderInfo, r, c, borders[sourceKey]);
-                // A source cell without a rule or a link takes the destination's away, as Excel does.
-                if (rules[sourceKey]) (to.dataVerification ??= {})[key] = cloneDeep(rules[sourceKey]);
-                else delete to.dataVerification?.[key];
+                // A source cell without a link takes the destination's away, as Excel does.
                 if (links && linkMap[sourceKey]) (to.hyperlink ??= {})[key] = cloneDeep(linkMap[sourceKey]);
                 else if (links) delete to.hyperlink?.[key];
 
@@ -1168,6 +1171,34 @@ export function carryCells(
             }
         }
     }
+    // A rule lands on the cells its source cells landed on. On the same sheet those join the rule itself, and on
+    // another sheet they become a rule of their own.
+    for (const [id, { ranges, rule }] of rules) {
+        const landed = tiles.flatMap((tile) => ranges.flatMap((range) => landedRanges(range, lines, tile)));
+        if (landed.length === 0) continue;
+        addValidation(to, lines.sheetId === ctx.currentSheetId ? id : crypto.randomUUID(), rule, landed);
+    }
+}
+
+// Where the cells of a range land in one tile: a range for each run of carried rows and columns it covers. A whole
+// block lands as one range. A filtered copy splits a range where the filter left rows out, and a tile the format
+// painter cut short takes only its first rows and columns.
+export function landedRanges(range: SingleRange, lines: CarriedLines, tile: CarryTile): SingleRange[] {
+    const rows = landedRuns(lines.rows.slice(0, tile.height), range.row, tile.row);
+    const columns = landedRuns(lines.columns.slice(0, tile.width), range.column, tile.column);
+    return rows.flatMap((row) => columns.map((column) => ({ row, column })));
+}
+
+// The runs of carried lines between first and last, as the lines they land on counted from start.
+function landedRuns(lines: readonly number[], [first, last]: readonly number[], start: number): number[][] {
+    const runs: number[][] = [];
+    for (let i = 0; i < lines.length; i += 1) {
+        if (lines[i] < first || lines[i] > last) continue;
+        const run = runs.at(-1);
+        if (run && run[1] === start + i - 1) run[1] = start + i;
+        else runs.push([start + i, start + i]);
+    }
+    return runs;
 }
 
 // How many carried lines from index i fall inside a merge's span, counting at most limit of them. A merge closes up

@@ -7,9 +7,8 @@ import type { Context } from '../context';
 import { getFlowdata, getSheetConfig } from '../context';
 import { normalizedCellAttr } from '../modules/cell';
 import { getCellTextInfo } from '../modules/text';
-import type { Sheet } from '../types';
 import { colEndX, colStartX } from './geometry';
-import type { CellOverflowItem, CellOverflowMap } from './types';
+import type { CellOverflowItem, CellOverflowMap, RenderPass } from './types';
 
 // Bounds the per-row walk for a source scrolled out of view: 256 columns is wider than any text a cell shows.
 export const OVERFLOW_REACH_COLUMNS = 256;
@@ -93,7 +92,7 @@ export function rowOverflowSpans(
 export function computeCellOverflowMap(
     sheetCtx: Context,
     canvas: CanvasRenderingContext2D,
-    dataVerification: Sheet['dataVerification'],
+    validationAt: RenderPass['validationAt'],
     colStart: number,
     colEnd: number,
     rowStart: number,
@@ -115,7 +114,7 @@ export function computeCellOverflowMap(
             colEnd,
             // A tick box shows a glyph; its label never spills.
             (cell, c) =>
-                dataVerification?.[`${r}_${c}`]?.type === 'checkbox'
+                validationAt(r, c)?.type === 'checkbox'
                     ? 0
                     : (getCellTextInfo(cell, canvas, { r, c })?.textWidthAll ?? 0),
             colhidden,

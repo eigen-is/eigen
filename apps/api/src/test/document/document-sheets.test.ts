@@ -808,7 +808,12 @@ describe('document/sheets — appendSheetsToYjs', () => {
                     conditionValue: ['=A1>Data!A1'],
                 },
             ],
-            dataVerification: { '2_0': { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' } },
+            dataValidations: {
+                v1: {
+                    ranges: [{ row: [2, 2], column: [0, 0] }],
+                    rule: { type: 'dropdown', type2: '', value1: 'Data!A1:A3', value2: '' },
+                },
+            },
             hyperlink: {
                 '1_0': { linkType: 'sheet', linkAddress: 'Data' },
                 '1_1': { linkType: 'cellrange', linkAddress: 'Data!B2' },
@@ -867,7 +872,7 @@ describe('document/sheets — appendSheetsToYjs', () => {
         expect(cell(1, 0)?.hl?.id).toBe(summary.id);
         const rule = summary.conditionalFormatRules?.[0];
         expect(rule?.type === 'default' && rule.conditionValue).toEqual(["=A1>'Data(Copy)'!A1"]);
-        expect(summary.dataVerification?.['2_0']?.value1).toBe("'Data(Copy)'!A1:A3");
+        expect(summary.dataValidations?.['v1']?.rule.value1).toBe("'Data(Copy)'!A1:A3");
         expect(summary.hyperlink).toEqual({
             '1_0': { linkType: 'sheet', linkAddress: 'Data(Copy)' },
             '1_1': { linkType: 'cellrange', linkAddress: "'Data(Copy)'!B2" },

@@ -5,7 +5,6 @@
 // and the arrow keys where the hidden rows and columns are.
 
 import { isRecord } from '@workspace/lib/guards';
-import { cloneDeep } from 'es-toolkit/compat';
 import type { DeleteRowColOp, InsertRowColOp } from '../../engine/rowcol';
 import {
     applySheetsDeleteRowCol,
@@ -66,8 +65,6 @@ export function insertRowCol(
     shiftFilterForInsert(sheet, op);
     shiftFrozenFocus(sheet, type, shift);
 
-    // The new rows or columns copy the validation rules of the one at the insert index, but not its links.
-    sheet.dataVerification = shiftCellKeyedForInsert(sheet.dataVerification, type, index, count, direction, cloneDeep);
     sheet.hyperlink = shiftCellKeyedForInsert(sheet.hyperlink, type, index, count, direction);
 
     const { data } = sheet;
@@ -129,7 +126,6 @@ export function deleteRowCol(
     shiftFilterForDelete(sheet, op);
     shiftFrozenFocus(sheet, type, (focus) => (focus >= start ? focus - (Math.min(end, focus) - start + 1) : focus));
 
-    sheet.dataVerification = shiftCellKeyedForDelete(sheet.dataVerification, type, start, end);
     sheet.hyperlink = shiftCellKeyedForDelete(sheet.hyperlink, type, start, end);
     if (!fromBatch) ctx.selections = undefined;
 

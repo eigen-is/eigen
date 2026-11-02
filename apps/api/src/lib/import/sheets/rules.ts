@@ -1,6 +1,6 @@
 // A worksheet's conditional formats and data validations, read from the part beside its grid. Excel 2010 writes what
 // the 2007 schema can't hold, a rule or a list over another sheet, into the extension list, read here too. What a rule
-// emits is charged before it is built: the ranges a format holds, the cells a validation keys and their text.
+// emits is charged before it is built: the ranges a format or a validation holds, and their text.
 
 import { formatInputDate } from '@workspace/lib/date';
 import type {
@@ -39,9 +39,6 @@ export type RulesContext = {
     dxfs: DxfLook[];
     palette: ThemePalette;
     date1904: boolean;
-    // The span of the grid's cells.
-    rows: number;
-    columns: number;
     // A 1904 workbook's date cells, by cellKey.
     dates: ReadonlySet<number>;
     // Throws past the budget: a range or a key counts as a cell, text as its characters.
@@ -58,7 +55,7 @@ export type RulesContext = {
 export function readRules(
     rest: XmlElement | undefined,
     context: RulesContext,
-): Pick<Sheet, 'conditionalFormatRules' | 'dataVerification'> {
+): Pick<Sheet, 'conditionalFormatRules' | 'dataValidations'> {
     if (!rest) return {};
     const extensions = (name: string) =>
         xmlChildren(rest, SML_NS, 'extLst')
@@ -141,7 +138,7 @@ export function readRules(
             },
         },
     ];
-    const dataVerification: NonNullable<Sheet['dataVerification']> = {};
+    const dataValidations: NonNullable<Sheet['dataValidations']> = {};
     for (const { validations, sqrefOf, formulaOf } of validationLists) {
         for (const validation of validations) {
             const rule = mapDataValidation(
@@ -155,23 +152,22 @@ export function readRules(
                 if ((xmlAttr(validation, '', 'type') ?? 'none') !== 'none') context.lost('validations-dropped');
                 continue;
             }
-            const text = rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length;
-            for (const { row, column } of rangesOf(sqrefOf(validation) ?? '', context)) {
-                const bottom = Math.min(row[1], context.rows + DV_ROW_MARGIN - 1);
-                const right = Math.min(column[1], context.columns + DV_COL_MARGIN - 1);
-                if (row[0] > bottom || column[0] > right) continue;
-                const cells = (bottom - row[0] + 1) * (right - column[0] + 1);
-                context.charge(cells, cells * text);
-                // One rule for every key, as the editor sets a range's: nothing edits a rule in place.
-                for (let r = row[0]; r <= bottom; r++)
-                    for (let c = column[0]; c <= right; c++) dataVerification[`${r}_${c}`] = rule;
+            // A rule is stored once over its ranges, so its text is charged once, and each range as one cell.
+            context.charge(0, rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length);
+            const ranges: SingleRange[] = [];
+            for (const range of rangesOf(sqrefOf(validation) ?? '', context)) {
+                context.charge(1, 0);
+                ranges.push(range);
             }
+            // Numbered in the file's order, as the importer numbers charts: a fresh sheet holds no other rule.
+            if (ranges.length > 0)
+                dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = { ranges, rule };
         }
     }
 
     return {
         ...(formats.length > 0 && { conditionalFormatRules: formats.map(({ format }) => format) }),
-        ...(Object.keys(dataVerification).length > 0 && { dataVerification }),
+        ...(Object.keys(dataValidations).length > 0 && { dataValidations }),
     };
 }
 
@@ -327,12 +323,6 @@ function extractSearchText(formula: string | undefined): string | null {
     const match = formula.match(/^NOT\(ISERROR\(SEARCH\("(.*)",/);
     return match ? match[1].replace(/""/g, '"') : null;
 }
-
-// Real workbooks often validate a whole column ("D2:D1048576"), but the grid covers only the cells. A rule for every
-// cell of the column would put hundreds of MB of validations into the snapshot. So a validation stops this far past
-// the cells. The margins are wide, because empty rows below the data that are validated for entry are common.
-const DV_ROW_MARGIN = 1000;
-const DV_COL_MARGIN = 100;
 
 function mapDataValidation(
     validation: XmlElement,

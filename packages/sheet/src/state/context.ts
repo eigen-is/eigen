@@ -70,11 +70,10 @@ export type Context = {
     // warning dialog
     warnDialog?: string;
     currency?: string;
-    dataVerification: {
-        dataRegulation: DataRegulationProps; // data validation rule
-    };
-    // data validation dropdown list
-    dataVerificationDropDownList?: boolean;
+    // The rule the data-validation dialog edits, before it is applied.
+    validationDraft: DataRegulationProps;
+    // Whether a list cell's drop-down is open.
+    validationListOpen?: boolean;
     conditionRules: ConditionRulesProps; // conditional formatting
 
     filterContextMenu?: {
@@ -234,22 +233,20 @@ export function defaultContext(refs: RefValues): Context {
             singleSelect: false,
         },
 
-        dataVerification: {
-            dataRegulation: {
-                type: '',
-                type2: '',
-                rangeTxt: '',
-                value1: '',
-                value2: '',
-                validity: '',
-                remote: false,
-                prohibitInput: false,
-                hintShow: false,
-                hintValue: '',
-            },
+        validationDraft: {
+            type: '',
+            type2: '',
+            rangeTxt: '',
+            value1: '',
+            value2: '',
+            validity: '',
+            remote: false,
+            prohibitInput: false,
+            hintShow: false,
+            hintValue: '',
         },
 
-        dataVerificationDropDownList: false,
+        validationListOpen: false,
 
         conditionRules: {
             rulesType: '',

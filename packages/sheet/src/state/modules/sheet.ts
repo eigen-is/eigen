@@ -39,7 +39,7 @@ export function changeSheet(ctx: Context, id: string) {
     };
 
     cancelNormalSelected(ctx);
-    ctx.dataVerificationDropDownList = false;
+    ctx.validationListOpen = false;
     ctx.activeObject = undefined;
     ctx.currentSheetId = id;
     ctx.currentSheetIsPivot = !!file.isPivotTable;

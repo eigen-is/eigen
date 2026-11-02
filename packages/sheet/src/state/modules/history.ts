@@ -291,7 +291,7 @@ function restoredFields(index: number, recorded: Patch[], restored: Context, mad
             );
             continue;
         }
-        const depth = field === 'config' ? 2 : field === 'hyperlink' || field === 'dataVerification' ? 1 : 0;
+        const depth = field === 'config' ? 2 : field === 'hyperlink' || field === 'dataValidations' ? 1 : 0;
         fields[field] = restoredValue(wanted[field], marked[field], fields[field], depth);
     }
     return fields;

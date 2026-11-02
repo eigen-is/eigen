@@ -59,4 +59,28 @@ describe('opToPatchOnSheets', () => {
         const [patches] = opToPatchOnSheets(SHEETS, ops);
         expect(patches).toEqual([{ op: 'replace', value: images, path: [0, 'images'] }]);
     });
+
+    // A peer can store anything under an id, and every reader walks an entry's ranges, so a write that would leave an
+    // entry not well formed never applies.
+    test('a validation write applies only when it leaves every entry well formed', () => {
+        const entry = {
+            ranges: [{ row: [0, 9], column: [1, 1] }],
+            rule: { type: 'dropdown', type2: '', value1: 'a', value2: '' },
+        };
+        const ops: Op[] = [
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'v1'], value: entry },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations', 'v1'] },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { v1: entry } },
+            { op: 'add', id: 'sheet-1', path: ['dataValidations', 'v2'], value: { ...entry, ranges: 'A1' } },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations'], value: { v1: entry, v2: {} } },
+            { op: 'remove', id: 'sheet-1', path: ['dataValidations'] },
+            { op: 'replace', id: 'sheet-1', path: ['dataValidations', 'v1', 'ranges'], value: [] },
+        ];
+        const [patches] = opToPatchOnSheets(SHEETS, ops);
+        expect(patches).toEqual([
+            { op: 'add', value: entry, path: [0, 'dataValidations', 'v1'] },
+            { op: 'remove', value: undefined, path: [0, 'dataValidations', 'v1'] },
+            { op: 'replace', value: { v1: entry }, path: [0, 'dataValidations'] },
+        ]);
+    });
 });
