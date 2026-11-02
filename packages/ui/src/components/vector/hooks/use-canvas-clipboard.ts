@@ -56,7 +56,7 @@ import { measureVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
 import type { PastePlan } from '../tools/paste-elements';
-import { planElementsPaste } from '../tools/paste-elements';
+import { emptyPastePlan, planElementsPaste } from '../tools/paste-elements';
 import { deleteSelection } from './selection-ops';
 
 // How many cross-mount images re-upload at once. The wire is forgeable, so a paste must not turn into
@@ -196,13 +196,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     const planForeignPaste = useCallback(
         (items: EigenClipboardItem[]): PastePlan => {
             const anchor = viewportCenterScene();
-            const plan: PastePlan = {
-                partials: [],
-                cloneIds: new Map(),
-                arrowRemaps: [],
-                crossMount: [],
-                measuredText: [],
-            };
+            const plan = emptyPastePlan();
             let cascade = 0;
             const placeAt = (w: number, h: number): Point => {
                 const off = cascade * IMAGE_CASCADE_OFFSET;
@@ -411,6 +405,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             const width = textBoxWidth(measured.width);
             const { height } = measured;
             commitPaste({
+                ...emptyPastePlan(),
                 partials: [
                     {
                         type: 'rectangle',
@@ -424,9 +419,6 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         textAlign,
                     },
                 ],
-                cloneIds: new Map(),
-                arrowRemaps: [],
-                crossMount: [],
                 measuredText: [{ index: 0, text, font, width }],
             });
         },

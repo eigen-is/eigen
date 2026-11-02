@@ -1,6 +1,7 @@
-// Plans the paste of a canvas copy's own elements: the partials to add in z-order, the id each one had when it was
-// copied, which the arrow-binding remap keys on, and the images whose bytes must be uploaded again. It decides and
-// writes nothing. The clipboard hook owns the transacts, and it plans another app's items into the same PastePlan.
+// A PastePlan is what one paste adds to the canvas, before anything is written. This file plans the paste of a canvas
+// copy's own elements: the partials to add in z-order, the id each one had when it was copied, which the arrow-binding
+// remap keys on, and the images whose bytes must be uploaded again. The clipboard hook plans another app's items into
+// the same shape, and it writes every plan.
 
 import { needsReUpload } from '@workspace/lib/clipboard';
 import { PENDING_PREFIX } from '@workspace/lib/drive';
@@ -12,26 +13,18 @@ import type { PastedArrow } from './binding';
 
 export type PastePlan = {
     partials: NewVectorElement[];
-    // partial index → the id the element had when it was copied, for remapPastedArrows.
+    // The id each partial had when it was copied, by the partial's index, for remapPastedArrows.
     cloneIds: Map<number, string>;
     arrowRemaps: PastedArrow[];
-    // Images whose bytes live in another container: index → the typed item that can fetch them.
+    // Images whose bytes live in another container, by the partial's index, with the typed item that can fetch them.
     crossMount: { index: number; item: EigenClipboardImageItem }[];
     // Text boxes sized by a measure of their text as the paste landed. Each keeps the text, its font and the width it
     // was given, so the hook can measure it again once the slices of that text load.
     measuredText: { index: number; text: string; font: Required<VectorTextFont>; width: number }[];
 };
 
-// The whole stored record minus what the writer allocates: the id, the index and the seed. A copy takes its own
-// jitter, as a duplicate does. `commentCardIds` clears, because a copy starts with no comments, the rule
-// duplicateElementsInDoc follows too. Any web page can write our MIME, so the `html` of a text box or a shape passes
-// the LightEditor allowlist before it reaches the doc. It is the sanitizer the mount seam runs, so nothing hostile is
-// ever stored.
-function pastePartial(el: VectorElement): NewVectorElement {
-    const { id, index, seed, ...rest } = el;
-    const partial: NewVectorElement = { ...rest, commentCardIds: '' };
-    if ('html' in el) partial.html = sanitizeToLightEditorHtml(el.html);
-    return partial;
+export function emptyPastePlan(): PastePlan {
+    return { partials: [], cloneIds: new Map(), arrowRemaps: [], crossMount: [], measuredText: [] };
 }
 
 export function planElementsPaste(
@@ -39,15 +32,15 @@ export function planElementsPaste(
     imageItems: EigenClipboardImageItem[],
     mediaFolderId: string | null,
 ): PastePlan {
-    const plan: PastePlan = { partials: [], cloneIds: new Map(), arrowRemaps: [], crossMount: [], measuredText: [] };
+    const plan = emptyPastePlan();
     for (const el of elements) {
         const partial = pastePartial(el);
         if (el.type === 'image') {
             // No media/ folder means no upload target and nothing to resolve a name against, so an image
             // is dropped rather than pasted as a broken reference (insertImageFiles bails the same way).
             if (!mediaFolderId) continue;
-            // The image items ARE the manifest: an image with no item beside it was copied mid-upload,
-            // so its bytes are fetchable from nowhere — dropping it beats pasting a broken reference.
+            // The image items list every image the copy could serialize. An image with no item was copied mid-upload,
+            // so its bytes can be fetched from nowhere, and it is dropped rather than pasted as a broken reference.
             const item = imageItems.find((i) => i.mediaName === el.mediaName);
             if (!item) continue;
             // An image from another media/ folder, or naming none, is uploaded again here; a failed upload drops it.
@@ -68,4 +61,15 @@ export function planElementsPaste(
         plan.partials.push(partial);
     }
     return plan;
+}
+
+// The whole stored record minus what the writer allocates: the id, the index and the seed. A copy takes its own jitter
+// and starts with no comments, as a duplicate does. Any web page can write our MIME, so the `html` of a text box or a
+// shape passes the LightEditor allowlist before it reaches the doc. It is the sanitizer the layer runs, so nothing
+// hostile is ever stored.
+function pastePartial(el: VectorElement): NewVectorElement {
+    const { id, index, seed, ...rest } = el;
+    const partial: NewVectorElement = { ...rest, commentCardIds: '' };
+    if ('html' in el) partial.html = sanitizeToLightEditorHtml(el.html);
+    return partial;
 }

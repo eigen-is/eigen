@@ -1037,7 +1037,7 @@ export function CanvasEditor({
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl) return editElement(hitEl);
         const id = sealed(undoManager, () =>
-            addElement({ type: 'rectangle', autoFit: true, x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }),
+            addElement({ ...boxToolElement('text'), x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }),
         );
         if (id) openRichText(id);
     };
