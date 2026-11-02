@@ -7,6 +7,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
+- **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
+- **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
+- **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
 - **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
 
 ### Changed
@@ -22,6 +25,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
+- **Copying in Drive** — **Copy to…** and **Save to Drive…** say "1 item copied" (or "3 items copied") with an **Open folder** button. **Duplicate** stays quiet
+- **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Open**, **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
+- **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
+- **The File menu of a document** — a document shared with you offers **Remove shared item**, and **Share** is hidden when you can't share it
 - **Text boxes in PowerPoint files** — a text box aligned to the top downloads set to resize the shape to fit its text, and a rectangle set that way in a PowerPoint file comes in as a text box
 - **Enter in Drive and Admin dialogs** — Enter saves in New folder, Rename, Email collaborators, Import to Calendar, a team's mounts and the bucket safety window. While a save runs, Cancel and Escape wait, and a failure keeps the dialog open with what you typed. The Word, Excel and PowerPoint import choice does the same
 
@@ -45,6 +52,16 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
+- **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
+- **Copying items with the same name** — copying any number of items with the same name into one folder lands every one of them at once, each under its own name
+- **Several screenshots in one message** — a message with any number of pasted screenshots of the same name posts with all of them, each under its own name, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
+- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target. A copy to another drive moves the unfinished folder to that drive's Trash. When only some items copy, the message says why the others failed
+- **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
+- **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
+- **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
+- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
+- **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
 - **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
 - **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
 - **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font

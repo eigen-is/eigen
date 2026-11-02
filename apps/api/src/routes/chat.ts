@@ -3,7 +3,7 @@
 // through SharedDrive, which checks the access before ChatRoom does the work.
 
 import type { ChatMatch, ChatMessage } from '@workspace/lib/types/chat';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath, InviteResult } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_CHAT, stripEigenExtension, withEigenExtension } from '@workspace/lib/types/drive';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { MAX_EMAIL_LENGTH, validateEmailTarget } from '@workspace/lib/validation';
@@ -13,9 +13,8 @@ import { findChatsByMembers } from '../lib/chat/find-by-members';
 import { ApiError } from '../lib/core/errors';
 import type { Drive } from '../lib/drive';
 import { getDrive, getSharedDrive } from '../lib/drive';
-import { getUniqueFileName } from '../lib/drive/naming';
+import { folderIn, withFreeName } from '../lib/drive/naming';
 import { getTeamHome } from '../lib/home';
-import { foldName } from '../lib/mount/names';
 import { betterAuth } from './auth';
 import { attachmentReferenceSchema } from './shared-schemas';
 
@@ -81,24 +80,25 @@ export const chatRouter = new Elysia({ name: 'chat' })
             if (!isTeam && members.length === 0) throw new ApiError(422, 'At least one member is required');
             // The wizard checks this too, but the route must, because an empty name would create and share
             // a bare '.eigenchat' dotfile.
-            let fileName = body.fileName.trim().normalize('NFC');
+            const fileName = body.fileName.trim().normalize('NFC');
             if (!fileName) throw new ApiError(422, 'A chat name is required');
 
             const parentId = body.parentId ?? (await drive.ensureChatsFolder(params.mountId));
 
             // A chat the wizard named gets a free name beside its siblings, and a name the user typed is a
-            // 409 on a clash. Two creates of one name at once can both pass this check, and then the
-            // unique index answers 409 for the second. The free name is picked with the extension on,
-            // because Drive.create adds it again.
+            // 409 on a clash. The free name is picked with the extension on, because Drive.create adds it
+            // again.
+            const create = (name: string) => drive.create(params.mountId, parentId, name, DRIVE_TYPE_CHAT, user);
+            let chat: DrivePath;
             if (body.dedupeName) {
+                const { mount } = await drive.resolveFile(params.mountId, parentId);
                 const desired = withEigenExtension(fileName, DRIVE_TYPE_CHAT);
-                const siblings = await drive.getFolderContents(params.mountId, parentId);
-                const used = new Set(siblings.map((s) => foldName(s.name)));
-                if (used.has(foldName(desired))) {
-                    fileName = stripEigenExtension(getUniqueFileName(desired, used));
-                }
+                chat = await withFreeName(folderIn(mount, parentId), desired, (name) =>
+                    create(stripEigenExtension(name)),
+                );
+            } else {
+                chat = await create(fileName);
             }
-            const chat = await drive.create(params.mountId, parentId, fileName, DRIVE_TYPE_CHAT, user);
 
             // A wizard chat is shared from the start. When the share fails, the new chat goes again
             // instead of staying unshared. No share email goes out, but the notification and the event
@@ -158,7 +158,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .post(
         '/chat/:ownerId/:mountId/:chatId/messages',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<ChatMessage> => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -187,7 +187,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .patch(
         '/chat/:ownerId/:mountId/:chatId/messages/:messageId',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<ChatMessage> => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -203,7 +203,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .delete(
         '/chat/:ownerId/:mountId/:chatId/messages/:messageId',
-        async ({ params, user }) => {
+        async ({ params, user }): Promise<{ success: boolean }> => {
             const drive = await getSharedDrive(params.ownerId, user);
             if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
                 throw new ApiError(403, 'No write permission');
@@ -217,7 +217,7 @@ export const chatRouter = new Elysia({ name: 'chat' })
 
     .post(
         '/chat/:ownerId/:mountId/:chatId/invite',
-        async ({ params, body, user }) => {
+        async ({ params, body, user }): Promise<InviteResult> => {
             // An invite shares the chat, which a guest may not, as on the ACL route.
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);

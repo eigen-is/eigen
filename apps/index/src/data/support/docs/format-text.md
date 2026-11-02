@@ -68,7 +68,7 @@ Select the text you want to change, then click the button in the toolbar:
 
 Each button is a toggle. Click it again on the same selection to remove the style. When the cursor is inside styled text, the button appears highlighted, so you can see what is active.
 
-For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline**, which show the same shortcuts, it has **Strikethrough**, **Superscript**, **Subscript**, and **Inline code**. Choose a style again on the same selection to remove it.
+For more styles, open **Format**, then **Text**. Next to **Bold**, **Italic**, and **Underline**, which show the same shortcuts on a computer, it has **Strikethrough**, **Superscript**, **Subscript**, and **Inline code**. Choose a style again on the same selection to remove it.
 
 ## Set text in capitals
 

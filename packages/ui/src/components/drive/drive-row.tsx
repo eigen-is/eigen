@@ -1,3 +1,7 @@
+// One row of the Drive table: the item's icon and name, with its owner, sharing, size and date in the
+// columns the container is wide enough for, and a ⋮ that opens the row menu. DriveTable draws one per
+// item and hands it the listing's controller for selection, drag and menus.
+
 import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types';
@@ -20,8 +24,7 @@ type DriveRowProps = {
     gridCols: string;
     coarse: boolean;
     controller: ReturnType<typeof useDriveItemController>;
-    // Stable bind from the list-level useLongPress (hoisted in DriveTable) — bind(item) yields the
-    // spreadable touch handlers for this row.
+    // The table's one useLongPress: bind(item) gives this row its touch handlers.
     longPressBind: ReturnType<typeof useLongPress<DrivePath>>['bind'];
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
@@ -33,7 +36,7 @@ type DriveRowProps = {
     hideActions?: boolean;
     getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
-    unreadPathIds?: Set<string>;
+    unreadPathIds?: ReadonlySet<string>;
 };
 
 export function DriveRow({

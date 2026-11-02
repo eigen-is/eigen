@@ -1,57 +1,49 @@
+// The list view of a Drive listing: a virtualized table with sortable column headers, rows and their
+// context menu. DriveList draws it in list mode, and the pickers draw it bare, without actions. It also
+// holds the shared props of both listing views and the sort rule the grid's sort menu reuses.
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
-import type { DrivePath } from '@workspace/lib/types';
-import type { DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
+import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
+import type { DrivePath, DriveSortDir, DriveSortKey } from '@workspace/lib/types/drive';
 import { nextSortDir, SortHeader, SortHeaderRow } from '@workspace/ui/components/sort-header';
 import { cn } from '@workspace/ui/lib/utils';
-import type React from 'react';
 import { useRef } from 'react';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { useLongPress } from '../../hooks/use-long-press';
+import type { DriveActionRunner } from './drive-action-runner';
 import { DriveItemContextMenu } from './drive-item-context-menu';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
 
-// Header/menu sort semantics, shared with drive-list's SortMenuItems (which imports these):
-// re-selecting the active field flips direction; switching field uses that field's default.
+// Re-selecting the active field flips the direction; switching field uses that field's default. The
+// grid's sort menu follows the same rule through nextDriveSort.
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
 export function nextDriveSort(key: DriveSortKey, sortKey: DriveSortKey, sortDir: DriveSortDir): DriveSortDir {
     return nextSortDir(key, sortKey, sortDir, DEFAULT_DIR).dir;
 }
 
-// Shared base for the drive views (table + grid): data, callbacks and selection inputs,
-// minus the table-only column flags. DriveGrid consumes this directly.
+// The props both listing views take, the table's column flags aside. DriveGrid takes exactly these.
 export type DriveViewProps = {
-    // Already sorted by the caller — the views render and navigate them as-is.
+    // Already sorted by the caller: the views render and navigate them in this order.
     items: DrivePath[];
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
-    onItemOpen?: (item: DrivePath) => void;
     isItemDisabled?: (item: DrivePath) => boolean;
     getItemHref?: (item: DrivePath) => string | undefined;
-    onShareClick?: (item: DrivePath) => void;
-    onDelete?: (items: DrivePath[]) => void;
-    onRename?: (item: DrivePath) => void;
-    onMove?: (item: DrivePath, targetItemId: string) => void;
-    onMoveTo?: (items: DrivePath[]) => void;
-    onCopyTo?: (items: DrivePath[]) => void;
-    onDuplicate?: (items: DrivePath[]) => void;
-    onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
-    onEmailCollaborators?: (item: DrivePath) => void;
-    allowDelete?: boolean;
-    // The listing's own write capability, carried into the subjects its menus act on.
-    canWrite?: boolean;
-    unreadPathIds?: Set<string>;
-    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    // What the rows' menus, keys and drops do. Absent in a picker.
+    actions?: DriveActionRunner;
+    unreadPathIds?: ReadonlySet<string>;
+    // Held by the caller, such as DriveList, so the selection survives a switch between list and grid.
     selection?: UseListSelectionReturn<DrivePath>;
-    // Fires whenever the internal shift/ctrl-aware selection changes — used by file pickers
-    // in multi-select mode to mirror the selection without reimplementing modifier handling.
+    // Called on every change of the selection, Shift and Ctrl clicks included. A multi-select picker
+    // mirrors the selection through it.
     onSelectionChange?: (items: DrivePath[]) => void;
-    // Replaces the default context-menu body — used by listings with their own actions (trash).
-    contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
+    // The rows of a listing with actions of its own, such as Trash, which its rows' menu draws instead.
+    ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
 };
 
 // Table view adds the column-layout flags the grid has no concept of.
@@ -61,22 +53,22 @@ export type DriveTableProps = DriveViewProps & {
     hideShared?: boolean;
     hideShareClick?: boolean;
     hideHeader?: boolean;
-    // Drop the ⋮ actions column (its grid track included) at every pointer type — used by the
-    // pickers (DriveBrowser), whose rows have no meaningful item actions to surface.
+    // Drops the ⋮ column and its grid track at every pointer type, for a picker such as DriveBrowser,
+    // whose rows have no actions.
     hideActions?: boolean;
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
     ancestorBreadcrumb?: DrivePath[];
-    externalSelectedIds?: Set<string>;
-    // Controlled sort: when provided, header clicks call onSortChange instead of writing the global
-    // view preference — used by the pickers so their sort stays local to the dialog.
+    externalSelectedIds?: ReadonlySet<string>;
+    // A controlled sort: a header click calls onSortChange instead of writing the shared view
+    // preference. A picker passes it, so its sort stays inside the dialog.
     sort?: { key: DriveSortKey; dir: DriveSortDir };
     onSortChange?: (sort: { key: DriveSortKey; dir: DriveSortDir }) => void;
 };
 
-// Static permutations so Tailwind's JIT sees every class; keyed by the visible optional columns.
-// The Size column joins the @[800px] tier (always present, right before Modified in DOM order),
-// so every combo carries an extra 10% track for it.
+// Every combination is written out, so Tailwind finds each class in the source. The key names the
+// optional columns that show. Size always shows from 800px on, right before Modified, so every
+// combination carries a 10% track for it.
 const GRID_COLS_800: Record<string, string> = {
     'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_15%_40px]',
     'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_40px]',
@@ -88,7 +80,7 @@ const GRID_COLS_800: Record<string, string> = {
     '': '@[800px]:grid-cols-[minmax(0,1fr)_10%_40px]',
 };
 
-// Same permutations without the trailing 40px kebab track, for `hideActions` (pickers).
+// The same combinations without the 40px track of the ⋮ column, for a picker's hideActions.
 const GRID_COLS_800_NO_ACTIONS: Record<string, string> = {
     'owner-shared-modified': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%_15%]',
     'owner-shared': '@[800px]:grid-cols-[minmax(0,1fr)_8%_10%_10%]',
@@ -104,21 +96,10 @@ export function DriveTable({
     items = [],
     activeItemId,
     onItemClick,
-    onItemOpen,
     isItemDisabled,
     getItemHref,
-    onShareClick,
-    onDelete,
-    onRename,
-    onMove,
-    onMoveTo,
-    onCopyTo,
-    onDuplicate,
-    onExport,
     onQuickLook,
-    onEmailCollaborators,
-    allowDelete = false,
-    canWrite = true,
+    actions,
     ancestorBreadcrumb,
     unreadPathIds,
     hideModified = false,
@@ -132,17 +113,16 @@ export function DriveTable({
     selection,
     externalSelectedIds,
     onSelectionChange,
-    contextMenuItems,
+    ownActions,
     sort,
     onSortChange,
 }: DriveTableProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const listRef = useRef<HTMLDivElement>(null);
 
-    // Uncontrolled (default): sort is the global view preference — header clicks mutate it exactly
-    // like the grid-mode dropdown, so every listing stays in sync without prop-drilling sort.
-    // Controlled (pickers): `sort`/`onSortChange` replace the hook path so clicks stay local and
-    // never write the global preference.
+    // By default the sort is the shared view preference, which a header click writes as the grid's
+    // sort menu does, so every listing sorts alike. A picker passes sort and onSortChange instead, and
+    // its clicks never write the preference.
     const prefs = useDriveViewPreferences();
     const sortKey = sort?.key ?? prefs.sortKey;
     const sortDir = sort?.dir ?? prefs.sortDir;
@@ -152,7 +132,7 @@ export function DriveTable({
         else prefs.setSort(key, dir);
     };
 
-    // Estimate only — every row is measured, since row height varies with the container-driven layout.
+    // A first guess only: every row is measured, as its height follows the container's width.
     const ROW_HEIGHT = 41;
     const virtualizer = useVirtualizer({
         count: items.length,
@@ -161,7 +141,7 @@ export function DriveTable({
         // Key the measurement cache by id so a re-sort moves cached heights with their rows.
         getItemKey: (index) => items[index].id,
         overscan: 12,
-        // List offset within the scroller — measured on the list wrapper, not the sticky header.
+        // The list's offset in the scroller, measured on the list itself rather than the sticky header.
         scrollMargin: listRef.current?.offsetTop ?? 0,
     });
 
@@ -173,17 +153,14 @@ export function DriveTable({
         selection,
         onItemClick,
         onQuickLook,
-        onMove,
         onSelectionChange,
-        onDelete,
-        allowDelete,
+        actions,
     });
 
-    // One long-press instance for the whole list — rows spread bind(item); disabled rows skip it.
+    // One long-press for the whole list: each row binds it to its item, and a disabled row doesn't.
     const longPress = useLongPress<DrivePath>((item, x, y) => controller.openContextMenuAt(item, x, y));
 
-    // On touch devices the row ⋮ has no hover/right-click affordance, so the 40px kebab
-    // column renders at every container width; on fine pointers the classes are unchanged.
+    // On touch nothing hovers and nothing right-clicks, so the 40px ⋮ column shows at every width.
     const coarse = useIsCoarsePointer();
     const colsKey = [!hideOwner && 'owner', !hideShared && 'shared', !hideModified && 'modified']
         .filter(Boolean)
@@ -276,7 +253,7 @@ export function DriveTable({
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
-                                onShareClick={onShareClick}
+                                onShareClick={actions && ((path) => actions.run('share', [path]))}
                                 hideOwner={hideOwner}
                                 hideShared={hideShared}
                                 hideModified={hideModified}
@@ -292,23 +269,7 @@ export function DriveTable({
             </div>
 
             {!hideActions && (
-                <DriveItemContextMenu
-                    controller={controller}
-                    items={items}
-                    getItemHref={getItemHref}
-                    onItemOpen={onItemOpen}
-                    onExport={onExport}
-                    onRename={onRename}
-                    onMoveTo={onMoveTo}
-                    onCopyTo={onCopyTo}
-                    onDuplicate={onDuplicate}
-                    onShareClick={onShareClick}
-                    onEmailCollaborators={onEmailCollaborators}
-                    onDelete={onDelete}
-                    allowDelete={allowDelete}
-                    canWrite={canWrite}
-                    renderItems={contextMenuItems}
-                />
+                <DriveItemContextMenu controller={controller} items={items} actions={actions} ownActions={ownActions} />
             )}
         </div>
     );

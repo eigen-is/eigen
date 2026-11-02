@@ -1,20 +1,24 @@
+// The row wiring every Drive list route shares, such as the folder view or Shared with me: what a row
+// does when it is selected, activated or quick-looked. A route passes its items and capabilities, where
+// a folder opens and where a selected row navigates, and hands the handlers to DriveLayout.
+
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
 import { subjectFromPath } from '@workspace/lib/file-subject';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import { isDocumentType, isFolderType, isInlineEditable } from '@workspace/lib/types/drive';
 import { useLayout } from '../layout/app/layout-context';
 import { usePreview } from '../preview-provider';
-import type { DriveCapabilities } from './drive-capabilities';
+import { useDriveQuickLook } from './use-drive-quick-look';
 
 type UseDriveListRouteOptions = {
-    // The unsorted items backing the list — the fallback preview passes this whole set as siblings.
+    // The unsorted items backing the list: the fallback preview passes this whole set as siblings.
     items: DrivePath[];
     // The view's own capabilities: the preview's convert rows need somewhere to write.
-    capabilities: Pick<DriveCapabilities, 'canWrite'>;
-    // Folder-branch target: fs stays in-route, shared/watched jump to /fs, mime clears the selection.
+    capabilities: DriveCapabilities;
+    // Where a folder opens: the folder view, for example, stays in its own route.
     onOpenFolder: (path: DrivePath) => void;
-    // Desktop row-select target: where a single click on a non-openable row navigates.
+    // Where a single click on a desktop row navigates.
     onSelectItem: (path: DrivePath) => void;
 };
 
@@ -24,11 +28,9 @@ type DriveListRouteHandlers = {
     onQuickLook: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
 };
 
-// Shared scaffold for the four Drive list routes (fs, mime, shared, watched). Every view runs the
-// same row wiring — quick-look opens the preview; a row activates by kind (folder → route,
-// eigen-doc → openDocument, inline-editable → /edit, else preview); selecting a row updates an open
-// preview and, on mobile, activates folders/docs straight away. Only the folder target and the
-// desktop select target vary, so the routes pass those two closures and keep the rest here.
+// A row activates by its kind: a folder opens in the route, a document in its app, an editable text file
+// in the editor, anything else in the preview. Selecting a row updates an open preview, and on mobile a
+// folder or a document opens straight away.
 export function useDriveListRoute({
     items,
     capabilities,
@@ -38,12 +40,9 @@ export function useDriveListRoute({
     const navigate = useNavigate();
     const { isMobile } = useLayout();
     const { openPreview, updatePreview, isPreviewOpen } = usePreview();
+    const onQuickLook = useDriveQuickLook(capabilities.canWrite);
 
     const subjectOf = (path: DrivePath) => subjectFromPath(path, capabilities.canWrite);
-
-    const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
-        openPreview(subjectOf(path), sortedSiblings.map(subjectOf));
-    };
 
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {

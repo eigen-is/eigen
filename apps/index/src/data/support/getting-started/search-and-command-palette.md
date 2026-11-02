@@ -6,7 +6,7 @@ category: Basics
 tags: [search, command-palette, navigation, getting-started]
 related: [getting-started/your-first-steps, account/light-and-dark-theme, drive/get-started]
 order: 3
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Eigen has one box that searches your files and email, jumps to any app, and runs quick actions. It's called the command palette, and you reach it from anywhere with a single keystroke. This page shows you how to open it and what it can do.
@@ -77,9 +77,9 @@ The palette understands a couple of things you paste in:
 
 ## Act on a file you've selected
 
-In Drive, select a file or folder first, then open the palette. The actions for that item appear at the top under a **Selection** heading, named after what you picked. From there you can **Share** it, **Rename** it, **Copy link** to it, **Download** it, **Move to trash**, and more, without leaving the keyboard.
+In Drive, select a file or folder first, then open the palette. The actions for that item appear at the top under a **Selection** heading, each with the item's name beside it. They're the actions of the item's right-click menu, under the same names: you can **Open** it, **Rename** it, **Duplicate** it, **Move to…** or **Copy to…** another folder, **Share** it, **Copy link**, **Watch** it, **Move to trash**, and more, without leaving the keyboard. With several items selected you get the actions that work on all of them, such as **Move 3 items to trash**. **Email collaborators** shows only for an item someone else can see, and a file that can be converted or imported offers the same convert and import actions as its menu, such as **Convert to sheet** or **Import to Contacts**. In the trash, the palette offers **Restore** and **Delete permanently**.
 
-Inside a document, the palette acts on the document you have open. Type "download" to see a row for each format the **File → Download** menu offers, named after the document, such as **Download Budget as Microsoft Word (.docx)**. A document selected in Drive offers the same rows.
+Inside a document, the palette acts on the document you have open. It offers **Rename**, **Share**, **Email collaborators** and **Move to trash** from the **File** menu, plus **Copy link** and **Mail to…**, each only where you may use it. Type "download" to see a row for each format the **File → Download** menu offers, such as **Download as Microsoft Word (.docx)**. If you can only read the document, you get the download rows, **Copy link** and **Mail to…**. A document selected in Drive offers the same rows.
 
 <div class="eigen-callout">
 

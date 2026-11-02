@@ -1,3 +1,7 @@
+// The palette's smart rows: what the typed text itself suggests. A whole email address or web link
+// claims the Top hit with Mail to or Open link, and a matching contact adds Send mail to rows under
+// Suggestions. With a selection the page offers to mail, the mail rows send those files along.
+
 import type { CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { ExternalLink, Mail } from 'lucide-react';
@@ -6,16 +10,9 @@ import { useContactSuggestions } from '../../contacts';
 import { parseQuery } from '../parse-query';
 import { parseSmartInput } from '../parse-smart-input';
 
-// Smart-suggestion ranks. Two tiers:
-//   - DETERMINISTIC (1000): unambiguous input shapes (a full email, a URL). These
-//     claim the Top Hit outright.
-//   - CONTACT_* (500-tier): non-deterministic contact-derived rows. They live in
-//     the Suggestions section below the Top Hit. CONTACT_WITH_ATTACH ranks one
-//     above CONTACT_PLAIN so users with a live Drive selection see
-//     "Send <files> to <email>" first.
-//
-// Local to this file — smart ranks never compete with catalog baseRanks (different
-// kind, different section); see commands/base-ranks.ts for the catalog tiers.
+// A sure shape, a whole email address or URL, claims the Top hit outright. A row from a matching
+// contact sits under Suggestions, and the one that sends the selected files ranks first there. These
+// ranks never compete with the catalog's base ranks, because they sort another section.
 const SMART_RANKS = {
     DETERMINISTIC: 1000,
     CONTACT_WITH_ATTACH: 501,
@@ -23,19 +20,19 @@ const SMART_RANKS = {
 } as const;
 
 export function useSmartResults(ctx: CommandContext, input: string): PaletteResult[] {
-    // Same shared hook the autosuggest UIs use — picks up personal contacts AND
-    // team members so typing a teammate's name also triggers the "Send mail to <email>"
-    // suggestion under Top Hit. Feed it the scope-stripped query so `mail: alice`
-    // matches contacts named "alice", not the literal "mail: alice".
+    // The query without its scope prefix, so `mail: alice` matches the contact Alice.
     const { suggestions } = useContactSuggestions(parseQuery(input).q);
 
     return useMemo(() => {
         const out: PaletteResult[] = [];
         const parsed = parseSmartInput(input);
+        // The selected files go along only where the page offers to mail them; Trash, for one, does not.
+        const items = ctx.selectionActions?.some(({ action }) => action.id === 'mail-to')
+            ? (ctx.selection?.items ?? [])
+            : [];
 
-        // Whole-input email or URL shape — deterministic claim on Top Hit.
+        // A whole email address or URL claims the Top hit.
         if (ctx.mailEnabled && parsed?.kind === 'email') {
-            const items = ctx.selection?.items ?? [];
             if (items.length > 0) {
                 const title =
                     items.length === 1
@@ -78,14 +75,11 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
             });
         }
 
-        // Top contact suggestion → derived smart rows. Non-deterministic so the contact
-        // card itself still claims the Top Hit via structural match; these rows sit in
-        // the Suggestions section directly under it. Skip when the typed input is
-        // already the suggestion's email (the deterministic path above covers it).
+        // The top contact adds rows under Suggestions, never the Top hit, so the contact card itself can
+        // claim it. A typed address that is already the contact's has its row from above.
         const top = suggestions[0];
         if (ctx.mailEnabled && top && parsed?.value !== top.email) {
-            // Plain compose, no attachments — always offered when a contact matches so
-            // the user can send a clean mail even with a Drive selection live.
+            // A mail without attachments, offered even with a selection, for a mail about something else.
             out.push({
                 kind: 'smart',
                 id: `smart.mail-to-contact-${top.id}`,
@@ -96,10 +90,6 @@ export function useSmartResults(ctx: CommandContext, input: string): PaletteResu
                 deterministic: false,
                 run: (rctx) => rctx.openMailComposeWith({ to: top.email }),
             });
-            // When a Drive selection is published, additionally offer the attach-aware
-            // variant. Ranked above the plain row so users with a live selection see
-            // "send these files" first.
-            const items = ctx.selection?.items ?? [];
             if (items.length > 0) {
                 const title =
                     items.length === 1

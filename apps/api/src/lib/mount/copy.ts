@@ -1,9 +1,10 @@
 // Copies a file or folder inside one mount. A folder is created again and walked item by item,
 // so a copied Eigen document keeps its type but starts without its old version history. A file is
 // saved again from a fresh temp copy, and the copy gets its own search entry and thumbnail. It
-// also records where each copy came from. Mount.copyPath calls it.
+// also records where each copy came from. Mount.copyPath calls it, and a copy between mounts has its
+// own walk, copyPathAcross.
 
-import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { storageGone } from '../core';
 import { copyThumbnail } from '../shared/thumbnails';
@@ -12,14 +13,36 @@ import { isVersionsFolder } from '../versioning/versions-folder';
 import type { Mount } from './mount';
 import { markContentDirty } from './search-index';
 
-// Recursive same-mount copy on one storage backend — the fast path next to the
-// cross-mount bridge in drive/copy-across.ts. Containers are recreated (typed) and
-// walked; files are re-uploaded from a freshest-first temp copy.
 export async function copyPath(
     mount: Mount,
     srcPathId: string,
     destParentId: string,
     name: string,
+    actor?: { id: string; email: string },
+): Promise<DrivePath> {
+    // The walk creates the top folder before anything else, so it is the first one here.
+    const createdFolderIds: string[] = [];
+    try {
+        return await copyTree(mount, srcPathId, destParentId, name, createdFolderIds, actor);
+    } catch (e) {
+        // A copy that fails part way removes its folder, so each retry does not leave another half-built
+        // one. The source is untouched and the folder holds only this copy, so there is nothing to keep.
+        const topId = createdFolderIds[0];
+        if (topId) {
+            await mount.deletePath(topId).catch((cleanupErr: unknown) => {
+                console.warn(`[copy] Could not remove the failed copy ${topId}:`, cleanupErr);
+            });
+        }
+        throw e;
+    }
+}
+
+async function copyTree(
+    mount: Mount,
+    srcPathId: string,
+    destParentId: string,
+    name: string,
+    createdFolderIds: string[],
     actor?: { id: string; email: string },
 ): Promise<DrivePath> {
     const src = await mount.getActivePath(srcPathId);
@@ -32,21 +55,17 @@ export async function copyPath(
     if (isContainerType(src.type)) {
         const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
         if (isEigenDoc) await mount.flushContainerDb(srcPathId);
-        const containerType: DriveContainerType | undefined = isEigenDoc ? src.type : undefined;
-        const newId = await mount.createFolder(destParentId, name, containerType);
+        const newId = await mount.createFolder(destParentId, name, src.type);
+        createdFolderIds.push(newId);
         if (actor) {
             mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }
-        const children = await mount.listFolder(srcPathId);
-        for (const child of children) {
-            // Inside an eigen-doc container, versions/ is snapshot history — a
-            // fresh copy starts clean rather than inheriting old snapshots.
+        for (const child of await mount.listFolder(srcPathId)) {
             if (isEigenDoc && isVersionsFolder(child)) continue;
-            await copyPath(mount, child.id, newId, child.name, actor);
+            await copyTree(mount, child.id, newId, child.name, createdFolderIds, actor);
         }
-        // The copied container's data.db is byte-copied as raw bytes — no onSync fires
-        // for the new container, so mark it dirty here and kick the reindexer to extract its
-        // body. Plain folders have no body and stay unmarked.
+        // The data.db arrives as plain bytes, so no sync tells search about the new document. It is
+        // marked for the reindexer here instead.
         if (isEigenDoc) {
             markContentDirty(mount, newId);
             mount.reindexQueue?.markDirty(newId);
@@ -54,13 +73,12 @@ export async function copyPath(
         return mount.getActivePath(newId);
     }
 
-    // Freshest-first source: readFile surfaces an un-acked pending upload's staged bytes (a
-    // just-created / outage-staged data.db) rather than the possibly-stale-or-absent storage
-    // object. The container branch above flushed the doc first, so its pending staging holds the
-    // current bytes; a regular file is staged only by a home restore whose upload has not acked yet.
+    // readFile reads the freshest copy, such as the staged bytes of an upload the bucket has not
+    // acknowledged yet. For a document's data.db, the flush of its container put the latest edits there.
     const tempId = crypto.randomUUID();
     try {
-        // Under the tree lock, as the open: on `local` an ancestor rename racing the read would read as gone.
+        // The read holds the tree lock shared. On `local` a rename of a folder above it would otherwise
+        // make the file read as gone.
         const { size, hash } = await mount.withTreeShared(async () => {
             const srcFile = await mount.readFile(srcPathId);
             if (!srcFile) throw storageGone();

@@ -1,3 +1,6 @@
+// The command palette's shared types: a command and the context it runs with, what a page publishes
+// as its selection and the rows bound to it, and the results the sources hand the engine to merge.
+
 import type { LucideIcon } from 'lucide-react';
 import type { ContactSuggestion } from './contact';
 import type {
@@ -8,12 +11,14 @@ import type {
     DocSearchSession,
 } from './doc-search';
 import type { DrivePath, EigenDocType, ExportFormat } from './drive';
+import type { DriveActionGroup } from './drive-actions';
+import type { FileActionGroup } from './file-subject';
 import type { EmailSummary } from './mail';
 import type { HelpSearchDoc } from './search';
 
 export type PaletteScope = 'mail' | 'file' | 'doc' | 'actions' | 'contacts' | 'help';
 
-export type ResultGroup =
+type ResultGroup =
     | 'top-hit'
     | 'suggested'
     | 'smart'
@@ -26,66 +31,64 @@ export type ResultGroup =
     | 'help'
     | 'actions';
 
-// A 1-item selection from an eigendoc viewer is identical in shape to a 1-item
-// Drive selection — both surface the same actions (Share, Mail to…, Copy link, …).
-// `isCurrentDocument` flags the eigendoc-viewer case so the "view this file" commands
-// (Open / Open in new tab / Quick preview) hide — you're already inside it.
-export type PaletteSelection = { items: DrivePath[]; isCurrentDocument?: boolean } | null;
+// What a page has selected: Drive's selected rows, or the open document as a one-item selection.
+export type PaletteSelection = { items: readonly DrivePath[] } | null;
 
-// Handlers a route publishes alongside the selection. Pure cross-app actions (Open
-// in new tab, Copy link, Mail to…) live in the catalog and don't need this — only
-// actions that depend on route-local dialog state (Rename, Share, Delete, Download,
-// Download as, Email collaborators) come through here. Quick preview is global (via openPreview
-// on CommandContext) and not part of this surface.
-export type PaletteSelectionActions = {
-    onDownload?: (item: DrivePath) => void;
-    onExport?: (item: DrivePath, format: ExportFormat) => void;
-    onRename?: (item: DrivePath) => void;
-    onShare?: (item: DrivePath) => void;
-    onEmailCollaborators?: (item: DrivePath) => void;
-    onDelete?: (items: DrivePath[]) => void;
-} | null;
+// One row a page offers for its selection, already bound to those items: the menu row it draws, whose
+// label and icon the palette shows, and the run that performs it. The row's menu group orders the
+// palette's rows as the menu orders them. Download as names its format.
+export type PaletteSelectionAction = {
+    action: {
+        id: string;
+        label: string;
+        pluralLabel?: string;
+        icon: LucideIcon;
+        group: DriveActionGroup | FileActionGroup;
+    };
+    run: (format?: ExportFormat) => void;
+};
 
-// The bag command handlers receive. Bundles app-aware navigation + the helpers
-// commands actually need to run their side effects. Other helpers are added when a
-// real caller needs them.
+// The rows a page publishes with its selection, such as Drive's item menu or an open document's File menu.
+export type PaletteSelectionActions = readonly PaletteSelectionAction[] | null;
+
+// What a command's handler receives: navigation that knows which app it runs in, and the helpers the
+// commands need for their side effects. A helper is added here once a command needs it.
 export type CommandContext = {
     ownerId: string;
-    // False on a server that runs without hosted mail — every Mail-flavored command and provider
-    // gates on it, so no palette row leads into an app that isn't there.
+    // False on a server without hosted mail. Every command and source that leads into Mail checks it, so
+    // no palette row leads into an app that isn't there.
     mailEnabled: boolean;
     selection: PaletteSelection;
     selectionActions: PaletteSelectionActions;
-    // The open eigendoc's search controller (published by DocSearchProvider). null in the drive
-    // list and non-eigendoc apps. Drives the palette `doc:` scope; Enter opens the find bar.
+    // The open document's search controller, which DocSearchProvider publishes. It is null where no
+    // document is open, such as in Drive. The palette's doc: scope searches through it, and Enter opens
+    // the find bar.
     docSearch: DocSearchController | null;
-    // The DocSearchProvider's find-bar session; an IN DOCUMENT hit's Enter/click adopts the query
-    // and reveals the match here. null when no eigendoc is open.
+    // The find bar's session in DocSearchProvider. Picking an In document hit hands it the query and
+    // shows the match there. It is null when no document is open.
     docSearchSession: DocSearchSession | null;
-    // Async comment-thread search for the open eigendoc; null when no document publishes it.
+    // The search through the open document's comment threads, null when no document publishes one.
     docCommentSearch: DocCommentSearch;
     navigate: (to: string) => void;
     openDriveCreate: (kind: EigenDocType | 'folder') => void;
-    openMailComposeWith: (opts: { to?: string; attachments?: DrivePath[] }) => void;
+    openMailComposeWith: (opts: { to?: string; attachments?: readonly DrivePath[] }) => void;
     openPreview: (path: DrivePath) => void;
     toggleTheme: () => void;
 };
 
-// Static catalog entry. Engine wraps these into `PaletteResult` of kind 'action'
-// after applying availability + boosts. `group: 'selection'` marks selection-aware
-// commands — they only surface when a selection is present and render in the top
-// "Selection" section instead of the catalog's "Actions" section. `dynamicTitle` lets
-// a selection command tailor its label to the current item(s) — "Share Q4-budget"
-// rather than a generic "Share".
+// A catalog entry. The engine wraps these into a `PaletteResult` of kind 'action' after applying
+// availability and boosts. `group: 'selection'` marks a command built from the rows a page published:
+// it renders in the "Selection" section instead of the catalog's "Actions" section, and its subtitle
+// names the selected item.
 export type Command = {
     id: string;
     title: string;
+    subtitle?: string;
     keywords?: string[];
     icon: LucideIcon;
     baseRank?: number;
     group?: 'actions' | 'selection';
     availability?: (ctx: CommandContext) => boolean;
-    dynamicTitle?: (ctx: CommandContext) => string;
     run: (ctx: CommandContext) => void;
 };
 

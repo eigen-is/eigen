@@ -8,11 +8,11 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { SQL } from 'drizzle-orm';
 import { and, desc, eq, isNotNull, isNull, sql } from 'drizzle-orm';
 import { ApiError } from '../core';
-import { getUniqueFileName } from '../drive/naming';
+import { folderIn, withFreeName } from '../drive/naming';
 import { closeCachedDbsUnder } from './document-db';
 import { renameThenWriteRow, rethrowPathWriteError } from './helpers';
 import type { Mount } from './mount';
-import { foldName, isReservedName, trashStorageKey } from './names';
+import { isReservedName, trashStorageKey } from './names';
 import { paths } from './schema';
 
 export async function trashPath(mount: Mount, pathId: string): Promise<DrivePath> {
@@ -116,73 +116,65 @@ export async function restorePath(mount: Mount, pathId: string): Promise<DrivePa
                 ? root.id
                 : trashedFrom;
 
-            // A row named `.trash` from before the name rule counts as a conflict too, because restoring
-            // it under that name would alias the real trash folder. The row is still trashed, so it never
-            // matches itself.
-            let restoreName = row.name;
-            const conflict =
-                isReservedName(restoreName) || (await mount.getChildByName(targetParentId, restoreName)) !== null;
-            if (conflict) {
-                const siblings = await mount.db
-                    .select({ name: paths.name })
-                    .from(paths)
-                    .where(and(eq(paths.parentId, targetParentId), isNull(paths.trashedAt)))
-                    .all();
-                const usedNames = new Set(siblings.map((s) => foldName(s.name)));
-                restoreName = getUniqueFileName(row.name, usedNames);
-            }
-
-            const now = new Date();
-            // Off `local` no lock keeps a trash of the target folder out, so the check shares the
-            // transaction of the row write.
-            const writeRow = async (): Promise<void> => {
-                try {
-                    mount.db.transaction((tx) => {
-                        const error = mount.targetFolderErrorInTx(tx, pathId, targetParentId);
-                        if (error) throw error;
-                        tx.update(paths)
-                            .set({
-                                parentId: targetParentId,
-                                trashedAt: null,
-                                trashedFrom: null,
-                                name: restoreName,
-                                ...(mount.isPathBased ? { file: restoreName } : {}),
-                                updatedAt: now,
-                            })
-                            .where(eq(paths.id, pathId))
-                            .run();
-                    });
-                } catch (e) {
-                    rethrowPathWriteError(e, restoreName);
-                }
+            // A row named `.trash` from before the name rule counts as taken too, because restoring it under
+            // that name would alias the real trash folder. The row is still trashed, so it never matches itself.
+            const folder = {
+                ...folderIn(mount, targetParentId),
+                isTaken: (name: string) => isReservedName(name) || mount.hasLiveChild(targetParentId, name),
             };
-
-            if (mount.isPathBased && mount.storage.rename) {
-                const rename = mount.storage.rename.bind(mount.storage);
-                const parentKey = await mount.getStorageKey(targetParentId);
-                const targetKey = parentKey ? `${parentKey}/${restoreName}` : restoreName;
-                const currentKey = await mount.getStorageKey(pathId);
-                // The mirror of trash. Bytes at the target alone are this item's, left by a restore whose row
-                // write was lost. Beside bytes still in the trash they are a leftover, unless a live row's
-                // name points at them on disk.
-                const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
-                if (occupant === 'live') {
-                    throw new ApiError(
-                        409,
-                        `"${restoreName}" is taken on disk by another item; rename that, then restore`,
-                    );
-                }
-                if (occupant === 'leftover' && !onDisk(mount, currentKey)) {
-                    await writeRow();
-                } else {
-                    if (occupant === 'leftover') {
-                        await moveAside(rename, targetKey, trashStorageKey(pathId, restoreName));
+            const now = new Date();
+            await withFreeName(folder, row.name, async (restoreName) => {
+                // Off `local` no lock keeps a trash of the target folder out, so the check shares the
+                // transaction of the row write.
+                const writeRow = async (): Promise<void> => {
+                    try {
+                        mount.db.transaction((tx) => {
+                            const error = mount.targetFolderErrorInTx(tx, pathId, targetParentId);
+                            if (error) throw error;
+                            tx.update(paths)
+                                .set({
+                                    parentId: targetParentId,
+                                    trashedAt: null,
+                                    trashedFrom: null,
+                                    name: restoreName,
+                                    ...(mount.isPathBased ? { file: restoreName } : {}),
+                                    updatedAt: now,
+                                })
+                                .where(eq(paths.id, pathId))
+                                .run();
+                        });
+                    } catch (e) {
+                        rethrowPathWriteError(e, restoreName);
                     }
-                    await renameThenWriteRow(rename, currentKey, targetKey, writeRow);
+                };
+
+                if (mount.isPathBased && mount.storage.rename) {
+                    const rename = mount.storage.rename.bind(mount.storage);
+                    const parentKey = await mount.getStorageKey(targetParentId);
+                    const targetKey = parentKey ? `${parentKey}/${restoreName}` : restoreName;
+                    const currentKey = await mount.getStorageKey(pathId);
+                    // The mirror of trash. Bytes at the target alone are this item's, left by a restore whose
+                    // row write was lost. Beside bytes still in the trash they are a leftover, unless a live
+                    // row's name points at them on disk.
+                    const occupant = await renameTarget(mount, targetParentId, targetKey, currentKey);
+                    if (occupant === 'live') {
+                        throw new ApiError(
+                            409,
+                            `"${restoreName}" is taken on disk by another item; rename that, then restore`,
+                        );
+                    }
+                    if (occupant === 'leftover' && !onDisk(mount, currentKey)) {
+                        await writeRow();
+                    } else {
+                        if (occupant === 'leftover') {
+                            await moveAside(rename, targetKey, trashStorageKey(pathId, restoreName));
+                        }
+                        await renameThenWriteRow(rename, currentKey, targetKey, writeRow);
+                    }
+                } else {
+                    await writeRow();
                 }
-            } else {
-                await writeRow();
-            }
+            });
 
             if (row.type !== 'file') {
                 restoreDescendants(mount, pathId, now);
