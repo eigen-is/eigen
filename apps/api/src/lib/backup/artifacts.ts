@@ -28,7 +28,8 @@ export async function listArtifacts(ownerId: string): Promise<BackupArtifact[]> 
         try {
             bytes = (await fsp.stat(artifactPath)).size;
         } catch {
-            continue; // deleted while this folder was being read
+            // Deleted while this folder was being read.
+            continue;
         }
         // A sidecar that does not read lists the archive as unverified, so one bad file does not blank the page.
         const sidecar = await readSidecar(artifactPath);
@@ -79,14 +80,14 @@ const ALREADY_THERE = 'That artifact is already in the backups folder';
 // An uploaded archive, from a body the route has only checked the length of to a listed artifact
 // with a sidecar: stream it into staging, land it under its final name, and read the manifest out
 // of what landed. The whole sequence is here rather than in the route because every step of it can
-// leave a file behind. The route hands over the body and gets back the name it can answer with.
+// leave a file behind.
 export async function landUpload(body: ReadableStream<Uint8Array>, name: string, declared: number): Promise<void> {
     const { artifactPath, ownerId } = resolveArtifact(name);
     if (fs.existsSync(artifactPath)) throw new ApiError(409, ALREADY_THERE);
 
     // Staged next to the backups folder so the landing below is one filesystem operation: an
     // interrupted upload never leaves a short archive under a name the list would offer for
-    // restore. writeTempWithHash is the stream-into-a-temp seam; its sha256 is incidental.
+    // restore. writeTempWithHash streams the body into the temp file, and its sha256 goes unused.
     const tempPath = getBackupTempPath(BACKUP_ARTIFACT_EXTENSION);
     try {
         // Made before the first byte, since the stream writes into the file it finds and keeps its mode.
