@@ -4,7 +4,6 @@
 
 import { useQueryClient } from '@tanstack/react-query';
 import { TEXT_PREVIEW_MAX_BYTES } from '@workspace/lib/constants';
-import { downloadDriveFile } from '@workspace/lib/download';
 import { useCheckPermissions, useTextPreview } from '@workspace/lib/drive';
 import { invalidateEditorContent, useFileContent } from '@workspace/lib/editor';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -48,8 +47,6 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
         setEditing(false);
     };
 
-    const handleDownload = () => downloadDriveFile(path);
-
     if (isLoading && !preview) {
         return <LoadingState />;
     }
@@ -60,7 +57,7 @@ export function NativeFileEditor({ path, onClose }: NativeFileEditorProps) {
 
     const detailColumn = !isMobile && (
         <Column id="detail" width="400px" toolbar={<DriveDetailToolbar />}>
-            <DriveDetail path={path} onDownload={handleDownload} />
+            <DriveDetail path={path} />
         </Column>
     );
 

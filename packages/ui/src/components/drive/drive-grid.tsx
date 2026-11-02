@@ -1,3 +1,6 @@
+// The grid view of a Drive listing: virtualized tiles in as many columns as fit, with the same
+// selection, keys and context menu as the table. DriveList draws it in grid mode.
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { DrivePath } from '@workspace/lib/types';
 import { useRef } from 'react';
@@ -18,21 +21,10 @@ export function DriveGrid({
     items = [],
     activeItemId,
     onItemClick,
-    onItemOpen,
     isItemDisabled,
     getItemHref,
-    onShareClick,
-    onDelete,
-    onRename,
-    onMove,
-    onMoveTo,
-    onCopyTo,
-    onDuplicate,
-    onExport,
     onQuickLook,
-    onEmailCollaborators,
-    allowDelete = false,
-    canWrite = true,
+    actions,
     selection,
     onSelectionChange,
     contextMenuItems,
@@ -62,10 +54,8 @@ export function DriveGrid({
         selection,
         onItemClick,
         onQuickLook,
-        onMove,
         onSelectionChange,
-        onDelete,
-        allowDelete,
+        actions,
     });
 
     // One long-press instance for the whole grid — tiles spread bind(item); disabled tiles skip it.
@@ -121,18 +111,7 @@ export function DriveGrid({
             <DriveItemContextMenu
                 controller={controller}
                 items={items}
-                getItemHref={getItemHref}
-                onItemOpen={onItemOpen}
-                onExport={onExport}
-                onRename={onRename}
-                onMoveTo={onMoveTo}
-                onCopyTo={onCopyTo}
-                onDuplicate={onDuplicate}
-                onShareClick={onShareClick}
-                onEmailCollaborators={onEmailCollaborators}
-                onDelete={onDelete}
-                allowDelete={allowDelete}
-                canWrite={canWrite}
+                actions={actions}
                 renderItems={contextMenuItems}
             />
         </div>

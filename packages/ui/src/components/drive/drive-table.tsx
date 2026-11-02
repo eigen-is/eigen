@@ -1,3 +1,7 @@
+// The list view of a Drive listing: a virtualized table with sortable column headers, rows and their
+// context menu. DriveList draws it in list mode, and the pickers draw it bare, without actions. It also
+// holds the shared props of both listing views and the sort rule the grid's sort menu reuses.
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsCoarsePointer } from '@workspace/lib/media';
@@ -10,47 +14,36 @@ import { useRef } from 'react';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { useLongPress } from '../../hooks/use-long-press';
 import { DriveItemContextMenu } from './drive-item-context-menu';
+import type { DriveActionRunner } from './drive-layout-dialogs';
 import { DriveRow } from './drive-row';
 import { useDriveItemController } from './use-drive-item-controller';
 
-// Header/menu sort semantics, shared with drive-list's SortMenuItems (which imports these):
-// re-selecting the active field flips direction; switching field uses that field's default.
+// Re-selecting the active field flips the direction; switching field uses that field's default. The
+// grid's sort menu follows the same rule through nextDriveSort.
 const DEFAULT_DIR: Record<DriveSortKey, DriveSortDir> = { name: 'asc', modified: 'desc', size: 'desc' };
 
 export function nextDriveSort(key: DriveSortKey, sortKey: DriveSortKey, sortDir: DriveSortDir): DriveSortDir {
     return nextSortDir(key, sortKey, sortDir, DEFAULT_DIR).dir;
 }
 
-// Shared base for the drive views (table + grid): data, callbacks and selection inputs,
-// minus the table-only column flags. DriveGrid consumes this directly.
+// The props both listing views take, the table's column flags aside. DriveGrid takes exactly these.
 export type DriveViewProps = {
     // Already sorted by the caller — the views render and navigate them as-is.
     items: DrivePath[];
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
-    onItemOpen?: (item: DrivePath) => void;
     isItemDisabled?: (item: DrivePath) => boolean;
     getItemHref?: (item: DrivePath) => string | undefined;
-    onShareClick?: (item: DrivePath) => void;
-    onDelete?: (items: DrivePath[]) => void;
-    onRename?: (item: DrivePath) => void;
-    onMove?: (item: DrivePath, targetItemId: string) => void;
-    onMoveTo?: (items: DrivePath[]) => void;
-    onCopyTo?: (items: DrivePath[]) => void;
-    onDuplicate?: (items: DrivePath[]) => void;
-    onExport?: (item: DrivePath, format: string) => void;
     onQuickLook?: (item: DrivePath) => void;
-    onEmailCollaborators?: (item: DrivePath) => void;
-    allowDelete?: boolean;
-    // The listing's own write capability, carried into the subjects its menus act on.
-    canWrite?: boolean;
-    unreadPathIds?: Set<string>;
+    // What the rows' menus, keys and drops do. Absent in a picker.
+    actions?: DriveActionRunner;
+    unreadPathIds?: ReadonlySet<string>;
     // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
     selection?: UseListSelectionReturn<DrivePath>;
     // Fires whenever the internal shift/ctrl-aware selection changes — used by file pickers
     // in multi-select mode to mirror the selection without reimplementing modifier handling.
     onSelectionChange?: (items: DrivePath[]) => void;
-    // Replaces the default context-menu body — used by listings with their own actions (trash).
+    // Replaces the default context-menu body, for a listing with actions of its own (Trash).
     contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
 };
 
@@ -104,21 +97,10 @@ export function DriveTable({
     items = [],
     activeItemId,
     onItemClick,
-    onItemOpen,
     isItemDisabled,
     getItemHref,
-    onShareClick,
-    onDelete,
-    onRename,
-    onMove,
-    onMoveTo,
-    onCopyTo,
-    onDuplicate,
-    onExport,
     onQuickLook,
-    onEmailCollaborators,
-    allowDelete = false,
-    canWrite = true,
+    actions,
     ancestorBreadcrumb,
     unreadPathIds,
     hideModified = false,
@@ -173,10 +155,8 @@ export function DriveTable({
         selection,
         onItemClick,
         onQuickLook,
-        onMove,
         onSelectionChange,
-        onDelete,
-        allowDelete,
+        actions,
     });
 
     // One long-press instance for the whole list — rows spread bind(item); disabled rows skip it.
@@ -276,7 +256,7 @@ export function DriveTable({
                                 disabled={isItemDisabled?.(item) ?? false}
                                 getItemHref={getItemHref}
                                 onItemClick={onItemClick}
-                                onShareClick={onShareClick}
+                                onShareClick={actions && ((path) => actions.run('share', [path]))}
                                 hideOwner={hideOwner}
                                 hideShared={hideShared}
                                 hideModified={hideModified}
@@ -295,18 +275,7 @@ export function DriveTable({
                 <DriveItemContextMenu
                     controller={controller}
                     items={items}
-                    getItemHref={getItemHref}
-                    onItemOpen={onItemOpen}
-                    onExport={onExport}
-                    onRename={onRename}
-                    onMoveTo={onMoveTo}
-                    onCopyTo={onCopyTo}
-                    onDuplicate={onDuplicate}
-                    onShareClick={onShareClick}
-                    onEmailCollaborators={onEmailCollaborators}
-                    onDelete={onDelete}
-                    allowDelete={allowDelete}
-                    canWrite={canWrite}
+                    actions={actions}
                     renderItems={contextMenuItems}
                 />
             )}

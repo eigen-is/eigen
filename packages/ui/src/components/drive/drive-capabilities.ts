@@ -1,21 +1,8 @@
-import type { EigenDocType } from '@workspace/lib/types/drive';
+// The capability presets a Drive view starts from: the full folder browser, a flat listing and a
+// read-only feed. A view picks one, spreads in its own overrides and hands the value to DriveLayout,
+// whose action runner gates every Drive action on it.
 
-// What a DriveLayout view lets the user do. Each render site declares its whole
-// capability set as one value — a preset below, optionally spread with overrides.
-export type DriveCapabilities = {
-    canCreateFolder: boolean;
-    canUpload: boolean;
-    // May write where the listed items sit — a convert saves the new document beside its source.
-    canWrite: boolean;
-    canDelete: boolean;
-    canRename: boolean;
-    canMove: boolean;
-    canShare: boolean;
-    // The fs browser shows the folder breadcrumb; filtered views show a title instead.
-    showBreadcrumb: boolean;
-    // Omit to allow creating every EigenDocType; an empty set disables create entirely.
-    createTypes?: ReadonlySet<EigenDocType>;
-};
+import type { DriveCapabilities, EigenDocType } from '@workspace/lib/types/drive';
 
 export const DRIVE_CAPABILITIES = {
     // The full folder browser (the fs route): create, upload, rearrange.
@@ -29,8 +16,8 @@ export const DRIVE_CAPABILITIES = {
         canShare: true,
         showBreadcrumb: true,
     },
-    // Flat views over existing items (mime filters, per-app doc lists): act on the
-    // items, but no folder ops — move needs the folder context these views lack.
+    // Flat views over existing items (mime filters, per-app doc lists): act on the items, but no
+    // folder ops, because a move needs the folder context these views lack.
     listing: {
         canCreateFolder: false,
         canUpload: false,

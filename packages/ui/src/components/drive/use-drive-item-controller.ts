@@ -1,3 +1,7 @@
+// The behavior a Drive listing's rows share, whichever view draws them, such as DriveTable or DriveGrid:
+// selection, keyboard navigation, drag and drop onto folders and the row menu's open state. Keyboard
+// keys and drops reach the same Drive action runner the menu does.
+
 import type { DrivePath } from '@workspace/lib/types';
 import type React from 'react';
 import type { RefObject } from 'react';
@@ -7,9 +11,10 @@ import { useListDrag } from '../../hooks/use-list-drag';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { useSelectableContextMenu } from '../../hooks/use-selectable-context-menu';
+import type { DriveActionRunner } from './drive-layout-dialogs';
 
 export type UseDriveItemControllerOptions = {
-    // Already sorted by the caller — the controller selects/navigates over them as-is.
+    // Already sorted by the caller: the controller selects and navigates over them as they are.
     items: DrivePath[];
     activeItemId?: string;
     // Grid width for keyboard navigation; DriveTable keeps the default single column.
@@ -20,11 +25,9 @@ export type UseDriveItemControllerOptions = {
     selection?: UseListSelectionReturn<DrivePath>;
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;
-    onMove?: (item: DrivePath, targetItemId: string) => void;
     onSelectionChange?: (items: DrivePath[]) => void;
-    // Same handler the context menu's trash entry calls — bound to Delete/Backspace here.
-    onDelete?: (items: DrivePath[]) => void;
-    allowDelete?: boolean;
+    // Absent in a picker, whose rows have no actions.
+    actions?: DriveActionRunner;
 };
 
 export function useDriveItemController({
@@ -36,10 +39,8 @@ export function useDriveItemController({
     selection: externalSelection,
     onItemClick,
     onQuickLook,
-    onMove,
     onSelectionChange,
-    onDelete,
-    allowDelete,
+    actions,
 }: UseDriveItemControllerOptions) {
     const handleItemSelect = useCallback(
         (id: string) => {
@@ -79,11 +80,14 @@ export function useDriveItemController({
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef,
         shouldNotify: () => !!activeItemId,
-        // A multi-selection wins over the cursored row, exactly as the context menu resolves it.
-        onDelete:
-            allowDelete && onDelete
-                ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
-                : undefined,
+        // Delete runs the menu's own delete row, on a multi-selection over the cursored row as the menu does.
+        onDelete: actions
+            ? (item) => {
+                  const items = selection.selectedCount > 1 ? selection.selectedItems : [item];
+                  const remove = actions.actionsFor(items).find((action) => action.group === 'destructive');
+                  if (remove) actions.run(remove.id, items);
+              }
+            : undefined,
         selection,
         columns,
         scrollToIndex,
@@ -132,7 +136,7 @@ export function useDriveItemController({
             e.preventDefault();
             setDragOverItemId(null);
             if (isValidFolderDrop(item)) {
-                for (const d of drag.draggedItems) onMove?.(d, item.id);
+                for (const d of drag.draggedItems) actions?.onMove?.(d, item.id);
             }
         },
     });

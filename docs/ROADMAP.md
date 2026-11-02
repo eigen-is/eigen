@@ -202,7 +202,7 @@ Still to do:
 - `packages/lib` absences: owner-scoped query keys carry `ownerId`, mutations use `onMutationError`, SSE handlers invalidate what their emitter changes. Split `types/drive.ts` into per-concern modules.
 - `packages/ui`.
 - The apps, thin ones last.
-- Duplication folding, on the next touch of each domain: each domain's actions, built again in the toolbar, compact menu, right-click, command palette and mobile menus, which have drifted in permission, label, keyboard and visibility. Extract a small action catalog per domain in the shape of `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`), not a generic menu framework.
+- Duplication folding, on the next touch of each domain: each domain's actions, built again in the toolbar, compact menu, right-click, command palette and mobile menus, which have drifted in permission, label, keyboard and visibility. Extract a small action catalog per domain in the shape of `FILE_ACTIONS` (`packages/lib/src/core/file-actions.ts`), not a generic menu framework. Drive's item menu has one, `DRIVE_ACTIONS`; its command palette rows and File menu still list their own.
 - WebDAV and CalDAV conformance, the measured gaps first (litmus 0.17, cadaver, vdirsyncer 0.21):
   - `webdav/propfind.ts` answers allprop to every request (no prop selection, no 404 propstat, `Brief` ignored). Adopting the shared `lib/dav/propfind.ts` also brings in the dav multistatus builders and `encodePathSegment` (WebDAV hrefs return `%40` for `@`), so it needs a client round (Finder, Explorer, rclone, Mountain Duck).
   - DELETE, MOVE, COPY and PROPPATCH ignore `If-Match` and `If-None-Match` (RFC 7232 § 3.1: 412).

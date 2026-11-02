@@ -1,7 +1,8 @@
 // A guest may not mail people through the server, so Drive offers Email collaborators on a shared item
 // to an editor and hides it from a guest editor.
 import { afterEach, expect, mock, test } from 'bun:test';
-import type { DrivePath } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive';
+import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -18,20 +19,31 @@ const { CommandPaletteProvider } = await import(
     '../../../components/layout/app/command-palette/command-palette-provider'
 );
 const { DRIVE_CAPABILITIES } = await import('../../../components/drive/drive-capabilities');
-const { useDriveLayoutDialogs } = await import('../../../components/drive/drive-layout-dialogs');
+const { useDriveActionRunner } = await import('../../../components/drive/drive-layout-dialogs');
 
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function emailCollaboratorsHandler() {
-    let handler: ((item: DrivePath) => void) | undefined;
+const sharedDoc = drivePath({
+    name: 'Plan.eigendoc',
+    mimeType: 'application/eigendoc',
+    type: 'doc',
+    ownerId: 'user-1',
+    parentId: 'root',
+    acl: [{ id: 'friend@example.com', read: true, write: true }],
+});
+
+async function offeredIds() {
+    let ids: DriveActionId[] = [];
     function Probe() {
-        handler = useDriveLayoutDialogs({
+        const runner = useDriveActionRunner({
             ownerId: 'user-1',
             mountId: 'default',
             currentPath: null,
             capabilities: DRIVE_CAPABILITIES.browse,
-        }).onEmailCollaborators;
+            onOpen: () => {},
+        });
+        ids = runner.actionsFor([sharedDoc]).map((action) => action.id);
         return null;
     }
     const router = createRouter({
@@ -42,15 +54,15 @@ async function emailCollaboratorsHandler() {
     });
     await router.load();
     ({ unmount } = await renderInDocument(createElement(RouterProvider, { router })));
-    return handler;
+    return ids;
 }
 
 test('an editor can email the collaborators', async () => {
     isGuest = false;
-    expect(await emailCollaboratorsHandler()).toBeFunction();
+    expect(await offeredIds()).toContain('email-collaborators');
 });
 
 test('a guest editor can not', async () => {
     isGuest = true;
-    expect(await emailCollaboratorsHandler()).toBeUndefined();
+    expect(await offeredIds()).not.toContain('email-collaborators');
 });

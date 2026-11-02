@@ -1,8 +1,10 @@
 // The Drive types the API serves and every app reads: a path and its ACL, the kinds of path and their
 // MIME types, the Eigen document types with their extensions, export formats and Y.Doc roots, and the
 // readers that classify a file by its name and MIME type. The API and the apps import them alike, so a
-// new kind of path or format is added here once.
+// new kind of path or format is added here once. The shapes of a Drive view's capabilities and of the
+// actions its menus offer live here too, beside the path they act on.
 
+import type { LucideIcon } from 'lucide-react';
 import type { BytesTextPreviewMode } from '../constants/preview';
 import { BAND_ROOTS } from '../docs/eigendoc/bands';
 import { STYLE_ROOT } from '../docs/eigendoc/normal-style';
@@ -501,6 +503,66 @@ export const DRIVE_SORT_KEYS = ['name', 'modified', 'size'] as const;
 export type DriveSortKey = (typeof DRIVE_SORT_KEYS)[number];
 export type DriveSortDir = 'asc' | 'desc';
 export type DriveViewPreferences = { mode: DriveViewMode; sortKey: DriveSortKey; sortDir: DriveSortDir };
+
+// What a Drive view lets the user do. Each view declares its whole set as one value, such as a preset
+// spread with overrides, and every Drive action reads its gate from it.
+export type DriveCapabilities = {
+    canCreateFolder: boolean;
+    canUpload: boolean;
+    // May write where the listed items sit: a convert saves the new document beside its source.
+    canWrite: boolean;
+    canDelete: boolean;
+    canRename: boolean;
+    canMove: boolean;
+    canShare: boolean;
+    // The fs browser shows the folder breadcrumb; filtered views show a title instead.
+    showBreadcrumb: boolean;
+    // Omit to allow creating every EigenDocType; an empty set disables create entirely.
+    createTypes?: ReadonlySet<EigenDocType>;
+};
+
+export type DriveActionId =
+    | 'open'
+    | 'open-new-tab'
+    | 'rename'
+    | 'duplicate'
+    | 'move-to'
+    | 'copy-to'
+    | 'download-as'
+    | 'share'
+    | 'email-collaborators'
+    | 'copy-link'
+    | 'mail-to'
+    | 'watch'
+    | 'trash'
+    | 'remove-shared';
+
+// The menu group a Drive action's row sits in, named as MenuSections names it.
+export type DriveActionGroup = 'open' | 'create' | 'organize' | 'output' | 'collaborate' | 'destructive';
+
+// The facts a Drive action's gate reads: the items it acts on and what the view allows.
+export type DriveActionSubject = {
+    items: readonly DrivePath[];
+    capabilities: DriveCapabilities;
+    // Every item is shared with the viewer directly, so a delete leaves the share instead of trashing it.
+    sharedWithMe: boolean;
+};
+
+export type DriveAction = {
+    id: DriveActionId;
+    label: string;
+    // The label for a multi-selection, {n} standing for the count. Only a row that acts on a set has one.
+    pluralLabel?: string;
+    icon: LucideIcon;
+    group: DriveActionGroup;
+    applies: (subject: DriveActionSubject) => boolean;
+    // The key that runs the row from the listing, shown beside it in the menu.
+    shortcut?: string;
+    // The route behind the row refuses a guest, and `applies` is never told who is asking.
+    guestDenied?: true;
+    // The row reaches the hosted mailbox, so a server without hosted mail hides it.
+    mailOnly?: true;
+};
 
 // The Drive file an import-from-drive request names: the picked file's owner, mount and path, and
 // nothing about where it lands. One type for every format, so the contacts, mail and calendar hooks and

@@ -1,6 +1,10 @@
-import type { FileActionGroup } from '@workspace/lib/types/file-subject';
+// Draws the file actions a runner offers as menu rows, such as Quick preview, Download or a convert. Every
+// menu that acts on a file draws them through this component, for example a Drive item's menu or a mail
+// attachment's, so a new file action shows up in all of them.
+
+import type { FileActionGroup, FileActionId } from '@workspace/lib/types/file-subject';
 import { MenuSections } from '../context-menu/menu-sections';
-import { DropdownMenuItem } from '../dropdown-menu';
+import { DropdownMenuItem, DropdownMenuShortcut } from '../dropdown-menu';
 import type { FileActionRunner } from './use-file-action-runner';
 
 type FileActionMenuItemsProps = {
@@ -9,14 +13,18 @@ type FileActionMenuItemsProps = {
     runner: FileActionRunner;
     // A host with rows of its own in a group (Drive's Open, Rename, Download ▸) draws each group where it goes.
     group?: FileActionGroup;
+    // The keys a host's own list binds to a row, such as Space for Quick preview in Drive. A pointer menu
+    // shows them; a touch menu has no keyboard to name.
+    shortcuts?: Partial<Record<FileActionId, string>>;
 };
 
-// The one place a file action is drawn as a menu row, in the registry's order within its menu group. A surface that
-// adds a row to FILE_ACTIONS gets it in every menu without editing one.
-export function FileActionMenuItems({ runner, group }: FileActionMenuItemsProps) {
+// Without a group, every group in its place; with one, that group's rows in the registry's order.
+export function FileActionMenuItems({ runner, group, shortcuts }: FileActionMenuItemsProps) {
     if (!group) {
         const rowsOf = (g: FileActionGroup) =>
-            runner.actions.some((action) => action.group === g) && <FileActionMenuItems runner={runner} group={g} />;
+            runner.actions.some((action) => action.group === g) && (
+                <FileActionMenuItems runner={runner} group={g} shortcuts={shortcuts} />
+            );
         return <MenuSections open={rowsOf('open')} convert={rowsOf('convert')} output={rowsOf('output')} />;
     }
     return runner.actions
@@ -25,6 +33,11 @@ export function FileActionMenuItems({ runner, group }: FileActionMenuItemsProps)
             <DropdownMenuItem key={action.id} disabled={runner.isPending} onClick={() => runner.run(action)}>
                 <action.icon className="h-4 w-4" />
                 {action.label}
+                {shortcuts?.[action.id] && (
+                    <DropdownMenuShortcut className="pointer-coarse:hidden">
+                        {shortcuts[action.id]}
+                    </DropdownMenuShortcut>
+                )}
             </DropdownMenuItem>
         ));
 }

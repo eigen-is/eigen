@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2062 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2068 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -544,7 +544,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (436)
+## Types (440)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -669,6 +669,11 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveAccessRecipient` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACL` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveACLDelta` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveAction` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveActionGroup` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveActionId` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveActionSubject` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
+| `DriveCapabilities` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContainerType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveContextType` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
 | `DriveImportSource` | `@workspace/lib/types` | packages/lib/src/types/drive.ts |
@@ -957,7 +962,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveViewProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `EigenDocAppConfig` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `CreateCallbacks` | `@workspace/ui/components/drive/create-menu` | packages/ui/src/components/drive/create-menu.ts |
-| `DriveCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
@@ -985,7 +989,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1113)
+## Utilities & constants (1115)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1488,6 +1492,8 @@ rather than inlining `queryClient.invalidateQueries`.
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `createWithReconcile` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
+| `DRIVE_ACTIONS` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
+| `driveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |

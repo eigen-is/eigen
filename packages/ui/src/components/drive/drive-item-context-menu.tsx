@@ -1,33 +1,23 @@
-import { useIsSharedWithMe } from '@workspace/lib/drive';
+// The menu a Drive listing opens on its rows, by right-click, long-press or a row's ⋮. It acts on the
+// whole selection when the clicked row is part of a multi-selection, and on that row alone otherwise.
+// DriveTable and DriveGrid mount one each; a listing with its own actions, such as Trash, draws its own body.
+
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { DrivePath } from '@workspace/lib/types';
-import { DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
-import { Copy, CopyPlus, FolderInput, Trash2 } from 'lucide-react';
 import type React from 'react';
 import { useMemo } from 'react';
-import { ContextMenuAnchor, MenuSections } from '../context-menu';
+import { ContextMenuAnchor } from '../context-menu';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { DriveItemMenuItems } from './drive-item-menu';
+import type { DriveActionRunner } from './drive-layout-dialogs';
 import type { useDriveItemController } from './use-drive-item-controller';
 
 type DriveItemContextMenuProps = {
     controller: ReturnType<typeof useDriveItemController>;
     // The listing behind the menu, in its display order: Quick preview pages through it.
     items: DrivePath[];
-    getItemHref?: (item: DrivePath) => string | undefined;
-    onItemOpen?: (item: DrivePath) => void;
-    onExport?: (item: DrivePath, format: string) => void;
-    onRename?: (item: DrivePath) => void;
-    onMoveTo?: (items: DrivePath[]) => void;
-    onCopyTo?: (items: DrivePath[]) => void;
-    onDuplicate?: (items: DrivePath[]) => void;
-    onShareClick?: (item: DrivePath) => void;
-    onEmailCollaborators?: (item: DrivePath) => void;
-    onDelete?: (items: DrivePath[]) => void;
-    allowDelete?: boolean;
-    // The view's own write capability: a read-only feed's subjects offer no row that writes beside them.
-    canWrite?: boolean;
-    // Replaces the default menu body — used by listings with their own actions (trash).
+    actions?: DriveActionRunner;
+    // Replaces the default menu body, for a listing with actions of its own (Trash).
     renderItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
 };
 
@@ -36,133 +26,42 @@ function contextItemsOf({ contextMenu, selection }: DriveItemContextMenuProps['c
     return selection.selectedCount > 1 ? selection.selectedItems : [contextMenu.item];
 }
 
-export function DriveItemContextMenu(props: DriveItemContextMenuProps) {
-    // Separate components: a listing with its own body (trash) draws no registry row, so it must not mount the runner.
-    if (props.renderItems) {
-        const { contextMenu } = props.controller;
-        const contextItems = contextItemsOf(props.controller);
-        return (
-            <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
-                {contextItems.length > 0 && props.renderItems(contextItems, contextMenu.close)}
-            </ContextMenuAnchor>
-        );
-    }
-    return <DriveItemActionsMenu {...props} />;
+export function DriveItemContextMenu({ controller, items, actions, renderItems }: DriveItemContextMenuProps) {
+    // Separate components: a listing with its own body (Trash) draws no registry row, so it must not mount the runner.
+    if (actions) return <DriveItemActionsMenu controller={controller} items={items} actions={actions} />;
+    const { contextMenu } = controller;
+    const contextItems = contextItemsOf(controller);
+    return (
+        <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
+            {contextItems.length > 0 && renderItems?.(contextItems, contextMenu.close)}
+        </ContextMenuAnchor>
+    );
 }
 
 function DriveItemActionsMenu({
     controller,
     items,
-    getItemHref,
-    onItemOpen,
-    onExport,
-    onRename,
-    onMoveTo,
-    onCopyTo,
-    onDuplicate,
-    onShareClick,
-    onEmailCollaborators,
-    onDelete,
-    allowDelete,
-    canWrite = true,
-}: DriveItemContextMenuProps) {
+    actions,
+}: DriveItemContextMenuProps & { actions: DriveActionRunner }) {
     const { contextMenu } = controller;
     const contextItems = contextItemsOf(controller);
+    const { canWrite } = actions.capabilities;
 
-    const subject = useMemo(
-        () => (contextMenu.item ? subjectFromPath(contextMenu.item, canWrite) : null),
-        [contextMenu.item, canWrite],
-    );
+    // A multi-selection has no file actions, so its runner has no subject.
+    const single = contextItems.length === 1 ? contextItems[0] : null;
+    const subject = useMemo(() => (single ? subjectFromPath(single, canWrite) : null), [single, canWrite]);
     // Mapped only while the menu is open: a folder listing can run to thousands of rows.
     const siblings = useMemo(
-        () => (contextMenu.item ? items.map((item) => subjectFromPath(item, canWrite)) : []),
-        [contextMenu.item, items, canWrite],
+        () => (single ? items.map((item) => subjectFromPath(item, canWrite)) : []),
+        [single, items, canWrite],
     );
     const runner = useFileActionRunner(subject, siblings);
-    const isSharedWithMe = useIsSharedWithMe();
-
-    const isSingleSelect = contextItems.length === 1;
-    const contextMenuItemHref = isSingleSelect && contextMenu.item ? getItemHref?.(contextMenu.item) : undefined;
 
     return (
         <>
             <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
-                {isSingleSelect && contextMenu.item && (
-                    <DriveItemMenuItems
-                        item={contextMenu.item}
-                        runner={runner}
-                        href={contextMenuItemHref}
-                        onClose={contextMenu.close}
-                        onItemOpen={onItemOpen}
-                        onExport={onExport}
-                        onRename={onRename}
-                        onMoveTo={onMoveTo}
-                        onCopyTo={onCopyTo}
-                        onDuplicate={onDuplicate}
-                        onShareClick={onShareClick}
-                        onEmailCollaborators={onEmailCollaborators}
-                        onDelete={onDelete}
-                        allowDelete={allowDelete}
-                    />
-                )}
-                {!isSingleSelect && contextItems.length > 0 && (
-                    <MenuSections
-                        create={
-                            onDuplicate && (
-                                <DropdownMenuItem
-                                    onClick={() => {
-                                        onDuplicate(contextItems);
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    <CopyPlus className="h-4 w-4" />
-                                    Duplicate {contextItems.length} items
-                                </DropdownMenuItem>
-                            )
-                        }
-                        organize={
-                            <>
-                                {onMoveTo && (
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            onMoveTo(contextItems);
-                                            contextMenu.close();
-                                        }}
-                                    >
-                                        <FolderInput className="h-4 w-4" />
-                                        Move {contextItems.length} items to…
-                                    </DropdownMenuItem>
-                                )}
-                                {onCopyTo && (
-                                    <DropdownMenuItem
-                                        onClick={() => {
-                                            onCopyTo(contextItems);
-                                            contextMenu.close();
-                                        }}
-                                    >
-                                        <Copy className="h-4 w-4" />
-                                        Copy {contextItems.length} items to…
-                                    </DropdownMenuItem>
-                                )}
-                            </>
-                        }
-                        destructive={
-                            allowDelete && (
-                                <DropdownMenuItem
-                                    variant="destructive"
-                                    onClick={() => {
-                                        onDelete?.(contextItems);
-                                        contextMenu.close();
-                                    }}
-                                >
-                                    <Trash2 className="h-4 w-4" />
-                                    {contextItems.every(isSharedWithMe)
-                                        ? `Remove ${contextItems.length} shared items`
-                                        : `Move ${contextItems.length} items to trash`}
-                                </DropdownMenuItem>
-                            )
-                        }
-                    />
+                {contextItems.length > 0 && (
+                    <DriveItemMenuItems items={contextItems} actions={actions} runner={runner} />
                 )}
             </ContextMenuAnchor>
             {runner.dialogs}
