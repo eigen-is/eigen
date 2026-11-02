@@ -1,3 +1,6 @@
+// The shared modal dialog, built on Radix: the overlay, the content box with its corner X, and the header, title,
+// description and footer parts that dialogs across the apps put inside it.
+
 import { Button } from '@workspace/ui/components/button';
 import { cn } from '@workspace/ui/lib/utils';
 import { XIcon } from 'lucide-react';
@@ -181,7 +184,7 @@ function DialogDescription({ className, ...props }: React.ComponentProps<typeof 
     return (
         <DialogPrimitive.Description
             data-slot="dialog-description"
-            className={cn('text-sm text-muted-foreground', className)}
+            className={cn('text-sm text-muted-foreground break-words', className)}
             {...props}
         />
     );
