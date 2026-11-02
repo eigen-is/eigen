@@ -11,6 +11,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
 - **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
 - **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
+- **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour. Every open tab counts down in a banner, then says Eigen is updating while it is down. Ctrl+C or a lost SSH session cancels
 
 ### Changed
 
@@ -32,6 +33,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
+- **Light backups (breaking)** — every `./eigen update` makes a Full backup, and `./eigen backup --light`, `./eigen update --full` and Light in **Back up now** are gone. This version can't restore a Light backup, and `./eigen status` lists the ones left with the command that deletes them
+- **Rolling back** — `./eigen rollback` keeps today's data when the version before opens it. It puts the update's backup back only when that version can't, or is too old to check, and a check that fails otherwise stops it with Eigen running as it was
+- **Restoring a user or team in Admin** — the account keeps working while its backup is unpacked and checked, so a refused restore costs nobody their open pages. It goes offline only for the swap at the end, and needs room on the data disk
+- **Private backups** — the files inside a backup, their records and a restored account are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
+- **Stopping during a backup** — before it stops Eigen, `./eigen` asks the server whether a backup or its upload runs, and waits for it. A server that doesn't answer within 10 seconds gets a warning, and the stop goes on
 - **Copying in Drive** — **Copy to…** and **Save to Drive…** say "1 item copied" (or "3 items copied") with an **Open folder** button. **Duplicate** stays quiet
 - **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Open**, **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
 - **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
@@ -88,6 +94,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
 - **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
 - **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
+- **One data folder, one server** — a second Eigen server on another machine or VM, such as one that reaches `data/` through a Docker Desktop folder or WSL2, refuses to start while the first one runs
+- **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
+- **Uploads after a restore** — a whole-server restore of an older backup keeps the files a restore of one account had not yet sent to an S3 bucket
+- **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
 
 ## [0.4.1] - 2026-10-28
 

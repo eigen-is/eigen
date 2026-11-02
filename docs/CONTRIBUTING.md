@@ -149,8 +149,9 @@ From then on, use the clone the way a server admin would: `./eigen logs`, `./eig
 
 To start over, stop it with `docker compose --env-file .env.production down`, move `data/` and `caddy-data/` somewhere else, and run `./eigen setup` again.
 
-Two things to know:
+Three things to know:
 
+- The API runs as uid 1000, as in production. An older `docker-compose.dev.yml` ran it as root, so on Linux a clone whose `data/` it wrote can't open those files: run `sudo chown -R 1000:1000 data backups` once, then `./eigen restart`.
 - If the stack was off for more than 7 days, Caddy's local certificates have expired. `docker compose --env-file .env.production restart caddy` renews them.
 - On a Mac, `sqlite3` on your machine can show old data from the container's databases. Read a database from inside the API container instead, with `docker compose --env-file .env.production exec eigen-api`.
 
