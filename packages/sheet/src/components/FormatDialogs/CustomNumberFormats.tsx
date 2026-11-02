@@ -54,15 +54,15 @@ export function CustomNumberFormats() {
                 </div>
                 <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
                     {NUMBER_FORMAT_PRESETS.map((preset) => (
-                        <div
-                            className="flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item"
+                        <button
+                            type="button"
+                            className="flex w-full items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item"
                             key={preset}
                             onClick={() => setPattern(preset)}
-                            tabIndex={0}
                         >
                             <span className="font-mono">{preset}</span>
                             <span className="text-muted-foreground">{update(preset, sampleValue)}</span>
-                        </div>
+                        </button>
                     ))}
                 </div>
             </FormDialogForm>

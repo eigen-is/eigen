@@ -102,18 +102,18 @@ export function CustomCurrencies() {
                 </div>
                 <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
                     {currencies.map((currency) => (
-                        <div
+                        <button
+                            type="button"
                             className={cn(
-                                'flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
+                                'flex w-full items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
                                 currency.name === selectedName && 'eigen-list-item-active',
                             )}
                             key={currency.name}
                             onClick={() => selectCurrency(currency)}
-                            tabIndex={0}
                         >
                             <span>{currency.name}</span>
                             <span className="text-muted-foreground">{currency.example}</span>
-                        </div>
+                        </button>
                     ))}
                 </div>
             </FormDialogForm>

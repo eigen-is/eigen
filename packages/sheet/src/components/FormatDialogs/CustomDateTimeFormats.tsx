@@ -181,18 +181,18 @@ export function CustomDateTimeFormats() {
                 </div>
                 <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
                     {DATE_FORMAT_PRESETS.map(({ name, value }) => (
-                        <div
+                        <button
+                            type="button"
                             className={cn(
-                                'flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
+                                'flex w-full items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
                                 value === pattern && 'eigen-list-item-active',
                             )}
                             key={value}
                             onClick={() => setSegments(tokenizePattern(value))}
-                            tabIndex={0}
                         >
                             <span>{name}</span>
                             <span className="text-muted-foreground font-mono">{value}</span>
-                        </div>
+                        </button>
                     ))}
                 </div>
             </FormDialogForm>

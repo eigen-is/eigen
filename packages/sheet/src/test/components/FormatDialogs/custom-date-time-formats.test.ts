@@ -23,6 +23,14 @@ const openDateTimeFormats = () =>
         editingCellPosition: [],
     });
 
+// A preset row by its first text. A browser clicks a focused button on Enter or Space, and type="button" keeps that
+// click from submitting the form, so a row that is such a button can be picked from the keyboard.
+const presetRow = (text: string) =>
+    [...document.querySelectorAll('[role="dialog"] .eigen-list-item')].find(
+        (row) => row.firstChild?.textContent === text,
+    );
+const pickableByKeyboard = (row: Element | undefined) => row instanceof HTMLButtonElement && row.type === 'button';
+
 const format = (context: Context) => context.sheets[0]?.data?.[0]?.[0]?.ct?.fa;
 
 test('Apply sets the pattern on the selection and closes', async () => {
@@ -63,4 +71,14 @@ test('Cancel closes and leaves the format', async () => {
     await dialog.click('Cancel');
     expect(format(dialog.context())).toBeUndefined();
     expect(dialog.dialogs()).toHaveLength(0);
+});
+
+test('a preset row replaces the pattern, and the keyboard can pick it', async () => {
+    const dialog = await openDateTimeFormats();
+    const row = presetRow('1930-08-05');
+    expect(pickableByKeyboard(row)).toBe(true);
+    await act(async () => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(dialog.dialogs()[0]?.textContent).toContain('Preview: 1930-08-05');
+    await dialog.click('Apply');
+    expect(format(dialog.context())).toBe('yyyy-MM-dd');
 });

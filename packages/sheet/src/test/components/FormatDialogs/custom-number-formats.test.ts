@@ -36,6 +36,14 @@ const openNumberFormats = () =>
         editingCellPosition: [],
     });
 
+// A preset row by its first text. A browser clicks a focused button on Enter or Space, and type="button" keeps that
+// click from submitting the form, so a row that is such a button can be picked from the keyboard.
+const presetRow = (text: string) =>
+    [...document.querySelectorAll('[role="dialog"] .eigen-list-item')].find(
+        (row) => row.firstChild?.textContent === text,
+    );
+const pickableByKeyboard = (row: Element | undefined) => row instanceof HTMLButtonElement && row.type === 'button';
+
 const formats = (context: Context) => context.sheets[0]?.data?.[0]?.map((c) => c?.ct?.fa);
 
 test('Apply sets the pattern on the selection and closes', async () => {
@@ -78,4 +86,13 @@ test('Cancel closes and leaves the format', async () => {
     await dialog.click('Cancel');
     expect(formats(dialog.context())).toEqual(['#,##0.00', undefined]);
     expect(dialog.dialogs()).toHaveLength(0);
+});
+
+test('a preset row fills the pattern field, and the keyboard can pick it', async () => {
+    const dialog = await openNumberFormats();
+    const row = presetRow('0.00%');
+    expect(pickableByKeyboard(row)).toBe(true);
+    await act(async () => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(dialog.field(PATTERN).value).toBe('0.00%');
+    expect(dialog.dialogs()).toHaveLength(1);
 });

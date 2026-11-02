@@ -28,6 +28,14 @@ const format = (context: Context) => context.sheets[0]?.data?.[0]?.[0]?.ct?.fa;
 const rowNames = () =>
     [...document.querySelectorAll('[role="dialog"] .eigen-list-item')].map((row) => row.firstChild?.textContent);
 
+// A currency row by its first text. A browser clicks a focused button on Enter or Space, and type="button" keeps that
+// click from submitting the form, so a row that is such a button can be picked from the keyboard.
+const presetRow = (text: string) =>
+    [...document.querySelectorAll('[role="dialog"] .eigen-list-item')].find(
+        (row) => row.firstChild?.textContent === text,
+    );
+const pickableByKeyboard = (row: Element | undefined) => row instanceof HTMLButtonElement && row.type === 'button';
+
 test('Apply sets the currency format of the typed symbol and closes', async () => {
     const dialog = await openCurrencies();
     expect(dialog.dialogs()).toHaveLength(1);
@@ -50,13 +58,13 @@ test('Enter in the symbol field applies it', async () => {
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('typing filters the list, and a picked currency takes its symbol and side', async () => {
+test('typing filters the list, and a currency picked by mouse or keyboard takes its symbol and side', async () => {
     const dialog = await openCurrencies();
     await dialog.type(SYMBOL, 'swed');
     expect(rowNames()).toEqual(['Swedish Krona']);
-    await act(async () => {
-        document.querySelector<HTMLElement>('[role="dialog"] .eigen-list-item')?.click();
-    });
+    const row = presetRow('Swedish Krona');
+    expect(pickableByKeyboard(row)).toBe(true);
+    await act(async () => row?.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     expect(dialog.field(SYMBOL).value).toBe('kr');
     await dialog.click('Apply');
     expect(format(dialog.context())).toBe('#,##0.00"kr"');
