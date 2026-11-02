@@ -1,3 +1,7 @@
+// Watch for one Drive item: useWatchToggle reads whether the viewer watches it, directly or through a
+// folder above it, and turns a direct watch on or off. The button sits on a toolbar, such as a
+// document's or the Drive detail column's; the menu row sits in a menu, such as the Drive item menu.
+
 import { useIsPathWatched, useUnwatchPath, useWatchPath } from '@workspace/lib/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Bell, BellRing } from 'lucide-react';
@@ -42,7 +46,6 @@ export function WatchToggleButton({ ownerId, mountId, pathId }: WatchToggleButto
     );
 }
 
-// Kebab-menu counterpart of WatchToggleButton, used by DocumentShareCluster on mobile.
 export function WatchMenuItem({ ownerId, mountId, pathId }: WatchToggleButtonProps) {
     const { direct, label, isPending, toggle } = useWatchToggle(ownerId, mountId, pathId);
     return (
