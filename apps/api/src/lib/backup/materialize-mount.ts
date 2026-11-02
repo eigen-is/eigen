@@ -28,6 +28,9 @@ import { requireMountDir, resolveInside } from './paths';
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
 
+// How many databases checkDatabases opens before it gives the event loop back.
+const DATABASES_PER_YIELD = 50;
+
 // Puts one mount's files where the restored mount looks for them. The archive holds them by path, so each backend
 // derives its keys again; an `s3` mount stages each file with a pending upload, which the UploadQueue drains with
 // its retry. Returns the container databases that stayed on local disk.
@@ -122,7 +125,7 @@ export function materializeMount(
 // Refuses a home folder still in the archive's layout that materializeMount could not put back or this server could
 // not open. A per-home restore runs it on the unpacked archive while the home still serves, so a refusal costs nobody
 // a page. In that layout every document database of a mount is at its archive path, an s3 mount's included.
-export function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mounts']): void {
+export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mounts']): Promise<void> {
     const containerDatabases: VersionedDatabase[] = [];
     for (const summary of mounts) {
         const dataDir = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.DATA_DIR);
@@ -138,7 +141,7 @@ export function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mount
             db.close();
         }
     }
-    checkRestoredDatabases(
+    await checkRestoredDatabases(
         homeDir,
         mounts.map((summary) => summary.id),
         containerDatabases,
@@ -148,13 +151,13 @@ export function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mount
 // What landed has to be a database this server can still open: SQLite's own verdict on the bytes,
 // and the schema stamp against the config that will open them. A database from a newer server passes
 // quick_check and is then refused by ManagedDatabase's forward-version guard, which fails the whole
-// home on the next load, long after the job said it was done. It opens the files directly, never through the home:
-// a restore has evicted the home, and a rollback's check runs in another process than the API.
-export function checkRestoredDatabases(
+// home on the next load, long after the job said it was done. It opens the files directly, never through a home: the
+// folder a restore checks is not the home's folder yet, and a rollback's check runs in another process than the API.
+export async function checkRestoredDatabases(
     homeDir: string,
     mountIds: readonly string[],
     containerDatabases: readonly VersionedDatabase[],
-): void {
+): Promise<void> {
     const targets: VersionedDatabase[] = HOME_DATABASES.map(([config, relPath]) => ({
         filePath: path.join(homeDir, relPath),
         config,
@@ -166,12 +169,15 @@ export function checkRestoredDatabases(
     // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
     // knowable path; verify read every one of them in the folder this restore unpacked minutes ago.
     targets.push(...containerDatabases);
-    checkDatabases(targets);
+    await checkDatabases(targets);
 }
 
-// The same verdict on any databases, such as the server's own. One that is not there is skipped.
-export function checkDatabases(targets: readonly VersionedDatabase[]): void {
-    for (const target of targets) {
+// The same verdict on any databases, such as the server's own. One that is not there is skipped. A home can hold tens
+// of thousands of document databases, and each open blocks the thread. The API runs this for a restore, so it lets
+// other requests run between every few databases.
+export async function checkDatabases(targets: readonly VersionedDatabase[]): Promise<void> {
+    for (const [index, target] of targets.entries()) {
+        if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
         if (!fs.existsSync(target.filePath)) continue;
         const version = schemaVersionOf(target.filePath);
         if (version > target.config.currentVersion) {

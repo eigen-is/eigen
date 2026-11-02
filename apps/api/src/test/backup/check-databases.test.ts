@@ -48,14 +48,25 @@ describe('checkDatabases', () => {
     test('waits out a writer, then judges the database as it is', async () => {
         const current = stampedDatabase('current.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
         let lock = await holdLock(current, 1000);
-        expect(() => checkDatabases([{ filePath: current, config: SHARE_REGISTRY_DB_CONFIG }])).not.toThrow();
+        await checkDatabases([{ filePath: current, config: SHARE_REGISTRY_DB_CONFIG }]);
         expect(await lock.exited).toBe(0);
 
         const newer = stampedDatabase('newer.db', SHARE_REGISTRY_DB_CONFIG.currentVersion + 1);
         lock = await holdLock(newer, 1000);
-        expect(() => checkDatabases([{ filePath: newer, config: SHARE_REGISTRY_DB_CONFIG }])).toThrow(
+        await expect(checkDatabases([{ filePath: newer, config: SHARE_REGISTRY_DB_CONFIG }])).rejects.toThrow(
             'newer than this server',
         );
         expect(await lock.exited).toBe(0);
     }, 20_000);
+
+    test('lets other work run between databases, so the API serves while it checks a large home', async () => {
+        const current = stampedDatabase('many.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
+        const targets = Array.from({ length: 120 }, () => ({ filePath: current, config: SHARE_REGISTRY_DB_CONFIG }));
+        let served = false;
+        setImmediate(() => {
+            served = true;
+        });
+        await checkDatabases(targets);
+        expect(served).toBe(true);
+    });
 });

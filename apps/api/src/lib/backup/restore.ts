@@ -88,7 +88,7 @@ export async function restoreHome(
             // A mount the backup skipped carries nothing. It stays disabled in the restored settings.json, and
             // snapshotHome left its folder out.
             const carried = manifest.mounts.filter((summary) => !summary.skipped);
-            checkUnpackedHome(path.join(folder, ARCHIVE_HOME_DIR), carried);
+            await checkUnpackedHome(path.join(folder, ARCHIVE_HOME_DIR), carried);
             // Read before the first write, since nothing takes an auth row back: a shares.json that does not read
             // would otherwise leave a deleted user signed in to an empty home.
             const shares = readShares(folder);
@@ -152,7 +152,7 @@ export async function restoreSafetyCopy(
         // every schema stamp. A copy this server made passes both; one carried over from a newer
         // server does not, and that has to surface here rather than on the next load.
         const mountIds = mountIdsIn(homeDir);
-        checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+        await checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
         redateTrash(homeDir, mountIds, Math.floor(Date.now() / 1000));
     };
 

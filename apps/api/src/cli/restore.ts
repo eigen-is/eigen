@@ -486,7 +486,7 @@ async function checkData(flags: Flags): Promise<void> {
     const server = join(DATA, SERVER_DIR);
     const homeKinds = [USER_HOMES_DIR, TEAM_HOMES_DIR, ORG_HOMES_DIR, GUEST_HOMES_DIR];
     try {
-        checkDatabases([
+        await checkDatabases([
             { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
             { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
         ]);
@@ -503,7 +503,7 @@ async function checkData(flags: Flags): Promise<void> {
         for (const [index, homeDir] of homeDirs.entries()) {
             console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
             const mountIds = mountIdsIn(homeDir);
-            checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+            await checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
         }
     } catch (error) {
         console.error(glyphLine('bad', `${describeError(error)}.`));

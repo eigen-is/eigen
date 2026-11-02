@@ -196,7 +196,7 @@ async function stageHome(
         notReplayed.missing += replay.missing;
     }
     const mountIds = carried.map((summary) => summary.id);
-    checkRestoredDatabases(homeDir, mountIds, containerDatabases);
+    await checkRestoredDatabases(homeDir, mountIds, containerDatabases);
     try {
         redateTrash(homeDir, mountIds, now);
     } catch (error) {
