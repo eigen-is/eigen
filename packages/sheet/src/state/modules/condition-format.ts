@@ -143,7 +143,8 @@ function readTypedValues(
         if (ranges.length > 1 || !range || range.row[0] !== range.row[1] || range.column[0] !== range.column[1]) {
             return ONLY_SINGLE_CELL;
         }
-        const data = getFlowdata(ctx);
+        // A reference that names a sheet, such as Data!A1, reads that sheet.
+        const data = getFlowdata(ctx, range.sheetId);
         values.conditionRange.push({ row: range.row, column: range.column });
         values.conditionValue.push(toRuleValue(data && getCellValue(range.row[0], range.column[0], data)));
     }

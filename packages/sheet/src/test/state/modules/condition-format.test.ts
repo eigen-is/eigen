@@ -317,4 +317,12 @@ describe('state/condition-format — setConditionRules', () => {
         expect(refusal(ruleDraft('aboveAverage'))).toBeNull();
         expect(refusal(ruleDraft('duplicateValue', { repeatValue: '1' }))).toBeNull();
     });
+
+    it('reads a cell on another sheet from that sheet', () => {
+        const ctx = ctxForRule();
+        ctx.sheets[1].name = 'Data';
+        ctx.sheets[1].data = numberRows([[9]]);
+        setConditionRules(ctx, ruleDraft('greaterThan', { rulesValue: 'Data!A1' }));
+        expect(savedValues(ctx)).toEqual([[9]]);
+    });
 });
