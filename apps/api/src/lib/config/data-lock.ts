@@ -18,7 +18,7 @@ export const LEASE_HEARTBEAT_MS = 5_000;
 // VACUUM blocks the holder's event loop, and so its heartbeat, for a while.
 export const LEASE_WAIT_MS = 30_000;
 // A lease that does not parse cannot say whose it is.
-const UNREADABLE_HOLDER = 'an API whose lease does not parse';
+const UNKNOWN_HOLDER = 'an unknown host (the lease does not parse)';
 
 // `kernel` and `dev` say whose file lock the holder shares. `host` and `pid` are only for the messages: a container's
 // hostname changes when Compose recreates it.
@@ -85,7 +85,7 @@ export function liveLeaseHolder(file: string, warn: (message: string) => void): 
     const lease = parseLease(before);
     const scope = lockScope(file);
     if (lease?.kernel === scope.kernel && lease.dev === scope.dev) return null;
-    const holder = lease ? describeHolder(lease) : UNREADABLE_HOLDER;
+    const holder = lease ? describeHolder(lease) : UNKNOWN_HOLDER;
     const last = lease ? `, last heartbeat ${lease.heartbeatAt}` : '';
     warn(
         `The data dir lease is held by ${holder}${last}; waiting ${LEASE_WAIT_MS / 1000} s to see whether it is alive.`,
@@ -98,7 +98,7 @@ export function liveLeaseHolder(file: string, warn: (message: string) => void): 
         return null;
     }
     const moved = parseLease(after);
-    return moved ? describeHolder(moved) : UNREADABLE_HOLDER;
+    return moved ? describeHolder(moved) : UNKNOWN_HOLDER;
 }
 
 // Only a regular file is read, never through a symlink, so a FIFO or a device planted in its place cannot hang or fill
@@ -128,10 +128,6 @@ function parseLease(text: string): DataLease | null {
     }
 }
 
-function describeHolder(lease: DataLease): string {
-    return `${lease.host}, pid ${lease.pid} (${lease.platform})`;
-}
-
 function isDataLease(value: unknown): value is DataLease {
     return (
         isRecord(value) &&
@@ -144,4 +140,8 @@ function isDataLease(value: unknown): value is DataLease {
         typeof value['startedAt'] === 'string' &&
         typeof value['heartbeatAt'] === 'string'
     );
+}
+
+function describeHolder(lease: DataLease): string {
+    return `${lease.host}, pid ${lease.pid} (${lease.platform})`;
 }
