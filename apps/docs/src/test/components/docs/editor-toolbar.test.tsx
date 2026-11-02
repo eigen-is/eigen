@@ -1153,7 +1153,7 @@ test.each(['OK', 'Cancel'])('Page setup closed with %s gives focus back to the e
 });
 
 const linkField = () => document.querySelector<HTMLInputElement>('[role="dialog"] input');
-const linkButton = (label: string) =>
+const dialogButton = (label: string) =>
     [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find((b) => b.textContent === label);
 
 async function openLinkDialog() {
@@ -1178,9 +1178,9 @@ test('Add link stays off until a URL is typed, and Enter links the selected text
     editor.commands.setTextSelection({ from: 1, to: 3 });
     await render(1920, true);
     await openLinkDialog();
-    expect(linkButton('Add link')?.disabled).toBe(true);
+    expect(dialogButton('Add link')?.disabled).toBe(true);
     await typeLink('https://eigen.is');
-    expect(linkButton('Add link')?.disabled).toBe(false);
+    expect(dialogButton('Add link')?.disabled).toBe(false);
     await act(async () => {
         const input = linkField();
         if (!input) throw new Error('no URL field');
@@ -1198,10 +1198,93 @@ test('a URL typed and then cancelled is gone the next time Add link opens', asyn
     await render(1920, true);
     await openLinkDialog();
     await typeLink('https://eigen.is');
-    await act(async () => linkButton('Cancel')?.click());
+    await act(async () => dialogButton('Cancel')?.click());
     expect(document.querySelector('[role="dialog"]')).toBeNull();
     await openLinkDialog();
     expect(linkField()?.value).toBe('');
+});
+
+// The field is trimmed, so a URL pasted with the spaces around it links, and spaces alone are no URL.
+test('Add link trims the URL, at the caret and on a selection, and spaces alone keep it off', async () => {
+    editor.commands.setContent(ONE_PARAGRAPH);
+    editor.commands.setTextSelection(1);
+    await render(1920, true);
+    await openLinkDialog();
+    await typeLink('   ');
+    expect(dialogButton('Add link')?.disabled).toBe(true);
+    await typeLink('  https://eigen.is  ');
+    await act(async () => dialogButton('Add link')?.click());
+    expect(editor.getJSON().content?.[0]?.content?.[0]).toEqual({
+        type: 'text',
+        text: 'https://eigen.is',
+        marks: [{ type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is' }) }],
+    });
+
+    editor.commands.setContent({
+        type: 'doc',
+        content: [{ type: 'paragraph', content: [{ type: 'text', text: 'ab' }] }],
+    });
+    editor.commands.setTextSelection({ from: 1, to: 3 });
+    await openLinkDialog();
+    await typeLink(' https://eigen.is/help\t');
+    await act(async () => dialogButton('Add link')?.click());
+    expect(editor.getJSON().content?.[0]?.content?.[0]?.marks).toEqual([
+        { type: 'link', attrs: expect.objectContaining({ href: 'https://eigen.is/help' }) },
+    ]);
+});
+
+// Each dialog the toolbar opens hands the focus back to the editor as it closes, the way Page setup does above, so the
+// next keystroke types in the doc and not on a trigger.
+const openToolbarDialog = {
+    'Add link': async () => {
+        editor.commands.setContent(ONE_PARAGRAPH);
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openLinkDialog();
+        await typeLink('https://eigen.is');
+    },
+    'Restart numbering': async () => {
+        editor.commands.setContent(orderedList({ start: 1, type: null }));
+        editor.commands.setTextSelection(3);
+        await render(1920, true);
+        await openMenu('Format');
+        await openSubmenu('Bullets and numbering');
+        await openSubmenu('List options');
+        await withBrowserFrames(() => clickItem('Restart numbering'));
+    },
+    'Custom spacing': async () => {
+        await openSpacing(formatted({}));
+        await withBrowserFrames(() => clickItem('Custom spacing…'));
+    },
+    'Indentation options': async () => {
+        editor.commands.setContent(formatted({}));
+        editor.commands.setTextSelection(1);
+        await render(1920, true);
+        await openMenu('Format');
+        await openSubmenu('Align and indent');
+        await withBrowserFrames(() => clickItem('Indentation options…'));
+    },
+};
+
+test.each([
+    ['Add link', 'Add link'],
+    ['Add link', 'Cancel'],
+    ['Restart numbering', 'OK'],
+    ['Restart numbering', 'Cancel'],
+    ['Custom spacing', 'Apply'],
+    ['Custom spacing', 'Cancel'],
+    ['Indentation options', 'Apply'],
+    ['Indentation options', 'Cancel'],
+] as const)('%s closed with %s gives focus back to the editor', async (title, label) => {
+    await openToolbarDialog[title]();
+    expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe(title);
+    const button = dialogButton(label);
+    if (!button) throw new Error(`no ${label} button`);
+    await withBrowserFrames(async () => {
+        await act(async () => button.click());
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.activeElement === editor.view.dom).toBe(true);
 });
 
 const NUMBERED_PRESETS = ['1. 2. 3.', 'a. b. c.', 'A. B. C.', 'i. ii. iii.', 'I. II. III.'];
