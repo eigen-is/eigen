@@ -1,3 +1,8 @@
+// A canvas document as React sees it: the scene read from the Y.Doc, and every write the editor makes to it. A host
+// such as the Vector or Slides editor calls useCanvasDoc once and hands the result to the canvas whole. Each writer is
+// one transaction, so one gesture is one undo step and one broadcast. The untracked writers fix up the document under
+// an origin the UndoManager ignores, so the user never undoes a fixup as a step of its own.
+
 import { useCollabDoc } from '@workspace/lib/collab';
 import type {
     NewVectorElement,
@@ -37,31 +42,29 @@ import {
     updateMetaInDoc,
 } from './frame-writes';
 
-// Origin sentinel for writes the UndoManager must IGNORE. Its trackedOrigins defaults to {null}
-// (the ctor below passes none), so any non-null transaction origin escapes capture — while the sync
-// provider still broadcasts it (y-websocket echoes every transaction whose origin isn't the provider
-// itself). Used for the pending→real image swap after a cross-mount paste, so the paste is ONE undo
-// step (⌘Z reverts the insert; peers converge via its inverse) instead of two.
+// The origin of a write the UndoManager must ignore. It tracks only the null origin, because useCollabDoc gives it no
+// tracked origins, so a write under any other origin is never captured. The provider still sends it to peers. An
+// example is the swap of a pasted image's pending name for its real one: the paste stays one undo step, and ⌘Z takes
+// back the insert, not the swap.
 const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 
-// After a patch, re-run followBindings and write the geometry into the same transact for every
-// arrow bound to a patched SHAPE — and for every patched BOUND ARROW, so a nudge/align/rotate of a bound
-// arrow alone re-glues its endpoints to the stationary shape instead of leaving them detached until the
-// shape's next move teleports them (bound endpoints stay glued, Excalidraw's model; only a drag past the
-// unbind threshold detaches). A shape+arrow moved rigidly no-ops via followBindings' null return.
-function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: Set<string>): void {
-    let touched = false;
-    for (const id of patchedIds) {
+// After a patch, runs followBindings again for every arrow bound to a patched shape, and for every patched arrow that
+// is bound, and writes their geometry in the same transaction. So a nudge, align or rotate of a bound arrow alone glues
+// its ends back to the shape that stayed put. Without it they would hang loose until the shape's next move jumped them
+// back. Bound ends stay glued, as in Excalidraw, and only a drag past the unbind threshold detaches one. A shape and its
+// arrow moved together write nothing, because followBindings returns null for them.
+function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: ReadonlySet<string>): void {
+    const touched = [...patchedIds].some((id) => {
         const m = elementsMap.get(id);
-        const t = m instanceof Y.Map ? m.get('type') : undefined;
-        if (isVectorElementType(t) && ELEMENT_KINDS[t].capabilities.bindable) touched = true;
-        else if (t === 'arrow' && m instanceof Y.Map && (m.get('startBinding') || m.get('endBinding'))) touched = true;
-        if (touched) break;
-    }
+        if (!(m instanceof Y.Map)) return false;
+        const type = m.get('type');
+        if (isVectorElementType(type) && ELEMENT_KINDS[type].capabilities.bindable) return true;
+        return type === 'arrow' && Boolean(m.get('startBinding') || m.get('endBinding'));
+    });
     if (!touched) return;
 
-    // Only the arrows are materialized, not the scene: this runs inside every gesture's transact, and
-    // the reverse index needs each arrow's two bindings and nothing else. An arrow-free scene stops here.
+    // Only the arrows are read, not the scene. This runs inside every gesture's transaction, and the reverse index
+    // needs nothing but each arrow's two bindings. A scene without arrows stops here.
     const arrowById = new Map<string, VectorArrowElement>();
     for (const value of elementsMap.values()) {
         if (!(value instanceof Y.Map) || value.get('type') !== 'arrow') continue;
@@ -82,9 +85,8 @@ function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: Set<string>)
     }
     if (arrows.size === 0) return;
 
-    // The other half of what followBindings reads: the shapes those arrows dock on, and only those —
-    // it reaches the map through boundShape on the arrow's own two bindings. A binding whose target is
-    // gone resolves to null there, which is what an unbound end already means.
+    // The other half of what followBindings reads: the shapes those arrows dock on, and only those, because it looks
+    // up nothing but the arrow's own two bindings. A binding whose shape is gone reads as an unbound end.
     const byId = new Map<string, VectorElement>();
     for (const arrow of arrows) {
         for (const binding of [arrow.startBinding, arrow.endBinding]) {
@@ -103,21 +105,20 @@ function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: Set<string>)
         arrowMap.set('width', next.width);
         arrowMap.set('height', next.height);
         arrowMap.set('points', next.points);
-        // Pinned segments co-shift with the re-normalized origin so they hold their scene position while
-        // the bound endpoint follows the shape. '' for every non-pinned arrow.
+        // The pinned segments move with the arrow's new origin, so they keep their place in the scene while the bound
+        // end follows the shape. An arrow without pins stores ''.
         arrowMap.set('fixedSegments', next.fixedSegments);
     }
 }
 
 export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, defaults: StyleDefaults) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], frames: [], meta: DEFAULT_SCENE_META });
-    // The host's style table, read at write time so the add callbacks stay dependency-free.
+    // The host's style table, read when an element is added, so the add callbacks never change.
     const defaultsRef = useRef(defaults);
     defaultsRef.current = defaults;
 
-    // Shared lifecycle: doc/provider/UndoManager creation + teardown. The UndoManager tracks the three
-    // scene roots (elements, frames, meta) with default trackedOrigins, so UNTRACKED_ORIGIN writes
-    // escape capture (below).
+    // useCollabDoc makes and tears down the doc, the provider and the UndoManager. The UndoManager tracks the three
+    // scene roots, the elements, frames and meta, so a write under UNTRACKED_ORIGIN escapes it.
     const {
         docRef,
         doc: yjsDoc,
@@ -138,8 +139,8 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
             const elementsMap = doc.getMap('elements');
             const framesMap = doc.getMap('frames');
             const metaMap = doc.getMap('meta');
-            // readVectorFromDoc materializes each per-element Y.Map through the ELEMENT_FIELDS
-            // whitelist, orders by fractional index, and heals invalid runs — the whole read path.
+            // readVectorFromDoc is the whole read path. It reads each element's map through the ELEMENT_FIELDS
+            // whitelist, orders the elements by fractional index and heals a broken run of keys.
             const updateReactState = () => setScene(readVectorFromDoc(doc));
             elementsMap.observeDeep(updateReactState);
             framesMap.observeDeep(updateReactState);
@@ -153,11 +154,10 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         },
     });
 
-    // Batch add — the whole set in ONE transact (paste's element ADDS: one gesture = one
-    // transact / one undo step). Consecutive fractional keys above the current top preserve the
-    // callers' order as the pasted stack's relative z-order. Returns the new ids in input order so the
-    // caller reselects the paste.
-    const addElements = useCallback((partials: NewVectorElement[]): string[] => {
+    // Adds the whole set in one transaction, so a paste is one undo step. The keys run on above the current top, so
+    // the caller's order becomes the pasted stack's order. Returns the new ids in that order, so a paste can select
+    // them.
+    const addElements = useCallback((partials: readonly NewVectorElement[]): string[] => {
         const doc = docRef.current;
         if (!doc || partials.length === 0) return [];
         const ids: string[] = [];
@@ -175,11 +175,9 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [addElements],
     );
 
-    // Batch update — the whole set in ONE transact, so a group move / nudge / z-order rewrite is a
-    // single undo step and a single broadcast — one gesture = one transact. Missing ids
-    // no-op (a peer may have deleted one mid-gesture).
-    // `origin` defaults to null (tracked/undoable). Pass UNTRACKED_ORIGIN for a technical fixup the
-    // user never undoes as their own step (the cross-mount pending→real swap) — still broadcast.
+    // Patches the whole set in one transaction, so a group move or a nudge is one undo step and one broadcast. An id
+    // that is gone writes nothing, because a peer may delete an element during a gesture. The null origin is tracked,
+    // so the write can be undone.
     const updateElements = useCallback(
         (patches: readonly { id: string; fields: VectorElementPatch }[], origin: unknown = null) => {
             const doc = docRef.current;
@@ -196,8 +194,8 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
                     }
                     patchedIds.add(id);
                 }
-                // Arrows follow their bound shapes in the SAME transact (one undo step, one broadcast), so
-                // every caller — nudge, drag-commit, align, paste-move — gets it for free.
+                // Arrows follow their bound shapes in the same transaction, so every caller, such as a nudge or an
+                // align, moves them in the same undo step and broadcast.
                 followBoundArrows(elementsMap, patchedIds);
             }, origin);
         },
@@ -220,7 +218,7 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         [updateElementsUntracked],
     );
 
-    const deleteElements = useCallback((ids: string[], origin: unknown = null) => {
+    const deleteElements = useCallback((ids: readonly string[], origin: unknown = null) => {
         const doc = docRef.current;
         if (!doc) return;
         doc.transact(() => {
@@ -229,10 +227,10 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         }, origin);
     }, []);
 
-    // Non-undoable delete (see UNTRACKED_ORIGIN): cleanup of a failed optimistic insert — ⌘Z must
-    // not resurrect a broken pending element as its own step; peers still receive the delete.
+    // Removes a placeholder that will never become real, such as an image whose upload failed. ⌘Z must not bring it
+    // back as a step of its own, and peers still get the delete.
     const deleteElementsUntracked = useCallback(
-        (ids: string[]) => deleteElements(ids, UNTRACKED_ORIGIN),
+        (ids: readonly string[]) => deleteElements(ids, UNTRACKED_ORIGIN),
         [deleteElements],
     );
 
@@ -252,9 +250,8 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         if (docRef.current) reorderElementsInDoc(docRef.current, ids, selectedIds, op);
     }, []);
 
-    // Frame ops: thin wrappers over frame-writes.ts, the way the element ops wrap element-writes.ts.
-    // Each is a discrete op, so each is `sealed` — adding a page then renaming it must be two undo
-    // steps. add/duplicate return the new frame id so the caller can activate it.
+    // The frame writes. Each is a discrete op, so each is sealed: adding a page and then renaming it are two undo
+    // steps. Adding and duplicating return the new frame's id, so the caller can show it.
     const addFrame = useCallback(
         (afterId: string | null) => {
             const doc = docRef.current;
@@ -334,15 +331,15 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
         updateFrames,
         updateMeta,
         undoManager,
-        // Exposed for awareness (cursors + remote selections).
+        // For awareness: the cursors and the remote selections.
         provider,
-        // The live Y.Doc, for the document-level comment lifecycle (its `comments` Y.Map). Null until
-        // the effect runs; the editor gates comment reads on `synced` like the rest of the panel.
+        // The live Y.Doc, for the comments, which live in its `comments` map. It is null until the effect runs, and the
+        // editor reads comments only once `synced` is true, like the rest of the panel.
         yjsDoc,
         synced,
         offline,
-        // Latched first-load flag — the editor gates its loading screen on this, not `synced`, so a
-        // WS blip never unmounts the canvas (transient selection/preview state survives).
+        // True from the first load on. The editor shows its loading screen on this, not on `synced`, so a dropped
+        // connection never unmounts the canvas and its selection and previews survive.
         loaded,
         storageUnavailable,
         storageGone,
@@ -350,6 +347,6 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
     };
 };
 
-// Everything a canvas host owns of its document: the scene, every writer, the collab lifecycle. The
-// editor takes it whole rather than fifteen threaded props.
+// Everything a canvas host owns of its document: the scene, every writer and the collab state. The editor takes it
+// whole rather than as a prop per writer.
 export type CanvasDoc = ReturnType<typeof useCanvasDoc>;
