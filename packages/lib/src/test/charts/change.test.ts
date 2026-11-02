@@ -149,7 +149,11 @@ describe('chartPointMoves', () => {
         });
     });
 
-    // An xlsx pie can store a point on every slice, and each row op moves them all.
+    // An xlsx pie can store a point on every slice, and each row op moves them all. Timed against a tenth of the
+    // points: linear is about 10x, a copy per move 100x. CPU time, not the wall clock, because a loaded runner
+    // preempts the long run far more often than the short one. Both sizes run once before the clock so the JIT is
+    // warm for each, ten rounds lift the short run above the clock's grain, and the two sizes take turns and keep
+    // their fastest of five, so a GC pause in one run fails nothing.
     test('applies a move of every point in linear time', () => {
         const shift = (i: number) => (i === 0 ? null : i - 1);
         const applying = (count: number) => {
@@ -157,16 +161,23 @@ describe('chartPointMoves', () => {
             const change = chartPointMoves(stored, shift);
             return () => applyChartSpecChange(stored, change);
         };
-        const fastest = (run: () => unknown) =>
-            Math.min(
-                ...Array.from({ length: 7 }, () => {
-                    const start = performance.now();
-                    run();
-                    return performance.now() - start;
-                }),
-            );
-        // Timed against a tenth of the points, so load slows both: linear is about 10x, a copy per move 100x.
-        expect(fastest(applying(MAX_CHART_POINTS))).toBeLessThan(30 * fastest(applying(MAX_CHART_POINTS / 10)));
+        const cpu = (run: () => unknown) => {
+            const started = process.cpuUsage();
+            for (let round = 0; round < 10; round += 1) run();
+            const { user, system } = process.cpuUsage(started);
+            return user + system;
+        };
+        const large = applying(MAX_CHART_POINTS);
+        const small = applying(MAX_CHART_POINTS / 10);
+        large();
+        small();
+        let fastestLarge = Infinity;
+        let fastestSmall = Infinity;
+        for (let turn = 0; turn < 5; turn += 1) {
+            fastestLarge = Math.min(fastestLarge, cpu(large));
+            fastestSmall = Math.min(fastestSmall, cpu(small));
+        }
+        expect(fastestLarge).toBeLessThan(30 * fastestSmall);
         const after = moved(
             Object.fromEntries(Array.from({ length: MAX_CHART_POINTS }, (_, i) => [i, '#000000'])),
             shift,
