@@ -12,15 +12,6 @@ import { isVectorFontLoaded, loadVectorFont, measureVectorText } from './text-me
 // Clients may measure a label a fraction of a px apart, so a width closer than this to the stored one is left alone.
 const LABEL_WIDTH_TOLERANCE = 0.5;
 
-// The text body's natural extent: from the top of its first block child to the bottom of its last one. The body's own
-// height is pinned to the box (height:100%), so it could never report a shrink. A client rect would be scaled by the
-// scene layer's zoom, while offsets are layout px, which are scene units. Null when the body holds no block child.
-export function textBodyHeight(body: Element): number | null {
-    const { firstElementChild: first, lastElementChild: last } = body;
-    if (!(first instanceof HTMLElement) || !(last instanceof HTMLElement)) return null;
-    return last.offsetTop + last.offsetHeight - first.offsetTop;
-}
-
 // `editing` is true when the box is the one the user is typing in, so the host can store that growth
 // as part of the keystroke that caused it rather than as bookkeeping.
 export type FitHeight = (id: string, height: number, editing: boolean) => void;
@@ -50,6 +41,15 @@ export function useTextBoxAutoFit(
         for (const block of body.children) observer.observe(block);
         return () => observer.disconnect();
     }, [host, el, onFit, editing]);
+}
+
+// The text body's natural extent: from the top of its first block child to the bottom of its last one. The body's own
+// height is pinned to the box (height:100%), so it could never report a shrink. A client rect would be scaled by the
+// scene layer's zoom, while offsets are layout px, which are scene units. Null when the body holds no block child.
+export function textBodyHeight(body: Element): number | null {
+    const { firstElementChild: first, lastElementChild: last } = body;
+    if (!(first instanceof HTMLElement) || !(last instanceof HTMLElement)) return null;
+    return last.offsetTop + last.offsetHeight - first.offsetTop;
 }
 
 // Measures an arrow label when it appears and whenever its text or font changes, and hands `onFit` the widths that are

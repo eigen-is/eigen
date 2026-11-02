@@ -48,69 +48,6 @@ import {
 // back the insert, not the swap.
 const UNTRACKED_ORIGIN = Symbol('vector-untracked-write');
 
-// After a patch, runs followBindings again for every arrow bound to a patched shape, and for every patched arrow that
-// is bound, and writes their geometry in the same transaction. So a nudge, align or rotate of a bound arrow alone glues
-// its ends back to the shape that stayed put. Without it they would hang loose until the shape's next move jumped them
-// back. Bound ends stay glued, as in Excalidraw, and only a drag past the unbind threshold detaches one. A shape and its
-// arrow moved together write nothing, because followBindings returns null for them.
-function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: ReadonlySet<string>): void {
-    const touched = [...patchedIds].some((id) => {
-        const m = elementsMap.get(id);
-        if (!(m instanceof Y.Map)) return false;
-        const type = m.get('type');
-        if (isVectorElementType(type) && ELEMENT_KINDS[type].capabilities.bindable) return true;
-        return type === 'arrow' && Boolean(m.get('startBinding') || m.get('endBinding'));
-    });
-    if (!touched) return;
-
-    // Only the arrows are read, not the scene. This runs inside every gesture's transaction, and the reverse index
-    // needs nothing but each arrow's two bindings. A scene without arrows stops here.
-    const arrowById = new Map<string, VectorArrowElement>();
-    for (const value of elementsMap.values()) {
-        if (!(value instanceof Y.Map) || value.get('type') !== 'arrow') continue;
-        const el = readElementFromFields(value);
-        if (el?.type === 'arrow') arrowById.set(el.id, el);
-    }
-    if (arrowById.size === 0) return;
-
-    const bound = arrowsBoundTo([...arrowById.values()]);
-    const arrows = new Set<VectorArrowElement>();
-    for (const id of patchedIds) {
-        for (const aid of bound.get(id) ?? []) {
-            const arrow = arrowById.get(aid);
-            if (arrow) arrows.add(arrow);
-        }
-        const patched = arrowById.get(id);
-        if (patched && (patched.startBinding !== '' || patched.endBinding !== '')) arrows.add(patched);
-    }
-    if (arrows.size === 0) return;
-
-    // The other half of what followBindings reads: the shapes those arrows dock on, and only those, because it looks
-    // up nothing but the arrow's own two bindings. A binding whose shape is gone reads as an unbound end.
-    const byId = new Map<string, VectorElement>();
-    for (const arrow of arrows) {
-        for (const binding of [arrow.startBinding, arrow.endBinding]) {
-            const target = parseBinding(binding);
-            if (!target || byId.has(target.elementId)) continue;
-            const el = readElementFromFields(elementsMap.get(target.elementId));
-            if (el) byId.set(el.id, el);
-        }
-    }
-    for (const arrow of arrows) {
-        const next = followBindings(arrow, byId);
-        const arrowMap = elementsMap.get(arrow.id);
-        if (!next || !(arrowMap instanceof Y.Map)) continue;
-        arrowMap.set('x', next.x);
-        arrowMap.set('y', next.y);
-        arrowMap.set('width', next.width);
-        arrowMap.set('height', next.height);
-        arrowMap.set('points', next.points);
-        // The pinned segments move with the arrow's new origin, so they keep their place in the scene while the bound
-        // end follows the shape. An arrow without pins stores ''.
-        arrowMap.set('fixedSegments', next.fixedSegments);
-    }
-}
-
 export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, defaults: StyleDefaults) => {
     const [scene, setScene] = useState<VectorScene>({ elements: [], frames: [], meta: DEFAULT_SCENE_META });
     // The host's style table, read when an element is added, so the add callbacks never change.
@@ -350,3 +287,66 @@ export const useCanvasDoc = (ownerId: string, mountId: string, pathId: string, d
 // Everything a canvas host owns of its document: the scene, every writer and the collab state. The editor takes it
 // whole rather than as a prop per writer.
 export type CanvasDoc = ReturnType<typeof useCanvasDoc>;
+
+// After a patch, runs followBindings again for every arrow bound to a patched shape, and for every patched arrow that
+// is bound, and writes their geometry in the same transaction. So a nudge, align or rotate of a bound arrow alone glues
+// its ends back to the shape that stayed put. Without it they would hang loose until the shape's next move jumped them
+// back. Bound ends stay glued, as in Excalidraw, and only a drag past the unbind threshold detaches one. A shape and its
+// arrow moved together write nothing, because followBindings returns null for them.
+function followBoundArrows(elementsMap: Y.Map<unknown>, patchedIds: ReadonlySet<string>): void {
+    const touched = [...patchedIds].some((id) => {
+        const m = elementsMap.get(id);
+        if (!(m instanceof Y.Map)) return false;
+        const type = m.get('type');
+        if (isVectorElementType(type) && ELEMENT_KINDS[type].capabilities.bindable) return true;
+        return type === 'arrow' && Boolean(m.get('startBinding') || m.get('endBinding'));
+    });
+    if (!touched) return;
+
+    // Only the arrows are read, not the scene. This runs inside every gesture's transaction, and the reverse index
+    // needs nothing but each arrow's two bindings. A scene without arrows stops here.
+    const arrowById = new Map<string, VectorArrowElement>();
+    for (const value of elementsMap.values()) {
+        if (!(value instanceof Y.Map) || value.get('type') !== 'arrow') continue;
+        const el = readElementFromFields(value);
+        if (el?.type === 'arrow') arrowById.set(el.id, el);
+    }
+    if (arrowById.size === 0) return;
+
+    const bound = arrowsBoundTo([...arrowById.values()]);
+    const arrows = new Set<VectorArrowElement>();
+    for (const id of patchedIds) {
+        for (const aid of bound.get(id) ?? []) {
+            const arrow = arrowById.get(aid);
+            if (arrow) arrows.add(arrow);
+        }
+        const patched = arrowById.get(id);
+        if (patched && (patched.startBinding !== '' || patched.endBinding !== '')) arrows.add(patched);
+    }
+    if (arrows.size === 0) return;
+
+    // The other half of what followBindings reads: the shapes those arrows dock on, and only those, because it looks
+    // up nothing but the arrow's own two bindings. A binding whose shape is gone reads as an unbound end.
+    const byId = new Map<string, VectorElement>();
+    for (const arrow of arrows) {
+        for (const binding of [arrow.startBinding, arrow.endBinding]) {
+            const target = parseBinding(binding);
+            if (!target || byId.has(target.elementId)) continue;
+            const el = readElementFromFields(elementsMap.get(target.elementId));
+            if (el) byId.set(el.id, el);
+        }
+    }
+    for (const arrow of arrows) {
+        const next = followBindings(arrow, byId);
+        const arrowMap = elementsMap.get(arrow.id);
+        if (!next || !(arrowMap instanceof Y.Map)) continue;
+        arrowMap.set('x', next.x);
+        arrowMap.set('y', next.y);
+        arrowMap.set('width', next.width);
+        arrowMap.set('height', next.height);
+        arrowMap.set('points', next.points);
+        // The pinned segments move with the arrow's new origin, so they keep their place in the scene while the bound
+        // end follows the shape. An arrow without pins stores ''.
+        arrowMap.set('fixedSegments', next.fixedSegments);
+    }
+}
