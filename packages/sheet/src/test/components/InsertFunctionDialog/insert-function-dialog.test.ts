@@ -43,21 +43,49 @@ test('OK opens the editor on the focus cell with the highlighted function and cl
     expect(dialog.dialogs()).toHaveLength(0);
 });
 
-test('after OK the editor has the focus, with the caret after the bracket', async () => {
-    const dialog = await openInsertFunction();
-    await dialog.type(SEARCH, 'SUMIF');
-    await dialog.click('OK');
-    // Radix hands the focus on a moment after the dialog unmounts.
+// The text before the caret in the focused editor, once Radix has handed the focus on after the dialog unmounted.
+async function textBeforeCaret() {
     await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
     expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
     const editor = document.activeElement;
     const caret = document.getSelection()?.getRangeAt(0);
     if (!editor || !caret) throw new Error('no caret');
+    expect(caret.collapsed).toBe(true);
     const before = document.createRange();
     before.setStart(editor, 0);
     before.setEnd(caret.startContainer, caret.startOffset);
-    expect(caret.collapsed).toBe(true);
-    expect(before.toString()).toBe('=SUMIF(');
+    return before.toString();
+}
+
+test('after OK the editor has the focus, with the caret after the bracket', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'SUMIF');
+    // A click focuses the button it presses.
+    dialog.button('OK')?.focus();
+    await dialog.click('OK');
+    expect(await textBeforeCaret()).toBe('=SUMIF(');
+});
+
+// In a browser, a caret placed in the editor while the dialog is open moves the focus there, and the dialog's focus
+// trap takes it back. With the focus in the search field, that also takes the selection out of the editor.
+test('after Enter in the search field the caret is after the bracket too', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'sum');
+    const search = dialog.field(SEARCH);
+    search.focus();
+    const selection = document.getSelection();
+    if (!selection) throw new Error('no selection');
+    const addRange = selection.addRange.bind(selection);
+    selection.addRange = (range: Range) => {
+        addRange(range);
+        if (search.isConnected) selection.removeAllRanges();
+    };
+    try {
+        await act(async () => pressEnter(search));
+        expect(await textBeforeCaret()).toBe('=SUM(');
+    } finally {
+        selection.addRange = addRange;
+    }
 });
 
 test('Enter in the search field inserts the highlighted function', async () => {

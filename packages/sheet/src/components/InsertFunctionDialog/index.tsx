@@ -12,7 +12,7 @@ import { useContext, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
-import { FUNCTION_CATEGORIES, FUNCTION_LIST, setCaretPosition } from '../../state';
+import { FUNCTION_CATEGORIES, FUNCTION_LIST, placeEditorCaret } from '../../state';
 
 export function InsertFunctionDialog() {
     const {
@@ -55,8 +55,7 @@ export function InsertFunctionDialog() {
             ];
             globalCache.doNotUpdateCell = true;
             input.innerHTML = `<span dir="auto" class="sheet-formula-text-color">=</span><span dir="auto" class="sheet-formula-text-color">${name}</span><span dir="auto" class="sheet-formula-text-color">(</span>`;
-            const bracket = input.lastElementChild;
-            if (bracket instanceof HTMLElement) setCaretPosition(ctx, bracket, 0, 1);
+            placeEditorCaret(input, name.length + 2);
             ctx.functionHint = name;
             ctx.functionCandidates = [];
             if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
