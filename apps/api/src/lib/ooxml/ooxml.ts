@@ -124,7 +124,7 @@ export const POINTS_PER_UNIT = new Map([
 
 // No real length needs more characters. A longer one is ignored unread, so a crafted 4 MB value is not scanned at
 // every use.
-const MAX_MEASURE_CHARS = 64;
+export const MAX_MEASURE_CHARS = 64;
 
 // An ST_Coordinate in EMU, or a universal measure converted to EMU. Anything else is undefined, and so is a value
 // too large for a double to hold exactly.

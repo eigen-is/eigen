@@ -536,9 +536,9 @@ describe('VML', () => {
         ]);
     });
 
-    test("a picture's width too long to be a number is no size", async () => {
+    test("a picture's width past 64 characters is no size", async () => {
         const { json } = await importDocxBody(
-            paragraph(vml(`style="width:${'9'.repeat(400)}px;height:50pt"`, '<v:imagedata r:id="rId4"/>')),
+            paragraph(vml(`style="width:${'9'.repeat(300)}px;height:50pt"`, '<v:imagedata r:id="rId4"/>')),
         );
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
             [null, null],
@@ -912,17 +912,17 @@ describe('text boxes as boxes', () => {
         expect(px[0]?.attrs).toMatchObject({ offsetX: -1 });
     });
 
-    // A digit string too long for a finite number reads as no length.
-    test('a VML inset too long to be a number gives no padding, alone or against its opposite', async () => {
-        const huge = `${'9'.repeat(400)}px`;
+    // A length past 64 characters reads as none, though 300 digits are still a finite number.
+    test('a VML inset past 64 characters gives no padding, alone or against its opposite', async () => {
+        const huge = `${'9'.repeat(300)}px`;
         const inset = (value: string) => vmlBox(PLACED).replace('inset="7.2pt,3.6pt,7.2pt,3.6pt"', `inset="${value}"`);
         const boxes = await vmlBoxesOf(inset(`${huge},0,-${huge},0`), inset(huge));
         expect(boxes.map((box) => box.attrs?.['paddingX'])).toEqual([null, null]);
     });
 
-    // A length that reads as infinite would wrap the box on the right and stretch it to the column.
-    test('a VML margin or width too long to be a number reads as none', async () => {
-        const huge = `${'9'.repeat(400)}px`;
+    // A huge length would wrap the box on the right and stretch it to the column.
+    test('a VML margin or width past 64 characters reads as none', async () => {
+        const huge = `${'9'.repeat(300)}px`;
         const wrapped = (style: string) => vmlBox(style, '<w10:wrap type="square"/>');
         const unplaced = PLACED.replace('margin-left:30pt;margin-top:15pt;width:150pt;', '');
         const [crafted, plain] = await vmlBoxesOf(

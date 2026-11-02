@@ -16,6 +16,7 @@ import {
     emu,
     isAlternateContent,
     isOnElement,
+    MAX_MEASURE_CHARS,
     measure,
     R_NS,
     W_NS,
@@ -237,14 +238,13 @@ export function vmlStyle(element: XmlElement): Map<string, string> {
 }
 
 // A VML length in px. A number with no unit is px in the CSS style, as a browser reads it, and EMU in an attribute such
-// as an inset or a stroke weight, as LibreOffice reads them. A number too long to be finite is no length.
+// as an inset or a stroke weight, as LibreOffice reads them. A value longer than any real length is none, unread, as
+// emu() and measure() refuse one.
 export function vmlPx(value: string | undefined, unitless: 'px' | 'emu'): number | null {
-    const text = value?.trim().toLowerCase() ?? '';
+    if (value === undefined || value.length > MAX_MEASURE_CHARS) return null;
+    const text = value.trim().toLowerCase();
     const [, number, px] = /^(-?(?:\d+(?:\.\d+)?|\.\d+))(px)?$/.exec(text) ?? [];
-    if (number !== undefined && (px || unitless === 'px')) {
-        const length = Number(number);
-        return Number.isFinite(length) ? length : null;
-    }
+    if (number !== undefined && (px || unitless === 'px')) return Number(number);
     const length = emu(text);
     return length === undefined ? null : length / EMU_PER_PX;
 }
