@@ -30,8 +30,8 @@ let beatFailed = false;
 let released = false;
 // Unref'd, so a process that has nothing else to do still exits.
 const heartbeat = setInterval(beat, LEASE_HEARTBEAT_MS).unref();
-// Any process.exit releases the lease too, such as a boot that exits on a setting it refuses. Only a kill or a crash
-// leaves it behind.
+// Any exit releases the lease too, such as a boot that exits on a setting it refuses or an uncaught exception. Only a
+// kill or a power cut leaves it behind.
 process.on('exit', releaseInstanceLease);
 
 // Called once the homes are closed by the graceful shutdown, so the heartbeat runs through the whole drain, and again

@@ -1,5 +1,6 @@
 // The control characters a line of text from outside may not hold, such as a file name, a header or a calendar uid.
-// The ranges are strings, because a TypeBox pattern takes one and compiles it without the u flag.
+// The patterns here refuse the C0 range. The C1 range is one a pattern opts into, such as the message of a restart
+// notice. The ranges are strings, because a TypeBox pattern takes one and compiles it without the u flag.
 
 // C0 and DEL, which can split a header line or a path.
 export const C0_CONTROL_RANGE = '\\x00-\\x1f\\x7f';
