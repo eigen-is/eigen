@@ -22,7 +22,7 @@ import { ensureAuthSchemaColumns } from '../../lib/auth/auth-schema-columns';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getMaxUploadSize, getServerSettings, updateServerSettings } from '../../lib/config/server-settings';
-import { isHomeCached } from '../../lib/home/get-home';
+import { atHome } from '../../lib/home/get-home';
 import { homeSize } from '../../lib/home/home';
 import { pullHomeSize } from '../../lib/home/home-relay';
 import * as s3Storage from '../../lib/storage/s3-storage';
@@ -1208,7 +1208,7 @@ describe('GET /settings/users', () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/users');
         const rows: AdminUserRow[] = await assertJson(res);
         expect(rows.find((r) => r.id === 'unlisted-home-id')).toBeDefined();
-        expect(isHomeCached('unlisted-home-id')).toBe(false);
+        expect(atHome('unlisted-home-id')).toBe(false);
         expect(fs.existsSync(getUserHomePath('unlisted-home-id'))).toBe(false);
         await db.delete(user).where(eq(user.id, 'unlisted-home-id'));
     });
@@ -1280,7 +1280,7 @@ describe('GET /settings/users/usage', () => {
         const usage = await assertJson<Record<string, HomeSizeResponse>>(res);
         expect(usage['UnsizedHomeId0000000000000000000']?.total.used).toBe(0);
         expect(usage['UnsizedHomeId0000000000000000000']?.total.max).toBeGreaterThan(0);
-        expect(isHomeCached('UnsizedHomeId0000000000000000000')).toBe(false);
+        expect(atHome('UnsizedHomeId0000000000000000000')).toBe(false);
         expect(fs.existsSync(getUserHomePath('UnsizedHomeId0000000000000000000'))).toBe(false);
         await db.delete(user).where(eq(user.id, 'UnsizedHomeId0000000000000000000'));
     });

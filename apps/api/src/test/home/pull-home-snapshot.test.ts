@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
-import { evictHome, getHome, isHomeCached, touchHomeIfLoaded } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome, touchHomeIfLoaded } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { BACKUP_RELEASE_MS, pullHomeSnapshot } from '../../lib/home/home-relay';
 import { createTestUser, getTestContext } from '../setup';
@@ -53,20 +53,20 @@ describe('pullHomeSnapshot', () => {
 
     async function waitForEviction(): Promise<void> {
         jest.useRealTimers();
-        for (let attempt = 0; attempt < 100 && isHomeCached(ownerId); attempt++) await Bun.sleep(20);
+        for (let attempt = 0; attempt < 100 && atHome(ownerId); attempt++) await Bun.sleep(20);
     }
 
     test('a home it booted and nobody opened goes after the short release idle', async () => {
         await evictHome(ownerId);
         captureThenFakeTimers();
         await pullHomeSnapshot(ownerId, targetDir(), {});
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
 
         jest.advanceTimersByTime(BACKUP_RELEASE_MS - 1);
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
         jest.advanceTimersByTime(2);
         await waitForEviction();
-        expect(isHomeCached(ownerId)).toBe(false);
+        expect(atHome(ownerId)).toBe(false);
     });
 
     test('a user who opens the home mid-capture keeps it, sockets and all, as long as their keepalive ticks', async () => {
@@ -77,14 +77,14 @@ describe('pullHomeSnapshot', () => {
         });
         await pullHomeSnapshot(ownerId, targetDir(), {});
         expect(opened).toBeDefined();
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
         expect(opened!.closing).toBe(false);
 
         // The keepalive re-arms the full idle, not the release one.
         jest.advanceTimersByTime(15_000);
         touchHomeIfLoaded(ownerId);
         jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
         expect(opened!.closing).toBe(false);
         expect(await getHome(ownerId)).toBe(opened!);
     });
@@ -98,11 +98,11 @@ describe('pullHomeSnapshot', () => {
         await pullHomeSnapshot(ownerId, targetDir(), {});
 
         jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
         expect(opened!.closing).toBe(false);
         jest.advanceTimersByTime(USER_IDLE_MS);
         await waitForEviction();
-        expect(isHomeCached(ownerId)).toBe(false);
+        expect(atHome(ownerId)).toBe(false);
     });
 
     test('a home that was tearing down when the capture started counts as asleep: its successor goes after the release idle', async () => {
@@ -110,11 +110,11 @@ describe('pullHomeSnapshot', () => {
         captureThenFakeTimers();
         await pullHomeSnapshot(ownerId, targetDir(), {});
         await going;
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
 
         jest.advanceTimersByTime(BACKUP_RELEASE_MS + 1);
         await waitForEviction();
-        expect(isHomeCached(ownerId)).toBe(false);
+        expect(atHome(ownerId)).toBe(false);
     });
 
     test('a home that was open before the capture keeps its full idle', async () => {
@@ -123,7 +123,7 @@ describe('pullHomeSnapshot', () => {
         await pullHomeSnapshot(ownerId, targetDir(), {});
 
         jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
-        expect(isHomeCached(ownerId)).toBe(true);
+        expect(atHome(ownerId)).toBe(true);
         expect(open.closing).toBe(false);
     });
 

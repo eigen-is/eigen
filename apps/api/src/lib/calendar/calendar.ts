@@ -24,7 +24,7 @@ import type { PutResourceResult } from '../core';
 import { ApiError, BroadcastBatch, computeResourceEtag, newSyncGen, normalizeResourceUri } from '../core';
 import type { DeleteResourceResult, ManagedDatabase, ResourcePreconditions } from '../core/';
 import type { Home } from '../home';
-import { isHomeCached } from '../home';
+import { atHome } from '../home';
 import { parseResource } from '../ical';
 import type { EventPatch, Revision } from '../ical/ical-component';
 import type { ParsedEvent } from '../ical/ical-parse';
@@ -111,7 +111,7 @@ export class Calendar {
         }
 
         // A home nobody registered stays unmetered: its quota lookup would boot a second Home over this very database.
-        this.meteredIngest = isHomeCached(this.home.user.id);
+        this.meteredIngest = atHome(this.home.user.id);
     }
 
     // Never locks: a quota check reaches it from inside the write lock.

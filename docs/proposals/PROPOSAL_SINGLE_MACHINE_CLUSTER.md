@@ -42,10 +42,10 @@ approaches were considered and rejected:
    Caddy uses a different hash algorithm internally. The two would disagree about which process owns
    which ownerId, causing relay messages to go to the wrong place.
 
-2. **Broadcast to all peers, check `isHomeCached()`** — rejected because `isHomeCached()` only returns true if
+2. **Broadcast to all peers, check `atHome()`** — rejected because `atHome()` only returns true if
    the Home singleton is currently cached in memory. Relay operations like shares and notifications
    need to **initialize** the Home (call `getHome()`) to write to its database. Broadcasting with
-   an `isHomeCached()` guard would silently drop messages for users whose Homes aren't loaded.
+   an `atHome()` guard would silently drop messages for users whose Homes aren't loaded.
 
 **Solution:** Route relay through Caddy. API processes send relay requests to
 `http://caddy:8080/internal/relay/{ownerId}`. Caddy extracts ownerId from the path, applies the
@@ -152,7 +152,7 @@ used by internal endpoints). `sendToHome()` wraps it with the cluster routing:
 ```typescript
 export async function sendToHome(targetUserId: string, message: HomeMessage): Promise<void> {
     // Fast path: Home is loaded on this process
-    if (isHomeCached(targetUserId)) {
+    if (atHome(targetUserId)) {
         await dispatchToLocalHome(targetUserId, message);
         return;
     }
@@ -174,20 +174,20 @@ export async function sendToHome(targetUserId: string, message: HomeMessage): Pr
 ```
 
 Key behaviors:
-- `isHomeCached()` is a **pure optimization** — if the Home is already loaded on this process, skip the
+- `atHome()` is a **pure optimization** — if the Home is already loaded on this process, skip the
   network hop. It is NOT a routing decision.
-- In single-process mode, `broadcast` type is skipped when `!isHomeCached()` (user has no SSE connection).
+- In single-process mode, `broadcast` type is skipped when `!atHome()` (user has no SSE connection).
   All other types call `getHome()` directly (original behavior).
 - In cluster mode, everything goes through Caddy's `:8080` listener. Caddy routes to the correct
   peer based on the ownerId in the URL path. The receiving peer calls `getHome()` to initialize the
   Home if needed.
 
 Pull functions (`pullSharedPaths`, `pullCalendarShares`, etc.) follow the same pattern: local fast
-path if `isHomeCached()`, else fetch through Caddy relay:
+path if `atHome()`, else fetch through Caddy relay:
 
 ```typescript
 export async function pullSharedPaths(ownerUserId: string, user: User): Promise<DrivePath[]> {
-    if (isHomeCached(ownerUserId) || !isClusterMode()) {
+    if (atHome(ownerUserId) || !isClusterMode()) {
         const home = await getHome(ownerUserId);
         return home.drive.getSharedWith(user);
     }
@@ -200,7 +200,7 @@ export async function pullSharedPaths(ownerUserId: string, user: User): Promise<
 New endpoints with `:ownerId` in the path (so Caddy can extract it for routing):
 
 - `POST /internal/relay/:ownerId` — receives `{ message: HomeMessage }`, calls
-  `dispatchToLocalHome()`. For `broadcast` messages only: checks `isHomeCached()` first and skips if the
+  `dispatchToLocalHome()`. For `broadcast` messages only: checks `atHome()` first and skips if the
   Home isn't loaded (user has no active SSE connection, so broadcasting is pointless).
 - `POST /internal/pull/:ownerId/shared-paths` — calls `getHome()`, returns shared paths
 - `POST /internal/pull/:ownerId/calendar-shares` — returns calendar shares

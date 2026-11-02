@@ -6,7 +6,7 @@ import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
 import { cleanupInactiveGuests } from '../../lib/auth/guest-cleanup';
 import { getGuestHomePath } from '../../lib/config/paths';
 import { updateServerSettings } from '../../lib/config/server-settings';
-import { evictHome, getHome, isHomeCached } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome } from '../../lib/home/get-home';
 import { authedRequest, getTestContext } from '../setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
@@ -88,7 +88,7 @@ describe('Guest cleanup', () => {
         const id = await makeGuest();
         setUserUpdatedAt(id, new Date(Date.now() - 30 * DAY_MS));
         await getHome(id);
-        expect(isHomeCached(id)).toBe(true);
+        expect(atHome(id)).toBe(true);
 
         const { deleted, skipped } = await cleanupInactiveGuests();
         expect(deleted).not.toContain(id);

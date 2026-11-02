@@ -17,7 +17,7 @@ import { buildArtifactName, buildHomeFolderName, getBackupsDir } from '../../lib
 import { measureFolder } from '../../lib/backup/safety-copy';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import * as verifyModule from '../../lib/backup/verify';
-import { getHome, isHomeCached } from '../../lib/home/get-home';
+import { atHome, getHome } from '../../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
@@ -387,7 +387,7 @@ describe('Backup routes', () => {
         // mount's re-upload queue starts draining now instead of waiting for whoever visits next
         // (Mount.init stands the queue up and reconciles the pending_uploads rows the restore
         // wrote). Asserted before any other request in this test touches the home.
-        expect(isHomeCached(target.id)).toBe(true);
+        expect(atHome(target.id)).toBe(true);
 
         const names = await rootNames();
         expect(names).toContain('seeded.png');
@@ -462,7 +462,7 @@ describe('Backup routes', () => {
         expect(job.kind).toBe('restore');
         expect(job.artifact).toBe(copy?.name);
         // Same as the artifact restore: the route warms the home it just replaced.
-        expect(isHomeCached(target.id)).toBe(true);
+        expect(atHome(target.id)).toBe(true);
         expect(await rootNames()).toContain('undo-me.png');
 
         // The copy took the home's place, and the home as the artifact restore left it took its own.

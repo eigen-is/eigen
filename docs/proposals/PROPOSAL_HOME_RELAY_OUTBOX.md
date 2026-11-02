@@ -67,7 +67,7 @@ seam.
   `deleteEventAt`, `pushUserProfile`). Reads need answers now; they stay synchronous in-process
   calls (RPC later, per SCALABILITY.md).
 - Queuing `broadcast`. It is ephemeral SSE, already short-circuited in `sendToHome` when the
-  target home isn't resident (`isHomeCached`); replaying a stale UI-refresh event after a reboot is
+  target home isn't resident (`atHome`); replaying a stale UI-refresh event after a reboot is
   meaningless — clients refetch on reconnect. It stays a direct call.
 - Queuing outbound email. `sendMail` (iMIP invites, share emails) keeps its own fire-and-forget
   transport at the seams; the outbox carries `HomeMessage` verbs only.

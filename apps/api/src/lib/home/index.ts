@@ -1,8 +1,8 @@
 export {
+    atHome,
     getHome,
     getTeamHome,
     getUserHome,
-    isHomeCached,
     shutdownAllHomes,
     touchHomeIfLoaded,
 } from './get-home';

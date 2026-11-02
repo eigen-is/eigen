@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
-import { evictHome, getHome, isHomeCached, touchHomeIfLoaded } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome, touchHomeIfLoaded } from '../../lib/home/get-home';
 import { getTestContext } from '../setup';
 
 // An open collab websocket pins the doc-owner's home on each keepalive tick via touchHomeIfLoaded,
@@ -36,19 +36,19 @@ describe('touchHomeIfLoaded (collab keepalive home pin)', () => {
 
     test('is a no-op and does not hydrate a home that was never loaded', async () => {
         const userId = await createHomeUser('touch-pin-unloaded@test.eigen.is');
-        expect(isHomeCached(userId)).toBe(false);
+        expect(atHome(userId)).toBe(false);
 
         expect(() => touchHomeIfLoaded(userId)).not.toThrow();
-        expect(isHomeCached(userId)).toBe(false);
+        expect(atHome(userId)).toBe(false);
     });
 
     test('does not resurrect an evicted home', async () => {
         const userId = await createHomeUser('touch-pin-evicted@test.eigen.is');
         await getHome(userId);
         await evictHome(userId);
-        expect(isHomeCached(userId)).toBe(false);
+        expect(atHome(userId)).toBe(false);
 
         touchHomeIfLoaded(userId);
-        expect(isHomeCached(userId)).toBe(false);
+        expect(atHome(userId)).toBe(false);
     });
 });

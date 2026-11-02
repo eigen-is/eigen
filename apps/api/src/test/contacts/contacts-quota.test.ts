@@ -7,7 +7,7 @@ import { avatarsDirOf } from '../contacts-test-helpers';
 import { getTestContext, TEST_DATA_DIR, TEST_PNG_BYTES } from '../setup';
 
 // A card's vCard bytes are metered against the Home's one data budget, the same budget mail and calendar
-// share. makeContacts homes are deliberately unmetered (never registered, so isHomeCached is false), so every
+// share. makeContacts homes are deliberately unmetered (never registered, so atHome is false), so every
 // test here runs against a real registered Home, the only place putCard's quota gate runs.
 
 // enforceHomeDataQuota's mail half is a live byte counter, so mail that arrives between two metered

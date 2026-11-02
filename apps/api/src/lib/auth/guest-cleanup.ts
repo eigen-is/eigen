@@ -6,7 +6,7 @@ import { eq, max } from 'drizzle-orm';
 import { session, user as userTable } from '../../../auth-schema';
 import { isSetupRequired } from '../config/server-config';
 import { getServerSettings } from '../config/server-settings';
-import { isHomeCached } from '../home/get-home';
+import { atHome } from '../home/get-home';
 import { deleteUserCompletely } from '../user/delete-user';
 import { GUEST_ROLE } from '../user/guest';
 import { getAuthDrizzleDb } from './auth';
@@ -36,7 +36,7 @@ export async function cleanupInactiveGuests(): Promise<GuestCleanupResult> {
     const skipped: string[] = [];
 
     for (const guest of guests) {
-        if (isHomeCached(guest.id)) {
+        if (atHome(guest.id)) {
             skipped.push(guest.id);
             continue;
         }

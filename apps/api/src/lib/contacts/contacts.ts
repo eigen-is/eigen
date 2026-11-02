@@ -17,7 +17,7 @@ import { getServerSettings } from '../config/server-settings';
 import type { ManagedDatabase, PutResourceResult, ResourcePreconditions } from '../core';
 import { ApiError, BroadcastBatch, computeResourceEtag, LocalFilesystem, newSyncGen } from '../core';
 import type { Home } from '../home';
-import { isHomeCached } from '../home';
+import { atHome } from '../home';
 import { pushUserProfile } from '../home/home-relay';
 import { getOrgOwner } from '../user/';
 import { createVCard, mergeVCard, normalizeBirthday, parseVCard } from '../vcard';
@@ -162,7 +162,7 @@ export class Contacts {
         }
 
         // Metering starts only here: the quota lookup opens the Home, which during init would await this very init.
-        this.meteredIngest = isHomeCached(this.home.user.id);
+        this.meteredIngest = atHome(this.home.user.id);
 
         this.sweepAvatars();
     }
