@@ -77,7 +77,7 @@ Commands:
   backup           Back up the whole server into backups/ while Eigen runs
   restore          Put a whole-server archive back (run by ./eigen restore)
   update-check     Print what changed since a version, and ask about breaking changes (run by ./eigen update)
-  restart-notice   Tell every open tab that Eigen restarts soon, or take that back (run by ./eigen update)`;
+  restart-notice   Tell every open tab that Eigen restarts soon, or take that back (run by ./eigen update and rollback)`;
 
 const [command = '', ...args] = process.argv.slice(2);
 const run = COMMANDS.get(command);

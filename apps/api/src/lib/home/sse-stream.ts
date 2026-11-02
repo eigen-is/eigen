@@ -21,7 +21,7 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
     const userId = home.user.id;
     let currentHome = home;
     let streamController: ReadableStreamDefaultController<StreamItem> | null = null;
-    let keepalive: Timer | null = null;
+    let keepalive: Timer | undefined;
     let isClosed = false;
 
     const send = (item: StreamItem) => {
@@ -71,7 +71,7 @@ export function createSSEStream(home: Home): ReadableStream<StreamItem> {
         },
         cancel: () => {
             isClosed = true;
-            if (keepalive) clearInterval(keepalive);
+            clearInterval(keepalive);
             currentHome.unsubscribeSSE(send);
         },
     });

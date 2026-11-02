@@ -1,6 +1,6 @@
 // The events the server sends on a tab's event stream, shared by the API that builds them and the
 // handlers in the browser that read them. An event carries the ids a handler needs to know which queries
-// to refetch, and rarely data (a notification's display text, the home's data epochs). A new event type
+// to refetch, and rarely data, such as a notification's display text or the home's data epochs. A new event type
 // gets its name in SSEventType and its shape in the SSEvent union.
 
 import type { RESTART_REASONS } from '../validation/restart';
@@ -96,7 +96,7 @@ export type SSEventCalendar = {
     ownerId: string;
 };
 
-// The one event that carries display text: it raises the toast, which has nothing to refetch.
+// It carries the toast's display text, because a toast has nothing to refetch.
 export type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
     title: string;
@@ -134,7 +134,8 @@ export type SSEventBackup = {
 };
 
 // Sent when a stream opens and with every keepalive: the data epoch of the user's own home and of each of
-// their teams, keyed by owner id. Only a restore changes one, so a tab reloads when an epoch it holds changes.
+// their teams, keyed by owner id. Only a restore or an update changes one, so a tab reloads when an epoch it holds
+// changes.
 export type SSEventHomeDataEpochs = {
     type: typeof SSEventType.HOME_DATA_EPOCHS;
     epochs: Record<string, string>;
