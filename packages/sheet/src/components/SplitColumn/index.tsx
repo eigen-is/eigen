@@ -55,7 +55,7 @@ export function SplitColumn() {
                 if (cellValue(data[r + i][c + j]) != null) overwrites = true;
             }
         }
-        if (overwrites) showDialog('There is already data here, do you want to replace it?', 'yesno', write);
+        if (overwrites) showDialog('There is already data here. Do you want to replace it?', 'yesno', write);
         else write();
     };
 
@@ -63,7 +63,7 @@ export function SplitColumn() {
         <FormDialog {...dialogProps} title="Split text" size="md">
             <FormDialogForm submitLabel="OK" onSubmit={split}>
                 <div className="select-none [&_table]:border-collapse [&_td]:border [&_td]:border-border">
-                    <div>Delimiters</div>
+                    <div>Separators</div>
                     <div className="border p-1.5 my-1.5 space-y-1 text-sm">
                         {SEPARATORS.map(({ id, label }) => (
                             <Label key={id} className="flex items-center gap-1.5">

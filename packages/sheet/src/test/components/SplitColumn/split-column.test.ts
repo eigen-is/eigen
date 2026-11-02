@@ -55,6 +55,7 @@ test('it names each separator in sentence case, and two separators in a row can 
         [cell('Ada,,Lovelace'), null],
         [cell('Alan,Turing'), null],
     ]);
+    expect(dialog.dialogs()[0]?.textContent).toStartWith('Split textSeparators');
     expect([...document.querySelectorAll('[role="dialog"] label')].map((l) => l.textContent)).toEqual([
         'Tab',
         'Semicolon',
@@ -109,6 +110,7 @@ test('with data to the right, OK asks first, and the question stays open until a
     await tick('Comma');
     await dialog.click('OK');
     expect(dialog.title()).toBe('Notice');
+    expect(dialog.dialogs()[0]?.textContent).toContain('There is already data here. Do you want to replace it?');
     expect(dialog.dialogs()).toHaveLength(1);
     expect(row(dialog.context(), 0)).toEqual(['Ada,Lovelace', 'keep']);
     await dialog.click('OK');
