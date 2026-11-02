@@ -89,5 +89,5 @@ test('Format › Conditional formatting › Manage rules opens the rules list as
     await openConditionalFormatting(container);
     await clickRow('Manage rules');
     expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
-    expect(dialogTitles()).toEqual(['Conditional formatting rules']);
+    expect(dialogTitles()).toEqual(['Manage rules']);
 });

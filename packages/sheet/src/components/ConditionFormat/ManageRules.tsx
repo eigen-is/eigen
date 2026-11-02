@@ -2,35 +2,22 @@
 // range, a plain-English description and a swatch of its style. Its delete button per rule removes the rule at once,
 // unless the sheet is protected, so the dialog is a list with only Close in its footer.
 
-import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
-import { columnIndexToLabel } from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, DefaultConditionalFormatRule } from '@workspace/lib/sheets';
 import { Button } from '@workspace/ui/components/button';
 import { DialogFooter } from '@workspace/ui/components/dialog';
 import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { X } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
+import { rangeToA1 } from '../../engine/a1-notation';
 import { useDialogProps } from '../../hooks/useDialog';
 import { deleteSheetRule, findSheet } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
-function formatRange(range: SingleRange): string {
-    const c1 = columnIndexToLabel(range.column[0]);
-    const c2 = columnIndexToLabel(range.column[1]);
-    const r1 = range.row[0] + 1;
-    const r2 = range.row[1] + 1;
-    if (r1 === r2 && c1 === c2) return `${c1}${r1}`;
-    return `${c1}${r1}:${c2}${r2}`;
-}
-
-function formatRanges(ranges: SingleRange[]): string {
-    return ranges.map(formatRange).join(', ');
-}
-
+// A rule the dialog made lists under the label it was made with. The others come from a file or from a value that reads
+// a cell, such as a formula rule.
 const RULE_LABELS: Record<string, string> = {
-    // Menu-created rules list under the RULE_COPY name they were created with.
     ...Object.fromEntries(Object.entries(RULE_COPY).map(([name, copy]) => [name, copy.label])),
-    // Engine condition names with no menu entry — xlsx import and formula rules.
     greaterThanOrEqual: 'Greater than or equal to',
     lessThanOrEqual: 'Less than or equal to',
     notEqual: 'Not equal to',
@@ -123,7 +110,7 @@ export function ManageRules() {
     const rules = findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
 
     return (
-        <FormDialog {...dialogProps} title="Conditional formatting rules" size="md">
+        <FormDialog {...dialogProps} title="Manage rules" size="md">
             {rules.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-6 text-center">No rules on this sheet.</p>
             ) : (
@@ -135,7 +122,7 @@ export function ManageRules() {
                             <div className="flex-1 min-w-0">
                                 <div className="font-medium truncate">{describeRule(rule)}</div>
                                 <div className="text-xs text-muted-foreground truncate">
-                                    {formatRanges(rule.cellrange)}
+                                    {rule.cellrange.map((range) => rangeToA1(range)).join(', ')}
                                 </div>
                             </div>
                             <Button

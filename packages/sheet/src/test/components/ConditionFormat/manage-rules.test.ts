@@ -40,7 +40,7 @@ const deleteButtons = () => [
 test('it lists the rules in one dialog with only Close, which closes it', async () => {
     const dialog = await openManageRules([GREATER_THAN, COLOR_SCALE]);
     expect(dialog.dialogs()).toHaveLength(1);
-    expect(dialog.title()).toBe('Conditional formatting rules');
+    expect(dialog.title()).toBe('Manage rules');
     expect(dialog.footer()).toEqual(['Close']);
     expect(dialog.button('Close')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
@@ -60,6 +60,7 @@ test('each rule has a named delete button that removes it at once', async () => 
     const dialog = await openManageRules([GREATER_THAN, COLOR_SCALE]);
     expect(dialog.dialogs()[0]?.textContent).toContain('Greater than 3');
     expect(dialog.dialogs()[0]?.textContent).toContain('A1:A4');
+    expect(dialog.dialogs()[0]?.textContent).toContain('B2');
     expect(deleteButtons()).toHaveLength(2);
     await act(async () => deleteButtons()[0]?.click());
     expect(dialog.context().sheets[0]?.conditionalFormatRules).toEqual([COLOR_SCALE]);
