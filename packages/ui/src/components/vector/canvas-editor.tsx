@@ -27,7 +27,6 @@ import type {
     VectorArrowElement,
     VectorElement,
     VectorElementPatch,
-    VectorRectangleElement,
     ZOp,
 } from '@workspace/lib/vector';
 import {
@@ -110,6 +109,7 @@ import { RichTextInPlaceEditor } from './kinds/rich-text';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import type { EditingState } from './text-editing';
 import { arrowLabelEditing } from './text-editing';
+import type { HealTextSize } from './text-measure';
 import { isVectorFontLoaded, measureLoadedVectorText, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
@@ -120,18 +120,15 @@ import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
 
-// Below this scene-unit extent (in BOTH dimensions) a drag-create is a click → discarded.
+// A drag-create smaller than this in both directions, in scene units, is a click.
 const CREATE_MIN_SIZE = 1;
 const MIN_ELEMENT_SIZE = 1;
-// Image drop/paste SIZING (natural-size-that-fits, 80% viewport cap, never upscale, unreadable →
-// default box) is the shared `fitImageSize` helper — vector is its reference behavior; the cascade
-// offset is the shared IMAGE_CASCADE_OFFSET.
-// A bound arrow dragged alone unbinds only past this SCREEN distance, so a click-select never detaches it
-// (Excalidraw's DRAGGING_THRESHOLD).
+// A bound arrow dragged alone lets go of its shape only past this distance in screen px, so a click that selects it
+// never detaches it. It is Excalidraw's DRAGGING_THRESHOLD.
 const ARROW_UNBIND_SCREEN = 10;
 
-// pointerId gates move/up to the pointer that started the gesture — on touch, a second finger's
-// events would otherwise drive (and prematurely commit) the first finger's gesture.
+// `pointerId` ties a gesture to the pointer that started it. On touch, a second finger's events would otherwise drive
+// the first finger's gesture and commit it early.
 type Gesture = { pointerId: number } & (
     | { kind: 'pan'; lastX: number; lastY: number }
     | {
@@ -141,87 +138,82 @@ type Gesture = { pointerId: number } & (
           originals: Record<string, { x: number; y: number }>;
           ids: string[];
           moved: boolean;
-          // The selected elements, snapshotted here (committed geometry is invariant for the gesture —
-          // only previews move), so the move tick reads them instead of re-scanning the scene per frame.
+          // The selected elements, taken once, because committed geometry holds still during the gesture and only
+          // previews move. The move tick reads them instead of scanning the scene every frame.
           selById: Map<string, VectorElement>;
-          // Snap targets = every OTHER element's edges/center, invariant for the gesture (only
-          // previews move; committed elements don't), so compute once here instead of per tick.
+          // The edges and centers of every other element, which hold still during the gesture too, so the snap targets
+          // are computed once here.
           snapTargets: SnapTargets;
       }
     | { kind: 'create'; startX: number; startY: number }
     | { kind: 'marquee'; startX: number; startY: number; additive: boolean; base: string[] }
 );
 
-// Imperative surface the canvas publishes for the host: the toolbar's Insert entries (the editor owns
-// the picker dialog, but placement needs the live viewport) and a reveal (⌘F, a comment card), which
-// pans the element to the container center at the current zoom.
+// The imperative surface the canvas publishes for its host: the toolbar's Insert entries, which need the live viewport
+// to place, and a reveal, such as for ⌘F or a comment card, which pans the element to the center at the current zoom.
 export type CanvasHandle = {
     insertFiles: (files: File[]) => void;
     insertDrivePaths: (paths: DrivePath[]) => Promise<void>;
     insertChart: (type: ChartType) => void;
     centerOn: (el: VectorElement) => void;
-    // Every element the canvas shows, on its background, as the SVG the browser draws (Vector's File › Download).
+    // Every element the canvas shows, on its background, as the SVG the browser draws, such as for File › Download.
     downloadDrawing: () => void;
 };
 
 type CanvasEditorProps = {
     // The host's document: the scene and every writer, taken whole rather than threaded prop by prop.
     doc: CanvasDoc;
-    // 'infinite' is the drawing canvas; 'frame' bounds it to one page — the canvas then renders,
-    // hit-tests, snaps and creates inside `frameId` only, and a pan can't push the page off screen.
+    // 'infinite' is the drawing canvas. 'frame' bounds it to one page: the canvas then renders, hit-tests, snaps and
+    // creates inside `frameId` only, and a pan can't push the page off screen.
     viewport: 'infinite' | 'frame';
-    // The active frame, '' on the infinite canvas — the home stamped on every new element.
+    // The active frame, or '' on the infinite canvas: the home stamped on every new element.
     frameId?: string;
     // The host's style table (the same one its useCanvasDoc writes through), so a drag-create preview
     // looks exactly like the element that lands.
     styleDefaults: StyleDefaults;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
-    // Tool lock (Q / padlock): a placement keeps the current tool active; threaded like `tool`, toggled here on Q.
+    // The tool lock, Q or the padlock, keeps the tool after a placement. It is passed in like `tool`; Q toggles it.
     toolLocked: boolean;
     setToolLocked: (locked: boolean) => void;
     canEdit: boolean;
-    // Owner + mount of THIS document, for cross-mount image paste (re-upload into our media/ folder).
+    // This document's owner and mount, for an image pasted from another mount, which uploads into our media folder.
     ownerId: string;
     mountId: string;
     // The document's file name, which a downloaded image is named for, less its extension.
     fileName: string;
-    // Selection is lifted to the editor so the properties panel and canvas share one source (the
-    // slides editor/canvas idiom).
+    // The selection lives in the editor, so the properties panel and the canvas share one source.
     selectedIds: string[];
     setSelectedIds: (ids: string[]) => void;
     toggle: (id: string) => void;
-    // Aspect lock, shared with the properties-panel checkbox: ObjectTransform's 'aspect-default'
-    // (Shift frees) when on, 'free' when off.
+    // The aspect lock, shared with the panel's checkbox. While it is on, a resize keeps the aspect and Shift frees it.
     aspectLocked: boolean;
-    // Awareness: doc.provider drives the CursorLayer's own subscription; publishCursor pushes the
-    // local pointer's scene position (throttled in the editor's use-canvas-presence).
+    // Awareness: doc.provider drives the CursorLayer's own subscription, and publishCursor sends the local pointer's
+    // scene position, throttled downstream.
     publishCursor: PublishCursor;
-    // Published/cleared by the canvas itself; optional so read-only hosts can omit it.
+    // The canvas publishes and clears it itself. It is optional, so a read-only host can leave it out.
     canvasRef?: { current: CanvasHandle | null };
-    // Comments. A commented element marks its top-right corner; clicking the mark opens the first card
-    // (the host reveals it). Omitting onOpenCard hides the marks, omitting onAddComment the menu row.
+    // Comments. A commented element shows a mark at its top-right corner, and a click on the mark opens its first card,
+    // which the host reveals. Without onOpenCard there are no marks, and without onAddComment no menu row.
     onOpenCard?: (cardId: string) => void;
-    // The document's cards, for the mark's color — the card's own, like a commented sheet cell's.
+    // The document's cards, for the mark's color, which is the card's own, as on a commented sheet cell.
     commentCards?: Record<string, CommentCard>;
     onAddComment?: (elementId: string) => void;
-    // ⌘F: every matching element rings, the stepped-to one rings brighter and flashes. Both come from
-    // the host's useCanvasDocSearch — the canvas only paints them.
+    // ⌘F: every match rings, and the one stepped to rings brighter and flashes. Both come from the host's
+    // useCanvasDocSearch; the canvas only paints them.
     searchMatchedIds?: ReadonlySet<string>;
     searchActiveId?: string | null;
-    // Page through frames on a one-finger swipe — the deck shell passes it on a view-only phone.
+    // Pages through frames on a one-finger swipe, such as in a deck viewed on a phone.
     onSwipeFrame?: (delta: number) => void;
     // Opens the host's image picker on the image key; the toolbar gets the same callback.
     onInsertImage?: () => void;
-    // The host's rows on a right-click on empty canvas, below the canvas' own Paste: the deck's slide rows.
+    // The host's rows on a right-click on empty canvas, below the canvas's own Paste, such as a deck's slide rows.
     backgroundMenu?: Omit<MenuSectionsProps, 'clipboard'>;
 };
 
-// The live, interactive canvas surface — one absolutely positioned layer per element, with the
-// scene-space overlay and the screen-space chrome above it: pan/zoom viewport, tool-driven
-// drag-create, selection, move, and the shared ObjectTransform chrome. Every drag/resize/rotate preview is LOCAL state;
-// exactly one Yjs transact fires per completed gesture (UX-RULING 5), with stopCapturing() at each
-// gesture start so one gesture = one undo step.
+// The live canvas surface: one absolutely positioned layer per element, with the scene-space overlay and the
+// screen-space chrome above it. Every drag, resize and rotate previews in local state. A gesture writes one Yjs
+// transaction when it ends, and a seal at its start makes that one undo step.
 export function CanvasEditor({
     doc,
     viewport,
@@ -268,14 +260,13 @@ export function CanvasEditor({
         undoManager,
         provider,
     } = doc;
-    // The page this canvas is bounded to, if any: its extent drives the fit/clamp/snap math and its
-    // background paints — and clips — the layers.
+    // The page this canvas is bounded to, if any. Its size drives the fit, the clamp and the snap, and its background
+    // paints and clips the layers.
     const frame = viewport === 'frame' ? frames.find((f) => f.id === frameId) : undefined;
-    // In frame mode the viewport's scene space IS the frame's space (elements store frame-relative
-    // coordinates), so an insert needs no translation — only the home frame stamped on it. Every insert
-    // path (drag-create, image drop/paste/picker, clipboard) goes through these two, so no callsite can
-    // forget it. `frameId` sits AFTER the spread on purpose: a pasted element carries the SOURCE frame's
-    // id and must land in the frame being pasted into.
+    // In frame mode the viewport's scene space is the frame's own, because elements store coordinates relative to it.
+    // So an insert needs no translation, only the home frame stamped on it. Every insert goes through these two, such
+    // as a drag-create, an image drop or a paste, so none can forget it. `frameId` comes after the spread on purpose: a
+    // pasted element carries the frame it was copied from and must land in the frame it is pasted into.
     const addElement = useCallback(
         (partial: NewVectorElement) => addElementRaw({ ...partial, frameId }),
         [addElementRaw, frameId],
@@ -304,31 +295,30 @@ export function CanvasEditor({
         frame: frame ? { width: frame.width, height: frame.height } : undefined,
         resetKey: frameId,
     });
-    // Coarse pointers (finger/stylus) get a fatter hit-slop and drive the touch gesture policy below.
+    // A coarse pointer, a finger or a stylus, gets a larger hit slop and drives the touch policy below.
     const coarse = useIsCoarsePointer();
-    // Images resolve/upload through the container's media/ folder (the provider the editor wraps
-    // us in). resolveMediaUrl feeds every <image> href; startUpload drives the optimistic insert;
-    // resolveMediaPath gives a copied image a portable source path for cross-mount paste.
+    // Images resolve and upload through the container's media folder, from the provider the editor wraps around the
+    // canvas. resolveMediaUrl feeds every image's href, startUpload drives the optimistic insert, and resolveMediaPath
+    // gives a copied image a source path another mount can fetch.
     const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, startUpload, mediaFolderId } = useMediaResolver();
-    // Cross-mount paste re-uploads a copied image's blob into OUR media/ folder; mutateAsync is stable.
+    // A paste from another mount uploads a copied image's bytes into our media folder. mutateAsync is stable.
     const uploadFile = useUploadFile(ownerId, mountId);
-    // Toolbar "Add image" drive picks copy into media/ first (the slides idiom); mutateAsync is stable.
+    // The toolbar's Add image copies a Drive pick into the media folder first. mutateAsync is stable.
     const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, mountId);
 
     const [previews, setPreviews] = useState<Record<string, Box>>({});
     const [creating, setCreating] = useState<CreatingState | null>(null);
-    // The marquee carries its direction mode so the render can signal it (solid = contain, dashed =
-    // intersect) — slides' visual convention, shared here.
+    // The marquee carries its mode so the render can show it: solid when it selects what it contains, dashed when it
+    // selects what it touches.
     const [marquee, setMarquee] = useState<{ box: Box; mode: MarqueeMode } | null>(null);
-    // Active snap guide lines (scene coords) while a move/resize gesture is snapping. Rendered as
-    // SVG lines in the scene group; cleared on gesture end.
+    // The snap guide lines, in scene coordinates, while a move or resize snaps. They clear when the gesture ends.
     const [snapLines, setSnapLines] = useState<SnapLine[]>([]);
     const spaceHeld = useSpaceHeld();
     // Pan mode: space held, or a view-only scene where every primary drag scrolls (one finger on a phone).
     const panMode = spaceHeld || !canEdit;
     const [panning, setPanning] = useState(false);
-    // Select-mode hover affordance: true while the idle pointer is over a selectable element, so the
-    // cursor signals draggability with `move` (the suite convention — slides/docs). Item E.
+    // True while the idle pointer is over an element it can select, so the cursor shows `move` there, as in the other
+    // apps.
     const [hoveringSelectable, setHoveringSelectable] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
     // In-place rich-text editing. Separate from `editing` (the arrow-label TextOverlay session) because
@@ -337,35 +327,34 @@ export function CanvasEditor({
     const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
     // The element whose kind's EditDialog a double-click opened (a chart's Edit data).
     const [editDialogId, setEditDialogId] = useState<string | null>(null);
-    // The object context menu (right-click) — the singleton surface; item is the right-clicked
-    // element id, its ops act on the selection below.
+    // The object context menu. Its item is the right-clicked element's id, and its rows act on the selection.
     const objectContextMenu = useContextMenu<string>();
     const backgroundContextMenu = useContextMenu<true>();
 
     const gestureRef = useRef<Gesture | null>(null);
-    // First onTransform of a resize/rotate is the de-facto gesture start (ObjectTransform fires it
-    // synchronously at grip pointerdown); flip it there for the one-stopCapturing-per-gesture rule.
+    // The first onTransform of a resize or rotate is the gesture's start, because ObjectTransform fires it at the
+    // grip's pointerdown. The seal happens there, once per gesture.
     const transformStartedRef = useRef(false);
     // Latest finishGesture closure, for the window-blur listener bound once below.
     const finishRef = useRef<() => void>(() => {});
-    // Latest touch-gesture reset, called from the blur/pointercancel safety net so a torn-down
-    // two-finger gesture can't leave stale touch state behind.
+    // The latest touch reset, called from the blur and pointercancel safety net, so a two-finger gesture torn down half
+    // way leaves no stale touch state.
     const touchResetRef = useRef<() => void>(() => {});
-    // Live editing session, read from event listeners (bound once) that must know a text overlay is
-    // open — the freeze safety-net below and commitEditing both consult it.
+    // The live label session, for the listeners bound once that must know a label editor is open, such as the freeze
+    // safety net below and commitEditing.
     const editingRef = useRef<EditingState | null>(null);
     editingRef.current = editing;
     const richTextEditRef = useRef<string | null>(null);
     richTextEditRef.current = richTextEditId;
-    // "Some text surface owns the keyboard and the pointer" — every gate that used to read `editing`.
+    // Whether a text editor owns the keyboard and the pointer.
     const textEditing = editing !== null || richTextEditId !== null;
-    // The same answer for listeners bound once (the clipboard hook's), which can't read state.
+    // The same answer for the listeners bound once, such as the clipboard hook's, which can't read state.
     const textEditingRef = useRef(false);
     textEditingRef.current = textEditing;
 
-    // The elements this canvas renders, hit-tests, marquees, snaps to and selects-all: one frame's in
-    // frame mode, the whole scene otherwise. NOT the comment/search paths — both must reach an element
-    // on another frame, so both read the host's `elements`.
+    // The elements this canvas renders, hit-tests, marquees, snaps to and selects: one frame's in frame mode, the whole
+    // scene otherwise. Comments and search read the host's `elements` instead, because both must reach an element on
+    // another frame.
     const visibleElements = useMemo(
         () => (viewport === 'frame' ? elementsInFrame(elements, frameId) : elements),
         [viewport, elements, frameId],
@@ -404,25 +393,24 @@ export function CanvasEditor({
         [ordered, searchMatchedIds],
     );
 
-    // All elements by id — the map an elbow arrow reads (arrowRoute) to resolve its bound shapes and
-    // derive its route. Deliberately spans the WHOLE scene: an elbow arrow inside a frame still routes
-    // around a bound shape outside it. Hit/marquee/label paths use it; the render path overlays previews.
+    // Every element by id, the map arrowRoute reads to resolve an elbow arrow's bound shapes. It spans the whole scene
+    // on purpose: an elbow arrow inside a frame still routes around a bound shape outside it. The hit test, the marquee
+    // and the label read it, and the render path lays the previews over it.
     const committedById = useMemo(() => new Map(elements.map((el) => [el.id, el])), [elements]);
 
-    // Frame mode shows only the peers on this frame; the infinite canvas shows everyone (an undefined
-    // filter is CursorLayer's "no filter" contract).
+    // Frame mode shows only the peers on this frame, and the infinite canvas shows everyone, which CursorLayer reads
+    // from an undefined filter.
     const isPeerVisible = useMemo(
         () => (viewport === 'frame' ? (s: CanvasPeerState) => peerOnFrame(s, frameId) : undefined),
         [viewport, frameId],
     );
 
-    // Element boxes by id for the shared CursorLayer's remote selection rings — rebuilt only when the
-    // scene changes, never on a peer cursor tick (the layer holds its own awareness subscription).
+    // Element boxes by id for the remote selection rings. They are built again only when the scene changes, never on a
+    // peer's cursor move, because the layer holds its own awareness subscription.
     const cursorBoxes = useMemo(() => {
         const m = new Map<string, Box>();
-        // An elbow arrow's ring must enclose its ROUTED polyline (the derived route or, when pinned, the
-        // stored polyline), never the raw 2-endpoint frame — elementBounds(el, route). Others keep their
-        // own rotated box.
+        // An elbow arrow's ring encloses its routed polyline, the derived route or the pinned one, never the frame of
+        // its two endpoints. Every other element keeps its own turned box.
         for (const el of ordered) {
             m.set(
                 el.id,
@@ -461,29 +449,27 @@ export function CanvasEditor({
         undoManager,
     });
 
-    // Elements with their live preview boxes applied — the map a bound arrow follows while its shape is
-    // mid-drag. Built only while a preview is live AND the scene holds an arrow, so an arrow-free
-    // drag doesn't reallocate it every frame.
+    // The elements with their live preview boxes: the map a bound arrow follows while its shape is dragged. It is built
+    // only while a preview is live and the scene holds an arrow, so a drag without arrows allocates nothing each frame.
     const hasPreviews = Object.keys(previews).length > 0;
     const hasArrows = useMemo(() => ordered.some((el) => el.type === 'arrow'), [ordered]);
     const previewById = useMemo(
         () => (hasPreviews && hasArrows ? buildPreviewById(ordered, previews) : null),
         [hasPreviews, hasArrows, ordered, previews],
     );
-    // The map the render path feeds an elbow arrow's route: preview boxes when a shape is mid-drag (the
-    // snake follows live), else the committed scene — its per-frame identity is the ElementLayer memo's cue.
+    // The map the render path feeds an elbow arrow's route: the previews while a shape is dragged, so the route follows
+    // live, and the committed scene otherwise. Its identity each frame is the ElementLayer memo's cue.
     const renderById = previewById ?? committedById;
 
-    // An element renders with its live local preview (move/resize/rotate) overriding the Yjs values;
-    // no preview → same object identity, so the memo skips it. A linear element's resize/rotate derives
-    // scaled points per frame through resizeLinear; a bound arrow whose shape is being previewed
-    // follows it per frame; an element marked for erasure dims to 20%.
+    // An element renders with its live preview over its stored values. Without a preview it keeps its identity, so the
+    // memo skips it. A linear element's resize scales its points each frame through resizeLinear, a bound arrow follows
+    // a shape being dragged, and an element about to be erased dims to 20%.
     const renderEl = (el: VectorElement): VectorElement => {
         const p = previews[el.id];
         let out = el;
         if (p) {
-            // Only a size change needs the per-frame point rescale; a move/rotate-only preview applies
-            // x/y/angle straight through (resizeLinear would re-derive the same box and points).
+            // Only a size change rescales the points each frame. A move or a turn applies position and angle straight
+            // through, where resizeLinear would derive the same box and points.
             if (isLinearElement(el) && (p.width !== el.width || p.height !== el.height)) {
                 out = { ...el, ...resizeLinear(el, p), angle: p.angle };
             } else {
@@ -497,12 +483,11 @@ export function CanvasEditor({
         return out;
     };
 
-    // Every canvas hotkey (V/R/D/O/T, Q, Delete/Backspace, arrows, ⌘A, ⌘D, ⌘Z/⌘⇧Z, z-order) is gated
-    // off while ANY text surface is open — the textarea's native undo/typing owns keys in-session, and
-    // the lib's ignoreInputs default does not cover a ProseMirror contenteditable, so a tool letter
-    // would otherwise be swallowed as a keystroke inside the in-place editor. An open dialog stands the
-    // keymap down too, or Delete on its button would delete the selection behind it. So does an open
-    // menu, whose arrow keys would otherwise also nudge the selection, except for undo and redo.
+    // Every canvas hotkey stands down while a text editor is open. The textarea's own undo and typing own the keys
+    // then, and the keyboard library's ignoreInputs does not cover a ProseMirror contenteditable, so a tool letter
+    // would be lost inside the in-place editor. An open dialog stands the keymap down too, or Delete on its button
+    // would delete the selection behind it. So does an open menu, whose arrow keys would nudge the selection, except
+    // for undo and redo.
     const dialogOpen = useDialogOpen();
     const menuOpen = useMenuOpen();
     useCanvasKeyboard({
@@ -524,8 +509,8 @@ export function CanvasEditor({
         onEdit: (el) => editElement(el),
     });
 
-    // Freeze the viewport while an overlay is open (same latch as gestures): a pan/zoom would
-    // desync the overlay from the element it sits over.
+    // The viewport freezes while a text editor is open, through the gestures' latch, because a pan or zoom would move
+    // the page away from the editor over it.
     useEffect(() => {
         if (!textEditing) return;
         frozenRef.current = true;
@@ -534,37 +519,34 @@ export function CanvasEditor({
         };
     }, [textEditing, frozenRef]);
 
-    // Safety net: any pointerup ends the freeze, clears the transform-start latch, and drops
-    // leftover previews — ObjectTransform's Escape-cancel and no-move paths fire no onCommit, so
-    // their snapshot preview would otherwise stick and mask later remote edits of that element.
-    // (Registered at mount, so on a normal commit this runs before ObjectTransform's own pointerup
-    // listener; the batched onCommit write supersedes the clear in the same render.) window blur
-    // can swallow the pointerup entirely (alt-tab mid-drag) — finalize any active canvas gesture
-    // first, mirroring ObjectTransform's commit-on-blur, so no gesture is left live tracking a
-    // released pointer when focus returns.
+    // A safety net: any pointerup ends the freeze, clears the transform-start latch and drops leftover previews.
+    // ObjectTransform's Escape and a press that never moved fire no onCommit, so their preview would stick and hide
+    // later remote edits of that element. It is registered at mount, so on a normal commit it runs before
+    // ObjectTransform's own pointerup listener, and the onCommit write replaces the clear in the same render. A window
+    // blur can swallow the pointerup, such as an alt-tab mid-drag, so it finishes any live canvas gesture first, as
+    // ObjectTransform commits on blur.
     useEffect(() => {
         const clear = () => {
-            // An open text session owns the freeze until it commits/discards — the opening click's
-            // own pointerup and every intra-textarea caret click must NOT unfreeze it (else wheel
-            // zoom, a re-opened session, or a spurious move gesture leak in mid-edit). The editing
-            // effect below clears the freeze when the session ends.
+            // An open text session owns the freeze until it ends. The opening click's own pointerup and every caret
+            // click inside the editor must not lift it, or a wheel zoom, a second session or a stray move would start
+            // mid-edit. The effect above lifts the freeze when the session ends.
             if (editingRef.current || richTextEditRef.current) return;
             frozenRef.current = false;
             transformStartedRef.current = false;
             setPreviews((p) => (Object.keys(p).length ? {} : p));
-            // Escape-canceled resizes fire no onCommit, so stale guide lines land here.
+            // A resize canceled with Escape fires no onCommit, so its guide lines are cleared here.
             setSnapLines((l) => (l.length ? [] : l));
         };
         const onBlur = () => {
-            // The textarea's own onBlur commits a label session; a rich-text session is ended by its
-            // own click-away/Escape, and neither may lose the viewport freeze here.
+            // The textarea's own onBlur commits a label session, and a rich-text session ends on its own click-away or
+            // Escape. Neither may lose the freeze here.
             if (editingRef.current || richTextEditRef.current) return;
             finishRef.current();
             touchResetRef.current();
             clear();
         };
-        // pointercancel is a genuine tear-down (lost capture, system gesture) — a plain pointerup is a
-        // normal lift the touch handler already unwinds, so only cancel/blur reset the touch state.
+        // A pointercancel is a real tear-down, such as lost capture or a system gesture. A plain pointerup is a normal
+        // lift the touch handler unwinds itself, so only a cancel and a blur reset the touch state.
         const onCancel = () => {
             touchResetRef.current();
             clear();
@@ -579,9 +561,9 @@ export function CanvasEditor({
         };
     }, [frozenRef]);
 
-    // Layered Escape (bubble phase): ObjectTransform claims mid-resize/rotate Escapes in the capture
-    // phase and stops them, so this never fires during a grip drag. It cancels an in-progress
-    // canvas gesture, else deselects, else returns to the select tool.
+    // The canvas's Escape, in the bubble phase. ObjectTransform claims Escape during a resize or rotate in the capture
+    // phase, so this never fires during a grip drag. It cancels the canvas's own gesture, or else deselects, or else
+    // returns to the select tool.
     const escRef = useRef({ hasSelection: false, tool, toolLocked, dialogOpen });
     escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, dialogOpen };
     useEffect(() => {
@@ -597,13 +579,13 @@ export function CanvasEditor({
                 frozenRef.current = false;
                 if (g.kind === 'create') {
                     setCreating(null);
-                    // The padlock survives a CANCELED placement exactly as it survives a completed one.
+                    // The padlock survives a canceled placement as it survives a completed one.
                     if (!s.toolLocked) setTool('select');
                 } else if (g.kind === 'marquee') {
                     setMarquee(null);
-                    // Cancel restores the gesture's base: the prior set for additive marquees,
-                    // empty for plain ones (pressing empty canvas deselects immediately, so
-                    // Escape staying deselected is the Excalidraw-consistent model).
+                    // A cancel restores the gesture's base: the earlier selection for an additive marquee, and nothing
+                    // for a plain one. A press on empty canvas deselects at once, so staying deselected on Escape
+                    // matches Excalidraw.
                     setSelectedIds(g.base);
                 } else if (g.kind === 'move') {
                     setPreviews({});
@@ -620,8 +602,8 @@ export function CanvasEditor({
         return () => document.removeEventListener('keydown', onKeyDown);
     }, [frozenRef, setTool, setSelectedIds]);
 
-    // Open the overlay on an arrow's label — the one plain-text path left on the canvas. The session
-    // shape lives in the pure text-editing module; the canvas only picks the selection and opens.
+    // Opens the label editor on an arrow's label, the one plain-text editor left on the canvas. The text-editing module
+    // shapes the session; the canvas only selects and opens.
     const openEditArrowLabel = (el: VectorArrowElement) => {
         const ed = arrowLabelEditing(el, arrowRoute(el, committedById));
         if (!ed) return false; // a degenerate arrow (< 2 points) has no label anchor
@@ -630,18 +612,18 @@ export function CanvasEditor({
         return true;
     };
 
-    // What this canvas sees (frame-scoped in frame mode) — the snap builder, the resize/move selection
-    // paths and the label heal read it. `elementsRef` stays the WHOLE scene: a pending image on another
-    // frame is still this tab's to sweep.
+    // What this canvas shows, one frame's elements in frame mode. The snap targets, the resize and move paths and the
+    // heal read it. `elementsRef` stays the whole scene, because a pending image on another frame is still this tab's
+    // to sweep.
     const visibleRef = useRef(visibleElements);
     visibleRef.current = visibleElements;
     const elementsRef = useRef(elements);
     elementsRef.current = elements;
 
-    // Snap targets = every OTHER visible element's edges/center (rotated → center only), plus the
-    // frame's own edges and center lines when there is one — an object aligns to the page the way it
-    // aligns to its neighbors. The infinite canvas has no edges to seed. Threshold is screen-space:
-    // SNAP_SCREEN_THRESHOLD / zoom keeps the snap radius a constant pixel distance at any zoom.
+    // Snap targets: the edges and centers of every other visible element, only the center of a turned one, plus the
+    // frame's edges and center lines when there is one, so an object aligns to the page as it aligns to its neighbors.
+    // The infinite canvas has no edges. The threshold is in screen px: SNAP_SCREEN_THRESHOLD / zoom keeps the radius
+    // the same at any zoom.
     const buildSnapTargets = useCallback(
         (excludeIds: Set<string>) =>
             computeSnapTargets(
@@ -653,10 +635,10 @@ export function CanvasEditor({
         [frame],
     );
 
-    // Resize-time snapping, fed to ObjectTransform's snapBox seam (the resize half of snapping; move snaps in
-    // the gesture loop above). Infers the moved edge by diffing the in-progress box against the element's
-    // committed start box (stable during a local resize). Rotated boxes skip (axis-aligned edges lie),
-    // mirroring slides. Records the matched guide lines for the SVG overlay.
+    // Snapping during a resize, through ObjectTransform's snapBox; a move snaps in the gesture loop below. It finds the
+    // moved edge by comparing the box with the element's committed box, which holds still during a local resize. A
+    // turned box doesn't snap, because its axis-aligned edges are not the ones the user sees. The matched guide lines
+    // go to the overlay.
     const resizeSnapBox = useCallback(
         (b: Box): Box => {
             if (b.angle !== 0) return b;
@@ -688,11 +670,11 @@ export function CanvasEditor({
         [selectedIds, buildSnapTargets, viewportRef],
     );
 
-    // Sweep zombie image placeholders left behind by a tab close or reload mid-upload (vector adopts
-    // the shared sweep). This canvas mounts only after the doc syncs, so mount IS the ready signal, and
-    // this tab's own uploads start on later user action — never in the mount snapshot. Snapshot pending
-    // element ids, re-check pending at removal (another tab may have completed the upload in the window),
-    // and delete the survivors in ONE untracked transact — a sweep must never be undoable.
+    // Sweeps the image placeholders a tab left behind when it closed or reloaded mid-upload. This canvas mounts only
+    // after the doc syncs, so the mount is the ready signal, and this tab's own uploads start later, never in the
+    // mount's snapshot. The sweep takes the pending ids, checks each again at removal, because another tab may have
+    // finished its upload meanwhile, and deletes the rest in one untracked write, because a sweep must never be
+    // undoable.
     useZombieMediaSweep({
         ready: true,
         scan: () =>
@@ -708,40 +690,25 @@ export function CanvasEditor({
         },
     });
 
-    // A size measured before the slices of its text have loaded is the fallback's, and the stored size is what every
-    // renderer and export draws. The overlay loads the slices of a label while the user types, so its commit is
-    // normally exact. But a label committed before they arrive, and a text box ⌘V measured as it landed, are measured
-    // again here once they load. Only the width changes: a label's height and a text box's both follow from the line
-    // count and the line height, which no face changes. The live element is checked first. A newer edit of the text,
-    // font or size owns the size, and so does whatever `holds` says, so a slow load never writes a stale size over it.
-    const healTextSize = useCallback(
-        (
-            id: string,
-            text: string,
-            fontSize: number,
-            fontFamily: string,
-            holds: (el: VectorArrowElement | VectorRectangleElement) => boolean,
-        ) => {
-            if (isVectorFontLoaded(fontSize, fontFamily, text)) return;
-            measureLoadedVectorText(text, fontSize, fontFamily)
-                .then(({ width }) => {
+    // A size measured before the slices of its text load is the fallback's. Every renderer and export draws the stored
+    // size, so a label committed early and a box pasted with ⌘V are measured again once those slices load. The write
+    // is untracked, like the text fit's: it corrects a measure, so ⌘Z takes back the edit and never the heal alone.
+    const healTextSize = useCallback<HealTextSize>(
+        (id, text, font, patch) => {
+            if (isVectorFontLoaded(text, font)) return;
+            measureLoadedVectorText(text, font)
+                .then((size) => {
                     const el = visibleRef.current.find((x) => x.id === id);
-                    // The element was deleted meanwhile, so there is nothing to heal.
-                    if (el?.type !== 'arrow' && el?.type !== 'rectangle') return;
-                    if (el.fontSize !== fontSize || el.fontFamily !== fontFamily || !holds(el)) return;
-                    if (width === (el.type === 'arrow' ? el.labelWidth : el.width)) return;
-                    sealed(undoManager, () =>
-                        updateElement(id, el.type === 'arrow' ? { labelWidth: width } : { width }),
-                    );
+                    const fields = el && patch(el, size);
+                    if (fields) updateElementUntracked(id, fields);
                 })
                 .catch(() => {});
         },
-        [updateElement, undoManager],
+        [updateElementUntracked],
     );
 
-    // One editing session → exactly one Yjs write, `sealed` so the session is its own
-    // undo step. Read the live session from a ref (not a closure) so the callback stays stable and side
-    // effects run once, never inside a state updater.
+    // One label session is one Yjs write, sealed so it is its own undo step. It reads the live session from a ref, not
+    // a closure, so the callback stays stable and its side effects run once, never inside a state updater.
     const commitEditing = useCallback(
         (text: string) => {
             const ed = editingRef.current;
@@ -749,17 +716,24 @@ export function CanvasEditor({
             setEditing(null);
             if (!ed) return;
             const empty = text.trim().length === 0;
-            // The arrow already exists — write the label in place: `text` + measured `labelWidth`
-            // (height derives from the line count) in one sealed transact. An empty label clears both
-            // to ''/0 and never deletes the arrow; a still-empty label is a no-op. updateElement no-ops
-            // on a Yjs map the arrow's remote deletion already removed.
+            // The arrow already exists, so the label is written in place: its `text` and measured `labelWidth` in one
+            // sealed write. Its height follows from the line count. An emptied label clears both and never deletes the
+            // arrow, and a new label left empty writes nothing. updateElement writes nothing when a peer deleted the
+            // arrow meanwhile.
             if (!(ed.isNew && empty)) {
-                const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
+                const font = { fontSize: ed.fontSize, fontFamily: ed.fontFamily };
+                const labelWidth = empty ? 0 : measureVectorText(text, font).width;
                 sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text, labelWidth }));
+                // A newer edit of the label or its font owns the width.
                 if (!empty) {
-                    healTextSize(ed.id, text, ed.fontSize, ed.fontFamily, (el) => {
-                        return el.type === 'arrow' && el.text === text;
-                    });
+                    healTextSize(ed.id, text, font, (el, { width }) =>
+                        el.type === 'arrow' &&
+                        el.text === text &&
+                        el.fontSize === font.fontSize &&
+                        el.fontFamily === font.fontFamily
+                            ? { labelWidth: width }
+                            : null,
+                    );
                 }
             }
             setSelectedIds([ed.id]);
@@ -785,14 +759,14 @@ export function CanvasEditor({
         if (!id) return;
         const el = visibleRef.current.find((e) => e.id === id);
         if (el && isTextBox(el) && paintsNothing(el)) {
-            // Sealed on BOTH sides: without the leading seal the delete lands inside Y.UndoManager's 500ms
-            // captureTimeout and merges into the session's last keystroke, so whether it is its own undo
-            // step would depend on how fast the user clicked away.
+            // Sealed on both sides. Without the leading seal the delete would land inside the undo manager's 500 ms
+            // window and merge into the session's last keystroke, so whether it is its own undo step would depend on
+            // how fast the user clicked away.
             sealed(undoManager, () => deleteElements([id]));
             setSelectedIds([]);
             return;
         }
-        // Trailing seal: the session's coalesced writes are one undo step.
+        // The trailing seal makes the session's writes one undo step.
         undoManager?.stopCapturing();
     }, [deleteElements, setSelectedIds, undoManager]);
 
@@ -803,8 +777,8 @@ export function CanvasEditor({
         return clientToScene(rect.left + rect.width / 2, rect.top + rect.height / 2);
     }, [clientToScene, containerRef]);
 
-    // Natural-size boxes for a batch of images: each fits within the visible viewport (uniform,
-    // never upscale), centered on `anchor`, cascading +20,+20 per item — shared by every insert path.
+    // Boxes at natural size for a batch of images, each fitted into the visible viewport without upscaling, centered on
+    // `anchor`, and each next one offset by the cascade. Every image insert shares it.
     const imagePlacements = useCallback(
         (intrinsics: (ImageSize | null)[], anchor: { x: number; y: number }) => {
             const rect = containerRef.current?.getBoundingClientRect();
@@ -819,20 +793,18 @@ export function CanvasEditor({
         [containerRef, viewportRef],
     );
 
-    // Drop/paste image(s) → upload into media/ and place each at natural size, centered on `anchor`
-    // (a multi-file drop cascades +20,+20). Sizes are measured up-front so the adds run as one tight
-    // synchronous batch = one undo step (an await between adds could split it past the UndoManager's
-    // capture window). Each optimistic element renders instantly from the pending blob URL; the
-    // pending → real mediaName swap is its own late transact (mirrors slides), and useUploadFile
-    // owns the failure toast.
+    // Dropped or pasted images upload into the media folder and land at natural size, centered on `anchor`, cascading
+    // when there are several. Their sizes are read first, so the adds run as one synchronous batch and one undo step:
+    // an await between adds could split it past the undo window. Each element draws at once from its pending blob URL.
+    // The swap to the real media name is a late write of its own, and useUploadFile shows the failure toast.
     const insertImageFiles = useCallback(
         async (files: File[], anchor: { x: number; y: number }) => {
-            if (!mediaFolderId) return; // no upload target — nothing to do
+            if (!mediaFolderId) return; // no folder to upload into
             const images = files.filter((f) => f.type.startsWith('image/'));
             if (!images.length) return;
             const measured = await Promise.all(
-                // readImageSize → null for a file with no intrinsic size (e.g. an SVG); fitImageSize
-                // maps null → the default box (viewport-capped), so the file is placed, not dropped.
+                // readImageSize gives null for a file with no size of its own, such as an SVG, and fitImageSize gives
+                // that the default box, so the file is placed, not dropped.
                 images.map(async (file) => ({ file, intrinsic: await readImageSize(file) })),
             );
 
@@ -854,8 +826,8 @@ export function CanvasEditor({
 
             for (const { id, promise } of pending) {
                 promise
-                    // Untracked swap: the drop's insert stays the sole undo step (one ⌘Z), same as the
-                    // cross-mount paste path; peers still receive the real name.
+                    // Untracked, so the drop's insert stays its one undo step, as a paste's does. Peers still receive
+                    // the real name.
                     .then((result) =>
                         result ? updateElementUntracked(id, { mediaName: result.name }) : deleteElementsUntracked([id]),
                     )
@@ -874,9 +846,9 @@ export function CanvasEditor({
         ],
     );
 
-    // Drive-picked images: copy into media/, measure, then place all at natural size around the
-    // viewport center in ONE transact = one undo step. Measuring goes by the copy result's own path —
-    // by NAME it would miss the pre-copy media listing (the slides idiom).
+    // Images picked in Drive copy into the media folder, are measured, then land at natural size around the viewport
+    // center in one undo step. They are measured by the copy's own path, because by name the media listing from before
+    // the copy would miss them.
     const insertDrivePaths = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId) return;
@@ -910,7 +882,7 @@ export function CanvasEditor({
         ],
     );
 
-    // Insert → Chart: the sample chart at the viewport center, selected, one undo step.
+    // Insert › Chart places the sample chart at the viewport center, selected, in one undo step.
     const insertChart = useCallback(
         (type: ChartType) => {
             const id = sealed(undoManager, () =>
@@ -921,15 +893,11 @@ export function CanvasEditor({
         [undoManager, addElement, viewportCenterScene, viewport, styleDefaults, setSelectedIds],
     );
 
-    // Image ingestion is gated on a real upload target (a fresh .eigenvector scaffolds media/, so
-    // this is normally present) and is closed while a text overlay owns paste + the pointer.
+    // Images insert only where there is a folder to upload into, which a new drawing has, and not while a text editor
+    // owns paste and the pointer.
     const imagesEnabled = canEdit && !!mediaFolderId && !textEditing;
-    // The drop hook stays ALWAYS enabled so dragover/drop are always preventDefault'd — a disabled
-    // hook skips that, letting the BROWSER navigate to a file dropped while read-only or mid-text-edit
-    // (destroying the editor + uncommitted text). The insertion gate lives in the callback instead;
-    // the drag-over affordance shows only when insertion is actually possible.
-    // ⌘C/⌘X/⌘V, the menu clipboard rows and the whole paste ladder live in the sibling hook (the
-    // canvas only hands it the scene, the selection and the frame-stamped writers).
+    // ⌘C, ⌘X, ⌘V, the menu's clipboard rows and every paste live in a sibling hook. The canvas hands it the scene, the
+    // selection and its writers.
     const { onMenuCopy, onMenuCut, onMenuPaste, pasteSvgText, downloadImage } = useCanvasClipboard({
         canEdit,
         textEditingRef,
@@ -985,19 +953,20 @@ export function CanvasEditor({
         meta.background,
     ]);
 
-    // In frame mode the letterbox backdrop is not the canvas: the frame clips its overhang, so an
-    // element created out there — and the in-place editor over it — would be invisible. The infinite
-    // canvas has no page, so nothing is off it.
+    // In frame mode the backdrop around the page is not the canvas: the frame clips what overhangs it, so an element
+    // created there, and the editor over it, would be invisible. The infinite canvas has no page, so nothing is off it.
     const offPage = (p: Point) => !!frame && !pointInFrame(p, frame);
 
+    // The drop target stays enabled, so dragover and drop are always prevented. A disabled one would let the browser
+    // navigate to a file dropped while read-only or mid-edit, which destroys the editor and the text not yet written.
+    // The callback gates the insert instead, and the drag-over hint shows only when a drop would insert.
     const { targetProps: fileDropProps, isDragging } = useFileDropTarget((files, e) => {
         if (!imagesEnabled) return;
         const dropped = e ? clientToScene(e.clientX, e.clientY) : viewportCenterScene();
-        // A drop on the backdrop lands on the page instead of being ignored — the files are already here.
+        // A drop on the backdrop lands on the page instead of being ignored, because the files are already here.
         const anchor = offPage(dropped) ? viewportCenterScene() : dropped;
-        // An .svg WE exported carries its elements in a `<metadata>` block, so dropping one restores
-        // native elements exactly as pasting one does — drop and paste are the same ladder, or the same
-        // file behaves differently depending on how it arrived. Any other svg is just an image.
+        // An SVG we exported carries its elements in a `<metadata>` block, so dropping one restores them as pasting one
+        // does. Otherwise the same file would behave differently by how it arrived. Any other SVG is an image.
         const svgFile = files.length === 1 && files[0].type === 'image/svg+xml' ? files[0] : null;
         if (svgFile) {
             void svgFile
@@ -1010,17 +979,17 @@ export function CanvasEditor({
         }
         void insertImageFiles(files, anchor);
     });
-    // Paste stays gated: its disabled default (no preventDefault) is harmless — text pastes flow on.
+    // The file paste target stays gated: disabled, it prevents nothing, which is harmless, and text pastes pass on.
     const { onPaste } = useFilePasteTarget((files) => {
         void insertImageFiles(files, viewportCenterScene());
     }, imagesEnabled);
 
-    // Whether an edit may start: the select tool, no session open, and frozenRef: no new session over a live gesture.
+    // Whether an edit may start: the select tool, no session open, and no live gesture to open a session over.
     const mayEdit = () => canEdit && tool === 'select' && !textEditing && !frozenRef.current;
 
-    // What opening an element does, for a double-click, a double-tap and Enter. An arrow opens the label overlay; a
-    // kind with an edit dialog opens that (a chart's data); an element that holds text opens the in-place editor
-    // inside its own layer; anything else does nothing. It says whether it opened anything.
+    // What opening an element does, for a double-click, a double tap and Enter. An arrow opens its label editor, a kind
+    // with an edit dialog opens that, such as a chart's data, and an element that holds text opens the in-place editor
+    // inside its own layer. Anything else does nothing. It says whether it opened anything.
     const editElement = (el: VectorElement) => {
         if (!mayEdit()) return false;
         if (el.type === 'arrow') return openEditArrowLabel(el);
@@ -1033,9 +1002,9 @@ export function CanvasEditor({
         return true;
     };
 
-    // Text-edit entry shared by a mouse double-click and a touch double-tap (touch-gestures synthesizes
-    // the tap-tap). An element opens as editElement says; empty canvas starts a new box there (Excalidraw's
-    // openNewText), placed like the text tool's own click: the starting box with its corner on the point.
+    // Text editing from a mouse double-click or a touch double tap, which the touch policy makes out of two taps. An
+    // element opens as editElement says. Empty canvas places a new text box there, as Excalidraw's openNewText does and
+    // as the Text tool's click does: the starting box with its corner on the point.
     const openTextAtClient = (clientX: number, clientY: number) => {
         if (!mayEdit()) return;
         const p = clientToScene(clientX, clientY);
@@ -1044,21 +1013,20 @@ export function CanvasEditor({
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl) return editElement(hitEl);
         const id = sealed(undoManager, () =>
-            addElement({ type: 'rectangle', autoFit: true, x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }),
+            addElement({ ...boxToolElement('text'), x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }),
         );
         if (id) openRichText(id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
 
-    // Right-click on an element opens the object menu, on empty canvas the background menu. Like
-    // slides, a right-click on an element outside the current selection selects it first, so the menu
-    // ops act on the target; a right-click inside the selection keeps the whole selection. The canvas
-    // uses hit-testing (elements have no per-node DOM), so this lives on the container, not per object.
+    // A right-click on an element opens the object menu, and on empty canvas the background menu. A right-click on an
+    // element outside the selection selects it first, so the menu acts on it, and one inside the selection keeps the
+    // whole selection. Elements have no DOM node of their own to listen on, so this hit-tests on the container.
     const onContextMenu = (e: React.MouseEvent) => {
-        // frozenRef: no menu over a live left-button gesture (marquee/move keeps its capture).
+        // No menu over a live left-button gesture, such as a marquee, which keeps its capture.
         if (textEditing || frozenRef.current) return;
-        // A multi-point draft runs unfrozen but still owns the pointer: no menu (object or browser)
-        // mid-draft — the draft keeps floating and the next left click keeps placing points.
+        // A line drawn point by point runs unfrozen but still owns the pointer, so no menu opens mid-draft. The draft
+        // keeps following the pointer and the next left click places a point.
         if (drawing.multiPointDraft) {
             e.preventDefault();
             return;
@@ -1080,8 +1048,8 @@ export function CanvasEditor({
         objectContextMenu.handleContextMenu(e, hitId);
     };
 
-    // Menu ops act on the full selection, wired to the same writes as ⌘[/] , ⌘D, and Delete so the
-    // menu and the keyboard stay one behavior (one sealed undo step each).
+    // The menu acts on the whole selection through the same writes as ⌘[, ⌘], ⌘D and Delete, so the menu and the keys
+    // behave as one, each in one undo step.
     const onMenuArrange = (op: ZOp) => applyZOrder(op, visibleElements, selectedIds, reorderElements, undoManager);
     const onMenuDuplicate = () => duplicateSelection(selectedIds, duplicateElements, setSelectedIds, undoManager);
     const onMenuDelete = () => deleteSelection(selectedIds, deleteElements, setSelectedIds, undoManager);
@@ -1108,9 +1076,9 @@ export function CanvasEditor({
     const EditDialog = editDialogElement ? ELEMENT_KIND_UI[editDialogElement.type].EditDialog : undefined;
     const onMenuConvertToShapes = () =>
         convertElementToShapes(selectedIds[0], menuShapes, replaceElement, setSelectedIds, undoManager);
-    // Touch/stylus policy (penMode palm rejection, two-finger pan/pinch, double-tap → text) lives in
-    // the sibling module; the canvas only dispatches. Its second-finger takeover ends any live one-finger
-    // gesture through this callback (a draw draft in the tools hook, else a canvas create/move/marquee).
+    // The touch and stylus policy lives in a sibling module, and the canvas only dispatches to it. A second finger ends
+    // the live one-finger gesture through abortActiveGesture: a drawing draft in the tools hook, or else the canvas's
+    // own create, move or marquee.
     const touch = useTouchGestures({
         tool,
         containerRef,
@@ -1128,10 +1096,10 @@ export function CanvasEditor({
     const onPointerDown = (e: React.PointerEvent) => {
         // Read first: Radix closes the menu on this same press, and a touch handler may take its turn before the check.
         const closesMenu = pressClosesMenu();
-        // Focus the tabIndex=-1 container so a following paste lands on our onPaste — a bare canvas
-        // div never holds focus, so image paste would otherwise bubble past us to the body.
+        // Focus the container, which has tabIndex -1, so a paste after this lands on our onPaste. A bare canvas div
+        // never holds focus, so an image paste would otherwise go past it to the body.
         containerRef.current?.focus();
-        // Touch gestures get first dibs (a second finger must intercept even while frozen).
+        // Touch gestures go first, because a second finger must take over even while frozen.
         if (touch.onPointerDown(e)) return;
         // A press that closes an open menu, such as File, only closes it.
         if (closesMenu) return;
@@ -1139,10 +1107,10 @@ export function CanvasEditor({
         // it and ends the session. The session's effect lifts the viewport freeze on the next render. So
         // this click only closes the editor, and the next one selects or draws.
         if (richTextEditRef.current) closeRichText();
-        // The surface is select-none, so a run selected elsewhere would survive this click and keep
-        // owning ⌘C/⌘X instead of the element it selects.
+        // The surface is select-none, so a run selected elsewhere would survive this click and keep ⌘C and ⌘X from the
+        // element it selects.
         dropOutsideTextSelection(containerRef.current);
-        if (frozenRef.current) return; // a gesture is already active (defensive)
+        if (frozenRef.current) return; // a gesture is already live
         if (panMode || e.button === 1) {
             e.preventDefault();
             containerRef.current?.setPointerCapture(e.pointerId);
@@ -1159,15 +1127,14 @@ export function CanvasEditor({
         // there, so a marquee may sweep across the page from outside.
         if (tool !== 'select' && tool !== 'eraser' && offPage(p)) return;
 
-        // Freehand / line / eraser own their own gesture (local state + capture); the hook consumes
-        // the event for those tools and the canvas does nothing more.
+        // A freehand stroke, a line and the eraser run their own gestures. The tools hook takes the event for those
+        // tools, and the canvas does nothing more.
         if (drawing.onPointerDown(e, p)) return;
 
         containerRef.current?.setPointerCapture(e.pointerId);
 
-        // Box tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already returned via
-        // the tools hook.) A text box drags out like a shape; a click under the threshold places the
-        // default box instead of discarding it — see finishGesture.
+        // A box tool starts a drag-create in local state. A text box drags out like a shape, and a click under the
+        // threshold places the default box instead of discarding it, as finishGesture does.
         if (isBoxTool(tool)) {
             frozenRef.current = true;
             undoManager?.stopCapturing();
@@ -1215,7 +1182,7 @@ export function CanvasEditor({
             return;
         }
 
-        // Empty space → marquee (Shift = additive; else clear first, then select contained).
+        // A press on empty space starts a marquee. Shift adds to the selection; otherwise it clears first.
         frozenRef.current = true;
         const additive = e.shiftKey;
         if (!additive) setSelectedIds([]);
@@ -1231,10 +1198,10 @@ export function CanvasEditor({
     };
 
     const onPointerMove = (e: React.PointerEvent) => {
-        // Two-finger pan/pinch consumes the move before any single-pointer gesture sees it.
+        // A two-finger pan or pinch takes the move before any one-pointer gesture sees it.
         if (touch.onPointerMove(e)) return;
-        // Publish the local cursor on every move (throttled downstream; no React state → no
-        // re-render), then handle the active gesture if any.
+        // The local cursor is published on every move, throttled downstream and with no React state, so nothing
+        // re-renders. Then the live gesture, if any, runs.
         const scene = clientToScene(e.clientX, e.clientY);
         publishCursor(scene);
         const g = gestureRef.current;
@@ -1247,11 +1214,10 @@ export function CanvasEditor({
             g.lastY = e.clientY;
             return;
         }
-        // A freehand stroke / eraser swipe / line draft (incl. its hover trailing point) is handled by
-        // the tools hook, which consumes the move.
+        // A freehand stroke, an eraser swipe or a line draft, with its hover point, is handled by the tools hook, which
+        // takes the move.
         if (drawing.onPointerMove(e)) return;
-        // Hover affordance (idle select): one hitTestTopmost on this same move path flips the `move` cursor.
-        // A gesture never pays for it.
+        // The idle select tool's hover: one hit test on this move sets the `move` cursor. A gesture never pays for it.
         if (!g && tool === 'select' && !textEditing) {
             const over = hitTestTopmost(ordered, scene, viewportRef.current.zoom, committedById, coarse) !== null;
             if (over !== hoveringSelectable) setHoveringSelectable(over);
@@ -1262,7 +1228,7 @@ export function CanvasEditor({
             let dx = p.x - g.startX;
             let dy = p.y - g.startY;
             if (e.shiftKey) {
-                // Square/circle: the dominant axis wins.
+                // A square or a circle: the longer axis wins.
                 const s = Math.max(Math.abs(dx), Math.abs(dy));
                 dx = (Math.sign(dx) || 1) * s;
                 dy = (Math.sign(dy) || 1) * s;
@@ -1274,7 +1240,7 @@ export function CanvasEditor({
             let dx = p.x - g.startX;
             let dy = p.y - g.startY;
             if (e.shiftKey) {
-                // Dominant-axis lock.
+                // Shift locks the move to the longer axis.
                 if (Math.abs(dx) < Math.abs(dy)) dx = 0;
                 else dy = 0;
             }
@@ -1282,10 +1248,9 @@ export function CanvasEditor({
 
             const selById = g.selById;
             const selEls = [...selById.values()];
-            // Snap the selection's AABB to the other elements (center-only if any member is rotated —
-            // Override-24), then apply the snap correction to every moved element. Empty lines = no snap.
-            // A Shift-locked axis (the zeroed one) is passed to snap as lockAxis so it never produces a
-            // correction or guide line to undo here.
+            // The selection's bounding box snaps to the other elements, by its center only when any member is turned,
+            // and the correction moves every element. No lines means no snap. An axis Shift locked goes to the snap as
+            // lockAxis, so it never gives a correction or a guide line to undo here.
             let snapDx = 0;
             let snapDy = 0;
             if (selEls.length > 0) {
@@ -1321,8 +1286,8 @@ export function CanvasEditor({
             setPreviews(next);
             return;
         }
-        // marquee — direction picks the mode (rightward = contain, leftward = intersect), resolved
-        // from the raw start/current x before normalizeRect drops the direction.
+        // A marquee's direction picks its mode: rightward it selects what it contains, leftward what it touches. It is
+        // read from the raw x values, before normalizeRect drops the direction.
         const box = normalizeRect(g.startX, g.startY, p.x, p.y);
         const mode = marqueeMode(g.startX, p.x);
         setMarquee({ box, mode });
@@ -1332,11 +1297,10 @@ export function CanvasEditor({
 
     const finishGesture = (altKey = false) => {
         const g = gestureRef.current;
-        // No active gesture → nothing to finish, and crucially DON'T touch frozenRef: a text session
-        // freezes the viewport with no gesture, and this handler runs on the session's opening
-        // pointerup (and on every caret click inside the textarea, which bubbles up here). Clearing
-        // the freeze here was letting wheel zoom/pan the scene out from under the overlay — the
-        // root cause of the editing-freeze leak. Only a real gesture unfreezes.
+        // With no gesture there is nothing to finish, and the freeze must stay. A text session freezes the viewport
+        // with no gesture, and this runs on the session's opening pointerup and on every caret click inside the editor.
+        // Lifting the freeze here would let a wheel zoom or pan the scene from under the editor. Only a real gesture
+        // lifts it.
         if (!g) return;
         gestureRef.current = null;
         frozenRef.current = false;
@@ -1350,12 +1314,12 @@ export function CanvasEditor({
             setCreating(null);
             if (!toolLocked) setTool('select');
             if (!c) return;
-            // A drag under the threshold is a CLICK: a shape is discarded, a text box is placed at
-            // its default size, because a click is how you start typing.
+            // A drag under the threshold is a click. A shape is discarded, but a text box is placed at its default
+            // size, because a click is how you start typing.
             const clicked = c.box.width < CREATE_MIN_SIZE && c.box.height < CREATE_MIN_SIZE;
             if (clicked && c.tool !== 'text') return;
-            // A click places the shared starting box (the engine's, so both apps agree); a drag keeps what
-            // the user drew. Either way the height only ever grows from there.
+            // A click places the engine's starting box, so both apps agree, and a drag keeps what the user drew. Either
+            // way the height only grows from there.
             const box = clicked ? { ...c.box, ...NEW_TEXT_BOX_SIZE } : c.box;
             const id = addElement({
                 ...boxToolElement(c.tool),
@@ -1366,8 +1330,8 @@ export function CanvasEditor({
                 seed: c.seed,
             });
             if (id) setSelectedIds([id]);
-            // Trailing seal: nothing inside the 500ms capture window may merge into this gesture's
-            // undo step (the leading seal fired at pointerdown).
+            // The trailing seal keeps anything inside the 500 ms window out of this gesture's undo step. The leading
+            // seal fired at pointerdown.
             undoManager?.stopCapturing();
             // A new text box opens its editor at once: an empty box you cannot type into is not a text tool.
             if (id && c.tool === 'text') openRichText(id);
@@ -1375,19 +1339,19 @@ export function CanvasEditor({
         }
         if (g.kind === 'move') {
             if (g.moved) {
-                // Alt-drag duplicate (slides' idiom): clones materialize at gesture END in ONE transact
-                // (the drag only ever showed local preview ghosts — no Yjs write happened yet), so it's
-                // a single undo step and the originals stay put. Plain drag commits the move.
+                // An Alt-drag duplicates. The drag showed only local previews, so the copies are written at the
+                // gesture's end in one write and one undo step, and the originals stay put. A plain drag writes the
+                // move.
                 const anchor = g.ids.find((id) => previews[id] && g.originals[id]);
                 const dx = anchor ? previews[anchor].x - g.originals[anchor].x : 0;
                 const dy = anchor ? previews[anchor].y - g.originals[anchor].y : 0;
                 if (altKey && (dx !== 0 || dy !== 0)) {
                     const ids = duplicateElements(g.ids, dx, dy);
-                    undoManager?.stopCapturing(); // trailing seal (leading seal fired at pointerdown)
+                    undoManager?.stopCapturing(); // the trailing seal
                     if (ids.length) setSelectedIds(ids);
                 } else {
-                    // Past the unbind threshold, a dragged arrow detaches from any bound shape left behind
-                    // (a shape dragged along stays bound — updateElements re-snaps it).
+                    // Past the unbind distance, a dragged arrow lets go of a bound shape it left behind. A shape
+                    // dragged along stays bound, because updateElements docks the arrow again.
                     const movedIds = new Set(g.ids);
                     const farEnough = Math.hypot(dx, dy) * viewportRef.current.zoom >= ARROW_UNBIND_SCREEN;
                     const patches = g.ids
@@ -1400,27 +1364,27 @@ export function CanvasEditor({
                             return { id, fields };
                         });
                     if (patches.length) updateElements(patches);
-                    undoManager?.stopCapturing(); // trailing seal, same as create
+                    undoManager?.stopCapturing(); // the trailing seal
                 }
             }
             setPreviews({});
             setSnapLines([]);
             return;
         }
-        // marquee: selection was set live during the move; a plain click already cleared it.
+        // A marquee set the selection live during the move, and a plain click already cleared it.
         setMarquee(null);
     };
     finishRef.current = finishGesture;
 
     const onPointerUp = (e: React.PointerEvent) => {
-        // Touch first: ends a pinch, or fires a double-tap (which cleans its own gesture + claims the up).
+        // Touch goes first: it ends a pinch, or fires a double tap, which ends its own gesture and claims the up.
         if (touch.onPointerUp(e)) return;
         const g = gestureRef.current;
-        // A freehand/line/eraser gesture finishes (writes) through the tools hook; a pan (the one canvas
-        // gesture that can coexist with a line draft) ends here.
+        // A freehand stroke, a line or an eraser swipe finishes and writes through the tools hook. A pan, the one
+        // canvas gesture that can run during a line draft, ends here.
         if (g?.kind !== 'pan' && drawing.onPointerUp(e)) return;
         if (g && e.pointerId !== g.pointerId) return;
-        // Read Alt off the terminal event (drop-time modifier) for Alt-drag duplicate.
+        // Alt is read off the last event, so the modifier at the drop decides an Alt-drag duplicate.
         finishGesture(e.altKey);
     };
 
@@ -1428,33 +1392,31 @@ export function CanvasEditor({
     const selectedElements = useMemo(() => ordered.filter((el) => selectedIds.includes(el.id)), [ordered, selectedIds]);
     const selectedRender = selectedElements.map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
-    // elementBounds is arrow-aware, so the union ring encloses a labeled arrow's overhang and an
-    // elbow arrow's routed bends (arrowRoute, preview-aware via renderById).
+    // elementBounds knows arrows, so the ring around the selection encloses a labeled arrow's overhang and an elbow
+    // arrow's bends, through arrowRoute and the previews in renderById.
     const unionBox = selectedRender.length >= 1 ? boundsToBox(sceneBounds(selectedRender, renderById)) : null;
-    // No ObjectTransform box (no ring/grips/rotate grip) for a single 2-point line/arrow OR any ELBOW arrow —
-    // the round endpoint dots (and, for an elbow, the pin dots) are its whole affordance. The elbow gate keys
-    // on `elbow`, NOT the stored point count: a pinned elbow stores its full polyline (>2 points), and stale
-    // pre-collapse data can too, yet an elbow must never mount the box. 3+-point straight linears keep the box.
+    // A single line or arrow with two points, and any elbow arrow, gets no transform box: its round end dots, and an
+    // elbow's pin dots, are its whole affordance. The elbow check asks `elbow`, not the stored point count, because a
+    // pinned elbow stores its whole polyline. A straight line of three or more points keeps the box.
     const singleLinear2pt =
         single !== null &&
         (single.type === 'line' || single.type === 'arrow') &&
         ((single.type === 'arrow' && single.elbow) || parsePoints(single.points).length <= 2);
-    // Chrome is suppressed during a create/marquee drag (grip flicker), a vertex drag (drawing.hiddenId —
-    // else a stale box lingers over the reshaping point draft), or a text overlay; a move keeps it.
+    // The chrome hides during a create or marquee drag, so the grips don't flicker, during a vertex drag, so no stale
+    // box lingers over the reshaped draft, and while a text editor is open. A move keeps it.
     const showChrome = !creating && !marquee && !textEditing && !drawing.active && !drawing.hiddenId;
     const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
-    // The scene's own paint is the INFINITE canvas's background. A frame paints its own (below) and
-    // the surface around it stays the app's, so a letterboxed page reads as a page.
+    // The scene paints the infinite canvas's background. A frame paints its own, and the surface around it stays the
+    // app's, so a letterboxed page reads as a page.
     const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
-    // A text box's height is DERIVED from the text in it, so the layer that renders a box measures it and
-    // writes the fit back here. A fit the typing user caused rides in their own undo step — the box
-    // grew because of that keystroke, and ⌘Z must take both back, since the fit itself only ever grows.
-    // Every other fit (a peer's edit, a load, a panel change) is bookkeeping and stays untracked.
-    // Withheld while a gesture is live: a resize preview owns the box it is dragging, and the committed
-    // width re-fits it the moment the drag ends.
+    // A text box's height follows its text, so the layer that renders a box measures it and writes the fit back here. A
+    // fit the typing user caused joins their own undo step: the box grew because of that keystroke, and the fit only
+    // grows, so ⌘Z must take back both. Every other fit, such as after a peer's edit, a load or a panel change, is
+    // bookkeeping and stays untracked. No fit runs while a gesture is live: a resize preview owns the box it drags, and
+    // the committed width fits it again once the drag ends.
     const fitElementHeight = useCallback(
         (id: string, height: number, editing: boolean) =>
             editing ? updateElement(id, { height }) : updateElementUntracked(id, { height }),
@@ -1462,8 +1424,8 @@ export function CanvasEditor({
     );
     const onFitHeight = canEdit && !hasPreviews && !creating ? fitElementHeight : undefined;
 
-    // One scene node — every render path routes through here so `byId` (an elbow arrow's route context) is
-    // threaded in one place, not per callsite.
+    // One scene node. Every render path goes through here, so `byId`, an elbow arrow's route context, is passed in one
+    // place.
     const node = (el: VectorElement, children?: ReactNode) => (
         <ElementLayer key={el.id} el={el} resolveMedia={resolveMediaUrl} byId={renderById} onFitHeight={onFitHeight}>
             {children}
@@ -1476,8 +1438,8 @@ export function CanvasEditor({
             {ordered.map((el) => {
                 // A line being vertex-dragged is drawn by the drawing preview below instead.
                 if (drawing.hiddenId === el.id) return null;
-                // Only an arrow label opens the overlay, so the element under edit keeps its
-                // shaft/heads and hides just the label the textarea draws (render text='').
+                // Only an arrow label opens the label editor, so the arrow under edit keeps its shaft and heads and
+                // hides just the label, which the textarea draws.
                 if (editing?.id === el.id && el.type === 'arrow') return node(renderEl({ ...el, text: '' }));
                 // The layer still paints the box's backdrop; only its text body gives way to the
                 // in-place editor inside it, styled with the same CSS the renderer would have emitted.
@@ -1494,14 +1456,14 @@ export function CanvasEditor({
                 return node(renderEl(el));
             })}
             {creating && node(creatingElement(creating, styleDefaults))}
-            {/* Live freehand/line draft, or a point-edit reshape — the SAME render path. */}
+            {/* A live freehand or line draft, or a point-edit reshape, through the same render path. */}
             {drawing.previewElement && node(drawing.previewElement)}
         </>
     );
 
-    // A frame is a page, drawn as a CARD (FramePage: the paint, the rounded clip and the light-pinned
-    // paper). Its border ring is drawn in the screen-space chrome layer below, where a 1px border is
-    // really 1px. The infinite canvas has no such box — its layers sit straight on the scene.
+    // A frame is a page, drawn as a card by FramePage: the paint, the rounded clip and the light paper. Its border is
+    // drawn in the screen-space chrome layer below, where a 1 px border is really 1 px. The infinite canvas has no such
+    // box, so its layers sit straight on the scene.
     const frameLayers = frame ? (
         <FramePage frame={frame} zoom={zoom} resolveMediaUrl={resolveMediaUrl}>
             {layers}
@@ -1511,9 +1473,9 @@ export function CanvasEditor({
     );
 
     return (
-        // The surface: the paper itself on the infinite canvas (always light, dark mode too — and its
-        // paint must stay OPAQUE, a translucent tint lets the dark app surface bleed through), the
-        // themed backdrop AROUND the page in frame mode. See canvasSurfaceClass.
+        // The surface: on the infinite canvas it is the paper itself, light in dark mode too, and its paint must stay
+        // opaque, or the dark app surface would bleed through a translucent tint. In frame mode it is the themed
+        // backdrop around the page. See canvasSurfaceClass.
         <div
             ref={containerRef}
             tabIndex={-1}
@@ -1528,8 +1490,8 @@ export function CanvasEditor({
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
-            // Hide our cursor from peers when the pointer leaves — unless a gesture holds capture (the
-            // pointer legitimately roams outside the container mid-drag).
+            // Our cursor is hidden from peers when the pointer leaves, unless a gesture holds capture, because the
+            // pointer may roam outside the container mid-drag.
             onPointerLeave={() => {
                 if (!gestureRef.current) {
                     publishCursor(null);
@@ -1540,9 +1502,9 @@ export function CanvasEditor({
             onDoubleClick={onDoubleClick}
             onContextMenu={onContextMenu}
             onPaste={onPaste}
-            // A press is the canvas' gesture. With text selected over the scene, Safari drags that selection
-            // from any press (Chrome from selectable text), and the page then gets no pointerup. A drag that
-            // starts in a text editor stays its own; a selection's drag starts at its text node.
+            // A press is the canvas's gesture. With text selected over the scene, Safari drags that selection from any
+            // press, and Chrome from selectable text, and the page then gets no pointerup. A drag that starts in a text
+            // editor stays its own; a selection's drag starts at its text node.
             onDragStart={(e) => {
                 const from = e.target instanceof Text ? e.target.parentElement : e.target;
                 const editor =
@@ -1551,14 +1513,14 @@ export function CanvasEditor({
             }}
             {...fileDropProps}
         >
-            {/* The scene: plain SCENE units, one layer div per element. pointer-events-none — hit
-                testing is geometry math on the container, never DOM hit testing. The viewport writes
-                the transform of this node (and of the two below) itself, so a pan/zoom event moves
-                them without a React render. */}
+            {/* The scene, in scene units, one layer div per element. It takes no pointer events, because the hit test
+                is geometry on the container, never a DOM hit test. The viewport writes the transform of this node, and
+                of the two below, itself, so a pan or zoom moves them without a React render. */}
             <div ref={sceneRef} className="pointer-events-none absolute inset-0 origin-top-left">
                 {frameLayers}
             </div>
-            {/* Scene-space chrome stays SVG: guides and bind affordances ride rotation/zoom for free. */}
+            {/* The scene-space chrome stays SVG, so the guides and the binding hints turn and zoom with the scene for
+                free. */}
             <svg
                 className={cn(CANVAS_PAPER_CLASS, 'pointer-events-none absolute inset-0 h-full w-full')}
                 xmlns={SVG_NS}
@@ -1570,16 +1532,16 @@ export function CanvasEditor({
                     {drawing.focusIndicators}
                 </g>
             </svg>
-            {/* Screen-space chrome, laid out by boxToStyle at the viewport React last rendered; a live
-                gesture moves the whole layer with one transform (chromeTransform) instead. It dresses the
-                PAGE, so it reads the page's palette and not the app's: the paper pin keeps a resize grip
-                white on a white slide in dark mode (a no-op on the infinite canvas, already paper). */}
+            {/* The screen-space chrome, laid out by boxToStyle at the viewport React last rendered. A live gesture
+                moves the whole layer with one transform, chromeTransform, instead. It dresses the page, so it takes the
+                page's palette and not the app's: the paper pin keeps a resize grip white on a white slide in dark mode.
+                The infinite canvas is paper already. */}
             <div
                 ref={chromeRef}
                 className={cn(CANVAS_PAPER_CLASS, 'pointer-events-none absolute inset-0 origin-top-left')}
             >
-                {/* The page card's border, in SCREEN px (the scene layer paints and clips it) — first, so
-                    the selection chrome draws over it. */}
+                {/* The page card's border, in screen px, because the scene layer paints and clips the page. It comes
+                    first, so the selection chrome draws over it. */}
                 {frame && (
                     <div
                         className="pointer-events-none absolute border-border"
@@ -1590,7 +1552,7 @@ export function CanvasEditor({
                         }}
                     />
                 )}
-                {/* Invisible-but-real elements, ringed while editing so they stay findable. */}
+                {/* Elements that paint nothing, ringed while editing so they stay findable. */}
                 {canEdit && <EmptyOutlines elements={ordered} boxToStyle={boxToStyle} />}
                 {/* ⌘F match rings, in the same screen-space chrome layer as the selection ring. */}
                 {matchedElements.map((el) => (
@@ -1614,7 +1576,7 @@ export function CanvasEditor({
                         boxToStyle={boxToStyle}
                         screenDeltaToScene={screenDeltaToScene}
                         showRotate
-                        // The shared aspect lock: 'aspect-default' (Shift frees) when checked, else 'free'.
+                        // The shared aspect lock: Shift frees a locked resize.
                         resizeMode={aspectLocked ? 'aspect-default' : 'free'}
                         minSize={MIN_ELEMENT_SIZE}
                         snapBox={resizeSnapBox}
@@ -1629,15 +1591,15 @@ export function CanvasEditor({
                         onCommit={(next, start) => {
                             transformStartedRef.current = false;
                             frozenRef.current = false;
-                            // Write only the fields the gesture changed — a rotate must not clobber
-                            // a peer's concurrent move/resize with its stale snapshot values.
+                            // Only the fields the gesture changed are written, so a rotate never writes stale values
+                            // over a peer's move or resize.
                             const fields: VectorElementPatch = {};
                             if (next.x !== start.x) fields.x = next.x;
                             if (next.y !== start.y) fields.y = next.y;
                             if (next.angle !== start.angle) fields.angle = next.angle;
                             if (isLinearElement(single)) {
-                                // A linear element rescales its points to the new box through resizeLinear,
-                                // reading the COMMITTED element so the total scale is exact.
+                                // A linear element scales its points to the new box through resizeLinear, which reads
+                                // the committed element so the total scale is exact.
                                 if (next.width !== start.width || next.height !== start.height) {
                                     const base = visibleRef.current.find((b) => b.id === single.id);
                                     if (base && isLinearElement(base)) {
@@ -1653,16 +1615,16 @@ export function CanvasEditor({
                             }
                             if (Object.keys(fields).length) {
                                 updateElement(single.id, fields);
-                                undoManager?.stopCapturing(); // trailing seal, same as create/move
+                                undoManager?.stopCapturing(); // the trailing seal
                             }
                             setPreviews({});
                             setSnapLines([]);
                         }}
                     />
                 )}
-                {/* Comment marks: LAST in the chrome layer, so the transform box's own NE grip — which
-                    sits on the very corner a mark claims — can never cover one. Screen-space like the
-                    selection ring, so they keep their size at any zoom. */}
+                {/* Comment marks, last in the chrome layer, so the transform box's top-right grip, which sits on the
+                    corner a mark claims, never covers one. They are in screen space like the selection ring, so they
+                    keep their size at any zoom. */}
                 {onOpenCard &&
                     commentedElements.map(({ id, cardId, color, corner }) => {
                         const { left, top } = boxToStyle(corner);
@@ -1673,17 +1635,16 @@ export function CanvasEditor({
                                 // -translate-x-full hangs the triangle inside the box, off the exact corner.
                                 className="pointer-events-auto absolute -translate-x-full"
                                 style={{ left, top }}
-                                // The container captures the pointer on its own pointerdown, so the click
-                                // that would follow never lands on us (it retargets): open from the pointer
-                                // event itself, and keep it off the canvas so it starts no drag.
+                                // The container captures the pointer on its own pointerdown, so the click that would
+                                // follow never lands here. The mark opens from the pointer event itself, and keeps the
+                                // press off the canvas so it starts no drag.
                                 onPointerDown={(e) => {
                                     e.stopPropagation();
                                     e.preventDefault();
                                     onOpenCard(cardId);
                                 }}
-                                // The pointerdown above swallows the click it would otherwise become, so
-                                // the keyboard needs its own opener; preventDefault keeps Enter/Space from
-                                // synthesising a second one.
+                                // The pointerdown above swallows the click it would become, so the keyboard needs its
+                                // own opener. preventDefault keeps Enter and Space from making a second one.
                                 onKeyDown={(e) => {
                                     if (e.key !== 'Enter' && e.key !== ' ') return;
                                     e.preventDefault();
@@ -1696,9 +1657,11 @@ export function CanvasEditor({
                             </button>
                         );
                     })}
-                {/* Round vertex handles: over the box for a 3+-point linear, the sole chrome for a 2-point one. */}
+                {/* Round vertex handles: over the box for a line of three or more points, and the only chrome for one
+                    of two. */}
                 {drawing.handles}
-                {/* Dashed union ring for multi-select + read-only single selections; a writable 2-point line/arrow shows only its handles. */}
+                {/* A dashed ring around a multiple selection, or a read-only single one. A line or arrow of two points
+                    the user can edit shows only its handles. */}
                 {showChrome && !showTransform && unionBox && !(singleLinear2pt && canEdit) && (
                     <div
                         className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"
@@ -1733,8 +1696,8 @@ export function CanvasEditor({
                         onCommit={commitEditing}
                     />
                 )}
-                {/* Remote peers: cursors + selection rings. Screen-space (its own subscription), above
-                    the local chrome; renders nothing when alone. */}
+                {/* Remote peers' cursors and selection rings, in screen space with their own subscription, above the
+                    local chrome. With no peers it draws nothing. */}
                 <CursorLayer
                     provider={provider}
                     boxes={cursorBoxes}
@@ -1742,26 +1705,25 @@ export function CanvasEditor({
                     isPeerVisible={isPeerVisible}
                 />
             </div>
-            {/* OS-file drag-over affordance. Shown only when a drop would actually insert (the drop
-                hook stays enabled even when it wouldn't — see above). Paper-pinned like the chrome layer:
-                its border and label are `primary`, which in dark mode is near-white — over the light page
-                of a framed canvas that is white on white. */}
+            {/* The OS-file drag-over hint, shown only when a drop would insert, though the drop target stays enabled
+                when it wouldn't. It is paper-pinned like the chrome layer: its border and label are `primary`, which in
+                dark mode is near white, and over a framed canvas's light page that is white on white. */}
             <FileDropOverlay
                 visible={isDragging && imagesEnabled}
                 label="Drop images to add"
                 icon={ImageIcon}
                 className={CANVAS_PAPER_CLASS}
             />
-            {/* Finish hint for a multi-point line/arrow draft: the finish triggers aren't discoverable, so
-                surface them while collecting clicks. Paper-pinned for the same reason as the overlay. */}
+            {/* A hint for a line drawn point by point, because its finish keys are not discoverable. It shows while the
+                clicks are collected, paper-pinned for the same reason as the drop hint. */}
             {drawing.multiPointDraft && (
                 <HintPill className={cn(CANVAS_PAPER_CLASS, 'bottom-3 left-1/2 -translate-x-1/2')}>
                     Enter or double-click to finish · Esc to cancel
                 </HintPill>
             )}
-            {/* Zoom readout; click resets to 100% about the viewport center. Bottom-RIGHT: the
-                router devtools badge owns the bottom-left corner in dev. A framed page has no zoom of
-                its own — it always shows the whole page — so it shows no pill. */}
+            {/* The zoom readout; a click resets to 100% about the viewport center. It sits bottom right, because the
+                router devtools badge owns the bottom left in dev. A framed page always shows the whole page, so it has
+                no zoom and no readout. */}
             {viewport === 'infinite' && (
                 <HintPill className={cn(CANVAS_PAPER_CLASS, 'bottom-3 right-3')} title="Reset zoom" onClick={resetZoom}>
                     {Math.round(zoom * 100)}%
@@ -1785,8 +1747,8 @@ export function CanvasEditor({
                 <MenuSections {...backgroundMenu} clipboard={<ClipboardMenuItems onPaste={onMenuPaste} />} />
             </ContextMenuAnchor>
             {editDialogElement && EditDialog && (
-                // Portaled to the body, but React bubbles its events up this tree, and the canvas' own
-                // pointer, double-click and paste handlers must not act on a click or paste in the dialog.
+                // Portaled to the body, but React bubbles its events up this tree, and the canvas's own pointer,
+                // double-click and paste handlers must not act on a click or a paste in the dialog.
                 <div
                     className="contents"
                     onPointerDown={(e) => e.stopPropagation()}

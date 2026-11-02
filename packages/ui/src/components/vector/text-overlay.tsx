@@ -97,7 +97,7 @@ export function TextOverlay({
     // again to fit the real metrics rather than the fallback's. An empty text matches no slice, so a fresh label
     // loads the slice with the space.
     const loadFont = (text: string) => {
-        loadVectorFont(fontSize, fontFamily, text || ' ')
+        loadVectorFont(text || ' ', { fontSize, fontFamily })
             .then(grow)
             .catch(() => {});
     };

@@ -1,18 +1,16 @@
-// A text box's auto-fit seam: the ONE place the stored height of a text box is measured back off the text that renders
-// in it. It hangs on the layer, so every surface that renders a live box runs it — the painted
-// layer AND the in-place editor mounted inside that same layer. A typed line, a paste, a panel change
-// (inset, font, size, leading, tracking) and a width resize therefore all re-fit through one path
-// instead of one write seam per feature, and a peer's change re-fits on every client that renders it.
+// Fits a text box's stored height to the text that renders in it. This is the one place that height is measured.
+// The hook runs inside the element's layer, so the painted layer and the in-place editor both fit through it. A typed
+// line, a paste, a panel change and a width resize all re-fit here, and a peer's change re-fits on every client that
+// renders the box.
 
 import type { VectorElement } from '@workspace/lib/vector';
 import { isTextBox, textBoxFitHeight } from '@workspace/lib/vector';
 import type { RefObject } from 'react';
 import { useLayoutEffect } from 'react';
 
-// The text body's natural extent: the span from its first block child's top to its last one's bottom.
-// Not the body's own height — that is pinned to the box (height:100%), so it could never report a
-// SHRINK — and not a client rect, which the scene layer's zoom would scale; offsets are layout px,
-// which are scene units. null when the body holds no block child to measure.
+// The text body's natural extent: from the top of its first block child to the bottom of its last one. The body's own
+// height is pinned to the box (height:100%), so it could never report a shrink. A client rect would be scaled by the
+// scene layer's zoom, while offsets are layout px, which are scene units. Null when the body holds no block child.
 export function textBodyHeight(body: Element): number | null {
     const { firstElementChild: first, lastElementChild: last } = body;
     if (!(first instanceof HTMLElement) || !(last instanceof HTMLElement)) return null;
@@ -23,10 +21,9 @@ export function textBodyHeight(body: Element): number | null {
 // as part of the keystroke that caused it rather than as bookkeeping.
 export type FitHeight = (id: string, height: number, editing: boolean) => void;
 
-// `host` is the element's layer div; its LAST element child is the styled text body — the rendered one,
-// or the in-place editor's box, which carries the same CSS and holds the editor as its one block child.
-// Last, not first: a painted box draws its backdrop svg before the body, in both of those states.
-// No handler (a thumbnail, present mode, a read-only canvas) means no measuring at all.
+// `host` is the element's layer div. Its last element child is the styled text body: the rendered one, or the in-place
+// editor's box, which carries the same CSS and holds the editor as its one block child. It is the last child because a
+// painted box draws its backdrop svg before the body. Without a handler, such as in a thumbnail, nothing is measured.
 export function useTextBoxAutoFit(
     host: RefObject<HTMLDivElement | null>,
     el: VectorElement,
@@ -43,10 +40,10 @@ export function useTextBoxAutoFit(
             if (height !== null) onFit(box.id, height, editing);
         };
         fit();
-        // The body's own box changes when a resize re-wraps it and when a late web font swaps in; a
-        // content or typography change re-runs this effect through `el` instead.
+        // A change to the text or the box re-runs this effect through `el`. A font slice that loads late re-wraps the
+        // text without one, so the blocks are watched. The body is not: its size is the box's, which a reflow keeps.
         const observer = new ResizeObserver(fit);
-        observer.observe(body);
+        for (const block of body.children) observer.observe(block);
         return () => observer.disconnect();
     }, [host, el, onFit, editing]);
 }

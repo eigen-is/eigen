@@ -24,8 +24,9 @@ const { isVectorFontLoaded, loadVectorFont } = await import('../../../components
 
 test('the font set loads and checks the slices of the text the label measures', async () => {
     calls.length = 0;
-    isVectorFontLoaded(20, 'sans', '茶 tea 😀');
-    await loadVectorFont(20, 'sans', '茶 tea 😀');
+    const font = { fontSize: 20, fontFamily: 'sans' };
+    isVectorFontLoaded('茶 tea 😀', font);
+    await loadVectorFont('茶 tea 😀', font);
     expect(calls).toEqual([
         ['check', '茶 tea 😀'],
         ['load', '茶 tea 😀'],

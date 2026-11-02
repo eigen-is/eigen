@@ -24,12 +24,11 @@ import { ArrowPanelSection } from './arrow';
 import { ChartEditDialog, ChartPanelSection } from './chart';
 import { ImagePanelSection } from './image';
 
-// Rows for a homogeneous selection of this kind. `onChange` applies ONE patch to every selected element
-// and `onChangeEach` a patch computed per element (a label's measured width, an arrow's re-docked
-// route), each in one sealed transact (the panel owns the sealing). `scene` resolves an element the
-// selection does not hold — an arrow's bound shape. `onReplace` swaps a sole selected element for new ones
-// and selects them, one undo step (a chart's Convert to shapes). `slideWidth` is the deck's, for its pt; a
-// drawing has none.
+// Rows for a selection of elements that are all this kind. `onChange` applies one patch to every selected element, and
+// `onChangeEach` a patch computed per element, such as a label's measured width. The panel seals each into one undo
+// step. `scene` resolves an element the selection does not hold, such as an arrow's bound shape. `onReplace` swaps a
+// sole selected element for new ones and selects them in one undo step, as a chart's Convert to shapes does.
+// `slideWidth` is the deck's, for its pt; a drawing has none.
 export type KindPanelSectionProps = {
     elements: VectorElement[];
     scene: Map<string, VectorElement>;

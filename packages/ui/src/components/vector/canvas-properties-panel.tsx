@@ -47,27 +47,16 @@ import { applyZOrder, convertElementToShapes } from './hooks/selection-ops';
 import { ELEMENT_KIND_UI, elementLabel } from './kinds';
 import { RichTextPanelSection } from './kinds/rich-text';
 
-// The box kinds' corner treatment — a different question from a shaft's curvature, hence its own row.
+// The box kinds' corners. A shaft's curvature is a different question, so it has a row of its own.
 const CORNERS_OPTIONS: { value: Corners; label: string }[] = [
     { value: 'straight', label: 'Straight' },
     { value: 'curved', label: 'Curved' },
     { value: 'round', label: 'Round' },
 ];
-// A width/height change on a linear element must rescale its points through resizeLinear, not
-// overwrite the box; the box fills each unset field from the element so x/y/angle-only changes pass through.
-function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Partial<Box>) {
-    return resizeLinear(el, {
-        x: patch.x ?? el.x,
-        y: patch.y ?? el.y,
-        width: patch.width ?? el.width,
-        height: patch.height ?? el.height,
-        angle: patch.angle ?? el.angle,
-    });
-}
 
 type CanvasPropertiesPanelProps = {
-    // The elements the canvas shows — z-order reorders the selection relative to the rest
-    // (zOrderKeys needs both), so in frame mode this is that frame's elements, not the whole scene.
+    // The elements the canvas shows. A z-order change moves the selection relative to the rest, so in frame mode this
+    // is that frame's elements, not the whole scene.
     elements: VectorElement[];
     selectedElements: VectorElement[];
     updateElements: (patches: { id: string; fields: VectorElementPatch }[]) => void;
@@ -78,12 +67,10 @@ type CanvasPropertiesPanelProps = {
     undoManager: Y.UndoManager | null;
     // Panel title with nothing selected; defaults to the canvas.
     emptyTitle?: string;
-    // What the panel shows with nothing selected — the host's own question about the surface, which
-    // the engine has no words for: the drawing canvas' background color, the deck's slide background
-    // with its apply-to scope.
+    // What the panel shows with nothing selected: the host's own rows about its surface, which the engine has no words
+    // for, such as a drawing's background color.
     emptySection?: ReactNode;
-    // Aspect lock, owned by the editor so the panel checkbox and the canvas'
-    // ObjectTransform resizeMode share one ephemeral setting.
+    // The aspect lock. The editor owns it, so the panel's checkbox and the canvas's resize grips share one setting.
     aspectLocked: boolean;
     onAspectLockChange: (locked: boolean) => void;
     // The deck's physical width in pt, so its text sizes read in pt; a drawing passes none and reads px.
@@ -106,54 +93,51 @@ export function CanvasPropertiesPanel({
 }: CanvasPropertiesPanelProps) {
     const selectedIds = selectedElements.map((el) => el.id);
     const byId = new Map(selectedElements.map((el) => [el.id, el]));
-    // Every element in scope, for a kind section that must resolve one the selection does not hold (an
-    // arrow's bound shape, when its route is re-docked).
+    // Every element in scope, for a kind section that must resolve one the selection does not hold, such as an arrow's
+    // bound shape when its route docks again.
     const sceneById = new Map(elements.map((el) => [el.id, el]));
     const has = selectedElements.length > 0;
     const all = (pick: (el: VectorElement) => boolean) => has && selectedElements.every(pick);
-    // Every row gates on capabilitiesOf(el) — per ELEMENT, never off the kind's static table, because an
-    // open freedraw paints no fill and so offers none.
+    // Every row asks capabilitiesOf of each element, never a table per kind, because an open freehand stroke paints no
+    // fill and so offers none.
     const showFill = all((el) => capabilitiesOf(el).fill);
-    // A border can be switched off only where the element still has a body without it; a line or an
-    // arrow IS its stroke, so its color row offers no None swatch.
+    // A border can be switched off only where the element still has a body without it. A line or an arrow is its
+    // stroke, so its color row offers no None swatch.
     const strokeOptional = all((el) => capabilitiesOf(el).strokeOptional);
-    // The hatch row sits INSIDE the Fill block — it is the other half of the same stored fill — and shows
-    // only for the kinds whose renderer honors it.
+    // The hatch row sits inside the Fill block, because it is the other half of the same stored fill. It shows only
+    // for the kinds that draw a hatch.
     const showFillStyle = showFill && all((el) => capabilitiesOf(el).fillStyle);
-    // Corners follow the kind's own capability; the separate Edges row is the shaft curvature a line or
-    // an arrow carries (round curve vs sharp polyline), never freedraw.
     const showCorners = all((el) => capabilitiesOf(el).corners);
-    // One kind selected ⇒ its own rows; a mixed selection shows only the generic ones.
+    // A selection of one kind shows that kind's rows too, and a mixed selection only the generic ones.
     const soleKind =
         has && selectedElements.every((el) => el.type === selectedElements[0].type) ? selectedElements[0].type : null;
     // The Text and Spacing rows serve every element that holds text, so a rectangle and a text box share them.
     const showText = all((el) => capabilitiesOf(el).text);
     const KindSection = soleKind ? ELEMENT_KIND_UI[soleKind].PanelSection : undefined;
-    // Stroke Style (dashed/dotted) is meaningless for a freehand stroke: it is a filled outline, not a
-    // drawn line, and the capability is what says so.
+    // A dashed or dotted style means nothing for a freehand stroke, which is a filled outline rather than a drawn
+    // line. The capability says so.
     const showStrokeStyle = all((el) => capabilitiesOf(el).strokeStyle);
-    // An elbow arrow pins angle 0 (its route lives in the unrotated local frame), so a pure-elbow
-    // selection disables the panel Angle input; the arrow's own rows live in its kind section.
+    // An elbow arrow's route lives in its unturned frame, so its angle stays 0. A selection of only elbow arrows
+    // disables the Angle input, while its width and height stay editable.
     const allElbow = all((el) => el.type === 'arrow' && el.elbow);
-    // The Edges row is a shaft's curvature (round curve vs sharp polyline), which the `edges` capability
-    // answers — freedraw stores a roundness but does not offer one. An all-arrow selection asks it in the
-    // arrow's own section instead, where it is the elbow's corner style and shows only for an elbow.
+    // The Edges row is a shaft's curvature, a round curve or a sharp polyline, which the `edges` capability answers. A
+    // freehand stroke stores a roundness but offers none. A selection of only arrows asks it in the arrow's own section
+    // instead, where it is the elbow's corner style.
     const showEdges = soleKind !== 'arrow' && all((el) => capabilitiesOf(el).edges);
     const showShape = showCorners || showEdges;
 
-    // Same fields on every selected element — one transact, one undo step.
+    // The same fields on every selected element, in one undo step.
     const applyToAll = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
         sealed(undoManager, () => updateElements(selectedIds.map((id) => ({ id, fields }))));
     };
 
-    // One edit = one undo step for every control that writes as the user goes: this host publishes the
-    // hold, which `sealed` stands down inside, so an opacity drag and a typed number are each one step
-    // instead of one per frame or per digit.
+    // A control that writes as the user goes takes this hold, and `sealed` stands down inside it. So an opacity drag and
+    // a typed number are each one undo step, not one per frame or per digit.
     const beginGesture = useCallback(() => holdCapture(undoManager), [undoManager]);
 
-    // A patch computed PER element — a kind section's seam for the writes one uniform patch cannot
-    // express (an arrow's re-docked elbow route, a label's re-measured width). Still one undo step.
+    // A patch computed per element, for the writes one patch for all cannot express, such as a label's measured width.
+    // Still one undo step.
     const applyToEach = (patch: (el: VectorElement) => VectorElementPatch) => {
         if (!selectedElements.length) return;
         sealed(undoManager, () => updateElements(selectedElements.map((el) => ({ id: el.id, fields: patch(el) }))));
@@ -164,8 +148,8 @@ export function CanvasPropertiesPanel({
         convertElementToShapes(selectedElements[0].id, partials, replaceElement, setSelectedIds, undoManager);
     };
 
-    // Numeric transform writes. A width/height change routes linear elements through resizeLinearTo so
-    // their points scale with the box; x/y/angle-only changes pass straight through.
+    // The Transform rows. A width or height change goes through resizeLinearTo for a linear element, so its points
+    // scale with the box.
     const applyTransform = (fields: VectorElementPatch) => {
         if (!selectedIds.length) return;
         const resizesLinear = fields.width !== undefined || fields.height !== undefined;
@@ -182,8 +166,8 @@ export function CanvasPropertiesPanel({
         );
     };
 
-    // The two halves of the stored fill are edited separately, so each write preserves the other ON EACH
-    // ELEMENT: re-painting a mixed-hatch selection must not collapse it to one hatch. One undo step.
+    // The two halves of the stored fill are edited apart, so each write keeps the other half of each element's fill.
+    // Painting a selection with mixed hatches must not give them all one hatch. One undo step.
     const applyFill = (next: (fill: Fill) => Fill) => {
         if (!selectedIds.length) return;
         sealed(undoManager, () =>
@@ -197,8 +181,8 @@ export function CanvasPropertiesPanel({
 
     const handleZOrderApply = (op: ZOp) => applyZOrder(op, elements, selectedIds, reorderElements, undoManager);
 
-    // Align / distribute / match-size over the shared arrange math. One transact, one undo step.
-    // computeArrange no-ops below 2 (distribute below 3), so nothing to gate here.
+    // Align, distribute and match size, in one undo step. computeArrange returns nothing for a selection too small to
+    // arrange, so nothing is gated here.
     const handleAlign = (op: ArrangeOp) => {
         const patches = computeArrange(
             selectedElements.map((el) => ({ id: el.id, x: el.x, y: el.y, width: el.width, height: el.height })),
@@ -225,7 +209,7 @@ export function CanvasPropertiesPanel({
     const tHeight = getMergedValue(selectedElements, (el) => Math.round(el.height));
     const tAngle = getMergedValue(selectedElements, (el) => Math.round(el.angle));
 
-    // The fill merges as the STORED string and is parsed once, so a gradient survives the merge intact.
+    // The fill merges as the stored string and is parsed once, so a gradient survives the merge whole.
     const fill = getMergedValue(selectedElements, (el) => ('fill' in el ? el.fill : undefined));
     const fillStyle = getMergedValue(selectedElements, (el) => ('fill' in el ? parseFill(el.fill).style : undefined));
     // A chart's own fields: its labels' color, and whether its data draws past the sketch.
@@ -238,16 +222,14 @@ export function CanvasPropertiesPanel({
     const roundness = getMergedValue(selectedElements, (el) => ('roundness' in el ? el.roundness : undefined));
     const opacity = getMergedValue(selectedElements, (el) => el.opacity);
 
-    // The element's own label, from the registry, where a text box is Text — a second table here would drift from the
-    // toolbar's.
+    // The element's own label, from the registry, where a text box is Text, so the panel and the toolbar agree.
     const title = !has
         ? (emptyTitle ?? 'Canvas')
         : selectedElements.length === 1
           ? elementLabel(selectedElements[0])
           : `${selectedElements.length} elements`;
 
-    // Sections follow the canonical order documented on PropertiesPanel — geometry, content, paint,
-    // appearance, actions.
+    // The sections follow PropertiesPanel's order: geometry, content, paint, appearance, actions.
     return (
         <PropertyGestureContext.Provider value={beginGesture}>
             <PropertiesPanel title={title}>
@@ -259,8 +241,6 @@ export function CanvasPropertiesPanel({
                         height={tHeight}
                         angle={tAngle}
                         onChange={applyTransform}
-                        // An elbow arrow's route lives in the unrotated local frame, so it pins angle 0 — the
-                        // Angle input is disabled for a pure-elbow selection (W/H stay editable).
                         angleDisabled={allElbow}
                         aspectLocked={aspectLocked}
                         onAspectLockChange={onAspectLockChange}
@@ -358,4 +338,16 @@ export function CanvasPropertiesPanel({
             </PropertiesPanel>
         </PropertyGestureContext.Provider>
     );
+}
+
+// A width or height change on a linear element rescales its points through resizeLinear rather than overwriting the
+// box. Each field the patch leaves out comes from the element, so a change of position or angle alone passes through.
+function resizeLinearTo(el: VectorLinearElement | VectorArrowElement, patch: Partial<Box>) {
+    return resizeLinear(el, {
+        x: patch.x ?? el.x,
+        y: patch.y ?? el.y,
+        width: patch.width ?? el.width,
+        height: patch.height ?? el.height,
+        angle: patch.angle ?? el.angle,
+    });
 }

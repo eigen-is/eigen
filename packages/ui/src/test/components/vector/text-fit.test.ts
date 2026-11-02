@@ -16,17 +16,23 @@ g.window = window;
 g.navigator = window.navigator;
 g.IS_REACT_ACT_ENVIRONMENT = true;
 
-// The hook re-measures on its ResizeObserver; happy-dom has none, so the test fires the callback once
-// the offsets a browser would have laid out are on the node.
-let remeasure: (() => void) | null = null;
+// The hook re-measures on its ResizeObserver; happy-dom has none. A browser fires an observer only for a node it
+// observes whose box changed, so the test does the same with `reflow` once the new offsets are on the node.
+const observed = new Map<Element, () => void>();
 class FakeResizeObserver {
+    private readonly callback: () => void;
     public constructor(callback: () => void) {
-        remeasure = callback;
+        this.callback = callback;
     }
-    public observe() {}
-    public disconnect() {}
+    public observe(target: Element) {
+        observed.set(target, this.callback);
+    }
+    public disconnect() {
+        observed.clear();
+    }
 }
 g.ResizeObserver = FakeResizeObserver;
+const reflow = (target: Element) => observed.get(target)?.();
 
 afterAll(() => {
     g.document = undefined;
@@ -145,10 +151,18 @@ function fittedHeight(backdrop: boolean, el?: VectorElement): number | undefined
     if (!line) throw new Error('the harness rendered no measurable body');
     Object.defineProperty(line, 'offsetTop', { value: 0 });
     Object.defineProperty(line, 'offsetHeight', { value: 120 });
-    act(() => remeasure?.());
+    act(() => reflow(line));
     act(() => root.unmount());
     return heights.at(-1);
 }
+
+// The body is pinned to the box (height:100%), so its own size never changes when its text re-wraps. A late font
+// slice re-wraps the lines inside it, and those are what must re-fit the box.
+describe('a reflow of the text', () => {
+    test('re-fits the box when a late font re-wraps its lines', () => {
+        expect(fittedHeight(false)).toBe(120);
+    });
+});
 
 describe('the body the hook measures', () => {
     test("is the host's last child, whether or not a backdrop precedes it", () => {

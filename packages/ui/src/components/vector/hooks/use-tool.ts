@@ -20,8 +20,7 @@ export type VectorToolEntry = {
     // shown for it, rather than doubling up on Select's keys.
     shortcut?: LetterKey;
     digit?: NumberKey;
-    // Drives the toolbar's menu split: inserting tools fill the Insert menu, the rest (the select mode
-    // + eraser) live in the Edit menu.
+    // Splits the toolbar's menus: the inserting tools fill the Insert menu, and Select and Eraser live in the Edit menu.
     inserts: boolean;
 };
 
@@ -40,8 +39,8 @@ export const VECTOR_TOOLS: VectorToolEntry[] = [
 
 export function useTool() {
     const [tool, setTool] = useState<VectorTool>('select');
-    // Tool lock (Q / the toolbar padlock): when on, shape/line/arrow/text tools stay active after a
-    // placement instead of reverting to select (freedraw/eraser already stay). Session-only state.
+    // The tool lock, Q or the toolbar's padlock. While it is on, a tool that places an element stays active after a
+    // placement instead of going back to Select. Draw and Eraser stay active anyway. It lasts for the session only.
     const [toolLocked, setToolLocked] = useState(false);
     return { tool, setTool, toolLocked, setToolLocked };
 }
