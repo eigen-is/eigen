@@ -1,6 +1,7 @@
 // A form dialog submits on Enter as on its submit button, and only when the caller says the fields are valid. While a
 // submit runs, its buttons and every way to close it wait. It closes once the submit succeeds and stays open when it
-// fails or returns false, for another try. A dialog that is closing takes no second submit.
+// fails or returns false, for another try. A dialog that is closing takes no second submit, and a dialog opened from
+// inside another form never submits that form.
 import { afterEach, expect, mock, test } from 'bun:test';
 import type { ReactNode } from 'react';
 import type { DialogAction } from '../../hooks/use-dialog-pending';
@@ -242,4 +243,33 @@ test('a description shows under the title and a screen reader reads it, and with
     await unmount();
     await render();
     expect(dialog()?.hasAttribute('aria-describedby')).toBe(false);
+});
+
+test('a dialog opened from inside another form submits only itself', async () => {
+    const onSubmit = mock(() => {});
+    const outerSubmit = mock(() => {});
+    ({ unmount } = await renderInDocument(
+        createElement(
+            'form',
+            {
+                onSubmit: (event: { preventDefault: () => void }) => {
+                    event.preventDefault();
+                    outerSubmit();
+                },
+            },
+            createElement(FormDialog, {
+                open: true,
+                onOpenChange,
+                title: 'Rename',
+                children: createElement(FormDialogForm, {
+                    onSubmit,
+                    submitLabel: 'Save',
+                    children: createElement(Input, { 'aria-label': 'Name', defaultValue: 'Notes' }),
+                }),
+            }),
+        ),
+    ));
+    await enter();
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(outerSubmit).not.toHaveBeenCalled();
 });
