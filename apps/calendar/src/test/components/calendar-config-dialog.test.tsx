@@ -1,6 +1,7 @@
 // New calendar and Edit calendar: Save and Enter wait for a name with more than spaces, Save creates or updates the
-// calendar with the name trimmed and closes, and a save the server refuses stays open with no unhandled rejection. Delete asks
-// first, on top of the open dialog, so a cancelled delete keeps the user's edits. The default calendar has no Delete.
+// calendar with the name trimmed and closes, and a save the server refuses stays open with no unhandled rejection.
+// Delete asks first, on top of the open dialog, so a cancelled delete keeps the user's edits. The default calendar has
+// no Delete.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import type { CalendarItem } from '@workspace/lib/types/calendar';

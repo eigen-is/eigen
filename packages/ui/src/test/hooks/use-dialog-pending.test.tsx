@@ -38,7 +38,7 @@ const refusal = () => new AppError({ error: { status: 403, value: 'No' }, status
 test('an action that returns or resolves false keeps the dialog open, and one that resolves closes it', async () => {
     const { onOpenChange, run } = await mount(false);
     await run(() => false);
-    await run(() => Promise.resolve(false));
+    await run(() => Promise.resolve<false>(false));
     expect(onOpenChange).not.toHaveBeenCalled();
     await run(() => Promise.resolve());
     expect(onOpenChange.mock.calls).toEqual([[false]]);
@@ -59,7 +59,7 @@ test('a toasted failure ends in run, and the dialog stays open', async () => {
     const { onOpenChange, run } = await mount(false);
     const failure = new Error('offline');
     onMutationError(failure);
-    expect(await run(() => Promise.reject(failure))).toBe('resolved');
+    expect(await run(() => Promise.reject<never>(failure))).toBe('resolved');
     expect(onOpenChange).not.toHaveBeenCalled();
 });
 
@@ -67,13 +67,13 @@ test('with closeOnRefusal a toasted refusal closes the dialog and ends in run', 
     const { onOpenChange, run } = await mount(true);
     const failure = refusal();
     onMutationError(failure);
-    expect(await run(() => Promise.reject(failure))).toBe('resolved');
+    expect(await run(() => Promise.reject<never>(failure))).toBe('resolved');
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('with closeOnRefusal a refusal no toast showed closes the dialog and still reaches the caller', async () => {
     const { onOpenChange, run } = await mount(true);
     const failure = refusal();
-    expect(await run(() => Promise.reject(failure))).toBe(failure);
+    expect(await run(() => Promise.reject<never>(failure))).toBe(failure);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });

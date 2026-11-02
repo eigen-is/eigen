@@ -145,7 +145,7 @@ test('a submit that returns or resolves false keeps the dialog open, and the nex
     await render({ onSubmit });
     await enter();
     expect(onOpenChange).not.toHaveBeenCalled();
-    result = Promise.resolve(false);
+    result = Promise.resolve<false>(false);
     await enter();
     expect(onOpenChange).not.toHaveBeenCalled();
     result = Promise.resolve();
