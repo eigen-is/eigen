@@ -1,7 +1,7 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
 // arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it and ⌘A selects every row. The
-// list spreads the returned handleKeyDown on its focusable container, and the hook keeps the focus on that container
-// while nothing else holds it.
+// list spreads the returned handleKeyDown on its focusable container. The hook keeps the focus on that container while
+// nothing else holds it, and takes it back from a row's own button when a key moves the cursor.
 
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
@@ -160,8 +160,15 @@ export function useKeyboardListNavigation<T>({
             return;
         }
 
+        // After a row's menu closes, the focus is back on that row's ⋮ button, where Enter opens the menu again. A
+        // key that moves the cursor hands the focus back to the list, so the next Enter opens the cursor's row.
+        const leaveControl = () => {
+            if (onControl) containerRef.current?.focus({ preventScroll: true });
+        };
+
         const moveTo = (computeNext: (prev: number) => number) => {
             e.preventDefault();
+            leaveControl();
             const next = computeNext(selectedIndex);
             if (next >= 0 && next !== selectedIndex) {
                 updateSelection(items[next], e);
@@ -169,6 +176,15 @@ export function useKeyboardListNavigation<T>({
                 scrollToRow(next);
             }
             setSelectedIndex(next);
+        };
+
+        const jumpTo = (index: number) => {
+            e.preventDefault();
+            leaveControl();
+            setSelectedIndex(index);
+            selection?.select(getSelectionId(items[index]));
+            notify(items[index], index);
+            scrollToRow(index);
         };
 
         // ⌘A on a list nobody clicked yet selects every row while the cursor is still at -1. Space, Enter and Delete
@@ -233,23 +249,14 @@ export function useKeyboardListNavigation<T>({
 
             case 'PageUp':
             case 'Home':
-                e.preventDefault();
                 jumpTo(0);
                 break;
 
             case 'PageDown':
             case 'End':
-                e.preventDefault();
                 jumpTo(items.length - 1);
                 break;
         }
-    };
-
-    const jumpTo = (index: number) => {
-        setSelectedIndex(index);
-        selection?.select(getSelectionId(items[index]));
-        notify(items[index], index);
-        scrollToRow(index);
     };
 
     return { selectedIndex, handleKeyDown };

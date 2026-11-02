@@ -94,30 +94,51 @@ type ImportCalendarTarget =
     | { kind: 'existing'; ownerId: string; calendarId: string }
     | { kind: 'new'; name: string; color: string };
 
+type LeftoverCalendar = { id: string; name: string; color: string };
+
 // A new calendar is made in the viewer's own home and the file imported into it. When the import fails or takes no
-// events, the calendar is deleted again at once, so a retry with another name or target starts clean. A calendar
-// whose delete failed too is remembered, and the next new-calendar try fills it instead of making a second one.
+// events, the calendar is deleted again at once. When that delete fails too, the calendar is remembered. A retry with
+// the same name and color fills it instead of making a second one, and so does a retry that picks it from the list.
+// Any other retry first tries once more to delete it, so no events land under a name the user did not ask for.
 export function useImportToCalendar(ownerId: string): {
     importToCalendar: (source: FileImportSource, target: ImportCalendarTarget) => Promise<void>;
 } {
     const createCalendar = useCreateCalendar(ownerId);
     const deleteCalendar = useDeleteCalendar(ownerId);
     const importCalendar = useImportCalendar();
-    const leftoverCalendarId = useRef<string | null>(null);
+    const leftoverCalendar = useRef<LeftoverCalendar | null>(null);
 
     const importToCalendar = useCallback(
         async (source: FileImportSource, target: ImportCalendarTarget) => {
+            const leftover = leftoverCalendar.current;
+            const reused =
+                leftover &&
+                (target.kind === 'existing'
+                    ? target.calendarId === leftover.id
+                    : target.name === leftover.name && target.color === leftover.color)
+                    ? leftover
+                    : null;
+            if (leftover && !reused) {
+                // The delete's hook toasts its own failure. The import goes on either way, and the next try deletes
+                // it again.
+                await deleteCalendar.mutateAsync(leftover.id).then(
+                    () => {
+                        leftoverCalendar.current = null;
+                    },
+                    () => {},
+                );
+            }
             if (target.kind === 'existing') {
+                if (reused) leftoverCalendar.current = null;
                 await importCalendar.mutateAsync({ ...source, ownerId: target.ownerId, calendarId: target.calendarId });
                 return;
             }
-            const calendarId =
-                leftoverCalendarId.current ??
-                (await createCalendar.mutateAsync({ name: target.name, color: target.color })).id;
+            const { name, color } = target;
+            const calendarId = reused?.id ?? (await createCalendar.mutateAsync({ name, color })).id;
             const discard = async () => {
-                leftoverCalendarId.current = calendarId;
+                leftoverCalendar.current = { id: calendarId, name, color };
                 await deleteCalendar.mutateAsync(calendarId);
-                leftoverCalendarId.current = null;
+                leftoverCalendar.current = null;
             };
             const result = await importCalendar.mutateAsync({ ...source, ownerId, calendarId }).catch(async (error) => {
                 // The delete's hook toasts its own failure, and the caller must still see why the import failed.
@@ -125,7 +146,7 @@ export function useImportToCalendar(ownerId: string): {
                 throw error;
             });
             if (result.imported === 0) await discard();
-            else leftoverCalendarId.current = null;
+            else if (reused) leftoverCalendar.current = null;
         },
         [createCalendar, deleteCalendar, importCalendar, ownerId],
     );
