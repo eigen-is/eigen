@@ -5,18 +5,21 @@
 
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { Field, FieldDescription, FieldLabel, FieldTitle } from '@workspace/ui/components/field';
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
 import { useOptionalPreview } from '../preview-provider/preview-context';
+
+// The word the title, the label and the placeholder use for the item.
+type ItemType = 'Folder' | 'File';
 
 type DriveCreateItemDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     // Rejects when the save fails, which keeps the dialog open.
     onCreateItem: (itemName: string) => Promise<unknown>;
-    type: string;
+    type: ItemType;
     path: DrivePath;
     title?: string;
     defaultValue?: string;
@@ -63,7 +66,7 @@ function ItemNameForm({
     location,
     onCreateItem,
 }: {
-    type: string;
+    type: ItemType;
     defaultValue: string;
     submitLabel: string;
     location: string;
@@ -79,23 +82,20 @@ function ItemNameForm({
                 await onCreateItem(itemName);
             }}
         >
-            <div className="py-4">
-                <Label htmlFor="itemName" className="mb-3">
-                    {type} name
-                </Label>
+            <Field>
+                <FieldLabel htmlFor="itemName">{type} name</FieldLabel>
                 <Input
                     id="itemName"
                     value={itemName}
                     onChange={(e) => setItemName(e.target.value)}
                     placeholder={`Enter ${type.toLowerCase()} name`}
-                    className="mt-2"
                     autoFocus
                 />
-                <div className="mt-4 mb-4">
-                    <Label className="mb-1">Location</Label>
-                    <span className="text-sm text-muted-foreground truncate block">{location}</span>
-                </div>
-            </div>
+            </Field>
+            <Field>
+                <FieldTitle>Location</FieldTitle>
+                <FieldDescription className="truncate">{location}</FieldDescription>
+            </Field>
         </FormDialogForm>
     );
 }

@@ -55,7 +55,7 @@ async function render(open: boolean) {
             open,
             onOpenChange: () => {},
             onCreateItem,
-            type: 'Rename',
+            type: 'File',
             path: drivePath({ name: 'Notes.eigendoc', mimeType: DRIVE_MIME_DOC }),
         }),
     ));
