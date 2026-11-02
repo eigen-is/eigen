@@ -1,3 +1,6 @@
+// Cell labels and sheet names as the formula parser reads them: a label's row and column, the two ways a reference
+// may spell a sheet name, and the key two names are compared by. The reference patterns of the engine build on these.
+
 import {
     columnIndexToLabel,
     columnLabelToIndex,
@@ -32,6 +35,12 @@ const LABEL_EXTRACT_REGEXP = new RegExp(`^(?:${SHEET_NAME_PREFIX})?(?:([$])?([A-
 
 export function unquoteSheetName(raw: string): string {
     return raw.replace(/^'|'$/g, '').replace(/''/g, "'");
+}
+
+// What two sheet names are compared by. Excel ignores case, so `data!A1` reads the sheet named Data, and a workbook
+// can't hold Data and data side by side.
+export function sheetNameKey(name: string): string {
+    return name.toLowerCase();
 }
 
 // Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.

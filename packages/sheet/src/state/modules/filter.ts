@@ -18,7 +18,7 @@ import { isRealNull, isRealNum } from './validation';
 
 // Sorts the rows below the header row by column col. Returns the message to show when a merge
 // in the range makes the sort impossible.
-export function orderbydatafiler(
+export function sortFilterRange(
     ctx: Context,
     startRow: number,
     startCol: number,

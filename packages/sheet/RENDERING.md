@@ -12,7 +12,7 @@ The fork's class and id prefix is `sheet-`. One engine-private class keeps a bar
 <Workbook>                                      Workbook/index.tsx
   <WorkbookContext.Provider>
     <ModalProvider>                              context/modal.tsx
-      <MenuBar>                                 MenuBar/index.tsx          (React + shadcn)
+      <WorkbookMenuBar>                         MenuBar/index.tsx          (React + shadcn)
       <FxEditor>                                FxEditor/index.tsx         (React + ContentEditable)
       <Sheet>                                   Sheet/index.tsx
         <canvas>                                                           (HTML5 Canvas: cells, grid, borders)
@@ -61,7 +61,7 @@ Everything interactive (selection, editing, resize handles, images) is a React D
 
 ### Theming: the light-pinned surface
 
-The workbook surface renders the same in light and dark mode. Like the docs page, the paper does not re-theme; only the app chrome around it does (MenuBar, SheetTab, portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas, headers and overlays) and the formula bar (`FxEditor`) carry the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`. It re-pins the theme tokens the surface reads to their light values and re-resolves inherited `color` inside the scope. The grid's colors (`--sheet-grid-line`, `--sheet-header-*`, `--sheet-cell-text`) are light-only variables in `globals.css`, shared with the chart Edit data grid, and the canvas reads them off its own element once per draw burst (`state/render/colors.ts`); its other colors, such as cell backgrounds, are hardcoded light. `--sheet-*` and `--app-current-color` do not change with the theme.
+The workbook surface renders the same in light and dark mode. Like the docs page, the paper does not re-theme; only the app chrome around it does (WorkbookMenuBar, SheetTab, portaled popups). The Sheet root (`Sheet/index.tsx`, wrapping canvas, headers and overlays) and the formula bar (`FxEditor`) carry the `.eigen-paper` scope class from `packages/ui/src/styles/globals.css`. It re-pins the theme tokens the surface reads to their light values and re-resolves inherited `color` inside the scope. The grid's colors (`--sheet-grid-line`, `--sheet-header-*`, `--sheet-cell-text`) are light-only variables in `globals.css`, shared with the chart Edit data grid, and the canvas reads them off its own element once per draw burst (`state/render/colors.ts`); its other colors, such as cell backgrounds, are hardcoded light. `--sheet-*` and `--app-current-color` do not change with the theme.
 
 In-grid popup cards (LinkEditCard, the validation hint card) opt back into the theme with `.eigen-paper-chrome`. Radix-portaled popups leave the scope by themselves. The add-row control stays pinned, because it sits directly on the paper with no card behind it. Its shadcn `dark:` variants still match inside the scope and resolve against the pinned tokens, so it is legible and near-light rather than exactly light, which is acceptable outside the grid.
 
@@ -173,11 +173,11 @@ The chevron is canvas paint; where it is drawn and why is in [SHEETS.md § A lis
 - The sheet tab menu (`SheetItem.tsx`) offers rename, delete, hide, show and color. The same items render through a shadcn `ContextMenu` (tab right-click) and a `DropdownMenu` (the chevron on the active tab).
 - The shadcn and Radix portals dismiss on an outside click, so there is no separate backdrop div.
 
-### 12. MenuBar (React + shadcn)
+### 12. WorkbookMenuBar (React + shadcn)
 
-**Files**: `MenuBar/index.tsx`, `MenuBar/edit-menu.tsx`, `MenuBar/view-menu.tsx`, `MenuBar/insert-menu.tsx`, `MenuBar/format-menu.tsx`, `MenuBar/data-menu.tsx`, `MenuBar/CustomBorder.tsx`
+**Files**: `MenuBar/index.tsx`, `MenuBar/sheet-edit-menu.tsx`, `MenuBar/view-menu.tsx`, `MenuBar/insert-menu.tsx`, `MenuBar/format-menu.tsx`, `MenuBar/format-toolbar.tsx`, `MenuBar/data-menu.tsx`, `MenuBar/CustomBorder.tsx`
 
-Plain React UI with no overlays: a menu bar in Google Sheets' style (Edit, View, Insert, Format, Data), with a shadcn `DropdownMenu` per top-level menu, a shadcn `Popover` for `CustomBorder` (the border style picker) and Tailwind styling.
+Plain React UI with no overlays: the shared `CenteredToolbar` with a menu bar in Google Sheets' style (Edit, View, Insert, Format, Data) on the left, one `AppBarMenu` per menu, and the format icon row in the middle, which folds into the Format menu as the bar narrows. `CustomBorder` is the border style picker. The workbook's keydown handler leaves the bar's keys to the bar, so Enter on a menu button opens the menu and not the cell editor.
 
 Any `DropdownMenuSubContent` rendered inside `cellArea` needs the `sheet-mousedown-cancel` class. Radix portals the submenu out of the DOM, but React's synthetic events still bubble across the portal. Without the class, `cellArea`'s mousedown guard misses the menu items and the selection jumps to the cell under the popup.
 

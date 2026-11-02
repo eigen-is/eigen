@@ -8,6 +8,10 @@ describe('engine/sheet-name — copySheetName', () => {
         expect(copySheetName('Sheet1', ['Sheet1', 'Sheet1(Copy)', 'Sheet1(Copy4)'])).toBe('Sheet1(Copy5)');
     });
 
+    test('a name taken in another case is taken, as Excel compares names', () => {
+        expect(copySheetName('Sheet1', ['sheet1', 'SHEET1(copy)'])).toBe('Sheet1(Copy2)');
+    });
+
     test('a copy of a copy counts from the name it copies', () => {
         expect(copySheetName('Sheet1(Copy)', ['Sheet1', 'Sheet1(Copy)'])).toBe('Sheet1(Copy2)');
     });

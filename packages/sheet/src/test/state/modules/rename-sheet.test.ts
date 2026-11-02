@@ -105,5 +105,6 @@ describe('a tab rename', () => {
     test('refuses an empty name, and keeps the old one for a name another tab has', () => {
         expect(rename('')).toEqual({ name: 'One', tab: 'One', error: 'Sheet name cannot be empty' });
         expect(rename('Two')).toEqual({ name: 'One', tab: 'One', error: undefined });
+        expect(rename('two')).toEqual({ name: 'One', tab: 'One', error: undefined });
     });
 });

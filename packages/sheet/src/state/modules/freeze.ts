@@ -1,6 +1,7 @@
 // The frozen panes as the grid shows them. initFreeze turns a sheet's frozen pane into the pane bounds that the canvas,
 // the overlays and the scroll read, and the helpers here place the overlay panes and the headers' freeze handles.
-// The sheet view calls initFreeze when the sheet or its sizes change, and the headers and the drag handlers use the rest.
+// The sheet view calls initFreeze, for example when the sheet or its sizes change, and callers such as the headers and
+// the drag handlers use the rest.
 
 import { freezesColumns, freezesRows } from '@workspace/lib/sheets';
 import { sortedIndex } from 'es-toolkit/compat';
@@ -20,33 +21,28 @@ export function initFreeze(ctx: Context, cache: GlobalCache, sheetId: string) {
     const freezen: Freezen = {};
     const range = frozen.range ?? { row_focus: 0, column_focus: 0 };
 
+    // The panes are measured from the top-left of the sheet, scrolled to 0.
     if (freezesRows(frozen)) {
-        const scrollTop = 0;
-        let row_st = sortedIndex(ctx.visibledatarow, scrollTop);
-        if (range.row_focus > row_st) row_st = range.row_focus;
-
+        const row = Math.max(range.row_focus, 0);
         freezen.horizontal = {
             freezenhorizontaldata: {
-                pos: ctx.visibledatarow[row_st],
-                boundary: row_st + 1,
-                scroll: scrollTop,
-                cumulative: ctx.visibledatarow.slice(row_st + 1),
-                edge: ctx.visibledatarow[row_st] - 2 - scrollTop + ctx.columnHeaderHeight,
+                pos: ctx.visibledatarow[row],
+                boundary: row + 1,
+                scroll: 0,
+                cumulative: ctx.visibledatarow.slice(row + 1),
+                edge: ctx.visibledatarow[row] - 2 + ctx.columnHeaderHeight,
             },
         };
     }
     if (freezesColumns(frozen)) {
-        const scrollLeft = 0;
-        let col_st = sortedIndex(ctx.visibledatacolumn, scrollLeft);
-        if (range.column_focus > col_st) col_st = range.column_focus;
-
+        const column = Math.max(range.column_focus, 0);
         freezen.vertical = {
             freezenverticaldata: {
-                pos: ctx.visibledatacolumn[col_st],
-                boundary: col_st + 1,
-                scroll: scrollLeft,
-                cumulative: ctx.visibledatacolumn.slice(col_st + 1),
-                edge: ctx.visibledatacolumn[col_st] - 2 - scrollLeft + ctx.rowHeaderWidth,
+                pos: ctx.visibledatacolumn[column],
+                boundary: column + 1,
+                scroll: 0,
+                cumulative: ctx.visibledatacolumn.slice(column + 1),
+                edge: ctx.visibledatacolumn[column] - 2 + ctx.rowHeaderWidth,
             },
         };
     }

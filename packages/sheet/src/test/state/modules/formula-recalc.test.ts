@@ -410,6 +410,8 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         ctx.sheets[0].name = 'Gone';
         ctx.sheets[1].data?.[0].splice(1, 1, { f: '=One!A1' });
         peerBatch(ctx, [{ op: 'replace', path: ['sheets', 1, 'data', 0, 1], value: { f: '=One!A1' } }, renameOne]);
+        expect(ctx.formulaCache.formulaCellInfoMap).toBeNull();
+        setFormulaCellInfo(ctx, { r: 0, c: 1, id: 'id_2' });
         expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formulaDependency).toEqual([]);
     });
 
@@ -431,13 +433,5 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         ctx.sheets[0].name = 'One';
         peerBatch(ctx, [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'One' }]);
         expect(getcellrange(ctx, 'Old!A1')).toBeNull();
-    });
-
-    // A row or column op sends the sheet's other fields with it, its name as it was among them.
-    it('a batch that writes a sheet name as it was keeps the map', () => {
-        const ctx = workbook('=One!A1');
-        const map = warmFormulaCellInfoMap(ctx);
-        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'One' }]);
-        expect(ctx.formulaCache.formulaCellInfoMap).toBe(map);
     });
 });

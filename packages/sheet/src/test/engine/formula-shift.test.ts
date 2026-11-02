@@ -226,6 +226,13 @@ describe('functionStrChange — sheet names on both legs', () => {
         );
         expect(once).not.toBe("'Sheet 1'!A1:B2");
     });
+
+    test('moves a ref that spells its sheet name in another case, as Excel reads it', () => {
+        expect(functionStrChange('=sheet1!A1', 'add', 'row', 'lefttop', 0, 1, 'Sheet1', false)).toBe('sheet1!A2');
+        expect(functionStrChange("='sheet 1'!A1", 'add', 'row', 'lefttop', 0, 1, 'Sheet 1', false)).toBe(
+            "'sheet 1'!A2",
+        );
+    });
 });
 
 describe('engine/formula-shift — detectAbsolute', () => {
@@ -476,6 +483,10 @@ describe('engine/formula-shift — renameSheetRefs', () => {
 
     test('a ref without its `=` comes back without one', () => {
         expect(renameSheetRefs('Data!$A$1:$A$5', renames)).toBe("'Data(Copy)'!$A$1:$A$5");
+    });
+
+    test('a ref spelling the name in another case is renamed too, as Excel reads it', () => {
+        expect(renameSheetRefs("=data!A1+'MY DATA'!B2", renames)).toBe("='Data(Copy)'!A1+Totals!B2");
     });
 });
 

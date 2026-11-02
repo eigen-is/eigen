@@ -114,7 +114,6 @@ export type FormulaEngineState = {
     // Reverse lookup cell → formulas reading it; mirrors formulaCellInfoMap
     // and must reset with it.
     dependencyIndex: DependencyIndex;
-    cellTextToIndexList: Record<string, FormulaDependency>;
 };
 
 // Scalar value that can appear in a formula expression or as a cell value, an error a cell holds included.

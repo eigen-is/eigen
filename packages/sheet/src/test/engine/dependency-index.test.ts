@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { DependencyIndex, dependencyBlocks } from '../../engine/dependency-index';
+import { DependencyIndex, dependencySlots } from '../../engine/dependency-index';
 import type { FormulaDependency } from '../../engine/types';
 
 // No sheet extent: every range is listed in the blocks it meets.
@@ -141,17 +141,17 @@ describe('engine/dependency-index — DependencyIndex', () => {
     });
 });
 
-describe('engine/dependency-index — dependencyBlocks', () => {
+describe('engine/dependency-index — dependencySlots', () => {
     test('a range costs every 64 × 16 block it meets, a single cell none', () => {
-        expect(dependencyBlocks([dep(5, 5, 5, 5)], unknownExtent)).toBe(0);
-        expect(dependencyBlocks([dep(0, 63, 0, 15)], unknownExtent)).toBe(1);
-        expect(dependencyBlocks([dep(63, 64, 15, 16)], unknownExtent)).toBe(4);
-        expect(dependencyBlocks([dep(0, 127, 0, 31), dep(200, 200, 40, 56)], unknownExtent)).toBe(4 + 2);
-        expect(dependencyBlocks([{ row: [0, 1], column: [0, 0], sheetId: undefined }], unknownExtent)).toBe(0);
+        expect(dependencySlots([dep(5, 5, 5, 5)], unknownExtent)).toBe(0);
+        expect(dependencySlots([dep(0, 63, 0, 15)], unknownExtent)).toBe(1);
+        expect(dependencySlots([dep(63, 64, 15, 16)], unknownExtent)).toBe(4);
+        expect(dependencySlots([dep(0, 127, 0, 31), dep(200, 200, 40, 56)], unknownExtent)).toBe(4 + 2);
+        expect(dependencySlots([{ row: [0, 1], column: [0, 0], sheetId: undefined }], unknownExtent)).toBe(0);
     });
 
     test('the whole grid is 16 million blocks', () => {
-        expect(dependencyBlocks([dep(0, 1_048_575, 0, 16_383)], unknownExtent)).toBe(16_384 * 1_024);
+        expect(dependencySlots([dep(0, 1_048_575, 0, 16_383)], unknownExtent)).toBe(16_384 * 1_024);
     });
 });
 
@@ -160,16 +160,16 @@ const tallSheet = (sheetId: string) => (sheetId === 's1' ? { rows: 64_000, colum
 
 describe('engine/dependency-index — a range across a whole sheet', () => {
     test('a range down every row costs one per column, one across every column one per row', () => {
-        expect(dependencyBlocks([dep(0, 63_999, 1, 1)], tallSheet)).toBe(1);
-        expect(dependencyBlocks([dep(0, 63_999, 0, 3)], tallSheet)).toBe(4);
-        expect(dependencyBlocks([dep(5, 5, 0, 39)], tallSheet)).toBe(1);
+        expect(dependencySlots([dep(0, 63_999, 1, 1)], tallSheet)).toBe(1);
+        expect(dependencySlots([dep(0, 63_999, 0, 3)], tallSheet)).toBe(4);
+        expect(dependencySlots([dep(5, 5, 0, 39)], tallSheet)).toBe(1);
         // A range past the sheet's last row runs down every row too.
-        expect(dependencyBlocks([dep(0, 1_048_575, 2, 2)], tallSheet)).toBe(1);
+        expect(dependencySlots([dep(0, 1_048_575, 2, 2)], tallSheet)).toBe(1);
         // Short of a whole column, or on a sheet whose size is unknown, a range costs its blocks.
-        expect(dependencyBlocks([dep(1, 63_999, 1, 1)], tallSheet)).toBe(1_000);
-        expect(dependencyBlocks([dep(0, 63_999, 1, 1, 'other')], tallSheet)).toBe(1_000);
+        expect(dependencySlots([dep(1, 63_999, 1, 1)], tallSheet)).toBe(1_000);
+        expect(dependencySlots([dep(0, 63_999, 1, 1, 'other')], tallSheet)).toBe(1_000);
         // The whole sheet costs its 40 columns, fewer than its 64,000 rows or its 3,000 blocks.
-        expect(dependencyBlocks([dep(0, 63_999, 0, 39)], tallSheet)).toBe(40);
+        expect(dependencySlots([dep(0, 63_999, 0, 39)], tallSheet)).toBe(40);
     });
 
     test('a whole column is found for each of its cells and for no other', () => {

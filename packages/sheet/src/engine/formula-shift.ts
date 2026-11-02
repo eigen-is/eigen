@@ -1,9 +1,17 @@
 // Rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs, an inserted
 // or deleted row or column moves the refs past it, a renamed sheet renames them, and an xlsx import replaces each
 // defined name with what it refers to. One character walker finds the refs and the names for all of them. It needs no
-// sheet state, so the editor, the op replay and the API's import share it.
+// sheet state, so the editor and the server share it, for example in the op replay and the xlsx import.
 
-import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
+import {
+    a1RangeRef,
+    extractLabel,
+    parseA1Range,
+    sheetNameKey,
+    sheetRefName,
+    toLabel,
+    unquoteSheetName,
+} from './a1-notation';
 import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
@@ -18,9 +26,10 @@ export function functionCopy(txt: string, rowOffset: number, colOffset: number):
 // imported tab whose name the workbook holds. A leading `=` is kept.
 export function renameSheetRefs(txt: string, renames: ReadonlyMap<string, string>): string {
     if (renames.size === 0 || !txt.includes('!')) return txt;
+    const byKey = new Map([...renames].map(([from, to]) => [sheetNameKey(from), to]));
     const renamed = walkFormulaRefs(txt, (ref) => {
         const sheetEnd = ref.lastIndexOf('!');
-        const name = sheetEnd > 0 ? renames.get(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+        const name = sheetEnd > 0 ? byKey.get(sheetNameKey(unquoteSheetName(ref.slice(0, sheetEnd)))) : undefined;
         return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
     });
     return txt.startsWith('=') ? `=${renamed}` : renamed;
@@ -287,7 +296,11 @@ function shiftRefForRowCol(
 ): string {
     const sheetEnd = txt.lastIndexOf('!') + 1;
     const prefix = txt.slice(0, sheetEnd);
-    if (sheetEnd > 0 ? unquoteSheetName(prefix.slice(0, -1)) !== targetSheet : !onTargetSheet) return txt;
+    const onSheet =
+        sheetEnd > 0
+            ? sheetNameKey(unquoteSheetName(prefix.slice(0, -1))) === sheetNameKey(targetSheet)
+            : onTargetSheet;
+    if (!onSheet) return txt;
 
     const [startTxt, endTxt = startTxt] = txt.slice(sheetEnd).split(':');
     // As in shiftRef: every token walkFormulaRefs hands over parses.

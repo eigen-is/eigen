@@ -50,7 +50,7 @@ import { OverlayVisuals } from './OverlayVisuals';
 import { RowHeader } from './RowHeader';
 
 export const SheetOverlay: React.FC = () => {
-    const { context, getContext, setContext, settings, refs } = useContext(WorkbookContext);
+    const { context, getContext, setContext, refs } = useContext(WorkbookContext);
     const { showDialog } = useDialog();
     const {
         onContextMenu: cellAreaContextMenu,
@@ -119,10 +119,10 @@ export const SheetOverlay: React.FC = () => {
             setContext((draftCtx) => {
                 const cellArea = refs.cellArea.current;
                 if (!cellArea) return;
-                handleCellAreaDoubleClick(draftCtx, refs.globalCache, settings, nativeEvent, cellArea);
+                handleCellAreaDoubleClick(draftCtx, refs.globalCache, nativeEvent, cellArea);
             });
         },
-        [refs.cellArea, refs.globalCache, setContext, settings],
+        [refs.cellArea, refs.globalCache, setContext],
     );
 
     // cellArea is the native scroll surface; its scroll event is the single
@@ -232,7 +232,6 @@ export const SheetOverlay: React.FC = () => {
                     handleOverlayMouseUp(
                         draftCtx,
                         refs.globalCache,
-                        settings,
                         nativeEvent,
                         cellArea,
                         container,
@@ -244,7 +243,7 @@ export const SheetOverlay: React.FC = () => {
                 }
             });
         },
-        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, settings, showAlert],
+        [refs.cellArea, refs.cellInput, refs.fxInput, refs.globalCache, setContext, showAlert],
     );
 
     const handleBottomAddRow = useCallback(() => {

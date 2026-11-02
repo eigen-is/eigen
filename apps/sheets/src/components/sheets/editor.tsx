@@ -117,7 +117,7 @@ function SheetEditorInner({
 
     const auth = useAuth();
     const publishSelection = usePresence(provider, workbookRef, auth.user, synced, snapshotVersion);
-    const copyToMediaFolder = useCopyToMediaFolder(ownerId, path.mountId);
+    const { mutateAsync: copyToMediaFolder } = useCopyToMediaFolder(ownerId, path.mountId);
     const uploadFile = useUploadFile(ownerId, path.mountId);
     const { resolveMediaUrl, resolveMediaUrlByPath, resolveMediaPath, isMediaMissing, startUpload } =
         useMediaResolver();
@@ -277,7 +277,7 @@ function SheetEditorInner({
     const handleImagePickFromDrive = useCallback(
         async (paths: DrivePath[]) => {
             if (!mediaFolderId || paths.length === 0) return;
-            const result = await copyToMediaFolder.mutateAsync({ paths: [paths[0]], mediaFolderId }).catch(() => null);
+            const result = await copyToMediaFolder({ paths: [paths[0]], mediaFolderId }).catch(() => null);
             if (!result?.[0]) return;
             // Measure via the copy result's own path — by NAME the lookup would miss the media
             // listing captured before the copy and size the image from the default box.

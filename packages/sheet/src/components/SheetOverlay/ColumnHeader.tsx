@@ -31,8 +31,8 @@ import { OverlayRegion } from './OverlayRegion';
 export const ColumnHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const { onContextMenu, openAtPoint, anchor: columnMenuAnchor } = useSheetContextMenu('column');
-    // Long-press opens the column menu on touch, mirroring the cell area — headers otherwise
-    // have no menu entry where the browser never synthesises a contextmenu. bind carries no item.
+    // A long press opens the column menu on touch, as it does on the cell area. A touch browser sends no contextmenu,
+    // so without it a header has no menu there.
     const longPress = useLongPress<null>((_item, x, y) => openAtPoint(x, y));
     const containerRef = useRef<HTMLDivElement>(null);
     const contentRef = useRef<HTMLDivElement>(null);
@@ -60,21 +60,15 @@ export const ColumnHeader: React.FC = () => {
             const scrolledX = mouseX + refs.globalCache.scrollLeft;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
             const { x } = fixPositionOnFrozenCells(freeze, scrolledX, 0, mouseX, 0);
-            const col_location = colLocation(x, context.visibledatacolumn);
-            const [col_pre, col, col_index] = col_location;
-            if (col_index !== hoverLocation.col_index) {
-                setHoverLocation({ col_pre, col, col_index });
-            }
+            const [col_pre, col, col_index] = colLocation(x, context.visibledatacolumn);
+            if (col_index === hoverLocation.col_index) return;
+            setHoverLocation({ col_pre, col, col_index });
             const flowdata = getFlowdata(context);
-            if (flowdata != null)
+            if (flowdata != null) {
                 allowEditRef.current =
                     isAllowEdit(context) &&
-                    isAllowEdit(context, [
-                        {
-                            row: [0, flowdata.length - 1],
-                            column: col_location,
-                        },
-                    ]);
+                    isAllowEdit(context, [{ row: [0, flowdata.length - 1], column: [col_index, col_index] }]);
+            }
         },
         [context, hoverLocation.col_index, refs.globalCache.freezen],
     );
@@ -190,8 +184,8 @@ export const ColumnHeader: React.FC = () => {
         };
     }, [refs.globalCache]);
 
-    // The header splits into the body's panes on its own axis: a pinned frozen band and a main band that scrolls,
-    // whose clip cuts the highlights at the freeze boundary.
+    // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
+    // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerHeight = context.columnHeaderHeight - 1.5;
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const colFreeze: Freezen | undefined = freeze?.vertical ? { vertical: freeze.vertical } : undefined;
@@ -211,8 +205,7 @@ export const ColumnHeader: React.FC = () => {
             onContextMenu={onContextMenu}
             {...longPress.bind(null)}
         >
-            {/* Selected highlights are passive: render into every region in pure
-                content coordinates; each region's clip shows exactly its portion. */}
+            {/* Each region draws every selected highlight in content coordinates. Its clip shows only its own part. */}
             {regions.map(({ pane, ...rect }) => (
                 <OverlayRegion key={pane} {...rect}>
                     {selectedLocation.map(({ col, col_pre, c1, c2 }) => (
@@ -229,8 +222,7 @@ export const ColumnHeader: React.FC = () => {
                     ))}
                 </OverlayRegion>
             ))}
-            {/* Hover highlight + resize handle are singletons in the single
-                region containing the hovered column. */}
+            {/* The hover highlight and the resize handle exist once, in the region that holds the hovered column. */}
             <OverlayRegion {...hoverRegion}>
                 <div
                     className="sheet-cols-change-size"
@@ -279,9 +271,9 @@ export const ColumnHeader: React.FC = () => {
                     </div>
                 ) : null}
             </OverlayRegion>
-            {/* The freeze handle's position adds the scroll offset, so in the translated content it stays put in the
-                viewport. It sits outside the panes, unclipped like the body's drag lines, and a freeze drag moves it
-                directly. */}
+            {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
+                scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
+                drag moves it directly. */}
             <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                 <div
                     className="sheet-cols-freeze-handle"

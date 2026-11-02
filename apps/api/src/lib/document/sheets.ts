@@ -23,18 +23,25 @@ import {
     recalcSheets,
     renameSheetRefs,
     replaySheetsOps,
+    sheetNameKey,
     sheetsNeedRecalc,
     withMaterializedData,
 } from '@workspace/sheet/engine';
 import type * as Y from 'yjs';
 
-// What the server's recalc lets an untrusted workbook's formulas cost. Past either bound the recalc fails like any
-// other, and the sheets keep the values they hold.
+// What the server's recalc lets an untrusted workbook's formulas cost. Past any bound the recalc fails like any other,
+// and the sheets keep the values they hold.
 export const SERVER_RECALC_BUDGET = {
-    // Counted in the slots the dependency index lists each range in (dependencyBlocks), the range cut to its sheet: a
-    // 64 × 16 block it meets, or a column when it runs down every row of its sheet. No workbook of the 1,062-file
-    // corpus needs more than 68.8 million (3.3 s), and this is four times that.
-    maxDependencyBlocks: 280_000_000,
+    // The slots the dependency index lists each range in (dependencySlots), the range cut to its sheet. A range lies in
+    // the 64 × 16 blocks it meets. A range down every row of its sheet, such as a whole column, takes one slot per
+    // column instead. A range across every column, such as a whole row, takes one slot per row. No workbook of the
+    // 1,062-file corpus needs more than 68.8 million (3.3 s), and this is four times that.
+    maxDependencySlots: 280_000_000,
+    // The links between formulas, one for each formula and each formula cell it reads. The slots don't bound them: a
+    // whole column costs one slot, but 20,000 `=COUNT(A:A)` in that column make 400 million links. The largest corpus
+    // workbook that recalcs needs 19.9 million (11 s), and this is twice that. The two corpus workbooks past it need
+    // 79.6 and 141.9 million and fail the cell budget below after a minute and 8 GB, so this stops them in 2 s.
+    maxDependencyEdges: 40_000_000,
     // The cells the evaluation of its ranges reads. The most a corpus workbook reads that recalcs in under 10 s is
     // 30 million (9.9 s), just under this. 2,000 COUNTIFs over A1:Z1048576 fail at it in 17 s, well inside an export's
     // deadline.
@@ -122,7 +129,8 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
     const fresh = imported.map((sheet) => {
-        const name = taken.includes(sheet.name) ? copySheetName(sheet.name, taken) : sheet.name;
+        const clashes = taken.some((other) => sheetNameKey(other) === sheetNameKey(sheet.name));
+        const name = clashes ? copySheetName(sheet.name, taken) : sheet.name;
         if (name !== sheet.name) renames.set(sheet.name, name);
         taken.push(name);
         return { id: crypto.randomUUID(), name };

@@ -140,6 +140,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         const canvas = useRef<HTMLCanvasElement>(null);
         const cellArea = useRef<HTMLDivElement>(null);
         const workbookContainer = useRef<HTMLDivElement>(null);
+        const menuBar = useRef<HTMLDivElement>(null);
 
         const refs: RefValues = useMemo(
             () => ({
@@ -166,7 +167,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         // biome-ignore lint/correctness/useExhaustiveDependencies: deps spread from Object.values(props) — biome can't see through the spread
         const mergedSettings = useMemo(
-            () => Object.assign(cloneDeep(defaultSettings), props) as Required<Settings>,
+            () => Object.assign(cloneDeep(defaultSettings), props),
             [...Object.values(props)],
         );
 
@@ -413,10 +414,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
         const onKeyDown = useCallback(
             (e: React.KeyboardEvent<HTMLDivElement>) => {
-                // Portaled UI (menus, popovers, dialogs) renders outside this div but still
-                // bubbles keydown through the React tree. The grid only owns keys from its
-                // own DOM subtree — without this, menu roving moves the selection and the
-                // handler's tail steals focus out of the open menu.
+                // The grid owns only the keys from its own part of the page. Portalled menus, popovers and dialogs
+                // render outside this div, but their keydown still bubbles here through the React tree, where it
+                // would move the selection and take the focus out of an open menu.
                 if (!(e.target instanceof Node && e.currentTarget.contains(e.target))) return;
                 const { nativeEvent } = e;
                 // Undo and redo run ahead of the grid's handler, because a write must not start another write
@@ -440,6 +440,9 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         return;
                     }
                 }
+                // The bar sits inside this div, and its other keys are its own: the Enter or Space that opens one of
+                // its menus would open the cell editor too.
+                if (menuBar.current?.contains(e.target)) return;
                 setContextWithProduce((draftCtx) => {
                     const input = cellInput.current;
                     if (!input) return;
@@ -722,7 +725,11 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         </section>
                         <div className="w-full">
                             {mergedSettings.showToolbar && (
-                                <WorkbookMenuBar leftItems={toolbarLeftItems} rightItems={toolbarRightItems} />
+                                <WorkbookMenuBar
+                                    ref={menuBar}
+                                    leftItems={toolbarLeftItems}
+                                    rightItems={toolbarRightItems}
+                                />
                             )}
                             {mergedSettings.showFormulaBar && <FxEditor />}
                         </div>

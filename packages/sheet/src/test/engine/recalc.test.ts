@@ -396,6 +396,36 @@ describe('engine/recalc — recalcSheets', () => {
         expect(entry?.v?.v).toBe(6);
     });
 
+    test('a sheet name in another case reads that sheet, as in Excel', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=data!A1*2')]]), sheet('s2', 'Data', [[num(4)]])];
+        expect(recalcSheets(sheets)[0].data![0][0]?.v).toBe(8);
+    });
+
+    // A stored matrix may lack rows, its first among them, so a whole row reads as wide as the sheet's widest row.
+    test('a whole row reads to the last column of a sheet whose first row is short', () => {
+        const sheets = [
+            sheet('s1', 'Sheet1', [[formula('=SUM(Holey!2:2)'), formula('=SUM(Holey!A2:C2)')]]),
+            sheet('s2', 'Holey', [[], [num(1), num(2)]]),
+        ];
+        const [out] = recalcSheets(sheets);
+        expect([out.data![0][0]?.v, out.data![0][1]?.v]).toEqual([3, 3]);
+    });
+
+    // Excel ignores a space that isn't between two references. A zenodo workbook writes =IF((AN38+ AO38         )<>0,…)
+    // over a number and the empty text another formula gives, and caches #VALUE!, as 1 + "" is in Excel.
+    test('spaces around an operand change nothing, and a number plus empty text is #VALUE!', () => {
+        const spaced = '=IF((A1+ B1         )<>0,A1,    "")';
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), num(2), formula(spaced), formula('= A1 +B1 '), formula('=SUM( A1 , B1 )')],
+                [num(1), formula('=""'), formula(spaced.replaceAll('1', '2'))],
+            ]),
+        ];
+        const [out] = recalcSheets(sheets);
+        expect(out.data![0].slice(2).map((cell) => cell?.v)).toEqual([1, 3, 3]);
+        expect(out.data![1][2]?.v).toBe('#VALUE!');
+    });
+
     test('one poisoned formula does not kill the pass', () => {
         // =NoSheet!A1 throws ERROR_REF (unresolvable sheet name); the sibling
         // formula must still compute.
@@ -409,8 +439,8 @@ describe('engine/recalc — recalcSheets', () => {
         const rows = Array.from({ length: 129 }, (): (Cell | null)[] => [null, null, null, null]);
         rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
         const sheets = [sheet('s1', 'Sheet1', rows)];
-        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+        expect(() => recalcSheets(sheets, { maxDependencySlots: 2 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencySlots: 3 })[0].data![0][1]?.v).toBe(1);
     });
 
     test('a range down every row of its sheet costs the budget one per column', () => {
@@ -418,8 +448,17 @@ describe('engine/recalc — recalcSheets', () => {
         const data = Array.from({ length: 6_400 }, (): (Cell | null)[] => [num(1), null]);
         const report = Array.from({ length: 10 }, (): (Cell | null)[] => [formula('=SUM(Data!A:A)')]);
         const sheets = [sheet('d', 'Data', data), sheet('r', 'Report', report)];
-        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 9 })).toThrow(RangeError);
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 10 })[1].data?.[9][0]?.v).toBe(6_400);
+        expect(() => recalcSheets(sheets, { maxDependencySlots: 9 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencySlots: 10 })[1].data?.[9][0]?.v).toBe(6_400);
+    });
+
+    // Each formula in column A reads the whole column, so each of the four is read by all four: 16 edges, though the
+    // index lists the column once per formula.
+    test('past its edge budget a recalc throws before it links the formulas', () => {
+        const rows = Array.from({ length: 4 }, (): (Cell | null)[] => [formula('=COUNT(A:A)')]);
+        const sheets = [sheet('s1', 'Sheet1', rows)];
+        expect(() => recalcSheets(sheets, { maxDependencyEdges: 15 })).toThrow(RangeError);
+        expect(() => recalcSheets(sheets, { maxDependencyEdges: 16 })).not.toThrow();
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {
@@ -449,7 +488,7 @@ describe('engine/recalc — recalcSheets', () => {
         const sheets = [
             sheet('s1', 'Sheet1', [[formula('=SUM(B1:XFD1048576)'), num(5), formula('=B1+1')]], { row: 1, column: 3 }),
         ];
-        expect(recalcSheets(sheets, { maxDependencyBlocks: 1 })[0].data![0][0]?.v).toBe(11);
+        expect(recalcSheets(sheets, { maxDependencySlots: 1 })[0].data![0][0]?.v).toBe(11);
     });
 
     test('output carries a populated calcChain for formula cells', () => {

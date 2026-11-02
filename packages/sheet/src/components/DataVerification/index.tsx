@@ -530,8 +530,7 @@ export function DataVerification() {
                                 checked={regulation[value]}
                                 onCheckedChange={() => {
                                     setContext((ctx) => {
-                                        const dataRegulation = ctx.validationDraft;
-                                        dataRegulation[value] = !dataRegulation[value];
+                                        ctx.validationDraft[value] = !ctx.validationDraft[value];
                                     });
                                 }}
                             />

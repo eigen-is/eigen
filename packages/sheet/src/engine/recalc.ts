@@ -4,16 +4,17 @@
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
+import { escapeRegExp } from 'es-toolkit';
 import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
 import type { SheetExtent } from './dependency-index';
-import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
+import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
-import { iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
+import { formulaOperators, iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import type {
     CalcChainEntry,
@@ -71,13 +72,18 @@ function sheetHasFormula(sheet: Sheet): boolean {
     return false;
 }
 
-// `maxDependencyBlocks` bounds what the formulas' ranges cost the dependency index (dependencyBlocks), and
-// `maxCellsRead` what their evaluation reads (each range read, cut to its sheet, costs its cells): past either the
-// recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
-// both for an untrusted workbook; without them there is no bound.
+// Three budgets bound what an untrusted workbook's formulas may cost, and past any of them the recalc throws before the
+// work. `maxDependencySlots` bounds the slots the dependency index lists the formulas' ranges in (dependencySlots).
+// `maxDependencyEdges` bounds the links between the formulas, one for each formula and formula cell it reads.
+// `maxCellsRead` bounds the cells their evaluation reads, each range read cut to its sheet. So many ranges over a large
+// sheet can't cost minutes and gigabytes. The server passes all three, and without them there is no bound.
 export function recalcSheets(
     sheets: readonly Sheet[],
-    { maxDependencyBlocks = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
+    {
+        maxDependencySlots = Number.POSITIVE_INFINITY,
+        maxDependencyEdges = Number.POSITIVE_INFINITY,
+        maxCellsRead = Number.POSITIVE_INFINITY,
+    } = {},
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
@@ -97,7 +103,7 @@ export function recalcSheets(
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
     const depIndex = new DependencyIndex();
-    let blocks = 0;
+    let slots = 0;
     const calcChainBySheet = new Map<string, CalcChainEntry[]>();
     for (const w of working) {
         const chain: CalcChainEntry[] = [];
@@ -129,8 +135,8 @@ export function recalcSheets(
                     color: 'w',
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
-                blocks += dependencyBlocks(indexed, extentOf);
-                if (blocks > maxDependencyBlocks) throw new RangeError('Formula ranges past the dependency budget');
+                slots += dependencySlots(indexed, extentOf);
+                if (slots > maxDependencySlots) throw new RangeError('Formula ranges past the dependency budget');
                 depIndex.set(key, indexed, extentOf);
             }
         }
@@ -142,17 +148,27 @@ export function recalcSheets(
         return finalize(byId, sheets, calcChainBySheet);
     }
 
-    // 3. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
+    // 3. Weigh the links before making them. A whole column read by every formula in it costs the index one slot per
+    //    formula, but the formulas square: 20,000 `=COUNT(A:A)` make 400 million links, minutes and gigabytes to build.
+    if (Number.isFinite(maxDependencyEdges)) {
+        let edges = 0;
+        for (const info of allInfos) {
+            edges += depIndex.countDependents(info.id, info.r, info.c);
+            if (edges > maxDependencyEdges) throw new RangeError('Formula references past the edge budget');
+        }
+    }
+
+    // 4. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
     for (const info of allInfos) {
         for (const depKey of depIndex.dependentsOf(info.id, info.r, info.c)) {
             info.parents[depKey] = 1;
         }
     }
 
-    // 4. Order them. A cycle neither throws nor hangs.
+    // 5. Order them. A cycle neither throws nor hangs.
     const order = getCalculationOrder(allInfos, infoMap);
 
-    // 5. Evaluate in order. A computed value reaches the formulas downstream through the engine's
+    // 6. Evaluate in order. A computed value reaches the formulas downstream through the engine's
     //    execFunctionGlobalData, which it reads before the resolver, and the resolver reads the matrices the pass writes.
     //    Volatiles keep their value. Each cell is guarded, so one poisoned formula never stops the pass.
     const engine = new FormulaEngine({ maxCellsRead });
@@ -189,7 +205,7 @@ export function recalcSheets(
     }
     overRead();
 
-    // 6. Write celldata from the computed data, and stamp each sheet's calcChain.
+    // 7. Write celldata from the computed data, and stamp each sheet's calcChain.
     return finalize(byId, sheets, calcChainBySheet);
 }
 
@@ -226,9 +242,18 @@ export function extractDependencies(
     return dependencies;
 }
 
-// The operators a formula splits at. A `:` that joins a reference to a function call, as in A1:INDEX(…) or
-// INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
-const OPERATORS = /==|!=|<>|<=|>=|[-,()=+/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
+// What a formula splits at: its operators, commas and brackets, and the name of a function it calls, so the LOG10 of
+// LOG10(A1) reads as no cell. A `:` that joins a reference to a function call, as in A1:INDEX(…) or INDEX(…):B3, is
+// one too, or A1 would read as a range up to a column named INDEX.
+const OPERATORS = new RegExp(
+    [
+        ...[...formulaOperators].map(escapeRegExp),
+        '[,()]',
+        '[A-Za-z_][\\w.]*(?=\\s*\\()',
+        ':(?=[A-Za-z_][\\w.]*\\()',
+        '(?<=\\)):',
+    ].join('|'),
+);
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference

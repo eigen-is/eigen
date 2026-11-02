@@ -179,8 +179,7 @@ export function updateFormat(
     foucsStatus: string | number,
     canvas?: CanvasRenderingContext2D,
 ) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     if (isRunStyleKey(attr) && isEditingText(ctx, $input)) {
         const [r, c] = ctx.editingCellPosition;
@@ -537,8 +536,7 @@ export function autoSelectionFormula(
     formula: string,
     cache: GlobalCache,
 ) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
     const flowdata = getFlowdata(ctx);
     if (flowdata == null) return;
     let isfalse = true;
@@ -896,8 +894,7 @@ export function handleVerticalAlign(ctx: Context, cellInput: HTMLDivElement, val
 }
 
 export function handleFormatPainter(ctx: Context) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
     // The painter takes one range, and never one that cuts through a merge.
     const selection = ctx.selections?.length === 1 ? ctx.selections[0] : undefined;
     if (!selection || hasPartMC(ctx, selection.row[0], selection.row[1], selection.column[0], selection.column[1])) {
@@ -949,8 +946,7 @@ export function handleTextBackground(ctx: Context, cellInput: HTMLDivElement, co
 }
 
 export function handleBorder(ctx: Context, type: BorderType, borderColor?: string, borderStyle?: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null) return;
@@ -963,8 +959,7 @@ export function handleBorder(ctx: Context, type: BorderType, borderColor?: strin
 }
 
 export function handleMerge(ctx: Context, type: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     if (selectIsOverlap(ctx)) {
         return;
@@ -1005,8 +1000,7 @@ export function handleSort(ctx: Context, isAsc: boolean) {
 }
 
 export function handleFreeze(ctx: Context, type: string) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
 
     const file = ctx.sheets[getSheetIndex(ctx, ctx.currentSheetId)!];
     if (!file) return;
@@ -1045,18 +1039,8 @@ export function handleTextSize(
     setAttr(ctx, cellInput, 'fs', size, canvas);
 }
 
-export function handleSum(
-    ctx: Context,
-    cellInput: HTMLDivElement,
-    fxInput: HTMLDivElement | null | undefined,
-    cache?: GlobalCache,
-) {
-    autoSelectionFormula(ctx, cellInput, fxInput, 'SUM', cache!);
-}
-
 export function handleLink(ctx: Context) {
-    const allowEdit = isAllowEdit(ctx);
-    if (!allowEdit) return;
+    if (!isAllowEdit(ctx)) return;
     const selection = ctx.selections?.[0];
     const flowdata = getFlowdata(ctx);
     if (flowdata != null && selection != null) {

@@ -1,5 +1,5 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import { dependencyBlocks } from '../../../engine/dependency-index';
+import { dependencySlots } from '../../../engine/dependency-index';
 import { extractDependencies } from '../../../engine/recalc';
 import type { Cell, FormulaDependency } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -151,8 +151,26 @@ describe('setFormulaCellInfo — lookups into whole columns', () => {
 
         const [[, deps, extentOf]] = set.mock.calls;
         expect(extentOf('d')).toEqual({ rows: 6_400, columns: 2 });
-        expect(dependencyBlocks(deps, extentOf)).toBe(2);
+        expect(dependencySlots(deps, extentOf)).toBe(2);
         expect(ctx.formulaCache.dependencyIndex.dependentsOf('d', 6_399, 0)).toEqual(['r0c1ir']);
+    });
+
+    // A stored matrix may lack rows, its first among them.
+    it('measures a sheet by its widest row', () => {
+        const ctx = contextFactory({
+            currentSheetId: 'r',
+            sheets: [
+                { name: 'Holey', id: 'h', order: 0, data: JSON.parse('[null, [null, null]]') },
+                { name: 'Report', id: 'r', order: 1, data: [[{ f: '=SUM(Holey!1:2)' }]] },
+            ],
+        }) as Context;
+        warmFormulaCellInfoMap(ctx);
+        const set = spyOn(ctx.formulaCache.dependencyIndex, 'set');
+
+        setFormulaCellInfo(ctx, { r: 0, c: 0, id: 'r' });
+
+        const [[, , extentOf]] = set.mock.calls;
+        expect(extentOf('h')).toEqual({ rows: 2, columns: 2 });
     });
 });
 
@@ -176,6 +194,8 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ['=SUM(A1:B3)', [on('s1', [0, 2], [0, 1])]],
         ['=SUM(B3:A1)', [on('s1', [0, 2], [0, 1])]],
         ['=Data!B2*2', [on('s2', [1, 1], [1, 1])]],
+        ['=data!B2*2', [on('s2', [1, 1], [1, 1])]],
+        ["=SUM('DATA'!A1:data!B2)", [on('s2', [0, 1], [0, 1])]],
         ['=SUM(Data!A1:B2)', [on('s2', [0, 1], [0, 1])]],
         ['=SUM(Data!A1:Data!B2)', [on('s2', [0, 1], [0, 1])]],
         ["=SUM('Data'!A1:'Data'!B2)", [on('s2', [0, 1], [0, 1])]],
@@ -184,6 +204,7 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ["=SUM('my sheet-1'!A1:'my sheet-1'!B2)", [on('s3', [0, 1], [0, 1])]],
         ['=SUM(Data!A1:Empty!B2)', []],
         ["=SUM('Data'!A1:'my sheet-1'!B2)", []],
+        ['=SUM(A1:Data!B2)', []],
         ["='my sheet-1'!A1+1", [on('s3', [0, 0], [0, 0])]],
         ["='my sheet-1'!A1:B2", [on('s3', [0, 1], [0, 1])]],
         ["='it''s'!B1", [on('s4', [0, 0], [1, 1])]],
@@ -215,6 +236,9 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ['=$A$1+B$2+$C3', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1]), on('s1', [2, 2], [2, 2])]],
         ['=IF(A1>=1,C1,D1)', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [2, 2]), on('s1', [0, 0], [3, 3])]],
         ['=A1<>B1', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [1, 1])]],
+        ['=LOG10(A1)+ATAN2(B2,1)', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1])]],
+        ['=LOG10 (A1)', [on('s1', [0, 0], [0, 0])]],
+        ['=A1==B1', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [1, 1])]],
         ['=#REF!+A1', [on('s1', [0, 0], [0, 0])]],
         ['=Missing!A1+B1', [on('s1', [0, 0], [1, 1])]],
         ['=SUM(A1', [on('s1', [0, 0], [0, 0])]],

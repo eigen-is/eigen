@@ -4,7 +4,13 @@
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
-import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN } from '../../engine/a1-notation';
+import {
+    MAX_SHEET_NAME_LENGTH,
+    SHEET_NAME_END_QUOTES,
+    SHEET_NAME_FORBIDDEN,
+    SHEET_NAME_RULE,
+    sheetNameKey,
+} from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
@@ -192,19 +198,16 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
     // `search` ignores the global pattern's lastIndex, which `test` would carry from one call into the next.
     if (
         txt.length > MAX_SHEET_NAME_LENGTH ||
-        txt.startsWith("'") ||
-        txt.endsWith("'") ||
+        txt.search(SHEET_NAME_END_QUOTES) !== -1 ||
         txt.search(SHEET_NAME_FORBIDDEN) !== -1
     ) {
         editable.innerText = oldtxt;
-        throw new Error(
-            `A sheet name has at most ${MAX_SHEET_NAME_LENGTH} characters, none of \\ / ? * [ ] :, and no ' at either end`,
-        );
+        throw new Error(SHEET_NAME_RULE);
     }
 
     if (index == null || ctx.sheets[index].name === txt) return;
 
-    if (ctx.sheets.some((sheet, i) => i !== index && sheet.name === txt)) {
+    if (ctx.sheets.some((sheet, i) => i !== index && sheetNameKey(sheet.name) === sheetNameKey(txt))) {
         editable.innerText = oldtxt;
         return;
     }
