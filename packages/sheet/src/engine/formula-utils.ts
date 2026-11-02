@@ -96,10 +96,9 @@ export function resolveCellRange(
         if (matrix.length === 0) return null;
         row[1] = matrix.length - 1;
     }
-    // A whole row ends at the first row's last column. A stored sheet's matrix may lack that row, and then the sheet
-    // has no width a whole row could read.
+    // A whole row ends at the sheet's last column, and on a sheet with no columns it reads nothing.
     if (Number.isNaN(col[1])) {
-        const width = matrix[0]?.length ?? 0;
+        const width = matrixWidth(matrix);
         if (width === 0) return null;
         col[1] = width - 1;
     }
@@ -107,6 +106,14 @@ export function resolveCellRange(
     const item: FormulaDependency = { row: sorted(row), column: sorted(col), sheetId };
     cellTextToIndexList[key] = item;
     return item;
+}
+
+// The number of columns a sheet's matrix holds: its widest row's, as a stored sheet's matrix may lack rows, even its
+// first.
+export function matrixWidth(matrix: CellMatrix): number {
+    let width = 0;
+    for (const row of matrix) width = Math.max(width, row?.length ?? 0);
+    return width;
 }
 
 // Checks parentheses are balanced, ignoring brackets inside quoted strings.

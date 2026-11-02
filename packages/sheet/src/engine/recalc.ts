@@ -13,7 +13,7 @@ import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
-import { iscelldata, resolveCellRange } from './formula-utils';
+import { iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import type {
     CalcChainEntry,
@@ -91,11 +91,7 @@ export function recalcSheets(
 
     const walk: WalkContext = { sheets: working, cellTextToIndexList: {} };
     const extents = new Map<string, SheetExtent>();
-    for (const w of working) {
-        let columns = 0;
-        for (const row of w.data) columns = Math.max(columns, row?.length ?? 0);
-        extents.set(w.id, { rows: w.data.length, columns });
-    }
+    for (const w of working) extents.set(w.id, { rows: w.data.length, columns: matrixWidth(w.data) });
     const extentOf = (sheetId: string) => extents.get(sheetId);
 
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.

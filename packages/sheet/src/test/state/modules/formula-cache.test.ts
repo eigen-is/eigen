@@ -128,8 +128,9 @@ describe('setFormulaCellInfo — lookups into whole columns', () => {
 
 // The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates
 // what an export would not. Sheet1 is 6 × 4, so a whole column ends at row 6 and a whole row at column D. Data is
-// 3 × 3, Empty has no rows, and Holey's first row is missing, as a matrix from a stored file's rows can be. A
-// function's arguments are read like any other part of the formula, INDEX, OFFSET and INDIRECT included.
+// 3 × 3, and Empty has no rows. Holey's first row is missing, as a matrix from a stored file's rows can be, so its
+// width is its second row's. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
+// INDIRECT included.
 describe('setFormulaCellInfo — the cells a formula reads', () => {
     const grid = (rows: number, cols: number): (Cell | null)[][] =>
         Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -176,7 +177,8 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ["=SUM('my sheet-1'!A:A)", [on('s3', [0, 1], [0, 0])]],
         ['=SUM(Empty!1:1)+SUM(Empty!A:A)', []],
         ['=SUM(Empty!A1:B2)', [on('s5', [0, 1], [0, 1])]],
-        ['=SUM(Holey!1:1)+A1', [on('s1', [0, 0], [0, 0])]],
+        ['=SUM(Holey!1:1)+A1', [on('s6', [0, 0], [0, 1]), on('s1', [0, 0], [0, 0])]],
+        ['=SUM(Holey!2:2)', [on('s6', [1, 1], [0, 1])]],
         ['=SUM(Holey!A:A)', [on('s6', [0, 1], [0, 0])]],
         ['=$A$1+B$2+$C3', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1]), on('s1', [2, 2], [2, 2])]],
         ['=IF(A1>=1,C1,D1)', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [2, 2]), on('s1', [0, 0], [3, 3])]],
