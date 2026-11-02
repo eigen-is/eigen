@@ -22,10 +22,10 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
-import type { Cell, Sheet } from '@workspace/lib/sheets';
+import type { Cell, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
 import { cellFontName, SHEET_DEFAULT_FONT, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
 import { resolveWebLink } from '@workspace/lib/sheets/web-link';
-import { parseA1Range, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
+import { parseA1Range, rangeToA1, toA1, unquoteSheetName, valueIsError } from '@workspace/sheet/engine';
 import { peakRss } from '../lib/document/transform/peak-rss';
 import { lossCounter } from '../lib/document/transform/protocol';
 import { TRANSFORM_LIMITS } from '../lib/document/transform/runner';
@@ -120,7 +120,7 @@ const SHEET_FIELDS = [
     'showGridLines',
     'filterRange',
     'hyperlink',
-    'dataVerification',
+    'dataValidations',
     'conditionalFormatRules',
     'images',
     'charts',
@@ -264,7 +264,7 @@ export function tallySheets(sheets: Sheet[]): Snapshot {
         if (sheet.showGridLines === false || sheet.showGridLines === 0) bump(counts, 'gridlinesOff');
         if (sheet.filterRange) bump(counts, 'filters');
         bump(counts, 'conditionalFormats', sheet.conditionalFormatRules?.length ?? 0);
-        bump(counts, 'validations', size(sheet.dataVerification));
+        bump(counts, 'validations', size(sheet.dataValidations));
         bump(counts, 'hyperlinks', size(sheet.hyperlink));
         bump(counts, 'images', size(sheet.images));
         bump(counts, 'charts', size(sheet.charts));
@@ -982,8 +982,9 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
                 const configB = new Map<string, unknown>(Object.entries(sheetB.config ?? {}));
                 for (const key of new Set([...configA.keys(), ...configB.keys()]))
                     keyed(key, sheet, configA.get(key), configB.get(key));
-            } else if (field === 'hyperlink' || field === 'dataVerification' || field === 'conditionalFormatRules')
-                keyed(field, sheet, x, y);
+            } else if (field === 'hyperlink' || field === 'conditionalFormatRules') keyed(field, sheet, x, y);
+            else if (field === 'dataValidations')
+                keyed(field, sheet, rulesByRanges(sheetA.dataValidations), rulesByRanges(sheetB.dataValidations));
             else if (field === 'charts') {
                 // A chart's parts compared as one spec, its series ids by place.
                 const spec = (value: unknown) =>
@@ -1014,6 +1015,19 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
         }
     }
     return differences;
+}
+
+// A sheet's validation rules keyed by the ranges they cover, as an import numbers the rules afresh.
+function rulesByRanges(validations: Sheet['dataValidations']): Record<string, DataVerificationRule> {
+    return Object.fromEntries(
+        Object.values(validations ?? {}).map(({ ranges, rule }) => [
+            ranges
+                .map((range) => rangeToA1(range))
+                .sort()
+                .join(' '),
+            rule,
+        ]),
+    );
 }
 
 // A sheet's pictures in paint order, by place, their media by order of first use, as an import names both afresh, and
@@ -1117,7 +1131,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'list ranges absolute',
         why: "A list's range is written absolute, as the engine reads one list for every cell where Excel would shift a relative ref",
         matches: ({ feature, a, b }) =>
-            feature === 'dataVerification' &&
+            feature === 'dataValidations' &&
             isRecord(a) &&
             isRecord(b) &&
             a['type'] === 'dropdown' &&
@@ -1130,7 +1144,7 @@ export const LISTED: Listed<RoundtripDifference, RoundtripContext>[] = [
         kind: 'list validations too long',
         why: 'Excel holds a list literal of at most 255 characters; a longer one is dropped and counted (validations-dropped)',
         matches: ({ feature, a, b }, { warnings }) =>
-            feature === 'dataVerification' &&
+            feature === 'dataValidations' &&
             warnings.has('validations-dropped') &&
             b === undefined &&
             isRecord(a) &&

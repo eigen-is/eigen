@@ -58,7 +58,7 @@ export type RulesContext = {
 export function readRules(
     rest: XmlElement | undefined,
     context: RulesContext,
-): Pick<Sheet, 'conditionalFormatRules' | 'dataVerification'> {
+): Pick<Sheet, 'conditionalFormatRules' | 'dataValidations'> {
     if (!rest) return {};
     const extensions = (name: string) =>
         xmlChildren(rest, SML_NS, 'extLst')
@@ -141,7 +141,7 @@ export function readRules(
             },
         },
     ];
-    const dataVerification: NonNullable<Sheet['dataVerification']> = {};
+    const dataValidations: NonNullable<Sheet['dataValidations']> = {};
     for (const { validations, sqrefOf, formulaOf } of validationLists) {
         for (const validation of validations) {
             const rule = mapDataValidation(
@@ -156,22 +156,24 @@ export function readRules(
                 continue;
             }
             const text = rule.value1.length + rule.value2.length + (rule.hintValue ?? '').length;
+            const ranges: SingleRange[] = [];
             for (const { row, column } of rangesOf(sqrefOf(validation) ?? '', context)) {
                 const bottom = Math.min(row[1], context.rows + DV_ROW_MARGIN - 1);
                 const right = Math.min(column[1], context.columns + DV_COL_MARGIN - 1);
                 if (row[0] > bottom || column[0] > right) continue;
                 const cells = (bottom - row[0] + 1) * (right - column[0] + 1);
                 context.charge(cells, cells * text);
-                // One rule for every key, as the editor sets a range's: nothing edits a rule in place.
-                for (let r = row[0]; r <= bottom; r++)
-                    for (let c = column[0]; c <= right; c++) dataVerification[`${r}_${c}`] = rule;
+                ranges.push({ row: [row[0], bottom], column: [column[0], right] });
             }
+            // Numbered in the file's order, as the importer numbers charts: a fresh sheet holds no other rule.
+            if (ranges.length > 0)
+                dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = { ranges, rule };
         }
     }
 
     return {
         ...(formats.length > 0 && { conditionalFormatRules: formats.map(({ format }) => format) }),
-        ...(Object.keys(dataVerification).length > 0 && { dataVerification }),
+        ...(Object.keys(dataValidations).length > 0 && { dataValidations }),
     };
 }
 

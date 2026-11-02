@@ -6,6 +6,7 @@
 import type { Context } from './context';
 import { getFlowdata } from './context';
 import { getComputeMap } from './modules/condition-format';
+import { validationLookup } from './modules/data-verification';
 import { clearMeasureTextCache, defaultFont } from './modules/text';
 import { drawCellBorders } from './render/borders';
 import { canvasColors } from './render/colors';
@@ -94,7 +95,10 @@ export class Canvas {
         renderCtx.fillStyle = canvasColors(this.canvasElement).cellText;
 
         const sheetIndex = getSheetIndex(this.sheetCtx, this.sheetCtx.currentSheetId);
-        const dataVerification = sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataVerification;
+        const validationAt = validationLookup(
+            sheetIndex == null ? undefined : this.sheetCtx.sheets[sheetIndex].dataValidations,
+            { row: [rowStart, rowEnd], column: [colStart, colEnd] },
+        );
 
         const pass: RenderPass = {
             sheetCtx: this.sheetCtx,
@@ -112,11 +116,11 @@ export class Canvas {
             colEnd,
             flowdata,
             cfCompute: getComputeMap(this.sheetCtx),
-            dataVerification,
+            validationAt,
             cellOverflowMap: computeCellOverflowMap(
                 this.sheetCtx,
                 renderCtx,
-                dataVerification,
+                validationAt,
                 colStart,
                 colEnd,
                 rowStart,

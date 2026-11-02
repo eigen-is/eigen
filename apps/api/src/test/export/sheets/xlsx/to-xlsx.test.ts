@@ -298,15 +298,18 @@ describe('the export keeps what a plain writer loses', () => {
                         conditionValue: ['1'],
                     },
                 ],
-                dataVerification: {
-                    '1_0': {
-                        type: 'dropdown',
-                        type2: '',
-                        value1: 'Yes,No',
-                        value2: '',
-                        prohibitInput: false,
-                        hintShow: false,
-                        hintValue: '',
+                dataValidations: {
+                    v: {
+                        ranges: [{ row: [1, 1], column: [0, 0] }],
+                        rule: {
+                            type: 'dropdown',
+                            type2: '',
+                            value1: 'Yes,No',
+                            value2: '',
+                            prohibitInput: false,
+                            hintShow: false,
+                            hintValue: '',
+                        },
                     },
                 },
                 charts: {

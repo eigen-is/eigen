@@ -27,6 +27,9 @@ export function opToPatchOnSheets(sheets: Sheet[], ops: Op[]): [Patch[], Op[]] {
         if (!op.id) continue;
         // An images array, which no per-object write resolves on, is dropped.
         if (op.path.length === 1 && op.path[0] === 'images' && !isRecord(op.value)) continue;
+        // The per-cell validation rules of the builds before rules were kept per range are dropped. Nothing reads them,
+        // and a write into them fails on a sheet without them, which would roll back the cells of its batch too.
+        if (op.path[0] === 'dataVerification') continue;
         if (op.path[0] === 'dataValidations' && !isValidationWrite(op)) continue;
         const i = sheets.findIndex((s) => s.id === op.id);
         if (i === -1) continue;

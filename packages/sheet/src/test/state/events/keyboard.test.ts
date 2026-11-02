@@ -13,6 +13,7 @@ import { handleGlobalKeyDown } from '../../../state/events/keyboard';
 import { selectionCache } from '../../../state/modules/selection';
 import type { Cell, DataVerificationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
+import { validationsByCell } from '../factories/validations';
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;
@@ -32,7 +33,7 @@ function listContext(rule: DataVerificationRule | null = LIST) {
     ctx.sheetFocused = true;
     ctx.editingCellPosition = [];
     ctx.selections = [{ row: [1, 1], column: [1, 1], row_focus: 1, column_focus: 1 }];
-    if (rule) ctx.sheets[0].dataVerification = { '1_1': rule };
+    if (rule) ctx.sheets[0].dataValidations = validationsByCell({ '1_1': rule });
     return ctx;
 }
 

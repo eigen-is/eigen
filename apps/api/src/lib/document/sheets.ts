@@ -144,7 +144,7 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
                 );
             }
         }
-        for (const rule of Object.values(sheet.dataVerification ?? {})) {
+        for (const { rule } of Object.values(sheet.dataValidations ?? {})) {
             if (rule.type === 'dropdown' && iscelldata(rule.value1)) rule.value1 = rename(rule.value1);
         }
         for (const link of Object.values(sheet.hyperlink ?? {})) {

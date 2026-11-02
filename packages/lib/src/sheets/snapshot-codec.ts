@@ -44,6 +44,9 @@ type EncodedSheet = Omit<Sheet, 'celldata' | 'data' | 'config' | 'images' | 'cha
     images?: Record<string, SheetImage>;
     charts?: Record<string, SheetChart>;
     dataValidations?: unknown;
+    // The per-cell validation rules of the builds before rules were kept per range. Sheets keep no backward
+    // compatibility, so the decoder drops them.
+    dataVerification?: unknown;
 };
 
 type SnapshotV2 = {
@@ -134,7 +137,16 @@ export function decodeSheetsWorkbook(snapshot: string): { sheets: Sheet[]; compu
     // that hides the problem.
     if (f !== FORMAT) throw unknownFormat(f);
     const decoded = sheets.map((encoded) => {
-        const { cells, borderCells, config, images, charts, dataValidations, ...rest } = encoded;
+        const {
+            cells,
+            borderCells,
+            config,
+            images,
+            charts,
+            dataValidations,
+            dataVerification: _old,
+            ...rest
+        } = encoded;
         // Every sheet gets all three maps, even empty ones. The editor writes each image, chart or validation under its
         // own key, and that patch needs the map to exist. A value that is no map is dropped, and so is a chart past the
         // entry cap and a validation that is not well formed.

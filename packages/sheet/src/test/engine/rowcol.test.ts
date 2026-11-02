@@ -14,7 +14,7 @@ import { expectedDelete, expectedInsert, SPANS } from './range-oracle';
 
 // Sheet shape with the editor-runtime extras the engine passes through but lib's
 // canonical Sheet/SheetConfig don't type (rowReadOnly/colReadOnly guards, the
-// filter state-only field). frozen/dataVerification live on the lib Sheet.
+// filter state-only field). frozen lives on the lib Sheet.
 type TestSheet = Sheet & {
     config?: SheetConfig & EditorSheetConfigExtras;
     filter?: unknown;
@@ -648,7 +648,6 @@ describe('applySheetsInsertRowCol — passthrough', () => {
                 config: {},
                 frozen: { type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } },
                 filter: { '0': { cindex: 0, str: 0, edr: 1, rowhidden: {} } },
-                dataVerification: { '0_0': { type: 'dropdown', type2: '', value1: 'a,b', value2: '' } },
             },
         ];
         const result = applySheetsInsertRowCol(sheets, {
@@ -661,7 +660,6 @@ describe('applySheetsInsertRowCol — passthrough', () => {
         // Engine doesn't iterate these — they survive cloneDeep unchanged.
         expect(result[0].frozen).toEqual({ type: 'rangeRow', range: { row_focus: 5, column_focus: 0 } });
         expect(result[0].filter).toBeDefined();
-        expect(result[0].dataVerification).toBeDefined();
     });
 });
 

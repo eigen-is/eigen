@@ -3,7 +3,9 @@
 // out and toggles tick boxes and list chevrons for the painter and the hit test, writes the hint a
 // selected cell shows, and validates and applies the draft the data-validation dialog edits.
 
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
+import { cfSplitRange } from '../../engine/conditional-format';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell } from '../../engine/types';
@@ -27,7 +29,7 @@ import {
     setCellValue,
 } from '..';
 import { getSheet } from '../api/common';
-import type { Rect } from '../types';
+import type { Rect, Sheet, SheetValidation } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
 
 // Lowercase phrase fragments the hint sentences slot into `${type}`/`${condition}`, keyed
@@ -261,6 +263,83 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
     return true;
 }
 
+// --- Rules over ranges --------------------------------------------------------
+// A sheet keeps each rule once, with the ranges it covers, under an id (dataValidations). A cell has at most one
+// rule, so putting a rule on cells first takes them out of every other rule.
+
+// The rule over one cell, with its id. Two peers putting rules on one cell at once can leave the cell in two rules,
+// and an xlsx file can hold overlapping ones. The highest id then wins on every tab: a longer id is higher, and ids of
+// one length compare by their characters. So of the rules an import numbers in the file's order, the last one wins.
+export function validationEntryAt(
+    validations: Sheet['dataValidations'],
+    r: number,
+    c: number,
+): [string, SheetValidation] | undefined {
+    let found: [string, SheetValidation] | undefined;
+    for (const [id, entry] of Object.entries(validations ?? {})) {
+        if ((!found || byId(id, found[0]) > 0) && entry.ranges.some((range) => covers(range, r, c))) {
+            found = [id, entry];
+        }
+    }
+    return found;
+}
+
+export function validationAt(validations: Sheet['dataValidations'], r: number, c: number) {
+    return validationEntryAt(validations, r, c)?.[1].rule;
+}
+
+// The painter's lookup for one paint. The rules are cut down once to the ranges inside the window it paints, so a
+// cell checks only those, however many rules the sheet has elsewhere. A cell outside the window, which the text
+// overflow can ask about, is looked up in full.
+export function validationLookup(
+    validations: Sheet['dataValidations'],
+    window: SingleRange,
+): (r: number, c: number) => DataVerificationRule | undefined {
+    const inView: [string, SheetValidation][] = [];
+    for (const [id, { ranges, rule }] of Object.entries(validations ?? {})) {
+        const near = ranges.filter((range) => overlaps(range, window));
+        if (near.length > 0) inView.push([id, { ranges: near, rule }]);
+    }
+    inView.sort(([a], [b]) => byId(b, a));
+    return (r, c) =>
+        covers(window, r, c)
+            ? inView.find(([, { ranges }]) => ranges.some((range) => covers(range, r, c)))?.[1].rule
+            : validationAt(validations, r, c);
+}
+
+// Takes an area out of every rule on the sheet, and drops a rule left with no cell. A changed rule is written whole
+// under its id: a write into its ranges alone would fail where a peer deleted the rule meanwhile, and take the rest
+// of its batch with it.
+export function clearValidations(sheet: Sheet, area: SingleRange) {
+    const validations = (sheet.dataValidations ??= {});
+    for (const [id, entry] of Object.entries(validations)) {
+        if (!entry.ranges.some((range) => overlaps(range, area))) continue;
+        const ranges = entry.ranges.flatMap((range) => cfSplitRange(range, area, area, 'restPart'));
+        if (ranges.length > 0) validations[id] = { ...entry, ranges };
+        else delete validations[id];
+    }
+}
+
+// Puts a rule on ranges of the sheet under an id. The ranges join the ones the id already has, and its rule stays.
+export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRule, ranges: SingleRange[]) {
+    for (const range of ranges) clearValidations(sheet, range);
+    const validations = (sheet.dataValidations ??= {});
+    const entry = validations[id];
+    validations[id] = { ranges: [...(entry?.ranges ?? []), ...ranges], rule: entry?.rule ?? rule };
+}
+
+function byId(a: string, b: string) {
+    return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
+}
+
+function covers(range: SingleRange, r: number, c: number) {
+    return r >= range.row[0] && r <= range.row[1] && c >= range.column[0] && c <= range.column[1];
+}
+
+function overlaps(a: SingleRange, b: SingleRange) {
+    return a.row[0] <= b.row[1] && b.row[0] <= a.row[1] && a.column[0] <= b.column[1] && b.column[0] <= a.column[1];
+}
+
 // --- Tick boxes -------------------------------------------------------------
 // The rule names the value that counts as checked; the CELL says whether it is.
 // Nothing stores a second flag, so an imported, pasted, typed or
@@ -346,13 +425,11 @@ export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: num
     return { x, y, size: CHECKBOX_SIZE };
 }
 
-// The rule that governs one cell on the current sheet, modeled on the sibling
-// getCellHyperlink (modules/hyperlink.ts) — the same lookup was written inline at
-// every callsite, most of them casting the sheet index past its not-found case.
+// The rule that governs one cell on the current sheet, as getCellHyperlink finds a cell's link.
 export function getCellDataVerification(ctx: Context, r: number, c: number) {
     const index = getSheetIndex(ctx, ctx.currentSheetId);
     if (index == null || index < 0) return undefined;
-    return ctx.sheets[index].dataVerification?.[`${r}_${c}`];
+    return validationAt(ctx.sheets[index].dataValidations, r, c);
 }
 
 // Only a click on the box toggles — anywhere else in the cell selects it like
@@ -426,32 +503,42 @@ export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: 
     return x >= right - DROPDOWN_CHEVRON_HIT_WIDTH && x <= right && y >= box.top && y <= box.top + box.height;
 }
 
-// Apply one rule across a range. Tick boxes seed their unchecked value into
-// EMPTY cells only — pointing a tick box at a column of existing TRUE/FALSE
-// must keep the data; isCheckboxChecked reads whatever was already there.
+// Puts one rule on a range, in place of the rules its cells had. Tick boxes seed their unchecked value into EMPTY
+// cells only: pointing a tick box at a column of existing TRUE/FALSE must keep the data, and isCheckboxChecked reads
+// whatever was already there. The seeding stops where the sheet's cells stop, so a whole-column tick box writes no
+// million cells.
 export function applyDataVerification(ctx: Context, range: SingleRange, item: DataVerificationRule) {
     if (!isAllowEdit(ctx)) return;
     const d = getFlowdata(ctx);
     if (!d) return;
-    const sheet = getSheet(ctx);
-    const rules = sheet.dataVerification ?? {};
-    // One clone for the whole range: the rules are read-only to everything that
-    // consumes them, paste and drop-cell already alias one rule across cells, and
-    // the serialized snapshot is the same either way.
-    const rule = { ...item };
+    addValidation(getSheet(ctx), crypto.randomUUID(), { ...item }, [range]);
+    if (item.type !== 'checkbox') return;
+    const seededRange = {
+        row: [range.row[0], Math.min(range.row[1], d.length - 1)],
+        column: [range.column[0], Math.min(range.column[1], (d[0]?.length ?? 0) - 1)],
+    };
     let seeded = false;
-    for (let r = range.row[0]; r <= range.row[1]; r += 1) {
-        if (!d[r]) continue;
-        for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-            rules[`${r}_${c}`] = rule;
-            if (item.type === 'checkbox' && isRealNull(getRealCellValue(r, c, d))) {
-                setCellValue(ctx, r, c, d, item.value2);
-                seeded = true;
-            }
+    for (let r = seededRange.row[0]; r <= seededRange.row[1]; r += 1) {
+        for (let c = seededRange.column[0]; c <= seededRange.column[1]; c += 1) {
+            if (!isRealNull(getRealCellValue(r, c, d))) continue;
+            setCellValue(ctx, r, c, d, item.value2);
+            seeded = true;
         }
     }
-    sheet.dataVerification = rules;
-    if (seeded) jfrefreshgrid(ctx, d, [range]);
+    if (seeded) jfrefreshgrid(ctx, d, [seededRange]);
+}
+
+// The range the dialog's text names. A whole column such as B:B runs to the grid's last row, as Excel stores it, so
+// the rule also covers the rows added later. A whole row runs to the grid's last column. The formula reader would
+// stop both where the sheet's cells stop.
+export function validationRange(ctx: Context, txt: string): SingleRange | undefined {
+    const range = getRangeByTxt(ctx, txt).at(-1);
+    if (!range) return undefined;
+    const ref = txt.slice(txt.lastIndexOf('!') + 1);
+    if (/^\$?[A-Za-z]+:\$?[A-Za-z]+$/.test(ref))
+        return { row: [range.row[0], REFERENCE_ROW_COUNT - 1], column: range.column };
+    if (/^\$?\d+:\$?\d+$/.test(ref)) return { row: range.row, column: [range.column[0], REFERENCE_COLUMN_COUNT - 1] };
+    return { row: range.row, column: range.column };
 }
 
 // Insert -> Tick box: Google's one-click entry, no dialog. There is nowhere to

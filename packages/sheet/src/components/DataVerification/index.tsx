@@ -17,12 +17,15 @@ import {
     applyDataVerification,
     CHECKBOX_CHECKED_VALUE,
     CHECKBOX_UNCHECKED_VALUE,
+    clearValidations,
     confirmMessage,
     getDropdownList,
-    getRangeByTxt,
     getRangetxt,
+    validationAt,
+    validationRange,
 } from '../../state';
 import { getSheet } from '../../state/api/common';
+import type { RangeOrWholeAxis } from '../../state/types';
 import { CellRangeDialog } from '../CellRangeDialog';
 
 const VERIFICATION_TYPES = [
@@ -115,40 +118,24 @@ export function DataVerification() {
         (type: string) => {
             if (type === 'confirm') {
                 setContext((ctx) => {
-                    const isPass = confirmMessage(ctx);
-                    if (isPass) {
-                        const range = getRangeByTxt(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
-                        if (range.length === 0) {
-                            return;
-                        }
-                        const target = range[range.length - 1];
-                        if (!target) return;
-                        const regulation = ctx.dataVerification.dataRegulation;
-                        const item = { ...regulation };
-                        if (regulation.type === 'dropdown') {
-                            item.value1 = getDropdownList(ctx, regulation.value1).join(',');
-                        }
-                        applyDataVerification(ctx, target, item);
+                    if (!confirmMessage(ctx)) return;
+                    const regulation = ctx.dataVerification.dataRegulation;
+                    const target = validationRange(ctx, regulation.rangeTxt);
+                    if (!target) return;
+                    const item = { ...regulation };
+                    if (regulation.type === 'dropdown') {
+                        item.value1 = getDropdownList(ctx, regulation.value1).join(',');
                     }
+                    applyDataVerification(ctx, target, item);
                 });
             } else if (type === 'delete') {
                 setContext((ctx) => {
-                    const range = getRangeByTxt(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
-                    if (range.length === 0) {
+                    const target = validationRange(ctx, ctx.dataVerification.dataRegulation.rangeTxt);
+                    if (!target) {
                         showDialog('The selection operation has not been performed yet', 'ok');
                         return;
                     }
-                    const currentDataVerification = getSheet(ctx).dataVerification ?? {};
-                    const str = range[range.length - 1]?.row[0];
-                    const edr = range[range.length - 1]?.row[1];
-                    const stc = range[range.length - 1]?.column[0];
-                    const edc = range[range.length - 1]?.column[1];
-                    if (str == null || stc == null || edr == null || edc == null) return;
-                    for (let r = str; r <= edr; r += 1) {
-                        for (let c = stc; c <= edc; c += 1) {
-                            delete currentDataVerification[`${r}_${c}`];
-                        }
-                    }
+                    clearValidations(getSheet(ctx), target);
                 });
             }
             hideDialog();
@@ -162,22 +149,26 @@ export function DataVerification() {
         setContext((ctx) => {
             let rangeT = '';
 
-            // If there's a selection, convert it to string form for display
+            // The selection as text, a column or row header's as B:B or 2:2, so its rule covers the whole column or row
             if (ctx.selections) {
                 const range = ctx.selections[ctx.selections.length - 1];
-                rangeT = getRangetxt(context, context.currentSheetId, range, context.currentSheetId);
+                const named: RangeOrWholeAxis =
+                    range.column_select && !range.row_select
+                        ? { row: [null, null], column: range.column }
+                        : range.row_select && !range.column_select
+                          ? { row: range.row, column: [null, null] }
+                          : range;
+                rangeT = getRangetxt(context, context.currentSheetId, named, context.currentSheetId);
             }
 
             // Initialize values
-            const ctxDataVerification = getSheet(ctx).dataVerification ?? {};
             if (!ctx.selections) return;
             const last = ctx.selections[ctx.selections.length - 1];
             const rowIndex = last.row_focus;
             const colIndex = last.column_focus;
             if (rowIndex == null || colIndex == null) return;
-            const item = ctxDataVerification[`${rowIndex}_${colIndex}`];
-            const defaultItem = item ?? {};
-            let rangValue = defaultItem.value1 ?? '';
+            const item = validationAt(getSheet(ctx).dataValidations, rowIndex, colIndex);
+            let rangValue = item?.value1 ?? '';
             // Range assignment related
             const { dataRegulation } = ctx.dataVerification;
             if (ctx.rangeDialog.type === 'dropDown' && dataRegulation.rangeTxt) {

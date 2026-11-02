@@ -6,9 +6,10 @@ import type {
     DataVerificationRule,
     DefaultConditionalFormatRule,
     Sheet,
+    SheetValidation,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { parseCellKey, REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { escapeXml } from '@workspace/lib/xml';
 import { iscelldata, isWellFormedCfRule, rangeToA1, toA1, withCfRanges } from '@workspace/sheet/engine';
 import type { Lost } from '../../../document/transform/protocol';
@@ -36,7 +37,7 @@ import { argbOf } from './styles';
 export function rulesXml(sheet: Sheet, styles: StyleRegistry, lost: Lost): string {
     return (
         conditionalFormattingXml(sheet.conditionalFormatRules ?? [], styles, lost) +
-        dataValidationsXml(sheet.dataVerification ?? {}, lost)
+        dataValidationsXml(sheet.dataValidations ?? {}, lost)
     );
 }
 
@@ -157,31 +158,17 @@ function cfRuleOf(rule: ConditionalFormatRule): CfRule | undefined {
     return undefined;
 }
 
-function dataValidationsXml(verification: NonNullable<Sheet['dataVerification']>, lost: Lost): string {
-    // The editor stores a copy of a rule per cell, so equal rules are one validation over their cells' rectangles,
-    // ordered by their first cell.
-    const cells = Object.keys(verification)
-        .map((key) => ({ key, cell: parseCellKey(key) }))
-        .sort((a, b) => a.cell[0] - b.cell[0] || a.cell[1] - b.cell[1]);
-    const groups = new Map<string, { rule: DataVerificationRule; cells: [number, number][] }>();
-    for (const { key, cell } of cells) {
-        const rule = verification[key];
-        const id = JSON.stringify([
-            rule.type,
-            rule.type2,
-            rule.value1,
-            rule.value2,
-            rule.prohibitInput === true,
-            promptOf(rule),
-        ]);
-        const group = groups.get(id);
-        if (group) group.cells.push(cell);
-        else groups.set(id, { rule, cells: [cell] });
-    }
+function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost): string {
+    // Each rule is one validation over its ranges. The ranges go in order of their top-left cells, and the rules in
+    // order of their first range, so one workbook always writes the same file. A relative reference reads from the
+    // first range's top-left cell, as Excel reads it.
+    const topLeft = (a: SingleRange, b: SingleRange) => a.row[0] - b.row[0] || a.column[0] - b.column[0];
+    const entries = Object.entries(rules)
+        .map(([id, { ranges, rule }]) => ({ id, ranges: [...ranges].sort(topLeft), rule }))
+        .sort((a, b) => topLeft(a.ranges[0], b.ranges[0]) || (a.id < b.id ? -1 : 1));
 
     const validations: string[] = [];
-    for (const { rule, cells } of groups.values()) {
-        const ranges = rectanglesOf(cells);
+    for (const { rule, ranges } of entries) {
         const validation = validationOf(rule, toA1(ranges[0].row[0], ranges[0].column[0]));
         if (!validation) {
             lost('validations-dropped');
@@ -250,29 +237,6 @@ function validationOf(
         formulas.push(String(number));
     }
     return { type, ...(operator !== 'between' && { operator }), formulas };
-}
-
-// A row's run of adjacent cells extends the rectangle of the same columns that ends on the row above; cells come in
-// row order, so the rectangles come in order of their first cell.
-function rectanglesOf(cells: [number, number][]): SingleRange[] {
-    const rectangles: SingleRange[] = [];
-    const open = new Map<string, SingleRange>();
-    let start = 0;
-    for (const [index, [row, column]] of cells.entries()) {
-        const next = cells[index + 1];
-        if (next && next[0] === row && next[1] === column + 1) continue;
-        const left = cells[start][1];
-        start = index + 1;
-        const columns = `${left}:${column}`;
-        const above = open.get(columns);
-        if (above && above.row[1] === row - 1) above.row[1] = row;
-        else {
-            const rectangle: SingleRange = { row: [row, row], column: [left, column] };
-            rectangles.push(rectangle);
-            open.set(columns, rectangle);
-        }
-    }
-    return rectangles;
 }
 
 function absoluteRef(ref: string): string {

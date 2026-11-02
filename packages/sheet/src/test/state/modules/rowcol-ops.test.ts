@@ -45,11 +45,15 @@ function richContext(): Context {
                     borderInfo: { '1_0': { t: SIDE }, '2_1': { b: SIDE }, '3_3': { l: SIDE } },
                 },
                 calcChain: [{ r: 2, c: 1, id: 'id_1' }],
-                // hyperlink + dataVerification are shifted only in the state layer,
-                // never re-derived by the engine — they prove the metadata ops carry
-                // every field the engine doesn't reproduce.
+                // The hyperlinks are shifted only in the state layer, and the validation rules ship whole as well,
+                // so they prove the metadata ops carry every field a receiver needs.
                 hyperlink: { '2_0': { linkType: 'webpage', linkAddress: 'https://eigen.is' } },
-                dataVerification: { '2_1': { type: 'dropdown', type2: 'true', value1: 'a,b', value2: '' } },
+                dataValidations: {
+                    v: {
+                        ranges: [{ row: [1, 2], column: [1, 1] }],
+                        rule: { type: 'dropdown', type2: 'true', value1: 'a,b', value2: '' },
+                    },
+                },
                 order: 0,
                 row: 4,
                 column: 4,
@@ -97,7 +101,7 @@ describe('insert/delete ops stay sheet-sized-payload free', () => {
     test('insertRowCol carries authoritative metadata ops for the target sheet', () => {
         const [ops, next] = emittedOps((ctx) => insertRowCol(ctx, INSERT_OP), { insertRowColOp: INSERT_OP });
         const metaPaths = ops.filter((op) => op.id === 'id_1' && op.path.length === 1).map((op) => op.path[0]);
-        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink', 'dataVerification']));
+        expect(metaPaths).toEqual(expect.arrayContaining(['config', 'hyperlink', 'dataValidations']));
         // Every receiver derives the sheet's size from its cells, so the size does not ship.
         expect(metaPaths).not.toContain('row');
         const configOp = ops.find((op) => op.path[0] === 'config');
@@ -116,7 +120,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
             expect(sheet.data).toEqual(next.sheets[i].data);
             expect(sheet.config ?? {}).toEqual(next.sheets[i].config ?? {});
             expect(sheet.hyperlink ?? {}).toEqual(next.sheets[i].hyperlink ?? {});
-            expect(sheet.dataVerification ?? {}).toEqual(next.sheets[i].dataVerification ?? {});
+            expect(sheet.dataValidations ?? {}).toEqual(next.sheets[i].dataValidations ?? {});
         }
     }
 
@@ -182,7 +186,7 @@ describe('BE replay converges with FE state from the slim ops alone', () => {
 });
 
 // The engine inserts blank rows/columns and seeds no styles (engine/rowcol.ts applyInsert);
-// the clone rule below comes from the state's dataVerification shifter: the row/column at
+// the clone rule below comes from shiftCellKeyedForInsert: the row/column at
 // `index` is the template in both directions, so insert-above at the top of a bordered
 // block repeats that row's top edge on the new row.
 describe('borders follow their cells through inserts and deletes', () => {

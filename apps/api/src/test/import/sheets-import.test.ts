@@ -26,6 +26,7 @@ import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../lib/ooxml/zip';
 import { getUserById } from '../../lib/user';
 import { PIXEL_PNG } from '../fixtures/pptx';
 import { build, deflated } from '../fixtures/raw-zip';
+import { rulesByCell } from '../fixtures/validations';
 import { exportXlsx, linkRels, rowsXml, SML, sheetXml, styleSheet, xlsxFixture } from '../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../fixtures/zip-bomb';
 import {
@@ -1758,7 +1759,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             hintShow: false,
             hintValue: '',
         };
-        expect(sheets[0].dataVerification).toEqual({ '1_1': expected, '2_1': expected, '3_1': expected });
+        expect(rulesByCell(sheets[0].dataValidations)).toEqual({ '1_1': expected, '2_1': expected, '3_1': expected });
     });
 
     test('convert keeps range-ref list sources verbatim for live cross-sheet resolution', async () => {
@@ -1780,12 +1781,12 @@ describe('Sheets xlsx conversion fidelity', () => {
 
         // The engine's getDropdownList resolves range refs (incl. quoted sheet names)
         // live, so source edits propagate — don't inline the values at import.
-        expect(sheets[0].dataVerification?.['0_2']).toMatchObject({
+        expect(rulesByCell(sheets[0].dataValidations)['0_2']).toMatchObject({
             type: 'dropdown',
             type2: '',
             value1: "'Other Sheet'!$B$1:$B$5",
         });
-        expect(sheets[1].dataVerification).toBeUndefined();
+        expect(sheets[1].dataValidations).toEqual({});
     });
 
     test('convert maps numeric, text-length and date validations onto engine types and operators', async () => {
@@ -1809,7 +1810,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             ],
         });
         const sheets = parseXlsx(buffer);
-        const rules = sheets[0].dataVerification ?? {};
+        const rules = rulesByCell(sheets[0].dataValidations);
 
         expect(rules['0_0']).toMatchObject({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' });
         // Excel "decimal" accepts any real number → engine `number`, not
@@ -1850,7 +1851,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             ],
         });
         const sheets = parseXlsx(buffer);
-        expect(Object.keys(sheets[0].dataVerification ?? {})).toEqual(['0_1']);
+        expect(Object.keys(rulesByCell(sheets[0].dataValidations))).toEqual(['0_1']);
     });
 
     test('convert maps validation messages onto hint and prohibit-input flags', async () => {
@@ -1870,7 +1871,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             ],
         });
         const sheets = parseXlsx(buffer);
-        const rules = sheets[0].dataVerification ?? {};
+        const rules = rulesByCell(sheets[0].dataValidations);
 
         expect(rules['0_0']).toMatchObject({ hintShow: true, hintValue: 'Choose Yes or No', prohibitInput: false });
         expect(rules['1_0']).toMatchObject({ hintShow: false, hintValue: '', prohibitInput: true });
@@ -1893,7 +1894,7 @@ describe('Sheets xlsx conversion fidelity', () => {
             }),
         );
 
-        const rules = sheets[0].dataVerification ?? {};
+        const rules = rulesByCell(sheets[0].dataValidations);
         // rowCount is 5 → rules survive up to 0-based row 1004 (5 + 1000-row margin).
         expect(rules['0_2']).toMatchObject({ type: 'dropdown', value1: 'Yes,No' });
         expect(rules['1004_2']).toMatchObject({ type: 'dropdown', value1: 'Yes,No' });

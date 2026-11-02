@@ -63,7 +63,12 @@ const WORKBOOK: Sheet[] = [
         },
         frozen: { type: 'rangeBoth', range: { row_focus: 0, column_focus: 0 } },
         filterRange: { row: [0, 7], column: [0, 4] },
-        dataVerification: { '2_2': { type: 'dropdown', type2: '', value1: 'a,b,c', value2: '' } },
+        dataValidations: {
+            v1: {
+                ranges: [{ row: [2, 2], column: [2, 2] }],
+                rule: { type: 'dropdown', type2: '', value1: 'a,b,c', value2: '' },
+            },
+        },
         hyperlink: { '5_0': { linkType: 'webpage', linkAddress: 'https://example.com' } },
         conditionalFormatRules: [
             {
@@ -103,15 +108,13 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect((JSON.parse(encoded) as Envelope).computed).toBe(true);
     });
 
-    test('round-trips every cell, border and sheet branch (only calcChain and the empty maps are added)', () => {
+    test('round-trips every cell, border and sheet branch (only calcChain and empty maps are added)', () => {
         const decoded = decodeSheetsSnapshot(
             encodeSheetsSnapshot(WORKBOOK, { computed: true }),
         ) as SheetWithCalcChain[];
-        expect(
-            decoded.map(
-                ({ calcChain: _chain, images: _images, charts: _charts, dataValidations: _rules, ...sheet }) => sheet,
-            ),
-        ).toEqual(WORKBOOK);
+        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
+            WORKBOOK.map((sheet) => ({ dataValidations: {}, ...sheet })),
+        );
         expect(decoded[0].calcChain).toEqual([
             { r: 1, c: 0, id: 'sheet-1' },
             { r: 7, c: 0, id: 'sheet-1' },
@@ -150,11 +153,9 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(BULK, { computed: true });
         expect(encoded.split('#a1b2c3')).toHaveLength(2);
         const decoded = decodeSheetsSnapshot(encoded) as SheetWithCalcChain[];
-        expect(
-            decoded.map(
-                ({ calcChain: _chain, images: _images, charts: _charts, dataValidations: _rules, ...sheet }) => sheet,
-            ),
-        ).toEqual(BULK);
+        expect(decoded.map(({ calcChain: _chain, images: _images, charts: _charts, ...sheet }) => sheet)).toEqual(
+            BULK.map((sheet) => ({ dataValidations: {}, ...sheet })),
+        );
     });
 
     test('dictionary encoding shrinks a style-heavy workbook at least 5x', () => {
@@ -351,6 +352,17 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(decoded.map((sheet) => Object.keys(sheet.dataValidations ?? {}))).toEqual([['kept'], []]);
     });
 
+    // Sheets keep no backward compatibility: the per-cell rules of a workbook saved before rules were kept per range
+    // are dropped, and the snapshot written next holds none of them.
+    test("an older snapshot's per-cell validation rules are dropped", () => {
+        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
+        envelope.sheets[0]!['dataVerification'] = { '2_2': { type: 'dropdown', type2: '', value1: 'a,b', value2: '' } };
+        const [decoded] = decodeSheetsSnapshot(JSON.stringify(envelope));
+        expect('dataVerification' in decoded).toBe(false);
+        expect(decoded.celldata).toEqual(WORKBOOK[0].celldata);
+        expect(encodeSheetsSnapshot([decoded], { computed: true })).not.toContain('dataVerification');
+    });
+
     test("a sheet's default column width and row height round-trip", () => {
         const sheets: Sheet[] = [{ id: 's', name: 'S', defaultColWidth: 64, defaultRowHeight: 17 }];
         const [decoded] = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));
@@ -414,7 +426,7 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         const encoded = encodeSheetsSnapshot(WORKBOOK, { computed: true });
         const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encoded));
         const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
-        expect(hex).toBe('5c106a392d5cb1103e0a83b5a6117489da13dea5908d15345f91709767ae3728');
+        expect(hex).toBe('0e352cbab7206951a95446a0374d3c34a169e0595ed19631b7b1d0773b66f2b7');
     });
 
     test('data and selections never reach the snapshot', () => {

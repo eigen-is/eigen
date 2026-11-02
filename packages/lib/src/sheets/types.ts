@@ -260,10 +260,6 @@ export type Sheet = {
     // editor-only `filter` field. A filter without criteria, which a fresh enable and the xlsx importer write, is
     // only this range.
     filterRange?: SingleRange;
-    // Data-validation rules keyed "r_c" (0-based). Written by the editor's
-    // DataVerification dialog and the xlsx importer; the runtime (cell focus,
-    // updateCell, canvas painter) reads them straight off the sheet.
-    dataVerification?: Record<string, DataVerificationRule>;
     // The data-validation rules by id, each over its ranges. Materialized like the config collections, so a new rule
     // or a changed one is written under its own id and two peers editing different rules don't overwrite each other.
     dataValidations?: Record<string, SheetValidation>;

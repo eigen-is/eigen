@@ -5,6 +5,7 @@ import { ApiError } from '../../../lib/core/errors';
 import { readXlsx, xlsxToSheets } from '../../../lib/import/sheets/from-xlsx';
 import { MAX_GRID_SLOTS, MAX_SHARED_FORMULA_TEXT, MAX_TEXT } from '../../../lib/import/sheets/limits';
 import { MAX_DECOMPRESSED_BYTES, openZip, writeZip } from '../../../lib/ooxml/zip';
+import { rulesByCell } from '../../fixtures/validations';
 import { OFFICE_COLORS, rowsXml, styleSheet, xlsxFixture } from '../../fixtures/xlsx';
 import { buildDeclaredSizeBombZip } from '../../fixtures/zip-bomb';
 
@@ -568,7 +569,7 @@ describe("the reader's rules", () => {
                 ],
             }),
         );
-        const rules = sheet.dataVerification ?? {};
+        const rules = rulesByCell(sheet.dataValidations);
         const plainRule = { value2: '', prohibitInput: false, hintShow: false, hintValue: '' };
         expect(rules).toMatchObject({
             // The later rule wins a cell two name.
@@ -597,7 +598,7 @@ describe("the reader's rules", () => {
         expect(perColumn).toMatchObject({ 4: 1010, 5: 1010, 103: 1 });
         expect(perColumn['104']).toBeUndefined();
         expect(Object.keys(rules)).toHaveLength(2133);
-        expect(plain.dataVerification).toBeUndefined();
+        expect(plain.dataValidations).toBeUndefined();
     });
 
     test('whole sheets: rules beside merges, links and columns, a merge past the cells widening the span', () => {
@@ -624,7 +625,7 @@ describe("the reader's rules", () => {
         ]);
         expect(sheet.hyperlink).toEqual({ '1_2': { linkType: 'cellrange', linkAddress: "'Second sheet'!A1" } });
         expect(sheet.config?.merge).toMatchObject({ '0_0': { rs: 1, cs: 2 }, '11_4': { rs: 2, cs: 2 } });
-        expect(Object.keys(sheet.dataVerification ?? {})).toHaveLength(1013 + 3);
+        expect(Object.keys(rulesByCell(sheet.dataValidations))).toHaveLength(1013 + 3);
     });
 });
 
@@ -667,7 +668,7 @@ describe("the reader's defined names", () => {
         const { sheets } = book();
         const [data] = sheets;
         expect(cellsOf(data)['0_1']?.f).toBe('=SUM(Data!$A$1:$A$3)*2');
-        expect(data.dataVerification?.['0_2']).toMatchObject({ type: 'dropdown', value1: 'Lists!$A$1:$A$2' });
+        expect(rulesByCell(data.dataValidations)['0_2']).toMatchObject({ type: 'dropdown', value1: 'Lists!$A$1:$A$2' });
         // An edit to A1, and the sum the editor computes again rather than the value Excel saved.
         const edited = sheets.map((sheet) => ({
             ...sheet,

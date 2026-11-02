@@ -16,8 +16,8 @@ import { getSheet } from '../api/common';
 import type { Context } from '../context';
 import { getFlowdata, getSheetConfig, updateContextWithSheetData } from '../context';
 import { carrySides } from '../modules/border';
-import type { CarriedLines, CarryTile } from '../modules/cell';
-import { carriedLines, carryCells, getQKBorder, setCellValue } from '../modules/cell';
+import type { CarryTile } from '../modules/cell';
+import { carriedLines, carryCells, getQKBorder, landedRanges, setCellValue } from '../modules/cell';
 import { createContextResolver, setFormulaCellInfo } from '../modules/formula-cache';
 import { delFunctionGroup, execFunctionGroup, execfunction } from '../modules/formula-exec';
 import { jfrefreshgrid } from '../modules/refresh';
@@ -420,26 +420,6 @@ function pasteHandlerOfCopyPaste(ctx: Context, copyState: Context['copyState']) 
     last.column = [minc, maxc];
 
     jfrefreshgrid(ctx, d, ctx.selections);
-}
-
-// Where the cells of a conditional format's range land in one tile: a range for each run of carried rows and
-// columns it covers. A whole block lands as one range. A filtered copy splits a range where the filter left rows out.
-function landedRanges(range: SingleRange, lines: CarriedLines, tile: CarryTile): SingleRange[] {
-    const rows = landedRuns(lines.rows, range.row, tile.row);
-    const columns = landedRuns(lines.columns, range.column, tile.column);
-    return rows.flatMap((row) => columns.map((column) => ({ row, column })));
-}
-
-// The runs of carried lines between first and last, as the lines they land on counted from start.
-function landedRuns(lines: readonly number[], [first, last]: readonly number[], start: number): number[][] {
-    const runs: number[][] = [];
-    for (let i = 0; i < lines.length; i += 1) {
-        if (lines[i] < first || lines[i] > last) continue;
-        const run = runs.at(-1);
-        if (run && run[1] === start + i - 1) run[1] = start + i;
-        else runs.push([start + i, start + i]);
-    }
-    return runs;
 }
 
 function handleFormulaStringPaste(ctx: Context, formulaStr: string) {

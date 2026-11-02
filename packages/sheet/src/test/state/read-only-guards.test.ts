@@ -8,6 +8,7 @@ import { createFilter } from '../../state/modules/filter';
 import { deleteRowCol, insertRowCol } from '../../state/modules/rowcol';
 import { filterPatch, patchToOp } from '../../state/utils/patch';
 import { contextFactory } from './factories/context';
+import { cellsWithRules, validationsByCell } from './factories/validations';
 
 enablePatches();
 
@@ -65,12 +66,14 @@ describe('read-only (allowEdit === false) state guards', () => {
     test('insertCheckbox is a no-op for viewers', () => {
         const ctx = contextFactory({ allowEdit: false }) as Context;
         insertCheckbox(ctx);
-        expect(ctx.sheets[0].dataVerification).toBeUndefined();
+        expect(cellsWithRules(ctx.sheets[0].dataValidations)).toEqual([]);
     });
 
     test('checkboxChange is a no-op for viewers', () => {
         const ctx = contextFactory({ allowEdit: false }) as Context;
-        ctx.sheets[0].dataVerification = { '0_0': { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' } };
+        ctx.sheets[0].dataValidations = validationsByCell({
+            '0_0': { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' },
+        });
         expect(checkboxChange(ctx, 0, 0)).toBe(false);
         expect(ctx.sheets[0].data![0][0]).toBeNull();
     });

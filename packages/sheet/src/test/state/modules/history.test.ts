@@ -14,13 +14,14 @@ import type { Cell } from '../../../engine/types';
 import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
+import { applyDataVerification, clearValidations, validationAt } from '../../../state/modules/data-verification';
 import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
 import { deleteRowCol, insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, changeSheet, deleteSheet } from '../../../state/modules/sheet';
-import type { History, Op, Sheet } from '../../../state/types';
+import type { DataVerificationRule, History, Op, Sheet } from '../../../state/types';
 import type { Tab } from '../factories/collab';
 import { author, join, tab, tabEdit, tabReceive, tabRedo, tabUndo } from '../factories/collab';
 import { workbookContextFactory } from '../factories/context';
@@ -858,6 +859,7 @@ describe('shiftEntries', () => {
     ];
     const replace = (path: Patch['path'], value?: unknown): Patch => ({ op: 'replace', path, value });
     const at = (...path: Patch['path']) => ['sheets', ONE, ...path];
+    const range = (row: number[]) => ({ row, column: [1, 1] });
 
     test.each<[string, Op, Patch, Patch | null]>([
         [
@@ -940,10 +942,34 @@ describe('shiftEntries', () => {
             replace(at('hyperlink', '7_1'), { linkType: 'webpage' }),
         ],
         [
-            'a validation rule moves',
+            "a validation rule's ranges move, the one an insert is inside grows",
             rows(2, 2),
-            replace(at('dataVerification', '5_1'), { type: 'checkbox' }),
-            replace(at('dataVerification', '7_1'), { type: 'checkbox' }),
+            replace(at('dataValidations', 'v'), { ranges: [range([5, 6]), range([1, 3])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), { ranges: [range([7, 8]), range([1, 5])], rule: { type: 'checkbox' } }),
+        ],
+        [
+            "a sheet's whole map of validation rules moves",
+            rows(2, 2),
+            replace(at('dataValidations'), { v: { ranges: [range([5, 6])], rule: { type: 'checkbox' } } }),
+            replace(at('dataValidations'), { v: { ranges: [range([7, 8])], rule: { type: 'checkbox' } } }),
+        ],
+        [
+            'a validation rule a delete shrinks keeps what is left',
+            deletedRows(2, 3),
+            replace(at('dataValidations', 'v'), { ranges: [range([3, 6]), range([2, 3])], rule: { type: 'checkbox' } }),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 4])], rule: { type: 'checkbox' } }),
+        ],
+        [
+            'a validation rule a delete takes whole drops the entry',
+            deletedRows(2, 3),
+            replace(at('dataValidations', 'v'), { ranges: [range([2, 3])], rule: { type: 'checkbox' } }),
+            null,
+        ],
+        [
+            "a validation rule's removal stays",
+            deletedRows(2, 3),
+            { op: 'remove', path: at('dataValidations', 'v') },
+            { op: 'remove', path: at('dataValidations', 'v') },
         ],
         [
             'a cell below a delete moves up',
@@ -1060,5 +1086,70 @@ describe('shiftEntries', () => {
     test('returns an entry the marker does not touch as it is', () => {
         const entry: History = { patches: [replace(at('data', 1, 1), { v: 1 })], inversePatches: [] };
         expect(shiftEntries([entry], rows(2, 2), sheets, 'undo')[0]).toBe(entry);
+    });
+});
+
+// Each validation rule is written under its own id, so two peers editing different rules keep both edits, and a peer's
+// row op moves an undo's rules with the cells they cover. Columns A and B each hold a list rule over rows 1 to 10.
+describe('validation rules on two tabs and a joiner', () => {
+    const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'a,b', value2: '' };
+    const TICKS: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+    const rules = (t: Tab) => t.ctx.sheets[0].dataValidations;
+    const apply = (row: number[], column: number[], rule: DataVerificationRule) => (ctx: Context) =>
+        applyDataVerification(ctx, { row, column }, rule);
+    const column = (t: Tab, c: number, rows: number) =>
+        Array.from({ length: rows }, (_, r) => validationAt(rules(t), r, c)?.type ?? null);
+    const repeat = (type: string | null, n: number) => Array<string | null>(n).fill(type);
+    function ruled() {
+        const base = workbook();
+        base.sheets[0].dataValidations = {
+            a: { ranges: [{ row: [0, 9], column: [0, 0] }], rule: LIST },
+            b: { ranges: [{ row: [0, 9], column: [1, 1] }], rule: LIST },
+        };
+        return base;
+    }
+
+    test('two peers editing different rules at once keep both edits', () => {
+        const base = ruled();
+        const a = tab(base);
+        const b = tab(base);
+        const fromA = tabEdit(a, apply([0, 1], [0, 0], TICKS));
+        const fromB = tabEdit(b, (ctx) => clearValidations(ctx.sheets[0], { row: [5, 9], column: [1, 1] }));
+        tabReceive(a, fromB);
+        tabReceive(b, fromA);
+        expect(rules(b)).toEqual(rules(a));
+        expect(join(base, [fromA, fromB])[0].dataValidations).toEqual(rules(a));
+        expect(column(a, 0, 4)).toEqual([...repeat('checkbox', 2), ...repeat('dropdown', 2)]);
+        expect(column(a, 1, 10)).toEqual([...repeat('dropdown', 5), ...repeat(null, 5)]);
+    });
+
+    test("an undo after a peer's row insert gives the cut rule its moved cells back, and redo puts the rule back", () => {
+        const s = session(ruled());
+        const applied = [...repeat('dropdown', 6), ...repeat('checkbox', 2), ...repeat('dropdown', 4)];
+        s.edit(s.a, apply([4, 5], [0, 0], TICKS));
+        s.edit(s.b, ...insertRows(2, 2));
+        expect(column(s.a, 0, 12)).toEqual(applied);
+        s.undo(s.a);
+        expect(column(s.a, 0, 13)).toEqual([...repeat('dropdown', 12), null]);
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.redo(s.a);
+        expect(column(s.a, 0, 12)).toEqual(applied);
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+    });
+
+    test('a row delete over a rule moves it on both tabs and the joiner, and its undo brings the rule back', () => {
+        const s = session(ruled());
+        s.edit(s.a, apply([4, 5], [0, 0], TICKS));
+        s.edit(s.a, ...deleteRows(3, 6));
+        expect(column(s.a, 0, 7)).toEqual([...repeat('dropdown', 6), null]);
+        expect(rules(s.b)).toEqual(rules(s.a));
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
+        s.undo(s.a);
+        const restored = [...repeat('dropdown', 4), ...repeat('checkbox', 2), ...repeat('dropdown', 4)];
+        expect(column(s.a, 0, 10)).toEqual(restored);
+        expect(column(s.b, 0, 10)).toEqual(restored);
+        expect(s.joiner()[0].dataValidations).toEqual(rules(s.a));
     });
 });
