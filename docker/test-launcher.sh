@@ -24,7 +24,7 @@
 #   - the group and mode every start gives .env.production and backups/ first, except on Docker Desktop, the line it
 #     prints when other users share the install folder's group, and the mode of a step's log;
 #   - what status passes the CLI about backups/, the files of an unfinished update, the newest build of main, and its
-#     folder;
+#     folder, and the Light backups in backups/ it names;
 #   - the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
 #
 # Usage:  ./docker/test-launcher.sh
@@ -754,6 +754,20 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
+    # A Light backup of 0.4.1 and before, which no restore takes, is named with the command that deletes it.
+    mkdir -p "$FIX/release/backups"
+    light=server-pre-update-light-20260101-000000.tar
+    : >"$FIX/release/backups/$light"
+    : >"$FIX/release/backups/$light.json"
+    : >"$FIX/release/backups/server-manual-full-20260101-000000.tar"
+    launch release status
+    rm -r "$FIX/release/backups"
+    if [ "$CODE" = 0 ] &&
+        printf '%s\n' "$OUT" | grep -qxF "▲  backups/ holds Light backups, which this version of Eigen cannot restore: $light. To delete them and their records: rm backups/server-*-light-*"; then
+        ok "$SHELL_NAME: status names the Light backups in backups/ and how to delete them"
+    else
+        fail "$SHELL_NAME: status with a Light backup: exit $CODE, '$OUT'"
+    fi
     echo ghcr.io/eigen-is/eigen/api@sha256:aaa >"$FIX/channel/.eigen/bundle"
     launch channel status
     rm "$FIX/channel/.eigen/bundle"
@@ -1346,10 +1360,10 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
     fi
-    # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one. A
-    # Light one, which no restore takes, is left out.
-    older="$FIX/release/backups/server-pre-update-full-20251201-000000.tar"
-    newer="$FIX/release/backups/server-pre-update-full-s3-20251202-000000.tar"
+    # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one. They
+    # list newest first by the stamp in the name, whatever their level. A Light one, which no restore takes, is left out.
+    older="$FIX/release/backups/server-pre-update-full-s3-20251201-000000.tar"
+    newer="$FIX/release/backups/server-pre-update-full-20251202-000000.tar"
     light="$FIX/release/backups/server-pre-update-light-20251203-000000.tar"
     : >"$older"
     : >"$newer"
@@ -1454,6 +1468,19 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: rollback after a failed check:$failed"
     fi
+    # A no to the check's question, and a check that stopped without a verdict, as when Docker cannot run the image or
+    # the OOM killer ends it, keep today's data and the way back.
+    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=3 launch release rollback --yes
+    declined_code=$CODE declined_steps=$(steps)
+    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=137 launch release rollback --yes
+    if [ "$declined_code" = 0 ] && [ "$declined_steps" = "restore --check-data --yes ($old)|" ] && [ "$CODE" = 1 ] &&
+        [ "$(steps)" = "restore --check-data --yes ($old)|" ] && [ -e "$FIX/release/.eigen/last-update" ] &&
+        printf '%s
+' "$ERR" | grep -q '■  The check stopped (exit 137); Eigen 0.2.99 (abc1234) runs on as it was.$'; then
+        ok "$SHELL_NAME: rollback whose check is declined, or stops without a verdict, changes nothing"
+    else
+        fail "$SHELL_NAME: rollback after a declined or stopped check: declined exit $declined_code, steps '$declined_steps'; stopped exit $CODE, steps '$(steps)', '$ERR'"
+    fi
     # Cut off after the stop, it starts Eigen again and keeps the way back, so the next rollback below finishes it.
     STUB_RUN_FAIL=bootstrap launch release rollback --yes
     if [ "$CODE" = 1 ] && [ "$(steps)" = "restore --check-data --yes ($old)|stop|configure $old|bootstrap $old|share|up|" ] &&
@@ -1502,24 +1529,17 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     fi
     rm -f "$FIX/release/.eigen/bundle"
     reset_release
-    # A Light backup, which a launcher of 0.4.1 or before made, brings nothing back: a rollback whose check fails, or
-    # that has no pins to check with, refuses and names it, before anything stops.
+    # A Light backup, which only a launcher of 0.4.1 or before made, with no pins after it, brings nothing back: the
+    # rollback refuses and names it before it takes the lock.
     light=server-pre-update-light-20260101-000000.tar
     : >"$FIX/release/backups/$light"
-    printf '%s\n' "$light" EIGEN_REGISTRY=ghcr.io/eigen-is/eigen EIGEN_VERSION=0.2.98 "EIGEN_API_IMAGE=$old" \
-        >"$FIX/release/.eigen/last-update"
-    STUB_RUN_FAIL=--check-data launch release rollback --yes
-    refused_code=$CODE refused_err=$ERR refused_steps=$(steps)
     echo "$light" >"$FIX/release/.eigen/last-update"
     launch release rollback --yes
-    if [ "$refused_code" = 1 ] && [ "$refused_steps" = "restore --check-data --yes ($old)|" ] &&
-        printf '%s\n' "$refused_err" | grep -q "■  backups/$light is a Light backup, which holds no files and no mail to bring back" &&
-        [ "$CODE" = 1 ] && [ -z "$(steps)" ] &&
-        printf '%s\n' "$ERR" | grep -q "■  backups/$light is a Light backup, which holds no files and no mail to bring back" &&
-        [ -e "$FIX/release/.eigen/last-update" ]; then
-        ok "$SHELL_NAME: rollback after a Light backup whose check fails, or with no pins to check with, refuses and names it"
+    if [ "$CODE" = 1 ] && [ -z "$(steps)" ] && [ -e "$FIX/release/.eigen/last-update" ] &&
+        printf '%s\n' "$ERR" | grep -q "■  The last update made a Light backup, backups/$light, which this version of Eigen cannot put back.$"; then
+        ok "$SHELL_NAME: rollback after a Light backup refuses and names it"
     else
-        fail "$SHELL_NAME: rollback after a Light backup: exit $refused_code, steps '$refused_steps', '$refused_err'; without pins exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: rollback after a Light backup: exit $CODE, steps '$(steps)', '$ERR'"
     fi
     rm -f "$FIX/release/backups/$light" "$FIX/release/backups/$full" "$FIX/release/.eigen/last-update"
     reset_release
