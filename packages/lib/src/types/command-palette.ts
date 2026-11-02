@@ -51,23 +51,23 @@ export type PaletteSelectionAction = {
 // The rows a page publishes with its selection, such as Drive's item menu or an open document's File menu.
 export type PaletteSelectionActions = readonly PaletteSelectionAction[] | null;
 
-// The bag command handlers receive. Bundles app-aware navigation + the helpers
-// commands actually need to run their side effects. Other helpers are added when a
-// real caller needs them.
+// What a command's handler receives: navigation that knows which app it runs in, and the helpers the
+// commands need for their side effects. A helper is added here once a command needs it.
 export type CommandContext = {
     ownerId: string;
-    // False on a server that runs without hosted mail — every Mail-flavored command and provider
-    // gates on it, so no palette row leads into an app that isn't there.
+    // False on a server without hosted mail. Every command and source that leads into Mail checks it, so
+    // no palette row leads into an app that isn't there.
     mailEnabled: boolean;
     selection: PaletteSelection;
     selectionActions: PaletteSelectionActions;
-    // The open eigendoc's search controller (published by DocSearchProvider). null in the drive
-    // list and non-eigendoc apps. Drives the palette `doc:` scope; Enter opens the find bar.
+    // The open document's search controller, which DocSearchProvider publishes. It is null where no
+    // document is open, such as in Drive. The palette's doc: scope searches through it, and Enter opens
+    // the find bar.
     docSearch: DocSearchController | null;
-    // The DocSearchProvider's find-bar session; an IN DOCUMENT hit's Enter/click adopts the query
-    // and reveals the match here. null when no eigendoc is open.
+    // The find bar's session in DocSearchProvider. Picking an In document hit hands it the query and
+    // shows the match there. It is null when no document is open.
     docSearchSession: DocSearchSession | null;
-    // Async comment-thread search for the open eigendoc; null when no document publishes it.
+    // The search through the open document's comment threads, null when no document publishes one.
     docCommentSearch: DocCommentSearch;
     navigate: (to: string) => void;
     openDriveCreate: (kind: EigenDocType | 'folder') => void;

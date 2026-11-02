@@ -1,6 +1,6 @@
 // The row wiring every Drive list route shares, such as the folder view or Shared with me: what a row
-// does when it is selected, activated or quick-looked. A route passes only where a folder opens and
-// where a selected row navigates, and hands the handlers to DriveLayout.
+// does when it is selected, activated or quick-looked. A route passes its items and capabilities, where
+// a folder opens and where a selected row navigates, and hands the handlers to DriveLayout.
 
 import { useNavigate } from '@tanstack/react-router';
 import { openDocument } from '@workspace/lib/api';
@@ -15,7 +15,7 @@ type UseDriveListRouteOptions = {
     // The unsorted items backing the list: the fallback preview passes this whole set as siblings.
     items: DrivePath[];
     // The view's own capabilities: the preview's convert rows need somewhere to write.
-    capabilities: Pick<DriveCapabilities, 'canWrite'>;
+    capabilities: DriveCapabilities;
     // Where a folder opens: the folder view, for example, stays in its own route.
     onOpenFolder: (path: DrivePath) => void;
     // Where a single click on a desktop row navigates.

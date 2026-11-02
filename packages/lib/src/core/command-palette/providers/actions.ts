@@ -11,7 +11,7 @@ import { actionBoosts } from '../rank';
 export function useActionResults(ctx: CommandContext, input: string): PaletteResult[] {
     return useMemo(() => {
         const visible = [...allCommands, ...selectionCommands(ctx)].filter(
-            (cmd: Command) => !cmd.availability || cmd.availability(ctx),
+            (cmd) => !cmd.availability || cmd.availability(ctx),
         );
         if (input.trim().length === 0) {
             // The engine routes selection commands to the "Selection" section, always shown when a

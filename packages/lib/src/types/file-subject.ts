@@ -1,20 +1,25 @@
+// The shapes of a file that any surface can act on, such as a Drive item or a mail attachment, and of the
+// file actions offered for it, such as Quick preview or a convert. Builders such as subjectFromPath make a
+// subject, and FILE_ACTIONS lists the actions themselves.
+
 import type { LucideIcon } from 'lucide-react';
 import type { DriveImportSource, DrivePath } from './drive';
 import type { Attachment } from './mail';
 
 // One file a surface can act on, whatever holds it: its identity, and nothing that follows from it.
-// Everything derivable — the key, the name, the mime, the size, the URLs — comes from `subjectInfo`
-// in core/file-subject.ts, so no consumer composes a route by hand and no fact is stored twice.
+// Everything that follows from it, such as the key, the name, the mime type, the size and the URLs, comes
+// from subjectInfo. So no consumer builds a route by hand, and no fact is stored twice.
 export type FileSubject = (
     | { drive: DrivePath; mail?: undefined }
     // The part's own facts ride along: nothing is fetched to name a part or size it.
     | { drive?: undefined; mail: MailPartRef; part: Pick<Attachment, 'contentType' | 'filename' | 'size'> }
 ) & {
-    // A message's or container's attachment, not a file at a Drive location: saved as a set, and
-    // converted only after a save to a folder the user picks (a chat copy sits in a hidden media folder).
+    // An attachment of a message or a container, not a file at a Drive location. It is saved as a set, and
+    // converted only once it is saved to a folder the user picks, since a chat's copy sits in a hidden media
+    // folder.
     attachment?: true;
-    // The viewer cannot write where this file sits (a watched feed), so no row that writes beside it
-    // applies. Set by the surface that holds the file, from its own DriveCapabilities.
+    // The viewer cannot write where this file sits, as in the watched feed, so no row that writes beside it
+    // applies. The surface that holds the file sets it from its own DriveCapabilities.
     readOnly?: true;
 };
 
@@ -50,8 +55,7 @@ export type FileActionId =
     | 'import-mail'
     | 'import-calendar';
 
-// The menu group a file action's row sits in, named as MenuSections names it (docs/LAYOUT.md § Menus draw their rows in
-// one order).
+// The menu group a file action's row sits in, named as MenuSections names it.
 export type FileActionGroup = 'open' | 'convert' | 'output';
 
 export type FileAction = {

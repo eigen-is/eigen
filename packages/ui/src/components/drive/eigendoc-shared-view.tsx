@@ -45,7 +45,7 @@ export function EigenDocSharedView({ config, to, pid, uid, mid, onNavigate, onNa
         data: unfilteredFolderContents = [],
         isLoading,
         error,
-    } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
+    } = useSharedPaths(ownerId, to === 'by-me' ? 'by-me' : 'with-me');
 
     const folderContents = unfilteredFolderContents.filter((path) => path.type === config.type);
 
