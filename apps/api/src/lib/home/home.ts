@@ -87,22 +87,22 @@ export class Home {
         return this._closing;
     }
 
-    public init(autoCreateDefaultMount = false): Promise<this> {
-        return (this.initPromise ??= this.runInit(autoCreateDefaultMount));
+    public init(): Promise<this> {
+        return (this.initPromise ??= this.runInit());
     }
 
-    private async runInit(autoCreateDefaultMount: boolean): Promise<this> {
+    private async runInit(): Promise<this> {
         try {
             // A crash between writing a settings file's staged copy and its rename leaves the copy behind.
             await this.fs
                 .sweepAtomicTemps('.', STALE_TEMP_MAX_AGE_MS)
                 .catch((err) => console.error(`[Home] Sweeping staged files failed for ${this.user.id}:`, err));
-            await time('Home.init.settings', () => this.settings.load());
+            await time('Home.init.settings', () => this.loadSettings());
 
             // allSettled waits for every part. Promise.all would return at the first failure while
             // the other parts are still opening databases and starting timers, and those would leak.
             const results = await Promise.allSettled([
-                time('Home.init.drive', async () => this._drive?.init(autoCreateDefaultMount)),
+                time('Home.init.drive', async () => this._drive?.init()),
                 time('Home.init.contacts', async () => this._contacts?.init()),
                 time('Home.init.mail', async () => this._mail?.init()),
                 time('Home.init.calendar', async () => this._calendar?.init()),
@@ -118,6 +118,11 @@ export class Home {
             await this.close();
             throw err;
         }
+    }
+
+    // A kind of home may fill in missing settings here, before its parts read them.
+    protected async loadSettings(): Promise<void> {
+        await this.settings.load();
     }
 
     // Runs once, however often it is called: closing the same database files twice is unsafe.

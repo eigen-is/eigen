@@ -60,8 +60,8 @@ The auth foundation already fits; all of the following was re-verified against s
   (`../../apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls
   `auth.api.createUser` and signs the user in — it creates *no* Home. The Home, maildir, default
   mount and quota all materialize on the first `getHome(userId)`
-  (`../../apps/api/src/lib/home/get-home.ts` → `UserHome.init()` in `user-home.ts`, which seeds the
-  default mount from server settings and runs `Drive.init(autoCreateDefaultMount)` +
+  (`../../apps/api/src/lib/home/get-home.ts` → `Home.init()`, where `UserHome.loadSettings` seeds the
+  default mount from server settings, then `Drive.init()` +
   `Mail.init()` etc.; quotas are resolved at read time by `resolveUserQuotas`). `getHome` is
   idempotent and concurrent-safe (`createAsyncSingleton` + install-race retry loop). An SSO user
   is therefore provisioned exactly like a waitlist user: on their first authenticated request.

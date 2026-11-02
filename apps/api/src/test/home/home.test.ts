@@ -1,9 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
-import { existsSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { evictHome, getHome } from '../../lib/home/get-home';
+import type { HomeSettings } from '../../lib/home/home';
 import type { TestContext } from '../setup';
 import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
 
@@ -142,5 +143,24 @@ describe('Home init', () => {
         await getHome(user.id);
         expect(existsSync(stale)).toBe(false);
         expect(existsSync(young)).toBe(true);
+    });
+
+    test('a fresh user home saves its default mount in settings.json and opens it', async () => {
+        const user = await createTestUser(`fresh-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Fresh');
+        const home = await getHome(user.id);
+
+        const saved: HomeSettings = JSON.parse(readFileSync(join(getUserHomePath(user.id), 'settings.json'), 'utf8'));
+        expect(saved.mounts?.['default']?.enabled).toBe(true);
+        expect(home.drive.getMountConfig('default').isDefault).toBe(true);
+    });
+
+    test('a default mount switched off in settings.json stays off', async () => {
+        const user = await createTestUser(`mount-off-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Off');
+        const home = await getHome(user.id);
+        await home.settings.set({ mounts: { default: { enabled: false } } });
+        await evictHome(user.id);
+
+        const reopened = await getHome(user.id);
+        expect(reopened.drive.getMounts().map((mount) => mount.config.id)).not.toContain('default');
     });
 });
