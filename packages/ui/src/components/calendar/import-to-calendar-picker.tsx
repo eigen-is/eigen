@@ -14,7 +14,7 @@ import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants/colors';
 import { importSourceOf, subjectInfo } from '@workspace/lib/file-subject';
 import { parseOwnerId } from '@workspace/lib/types';
 import type { CalendarOption } from '@workspace/lib/types/calendar';
-import type { FileSubject } from '@workspace/lib/types/file-subject';
+import type { FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { useState } from 'react';
 import { Button } from '../button';
 import { FormDialog, FormDialogForm } from '../form-dialog';
@@ -36,6 +36,8 @@ type ImportToCalendarPickerProps = {
 export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalendarPickerProps) {
     const preview = useOptionalPreview();
     const fileName = subject ? subjectInfo(subject).name : '';
+    // Null only for a subject with no bytes, such as a folder, which no import row is offered for.
+    const source = subject && importSourceOf(subject);
 
     return (
         <FormDialog
@@ -48,13 +50,13 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
             size="sm"
             abovePreview={preview?.isPreviewOpen}
         >
-            <ImportToCalendarForm subject={subject} fileName={fileName} />
+            {source && <ImportToCalendarForm source={source} fileName={fileName} />}
         </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening asks for the calendars and starts from the defaults.
-function ImportToCalendarForm({ subject, fileName }: { subject: FileSubject | null; fileName: string }) {
+function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; fileName: string }) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const { data: calendars, isError, refetch } = useCalendars(ownerId);
@@ -80,9 +82,6 @@ function ImportToCalendarForm({ subject, fileName }: { subject: FileSubject | nu
     const isNew = target === NEW_CALENDAR;
 
     const handleSubmit = async () => {
-        if (!subject) return;
-        const source = importSourceOf(subject);
-        if (!source) return;
         // A new calendar is always made in the viewer's own home; a team home is only ever written into.
         if (isNew) {
             const color =
@@ -90,8 +89,9 @@ function ImportToCalendarForm({ subject, fileName }: { subject: FileSubject | nu
             await importToCalendar(source, { kind: 'new', name: name.trim(), color });
             return;
         }
+        // The chosen calendar can be gone from a later fetch, such as a team calendar the viewer may no longer write in.
         const chosen = options.find((option) => targetValue(option) === target);
-        if (!chosen) return;
+        if (!chosen) return false;
         await importToCalendar(source, { kind: 'existing', ownerId: chosen.ownerId, calendarId: chosen.id });
     };
 

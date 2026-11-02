@@ -1,9 +1,9 @@
-// The one thing an .ics import needs that the other two do not: a target. What is pinned here is which
-// calendars are offered (the home's own, plus a team calendar the viewer may write in — a calendar shared
-// from another user's home is refused by the import route, so it is not on the list), the file and target the
-// dialog hands `useImportToCalendar`, that a later fetch overwrites no choice, that Enter submits and a failure
-// keeps the dialog open, and that a list that would not load offers a retry rather than loading for ever. Making, filling and unmaking a new calendar is the hook's, pinned in
-// packages/lib (src/test/core/calendar/hooks/use-transfer.test.ts).
+// The one thing an .ics import needs that the other two do not: a target. What is pinned here is which calendars are
+// offered: the home's own, plus a team calendar the viewer may write in. A calendar shared from another user's home is
+// refused by the import route, so it is not on the list. Also pinned: the file and target the dialog hands
+// `useImportToCalendar`, that a later fetch overwrites no choice, that Enter submits, that a failure or a calendar
+// that went away keeps the dialog open, and that a list that would not load offers a retry rather than loading for
+// ever. Making, filling and deleting a new calendar is the hook's, pinned in packages/lib's use-transfer test.
 import { expect, mock, test } from 'bun:test';
 import { importSourceOf, subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
@@ -75,13 +75,17 @@ const sharedCalendars: Shared[] = [
     },
 ];
 // What the hooks answer for the render under test: the list may not have arrived.
-const served: { calendars: Calendar[] | undefined; isError: boolean } = { calendars, isError: false };
+const served: { calendars: Calendar[] | undefined; sharedCalendars: Shared[]; isError: boolean } = {
+    calendars,
+    sharedCalendars,
+    isError: false,
+};
 
 const realCalendarModule = await import('@workspace/lib/calendar');
 mock.module('@workspace/lib/calendar', () => ({
     ...realCalendarModule,
     useCalendars: () => ({ data: served.calendars, isError: served.isError, refetch }),
-    useSharedCalendars: () => ({ data: sharedCalendars }),
+    useSharedCalendars: () => ({ data: served.sharedCalendars }),
     useImportToCalendar: () => ({
         importToCalendar: async (source: unknown, target: Target) => {
             sources.push(source);
@@ -273,6 +277,8 @@ test('Enter in the new calendar’s name imports into a calendar of that name, t
 test('a new calendar with no name cannot be imported, by the button or by Enter', async () => {
     const { button, chooseCalendar, closed, cleanup, enter, typeName } = await open();
     await chooseCalendar('New calendar');
+    await typeName('');
+    expect(button('Import')?.disabled).toBe(true);
     await typeName('   ');
     expect(button('Import')?.disabled).toBe(true);
 
@@ -298,6 +304,19 @@ test('an import that fails keeps the dialog open with the calendar and name stil
     expect(button('Import')?.disabled).toBe(false);
 
     failure = null;
+    await cleanup();
+});
+
+test('a calendar that went away after it was chosen imports nothing and keeps the dialog open', async () => {
+    const { chooseCalendar, click, closed, cleanup, draw } = await open();
+    await chooseCalendar('Marketing');
+
+    served.sharedCalendars = [];
+    await draw();
+    await click('button', 'Import');
+    expect(handed).toEqual([]);
+    expect(closed.count).toBe(0);
+    served.sharedCalendars = sharedCalendars;
     await cleanup();
 });
 
