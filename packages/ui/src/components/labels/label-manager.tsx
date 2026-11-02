@@ -5,6 +5,7 @@ import { useAddLabel, useDeleteLabel, useUpdateLabel } from '@workspace/lib/cont
 import type { Label } from '@workspace/lib/types/label';
 import { Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '../../lib/utils';
 import { SidebarItem } from '../layout/sidebar';
 import { DroppableSidebarItem } from '../layout/sidebar/droppable-sidebar-item';
 import { SidebarSection } from '../layout/sidebar/sidebar-section';
@@ -12,6 +13,10 @@ import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import type { LabelFormValues } from './label-dialog';
 import { LabelDialog } from './label-dialog';
 import type { LabelManagerProps } from './types';
+
+// HOVER_REVEAL_CLASS with the pencil's softer look: 80% on the row's hover and for the keyboard, 100% under the pointer.
+const PENCIL_REVEAL_CLASS =
+    'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-80 group-has-focus-visible:pointer-events-auto group-has-focus-visible:opacity-80 hover:opacity-100 pointer-coarse:pointer-events-auto pointer-coarse:opacity-80';
 
 export function LabelManager({
     labels,
@@ -57,7 +62,7 @@ export function LabelManager({
             >
                 {labels.map((label) => {
                     const editButton = !condensed && (
-                        <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 pointer-coarse:opacity-80">
+                        <div className={cn('editButton absolute right-2', PENCIL_REVEAL_CLASS)}>
                             <TooltipButton
                                 icon={Pencil}
                                 tooltipText="Edit label"

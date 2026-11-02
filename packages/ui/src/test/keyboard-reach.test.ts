@@ -48,6 +48,15 @@ test('a button under opacity-0 is a tab stop, and shows on focus only with a foc
     expect(isShown(ownFocus, { on: ownFocus, by: 'mouse' })).toBe(false);
 });
 
+test('any opacity above 0 shows, and a focus variant may set a partial opacity', () => {
+    expect(isShown(button('<button class="opacity-80">x</button>'))).toBe(true);
+    const partial = button(
+        '<div class="group"><div class="opacity-0 group-has-focus-visible:opacity-80"><button>x</button></div></div>',
+    );
+    expect(isShown(partial)).toBe(false);
+    expect(isShown(partial, { on: partial, by: 'keyboard' })).toBe(true);
+});
+
 test('group-has-focus-visible shows for the keyboard only, and group-focus-within for a mouse click too', () => {
     const keyboardOnly = button(
         '<div class="group"><div class="opacity-0 group-has-focus-visible:opacity-100"><button>x</button></div></div>',
