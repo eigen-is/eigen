@@ -150,6 +150,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodAt: null,
+            running: [],
         };
         const light = ['server-pre-update-light-20260101-000000.tar', 'server-manual-light-20260102-000000.tar'];
         const listing = [...light, `${light[0]}.json`, buildServerArchiveName('manual', 'full', hoursAgo(1))];
