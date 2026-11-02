@@ -51,7 +51,7 @@ export async function packFolder(dir: string, artifactPath: string, onProgress?:
 
 export type ServerArchiveWriter = {
     appendFile(name: string, sourcePath: string): Promise<void>;
-    finish(manifest: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
+    finish(fields: Omit<ServerArchiveManifest, 'entries'>): Promise<ServerArchiveManifest>;
     abort(): Promise<void>;
 };
 
