@@ -1,3 +1,6 @@
+// The header above a list filtered by one label, such as Contacts' label view: the label's color and name, and a
+// pencil that opens LabelDialog to edit or delete it.
+
 import { useDeleteLabel, useUpdateLabel } from '@workspace/lib/contacts';
 import type { Label } from '@workspace/lib/types/label';
 import { Pencil } from 'lucide-react';
@@ -11,41 +14,14 @@ export type LabelFilterHeaderProps = {
 };
 
 export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
-    const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const { mutateAsync: updateLabel } = useUpdateLabel();
     const { mutateAsync: deleteLabel } = useDeleteLabel();
 
     const label = labels.find((l) => l.id === labelId);
+    if (!label) return null;
 
-    const handleEditClick = (label: Label) => {
-        setSelectedLabel(label);
-        setDialogOpen(true);
-    };
-
-    const handleSubmit = async (data: { name: string; color: string }) => {
-        try {
-            if (selectedLabel) {
-                // Edit existing label
-                await updateLabel({
-                    ...selectedLabel,
-                    name: data.name,
-                    color: data.color,
-                });
-            }
-            setDialogOpen(false);
-        } catch {
-            // Mutation's onError handles the toast; keep dialog open for retry
-        }
-    };
-
-    const handleDeleteLabel = async () => {
-        if (!selectedLabel) return;
-        await deleteLabel(selectedLabel.id);
-        setDialogOpen(false);
-    };
-
-    return label ? (
+    return (
         <>
             <div className="flex items-center justify-between h-12 app-gutter-x border-b">
                 <h1 className="text-base font-medium flex items-center gap-2">
@@ -58,17 +34,20 @@ export function LabelFilterHeader({ labels, labelId }: LabelFilterHeaderProps) {
                     size="icon"
                     variant="ghost"
                     className="h-8 w-8"
-                    onClick={() => handleEditClick(label)}
+                    onClick={() => setDialogOpen(true)}
                 />
             </div>
 
             <LabelDialog
                 open={dialogOpen}
                 onOpenChange={setDialogOpen}
-                selectedLabel={selectedLabel}
-                onSubmit={handleSubmit}
-                onDelete={handleDeleteLabel}
+                selectedLabel={label}
+                onSubmit={(data) => updateLabel({ ...label, name: data.name, color: data.color })}
+                onDelete={async () => {
+                    await deleteLabel(label.id);
+                    setDialogOpen(false);
+                }}
             />
         </>
-    ) : null;
+    );
 }
