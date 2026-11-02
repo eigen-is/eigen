@@ -128,6 +128,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: null,
+            running: [],
         };
         try {
             const { stdout } = await runCli(['status', '--services=eigen-api\trunning\thealthy'], {
@@ -150,6 +151,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: hoursAgo(3).toISOString(),
+            running: [],
         });
         expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
     });
@@ -163,6 +165,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: hoursAgo(1).toISOString(),
+            running: [],
         });
         expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
     });
@@ -176,6 +179,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: { ...missed, error: 'bucket refused' },
             warned: null,
             newestGoodFullAt: hoursAgo(5).toISOString(),
+            running: [],
         });
         expect(row).toBe(`▲  Backup       ${missed.name} not uploaded, 5h ago: bucket refused`);
     });
@@ -189,6 +193,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: { ...warned, error: 'Alice, Team Blue' },
             newestGoodFullAt: hoursAgo(29).toISOString(),
+            running: [],
         });
         expect(row).toBe(`▲  Backup       ${warned.name} backed up with warnings, 5h ago: Alice, Team Blue`);
     });
@@ -202,6 +207,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: { ...night, error: 'bucket refused' },
             warned: { ...night, error: 'Alice' },
             newestGoodFullAt: hoursAgo(29).toISOString(),
+            running: [],
         });
         expect(row).toBe(`▲  Backup       ${night.name} not uploaded, 5h ago: bucket refused`);
     });
@@ -214,6 +220,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: hoursAgo(49).toISOString(),
+            running: [],
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(
             `▲  Backup       ${newest.name}, 1h ago, 1.0 KB; no good Full backup in two days`,
@@ -232,6 +239,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: null,
+            running: [],
         });
         expect(running).toBe(`◇  Backup       ${name}, just now, running`);
         const failed = await backupRow({
@@ -241,6 +249,7 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: null,
+            running: [],
         });
         expect(failed).toBe(`▲  Backup       ${name}, just now, failed: no room`);
         const none = await backupRow({
@@ -250,7 +259,60 @@ describe('the Backup row', () => {
             scheduledNotUploaded: null,
             warned: null,
             newestGoodFullAt: null,
+            running: [],
         });
         expect(none).toBe('▲  Backup       none yet; ./eigen backup makes one');
     });
+
+    // The launcher's question before a stop, which it asks again until the answer is empty.
+    test('--running prints the server backup and the uploads that run on one line, and nothing once none does', async () => {
+        const night = archive('scheduled', hoursAgo(0)).name;
+        const before = archive('manual', hoursAgo(5)).name;
+        const ask = async (running: ControlStatus['backup']['running']) => {
+            backup = {
+                scheduleEnabled: true,
+                newest: null,
+                scheduledFailure: null,
+                scheduledNotUploaded: null,
+                warned: null,
+                newestGoodFullAt: null,
+                running,
+            };
+            return runCli(['status', '--running'], { env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET } });
+        };
+        const both = await ask([
+            { kind: 'server-backup', archive: night },
+            { kind: 'upload', archive: before },
+        ]);
+        expect(both).toMatchObject({ code: 0, stderr: '' });
+        expect(both.stdout).toBe(`the server backup ${night} and the upload of ${before}\n`);
+        expect((await ask([{ kind: 'upload', archive: night }])).stdout).toBe(`the upload of ${night}\n`);
+        expect(await ask([])).toMatchObject({ code: 0, stdout: '', stderr: '' });
+    });
+
+    test('--running with Eigen not answering fails, so the launcher can tell it from nothing running', async () => {
+        const { stdout, stderr, code } = await runCli(['status', '--running'], {
+            env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: join(TEST_DATA_DIR, 'none.sock') },
+        });
+        expect(code).toBe(1);
+        expect(stdout).toBe('');
+        expect(stderr).toContain('Eigen is not answering.');
+    });
+
+    // A hung API would otherwise hold every stop, since the control socket sets no timeout of its own.
+    test('--running gives up on a socket that takes the question and never answers', async () => {
+        const hung = Bun.listen({ unix: join(TEST_DATA_DIR, 'hung.sock'), socket: { data: () => {} } });
+        try {
+            const started = Date.now();
+            const { stdout, stderr, code } = await runCli(['status', '--running'], {
+                env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: hung.unix },
+            });
+            expect(code).toBe(1);
+            expect(stdout).toBe('');
+            expect(stderr).toContain('Eigen is not answering.');
+            expect(Date.now() - started).toBeLessThan(12_000);
+        } finally {
+            hung.stop(true);
+        }
+    }, 15_000);
 });

@@ -52,9 +52,12 @@ trap 'rm -rf "$FIX"' EXIT
 # .env.production when it names no release, keeping the registry it names, and a launcher that prints STUB_LAUNCHER on
 # stderr. Compose ps names eigen-api as running unless STUB_RUNNING=0, compose run (the stage) exits STUB_STAGE,
 # compose exec of backup prints archive=STUB_ARCHIVE and exits STUB_EXEC, one of restart-notice --in prints an at= and
-# exits STUB_NOTICE, and one that checksums $EIGEN_ENV_FILE
-# that of STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
-# update-check --level ends its line in \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
+# exits STUB_NOTICE, one of status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=old
+# refuses the flag as the CLI of 0.4.1 does (exit 2) and with STUB_ASK=fail fails as one that is not answering. With
+# STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any other is printed,
+# and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums STUB_MOUNTED, the file
+# eigen-api mounts, or else .env.production. With a -t among a run's arguments, update-check --level ends its line in
+# \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
 # .env.production.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
@@ -91,6 +94,22 @@ case $1 in
                 case " $* " in *" restart-notice --in "*)
                     echo 'at=2026-01-01T00:10:00.000Z'
                     exit "${STUB_NOTICE:-0}"
+                    ;;
+                esac
+                case " $* " in *" status --running "*)
+                    case ${STUB_ASK:-} in
+                        old) echo 'Unknown argument "--running".' >&2; exit 2 ;;
+                        fail) echo '■  Eigen is not answering.' >&2; exit 1 ;;
+                    esac
+                    if [ -n "${STUB_ASKS:-}" ]; then
+                        answer=$(head -n 1 "$STUB_ASKS")
+                        sed 1d "$STUB_ASKS" >"$STUB_ASKS.next" && mv "$STUB_ASKS.next" "$STUB_ASKS"
+                        case $answer in
+                            fail) echo '■  Eigen is not answering.' >&2; exit 1 ;;
+                            '' | -) ;;
+                            *) printf '%s\n' "$answer" ;;
+                        esac
+                    elif [ -n "${STUB_JOBS:-}" ] && [ -f "$STUB_JOBS" ]; then cat "$STUB_JOBS"; fi
                     ;;
                 esac
                 ;;
@@ -229,7 +248,7 @@ launch() {
     for name in STUB_INFO STUB_COMPOSE STUB_FAIL STUB_IMAGE STUB_LATEST STUB_REVISION STUB_LABEL_VERSION \
         STUB_LABEL_REVISION STUB_LABEL_REVISION_DOVECOT STUB_MOVED STUB_DIGEST STUB_RUN_FAIL STUB_CHECKED STUB_LEVEL \
         STUB_SWAP_CUT STUB_SWAP_SLOW STUB_SWAP_KEPT STUB_RUNNING STUB_STAGE STUB_ARCHIVE STUB_EXEC STUB_NOTICE \
-        STUB_MOUNTED; do
+        STUB_MOUNTED STUB_ASK STUB_ASKS STUB_JOBS; do
         if [ -n "${!name+set}" ]; then vars+=("$name=${!name}"); fi
     done
     CODE=0
@@ -340,24 +359,55 @@ update_steps() {
 # A restore's stub swap writes the pins of its archive into .env.production; this puts the fixture's back.
 reset_release() { printf 'DOMAIN=eigen.example.com\nEIGEN_VERSION=0.2.99\n' >"$FIX/release/.env.production"; }
 
-# A server backup's record in local/backups/, and its JSON, with \n escapes, while the backup runs.
-BACKUP_RECORD=$FIX/local/backups/server-scheduled-full-20260101-020000.tar.json
+# What status --running prints while a server backup runs, and while its upload runs after it.
+NIGHT=server-scheduled-full-20260101-020000.tar
+BACKUP_RUNS="the server backup $NIGHT"
+UPLOAD_RUNS="the upload of $NIGHT"
+
+# launch_during_backup <what status --running prints> <args…>: launch in local/ while the API says that runs, until
+# 3 s in.
+launch_during_backup() {
+    printf '%s\n' "$1" >"$FIX/jobs"
+    shift
+    (sleep 3; rm -f "$FIX/jobs") &
+    STUB_JOBS=$FIX/jobs launch local "$@"
+    wait
+}
+
+# launch_asked <answer…> -- <args…>: launch in local/ while status --running answers these in turn (STUB_ASKS).
+launch_asked() {
+    : >"$FIX/asks"
+    while [ "$1" != -- ]; do
+        printf '%s\n' "$1" >>"$FIX/asks"
+        shift
+    done
+    shift
+    STUB_ASKS=$FIX/asks launch local "$@"
+    rm "$FIX/asks"
+}
+
+# asked: how often the last launch asked status --running.
+asked() { printf '%s\n' "$CALLS" | grep -c ' status --running$' || :; }
+
+# An API of 0.4.1 or before cannot be asked, so the launcher reads the record of a server backup in local/backups/: its
+# JSON, with \n escapes, while the backup runs.
+BACKUP_RECORD=$FIX/local/backups/$NIGHT.json
 BACKUP_RUNNING='{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}'
 
-# launch_during_backup <record JSON> <args…>: launch in local/ with that backup record, which ends 3 s in.
-launch_during_backup() {
+# launch_during_old_backup <record JSON> <args…>: launch in local/ on such an API with that record, which ends 3 s in.
+launch_during_old_backup() {
     mkdir -p "$FIX/local/backups"
     printf '%b\n' "$1" >"$BACKUP_RECORD"
     shift
     (sleep 3; rm -f "$BACKUP_RECORD") &
-    launch local "$@"
+    STUB_ASK=old launch local "$@"
     wait
     rm -r "$FIX/local/backups"
 }
 
-# waited_for_backup: the last launch said the server backup ended, then that Eigen stopped.
+# waited_for_backup: the last launch said what of a server backup it waited for, then that Eigen stopped.
 waited_for_backup() {
-    [ "$(printf '%s\n' "$OUT" | grep -o -e 'The server backup ended' -e 'Eigen stopped' | tr '\n' '|')" = 'The server backup ended|Eigen stopped|' ]
+    [ "$(printf '%s\n' "$OUT" | grep -o -e 'Waited for ' -e 'Eigen stopped' | tr '\n' '|')" = 'Waited for |Eigen stopped|' ]
 }
 
 for SHELL_NAME in dash busybox host; do
@@ -733,18 +783,77 @@ for SHELL_NAME in dash busybox host; do
         fail "$SHELL_NAME: stop: exit $CODE, calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     # The stop would kill a server backup that runs, and that night would have none.
-    launch_during_backup "$BACKUP_RUNNING" stop
-    if [ "$CODE" = 0 ] && waited_for_backup; then
-        ok "$SHELL_NAME: stop waits for the server backup that runs to end"
+    launch_during_backup "$BACKUP_RUNS" stop
+    if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$OUT" | grep -qF "Waited for $BACKUP_RUNS to end" &&
+        [ "$(printf '%s\n' "$CALLS" | grep -c ' status --running$')" -gt 1 ]; then
+        ok "$SHELL_NAME: stop asks the API again until the server backup that runs has ended, and names it"
     else
         fail "$SHELL_NAME: stop during a server backup: exit $CODE, '$OUT'"
     fi
     # The upload that follows a backup runs in the API too, and a stop cuts it off before the bucket has the archive.
-    launch_during_backup '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}' stop
-    if [ "$CODE" = 0 ] && waited_for_backup; then
+    launch_during_backup "$UPLOAD_RUNS" stop
+    if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$OUT" | grep -qF "Waited for $UPLOAD_RUNS to end"; then
         ok "$SHELL_NAME: stop waits for the upload of a server backup to end"
     else
         fail "$SHELL_NAME: stop during the upload of a server backup: exit $CODE, '$OUT'"
+    fi
+    # With eigen-api stopped nothing runs a backup, so there is nobody to ask.
+    STUB_RUNNING=0 launch_during_backup "$BACKUP_RUNS" stop
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' && ! printf '%s\n' "$OUT" | grep -q 'Waited' &&
+        ! printf '%s\n' "$CALLS" | grep -q ' status --running$'; then
+        ok "$SHELL_NAME: stop with eigen-api stopped asks nothing and waits for nothing"
+    else
+        fail "$SHELL_NAME: stop with eigen-api stopped: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    # A stop is what an API that does not answer needs, so the launcher says so and does not wait.
+    STUB_ASK=fail launch local stop
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '▲  Eigen did not say whether a server backup runs' &&
+        printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' && [ "$(asked)" = 2 ]; then
+        ok "$SHELL_NAME: stop asks twice, then says so when the API does not answer whether a backup runs, and stops"
+    else
+        fail "$SHELL_NAME: stop with an API that does not answer: exit $CODE, '$OUT', asked $(asked) times"
+    fi
+    # One docker compose exec can fail on a busy host while the API and its backup run on.
+    launch_asked fail - -- stop
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$OUT" | grep -q 'did not say' && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped'; then
+        ok "$SHELL_NAME: stop asks once more when the first ask fails"
+    else
+        fail "$SHELL_NAME: stop past one failed first ask: exit $CODE, '$OUT'"
+    fi
+    launch_asked "$BACKUP_RUNS" "$BACKUP_RUNS" fail "$BACKUP_RUNS" - -- stop
+    if [ "$CODE" = 0 ] && waited_for_backup && ! printf '%s\n' "$OUT" | grep -q 'did not say' && [ "$(asked)" -ge 5 ]; then
+        ok "$SHELL_NAME: stop waits on past one failed ask until the server backup has ended"
+    else
+        fail "$SHELL_NAME: stop past a failed ask in the wait: exit $CODE, '$OUT', asked $(asked) times"
+    fi
+    launch_asked "$BACKUP_RUNS" fail fail fail fail -- stop
+    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '▲  Eigen did not say whether a server backup runs' &&
+        printf '%s\n' "$ERR" | grep -q '■  Eigen stopped answering' && printf '%s\n' "$OUT" | grep -q '◇  Eigen stopped' &&
+        [ "$(asked)" = 4 ]; then
+        ok "$SHELL_NAME: stop gives up the wait after three failed asks in a row, says so, and stops"
+    else
+        fail "$SHELL_NAME: stop with an API that stops answering in the wait: exit $CODE, '$OUT', '$ERR', asked $(asked) times"
+    fi
+    # The upload starts as the backup ends, and the last line names what the stop waited for last. The wait sees the
+    # change, and before_stop asks once more for what to wait for next.
+    launch_asked "$BACKUP_RUNS" "$UPLOAD_RUNS" "$UPLOAD_RUNS" - -- stop
+    if [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | grep 'Waited for ' | tail -n 1)" = "◇  Waited for $UPLOAD_RUNS to end" ]; then
+        ok "$SHELL_NAME: stop names the upload it waited for after the server backup"
+    else
+        fail "$SHELL_NAME: stop during a backup and then its upload: exit $CODE, '$OUT'"
+    fi
+    # An update stops the old API with the new launcher, and an API of 0.4.1 or before has no status --running.
+    launch_during_old_backup "$BACKUP_RUNNING" stop
+    if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$OUT" | grep -qF "Waited for $BACKUP_RUNS to end"; then
+        ok "$SHELL_NAME: stop on an API of 0.4.1 waits while the record of its server backup says it runs"
+    else
+        fail "$SHELL_NAME: stop during a server backup of an API of 0.4.1: exit $CODE, '$OUT'"
+    fi
+    launch_during_old_backup '{\n  "state": "done",\n  "upload": {\n    "state": "running"\n  }\n}' stop
+    if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$OUT" | grep -qF "Waited for $UPLOAD_RUNS to end"; then
+        ok "$SHELL_NAME: stop on an API of 0.4.1 waits while the record says its upload runs"
+    else
+        fail "$SHELL_NAME: stop during an upload of an API of 0.4.1: exit $CODE, '$OUT'"
     fi
 
     mkdir -p "$FIX/release/backups" "$FIX/release/.eigen" "$FIX/channel/.eigen"
@@ -1034,12 +1143,11 @@ for SHELL_NAME in dash busybox host; do
     fi
     rm "$FIX/release/.eigen/last-update"
     # The stop is armed only after the wait for a running server backup, so an interrupt there leaves Eigen running.
-    mkdir -p "$FIX/release/data" "$FIX/release/backups"
-    printf '{\n  "state": "running",\n  "startedAt": "2026-01-01T02:00:00.000Z"\n}\n' \
-        >"$FIX/release/backups/server-scheduled-full-20260101-020000.tar.json"
-    LAUNCH_TERM='ps --status running --services' STUB_DIGEST=ddd \
+    mkdir -p "$FIX/release/data"
+    printf '%s\n' "$BACKUP_RUNS" >"$FIX/jobs"
+    LAUNCH_TERM=' status --running' STUB_JOBS=$FIX/jobs STUB_DIGEST=ddd \
         launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
-    rm -r "$FIX/release/data" "$FIX/release/backups"
+    rm -r "$FIX/release/data" "$FIX/jobs"
     if [ "$CODE" = 130 ] && ! printf '%s\n' "$CALLS" | grep -Eq ' (stop|up -d --wait)$| configure --backfill$' &&
         [ ! -e "$FIX/release/.eigen/lock" ] && [ ! -e "$FIX/release/.eigen/last-update" ]; then
         ok "$SHELL_NAME: an interrupt while an update waits for a running server backup neither stops nor restarts Eigen, nor writes .env.production"
@@ -1076,24 +1184,24 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: a restore does not share .env.production before the start: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
-    # The stop would kill a server backup that runs, so it waits for its record to end.
-    launch_during_backup "$BACKUP_RUNNING" restore "$ARCHIVE" --yes
+    # The stop would kill a server backup that runs, so it waits for it to end.
+    launch_during_backup "$BACKUP_RUNS" restore "$ARCHIVE" --yes
     if [ "$CODE" = 0 ] && waited_for_backup && printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
         ok "$SHELL_NAME: a restore waits for the server backup that runs to end before it stops Eigen"
     else
         fail "$SHELL_NAME: a restore during a server backup: exit $CODE, '$OUT', steps '$(steps)'"
     fi
-    # A record whose end was never written, as on a full disk, stays running with no job behind it.
+    # An API of 0.4.1 keeps a record whose end was never written, as on a full disk, running with no job behind it.
     mkdir -p "$FIX/local/backups"
     printf '%b\n' "$BACKUP_RUNNING" >"$BACKUP_RECORD"
     touch -t 202601010200 "$BACKUP_RECORD"
-    launch local restore "$ARCHIVE" --yes
+    STUB_ASK=old launch local restore "$ARCHIVE" --yes
     rm -r "$FIX/local/backups"
-    if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q 'looks stale' &&
+    if [ "$CODE" = 0 ] && ! printf '%s\n' "$OUT" | grep -q 'Waited' &&
         printf '%s\n' "$(steps)" | grep -q '|stop|restore --swap'; then
-        ok "$SHELL_NAME: a restore goes on past a server backup record that stayed running for over a day"
+        ok "$SHELL_NAME: a restore on an API of 0.4.1 goes on past a record that has said running for over a day"
     else
-        fail "$SHELL_NAME: a restore past a stale server backup record: exit $CODE, '$OUT', steps '$(steps)'"
+        fail "$SHELL_NAME: a restore past a stale record of an API of 0.4.1: exit $CODE, '$OUT', steps '$(steps)'"
     fi
     STUB_FAIL=compose-run launch local restore "$ARCHIVE" --yes
     if [ "$CODE" = 1 ] && [ "$(steps)" = "share|stage eigen-api restore $ARCHIVE --stage --yes|rm data/.restoring|" ] &&

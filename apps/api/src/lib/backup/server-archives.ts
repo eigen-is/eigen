@@ -16,18 +16,17 @@ import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { alertOwner } from '../user/alert-owner';
-import { listBackupJobs, runningJobOn } from './jobs';
+import { ARCHIVE_MODE } from './archive';
+import { isServerJob, listBackupJobs, runningJobOn } from './jobs';
 import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath, writeRecord } from './paths';
 import type { RetentionCandidate } from './retention';
 import { pruneServerArchives } from './retention';
 
 const INTERRUPTED = 'interrupted by a restart';
 
-// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. 0640 would lock the
-// operator out: the rename keeps the group the file got in the staging folder, and that is the API's group, not
-// the operator's. The backups folder is what keeps other users of the host away from it.
+// For the API's user alone, like the archive: it names every home the archive holds.
 export function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
-    return writeRecord(serverSidecarPath(archivePath), sidecar);
+    return writeRecord(serverSidecarPath(archivePath), sidecar, ARCHIVE_MODE);
 }
 
 // Null when there is none, or none that reads: nothing is judged or deleted on a record nobody can read.
@@ -83,6 +82,8 @@ export type ServerBackupStatus = {
     // The newest scheduled archive or the newest archive, when it was backed up with warnings; `error` names the homes.
     warned: ArchiveLine | null;
     newestGoodFullAt: string | null;
+    // The server backup and the uploads that run now, from the job list: what ./eigen waits for before a stop.
+    running: { kind: 'server-backup' | 'upload'; archive: string }[];
 };
 
 export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
@@ -92,11 +93,11 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     const goodFull = archives.find((archive) => archive.level !== 'light' && isGood(archive.record));
     const warned = [scheduled, newest].find((archive) => archive?.record?.state === 'done' && !isGood(archive.record));
     const { schedule, upload } = getServerSettings().backups;
+    const jobs = listBackupJobs();
     const notUploaded =
         scheduled &&
         (scheduled.record?.upload?.state === 'failed' ||
-            (!scheduled.record?.upload &&
-                canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs: listBackupJobs() })));
+            (!scheduled.record?.upload && canUploadServerArchive(scheduled, { uploadEnabled: upload.enabled, jobs })));
     return {
         scheduleEnabled: schedule.enabled,
         newest: newest
@@ -114,6 +115,9 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
               )
             : null,
         newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
+        running: jobs.flatMap(({ kind, state, artifact }) =>
+            state === 'running' && isServerJob(kind) && artifact ? [{ kind, archive: artifact }] : [],
+        ),
     };
 }
 

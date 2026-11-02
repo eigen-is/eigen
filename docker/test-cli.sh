@@ -303,14 +303,15 @@ case $ARCHIVE in
     server-manual-full-*.tar) ok "it is a manual Full archive" ;;
     *) fail "the archive is named '$ARCHIVE'" ;;
 esac
-# ./eigen reads the record to tell whether a backup runs, as the operator, whose group is not the API's.
+# The record names every home, so like the archive it is the API's user's alone: ./eigen asks the API what runs.
 if [ "$HOST_OS" = 'Docker Desktop' ]; then
     skip "who reads the record of $ARCHIVE: Docker Desktop shows every file as the container user's"
-elif as_user "$OPERATOR" grep -q '"state": "done"' "$INSTALL/backups/$ARCHIVE.json" &&
+elif as_user "$OPERATOR" ls "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1 &&
+    ! as_user "$OPERATOR" cat "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1 &&
     ! as_user "$STRANGER" cat "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1; then
-    ok "the operator reads the record of $ARCHIVE, and another user of the host does not"
+    ok "the operator lists the record of $ARCHIVE and reads it no more than another user of the host"
 else
-    fail "the record of $ARCHIVE: $(owner_mode "$INSTALL/backups/$ARCHIVE.json"), the operator cannot read it or uid ${STRANGER%%:*} can"
+    fail "the record of $ARCHIVE: $(owner_mode "$INSTALL/backups/$ARCHIVE.json"), the operator cannot list it or someone reads it"
 fi
 eigen backup --light --s3
 if [ "$CODE" = 2 ] && says 'A light backup holds no files, so it takes no --s3.'; then
@@ -520,10 +521,12 @@ header "./eigen stop, and with Eigen stopped"
 eigen stop
 show
 running=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT")
-if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ]; then
-    ok "./eigen stop stops every container of the project"
+# The API of this build answers status --running, so the stop does not go on blind.
+if [ "$CODE" = 0 ] && says '◇  Eigen stopped' && [ -z "$running" ] &&
+    ! says 'did not say whether a server backup runs'; then
+    ok "./eigen stop asks the API whether a server backup runs, and stops every container of the project"
 else
-    fail "./eigen stop: exit $CODE, still running: $running"
+    fail "./eigen stop: exit $CODE, still running: $running, output: $(printf '%s' "$OUT" | tr '\n' ' ')"
 fi
 eigen status
 show

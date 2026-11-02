@@ -100,9 +100,9 @@ describe('Backup boot', () => {
         }
     });
 
-    // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode. ./eigen reads a server
-    // archive's sidecar as the operator, so that one stays as it is.
-    test('the boot closes the home archives and home sidecars an older build left readable', async () => {
+    // A build before 0.4.1 wrote a home archive and its sidecar with the umask's mode, and one before 0.4.2 a server
+    // archive's sidecar.
+    test('the boot closes the archives and sidecars an older build left readable', async () => {
         const dir = join(TEST_DATA_DIR, 'backups-modes');
         const at = new Date('2026-10-01T12:00:00Z');
         const archive = join(dir, buildArtifactName('bootmodesAAAAAAAAAAAAAAAAAAAAAAA', at));
@@ -123,8 +123,9 @@ describe('Backup boot', () => {
         try {
             await recoverBackupsAfterRestart();
             const modeOf = (file: string) => statSync(file).mode & 0o777;
-            expect([archive, sidecarPath(archive), orphanSidecar].map(modeOf)).toEqual([0o600, 0o600, 0o600]);
-            expect(modeOf(serverSidecar)).toBe(0o644);
+            expect([archive, sidecarPath(archive), orphanSidecar, serverSidecar].map(modeOf)).toEqual([
+                0o600, 0o600, 0o600, 0o600,
+            ]);
             expect(modeOf(elsewhere)).toBe(0o644);
         } finally {
             if (previous === undefined) delete process.env['EIGEN_BACKUPS_DIR'];

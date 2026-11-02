@@ -1,20 +1,20 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
-import type { BackupJob, BackupReason, ServerArchiveSidecar } from '@workspace/lib/types/backup';
+import type { BackupJob, BackupReason } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
-import { drainBackupJobs, getBackupJob } from '../../lib/backup/jobs';
+import { drainBackupJobs, getBackupJob, listBackupJobs } from '../../lib/backup/jobs';
 import {
     BUCKET_PARTIAL_SUFFIX,
     buildServerArchiveName,
     getBackupsDir,
     serverSidecarPath,
 } from '../../lib/backup/paths';
-import * as serverArchives from '../../lib/backup/server-archives';
 import { readServerSidecar } from '../../lib/backup/server-archives';
 import { startServerBackup } from '../../lib/backup/server-job';
 import * as upload from '../../lib/backup/upload';
 import { backupKey, checkBackupDestination, uploadServerArchive } from '../../lib/backup/upload';
+import * as uploadJob from '../../lib/backup/upload-job';
 import { getDataRoot, PATHS, USER_HOMES_DIR } from '../../lib/config/paths';
 import { getDomain } from '../../lib/config/server-config';
 import { updateServerSettings } from '../../lib/config/server-settings';
@@ -31,6 +31,7 @@ import { findOrFail, getTestContext } from '../setup';
 import { TEST_DATA_DIR } from '../test-env';
 import {
     alertTitlesTo,
+    holdCaptures,
     removeServerRecords,
     serverManifestOf,
     waitForJob,
@@ -383,26 +384,66 @@ describe('Upload of server archives', () => {
             JOB_TIMEOUT_MS,
         );
 
-        // ./eigen stop waits while a record says running, so the upload must say so before the backup stops saying it.
+        // ./eigen stop waits while the status names a server backup or an upload that runs.
         test(
-            'the record the backup ends with already says its upload runs',
+            'the status names the server backup that runs, then its upload, and nothing once both ended',
             async () => {
                 await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
-                const written: ServerArchiveSidecar[] = [];
-                const write = serverArchives.writeServerSidecar;
-                const writes = spyOn(serverArchives, 'writeServerSidecar').mockImplementation((archivePath, record) => {
-                    written.push(structuredClone(record));
-                    return write(archivePath, record);
+                const running = async () => (await getServerStatus()).backup.running;
+                const captures = holdCaptures();
+                const gate = Promise.withResolvers<void>();
+                const real = upload.uploadServerArchive;
+                let calls = 0;
+                const held = spyOn(upload, 'uploadServerArchive').mockImplementation(async (...args) => {
+                    calls++;
+                    await gate.promise;
+                    return real(...args);
                 });
-                let job: BackupJob;
                 try {
-                    job = await waitForJob((await startServerBackup({ level: 'light', reason: 'manual' })).id);
+                    expect(await running()).toEqual([]);
+                    const started = await startServerBackup({ level: 'light', reason: 'manual' });
+                    const archive = started.artifact;
+                    if (!archive) throw new Error('the backup names no archive');
+                    expect(await running()).toEqual([{ kind: 'server-backup', archive }]);
+                    captures.release();
+                    const job = await waitForJob(started.id);
+                    await waitFor(() => calls === 1, 10_000);
+                    expect(await running()).toEqual([{ kind: 'upload', archive }]);
+                    gate.resolve();
+                    expect((await uploadOf(job)).state).toBe('done');
+                    expect(await running()).toEqual([]);
+                } finally {
+                    gate.resolve();
+                    captures.restore();
+                    held.mockRestore();
+                }
+            },
+            JOB_TIMEOUT_MS,
+        );
+
+        test(
+            'the upload starts while its backup still runs, so the status never names neither',
+            async () => {
+                await updateServerSettings({ backups: { upload: { enabled: true, s3: bucket, keep: 30 } } });
+                const real = uploadJob.startUploadJob;
+                const backupStates: BackupJob['state'][] = [];
+                const starts = spyOn(uploadJob, 'startUploadJob').mockImplementation((archivePath, startedBy) => {
+                    const uploading = real(archivePath, startedBy);
+                    const name = basename(archivePath);
+                    const backup = findOrFail(
+                        listBackupJobs(),
+                        (job) => job.kind === 'server-backup' && job.artifact === name,
+                    );
+                    backupStates.push(backup.state);
+                    return uploading;
+                });
+                try {
+                    const job = await waitForJob((await startServerBackup({ level: 'light', reason: 'manual' })).id);
                     expect((await uploadOf(job)).state).toBe('done');
                 } finally {
-                    writes.mockRestore();
+                    starts.mockRestore();
                 }
-                const ended = findOrFail(written, (record) => record.state === 'done');
-                expect(ended.upload).toMatchObject({ state: 'running', key: own(job.artifact!) });
+                expect(backupStates).toEqual(['running']);
             },
             JOB_TIMEOUT_MS,
         );
