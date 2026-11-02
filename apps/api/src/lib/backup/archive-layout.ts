@@ -80,8 +80,7 @@ const CONTAINER_DATA_DB = 'data.db';
 const CONTAINER_COMMENTS_DB = 'comments.db';
 const CONTAINER_DB_NAMES = new Set([CONTAINER_DATA_DB, CONTAINER_COMMENTS_DB]);
 
-// Every schema a container's databases carry, which a Light backup leaves out. A release that migrates one is marked
-// (full backup) in the changelog, and the release check on a version tag holds it to that.
+// Every schema a container's databases carry, which a Light backup leaves out.
 export const CONTAINER_DB_CONFIGS = {
     collab: COLLAB_DB_CONFIG,
     chat: CHAT_ROOM_DB_CONFIG,

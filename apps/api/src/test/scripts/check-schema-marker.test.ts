@@ -1,9 +1,12 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { CONTAINER_DB_CONFIGS } from '../../lib/backup/archive-layout';
+import { CONTAINER_DB_CONFIGS, HOME_DATABASES } from '../../lib/backup/archive-layout';
+import { MOUNT_DB_CONFIG } from '../../lib/mount/db-config';
+import { SHARE_REGISTRY_DB_CONFIG } from '../../lib/share/db-config';
+import { WAITLIST_DB_CONFIG } from '../../lib/waitlist/db-config';
 import {
-    containerDbMarkerError,
-    containerDbVersionsAt,
     previousRelease,
+    schemaMarkerError,
+    schemaVersionsAt,
     shallowCloneError,
 } from '../../scripts/check-schema-marker';
 
@@ -27,7 +30,7 @@ A fix.
 const marked = CHANGELOG.replace('- **Comments** — a new column', '- **Comments (full backup)** — a new column');
 const before = new Map([
     ['collab', 1],
-    ['chatroom', 2],
+    ['mail', 2],
     ['comment-index', 5],
 ]);
 const unmoved = [...before].map(([name, currentVersion]) => ({ name, currentVersion }));
@@ -50,43 +53,53 @@ describe('previousRelease', () => {
     });
 });
 
-describe('containerDbMarkerError', () => {
-    test('a container database moved without the marker fails, naming it, its versions and the marker', () => {
-        const error = containerDbMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, moved);
+describe('schemaMarkerError', () => {
+    test('a database moved without the marker fails, naming it, its versions and the marker', () => {
+        const error = schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, moved);
         expect(error).toContain('comment-index 5 → 6');
         expect(error).toContain('(full backup)');
-        expect(error).not.toContain('chatroom');
+        expect(error).not.toContain('mail');
+    });
+
+    test('a database a Light backup holds counts too: the build before cannot open it either', () => {
+        const mail = unmoved.map((db) => (db.name === 'mail' ? { ...db, currentVersion: 3 } : db));
+        expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, mail)).toContain('mail 2 → 3');
     });
 
     test('a move with the marker in the release section passes', () => {
-        expect(containerDbMarkerError(marked, '0.3.2', '0.3.3', before, moved)).toBeNull();
+        expect(schemaMarkerError(marked, '0.3.2', '0.3.3', before, moved)).toBeNull();
     });
 
     test('nothing moved passes without the marker, and a database new since the previous release is no move', () => {
-        expect(containerDbMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, unmoved)).toBeNull();
+        expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, unmoved)).toBeNull();
         const added = [...unmoved, { name: 'whiteboard', currentVersion: 3 }];
-        expect(containerDbMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, added)).toBeNull();
+        expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, added)).toBeNull();
     });
 
     test('a marker under [Unreleased] or under the previous release does not count', () => {
-        expect(containerDbMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, moved)).not.toBeNull();
+        expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, moved)).not.toBeNull();
     });
 
     test('on main, a move since the release it runs on passes with the marker under [Unreleased] and fails without', () => {
-        expect(containerDbMarkerError(CHANGELOG, '0.3.3', '0.3.3', before, moved, true)).toBeNull();
+        expect(schemaMarkerError(CHANGELOG, '0.3.3', '0.3.3', before, moved, true)).toBeNull();
         const unmarked = CHANGELOG.replace('**Chat (full backup)**', '**Chat**');
-        const error = containerDbMarkerError(unmarked, '0.3.3', '0.3.3', before, moved, true);
+        const error = schemaMarkerError(unmarked, '0.3.3', '0.3.3', before, moved, true);
         expect(error).toContain('comment-index 5 → 6');
         expect(error).toContain('under ## [Unreleased]');
     });
 });
 
-describe('containerDbVersionsAt', () => {
-    test("reads at HEAD the versions the configs declare, so the git grep and the regex follow the files' shape", () => {
-        const declared = new Map(
-            Object.values(CONTAINER_DB_CONFIGS).map(({ name, currentVersion }) => [name, currentVersion]),
-        );
-        expect(containerDbVersionsAt('HEAD')).toEqual(declared);
+describe('schemaVersionsAt', () => {
+    test("reads at HEAD the version of every database config, so the git grep and the regex follow the files' shape", () => {
+        const configs = [
+            ...HOME_DATABASES.map(([config]) => config),
+            ...Object.values(CONTAINER_DB_CONFIGS),
+            MOUNT_DB_CONFIG,
+            SHARE_REGISTRY_DB_CONFIG,
+            WAITLIST_DB_CONFIG,
+        ];
+        const declared = new Map(configs.map(({ name, currentVersion }) => [name, currentVersion]));
+        expect(schemaVersionsAt('HEAD')).toEqual(declared);
     });
 });
 
