@@ -50,12 +50,21 @@ describe('checkDatabases', () => {
         await expect(check(text)).rejects.toBeInstanceOf(UnopenableDatabaseError);
 
         // A rollback reads this as a check that could not run, so it keeps today's data rather than put a backup back.
-        // The lock outlasts both waits: the one for the schema stamp, then the one for the quick_check.
         const busy = stampedDatabase('busy.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
-        const lock = await holdLock(busy, 12_000);
+        const lock = await holdLock(busy, 7000);
         const error = await check(busy).catch((caught: unknown) => caught);
         expect(error).toBeInstanceOf(Error);
         expect(error).not.toBeInstanceOf(UnopenableDatabaseError);
+        expect(await lock.exited).toBe(0);
+    }, 30_000);
+
+    // The stamp and the quick_check are read on one open, so a lock that outlasts the wait for the stamp fails the
+    // check there. It must not read as version 0 and let a newer database through once the lock is gone.
+    test('a newer database whose writer outlasts one wait is not passed', async () => {
+        const newer = stampedDatabase('newer-busy.db', SHARE_REGISTRY_DB_CONFIG.currentVersion + 1);
+        const lock = await holdLock(newer, 7000);
+        const checked = checkDatabases([{ filePath: newer, config: SHARE_REGISTRY_DB_CONFIG }]);
+        await expect(checked).rejects.toThrow();
         expect(await lock.exited).toBe(0);
     }, 30_000);
 

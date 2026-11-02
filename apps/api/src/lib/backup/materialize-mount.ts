@@ -35,8 +35,8 @@ export type VersionedDatabase = { filePath: string; config: DatabaseConfig<Schem
 // not read, which says nothing of the data.
 export class UnopenableDatabaseError extends ApiError {}
 
-// How many databases checkDatabases opens before it gives the event loop back.
-const DATABASES_PER_YIELD = 50;
+// How many databases a check opens before it gives the event loop back, here and in verifyFolder.
+export const DATABASES_PER_YIELD = 50;
 // How many files materializeMount puts in place in one transaction before it gives the event loop back.
 const FILES_PER_BATCH = 500;
 
@@ -139,7 +139,8 @@ export async function materializeMount(
 
 // Refuses a home folder still in the archive's layout that materializeMount could not put back or this server could
 // not open. A per-home restore runs it on the unpacked archive while the home still serves, so a refusal costs nobody
-// a page. In that layout every document database of a mount is at its archive path, an s3 mount's included.
+// a page. In that layout every document database of a mount is at its archive path, an s3 mount's included. The
+// restore runs it right after verifyFolder, which ran SQLite's check on the same bytes, so only the stamps are read.
 export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mounts']): Promise<void> {
     const containerDatabases: VersionedDatabase[] = [];
     for (const summary of mounts) {
@@ -160,6 +161,7 @@ export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest[
         homeDir,
         mounts.map((summary) => summary.id),
         containerDatabases,
+        { verified: true },
     );
 }
 
@@ -168,10 +170,12 @@ export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest[
 // quick_check and is then refused by ManagedDatabase's forward-version guard, which fails the whole
 // home on the next load, long after the job said it was done. It opens the files directly, never through a home: the
 // folder a restore checks is not the home's folder yet, and a rollback's check runs in another process than the API.
+// `verified` says verifyFolder already ran SQLite's check on these bytes, so only the stamps are read.
 export async function checkRestoredDatabases(
     homeDir: string,
     mountIds: readonly string[],
     containerDatabases: readonly VersionedDatabase[],
+    { verified = false }: { verified?: boolean } = {},
 ): Promise<void> {
     const targets: VersionedDatabase[] = HOME_DATABASES.map(([config, relPath]) => ({
         filePath: path.join(homeDir, relPath),
@@ -185,46 +189,40 @@ export async function checkRestoredDatabases(
     // every one at its path in the unpacked archive, an s3 mount's included. The server stage passes none for an s3
     // mount, whose copies are staged for the bucket, and refuses an archive of a newer Eigen outright instead.
     targets.push(...containerDatabases);
-    await checkDatabases(targets);
+    await checkDatabases(targets, { verified });
 }
 
 // The same verdict on any databases, such as the server's own. One that is not there is skipped. A home can hold tens
 // of thousands of document databases, and each open blocks the thread. The API runs this for a restore, so it lets
 // other requests run between every few databases.
-export async function checkDatabases(targets: readonly VersionedDatabase[]): Promise<void> {
-    for (const [index, target] of targets.entries()) {
+export async function checkDatabases(
+    targets: readonly VersionedDatabase[],
+    { verified = false }: { verified?: boolean } = {},
+): Promise<void> {
+    for (const [index, { filePath, config }] of targets.entries()) {
         if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
-        if (!fs.existsSync(target.filePath)) continue;
-        const version = schemaVersionOf(target.filePath);
-        if (version > target.config.currentVersion) {
-            throw new UnopenableDatabaseError(
-                400,
-                `${target.filePath} is at ${target.config.name} schema v${version}, newer than this server ` +
-                    `supports (v${target.config.currentVersion}) — restore it on a server at least as new`,
-            );
-        }
-        const verdict = quickCheck(target.filePath);
+        if (!fs.existsSync(filePath)) continue;
+        // One open for both reads, so a writer is waited out once.
+        const verdict = readToJudge(filePath, (db) => {
+            const version = readSchemaVersion(db);
+            if (version > config.currentVersion) {
+                throw new UnopenableDatabaseError(
+                    400,
+                    `${filePath} is at ${config.name} schema v${version}, newer than this server ` +
+                        `supports (v${config.currentVersion}) — restore it on a server at least as new`,
+                );
+            }
+            return verified ? 'ok' : readQuickCheck(db);
+        });
         if (verdict !== 'ok') {
-            throw new UnopenableDatabaseError(500, `${target.filePath} did not survive the restore: ${verdict}`);
+            throw new UnopenableDatabaseError(500, `${filePath} did not survive the restore: ${verdict}`);
         }
     }
 }
 
-// SQLite's verdict on the pages of a database that is there. A file that is no database, or one too damaged to answer,
-// makes SQLite throw rather than answer, and that is a verdict too. Any other error, such as a lock held longer than
-// openToCheck waits, is not one, and goes on to the caller.
+// SQLite's verdict on the pages of a database that is there.
 export function quickCheck(filePath: string): string {
-    let db: Database | undefined;
-    try {
-        db = openToCheck(filePath);
-        return db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
-    } catch (error) {
-        const code = errnoOf(error) ?? '';
-        if (code === 'SQLITE_NOTADB' || code.startsWith('SQLITE_CORRUPT')) return describeError(error);
-        throw error;
-    } finally {
-        db?.close();
-    }
+    return readToJudge(filePath, readQuickCheck);
 }
 
 // Every restore starts the trash of each restored mount over at `now`, in seconds as trashPath writes it. Whoever
@@ -310,7 +308,7 @@ function requireMaterializable(homeDir: string, summary: BackupManifest['mounts'
     if (summary.storageType !== 's3') return metadataPath;
     // The pending rows materializeMount writes need the `isDatabase` column: without it every restored file would
     // later be dropped as a corrupt staged copy.
-    const metadataVersion = schemaVersionOf(metadataPath);
+    const metadataVersion = readStamp(metadataPath);
     if (metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
         throw new ApiError(
             400,
@@ -321,19 +319,47 @@ function requireMaterializable(homeDir: string, summary: BackupManifest['mounts'
     return metadataPath;
 }
 
-// A database with no stamp, or one that does not open, reads as 0, which ManagedDatabase takes as "never migrated".
-// The quick_check after it names the failure.
-function schemaVersionOf(filePath: string): number {
-    let db: Database | null = null;
+// Runs `read` on one open of a database that is there. A file that is no database, or one too damaged to answer,
+// makes SQLite throw rather than answer, and that is a verdict too: it comes back as what SQLite said. Any other
+// error, such as a lock held longer than openToCheck waits, is not one, and goes on to the caller.
+function readToJudge(filePath: string, read: (db: Database) => string): string {
+    let db: Database | undefined;
     try {
         db = openToCheck(filePath);
-        const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
-        return row?.version ?? 0;
-    } catch {
-        return 0;
+        return read(db);
+    } catch (error) {
+        const code = errnoOf(error) ?? '';
+        if (code === 'SQLITE_NOTADB' || code.startsWith('SQLITE_CORRUPT')) return describeError(error);
+        throw error;
     } finally {
         db?.close();
     }
+}
+
+// The schema stamp of a database that is there. One SQLite cannot read is refused by name.
+function readStamp(filePath: string): number {
+    let version = 0;
+    const verdict = readToJudge(filePath, (db) => {
+        version = readSchemaVersion(db);
+        return 'ok';
+    });
+    if (verdict !== 'ok') throw new UnopenableDatabaseError(500, `${filePath} does not open: ${verdict}`);
+    return version;
+}
+
+function readQuickCheck(db: Database): string {
+    return db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
+}
+
+// A database with no stamp reads as 0, which ManagedDatabase takes as "never migrated".
+function readSchemaVersion(db: Database): number {
+    const stamped = db
+        .query<{ found: number }, []>(
+            "SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = '__schema_version'",
+        )
+        .get();
+    if (!stamped) return 0;
+    return db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get()?.version ?? 0;
 }
 
 // Verify refuses a paths table that could leave its mount (checkArchivedPathRows). This second guard resolves every

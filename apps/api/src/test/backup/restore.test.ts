@@ -1751,6 +1751,30 @@ describe('Backup restore of one home judges, then takes the home', () => {
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 
+    // verifyFolder ran SQLite's check on every database of the unpacked archive, so the check before the swap reads only
+    // their schema stamps. A large home takes minutes per pass.
+    test('the check before the swap reads the stamps only, after verify checked the pages', async () => {
+        const artifact = await backup(user.id, new Date(Date.now() + 91_000));
+        const querySpy = spyOn(Database.prototype, 'query');
+        const pagesChecked = () => querySpy.mock.calls.filter(([sql]) => sql.includes('quick_check')).length;
+        const during: number[] = [];
+        const check = materializeModule.checkUnpackedHome;
+        const checkSpy = spyOn(materializeModule, 'checkUnpackedHome').mockImplementation(async (homeDir, mounts) => {
+            const before = pagesChecked();
+            await check(homeDir, mounts);
+            during.push(pagesChecked() - before);
+        });
+        try {
+            await restoreHome(artifact, user.id, `restore-stamps-${Date.now()}`);
+        } finally {
+            querySpy.mockRestore();
+            checkSpy.mockRestore();
+        }
+        expect(during).toEqual([0]);
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        removeSafetyCopies(user.id);
+    });
+
     // The archive is unpacked on the data disk beside the home, so the home is offline only for the swap's two renames.
     test('the mounts are put in place beside the home while it serves, and the swap is two renames', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 95_000));

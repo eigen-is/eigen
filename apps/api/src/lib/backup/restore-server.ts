@@ -181,7 +181,8 @@ async function stageHome(
         notReplayed.missing += replay.missing;
     }
     const mountIds = carried.map((summary) => summary.id);
-    await checkRestoredDatabases(homeDir, mountIds, containerDatabases);
+    // verifyFolder checked these pages. Since then each file was only renamed, or written through SQLite itself.
+    await checkRestoredDatabases(homeDir, mountIds, containerDatabases, { verified: true });
     try {
         redateTrash(homeDir, mountIds, now);
     } catch (error) {

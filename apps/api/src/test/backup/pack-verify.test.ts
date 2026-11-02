@@ -56,6 +56,7 @@ import { getHome } from '../../lib/home/get-home';
 import {
     assertJson,
     authedRequest,
+    countLoopTurns,
     createTeam,
     createTestUser,
     drivePost,
@@ -1146,4 +1147,41 @@ describe('The unpack bound', () => {
         },
         PACK_TIMEOUT_MS,
     );
+});
+
+// A home can hold tens of thousands of databases, and each quick_check blocks the thread. A restore verifies in the API,
+// so other requests run between every few databases.
+describe('verifyFolder', () => {
+    test('lets other work run while it checks the databases', async () => {
+        const folder = mkdtempSync(join(TEST_DATA_DIR, 'verify-yield-'));
+        const manifest: BackupManifest = {
+            formatVersion: 1,
+            kind: 'user',
+            ownerId: 'verifyyieldAAAAAAAAAAAAAAAAAAAAA',
+            name: 'yield',
+            createdAt: new Date().toISOString(),
+            appVersion: 'test',
+            server: { domain: 'test', orgId: 'test' },
+            counts: { databases: 0, files: 0, bytes: 0 },
+            mounts: [],
+            entries: [],
+        };
+        writeFileSync(join(folder, 'manifest.json'), JSON.stringify(manifest));
+        for (let index = 0; index < 120; index++) {
+            mkdirSync(join(folder, 'home', 'mounts', `m${index}`), { recursive: true });
+            new Database(join(folder, 'home', 'mounts', `m${index}`, 'metadata.db')).close();
+        }
+        const turns = countLoopTurns();
+        const turnsAt: number[] = [];
+        try {
+            await verifyFolder(folder, (step) => {
+                if (step === 'verify databases') turnsAt.push(turns.read());
+            });
+        } finally {
+            turns.stop();
+            rmSync(folder, { recursive: true, force: true });
+        }
+        expect(turnsAt).toHaveLength(120);
+        expect(turnsAt.at(-1)).toBeGreaterThan(turnsAt[0]);
+    });
 });
