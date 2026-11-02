@@ -6,7 +6,7 @@ category: Basics
 tags: [drive, files, folders, organize, rename, move]
 related: [drive/get-started, drive/create-folders-and-documents]
 order: 70
-updated: 2026-06-08
+updated: 2026-11-02
 ---
 
 You can rename any file or folder in Drive and move items between folders without leaving the browser.
@@ -26,7 +26,7 @@ Drag the item onto a folder to move it there. The folder highlights as you drag 
 
 <div class="eigen-callout">
 
-You can only drop items onto folders, not onto other files. If a folder does not highlight when you drag over it, the drag is not on a valid target.
+You can only drop items onto folders, not onto other files. If a folder does not highlight when you drag over it, the drag is not on a valid target. Folders also don't accept drops in a view where you can't move items, such as a type filter, **Shared with me**, **Watched**, or a folder shared with you for viewing only. Use **Copy to…** there.
 
 </div>
 

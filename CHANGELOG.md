@@ -7,6 +7,9 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Added
 
 - **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
+- **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
+- **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
+- **Shortcuts in the Drive menu** — on a computer, the menu shows **Space** next to **Quick preview** and **Delete** next to **Move to trash** and **Remove shared item**
 
 ### Changed
 
@@ -20,6 +23,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
 - **Web page downloads** — a download carries only the parts of each font its text uses: a short document is about 380 KB instead of 1.2 MB, a sheet or deck about 310 KB instead of 1 MB
 - **The server image** — the API image installs no recommended packages, and no libvips or ImageMagick from Debian, which nothing used. SVG thumbnails draw Chinese and Korean text
+- **Copying in Drive** — **Copy to…** and **Save to Drive…** say "1 item copied" (or "3 items copied") with an **Open folder** button. **Duplicate** stays quiet
+- **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Open**, **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
+- **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
+- **The File menu of a document** — a document shared with you offers **Remove shared item**, and **Share** is hidden when you can't share it
 
 ### Fixed
 
@@ -31,6 +38,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
+- **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
+- **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
+- **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
+- **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
 
 ## [0.4.1] - 2026-10-28
 
