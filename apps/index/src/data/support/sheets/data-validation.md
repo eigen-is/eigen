@@ -15,7 +15,9 @@ Data validation lets you control what goes into a cell. You can add a dropdown l
 1. Select the cell or cells you want to validate.
 2. Open the **Data** menu and click **Data verification**.
 
-The dialog shows the current selection in the **Cell range** field. You can type a different range there, or click the grid icon next to it to select a range with the mouse.
+The dialog shows the current selection in the **Cell range** field. You can type a different range there, or click the grid icon next to it to select a range with the mouse. When you confirm the range, the dialog comes back with everything you had filled in.
+
+When you click **OK**, Sheets checks the rule first. If something can't be used, such as a range that names no cells or a list with no options, the dialog stays open and a message under the field says what is wrong.
 
 If you selected a whole column by clicking its header letter, the field shows it as `B:B`, and the rule covers every row of that column, including the rows below your data. A whole row shows as `2:2`.
 
