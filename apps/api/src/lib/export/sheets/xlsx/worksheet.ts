@@ -5,6 +5,8 @@
 import { pxToPt } from '@workspace/lib/docs/eigendoc';
 import type { Sheet } from '@workspace/lib/sheets';
 import {
+    freezesColumns,
+    freezesRows,
     parseCellKey,
     REFERENCE_COLUMN_COUNT,
     REFERENCE_ROW_COUNT,
@@ -89,15 +91,10 @@ export function worksheetPart(
 // One view: Excel honors only the first. A frozen pane splits after the last frozen row and column.
 function viewsXml(sheet: Sheet, selected: boolean): string {
     const attributes = `${sheet.showGridLines === false || sheet.showGridLines === 0 ? ' showGridLines="0"' : ''}${selected ? ' tabSelected="1"' : ''} workbookViewId="0"`;
-    const { type, range } = sheet.frozen ?? {};
-    const rows =
-        type === 'row' || type === 'both' || type === 'rangeRow' || type === 'rangeBoth'
-            ? Math.min((range?.row_focus ?? 0) + 1, REFERENCE_ROW_COUNT - 1)
-            : 0;
-    const columns =
-        type === 'column' || type === 'both' || type === 'rangeColumn' || type === 'rangeBoth'
-            ? Math.min((range?.column_focus ?? 0) + 1, REFERENCE_COLUMN_COUNT - 1)
-            : 0;
+    const { frozen } = sheet;
+    const range = frozen?.range;
+    const rows = freezesRows(frozen) ? Math.min((range?.row_focus ?? 0) + 1, REFERENCE_ROW_COUNT - 1) : 0;
+    const columns = freezesColumns(frozen) ? Math.min((range?.column_focus ?? 0) + 1, REFERENCE_COLUMN_COUNT - 1) : 0;
     if (!(rows > 0) && !(columns > 0)) return `<sheetViews><sheetView${attributes}/></sheetViews>`;
     const pane = rows > 0 && columns > 0 ? 'bottomRight' : rows > 0 ? 'bottomLeft' : 'topRight';
     const splits = `${columns > 0 ? ` xSplit="${columns}"` : ''}${rows > 0 ? ` ySplit="${rows}"` : ''}`;

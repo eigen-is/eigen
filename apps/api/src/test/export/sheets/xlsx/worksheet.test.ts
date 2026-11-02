@@ -115,6 +115,24 @@ describe('a worksheet part', () => {
         );
     });
 
+    test('a bare frozen type splits the same axes as its range form', () => {
+        const pane = (type: NonNullable<Sheet['frozen']>['type']) =>
+            partOf({
+                name: 'Sheet1',
+                celldata: [],
+                frozen: { type, range: { row_focus: 1, column_focus: 2 } },
+            }).xml.match(/<pane[^>]*>/)?.[0];
+        const rows = '<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/>';
+        const columns = '<pane xSplit="3" topLeftCell="D1" activePane="topRight" state="frozen"/>';
+        const both = '<pane xSplit="3" ySplit="2" topLeftCell="D3" activePane="bottomRight" state="frozen"/>';
+        expect(pane('row')).toBe(rows);
+        expect(pane('rangeRow')).toBe(rows);
+        expect(pane('column')).toBe(columns);
+        expect(pane('rangeColumn')).toBe(columns);
+        expect(pane('both')).toBe(both);
+        expect(pane('rangeBoth')).toBe(both);
+    });
+
     test('links are a block of their own: web links by relationship, places in the workbook by location, the whole range kept; one it cannot write is counted', () => {
         const { xml, relationships, lost } = partOf(
             {

@@ -5,13 +5,13 @@
 
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import type React from 'react';
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import type { Freezen } from '../../state';
 import {
     computeRowHeaderRegions,
     fixPositionOnFrozenCells,
-    getSheetIndex,
+    getFrozenHandleTop,
     handleRowFreezeHandleMouseDown,
     handleRowHeaderMouseDown,
     handleRowSizeHandleMouseDown,
@@ -41,21 +41,7 @@ export const RowHeader: React.FC = () => {
     const [selectedLocation, setSelectedLocation] = useState<
         { row: number; row_pre: number; r1: number; r2: number }[]
     >([]);
-    const sheetIndex = getSheetIndex(context, context.currentSheetId);
-    const sheet = sheetIndex == null ? null : context.sheets[sheetIndex];
-    const freezeHandleTop = useMemo(() => {
-        if (
-            sheet?.frozen?.type === 'row' ||
-            sheet?.frozen?.type === 'rangeRow' ||
-            sheet?.frozen?.type === 'rangeBoth' ||
-            sheet?.frozen?.type === 'both'
-        ) {
-            return (
-                rowLocationByIndex(sheet?.frozen?.range?.row_focus || 0, context.visibledatarow)[1] + context.scrollTop
-            );
-        }
-        return context.scrollTop;
-    }, [context.visibledatarow, sheet?.frozen, context.scrollTop]);
+    const freezeHandleTop = getFrozenHandleTop(context);
 
     // biome-ignore lint/correctness/useExhaustiveDependencies: globalCache.scrollTop is the live scroll value read fresh off a stable ref, never a React dependency
     const onMouseMove = useCallback(
@@ -66,11 +52,10 @@ export const RowHeader: React.FC = () => {
             const container = containerRef.current;
             if (!container) return;
             const mouseY = e.pageY - container.getBoundingClientRect().top - window.scrollY;
-            const _y = mouseY + refs.globalCache.scrollTop;
+            const scrolledY = mouseY + refs.globalCache.scrollTop;
             const freeze = refs.globalCache.freezen?.[context.currentSheetId];
-            const { y } = fixPositionOnFrozenCells(freeze, 0, _y, 0, mouseY);
-            const row_location = rowLocation(y, context.visibledatarow);
-            const [row_pre, row, row_index] = row_location;
+            const { y } = fixPositionOnFrozenCells(freeze, 0, scrolledY, 0, mouseY);
+            const [row_pre, row, row_index] = rowLocation(y, context.visibledatarow);
             if (row_pre !== hoverLocation.row_pre || row !== hoverLocation.row) {
                 setHoverLocation({ row_pre, row, row_index });
             }
@@ -150,18 +135,14 @@ export const RowHeader: React.FC = () => {
     );
 
     useEffect(() => {
-        const s = context.selections || [];
         let rowTitleMap: Record<number, number> = {};
-        for (let i = 0; i < s.length; i += 1) {
-            const r1 = s[i].row[0];
-            const r2 = s[i].row[1];
-            rowTitleMap = selectTitlesMap(rowTitleMap, r1, r2);
+        for (const selection of context.selections ?? []) {
+            rowTitleMap = selectTitlesMap(rowTitleMap, selection.row[0], selection.row[1]);
         }
-        const rowTitleRange = selectTitlesRange(rowTitleMap);
         const selects: { row: number; row_pre: number; r1: number; r2: number }[] = [];
-        for (let i = 0; i < rowTitleRange.length; i += 1) {
-            const r1 = rowTitleRange[i][0];
-            const r2 = rowTitleRange[i][rowTitleRange[i].length - 1];
+        for (const rows of selectTitlesRange(rowTitleMap)) {
+            const r1 = rows[0];
+            const r2 = rows[rows.length - 1];
             const row = rowLocationByIndex(r2, context.visibledatarow)[1];
             const row_pre = rowLocationByIndex(r1, context.visibledatarow)[0];
             if (typeof row_pre === 'number' && typeof row === 'number') {
@@ -171,10 +152,8 @@ export const RowHeader: React.FC = () => {
         setSelectedLocation(selects);
     }, [context.selections, context.visibledatarow]);
 
-    // The header is no longer its own scroll surface; it tracks the single
-    // scroll offset on the bus by translating its content. notifyScrollListeners
-    // runs synchronously, so this stays in lockstep with the canvas labels for
-    // both user and programmatic scroll. Applied once on mount for the initial offset.
+    // The header follows the one scroll offset on the bus by translating its content. notifyScrollListeners runs
+    // synchronously, so the header moves in step with the canvas labels, and the first call sets the offset on mount.
     useEffect(() => {
         const applyOffset = () => {
             if (contentRef.current) {
@@ -188,10 +167,8 @@ export const RowHeader: React.FC = () => {
         };
     }, [refs.globalCache]);
 
-    // The header shares the body-overlay region model one axis at a time
-    // (RENDERING.md § Scrolling): a pinned frozen band + a bus-translated main
-    // band whose clip cuts the highlights at the freeze boundary, replacing the
-    // recipe-time fix*StyleOverflowInFreeze clamps (stale during pure scroll).
+    // The header splits into the body's panes on its own axis: a pinned frozen band and a main band that scrolls,
+    // whose clip cuts the highlights at the freeze boundary.
     const headerWidth = context.rowHeaderWidth - 1.5;
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const rowFreeze: Freezen | undefined = freeze?.horizontal ? { horizontal: freeze.horizontal } : undefined;
@@ -262,10 +239,9 @@ export const RowHeader: React.FC = () => {
                     ) : null}
                 </OverlayRegion>
             </div>
-            {/* The freeze drag handle keeps its viewport-pinning +scroll pattern
-                on the live translate (imperatively repositioned during freeze
-                drags in live content coordinates), unclipped like the body's
-                pane-spanning drag lines. */}
+            {/* The freeze handle's position adds the scroll offset, so in the translated content it stays put in the
+                viewport. It sits outside the panes, unclipped like the body's drag lines, and a freeze drag moves it
+                directly. */}
             <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                 <div
                     className="sheet-rows-freeze-handle"
