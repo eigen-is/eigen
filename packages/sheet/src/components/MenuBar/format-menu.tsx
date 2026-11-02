@@ -515,19 +515,20 @@ const ITEM_SELECTION_RULES: ConditionRuleItem[] = [
     { text: 'belowAverage', value: 'Below' },
 ];
 
+// Each label names the stops in the order the swatch draws them: the color of the highest value first.
 const COLOR_SCALE_PRESETS = [
-    { key: 'colorGradation_1', label: 'Green-yellow-red color gradation' },
-    { key: 'colorGradation_2', label: 'Red-yellow-green color gradation' },
-    { key: 'colorGradation_3', label: 'Green-white-red color gradation' },
-    { key: 'colorGradation_4', label: 'Red-white-green color gradation' },
-    { key: 'colorGradation_5', label: 'Blue-white-red color gradation' },
-    { key: 'colorGradation_6', label: 'Red-white-blue color gradation' },
-    { key: 'colorGradation_7', label: 'White-red color gradation' },
-    { key: 'colorGradation_8', label: 'Red-white color gradation' },
-    { key: 'colorGradation_9', label: 'Green-white color gradation' },
-    { key: 'colorGradation_10', label: 'White-green color gradation' },
-    { key: 'colorGradation_11', label: 'Green-yellow color gradation' },
-    { key: 'colorGradation_12', label: 'Yellow-green color gradation' },
+    { key: 'colorGradation_1', label: 'Red-yellow-green color gradation' },
+    { key: 'colorGradation_2', label: 'Green-yellow-red color gradation' },
+    { key: 'colorGradation_3', label: 'Red-white-green color gradation' },
+    { key: 'colorGradation_4', label: 'Green-white-red color gradation' },
+    { key: 'colorGradation_5', label: 'Red-white-blue color gradation' },
+    { key: 'colorGradation_6', label: 'Blue-white-red color gradation' },
+    { key: 'colorGradation_7', label: 'Red-white color gradation' },
+    { key: 'colorGradation_8', label: 'White-red color gradation' },
+    { key: 'colorGradation_9', label: 'White-green color gradation' },
+    { key: 'colorGradation_10', label: 'Green-white color gradation' },
+    { key: 'colorGradation_11', label: 'Yellow-green color gradation' },
+    { key: 'colorGradation_12', label: 'Green-yellow color gradation' },
 ];
 
 const DATA_BAR_PRESETS = [
