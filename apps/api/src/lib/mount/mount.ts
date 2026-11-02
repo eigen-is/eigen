@@ -31,7 +31,7 @@ import type { ContentExtractor } from './content-reindex-queue';
 import { ContentReindexQueue } from './content-reindex-queue';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
-import type { DocumentDbSlot } from './document-db';
+import type { DatabaseHold, DocumentDbSlot } from './document-db';
 import * as documentDb from './document-db';
 import {
     ancestorIds,
@@ -1322,6 +1322,23 @@ export class Mount {
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
         return documentDb.createDatabase(this, config, pathId);
+    }
+
+    // Runs fn with the database open, which then closes after a quiet minute. A reader uses this
+    // rather than openDatabase, so no close runs under it.
+    public async withDatabase<S extends SchemaType, T>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
+        return documentDb.withDatabase(this, config, pathId, fn);
+    }
+
+    public async holdDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<DatabaseHold<S>> {
+        return documentDb.holdDatabase(this, config, pathId);
     }
 
     public async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {

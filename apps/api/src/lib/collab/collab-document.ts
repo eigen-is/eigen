@@ -57,6 +57,8 @@ export class CollabDocument {
     private readonly drive: Drive;
     private readonly path: DrivePath;
     private provider!: DbProvider;
+    // Lets go of data.db. A reader's idle close would otherwise close it under the provider.
+    private releaseDataDb: (() => void) | null = null;
     private awareness!: awarenessProtocol.Awareness;
     private readonly connections = new Map<ServerWebSocket<unknown>, User>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
@@ -112,12 +114,18 @@ export class CollabDocument {
             this.drive.openDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id).catch(() => {});
         }
 
-        const managedDb = await this.drive.openDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        const dataDb = await this.drive.holdDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        try {
+            this.provider = new DbProvider(this.doc, this.path.name, dataDb.db);
+            // Before the document listens for updates, so the stamp is saved but moves no Modified time.
+            stampMissingSheetsBase(this.path.type, this.doc);
+        } catch (error) {
+            // A document that fails to open is never destructed, so it lets go here.
+            dataDb.release();
+            throw error;
+        }
         this.dataDbPathId = dataDbPath.id;
-
-        this.provider = new DbProvider(this.doc, this.path.name, managedDb);
-        // Before the document listens for updates, so the stamp is saved but moves no Modified time.
-        stampMissingSheetsBase(this.path.type, this.doc);
+        this.releaseDataDb = dataDb.release;
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
@@ -150,7 +158,8 @@ export class CollabDocument {
         return this;
     }
 
-    // The provider writes a last snapshot as it stops, so the caller closes data.db only after this.
+    // The provider writes a last snapshot as it stops and then lets go of data.db, so the caller
+    // closes data.db only after this.
     public destruct(): void {
         if (this.closed) return;
         this.closed = true;
@@ -166,6 +175,7 @@ export class CollabDocument {
         }
         this.connections.clear();
         this.provider.destroy();
+        this.releaseDataDb?.();
         this.awareness.destroy();
         this.doc.destroy();
     }

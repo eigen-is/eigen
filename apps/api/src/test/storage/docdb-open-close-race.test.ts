@@ -1,11 +1,12 @@
 import { Database } from 'bun:sqlite';
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
 import { existsSync, mkdirSync, rmSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import type { BunFile } from 'bun';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import { ApiError, ManagedDatabase } from '../../lib/core';
+import { HOLDER_WAIT_MS, IDLE_CLOSE_MS } from '../../lib/mount/document-db';
 import { Mount } from '../../lib/mount/mount';
 import { LocalStorage } from '../../lib/storage/local-storage';
 import { DEFAULT_RETENTION } from '../../lib/versioning/retention';
@@ -587,4 +588,96 @@ describe('an open still loading from storage', () => {
         const reopened = await mount.openDatabase(docConfig, dataDbId);
         expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
     }, 10_000);
+});
+
+// A reader holds its database only while it runs. The database then closes after a quiet minute, and
+// a close that comes earlier waits for the holder, for a few seconds at most.
+describe('holders', () => {
+    afterEach(() => {
+        jest.useRealTimers();
+    });
+
+    test('a database a reader used closes IDLE_CLOSE_MS after it lets go', async () => {
+        const { mount } = await createGatedLocalMount('idle-close');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        jest.useFakeTimers();
+
+        await mount.withDatabase(docConfig, dataDbId, async (db) => {
+            db.db.insert(docSchema.items).values({ id: 1, data: 'read then written' }).run();
+        });
+        const slot = mount.documentDbs.get(dataDbId);
+        jest.advanceTimersByTime(IDLE_CLOSE_MS - 1);
+        await slot?.tail;
+        expect(slot?.db).toBe(managed);
+
+        jest.advanceTimersByTime(1);
+        await slot?.tail;
+        expect(slot?.db).toBeNull();
+        expect(() => managed.db).toThrow('Database not open');
+        // The close synced the write.
+        expect(await countStoredRows(mount, dataDbId)).toBe(1);
+    });
+
+    test('a reader that comes back within the idle window keeps the database open', async () => {
+        const { mount } = await createGatedLocalMount('idle-renewed');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        jest.useFakeTimers();
+
+        await mount.withDatabase(docConfig, dataDbId, async () => {});
+        jest.advanceTimersByTime(IDLE_CLOSE_MS / 2);
+        await mount.withDatabase(docConfig, dataDbId, async () => {});
+        const slot = mount.documentDbs.get(dataDbId);
+        jest.advanceTimersByTime(IDLE_CLOSE_MS - 1);
+        await slot?.tail;
+        expect(slot?.db).toBe(managed);
+
+        jest.advanceTimersByTime(1);
+        await slot?.tail;
+        expect(slot?.db).toBeNull();
+    });
+
+    test('a close waits for a reader in flight, which reads the open database', async () => {
+        const { mount } = await createGatedLocalMount('close-waits-holder');
+        const { dataDbId, managed } = await provisionDoc(mount, docConfig);
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+
+        const entered = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        const reading = mount.withDatabase(docConfig, dataDbId, async (db) => {
+            entered.resolve();
+            await gate.promise;
+            return db.db.select().from(docSchema.items).all().length;
+        });
+        await entered.promise;
+
+        const closing = mount.closeDatabase(dataDbId);
+        expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(false);
+        gate.resolve();
+        expect(await reading).toBe(1);
+        await closing;
+        expect(mount.documentDbs.has(dataDbId)).toBe(false);
+    });
+
+    test('a close waiting for a holder that never lets go closes after HOLDER_WAIT_MS', async () => {
+        const { mount } = await createGatedLocalMount('close-deadline');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        const hold = await mount.holdDatabase(docConfig, dataDbId);
+        const slot = mount.documentDbs.get(dataDbId);
+        jest.useFakeTimers();
+
+        const closing = mount.closeDatabase(dataDbId);
+        // A few microtasks bring the close to its wait.
+        for (let turn = 0; turn < 100 && !slot?.lastHolderGone; turn++) await Promise.resolve();
+        expect(slot?.lastHolderGone).toBeTruthy();
+        jest.advanceTimersByTime(HOLDER_WAIT_MS - 1);
+        expect(slot?.db).not.toBeNull();
+
+        jest.advanceTimersByTime(1);
+        await closing;
+        expect(slot?.db).toBeNull();
+        expect(() => hold.db.db).toThrow('Database not open');
+        // A late release after the forced close arms nothing.
+        hold.release();
+        expect(slot?.idleTimer).toBeNull();
+    });
 });

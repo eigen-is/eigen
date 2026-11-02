@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { eq } from 'drizzle-orm';
 import { ApiError, storageGone } from '../core';
-import { withDocumentDb } from '../mount/document-db';
+import { closeInSlot, withDocumentDb } from '../mount/document-db';
 import { isViableRecoveryTemp } from '../mount/helpers';
 import type { Mount } from '../mount/mount';
 import { paths } from '../mount/schema';
@@ -240,10 +240,9 @@ export async function replaceContainerDataDb(mount: Mount, containerId: string, 
         if (!dataDb) throw new ApiError(404, `data.db not found in container ${containerId}`);
         const { size, hash } = await hashFile(sourcePath);
         await withDocumentDb(mount, dataDb.id, async (slot) => {
-            // skipFinalSnapshot: the db is being discarded, and snapshotting would re-enter this lock.
-            const db = slot.db;
-            slot.db = null;
-            await db?.close({ skipFinalSnapshot: true });
+            // It waits for a request still reading the chat. skipFinalSnapshot: the db is being
+            // discarded, and snapshotting would re-enter this lock.
+            await closeInSlot(slot, dataDb.id, { skipFinalSnapshot: true });
             // The next open would adopt a crash temp over the new bytes.
             await mount.cleanupTemp(dataDb.id);
             await mount.withTreeShared(async () => {

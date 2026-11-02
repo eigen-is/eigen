@@ -1,7 +1,8 @@
 // The document databases of a mount, such as a container's data.db and comments.db. Each one is a
 // SQLite working copy that is opened from storage, synced back to it and closed, one call at a time per
-// path. Mount is how callers reach it, and closeAllDatabases tears every one down when a Home closes or
-// a mount goes away.
+// path. A reader holds one only while it runs, and the database closes after a quiet minute without
+// holders. Mount is how callers reach it, and closeAllDatabases tears every one down when a Home closes
+// or a mount goes away.
 
 import * as fs from 'node:fs';
 import { eq } from 'drizzle-orm';
@@ -15,10 +16,28 @@ import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
 import { getShutdownDrainDeadline } from './upload-limits';
 
+// A database with no holder stays open this long. On s3, and on a local mount that works on a temp
+// copy, an open is a download and a close an upload. So a chat that gets a message every few seconds
+// must not move its data.db both ways for each one. A close this late also never comes sooner than
+// the 30 s sync would.
+export const IDLE_CLOSE_MS = 60_000;
+// A close waits this long for the holders to let go. Then it closes anyway and logs, so a holder that
+// hangs can't hang a shutdown.
+export const HOLDER_WAIT_MS = 5_000;
+
 export type DocumentDbSlot = {
     db: ManagedDatabase<SchemaType> | null; // the live instance while open; null while a build or a close is in flight
     tail: Promise<void>; // the lifecycle op in flight; the next op on this pathId queues behind it
     pending: number; // queued + running ops; the slot is dropped when it reaches 0 with db null
+    holders: number; // the callers using db right now, such as a withDatabase reader or an open collab document
+    idleTimer: ReturnType<typeof setTimeout> | null; // the close armed when the last holder let go
+    lastHolderGone: (() => void) | null; // set while a close waits for the holders
+};
+
+// A database a caller holds open, and the call that lets go of it.
+export type DatabaseHold<S extends SchemaType> = {
+    db: ManagedDatabase<S>;
+    release: () => void;
 };
 
 export async function openDatabase<S extends SchemaType>(
@@ -40,6 +59,41 @@ export async function createDatabase<S extends SchemaType>(
     return openDocumentDb(mount, config, pathId, 'create');
 }
 
+// Runs fn with the database open, and closes it IDLE_CLOSE_MS after the last holder lets go. A close
+// that comes meanwhile waits for fn, inside the slot and maybe under the container path lock, so fn
+// must never take that path lock or call withDatabase for the same pathId.
+export async function withDatabase<S extends SchemaType, T>(
+    mount: Mount,
+    config: DatabaseConfig<S>,
+    pathId: string,
+    fn: (db: ManagedDatabase<S>) => Promise<T>,
+): Promise<T> {
+    const hold = await holdDatabase(mount, config, pathId);
+    try {
+        return await fn(hold.db);
+    } finally {
+        hold.release();
+    }
+}
+
+// withDatabase for a holder that outlives one call, such as an open collab document, which writes
+// every edit to its data.db. It lets go in its own close, before it closes the database. Whatever
+// closes such a database, such as a trash, closes the document first. So this holder alone may take
+// the container path lock while it holds, as a workbook's version before its compaction does.
+export async function holdDatabase<S extends SchemaType>(
+    mount: Mount,
+    config: DatabaseConfig<S>,
+    pathId: string,
+): Promise<DatabaseHold<S>> {
+    return withDocumentDb(mount, pathId, async (slot) => {
+        const db = await openInSlot(mount, slot, config, pathId, 'open');
+        slot.holders++;
+        if (slot.idleTimer) clearTimeout(slot.idleTimer);
+        slot.idleTimer = null;
+        return { db, release: () => releaseHold(mount, pathId, slot) };
+    });
+}
+
 // Every open, create and close of one pathId runs here, one at a time, in call order.
 // Lock order: container path lock → slot → tree lock, never the reverse; the close-time snapshot try-locks.
 // A chain rather than withPathLock: `has` must also see queued opens and closes.
@@ -48,7 +102,14 @@ export async function withDocumentDb<T>(
     pathId: string,
     fn: (slot: DocumentDbSlot) => Promise<T>,
 ): Promise<T> {
-    const slot = mount.documentDbs.get(pathId) ?? { db: null, tail: Promise.resolve(), pending: 0 };
+    const slot = mount.documentDbs.get(pathId) ?? {
+        db: null,
+        tail: Promise.resolve(),
+        pending: 0,
+        holders: 0,
+        idleTimer: null,
+        lastHolderGone: null,
+    };
     mount.documentDbs.set(pathId, slot);
     slot.pending++;
     const run = slot.tail.then(() => fn(slot));
@@ -69,18 +130,45 @@ async function openDocumentDb<S extends SchemaType>(
     pathId: string,
     mode: 'open' | 'create',
 ): Promise<ManagedDatabase<S>> {
-    // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
-    // schema S can only be re-attached here — the config that built the entry carries it.
-    return withDocumentDb(mount, pathId, async (slot) => {
-        if (mount.closing) throw new ApiError(503, 'Mount is closing');
-        if (slot.db) {
-            if (mode === 'create') throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
-            return slot.db as ManagedDatabase<S>;
-        }
-        const db = await buildDocumentDb(mount, config, pathId, mode);
-        slot.db = db;
-        return db;
-    });
+    return withDocumentDb(mount, pathId, (slot) => openInSlot(mount, slot, config, pathId, mode));
+}
+
+async function openInSlot<S extends SchemaType>(
+    mount: Mount,
+    slot: DocumentDbSlot,
+    config: DatabaseConfig<S>,
+    pathId: string,
+    mode: 'open' | 'create',
+): Promise<ManagedDatabase<S>> {
+    if (mount.closing) throw new ApiError(503, 'Mount is closing');
+    if (slot.db) {
+        if (mode === 'create') throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
+        // Seam: documentDbs is one heterogeneous cache (ManagedDatabase<SchemaType>), so the caller's
+        // schema S can only be re-attached here — the config that built the entry carries it.
+        return slot.db as ManagedDatabase<S>;
+    }
+    const db = await buildDocumentDb(mount, config, pathId, mode);
+    slot.db = db;
+    return db;
+}
+
+// The last holder to let go wakes a close that waits for it, or else arms the idle close.
+function releaseHold(mount: Mount, pathId: string, slot: DocumentDbSlot): void {
+    if (--slot.holders > 0) return;
+    if (slot.lastHolderGone) {
+        slot.lastHolderGone();
+        return;
+    }
+    if (!slot.db) return;
+    slot.idleTimer = setTimeout(() => {
+        slot.idleTimer = null;
+        withDocumentDb(mount, pathId, async (current) => {
+            // A holder came back meanwhile, or this slot was closed and a new one took its place.
+            if (current === slot && slot.holders === 0) await closeInSlot(slot, pathId);
+        }).catch((error: unknown) => console.error(`[Mount] idle close failed for ${pathId}:`, error));
+    }, IDLE_CLOSE_MS);
+    // An idle database must never keep the process alive.
+    slot.idleTimer.unref();
 }
 
 async function buildDocumentDb<S extends SchemaType>(
@@ -251,13 +339,30 @@ export async function closeDatabase(
     opts?: { skipFinalSnapshot?: boolean },
 ): Promise<void> {
     if (!mount.documentDbs.has(pathId)) return;
-    await withDocumentDb(mount, pathId, async (slot) => {
-        const db = slot.db;
-        if (!db) return;
-        // Cleared BEFORE closing: a snapshot read mid-close must not see the closing instance.
-        slot.db = null;
-        await db.close(opts);
-    });
+    await withDocumentDb(mount, pathId, (slot) => closeInSlot(slot, pathId, opts));
+}
+
+// Closes the slot's database once its holders let go, or after HOLDER_WAIT_MS. The caller runs it
+// inside the slot, so no new holder arrives while it waits.
+export async function closeInSlot(
+    slot: DocumentDbSlot,
+    pathId: string,
+    opts?: { skipFinalSnapshot?: boolean },
+): Promise<void> {
+    const db = slot.db;
+    if (!db) return;
+    if (slot.holders > 0) {
+        const { promise, resolve } = Promise.withResolvers<void>();
+        slot.lastHolderGone = resolve;
+        const released = await settlesWithin(promise, HOLDER_WAIT_MS);
+        slot.lastHolderGone = null;
+        if (!released) console.warn(`[Mount] closing ${pathId} while ${slot.holders} holder(s) still use it`);
+    }
+    if (slot.idleTimer) clearTimeout(slot.idleTimer);
+    slot.idleTimer = null;
+    // Cleared BEFORE closing: a snapshot read mid-close must not see the closing instance.
+    slot.db = null;
+    await db.close(opts);
 }
 
 // Flush + close every cached document DB at or below `rootId` (the container's own data.db, its
@@ -293,13 +398,10 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
         mount.pruneTimer = null;
     }
 
-    // Reindex FIRST, awaiting its in-flight drain: an extract mid-await opens a doc DB via
-    // openDatabase and leaves it for the mount lifecycle to close. Draining before the sweep below
-    // means that last-extract DB lands in the map and is closed by it — an open landing after the
-    // gate below is refused (else 30s timer, fd, temp; dirty syncs into a closed metadata.db).
-    // Leftover dirty rows still replay on the next open (only the current extract is drained, not
-    // the backlog). The await is deadline-bounded so a black-holed extract can't park teardown (see
-    // ContentReindexQueue.close).
+    // The reindex closes first, and the extract in flight finishes. That extract may hold a document
+    // database, and the sweep below would otherwise wait for it. An open that lands after the gate
+    // below is refused. Only the current extract is drained, so the other dirty rows replay on the
+    // next open. The wait has a deadline, so an extract that hangs can't park the teardown.
     await mount.reindexQueue?.close();
 
     // Thumbnail jobs end with getPath/updatePath on metadata.db and hold a sharp worker; each is

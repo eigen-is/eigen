@@ -51,6 +51,7 @@ import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
+import type { DatabaseHold } from '../mount/document-db';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
@@ -1249,6 +1250,15 @@ export class Drive {
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
         return this.getMount(mountId).openDatabase(config, pathId);
+    }
+
+    // An open collab document holds its data.db for as long as it is open.
+    public async holdDatabase<S extends SchemaType>(
+        mountId: string,
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<DatabaseHold<S>> {
+        return this.getMount(mountId).holdDatabase(config, pathId);
     }
 
     // Creates the database files of a new document, such as its data.db and comments.db. When one
