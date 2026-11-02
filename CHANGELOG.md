@@ -30,7 +30,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
 - **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
-- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at. A picture in a drawing group keeps its own size, and older Word drawings keep their colors and wrap side
+- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
 - **Dialogs in Calendar** — Enter in a new event's title saves it, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
