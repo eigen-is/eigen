@@ -32,7 +32,7 @@ import { CommentIndicator } from '@workspace/ui/components/comments';
 import type { CoupledSize } from '@workspace/ui/components/properties-panel';
 import { cn } from '@workspace/ui/lib/utils';
 import type React from 'react';
-import type { ReactNode, RefObject } from 'react';
+import type { ReactNode } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { PaperRoom } from './positioned-figure';
 import { roomOnPaper } from './positioned-figure';
@@ -324,7 +324,7 @@ type FigureFrameProps = Pick<NodeViewProps, 'node' | 'selected' | 'editor' | 'ex
     // A text box's: the move, the drag and the selection start on a band along its edge alone, and a press inside it
     // goes to `onInsidePress`, which opens it, or to its open editor when there is none. `text` is the element whose
     // border and padding hold the band.
-    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: RefObject<HTMLElement | null> };
+    dragSurface?: { onInsidePress: ((e: React.PointerEvent) => void) | null; text: HTMLElement | null };
     children: ReactNode;
 };
 
@@ -440,7 +440,7 @@ export function FigureFrame({
             if (e.target instanceof Element && e.target.closest('button')) return;
             const edge = contentRef.current;
             const inside = dragSurface?.onInsidePress;
-            if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text.current, e)) move?.(e);
+            if (!dragSurface || !edge || inEdgeBand(edge, dragSurface.text, e)) move?.(e);
             else if (e.button === 0 && inside) {
                 if (move && selected) move(e, inside);
                 else inside(e);
