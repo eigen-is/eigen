@@ -729,7 +729,7 @@ countdown() {
         line="Restarts in $remaining, at $RESTART_AT. Ctrl+C cancels."
         if [ -t 1 ]; then
             # A line that wraps leaves a line a second: \r only goes back to the start of the last one.
-            line=$(printf '%s\n' "$line" | cut -c "1-$(($(columns) - 4))")
+            if [ "$(columns)" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$(($(columns) - 4))"); fi
             printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
         elif [ "$left" = "$IN_SECONDS" ]; then
             say "$ACCENT" '◆' "$line"
@@ -1221,11 +1221,23 @@ update() {
     need_in_time update
     if [ "$check" = 1 ] && [ -n "$IN_TIME" ]; then refuse_usage update "--check updates nothing, so it takes no --in."; fi
     # After --in, a version reads as the message.
-    if [ -z "$target" ] && release_name "$IN_MESSAGE"; then
-        refuse_usage update "Put the version before --in: ./eigen update $IN_MESSAGE --in $IN_TIME"
+    # Only a single word can be one; a sentence that mentions a version is a message.
+    if [ -z "$target" ]; then
+        case $IN_MESSAGE in
+            *' '*) ;;
+            *) if release_name "$IN_MESSAGE"; then
+                refuse_usage update "Put the version before --in: ./eigen update $IN_MESSAGE --in $IN_TIME"
+            fi ;;
+        esac
     fi
     if [ "$MODE" = local ]; then
         die "A local build has no updates." "Pull the code and run ./eigen setup again, which builds it."
+    fi
+    # The old launcher's notice is on the tabs, and exec dropped its traps: from here a failure takes it back.
+    if [ "$pulled" = 1 ]; then
+        lock
+        AT_EXIT=unannounce
+        trap 'exit 129' HUP
     fi
     need_install
     if [ "$pulled" = 1 ]; then
@@ -1234,7 +1246,7 @@ update() {
         wordmark update
         preflight
     fi
-    if [ "$check" = 0 ]; then lock; fi
+    if [ "$check" = 0 ] && [ "$pulled" != 1 ]; then lock; fi
     if [ "$pulled" = 1 ]; then update_apply; else update_get; fi
 }
 
@@ -1345,9 +1357,7 @@ update_get() {
 # The part the launcher of the new version runs: stop, switch and start.
 update_apply() {
     # Up to the stop, which ends the old API and its notice, a failure or a hangup takes back the notice the old
-    # launcher gave. The old API's CLI may have no restart-notice, which unannounce lets pass.
-    AT_EXIT=unannounce
-    trap 'exit 129' HUP
+    # launcher gave (armed in update). The old API's CLI may have no restart-notice, which unannounce lets pass.
     # 0.3.1's launcher hands over the backup it made, or --no-backup; one older than that made none and says neither.
     if [ -z "$saved" ] && [ -z "$no_backup" ]; then
         die "This update was started by a launcher older than 0.3.1." \

@@ -822,13 +822,17 @@ for SHELL_NAME in dash busybox host; do
     launch release update --in 10m 0.4.0
     version_err=$ERR
     launch release restore --in 10m "$ARCHIVE"
+    restore_err=$ERR
+    STUB_LATEST=0.2.99 STUB_REVISION=abc1234 launch release update --in 0 "5 min. New version 0.4.1"
+    sentence_code=$CODE sentence_err=$ERR
     if [ -z "$failed" ] && [ "$zero" = 0 ] && [ "$bogus_code" = 2 ] &&
         printf '%s\n' "$bogus_err" | grep -q '^Unknown argument "--bogus".$' &&
         printf '%s\n' "$version_err" | grep -qx 'Put the version before --in: ./eigen update 0.4.0 --in 10m' &&
-        printf '%s\n' "$ERR" | grep -qx "Put the archive before --in: ./eigen restore $ARCHIVE --in 10m"; then
-        ok "$SHELL_NAME: --in takes 0 and a leading zero, and refuses a bare number, more than an hour, a stray unit, no time, --check, a long message, and a version or an archive after it, before anything runs"
+        printf '%s\n' "$restore_err" | grep -qx "Put the archive before --in: ./eigen restore $ARCHIVE --in 10m" &&
+        [ "$sentence_code" = 0 ] && ! printf '%s\n' "$sentence_err" | grep -q 'Put the version before'; then
+        ok "$SHELL_NAME: --in takes 0 and a leading zero, and refuses a bare number, more than an hour, a stray unit, no time, --check, a long message, and a version or an archive after it, before anything runs, and takes a message with spaces that holds a version"
     else
-        fail "$SHELL_NAME: --in parsing:$failed; --in 0 exit $zero; --in 09m --bogus exit $bogus_code, '$bogus_err'; a version after --in '$version_err'; an archive after --in '$ERR'"
+        fail "$SHELL_NAME: --in parsing:$failed; --in 0 exit $zero; --in 09m --bogus exit $bogus_code, '$bogus_err'; a version after --in '$version_err'; an archive after --in '$restore_err'; a sentence with a version exit $sentence_code, '$sentence_err'"
     fi
     rm -f "$FIX/release/.eigen/last-update" "$FIX/release/.eigen/bundle"
     failed=''
@@ -935,6 +939,18 @@ for SHELL_NAME in dash busybox host; do
         ok "$SHELL_NAME: a handover with neither a backup nor --no-backup is refused before it changes anything, and takes the notice back"
     else
         fail "$SHELL_NAME: a handover from an older launcher: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    # A handover that dies before update_apply (here in need_install) still takes the old launcher's notice back.
+    mkdir -p "$FIX/bare/.eigen"
+    launch bare update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
+    lock_left=''
+    if [ -e "$FIX/bare/.eigen/lock" ]; then lock_left=1; fi
+    rm -rf "$FIX/bare/.eigen"
+    if [ "$CODE" = 1 ] && printf '%s\n' "$ERR" | grep -q '■  Eigen is not set up in ' &&
+        printf '%s\n' "$CALLS" | tail -n 1 | grep -q ' restart-notice --clear$' && [ -z "$lock_left" ]; then
+        ok "$SHELL_NAME: a handover that dies in need_install takes the notice back"
+    else
+        fail "$SHELL_NAME: a handover that dies in need_install: exit $CODE, '$ERR', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     STUB_DIGEST=ddd launch release update --pulled 0.2.99 --saved server-pre-update-full-20260101-000000.tar
     rm -r "$FIX/release/data"
