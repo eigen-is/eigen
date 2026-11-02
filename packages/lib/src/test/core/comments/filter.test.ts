@@ -15,7 +15,6 @@ function makeEntry(overrides: Partial<CommentEntry> = {}): CommentEntry {
         resolvedBy: null,
         resolvedAt: null,
         lastAuthorEmail: null,
-        lastMessageSnippet: null,
         lastActivityAt: null,
         messageCount: 0,
         createdAt: new Date(0),

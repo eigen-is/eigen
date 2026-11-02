@@ -1,11 +1,14 @@
+// The chat types the API and the apps share, such as a message with its attachments, a room member
+// and the comment index entry that the comments panel shows.
+
 import type { DrivePath } from './drive';
 import type { AttachmentReference } from './drive-reference';
 
-// Default folder new chats land in — resolved by name on each use, so it stays freely
-// renameable/movable/deletable.
+// New chats go into the folder with this name. It is looked up by name each time, so a user may
+// rename, move or delete it.
 export const CHATS_FOLDER_NAME = 'chats';
 
-// A by-members match: `canWrite` = the caller owns it or holds a write ACL entry.
+// A chat found by its members. canWrite is true when the caller owns the chat or may write to it.
 export type ChatMatch = {
     path: DrivePath;
     canWrite: boolean;
@@ -43,7 +46,6 @@ export type CommentEntry = {
     resolvedBy: string | null;
     resolvedAt: Date | null;
     lastAuthorEmail: string | null;
-    lastMessageSnippet: string | null;
     lastActivityAt: Date | null;
     messageCount: number;
     createdAt: Date;
