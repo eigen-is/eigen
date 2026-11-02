@@ -27,7 +27,6 @@ import type {
     VectorArrowElement,
     VectorElement,
     VectorElementPatch,
-    VectorRectangleElement,
     ZOp,
 } from '@workspace/lib/vector';
 import {
@@ -110,6 +109,7 @@ import { RichTextInPlaceEditor } from './kinds/rich-text';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import type { EditingState } from './text-editing';
 import { arrowLabelEditing } from './text-editing';
+import type { HealTextSize } from './text-measure';
 import { isVectorFontLoaded, measureLoadedVectorText, measureVectorText } from './text-measure';
 import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
@@ -708,35 +708,21 @@ export function CanvasEditor({
         },
     });
 
-    // A size measured before the slices of its text have loaded is the fallback's, and the stored size is what every
-    // renderer and export draws. The overlay loads the slices of a label while the user types, so its commit is
-    // normally exact. But a label committed before they arrive, and a text box ⌘V measured as it landed, are measured
-    // again here once they load. Only the width changes: a label's height and a text box's both follow from the line
-    // count and the line height, which no face changes. The live element is checked first. A newer edit of the text,
-    // font or size owns the size, and so does whatever `holds` says, so a slow load never writes a stale size over it.
-    const healTextSize = useCallback(
-        (
-            id: string,
-            text: string,
-            fontSize: number,
-            fontFamily: string,
-            holds: (el: VectorArrowElement | VectorRectangleElement) => boolean,
-        ) => {
-            if (isVectorFontLoaded(fontSize, fontFamily, text)) return;
-            measureLoadedVectorText(text, fontSize, fontFamily)
-                .then(({ width }) => {
+    // A size measured before the slices of its text load is the fallback's. Every renderer and export draws the stored
+    // size, so a label committed early and a box pasted with ⌘V are measured again once those slices load. The write
+    // is untracked, like the text fit's: it corrects a measure, so ⌘Z takes back the edit and never the heal alone.
+    const healTextSize = useCallback<HealTextSize>(
+        (id, text, font, patch) => {
+            if (isVectorFontLoaded(text, font)) return;
+            measureLoadedVectorText(text, font)
+                .then((size) => {
                     const el = visibleRef.current.find((x) => x.id === id);
-                    // The element was deleted meanwhile, so there is nothing to heal.
-                    if (el?.type !== 'arrow' && el?.type !== 'rectangle') return;
-                    if (el.fontSize !== fontSize || el.fontFamily !== fontFamily || !holds(el)) return;
-                    if (width === (el.type === 'arrow' ? el.labelWidth : el.width)) return;
-                    sealed(undoManager, () =>
-                        updateElement(id, el.type === 'arrow' ? { labelWidth: width } : { width }),
-                    );
+                    const fields = el && patch(el, size);
+                    if (fields) updateElementUntracked(id, fields);
                 })
                 .catch(() => {});
         },
-        [updateElement, undoManager],
+        [updateElementUntracked],
     );
 
     // One editing session → exactly one Yjs write, `sealed` so the session is its own
@@ -754,12 +740,19 @@ export function CanvasEditor({
             // to ''/0 and never deletes the arrow; a still-empty label is a no-op. updateElement no-ops
             // on a Yjs map the arrow's remote deletion already removed.
             if (!(ed.isNew && empty)) {
-                const labelWidth = empty ? 0 : measureVectorText(text, ed.fontSize, ed.fontFamily).width;
+                const font = { fontSize: ed.fontSize, fontFamily: ed.fontFamily };
+                const labelWidth = empty ? 0 : measureVectorText(text, font).width;
                 sealed(undoManager, () => updateElement(ed.id, { text: empty ? '' : text, labelWidth }));
+                // A newer edit of the label or its font owns the width.
                 if (!empty) {
-                    healTextSize(ed.id, text, ed.fontSize, ed.fontFamily, (el) => {
-                        return el.type === 'arrow' && el.text === text;
-                    });
+                    healTextSize(ed.id, text, font, (el, { width }) =>
+                        el.type === 'arrow' &&
+                        el.text === text &&
+                        el.fontSize === font.fontSize &&
+                        el.fontFamily === font.fontFamily
+                            ? { labelWidth: width }
+                            : null,
+                    );
                 }
             }
             setSelectedIds([ed.id]);

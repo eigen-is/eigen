@@ -87,9 +87,11 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
                 await Promise.all(
                     arrows.map(async (el) => {
                         const patch = fields(el);
-                        const size = patch.fontSize ?? el.fontSize;
-                        const family = patch.fontFamily ?? el.fontFamily;
-                        const { width } = await measureLoadedVectorText(el.text, size, family);
+                        const font = {
+                            fontSize: patch.fontSize ?? el.fontSize,
+                            fontFamily: patch.fontFamily ?? el.fontFamily,
+                        };
+                        const { width } = await measureLoadedVectorText(el.text, font);
                         return [el.id, { ...patch, labelWidth: width }] as const;
                     }),
                 ),

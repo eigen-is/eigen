@@ -7,6 +7,7 @@ import { PENDING_PREFIX } from '@workspace/lib/drive';
 import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardImageItem } from '@workspace/lib/types/clipboard';
 import type { NewVectorElement, VectorElement } from '@workspace/lib/vector';
+import type { VectorTextFont } from '../text-measure';
 import type { PastedArrow } from './binding';
 
 export type PastePlan = {
@@ -16,9 +17,9 @@ export type PastePlan = {
     arrowRemaps: PastedArrow[];
     // Images whose bytes live in another container: index → the typed item that can fetch them.
     crossMount: { index: number; item: EigenClipboardImageItem }[];
-    // Text boxes sized as the paste landed by a measure of their text: index → that text, its font and the width it
-    // measured, so the hook measures it again once the slices of the text have loaded.
-    measuredText: { index: number; text: string; fontSize: number; fontFamily: string; width: number }[];
+    // Text boxes sized by a measure of their text as the paste landed. Each keeps the text, its font and the width it
+    // was given, so the hook can measure it again once the slices of that text load.
+    measuredText: { index: number; text: string; font: VectorTextFont; width: number }[];
 };
 
 // The whole stored record minus what the writer allocates: the id, the index and the seed. A copy takes its own

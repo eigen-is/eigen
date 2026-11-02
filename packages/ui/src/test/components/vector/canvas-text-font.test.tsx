@@ -50,17 +50,19 @@ type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
 
 let doc = new Y.Doc();
 let provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+// The scene roots, tracked as useCollabDoc tracks them, so a test can ask what one ⌘Z takes back.
+let undoManager = new Y.UndoManager(doc.getMap('elements'));
 mock.module('@workspace/lib/collab', () => ({
     ...realCollab,
     useCollabDoc: (options: UseCollabDocOptions) => {
         const docRef = useRef(doc);
         const onInit = useRef(options.onInit);
-        useEffect(() => onInit.current?.({ doc, provider, undoManager: null }), []);
+        useEffect(() => onInit.current?.({ doc, provider, undoManager }), []);
         return {
             doc,
             docRef,
             provider,
-            undoManager: null,
+            undoManager,
             synced: true,
             offline: false,
             loaded: true,
@@ -81,6 +83,7 @@ beforeEach(() => {
     provider.destroy();
     doc = new Y.Doc();
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+    undoManager = new Y.UndoManager(doc.getMap('elements'));
     loaded.clear();
     network = new Promise<void>((resolve) => {
         release = resolve;
@@ -134,6 +137,11 @@ async function render(): Promise<HTMLElement> {
     return rendered.container;
 }
 
+const labelText = () => {
+    const arrow = readVectorFromDoc(doc).elements.find((el) => el.id === 'arrow');
+    return arrow?.type === 'arrow' ? arrow.text : undefined;
+};
+
 const labelWidth = () => {
     const arrow = readVectorFromDoc(doc).elements.find((el) => el.id === 'arrow');
     return arrow?.type === 'arrow' ? arrow.labelWidth : undefined;
@@ -166,6 +174,40 @@ test('a label committed before its slices load is measured again in the slices o
         await network;
     });
     expect(labelWidth()).toBe(100);
+});
+
+// The heal corrects a measure the user never made, so ⌘Z takes back the label and not the heal alone, and ⌘⇧Z brings
+// the label back at its healed width.
+test("a label's heal is not an undo step of its own", async () => {
+    const container = await render();
+    const layer = container.querySelector('[data-element-id="arrow"]');
+    if (!layer) throw new Error('no arrow layer');
+    await act(async () => {
+        layer.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 0 }));
+    });
+    const textarea = container.querySelector('textarea');
+    if (!textarea) throw new Error('the label editor did not open');
+    await act(async () => {
+        textarea.value = '茶 tea';
+        textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    await act(async () => {
+        release();
+        await network;
+    });
+    expect(labelWidth()).toBe(100);
+
+    await act(async () => {
+        undoManager.undo();
+    });
+    expect(labelText()).toBe('');
+    await act(async () => {
+        undoManager.redo();
+    });
+    expect({ text: labelText(), width: labelWidth() }).toEqual({ text: '茶 tea', width: 100 });
 });
 
 async function paste(fill: (event: ClipboardEvent) => void): Promise<void> {
@@ -226,4 +268,33 @@ test('a pasted box resized before its slices load keeps the width it was given',
 
     await loadSlices();
     expect(textBox()).toEqual({ width: 300, height: oneLine });
+});
+
+test("a pasted box's heal is not an undo step of its own", async () => {
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    await loadSlices();
+    expect(textBox()).toEqual({ width: 100, height: oneLine });
+
+    await act(async () => {
+        undoManager.undo();
+    });
+    expect(textBox()).toBeUndefined();
+});
+
+// The fallback is narrower here, but a wider one wraps the text, and the fit grows the box to the lines it wrapped
+// into. The fit only grows, so the heal sets the height its one line needs as well as the width.
+test("a pasted box's heal takes back the height a fallback's wrap grew it to", async () => {
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    const box = readVectorFromDoc(doc).elements.find((el) => el.type === 'rectangle');
+    if (!box) throw new Error('nothing was pasted');
+    const stored = doc.getMap('elements').get(box.id);
+    if (!(stored instanceof Y.Map)) throw new Error('the box is not stored');
+    await act(async () => {
+        doc.transact(() => stored.set('height', 3 * oneLine), 'fit');
+    });
+
+    await loadSlices();
+    expect(textBox()).toEqual({ width: 100, height: oneLine });
 });

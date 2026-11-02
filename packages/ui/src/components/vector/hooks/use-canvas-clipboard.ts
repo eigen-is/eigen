@@ -30,11 +30,9 @@ import type {
     Point,
     StyleDefaults,
     TextAlign,
-    VectorArrowElement,
     VectorElement,
     VectorElementPatch,
     VectorMeta,
-    VectorRectangleElement,
 } from '@workspace/lib/vector';
 import {
     canvasPtToPx,
@@ -44,6 +42,7 @@ import {
     readClipboardTypography,
     readElementsClipboardItem,
     reanchorElements,
+    textBoxFitHeight,
 } from '@workspace/lib/vector';
 import { sealed } from '@workspace/ui/components/properties-panel';
 import { useCallback, useEffect, useRef } from 'react';
@@ -51,6 +50,7 @@ import { toast } from 'sonner';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import { downloadCanvasImage } from '../canvas-image';
+import type { HealTextSize } from '../text-measure';
 import { measureVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
@@ -120,13 +120,7 @@ type CanvasClipboardParams = {
     undoManager: Y.UndoManager | null;
     viewportCenterScene: () => Point;
     // The canvas's heal of a size measured before the slices of its text loaded, which a pasted text box needs.
-    healTextSize: (
-        id: string,
-        text: string,
-        fontSize: number,
-        fontFamily: string,
-        holds: (el: VectorArrowElement | VectorRectangleElement) => boolean,
-    ) => void;
+    healTextSize: HealTextSize;
     // OS files on the clipboard go through the canvas' own image-insert path.
     insertImageFiles: (files: File[], anchor: Point) => Promise<void>;
     mediaFolderId: string | null;
@@ -253,8 +247,9 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                     typo.fontSize !== undefined && Number.isFinite(typo.fontSize)
                         ? canvasPtToPx(typo.fontSize, slideWidth)
                         : styleDefaults.fontSize;
-                const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
-                plan.measuredText.push({ index: plan.partials.length, text: item.text, fontSize, fontFamily, width });
+                const font = { fontSize, fontFamily };
+                const { width, height } = measureVectorText(item.text, font);
+                plan.measuredText.push({ index: plan.partials.length, text: item.text, font, width });
                 plan.partials.push({
                     type: 'rectangle',
                     autoFit: true,
@@ -289,13 +284,23 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             if (!ids.length) return false;
             setSelectedIds(ids);
 
-            // A box that no longer holds the pasted text at the width it was measured at has been edited or resized,
-            // and that edit owns its size.
-            for (const { index, text, fontSize, fontFamily, width } of plan.measuredText) {
+            // A box whose text, font or width changed since the paste was edited or resized, and that edit owns its size.
+            // The heal writes the height too, because the fit only grows: a fallback that wrapped the text grew the box.
+            // The height is what textBoxFitHeight asks of a box with none yet: the text plus the inset and the border.
+            for (const { index, text, font, width } of plan.measuredText) {
                 const html = textToParagraphHtml(text);
-                healTextSize(ids[index], text, fontSize, fontFamily, (el) => {
-                    return isTextBox(el) && el.html === html && el.width === width;
-                });
+                healTextSize(ids[index], text, font, (el, size) =>
+                    isTextBox(el) &&
+                    el.html === html &&
+                    el.width === width &&
+                    el.fontSize === font.fontSize &&
+                    el.fontFamily === font.fontFamily
+                        ? {
+                              width: size.width,
+                              height: textBoxFitHeight({ ...el, height: 0 }, size.height) ?? el.height,
+                          }
+                        : null,
+                );
             }
 
             // Cross-mount images: fetch from source, re-upload into our media/, swap the pending name
@@ -383,8 +388,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     const pasteTextElement = useCallback(
         (text: string, textAlign: TextAlign = 'left') => {
             const anchor = viewportCenterScene();
-            const { fontSize, fontFamily } = styleDefaults;
-            const { width, height } = measureVectorText(text, fontSize, fontFamily);
+            const font = { fontSize: styleDefaults.fontSize, fontFamily: styleDefaults.fontFamily };
+            const { width, height } = measureVectorText(text, font);
             commitPaste({
                 partials: [
                     {
@@ -402,7 +407,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                 cloneIds: new Map(),
                 arrowRemaps: [],
                 crossMount: [],
-                measuredText: [{ index: 0, text, fontSize, fontFamily, width }],
+                measuredText: [{ index: 0, text, font, width }],
             });
         },
         [viewportCenterScene, commitPaste, styleDefaults],
