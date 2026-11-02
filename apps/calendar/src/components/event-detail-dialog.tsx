@@ -19,7 +19,7 @@ import {
     useUpdateEvent,
 } from '@workspace/lib/calendar';
 import type { CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { DeleteDialog } from '@workspace/ui';
+import { DeleteDialog, TooltipButton } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { EventDetailCard } from '@workspace/ui/components/calendar';
 import {
@@ -271,20 +271,22 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                             <div className="flex gap-1 mr-auto">
                                 {canEdit && (
                                     <>
-                                        <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                                            <Pencil className="h-4 w-4" />
-                                        </Button>
-                                        <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        <TooltipButton
+                                            icon={Pencil}
+                                            tooltipText="Edit event"
+                                            onClick={() => setEditOpen(true)}
+                                        />
+                                        <TooltipButton
+                                            icon={Trash2}
+                                            tooltipText="Delete event"
+                                            onClick={handleDeleteClick}
+                                        />
                                     </>
                                 )}
                                 {canExport && (
-                                    <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        title="Export event"
-                                        aria-label="Export event"
+                                    <TooltipButton
+                                        icon={Download}
+                                        tooltipText="Export event"
                                         disabled={isExporting}
                                         // An occurrence is drawn from its series, so the series is what leaves.
                                         onClick={() =>
@@ -292,9 +294,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                                 event.parentEventId || event.id,
                                             ])
                                         }
-                                    >
-                                        <Download className="h-4 w-4" />
-                                    </Button>
+                                    />
                                 )}
                             </div>
                         )}
