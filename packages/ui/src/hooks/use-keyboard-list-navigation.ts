@@ -7,6 +7,10 @@ import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { UseListSelectionReturn } from './use-list-selection';
 
+// A control inside a row with its own Enter and Space, such as the row's ⋮ button. A row's name link is not one: it
+// stands for the row, so Enter there still opens the row.
+const OWNS_ENTER_AND_SPACE = 'button, input, select, textarea';
+
 // Both props or neither. With both, the parent owns the cursor. Mail does this: it tracks the cursor by email id, so
 // the cursor survives a new sort or new mail, and its shortcuts read the same cursor. The hook then moves from
 // cursorIndex, reports each move to onCursorChange, and leaves activeId alone, since the parent decides where the
@@ -141,6 +145,8 @@ export function useKeyboardListNavigation<T>({
         // list too: Enter in its field would open the row. Only a key pressed inside the list's own DOM is the list's.
         if (!(e.target instanceof Node) || !e.currentTarget.contains(e.target)) return;
         if (items.length === 0) return;
+        const onControl = e.target instanceof Element && e.target.closest(OWNS_ENTER_AND_SPACE) !== null;
+        if (onControl && (e.key === 'Enter' || e.key === ' ')) return;
 
         if (selection && (e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey)) {
             e.preventDefault();
