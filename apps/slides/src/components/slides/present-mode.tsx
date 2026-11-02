@@ -79,10 +79,9 @@ export function PresentMode({ frame, elements, onNext, onPrev, onExit }: Present
             // The overlay IS the presentation surface: it holds focus so a clicker's keys reach it.
             tabIndex={0}
             onKeyDown={onKeyDown}
-            // Why z-[100]: present mode must cover the whole app shell, so it sits at the documented
-            // full-screen tier, the one FilePreview uses (LAYOUT.md § One z-index scale, and app code
-            // sets none). At the portal tier (z-50) it would only tie with the app's own dropdowns
-            // and popovers.
+            // Why z-[100]: present mode covers the whole app shell from where it renders, not from a portal on
+            // <body>. At the portal tier (z-50) it would lose to the app's own dropdowns and popovers, which
+            // portal later in the document.
             className={cn(
                 'fixed inset-0 z-[100] flex items-center justify-center bg-black',
                 !controlsVisible && 'cursor-none',

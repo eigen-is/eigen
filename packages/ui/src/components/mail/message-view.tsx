@@ -1,3 +1,7 @@
+// One mail message, drawn the same way wherever its fields came from, such as the mail reader's stored message or the
+// `.eml` quick look's served payload: the subject, the sender line with a popover of every address, the chips the host
+// passes in and the body, whose remote images wait until the viewer loads them. It takes data in and fetches nothing.
+
 import { getMailComposeUrl } from '@workspace/lib/api';
 import { formatDateTime } from '@workspace/lib/date';
 import { flattenAddresses, NO_SUBJECT, stripRemoteContent } from '@workspace/lib/mail';
@@ -5,11 +9,8 @@ import type { AddressObject } from '@workspace/lib/types/mail';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
-import { cn } from '../../lib/utils';
 import { Button } from '../button';
-import { ABOVE_PREVIEW_Z } from '../dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '../popover';
-import { useOptionalPreview } from '../preview-provider/preview-context';
 import { Separator } from '../separator';
 import { ShadowContent } from '../shadow-content';
 import { UserAvatar } from '../user/user-avatar';
@@ -44,8 +45,6 @@ type MessageViewProps = {
     onLoadRemoteImages?: () => void;
 };
 
-// One message, drawn the same way wherever its fields came from: the mail reader's stored message and the
-// `.eml` quick look's served payload (docs/MAIL.md). Data in; it fetches nothing and acts on nothing.
 export function MessageView({
     subject,
     from,
@@ -193,10 +192,6 @@ function MailHeaderDetails({ header }: { header: HeaderFields }) {
 }
 
 function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean }) {
-    // Drawn inside the full-screen quick look (z-100), the details popover has to clear it the way a
-    // dialog does (LAYOUT.md § One z-index scale, and app code sets none); the reader draws it under no
-    // overlay at all.
-    const preview = useOptionalPreview();
     const recipients = [
         ...collectAddresses(header.to),
         ...collectAddresses(header.cc),
@@ -233,10 +228,7 @@ function MailHeader({ header, isSent }: { header: HeaderFields; isSent?: boolean
                             <PopoverContent
                                 align="start"
                                 collisionPadding={8}
-                                className={cn(
-                                    'w-[28rem] max-w-[calc(100vw-2rem)]',
-                                    preview?.isPreviewOpen && ABOVE_PREVIEW_Z,
-                                )}
+                                className="w-[28rem] max-w-[calc(100vw-2rem)]"
                             >
                                 <MailHeaderDetails header={header} />
                             </PopoverContent>

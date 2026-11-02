@@ -9,7 +9,6 @@ import { Field, FieldDescription, FieldLabel, FieldTitle } from '@workspace/ui/c
 import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
-import { useOptionalPreview } from '../preview-provider/preview-context';
 
 // The word the title, the label and the placeholder use for the item.
 type ItemType = 'Folder' | 'File';
@@ -37,16 +36,8 @@ export function DriveItemNameDialog({
     submitLabel = 'Create',
 }: DriveItemNameDialogProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
-    // Opened over a file preview, such as New folder in Save to Drive's picker, it has to sit above that preview.
-    const preview = useOptionalPreview();
-
     return (
-        <FormDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title={title || `New ${type.toLowerCase()}`}
-            abovePreview={preview?.isPreviewOpen}
-        >
+        <FormDialog open={open} onOpenChange={onOpenChange} title={title || `New ${type.toLowerCase()}`}>
             <ItemNameForm
                 type={type}
                 defaultValue={defaultValue}

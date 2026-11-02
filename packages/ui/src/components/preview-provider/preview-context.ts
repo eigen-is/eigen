@@ -1,10 +1,9 @@
+// The quick-look context: open, page and close the file preview, and say whether one is open. It lives apart from
+// PreviewProvider, which renders the preview and so pulls in the whole Drive tree. Code inside that tree, such as the
+// file action runner, reads the context from here without an import cycle, so this file imports nothing from it.
+
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import { createContext, useContext } from 'react';
-
-// Leaf module for the preview context so the base Dialog primitive can read the
-// "is a preview open" flag without importing PreviewProvider — which pulls in the
-// whole Drive feature tree (FilePreview → DriveLocationPicker → Dialog) and closes
-// an import cycle back onto Dialog. This file must import nothing from that tree.
 
 export type PreviewContextValue = {
     openPreview: (subject: FileSubject, siblings?: FileSubject[]) => void;

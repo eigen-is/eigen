@@ -15,8 +15,7 @@ const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
-const { ABOVE_PREVIEW_Z } = await import('../../components/dialog');
-const { PreviewContext } = await import('../../components/preview-provider/preview-context');
+const { isLayerAbove } = await import('../../hooks/use-dialog-open');
 
 let unmount = async () => {};
 const realGetComputedStyle = globalThis.getComputedStyle;
@@ -250,39 +249,29 @@ test('a description shows under the title and a screen reader reads it, and with
     expect(dialog()?.hasAttribute('aria-describedby')).toBe(false);
 });
 
-test('abovePreview lifts the dialog over an open preview, and Escape there closes the dialog', async () => {
+// The preview is a layer on <body> like the dialog. A dialog opened after it is later in the document, so it paints
+// above at the same z-index and owns its Escape; one opened before it, such as a Stickies card, leaves Escape to it.
+test('over an open preview the dialog sits later in the document, at no z above 50, and Escape closes it', async () => {
     onOpenChange.mockClear();
-    const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
-    const renderOverPreview = async (abovePreview: boolean) => {
-        ({ unmount } = await renderInDocument(
-            createElement(
-                PreviewContext.Provider,
-                { value: preview },
-                createElement(FormDialog, {
-                    open: true,
-                    onOpenChange,
-                    title: 'Import',
-                    abovePreview,
-                    children: createElement(FormDialogForm, {
-                        onSubmit: () => {},
-                        submitLabel: 'Import',
-                        children: null,
-                    }),
-                }),
-            ),
-        ));
-    };
-    // Under a preview the Escape is the preview's, so a dialog that is not flagged stays open.
-    await renderOverPreview(false);
-    expect(dialog()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(false);
-    await pressEscape();
-    expect(onOpenChange).not.toHaveBeenCalled();
-    await unmount();
-
-    await renderOverPreview(true);
-    expect(dialog()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
+    const preview = document.createElement('div');
+    preview.setAttribute('data-preview-overlay', '');
+    document.body.append(preview);
+    await render();
+    const content = dialog();
+    if (!content) throw new Error('no dialog');
+    expect(isLayerAbove(preview, content)).toBe(true);
+    expect(content.className).not.toMatch(/\bz-\[/);
     await pressEscape();
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+    await unmount();
+    preview.remove();
+
+    // The same dialog opened before the preview is under it, and the Escape is the preview's.
+    await render();
+    document.body.append(preview);
+    await pressEscape();
+    expect(onOpenChange).not.toHaveBeenCalled();
+    preview.remove();
 });
 
 test('a dialog opened from inside another form submits only itself', async () => {

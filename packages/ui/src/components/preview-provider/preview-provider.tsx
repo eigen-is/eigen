@@ -1,3 +1,6 @@
+// PreviewProvider holds the one quick-look preview an app shows, and renders it on <body> while it is open. Anything
+// under it opens a file through usePreview, with the siblings the arrow keys page through.
+
 import { subjectInfo } from '@workspace/lib/file-subject';
 import type { FileSubject } from '@workspace/lib/types/file-subject';
 import type React from 'react';
@@ -6,7 +9,7 @@ import { createPortal } from 'react-dom';
 import { FilePreview } from '../drive/file-preview';
 import { PreviewContext, useOptionalPreview, usePreview } from './preview-context';
 
-// The hooks live in the feature-tree-free ./preview-context leaf so Dialog can read the preview flag.
+// The hooks live in the ./preview-context leaf, so code inside the preview's own tree reads them without a cycle.
 export { useOptionalPreview, usePreview };
 
 type PreviewState = { subject: FileSubject; siblings: FileSubject[] };

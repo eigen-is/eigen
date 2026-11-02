@@ -200,15 +200,15 @@ Global shortcuts use `@tanstack/react-hotkeys` (`useHotkey`), with `formatForDis
 | Docs figure layers | -1 to 2 | a figure behind the text (-1) or in front of it (1), and its grips above both (2), in the page's stacking context |
 | In-content floating UI | 10 | inline autocompletes, suggestion lists |
 | Sheet canvas overlays | 8 to 30 | selection, freeze handles, scrollbars, all under `cellArea` |
-| Portaled UI | 50 | shadcn and Radix dropdowns, popovers, dialogs |
-| Full-screen overlay | 100 | `FilePreview`, slides `PresentMode` |
-| Above the overlay | 200 | `DialogContent` with `abovePreview`; `MessageView`'s details popover in the `.eml` quick look |
+| Portaled UI | 50 | shadcn and Radix dropdowns, popovers, dialogs, tooltips; `FilePreview` |
+| Inline full-screen overlay | 100 | slides `PresentMode` |
 | Toaster | library | Sonner stacks itself |
 
 - **App components set no z-index.** They use layout instead: a flex sibling (slides) or `absolute` inside a parent that makes a stacking context (docs, `relative overflow-hidden`). Side panels belong here.
 - `position: relative` alone makes no stacking context. It takes a z-index other than `auto`, or `transform`, `opacity` below 1, `filter`, `isolation: isolate` or `will-change`. To contain children's z-indices, add `isolation: isolate`.
 - Don't raise a menu above shadcn's z-50. If a portaled menu is covered, lower whatever covers it.
-- **Anything above 50 carries a comment** saying why. A layer at 200 is a `role="dialog"` after the overlay in `<body>`, which is how the overlay under it knows to stand its own keys down ([PREVIEWS.md](PREVIEWS.md#the-overlays-keys-stand-down-for-a-layer-above-it)).
+- **Portaled layers stack by document order.** Each portals to `<body>` as it opens, so at the same z-50 the later one paints above. The file preview is one of them, so a dialog, a select list or a tooltip opened over it lands above it, and a dialog tells whether it sits over the preview the same way ([PREVIEWS.md](PREVIEWS.md#a-dialog-under-the-overlay-leaves-escape-and-outside-clicks-to-it)).
+- **Anything above 50 carries a comment** saying why. Present mode is at 100 because it renders inside the app shell, not on `<body>`, and must cover the shell's own portals.
 - Overlays inside the sheet's `cellArea` stay at 30 or below, so the sheet's portaled menus land above them at 50.
 
 ## Buttons navigate here, links in content open a new tab

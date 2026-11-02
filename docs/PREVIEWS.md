@@ -184,7 +184,7 @@ A convert on an attachment opens the Save to Drive picker first, titled with the
 
 `SaveToDrivePicker` (`packages/ui/src/components/drive/save-to-drive-picker.tsx`) is the one "where does this go" dialog. A Drive subject is copied server-side, so its bytes never travel through the browser. A mail subject is written from the message the server still holds, in one call for every part. "Download instead" falls back to browser downloads, staggered because a browser drops the later downloads of a burst fired in one tick.
 
-Siblings come from one surface, so a batch is all Drive items or all mail parts, and the first subject picks the branch. The picker renders above the overlay through `DialogContent`'s `abovePreview` prop.
+Siblings come from one surface, so a batch is all Drive items or all mail parts, and the first subject picks the branch. The picker opens after the overlay in the document, so it paints above it and owns its own Escape and outside click ([§ The overlay's keys stand down for a layer above it](#the-overlays-keys-stand-down-for-a-layer-above-it)).
 
 ## The overlay picks its mode from the subject
 
@@ -198,9 +198,13 @@ Siblings come from one surface, so a batch is all Drive items or all mail parts,
 
 Escape closes, all four arrow keys page, and Space closes the way it opened, like Finder's Quick Look. The keys listen on the document, so they must yield to a layer open above the overlay.
 
-Every layer portals to `<body>` in the order it opened, so later in the document is higher in the stack. `useDialogOpen(overlayRef)` (`packages/ui/src/hooks/use-dialog-open.ts`) asks whether a `role="dialog"` after the overlay is open. A stickies card dialog the overlay was opened from sits before it, so it doesn't count.
+Every layer portals to `<body>` in the order it opened, so later in the document is higher in the stack. The overlay sits at the portal tier, z-50, like every Radix layer, so a dialog, menu, select list or tooltip opened over it paints above it with no z-index of its own. `useDialogOpen(overlayRef)` (`packages/ui/src/hooks/use-dialog-open.ts`) asks whether a `role="dialog"` after the overlay is open. A stickies card dialog the overlay was opened from sits before it, so it doesn't count.
 
-Presence is not enough for the keydown in hand. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so by then the layer is gone. So a keydown whose target sits inside a dialog, menu or listbox after the overlay belongs to that layer. A `DialogContent` under an open preview ignores Escape, which is the overlay's to close.
+Presence is not enough for the keydown in hand. A layer dismisses itself on the capture phase of the same keydown the overlay hears on the bubble, so by then the layer is gone. So a keydown whose target sits inside a dialog, menu or listbox after the overlay belongs to that layer.
+
+## A dialog under the overlay leaves Escape and outside clicks to it
+
+The overlay is no Radix layer, so Radix can't tell a dialog under it from one over it. `DialogContent` asks at event time, with the same `isLayerAbove` test against the `[data-preview-overlay]` element. A dialog before the overlay in the document, such as the stickies card, ignores Escape and a click outside it: those close the overlay, and the card stays. A dialog after it, such as Save to Drive or New folder over Save to Drive, closes on its own Escape, X, Cancel or outside click, and the overlay stays. No caller says which one it is, so a dialog a file action opens over the overlay gets this without a prop.
 
 Space yields when focus is on a control inside the overlay, where it presses that control. The overlay registers it with `preventDefault: false`, because the hotkey library prevents the default before the callback runs. A focused Chrome `<audio controls>` swallows every keydown, so while it has focus the X button is the only way out.
 
@@ -212,5 +216,5 @@ Space yields when focus is on a control inside the overlay, where it presses tha
 
 - [DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md): the transform process, its admission and its benchmark
 - [EXPORT.md](EXPORT.md): the full-document renderers the previews share
-- [LAYOUT.md](LAYOUT.md): Drive's item menu, capabilities and the overlay's z-index
+- [LAYOUT.md](LAYOUT.md): Drive's item menu, capabilities and the z-index scale the overlay sits on
 - [MAIL.md](MAIL.md), [CALENDAR.md](CALENDAR.md), [CONTACTS.md](CONTACTS.md): the parsers and the imports

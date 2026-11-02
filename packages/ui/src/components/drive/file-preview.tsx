@@ -112,7 +112,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
             aria-modal="true"
             aria-label={info.name}
             tabIndex={-1}
-            className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
+            className="fixed inset-0 z-50 bg-black/80 flex flex-col animate-in fade-in outline-none"
             style={{ pointerEvents: 'auto' }}
             // Synthetic events bubble across portals, so a click inside the picker would land here too.
             onClick={(e) => {

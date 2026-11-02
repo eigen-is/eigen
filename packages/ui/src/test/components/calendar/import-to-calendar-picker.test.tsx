@@ -109,8 +109,7 @@ mock.module('@workspace/lib/public', () => ({
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
-const { ABOVE_PREVIEW_Z } = await import('../../../components/dialog');
+const { isLayerAbove } = await import('../../../hooks/use-dialog-open');
 const { ImportToCalendarPicker } = await import('../../../components/calendar/import-to-calendar-picker');
 
 const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
@@ -119,14 +118,11 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     size: 2048,
 });
 
-const openPreviewContext = {
-    openPreview: () => {},
-    updatePreview: () => {},
-    closePreview: () => {},
-    isPreviewOpen: true,
-};
-
+// With a preview open, its overlay is on <body> before the dialog, as when Import to Calendar opens from its footer.
 async function open(previewOpen = false) {
+    const preview = document.createElement('div');
+    preview.setAttribute('data-preview-overlay', '');
+    if (previewOpen) document.body.append(preview);
     handed = [];
     sources = [];
     refetch.mockClear();
@@ -137,17 +133,13 @@ async function open(previewOpen = false) {
     const draw = async () => {
         await act(async () => {
             root.render(
-                createElement(
-                    PreviewContext.Provider,
-                    { value: previewOpen ? openPreviewContext : undefined },
-                    createElement(ImportToCalendarPicker, {
-                        subject,
-                        open: true,
-                        onClose: () => {
-                            closed.count += 1;
-                        },
-                    }),
-                ),
+                createElement(ImportToCalendarPicker, {
+                    subject,
+                    open: true,
+                    onClose: () => {
+                        closed.count += 1;
+                    },
+                }),
             );
         });
     };
@@ -199,9 +191,11 @@ async function open(previewOpen = false) {
     const cleanup = async () => {
         await act(async () => root.unmount());
         container.remove();
+        preview.remove();
     };
     return {
         closed,
+        preview,
         button,
         click,
         chooseCalendar,
@@ -321,17 +315,16 @@ test('an import that fails keeps the dialog open with the calendar and name stil
     await cleanup();
 });
 
-test('over an open preview the calendar list is lifted above the dialog, and otherwise it is not', async () => {
-    const plain = await open();
-    await plain.openList();
-    const list = () => [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
-    expect(list()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(false);
-    await plain.cleanup();
-
-    const over = await open(true);
-    await over.openList();
-    expect(list()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
-    await over.cleanup();
+// The list portals to <body> as it opens, after the preview and the dialog, so it paints above both at z-50.
+test('over an open preview the calendar list opens after it in the document, at no z above 50', async () => {
+    const { cleanup, dialog, openList, preview } = await open(true);
+    await openList();
+    const list = [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
+    if (!list) throw new Error('the list did not open');
+    expect(isLayerAbove(preview, dialog())).toBe(true);
+    expect(isLayerAbove(dialog(), list)).toBe(true);
+    expect(list.className).not.toMatch(/\bz-\[/);
+    await cleanup();
 });
 
 test('a calendar that went away after it was chosen greys Import out until another is picked', async () => {
