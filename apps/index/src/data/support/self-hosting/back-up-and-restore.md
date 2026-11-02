@@ -104,6 +104,8 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 2. It stops Eigen, moves the current `data/` and `.env.production` aside as `data.pre-restore-<date>-<time>` and `.env.production.pre-restore-<date>-<time>`, and puts the backup in their place.
 3. It starts Eigen again, on the version that made the backup.
 
+To give people time to save their work, add `--in` with a time up to `1h`, and a message if you like: `./eigen restore <backup> --in 10m "Back at three"`. After the question and the unpacking, every open Eigen page counts down to the stop, and Eigen stops when the time is up. Ctrl+C cancels the wait and leaves Eigen as it was. See [Warn everyone first](/support/self-hosting/update#warn-everyone-first).
+
 Check that all is well, then delete what was kept aside:
 
 ```bash

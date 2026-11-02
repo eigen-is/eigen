@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, update, rollback, release, breaking]
 related: [self-hosting/back-up-and-restore, self-hosting/commands-and-files]
 order: 80
-updated: 2026-10-29
+updated: 2026-11-02
 ---
 
 An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
@@ -21,12 +21,29 @@ In the install folder, run:
 
 1. Eigen downloads the new release while it keeps running.
 2. When the release notes list breaking changes, it shows them and asks whether to go on. Without a terminal, like from cron, it refuses until you run `./eigen update --accept-breaking`.
-3. While Eigen keeps running, it makes a backup in `backups/`. When a backup is already running, it waits for that one to end. If the backup fails, the update stops there and Eigen runs on as it was.
-4. Eigen stops, switches to the new version, and starts again.
+3. It tells everyone who has Eigen open that it is about to restart. With `--in`, it warns them first and waits: see [Warn everyone first](#warn-everyone-first).
+4. While Eigen keeps running, it makes a backup in `backups/`. When a backup is already running, it waits for that one to end. If the backup fails, the update stops there and Eigen runs on as it was.
+5. Eigen stops, switches to the new version, and starts again.
 
-Eigen is down only for the switch. When it is back, every open browser tab reloads by itself onto the new version. Anything a tab had not saved yet is lost, such as text typed while Eigen was down or a comment not yet sent. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
+Eigen is down only for the switch. Meanwhile the open tabs say that Eigen is updating. When it is back, every open browser tab reloads by itself onto the new version. Anything a tab had not saved yet is lost, such as text typed while Eigen was down or a comment not yet sent. What people change between the end of the backup and the stop is not in the backup, so the update prints the time the backup ends. When it is done, it removes older images. It keeps the images of the version before, so `./eigen rollback` can go back to it.
 
 To see whether there is an update, and what it brings, without installing it: `./eigen update --check`. To install a specific release: `./eigen update 0.3.1`.
+
+## Warn everyone first
+
+To give people time to save their work, warn them and wait before the restart:
+
+```bash
+./eigen update --in 10m "Back at three"
+```
+
+Every open Eigen page shows a banner at its foot, like the message `shutdown` sends to every terminal: "Eigen restarts for an update in 10 minutes", with your message below it. It counts down in minutes, and in seconds in the last minute. The terminal counts down too.
+
+The time needs its unit: `90s`, `10m`, or `1h`, the longest wait. The message is optional, up to 200 characters, and comes right after the time. A version goes before `--in`: `./eigen update 0.3.2 --in 10m`.
+
+The wait comes after the download and the question about breaking changes, and before the backup. Ctrl+C cancels it, and so does a lost SSH session, so run a long wait in tmux or screen. When you cancel, or the update fails, the banner goes away and Eigen runs on as it was.
+
+`./eigen rollback --in 10m` and `./eigen restore <backup> --in 10m` warn the same way, right before Eigen stops.
 
 ## The backup an update makes
 
