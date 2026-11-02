@@ -3,7 +3,7 @@ import type {
     VectorArrowElement,
     VectorElement,
     VectorImageElement,
-    VectorRichTextElement,
+    VectorRectangleElement,
     VectorShapeElement,
 } from '@workspace/lib/vector';
 import {
@@ -21,6 +21,7 @@ import {
     serializeBinding,
     shapeAnchorPoints,
     solidFill,
+    textBoxDefaults,
     textualDefaults,
     VECTOR_STYLE_DEFAULTS,
 } from '@workspace/lib/vector';
@@ -39,6 +40,7 @@ const rect = (over: Partial<VectorShapeElement> & Pick<VectorShapeElement, 'id'>
     ...textualDefaults(VECTOR_STYLE_DEFAULTS, DEFAULT_SHAPE_TEXT_PROPS),
     roughness: 1,
     type: 'rectangle',
+    autoFit: false,
     // A filled shape binds anywhere inside (a transparent one binds only in the outline band), so a
     // dropped-inside endpoint reaches it.
     fill: solidFill('#dddddd'),
@@ -252,12 +254,12 @@ describe('bindingCandidate / bindArrow — the DOM boxes are targets too', () =>
     const BOX = { x: 0, y: 0, width: 200, height: 100, angle: 0, index: 'a0' };
 
     const textBox = (
-        over: Partial<VectorRichTextElement> & Pick<VectorRichTextElement, 'id'>,
-    ): VectorRichTextElement => ({
+        over: Partial<VectorRectangleElement> & Pick<VectorRectangleElement, 'id'>,
+    ): VectorRectangleElement => ({
+        ...textBoxDefaults(VECTOR_STYLE_DEFAULTS),
         ...DEFAULT_ELEMENT_PROPS,
-        ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
         ...BOX,
-        type: 'richtext',
+        type: 'rectangle',
         fill: solidFill('#dddddd'),
         ...over,
     });

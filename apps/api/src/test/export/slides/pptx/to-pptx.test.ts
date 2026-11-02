@@ -12,6 +12,7 @@ import {
     serializeBackgroundFill,
     serializeFill,
     slidePtToPx,
+    textBoxDefaults,
 } from '@workspace/lib/vector';
 import * as Y from 'yjs';
 import type { XmlElement } from '../../../../lib/core/xml';
@@ -59,6 +60,11 @@ function element(type: VectorElementType, over: Fields): Fields {
         angle: 0,
         ...over,
     };
+}
+
+// A text box as the Text tool creates one: a rectangle that fits its text.
+function textBox(over: Fields): Fields {
+    return element('rectangle', { ...textBoxDefaults(SLIDES_STYLE_DEFAULTS), ...over });
 }
 
 function deckDoc(frames: FrameSpec[], elements: Fields[], slideSize: SlideSize | undefined, slideWidth: number): Y.Doc {
@@ -261,7 +267,7 @@ describe('pptx package', () => {
 
     test('the same deck writes the same bytes', () => {
         const scene = sceneOf([
-            element('richtext', { html: '<p>Hello <a href="https://example.com">there</a></p>' }),
+            textBox({ html: '<p>Hello <a href="https://example.com">there</a></p>' }),
             element('image', { index: 'a1', mediaName: 'wide.png', objectFit: 'cover' }),
         ]);
         expect(writePptx(scene, { title: 'Deck', media: [PNG_MEDIA], lost: () => {} })).toEqual(
@@ -298,7 +304,7 @@ describe('pptx package', () => {
             sceneOf(
                 [
                     element('rectangle', { corners: 'straight', x: 192, y: 144 }),
-                    element('richtext', { index: 'a1', html: '<p>small</p>', fontSize: 48 }),
+                    textBox({ index: 'a1', html: '<p>small</p>', fontSize: 48 }),
                 ],
                 undefined,
                 '4:3',
@@ -319,7 +325,7 @@ describe('pptx package', () => {
         [720, '9144000', '5143500', 'screen16x9'],
         [960, '12192000', '6858000', undefined],
     ] as const)('a %s pt wide deck writes its own width, and a 44 pt title as 44 pt', (width, cx, cy, type) => {
-        const title = element('richtext', { html: '<p>Title</p>', fontSize: slidePtToPx(44, width) });
+        const title = textBox({ html: '<p>Title</p>', fontSize: slidePtToPx(44, width) });
         const zip = pptx(sceneOf([title], undefined, '16:9', width));
         const size = first(part(zip, 'ppt/presentation.xml'), P, 'sldSz');
         expect([attr(size, 'cx'), attr(size, 'cy'), attr(size, 'type')]).toEqual([cx, cy, type]);
@@ -327,7 +333,7 @@ describe('pptx package', () => {
     });
 
     test("a size the canvas holds unsnapped writes the deck's whole points, not 58.67", () => {
-        const title = element('richtext', { html: '<p>Title</p>', fontSize: 117.33333333333334 });
+        const title = textBox({ html: '<p>Title</p>', fontSize: 117.33333333333334 });
         expect(attr(runProps(only(pptx(sceneOf([title], undefined, '16:9', 720))), 'Title'), 'sz')).toBe('4400');
     });
 
@@ -847,7 +853,7 @@ describe('pptx text', () => {
         const shape = only(
             pptx(
                 sceneOf([
-                    element('richtext', {
+                    textBox({
                         html: '<p>Title</p>',
                         fontFamily: 'Source Serif 4',
                         fontSize: 48,
@@ -899,8 +905,8 @@ describe('pptx text', () => {
                     element('path', { index: 'a4', ...text, ...closed }),
                     element('rectangle', { index: 'a5' }),
                     element('path', { index: 'a6', ...text, path: 'M 0 0 L 1 1', closed: false }),
-                    element('richtext', { index: 'a7', html: '<p>Box</p>' }),
-                    element('richtext', { index: 'a8', html: '' }),
+                    textBox({ index: 'a7', html: '<p>Box</p>' }),
+                    textBox({ index: 'a8', html: '' }),
                 ]),
             ),
         );
@@ -918,6 +924,33 @@ describe('pptx text', () => {
         for (const shape of all.slice(5, 7)) expect(descendants(shape, P, 'txBody')).toEqual([]);
         expect(paragraphs(all[7])).toEqual(['Box']);
         expect(descendants(all[8], P, 'txBody')).toHaveLength(1);
+    });
+
+    test('a text box is marked and grows its shape to its text, where a rectangle with text keeps its size', () => {
+        const all = shapes(
+            pptx(
+                sceneOf([
+                    element('rectangle', {
+                        ...textBoxDefaults(SLIDES_STYLE_DEFAULTS),
+                        index: 'a0',
+                        html: '<p>Box</p>',
+                    }),
+                    textBox({ index: 'a1', html: '' }),
+                    element('rectangle', { index: 'a2', html: '<p>Shape</p>' }),
+                ]),
+            ),
+        );
+        expect(
+            all.map((shape) => [
+                attr(first(shape, P, 'cNvPr'), 'name')?.split(' ')[0],
+                attr(first(shape, P, 'cNvSpPr'), 'txBox'),
+                xmlElements(first(shape, A, 'bodyPr')).map((child) => child.local),
+            ]),
+        ).toEqual([
+            ['Text', '1', ['spAutoFit']],
+            ['Text', '1', ['spAutoFit']],
+            ['Rectangle', undefined, ['noAutofit']],
+        ]);
     });
 
     test('a shape whose list the user emptied holds no text, so it writes no body', () => {
@@ -944,8 +977,8 @@ describe('pptx text', () => {
         const [painted, bare] = shapes(
             pptx(
                 sceneOf([
-                    element('richtext', { index: 'a0', html: '<p>a</p>', corners: 'curved', strokeColor: '#000000' }),
-                    element('richtext', { index: 'a1', html: '<p>b</p>', corners: 'round' }),
+                    textBox({ index: 'a0', html: '<p>a</p>', corners: 'curved', strokeColor: '#000000' }),
+                    textBox({ index: 'a1', html: '<p>b</p>', corners: 'round' }),
                 ]),
             ),
         );
@@ -958,7 +991,7 @@ describe('pptx text', () => {
     test('inline marks, links, breaks and paragraphs', () => {
         const zip = pptx(
             sceneOf([
-                element('richtext', {
+                textBox({
                     html:
                         '<p>plain <strong>bold <em>both</em></strong> <u>under</u> <s>gone</s></p>' +
                         '<p>a<br>b <a href="https://example.com/?a=1&amp;b=&quot;2&quot;">link</a></p><p></p>',
@@ -995,7 +1028,7 @@ describe('pptx text', () => {
     test('a link target percent-encodes what a URI cannot hold', () => {
         const zip = pptx(
             sceneOf([
-                element('richtext', {
+                textBox({
                     html: '<p><a href="https://a.b/x yé?q=50%">web</a> <a href="mailto:jé@x.nl?subject=hi there">mail</a></p>',
                 }),
             ]),
@@ -1011,7 +1044,7 @@ describe('pptx text', () => {
     test('a script or file link a peer writes never reaches a relationship', () => {
         const zip = pptx(
             sceneOf([
-                element('richtext', {
+                textBox({
                     html: '<p><a href="javascript:alert(1)">js</a> <a href=" JaVaScRiPt:alert(1)">mixed</a> <a href="file:///etc/passwd">file</a></p>',
                 }),
             ]),
@@ -1025,7 +1058,7 @@ describe('pptx text', () => {
 
     test("a paragraph's leading break keeps its line, its last one draws none", () => {
         const html = '<p><br>after<br></p><p> x <br></p><p>foo<br> </p><p>bar<br>\n</p>';
-        const shape = only(pptx(sceneOf([element('richtext', { html })])));
+        const shape = only(pptx(sceneOf([textBox({ html })])));
         expect(paragraphs(shape)).toEqual(['\nafter', 'x', 'foo', 'bar']);
     });
 
@@ -1033,7 +1066,7 @@ describe('pptx text', () => {
         const shape = only(
             pptx(
                 sceneOf([
-                    element('richtext', {
+                    textBox({
                         html: '<ul><li><p>one</p><ul><li><p>nested</p></li></ul></li></ul><ol><li><p>first</p></li></ol>',
                     }),
                 ]),
@@ -1050,7 +1083,7 @@ describe('pptx text', () => {
 
     test('a tall line and a deep list stop at the schema ceilings', () => {
         const nested = `${'<ul><li><p>deep</p>'.repeat(20)}${'</li></ul>'.repeat(20)}`;
-        const shape = only(pptx(sceneOf([element('richtext', { html: nested, fontSize: 400, lineHeight: 10 })])));
+        const shape = only(pptx(sceneOf([textBox({ html: nested, fontSize: 400, lineHeight: 10 })])));
         // 10 × 400 px is 2000 pt, past ST_TextSpacingPoint's 1584 pt.
         expect(attr(first(first(shape, A, 'lnSpc'), A, 'spcPts'), 'val')).toBe('158400');
         // Twenty levels of 1.5em at 400 px, past ST_TextMargin's 51,206,400 EMU.
@@ -1060,9 +1093,7 @@ describe('pptx text', () => {
     });
 
     test('a quote indents past its bar and draws at 70%', () => {
-        const shape = only(
-            pptx(sceneOf([element('richtext', { html: '<blockquote><p>quoted</p></blockquote><p>after</p>' })])),
-        );
+        const shape = only(pptx(sceneOf([textBox({ html: '<blockquote><p>quoted</p></blockquote><p>after</p>' })])));
         const [quoted, after] = descendants(shape, A, 'pPr');
         // 0.75em of 48 px and the 3 px bar.
         expect(attr(quoted, 'marL')).toBe(String(39 * EMU));
@@ -1075,7 +1106,7 @@ describe('pptx text', () => {
         const hostile = 'a < b & "c" ]]> \u0001￾ d';
         const scene = sceneOf(
             [
-                element('richtext', {
+                textBox({
                     html: `<p>${hostile.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')}</p>`,
                 }),
                 element('arrow', { index: 'a1', points: '[[0,0],[100,0]]', height: 0, text: hostile }),
@@ -1284,15 +1315,15 @@ describe('pptx losses', () => {
                 id: 'straight',
             }),
             // A text box with no border or fill puts no rough ink on the slide.
-            element('richtext', { html: '<p>plain</p>', roughness: 1, index: 'a3', id: 'text' }),
+            textBox({ html: '<p>plain</p>', roughness: 1, index: 'a3', id: 'text' }),
         ];
         expect(await lossesOf(shapes)).toEqual([{ code: 'shapes-simplified', count: 2 }]);
     });
 
     test("a quote's bar is left out of its text box, counted once per box", async () => {
         const boxes = [
-            element('richtext', { html: '<blockquote><p>a</p></blockquote><blockquote><p>b</p></blockquote>' }),
-            element('richtext', { html: '<p>plain</p>', index: 'a1', id: 'plain' }),
+            textBox({ html: '<blockquote><p>a</p></blockquote><blockquote><p>b</p></blockquote>' }),
+            textBox({ html: '<p>plain</p>', index: 'a1', id: 'plain' }),
         ];
         expect(await lossesOf(boxes)).toEqual([{ code: 'text-simplified', count: 1 }]);
     });

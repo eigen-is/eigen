@@ -15,7 +15,7 @@ import type {
     VectorElementType,
     VectorImageElement,
     VectorLinearElement,
-    VectorRichTextElement,
+    VectorRectangleElement,
     VectorShapeElement,
 } from '@workspace/lib/vector';
 import {
@@ -39,6 +39,7 @@ import {
     serializeBinding,
     shapeAnchorPoints,
     solidFill,
+    textBoxDefaults,
     textualDefaults,
     VECTOR_STYLE_DEFAULTS,
     writeElementInDoc,
@@ -70,15 +71,15 @@ function measureExcalifont(text: string, fontSize: number): { width: number; hei
     return { width, height: lines.length * getLineHeightPx(FONT, fontSize) };
 }
 
-// A rich-text box is laid out by the browser's HTML shaper, which runs a little wider than summed
+// A text box is laid out by the browser's HTML shaper, which runs a little wider than summed
 // advances; at exactly the measured width a one-line label wraps. 8% slack keeps the demo's
 // labels on one line. Arrow labels are SVG <text> (no wrapping), so they measure unpadded.
-const RICH_TEXT_SLACK = 1.08;
+const TEXT_BOX_SLACK = 1.08;
 
-// The box a rich-text element gets for a measured string: the measurement plus the shaping slack.
-function measureRichTextBox(text: string, fontSize: number): { width: number; height: number } {
+// The box a text box gets for a measured string: the measurement plus the shaping slack.
+function measureTextBox(text: string, fontSize: number): { width: number; height: number } {
     const { width, height } = measureExcalifont(text, fontSize);
-    return { width: width * RICH_TEXT_SLACK, height };
+    return { width: width * TEXT_BOX_SLACK, height };
 }
 
 // Side-midpoint order matches shapeAnchorPoints (right, bottom, left, top).
@@ -95,7 +96,7 @@ export function buildVectorDoc(doc: Y.Doc, plan: typeof SITE_PLAN): void {
     const lines: VectorLinearElement[] = plan.lines.map(buildLine);
     const images: VectorImageElement[] = plan.images.map(buildImage);
     const arrows: VectorArrowElement[] = plan.arrows.map((a, i) => buildArrow(a, i, byKey, byId));
-    const texts: VectorRichTextElement[] = plan.texts.map((t, i) => buildText(t, i));
+    const texts: VectorRectangleElement[] = plan.texts.map((t, i) => buildText(t, i));
 
     // Bottom-up z-order: ground outlines, lines, shapes, images, arrows, then every text on top.
     const ground = shapes.filter((_, i) => plan.shapes[i].ground);
@@ -149,7 +150,7 @@ function buildShape(s: SitePlanShape): VectorShapeElement {
     if (s.kind === 'ellipse') return { ...box, type: 'ellipse' };
     const corners = s.corners ?? DEFAULT_CORNERS;
     if (s.kind === 'diamond') return { ...box, type: 'diamond', corners };
-    return { ...box, type: 'rectangle', corners };
+    return { ...box, type: 'rectangle', corners, autoFit: false };
 }
 
 function buildLine(l: SitePlanLine, i: number): VectorLinearElement {
@@ -264,16 +265,16 @@ function sidePoint(shape: VectorShapeElement, end: { side: CanvasSide; along?: n
     }
 }
 
-// A free text, placed outside any shape: the kind's defaults under the drawing's style table, the box the seeder
+// A free text, placed outside any shape: a text box's defaults under the drawing's style table, the box the seeder
 // measured and the typography the drawing is authored in. Typed rather than partial, because sceneBounds measures it
 // before the write.
-function buildText(t: SitePlanText, i: number): VectorRichTextElement {
-    const { width, height } = measureRichTextBox(t.text, t.fontSize);
+function buildText(t: SitePlanText, i: number): VectorRectangleElement {
+    const { width, height } = measureTextBox(t.text, t.fontSize);
     return {
-        ...kindDefaults('richtext', SITE_PLAN_STYLE),
+        ...textBoxDefaults(SITE_PLAN_STYLE),
         id: `el-text-${i}`,
         index: '',
-        type: 'richtext',
+        type: 'rectangle',
         x: t.x,
         y: t.y,
         width,

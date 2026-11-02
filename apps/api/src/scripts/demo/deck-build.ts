@@ -1,15 +1,13 @@
-// Builds the sponsor deck straight into a slides container's Y.Doc from the typed SPONSOR_DECK spec (content.ts) — the
-// site-plan approach (vector-build.ts) rather than a byte-copied fixture, because a deck is a canvas document now and
-// frozen bytes cannot survive a stored-shape change. One frame per slide, elements positioned relative to the frame;
-// the deck writes no meta.slideSize, so it is 16:9. Every frame and element goes through the editor's own writer
-// (write-vector.ts), so the doc reads back through read-vector unchanged. Deterministic ids and indices: a reseed
-// rebuilds the same deck.
+// Builds the sponsor deck straight into a slides container's Y.Doc from the typed SPONSOR_DECK spec, as the site-plan
+// drawing is built, because frozen bytes could not survive a change to the stored shape. One frame per slide, each
+// element relative to its frame, and no meta.slideSize, so the deck is 16:9. Every record goes through the editor's
+// own writer, writeElementInDoc, so the doc reads back unchanged, and fixed ids and indices make a reseed identical.
 
 import { basename } from 'node:path';
 import type { NewVectorElement, StyleDefaults } from '@workspace/lib/vector';
 import {
     DEFAULT_ELEMENT_PROPS,
-    DEFAULT_RICHTEXT_PROPS,
+    DEFAULT_TEXT_BOX_PROPS,
     generateNKeysBetween,
     SLIDES_STYLE_DEFAULTS,
     serializeBackgroundFill,
@@ -56,7 +54,8 @@ export function buildDeckDoc(doc: Y.Doc, slides: DeckSlide[]): void {
 // roughness 0, so every element is drawn crisp and the seed changes nothing but a reseed's bytes.
 function buildText(t: DeckText, slideKey: string, frameId: string, i: number): DeckElement {
     const element: NewVectorElement = {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         frameId,
         seed: DEFAULT_ELEMENT_PROPS.seed,
         x: t.x,
@@ -66,10 +65,10 @@ function buildText(t: DeckText, slideKey: string, frameId: string, i: number): D
         html: t.html,
         fontFamily: t.font ?? DECK_STYLE.fontFamily,
         fontSize: t.fontSize,
-        fontWeight: t.bold ? 'bold' : DEFAULT_RICHTEXT_PROPS.fontWeight,
+        fontWeight: t.bold ? 'bold' : DEFAULT_TEXT_BOX_PROPS.fontWeight,
         color: t.color ?? DECK_STYLE.color,
-        textAlign: t.align ?? DEFAULT_RICHTEXT_PROPS.textAlign,
-        verticalAlign: t.valign ?? DEFAULT_RICHTEXT_PROPS.verticalAlign,
+        textAlign: t.align ?? DEFAULT_TEXT_BOX_PROPS.textAlign,
+        verticalAlign: t.valign ?? DEFAULT_TEXT_BOX_PROPS.verticalAlign,
     };
     return { id: `el-${slideKey}-text-${i}`, element };
 }

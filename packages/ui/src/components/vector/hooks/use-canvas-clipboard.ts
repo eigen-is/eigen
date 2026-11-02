@@ -1,7 +1,6 @@
-// The canvas' clipboard: the ⌘C/⌘X/⌘V document listeners, the async menu ops, and the paste ladder
-// (eigen items → our SVG's embedded metadata → OS files → plain text). The PRODUCER lives in
-// tools/clipboard, the paste DECISIONS in tools/paste-elements; this hook owns the events, the
-// transacts and the placement.
+// The canvas's clipboard: the ⌘C, ⌘X and ⌘V document listeners, the async menu ops, and the paste ladder (eigen
+// items, then our SVG's embedded metadata, then OS files, then plain text). buildSelectionData builds the payload and
+// planElementsPaste decides what a pasted canvas copy adds; this hook owns the events, the transactions and the placement.
 
 import { onMutationError } from '@workspace/lib/api-error';
 import { newChartSpecParts } from '@workspace/lib/charts';
@@ -240,7 +239,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
                         : styleDefaults.fontSize;
                 const { width, height } = measureVectorText(item.text, fontSize, fontFamily);
                 plan.partials.push({
-                    type: 'richtext',
+                    type: 'rectangle',
+                    autoFit: true,
                     ...placeAt(width, height),
                     width,
                     height,
@@ -349,7 +349,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
         [pasteEigenItems],
     );
 
-    // Plain-text paste (no eigen payload, no OS files) → ONE rich-text box at the viewport center, in the
+    // Plain-text paste (no eigen payload, no OS files) → ONE text box at the viewport center, in the
     // HOST's typography and with a locally-measured box (the pasteEigenItems text idiom). The partial names
     // no font, so the box is created with the same table it is measured with. Multi-line text is preserved
     // — textToParagraphHtml keeps one paragraph per line. One sealed undo step.
@@ -359,7 +359,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             const { width: w, height: h } = measureVectorText(text, styleDefaults.fontSize, styleDefaults.fontFamily);
             const id = sealed(undoManager, () =>
                 addElement({
-                    type: 'richtext',
+                    type: 'rectangle',
+                    autoFit: true,
                     x: anchor.x - w / 2,
                     y: anchor.y - h / 2,
                     width: w,
@@ -375,7 +376,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
     );
 
     // Non-eigen text paste (the keyboard fallthrough and the async menu path share this policy): plain
-    // text, or the flattened text of pasted HTML, becomes one rich-text box. Prose alignment rides in
+    // text, or the flattened text of pasted HTML, becomes one text box. Prose alignment rides in
     // text/html as a block text-align, which readDominantTextAlign reads as a TextAlign. Returns true
     // when it consumed content so the keyboard handler can gate its preventDefault on a real paste.
     const pasteNonEigenText = useCallback(
@@ -488,7 +489,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             }
             // Nothing placed by the rungs above. OS files fall through to useFilePasteTarget (image drop path).
             if (paste.files.length > 0) return;
-            // Plain text (or the text of pasted HTML) → a new rich-text box; only claim the event when
+            // Plain text (or the text of pasted HTML) → a new text box; only claim the event when
             // content is actually consumed, else it falls through to the OS-file path.
             if (pasteNonEigenText(paste.html, paste.text)) {
                 claim();
@@ -545,7 +546,7 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             if (data && pasteEigenItems(data.items)) return;
             // Nothing placed yet: walk the SAME ladder ⌘V does, over the same classifier, so the menu
             // row and the keystroke are one behavior — an SVG restores our elements or lands as an
-            // image, anything else becomes a rich-text box. OS-file image paste stays ⌘V-only (the async
+            // image, anything else becomes a text box. OS-file image paste stays ⌘V-only (the async
             // API exposes no File objects for the drop pipeline).
             let html = '';
             let text = '';

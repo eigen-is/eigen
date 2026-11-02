@@ -37,6 +37,7 @@ const SHAPE_BASE: Omit<VectorRectangleElement, 'id' | 'type'> = {
     roughness: 1,
     seed: 1,
     corners: 'straight',
+    autoFit: false,
     strokeWidth: 2,
 };
 

@@ -65,7 +65,10 @@ export async function downloadCanvasImage(
 // the box's size, under the app's canvas-text.css. It is read back as where every character landed.
 async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
     const boxes = elements
-        .filter((el): el is VectorTextualElement => isTextual(el) && (el.type === 'richtext' || hasText(el)))
+        .filter(
+            (el): el is VectorTextualElement =>
+                isTextual(el) && ((el.type === 'rectangle' && el.autoFit) || hasText(el)),
+        )
         .map((el) => {
             const host = document.createElement('div');
             host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;

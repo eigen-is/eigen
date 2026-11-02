@@ -11,7 +11,7 @@ import type {
     VectorScene,
 } from '../../vector/types';
 import { DEFAULT_ELEMENT_PROPS } from '../../vector/types';
-import { path, richtext, scene, shape } from './element-factories';
+import { path, scene, shape, textBox } from './element-factories';
 
 // Freedraw/line/arrow rows carry the paint + roughjs fields the shared defaults no longer hold.
 const LINEAR_PAINT = { fill: solidFill('transparent'), roughness: 1 } as const;
@@ -47,7 +47,8 @@ export function buildGoldenScene(): VectorScene {
         {
             ...DEFAULT_ELEMENT_PROPS,
             id: 't1',
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 0,
             y: 240,
             width: 120,
@@ -381,7 +382,8 @@ describe('sceneToSvg', () => {
                 {
                     ...DEFAULT_ELEMENT_PROPS,
                     id: 't',
-                    type: 'richtext',
+                    type: 'rectangle',
+                    autoFit: true,
                     x: 0,
                     y: 0,
                     width: 100,
@@ -417,14 +419,14 @@ describe('sceneToSvg', () => {
     });
 
     test('a painted box draws its backdrop inside its own <g>, before the text', () => {
-        const svg = sceneToSvg(scene([richtext({ id: 't', html: '<p>hi</p>', fill: solidFill('#ffcc00') })]));
+        const svg = sceneToSvg(scene([textBox({ id: 't', html: '<p>hi</p>', fill: solidFill('#ffcc00') })]));
         const group = svg.slice(svg.indexOf('<g transform='));
         expect(group.indexOf('<g stroke-linecap="round">')).toBeLessThan(group.indexOf('<foreignObject'));
         expect(group).toContain('#ffcc00');
     });
 
     test('rich text overflows its box instead of being clipped, and neutralises <p> margins', () => {
-        const svg = sceneToSvg(scene([richtext({ id: 't', html: '<p>a long label</p>' })]));
+        const svg = sceneToSvg(scene([textBox({ id: 't', html: '<p>a long label</p>' })]));
         // A box stored at exactly its measured width wraps a hair wider in HTML shaping; the wrapped
         // line has to stay visible (foreignObject clips to its rect by default), as slides does.
         expect(svg).toContain('<foreignObject x="0" y="0" width="100" height="60" overflow="visible">');
@@ -435,7 +437,7 @@ describe('sceneToSvg', () => {
     });
 
     test('a box measured as SVG text draws that text in its <g>, over its backdrop, and no foreignObject', () => {
-        const el = richtext({ id: 't', html: '<p>hi</p>', fill: solidFill('#ffcc00'), angle: 90 });
+        const el = textBox({ id: 't', html: '<p>hi</p>', fill: solidFill('#ffcc00'), angle: 90 });
         const svg = sceneToSvg(scene([el]), { richText: new Map([['t', '<text>hi</text>']]) });
 
         expect(svg).not.toContain('<foreignObject');

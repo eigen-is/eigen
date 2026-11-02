@@ -1,27 +1,7 @@
-// Cross-app clipboard payload. Ephemeral wire data (an `application/eigen-clipboard` MIME + an
-// HTML-marker fallback, read/written in core/clipboard) — there are no persisted instances, so the
-// shape is a clean break with zero backwards-compatibility concern.
-//
-// Geometry and typography are FIRST-CLASS TYPED fields. That is the one-source-of-truth fix: before
-// this, the apps stashed size in an untyped `meta` bag — one as `meta.w/h`, another as `meta.width` —
-// so an image lost its size crossing between them. There is no `meta` bag any more: every field here
-// has a producer AND a consumer, and anything an app wants to carry across earns a typed field.
-//
-// `width`/`height` are MANDATORY on every item — the producer measures its own rendered box (docs
-// measures the figure's <img>, which stores width only) so no consumer ever probes the pixels to
-// recover a ratio. That probe was the aspect-ratio bug: it resolved the image BY NAME against a
-// media listing captured before the paste's own re-upload, missed, and fell back to a 4:3 default.
-// IMAGES place straight from the wire box; TEXT re-measures locally (a wire size is never written
-// onto a text box, whose height follows the consuming app's own font metrics), so `height` on a text
-// item is fidelity information, not a placement instruction.
-//
-// Forged wires are filtered at the read seam (parseEigenJson) — per ITEM, not just per geometry: an
-// item that doesn't match its own variant is dropped there, because a consumer that trusted it would
-// throw inside a paste handler that has already called preventDefault, and silently eat the paste.
-//
-// No `x`/`y` on the image and text items: paste anchors at each app's own default/cursor/viewport-center.
-// The `elements` item is the exception, and says why on itself — a canvas selection carries the stored
-// coordinates so a canvas→canvas paste can place it relative to where it was copied from.
+// The cross-app clipboard payload: what one Eigen app writes on copy and every other app reads on paste, such as a
+// text, an image, a chart or a canvas selection. It rides as JSON under its own MIME type, with an HTML marker as a
+// fallback, and is never stored, so its shape can change freely. Every field has a producer and a consumer, and the
+// paste side drops a forged item before any consumer sees it (parseEigenJson).
 
 import type { ChartLook, ChartSpecTexts } from './chart';
 
@@ -29,8 +9,8 @@ import type { ChartLook, ChartSpecTexts } from './chart';
 // `fontFamily` is the EIGEN_FONTS name (per the fontFamily value canon), not a CSS stack. Every field
 // optional — a consumer applies the ones it understands and ignores the rest.
 //
-// The set is exactly what `VectorRichTextElement` models, which is also the widest thing any consumer
-// can place: vector's foreign-paste writes all ten onto the rich-text box it creates, and docs maps
+// The set is the typography a canvas text box stores, which is also the widest thing any consumer
+// can place: a canvas paste writes all ten onto the text box it creates, and docs maps
 // the six it has nodes/marks for (family, color, alignment, bold, italic, underline/strike). Nothing
 // goes on this wire that no consumer reads.
 //
@@ -81,9 +61,7 @@ export type EigenClipboardImageItem = {
 };
 
 // A canvas selection as NATIVE elements: whole stored records (the ELEMENT_FIELDS scalars), so a
-// canvas→canvas paste restores exactly what was copied — including every field a future kind adds, which
-// the old per-kind `meta.vector` carrier had to re-list by hand and kept losing (rich text's color, most
-// recently). Consumers that cannot place elements ignore this item and read the image / text items beside
+// canvas→canvas paste restores exactly what was copied, including every field a future kind adds. Consumers that cannot place elements ignore this item and read the image / text items beside
 // it, or the `svg` flavor. Coordinates are the STORED ones (scene coordinates on an infinite canvas,
 // frame-relative inside a frame) — the one item type that carries position, because a canvas paste is
 // placed RELATIVE to where the set was copied from, not "at the app's default spot".
@@ -113,6 +91,10 @@ export type EigenClipboardChartItem = {
     look: ChartLook;
 };
 
+// Every item carries the width and height its source drew it at, so no consumer probes the pixels to recover a
+// ratio. An image places straight from that box. Text re-measures in the consuming app's own font, so its height is
+// fidelity information, not a placement instruction. Only the elements item carries a position: the others paste at
+// each app's own default spot.
 export type EigenClipboardItem =
     | EigenClipboardTextItem
     | EigenClipboardImageItem

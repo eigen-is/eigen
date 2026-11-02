@@ -8,10 +8,11 @@ import type { Bounds, Point } from '../geometry';
 import { boxCenter, getElementBounds, rotatePoint } from '../geometry';
 import type { OutlineShape } from '../outline';
 import { EMPTY_OUTLINE } from '../outline';
-import type { Corners, VectorElement, VectorElementBase } from '../types';
-import { DEFAULT_ELEMENT_PROPS, prop } from '../types';
+import type { Corners, TextProps, VectorElement, VectorElementBase } from '../types';
+import { DEFAULT_ELEMENT_PROPS, DEFAULT_SHAPE_TEXT_PROPS, prop } from '../types';
 import type { YMapLike } from './read-fields';
-import { fontFamily } from './read-fields';
+import { fillField, fontFamily } from './read-fields';
+import { readTextual } from './textual';
 
 // A piece of text an element draws, in an EIGEN_FONTS family.
 type FontRun = { family: string; text: string };
@@ -62,8 +63,28 @@ export type Capabilities = {
     creation: 'box' | 'polyline' | 'freedraw' | 'none';
 };
 
+// What a box shape supports, such as a rectangle: a hatched fill, a dashed border it may drop, corners, docking, text
+// and a tool that drags it out. Each box shape states only where it differs, such as an ellipse, which has no corners.
+export const BOX_CAPABILITIES: Capabilities = {
+    fill: true,
+    fillStyle: true,
+    strokeStyle: true,
+    corners: true,
+    edges: false,
+    strokeOptional: true,
+    bindable: true,
+    text: true,
+    silhouette: 'box',
+    creation: 'box',
+};
+
+// The stored fill and text of a box shape, each validated. A corrupt text field reads as `props`.
+export function readBoxShape(src: YMapLike, props: TextProps = DEFAULT_SHAPE_TEXT_PROPS) {
+    return { fill: fillField(src.get('fill')), ...readTextual(src, props) };
+}
+
 // The base fields a kind may start a new element with other than the shared table's value.
-type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
+export type BasePaintDefaults = Partial<Pick<VectorElementBase, 'strokeColor' | 'strokeWidth' | 'strokeStyle'>>;
 
 type RenderContext = {
     resolveMedia?: (mediaName: string) => string | null;
@@ -86,9 +107,9 @@ type KindSpec<T extends VectorElement> = {
     is(el: VectorElement): el is T;
     capabilities: Capabilities;
     defaults(style: StyleDefaults): KindFields<T>;
-    // Overrides of the shared base defaults for a NEW element of this kind. The DOM-box kinds use the
-    // stroke as a BORDER, and a fresh box paints none until the user picks a color (slides' borderWidth
-    // 0, same intent). Omit where the base table already answers.
+    // Overrides of the shared base defaults for a NEW element of this kind. The image uses the stroke as a
+    // BORDER, and a fresh one paints none until the user picks a color (slides' borderWidth 0, same
+    // intent). Omit where the base table already answers.
     baseDefaults?: BasePaintDefaults;
     // Capabilities that depend on the ELEMENT rather than the kind, layered over the static table.
     // Omit where every element of the kind answers the same.
@@ -121,7 +142,7 @@ type KindSpec<T extends VectorElement> = {
 };
 
 // The registry entry. `defaults` and `read` keep the kind's own element type, so a consumer that names
-// a kind (`ELEMENT_KINDS.richtext`) composes a typed element instead of re-listing its fields; every
+// a kind (`ELEMENT_KINDS.rectangle`) composes a typed element instead of re-listing its fields; every
 // other method takes the union, so a generic `ELEMENT_KINDS[el.type]` dispatch stays callable.
 export type ElementKind<T extends VectorElement = VectorElement> = {
     type: T['type'];
@@ -162,7 +183,7 @@ export function boxAnchorPoints(el: VectorElement): Point[] {
 
 // The default aim lines: the vertical + horizontal center lines, un-shrunk. Excalidraw uses these for every
 // bindable shape except the rectangle, which overrides with its shrunk corner diagonals.
-function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
+export function boxAimLines(el: VectorElement): [[Point, Point], [Point, Point]] {
     const { x, y, width: w, height: h } = el;
     const center = boxCenter(el);
     const rotate = (point: Point): Point => rotatePoint(point, center, el.angle);

@@ -104,7 +104,7 @@ import type { VectorTool } from './hooks/use-tool';
 import { useViewport } from './hooks/use-viewport';
 import { ELEMENT_KIND_UI } from './kinds';
 import { newChartElement } from './kinds/chart';
-import { RichTextInPlaceEditor } from './kinds/richtext';
+import { RichTextInPlaceEditor } from './kinds/rich-text';
 import { CANVAS_PAPER_CLASS, canvasSurfaceClass, FramePage } from './paper';
 import type { EditingState } from './text-editing';
 import { arrowLabelEditing } from './text-editing';
@@ -113,7 +113,7 @@ import { TextOverlay } from './text-overlay';
 import { buildPreviewById, followArrowPreview, unbindDraggedArrow } from './tools/binding';
 import { boundsToBox, boxToBounds, elementBox } from './tools/boxes';
 import type { CreatingState } from './tools/create-shape';
-import { creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
+import { boxToolElement, creatingElement, isBoxTool, newShapeBox, normalizeRect } from './tools/create-shape';
 import { SnapGuides } from './tools/snap-guides';
 import { useTouchGestures } from './tools/touch-gestures';
 import { useDrawingTools } from './tools/use-drawing-tools';
@@ -331,7 +331,7 @@ export function CanvasEditor({
     const [editing, setEditing] = useState<EditingState | null>(null);
     // In-place rich-text editing. Separate from `editing` (the arrow-label TextOverlay session) because
     // the two never coexist and each owns a different commit contract: a label commits once on close,
-    // a rich-text box writes on every change.
+    // an element's rich text writes on every change.
     const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
     // The element whose kind's EditDialog a double-click opened (a chart's Edit data).
     const [editDialogId, setEditDialogId] = useState<string | null>(null);
@@ -762,7 +762,8 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it. An empty text box that paints nothing is deleted. A shape stays, because the user drew it.
+    // Close it. An empty text box (a rectangle with `autoFit`) that paints nothing is deleted. A shape stays, because
+    // the user drew it.
     // Otherwise the trailing seal closes the session's writes. Reads the LIVE element: the session wrote
     // through updateElement, so React state may be one tick behind.
     const closeRichText = useCallback(() => {
@@ -771,7 +772,7 @@ export function CanvasEditor({
         setRichTextEditId(null);
         if (!id) return;
         const el = visibleRef.current.find((e) => e.id === id);
-        if (el && el.type === 'richtext' && paintsNothing(el)) {
+        if (el && el.type === 'rectangle' && el.autoFit && paintsNothing(el)) {
             // Sealed on BOTH sides: without the leading seal the delete lands inside Y.UndoManager's 500ms
             // captureTimeout and merges into the session's last keystroke, so whether it is its own undo
             // step would depend on how fast the user clicked away.
@@ -1030,7 +1031,9 @@ export function CanvasEditor({
         const hit = hitTestTopmost(ordered, p, viewportRef.current.zoom, committedById, coarse);
         const hitEl = hit ? ordered.find((el) => el.id === hit) : undefined;
         if (hitEl) return editElement(hitEl);
-        const id = sealed(undoManager, () => addElement({ type: 'richtext', x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }));
+        const id = sealed(undoManager, () =>
+            addElement({ type: 'rectangle', autoFit: true, x: p.x, y: p.y, ...NEW_TEXT_BOX_SIZE }),
+        );
         if (id) openRichText(id);
     };
     const onDoubleClick = (e: React.MouseEvent) => openTextAtClient(e.clientX, e.clientY);
@@ -1151,7 +1154,7 @@ export function CanvasEditor({
         containerRef.current?.setPointerCapture(e.pointerId);
 
         // Box tool → start a local (not-yet-Yjs) drag-create. (Freehand/line/eraser already returned via
-        // the tools hook.) Rich text drags out like a shape; a click under the threshold places the
+        // the tools hook.) A text box drags out like a shape; a click under the threshold places the
         // default box instead of discarding it — see finishGesture.
         if (isBoxTool(tool)) {
             frozenRef.current = true;
@@ -1159,7 +1162,7 @@ export function CanvasEditor({
             setSelectedIds([]);
             gestureRef.current = { kind: 'create', pointerId: e.pointerId, startX: p.x, startY: p.y };
             setCreating({
-                type: tool,
+                tool,
                 seed: randomSeed(),
                 box: { x: p.x, y: p.y, width: 0, height: 0, angle: 0 },
             });
@@ -1335,15 +1338,15 @@ export function CanvasEditor({
             setCreating(null);
             if (!toolLocked) setTool('select');
             if (!c) return;
-            // A drag under the threshold is a CLICK: a shape is discarded, a rich-text box is placed at
+            // A drag under the threshold is a CLICK: a shape is discarded, a text box is placed at
             // its default size, because a click is how you start typing.
             const clicked = c.box.width < CREATE_MIN_SIZE && c.box.height < CREATE_MIN_SIZE;
-            if (clicked && c.type !== 'richtext') return;
+            if (clicked && c.tool !== 'text') return;
             // A click places the shared starting box (the engine's, so both apps agree); a drag keeps what
             // the user drew. Either way the height only ever grows from there.
             const box = clicked ? { ...c.box, ...NEW_TEXT_BOX_SIZE } : c.box;
             const id = addElement({
-                type: c.type,
+                ...boxToolElement(c.tool),
                 x: box.x,
                 y: box.y,
                 width: Math.max(MIN_ELEMENT_SIZE, box.width),
@@ -1355,7 +1358,7 @@ export function CanvasEditor({
             // undo step (the leading seal fired at pointerdown).
             undoManager?.stopCapturing();
             // A new text box opens its editor at once: an empty box you cannot type into is not a text tool.
-            if (id && c.type === 'richtext') openRichText(id);
+            if (id && c.tool === 'text') openRichText(id);
             return;
         }
         if (g.kind === 'move') {
@@ -1434,7 +1437,7 @@ export function CanvasEditor({
     // the surface around it stays the app's, so a letterboxed page reads as a page.
     const background = viewport === 'infinite' && !isTransparentColor(meta.background) ? meta.background : undefined;
 
-    // Rich text's height is DERIVED from the text in it, so the layer that renders a box measures it and
+    // A text box's height is DERIVED from the text in it, so the layer that renders a box measures it and
     // writes the fit back here. A fit the typing user caused rides in their own undo step — the box
     // grew because of that keystroke, and ⌘Z must take both back, since the fit itself only ever grows.
     // Every other fit (a peer's edit, a load, a panel change) is bookkeeping and stays untracked.

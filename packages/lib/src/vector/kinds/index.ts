@@ -23,17 +23,16 @@ import { pathKind } from './path';
 import { pieKind } from './pie';
 import type { YMapLike } from './read-fields';
 import { isYMapLike } from './read-fields';
-import { rectangleKind } from './rectangle';
-import { richTextKind } from './richtext';
+import { rectangleKind, TEXT_BOX_BASE_DEFAULTS } from './rectangle';
 
 export type { RenderOutput, StyleDefaults } from './kind';
 export { NEW_TEXT_BOX_SIZE, SLIDES_STYLE_DEFAULTS, VECTOR_STYLE_DEFAULTS } from './kind';
-export { richTextFitHeight } from './richtext';
+export { richTextFitHeight } from './rectangle';
 // The text block every kind with text shares. The in-place editor paints its box with the SAME string the
 // renderer emits (richTextCssText), so the two cannot drift.
 export { hasText, richTextCssText, textualDefaults } from './textual';
 
-// Each entry keeps its own element type, so `ELEMENT_KINDS.richtext.defaults(style)` is rich text's
+// Each entry keeps its own element type, so `ELEMENT_KINDS.rectangle.defaults(style)` is the rectangle's
 // field set and a generic `ELEMENT_KINDS[el.type]` lookup still answers with the union.
 export type ElementKindRegistry = { [K in VectorElementType]: ElementKind<ElementOfType<K>> };
 
@@ -45,7 +44,6 @@ export const ELEMENT_KINDS: ElementKindRegistry = {
     path: pathKind,
     chart: chartKind,
     image: imageKind,
-    richtext: richTextKind,
     freedraw: freedrawKind,
     line: lineKind,
     arrow: arrowKind,
@@ -80,7 +78,7 @@ export function isBindable(el: VectorElement): el is VectorBindableElement {
     return capabilitiesOf(el).bindable;
 }
 
-// The elements that hold rich text, such as a text box or a rectangle: the ones the in-place editor, the panel's
+// The elements that hold rich text, such as a rectangle or an ellipse: the ones the in-place editor, the panel's
 // text rows and the renderer act on. Read through the capability accessor.
 export function isTextual(el: VectorElement): el is VectorTextualElement {
     return capabilitiesOf(el).text;
@@ -93,22 +91,24 @@ export function isVectorElementType(v: unknown): v is VectorElementType {
 }
 
 // The shared base props a NEW element of this kind is created with, under the kind's own overrides —
-// the two the creation path spreads before the kind's own fields. The panel's reset affordances read
-// the same table, so "reset" restores exactly what "create" would have given: an image's border resets
-// to none, a rectangle's to the shared ink color.
+// the two the creation path spreads before the kind's own fields. A reset that reads this table restores
+// exactly what creation gave: an image's border resets to none, a rectangle's to the shared ink color, and
+// a text box's (`autoFit`) to none.
 export function baseDefaultsFor(
     type: VectorElementType,
     style: StyleDefaults,
+    autoFit = false,
 ): Pick<VectorElementBase, keyof typeof DEFAULT_ELEMENT_PROPS> {
+    const own = type === 'rectangle' && autoFit ? TEXT_BOX_BASE_DEFAULTS : ELEMENT_KINDS[type].baseDefaults;
     // The shared table's roughness is the READER's 0; a new element is as sketchy as its host says.
-    return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...ELEMENT_KINDS[type].baseDefaults };
+    return { ...DEFAULT_ELEMENT_PROPS, roughness: style.roughness, ...own };
 }
 
-// The kinds a tool can create, in toolbar order — VECTOR_TOOLS derives from this instead of hand-listing
-// tools next to icons. The literal tuple is what gives `CreationToolType` a narrow union, so a UI table
+// The kinds a tool can create, in toolbar order — VECTOR_TOOLS derives its kind tools from this instead of
+// hand-listing them next to icons. The literal tuple is what gives `CreationToolType` a narrow union, so a UI table
 // keyed by it is exhaustive-checked; the registry test pins the tuple against the capabilities so the two
 // can never disagree.
-const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw', 'richtext'] as const;
+const CREATION_ORDER = ['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw'] as const;
 
 type CreationToolType = (typeof CREATION_ORDER)[number];
 export const CREATION_TOOL_TYPES: readonly CreationToolType[] = CREATION_ORDER;

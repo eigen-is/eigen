@@ -1,5 +1,6 @@
-// A text box's HTML as the paragraphs and runs of a DrawingML text body, laid out as canvas-text.css lays it out: its
-// lists, quotes, links and marks, and its sizes and spacing in the deck's points.
+// An element's HTML as the paragraphs and runs of a DrawingML text body, laid out as the canvas's text stylesheet lays
+// it out: its lists, quotes, links and marks, and its sizes and spacing in the deck's points. A text box's body grows
+// its shape to its text, as the canvas grows the box.
 
 import { isElement } from '@workspace/lib/html';
 import type { TextAlign, VerticalAlign } from '@workspace/lib/vector';
@@ -51,6 +52,9 @@ type TextBox = {
     lineHeight: number;
     inset: number;
     wrap: boolean;
+    // Whether the body grows its shape to its text (a:spAutoFit), as a text box grows. Otherwise the shape keeps its
+    // size and the text spills.
+    autoFit: boolean;
     opacity: number;
 };
 
@@ -161,7 +165,8 @@ export function textBodyXml(slide: Slide, paragraphs: Paragraph[], box: TextBox)
         return `<a:p><a:pPr${attrs}>${lineSpacing}${spacing}${marker}</a:pPr>${runs.join('')}${end}</a:p>`;
     });
     const wrap = box.wrap ? 'square' : 'none';
-    return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHOR_BY_ALIGN[box.verticalAlign]}" rtlCol="0"><a:noAutofit/></a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
+    const fit = box.autoFit ? '<a:spAutoFit/>' : '<a:noAutofit/>';
+    return `<p:txBody><a:bodyPr wrap="${wrap}" lIns="${inset}" tIns="${inset}" rIns="${inset}" bIns="${inset}" anchor="${ANCHOR_BY_ALIGN[box.verticalAlign]}" rtlCol="0">${fit}</a:bodyPr><a:lstStyle/>${body.join('')}</p:txBody>`;
 }
 
 // CSS drops the collapsed space at a block's start and end, then the block's last break, which starts no line.

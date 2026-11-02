@@ -29,6 +29,9 @@ import { box, buildPptx, cxn, dspSp, PIXEL_PNG, para, scheme, smartArt, solid, s
 
 // A deck exported to .pptx and read back: what the writer states, the reader reads the same.
 
+// A text box, a rectangle that fits its text, reads as 'text', so a list of kinds tells it from a rectangle.
+const kindOf = (found: NewVectorElement) => (found.type === 'rectangle' && found.autoFit ? 'text' : found.type);
+
 const FRAME = { width: 1920, height: 1080 };
 
 const gradient = (from: string, to: string, angle: number) =>
@@ -68,7 +71,8 @@ const ELEMENTS: NewVectorElement[] = [
     },
     { type: 'pie', x: 1500, y: 40, width: 240, height: 160, angle: 20, startAngle: 30, sweepAngle: 120 },
     {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: 100,
         y: 500,
         width: 600,
@@ -82,7 +86,8 @@ const ELEMENTS: NewVectorElement[] = [
         verticalAlign: 'center',
     },
     {
-        type: 'richtext',
+        type: 'rectangle',
+        autoFit: true,
         x: 1000,
         y: 800,
         width: 500,
@@ -158,7 +163,9 @@ describe('a deck exported and read back', () => {
             expectPx(found.width, element.width);
             expectPx(found.height, element.height);
             expectDegrees(found.angle, element.angle);
-            if (element.type === 'rectangle' || element.type === 'diamond' || element.type === 'image')
+            // An unpainted text box shows no corners, so it is written, and read back, straight.
+            const plainRectangle = element.type === 'rectangle' && !element.autoFit;
+            if (plainRectangle || element.type === 'diamond' || element.type === 'image')
                 expect(found.corners).toBe(element.corners);
         }
     });
@@ -195,9 +202,23 @@ describe('a deck exported and read back', () => {
         }
     });
 
+    test('keeps which rectangles fit their text', () => {
+        const fits = pairs.flatMap(([element, found]) =>
+            element.type === 'rectangle' ? [[element.autoFit, found.autoFit === true]] : [],
+        );
+        expect(fits).toEqual([
+            [false, false],
+            [false, false],
+            [false, false],
+            [false, false],
+            [true, true],
+            [true, true],
+        ]);
+    });
+
     test('keeps rich text: its html, typography and box fields', () => {
         for (const [element, found] of pairs) {
-            if (element.type !== 'richtext') continue;
+            if (element.type !== 'rectangle' || !element.autoFit) continue;
             expect(found).toMatchObject({
                 html: element.html,
                 fontFamily: element.fontFamily,
@@ -230,7 +251,8 @@ describe('a deck exported and read back', () => {
 
     test("keeps a bordered text box's text inside its border, where the canvas draws it", () => {
         const bordered: NewVectorElement = {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 100,
             y: 100,
             width: 400,
@@ -434,7 +456,8 @@ describe('paths exported and read back', () => {
     const ROUNDED: NewVectorElement[] = [
         { type: 'diamond', x: 100, y: 600, width: 300, height: 200, angle: 0, corners: 'curved', fill: solid },
         {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 600,
             y: 600,
             width: 400,
@@ -479,7 +502,7 @@ describe('paths exported and read back', () => {
         // The writer marks the text box txBox, so its text comes back in a text box on top of its path.
         expect(box).toMatchObject({ type: 'path', closed: true, fill: solid });
         expect(box.html).toBeUndefined();
-        expect(text).toMatchObject({ type: 'richtext', html: '<p>Rounded</p>' });
+        expect(text).toMatchObject({ type: 'rectangle', autoFit: true, html: '<p>Rounded</p>' });
         for (const [found, element] of [
             [diamond, ROUNDED[0]],
             [box, ROUNDED[1]],
@@ -492,7 +515,8 @@ describe('paths exported and read back', () => {
 
     test("a painted text box with the deck's default corners keeps its text in a text box", () => {
         const painted: NewVectorElement = {
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             x: 100,
             y: 100,
             width: 600,
@@ -502,9 +526,9 @@ describe('paths exported and read back', () => {
         };
         const { sent, deck } = roundTrip([painted]);
         expect(sent[0]).toMatchObject({ corners: 'curved' });
-        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), found.html])).toEqual([
             ['path', undefined],
-            ['richtext', '<p>Hello</p>'],
+            ['text', '<p>Hello</p>'],
         ]);
     });
 });
@@ -611,7 +635,7 @@ describe('a SmartArt graphic imported, exported and read back', () => {
             found.width,
             found.height,
         ];
-        expect(imported.map((found) => found.type)).toEqual(['rectangle', 'richtext', 'path']);
+        expect(imported.map(kindOf)).toEqual(['rectangle', 'text', 'path']);
         expect(back.map(shape)).toEqual(imported.map(shape));
     });
 });

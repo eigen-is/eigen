@@ -48,18 +48,30 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     const opacity = el.opacity / 100;
     countPlainLook(el, slide);
     // A shape writes a text body only once it holds text. A text box writes one even empty, as PowerPoint does.
-    const text = isTextual(el) && (el.type === 'richtext' || hasText(el)) ? textXml(el, slide, opacity) : '';
+    const text =
+        isTextual(el) && ((el.type === 'rectangle' && el.autoFit) || hasText(el)) ? textXml(el, slide, opacity) : '';
     switch (el.type) {
-        case 'rectangle':
+        case 'rectangle': {
+            // A text box is marked txBox. A rounded preset insets its text by its corners, where Eigen's keeps the box,
+            // so a painted rounded text box is its outline, and an unpainted one shows no corners.
+            const outline = rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, cornerRadius(el), 0);
+            const painted = isBordered(el) || !isTransparentFill(parseFill(el.fill));
+            const geometry = !el.autoFit
+                ? boxGeometry(el)
+                : painted && outline.kind === 'rounded'
+                  ? outlineGeometry(outline.core, outline.radius, el, slide)
+                  : presetXml('rect');
             return spXml(
                 slide,
-                'Rectangle',
+                el.autoFit ? 'Text' : 'Rectangle',
                 el,
-                boxGeometry(el),
+                geometry,
                 fillXml(parseFill(el.fill), opacity, el),
                 lineXml(slide, el, opacity),
                 text,
+                el.autoFit,
             );
+        }
         case 'ellipse':
             return spXml(
                 slide,
@@ -116,26 +128,6 @@ export function elementXml(el: VectorElement, slide: Slide): string {
         }
         case 'image':
             return pictureXml(el, slide, opacity);
-        case 'richtext': {
-            // A rounded preset insets its text by its corners, where Eigen's keeps the box: a painted rounded box is its
-            // outline, and an unpainted one shows no corners.
-            const outline = rectOutline({ x: 0, y: 0, width: el.width, height: el.height }, cornerRadius(el), 0);
-            const painted = isBordered(el) || !isTransparentFill(parseFill(el.fill));
-            const geometry =
-                painted && outline.kind === 'rounded'
-                    ? outlineGeometry(outline.core, outline.radius, el, slide)
-                    : presetXml('rect');
-            return spXml(
-                slide,
-                'Text',
-                el,
-                geometry,
-                fillXml(parseFill(el.fill), opacity, el),
-                lineXml(slide, el, opacity),
-                text,
-                true,
-            );
-        }
         case 'line':
             return linearXml(el, parsePoints(el.points), slide, opacity);
         case 'freedraw':
@@ -153,7 +145,8 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     }
 }
 
-// An element's text as a text body, inset by its padding and its border, as the canvas insets it.
+// An element's text as a text body, inset by its padding and its border, as the canvas insets it. A text box's body
+// grows its shape to its text, as the canvas grows the box.
 function textXml(el: VectorTextualElement, slide: Slide, opacity: number): string {
     const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
     const paragraphs = paragraphsOf(el.html);
@@ -167,6 +160,7 @@ function textXml(el: VectorTextualElement, slide: Slide, opacity: number): strin
         strike: el.textDecoration === 'line-through',
         inset,
         wrap: true,
+        autoFit: el.type === 'rectangle' && el.autoFit,
         opacity,
     });
 }

@@ -20,11 +20,12 @@ import type {
     Textual,
     VectorElement,
     VectorElementBase,
-    VectorRichTextElement,
+    VectorRectangleElement,
     VectorTextualElement,
 } from '../../../vector/types';
 import { BASE_ELEMENT_FIELDS, DEFAULT_ELEMENT_PROPS } from '../../../vector/types';
-import { chart, ellipse, image, linear, path, pie, richtext, shape } from '../element-factories';
+import { textBoxDefaults } from '../../../vector/write-vector';
+import { chart, ellipse, image, linear, path, pie, shape, textBox } from '../element-factories';
 
 const TYPES = [
     'rectangle',
@@ -34,7 +35,6 @@ const TYPES = [
     'path',
     'chart',
     'image',
-    'richtext',
     'freedraw',
     'line',
     'arrow',
@@ -79,15 +79,7 @@ describe('ELEMENT_KINDS', () => {
     });
 
     test('the creation tools are exactly the kinds that can be drawn, in toolbar order', () => {
-        expect(CREATION_TOOL_TYPES).toEqual([
-            'rectangle',
-            'diamond',
-            'ellipse',
-            'arrow',
-            'line',
-            'freedraw',
-            'richtext',
-        ]);
+        expect(CREATION_TOOL_TYPES).toEqual(['rectangle', 'diamond', 'ellipse', 'arrow', 'line', 'freedraw']);
         // the hand-written tuple can never drift from the capabilities
         const drawable = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.creation !== 'none')
@@ -96,7 +88,7 @@ describe('ELEMENT_KINDS', () => {
         expect(ELEMENT_KINDS.image.capabilities.creation).toBe('none');
     });
 
-    test('the bindable kinds are the closed shapes, the pie slice, the path, the chart and the two DOM boxes', () => {
+    test('the bindable kinds are the closed shapes, the pie slice, the path, the chart and the image', () => {
         // isBindable READS this table, so the only thing worth pinning is which kinds set the capability:
         // the arrow endpoint docks on anything with a real outline, never on a stroke.
         expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.bindable)).toEqual([
@@ -107,19 +99,18 @@ describe('ELEMENT_KINDS', () => {
             'path',
             'chart',
             'image',
-            'richtext',
         ]);
         expect(isBindable(pie({ id: 'p' }))).toBe(true);
         // an open path has no edge to dock to (capabilitiesOf)
         expect(isBindable(path({ id: 'c' }))).toBe(true);
         expect(isBindable(path({ id: 'o', path: 'M 0 0 L 1 1', closed: false }))).toBe(false);
         expect(isBindable(chart({ id: 'c' }))).toBe(true);
-        expect(isBindable(richtext({ id: 't' }))).toBe(true);
+        expect(isBindable(textBox({ id: 't' }))).toBe(true);
         expect(isBindable(shape({ id: 'r', type: 'rectangle' }))).toBe(true);
         expect(isBindable(linear({ id: 'l', type: 'line' }))).toBe(false);
     });
 
-    test('the text kinds are the rich-text box and the closed shapes, pinned against VectorTextualElement', () => {
+    test('the text kinds are the closed shapes, pinned against VectorTextualElement', () => {
         // A Record over the union's types: a type the union gains or loses fails to compile here, and the
         // capability list below must then match it.
         const textual: Record<VectorTextualElement['type'], true> = {
@@ -128,7 +119,6 @@ describe('ELEMENT_KINDS', () => {
             ellipse: true,
             pie: true,
             path: true,
-            richtext: true,
         };
         expect(TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.text)).toEqual(
             TYPES.filter((type) => Object.hasOwn(textual, type)),
@@ -139,7 +129,7 @@ describe('ELEMENT_KINDS', () => {
             ellipse({ id: 'e' }),
             pie({ id: 'p' }),
             path({ id: 'c' }),
-            richtext({ id: 't' }),
+            textBox({ id: 't' }),
         ]) {
             expect([el.type, isTextual(el)]).toEqual([el.type, true]);
         }
@@ -170,15 +160,15 @@ describe('ELEMENT_KINDS', () => {
             lineHeight: true,
             padding: true,
         };
-        for (const type of ['rectangle', 'diamond', 'ellipse', 'pie', 'path', 'richtext'] as const) {
+        for (const type of ['rectangle', 'diamond', 'ellipse', 'pie', 'path'] as const) {
             for (const key of Object.keys(keys))
                 expect([type, ELEMENT_KINDS[type].fields]).toEqual([type, expect.arrayContaining([key])]);
         }
     });
 
     test('every bindable kind answers the docking questions', () => {
-        // Docking needs an outline, four anchors and two aim lines. The DOM boxes declare no anchorPoints
-        // or aimLines of their own, so this is what pins defineKind's box defaults reaching them.
+        // Docking needs an outline, four anchors and two aim lines. The image declares no anchorPoints
+        // or aimLines of its own, so this is what pins defineKind's box defaults reaching them.
         const bindables: VectorElement[] = [
             shape({ id: 'r', type: 'rectangle' }),
             shape({ id: 'd', type: 'diamond' }),
@@ -187,9 +177,9 @@ describe('ELEMENT_KINDS', () => {
             path({ id: 'pa' }),
             chart({ id: 'c' }),
             image({ id: 'i' }),
-            richtext({ id: 't' }),
+            textBox({ id: 't' }),
         ];
-        expect(bindables.map((el) => el.type)).toEqual(
+        expect(bindables.slice(0, -1).map((el) => el.type)).toEqual(
             TYPES.filter((type) => ELEMENT_KINDS[type].capabilities.bindable),
         );
         for (const el of bindables) {
@@ -285,16 +275,16 @@ describe('ELEMENT_KINDS', () => {
         }
     });
 
-    test('rich text carries a padding field, unpadded by default', () => {
-        expect(ELEMENT_KINDS.richtext.fields).toContain('padding');
-        expect(ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS).padding).toBe(0);
+    test('a text box carries a padding field, unpadded by default', () => {
+        expect(ELEMENT_KINDS.rectangle.fields).toContain('padding');
+        expect(textBoxDefaults(VECTOR_STYLE_DEFAULTS).padding).toBe(0);
     });
 
     test('a kind defaults to its OWN element, so a consumer spreads them instead of re-listing fields', () => {
         const base: VectorElementBase = {
             ...DEFAULT_ELEMENT_PROPS,
             id: 't',
-            type: 'richtext',
+            type: 'rectangle',
             x: 0,
             y: 0,
             width: 100,
@@ -304,15 +294,15 @@ describe('ELEMENT_KINDS', () => {
         };
         // The annotation is the pin: `defaults` typed as Record<string, unknown> would leave every kind
         // field missing here, and a typo'd override would not be caught.
-        const el: VectorRichTextElement = {
+        const el: VectorRectangleElement = {
             ...base,
-            ...ELEMENT_KINDS.richtext.defaults(VECTOR_STYLE_DEFAULTS),
-            type: 'richtext',
+            ...ELEMENT_KINDS.rectangle.defaults(VECTOR_STYLE_DEFAULTS),
+            type: 'rectangle',
             html: '<p>hi</p>',
-            textAlign: 'center',
+            textAlign: 'left',
         };
-        expect(Object.keys(el).sort()).toEqual([...BASE_ELEMENT_FIELDS, ...ELEMENT_KINDS.richtext.fields].sort());
-        expect(el.textAlign).toBe('center');
+        expect(Object.keys(el).sort()).toEqual([...BASE_ELEMENT_FIELDS, ...ELEMENT_KINDS.rectangle.fields].sort());
+        expect(el.textAlign).toBe('left');
         expect(el.lineHeight).toBe(1.2);
     });
 
@@ -334,7 +324,7 @@ describe('ELEMENT_KINDS', () => {
 
     test('searchText covers the text kinds and arrow labels, tags stripped', () => {
         expect(
-            ELEMENT_KINDS.richtext.searchText(richtext({ id: 'x', html: '<p>hello <strong>world</strong></p>' })),
+            ELEMENT_KINDS.rectangle.searchText(textBox({ id: 'x', html: '<p>hello <strong>world</strong></p>' })),
         ).toBe('hello world');
         expect(ELEMENT_KINDS.rectangle.searchText(shape({ id: 'r', type: 'rectangle' }))).toBe('');
         for (const el of [
@@ -373,17 +363,7 @@ describe('capabilities agree with the stored fields', () => {
         const hatched = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.fillStyle)
             .map(([type]) => type);
-        expect(hatched.sort()).toEqual([
-            'chart',
-            'diamond',
-            'ellipse',
-            'freedraw',
-            'line',
-            'path',
-            'pie',
-            'rectangle',
-            'richtext',
-        ]);
+        expect(hatched.sort()).toEqual(['chart', 'diamond', 'ellipse', 'freedraw', 'line', 'path', 'pie', 'rectangle']);
     });
 
     test('every kind but freedraw honours the stroke dash style', () => {
@@ -402,7 +382,6 @@ describe('capabilities agree with the stored fields', () => {
             'path',
             'pie',
             'rectangle',
-            'richtext',
         ]);
     });
 
@@ -413,16 +392,7 @@ describe('capabilities agree with the stored fields', () => {
         const optional = Object.entries(ELEMENT_KINDS)
             .filter(([, kind]) => kind.capabilities.strokeOptional)
             .map(([type]) => type);
-        expect(optional.sort()).toEqual([
-            'chart',
-            'diamond',
-            'ellipse',
-            'image',
-            'path',
-            'pie',
-            'rectangle',
-            'richtext',
-        ]);
+        expect(optional.sort()).toEqual(['chart', 'diamond', 'ellipse', 'image', 'path', 'pie', 'rectangle']);
     });
 
     test('only a bindable kind declares a silhouette', () => {
@@ -459,7 +429,7 @@ describe('capabilitiesOf', () => {
     test('a kind without geometry-dependent answers gets its static table', () => {
         const rect = shape({ id: 'r', type: 'rectangle' });
         expect(capabilitiesOf(rect)).toEqual(ELEMENT_KINDS.rectangle.capabilities);
-        expect(capabilitiesOf(richtext({ id: 't' }))).toEqual(ELEMENT_KINDS.richtext.capabilities);
+        expect(capabilitiesOf(textBox({ id: 't' }))).toEqual(ELEMENT_KINDS.rectangle.capabilities);
     });
 
     test('the capability and the renderer agree on which strokes paint a fill', () => {
@@ -475,11 +445,13 @@ describe('capabilitiesOf', () => {
 });
 
 describe('baseDefaults', () => {
-    test('a new rich text box or image paints no border until a stroke colour is picked', () => {
-        for (const type of ['richtext', 'image'] as const) {
-            expect([type, baseDefaultsFor(type, VECTOR_STYLE_DEFAULTS).strokeColor]).toEqual([type, 'transparent']);
-        }
-        const out = ELEMENT_KINDS.richtext.render(richtext({ id: 'rt', ...ELEMENT_KINDS.richtext.baseDefaults }), {});
+    test('a new text box or image paints no border until a stroke colour is picked', () => {
+        expect(baseDefaultsFor('rectangle', VECTOR_STYLE_DEFAULTS, true).strokeColor).toBe('transparent');
+        expect(baseDefaultsFor('image', VECTOR_STYLE_DEFAULTS).strokeColor).toBe('transparent');
+        const out = ELEMENT_KINDS.rectangle.render(
+            textBox({ id: 'rt', ...textBoxDefaults(VECTOR_STYLE_DEFAULTS) }),
+            {},
+        );
         expect('html' in out && out.style).not.toContain('border:');
     });
 

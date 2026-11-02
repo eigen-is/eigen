@@ -130,7 +130,7 @@ describe('Eigenvector export — rich-text HTML sanitization', () => {
         seedVectorDoc(collab.doc, {
             ...scene,
             elements: scene.elements.map((el) =>
-                el.type === 'richtext'
+                el.type === 'rectangle' && el.autoFit
                     ? {
                           ...el,
                           html:
@@ -156,10 +156,12 @@ describe('Eigenvector export — rich-text nesting', () => {
         const doc = new Y.Doc();
         seedVectorDoc(doc, {
             ...scene,
-            elements: scene.elements.map((el) => (el.type === 'richtext' ? { ...el, html } : el)),
+            elements: scene.elements.map((el) => (el.type === 'rectangle' && el.autoFit ? { ...el, html } : el)),
         });
-        const text = sanitizeSceneHtml(readVectorFromDoc(doc)).elements.find((el) => el.type === 'richtext');
-        return text?.type === 'richtext' ? text.html : '';
+        const text = sanitizeSceneHtml(readVectorFromDoc(doc)).elements.find(
+            (el) => el.type === 'rectangle' && el.autoFit,
+        );
+        return text?.type === 'rectangle' && text?.autoFit ? text.html : '';
     };
     const fill = (prefix: string, unit: string) =>
         prefix + unit.repeat(Math.floor((64 * 1024 - prefix.length) / unit.length));

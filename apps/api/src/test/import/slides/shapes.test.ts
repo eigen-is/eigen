@@ -50,6 +50,9 @@ const elementsOf = (shapes: string, fixture: Partial<PptxFixture> = {}): NewVect
     deckOf({ slides: [{ shapes }], ...fixture }).slides[0].elements;
 const element = (shapes: string, fixture: Partial<PptxFixture> = {}) => elementsOf(shapes, fixture)[0];
 
+// A text box, a rectangle that fits its text, reads as 'text', so a list of kinds tells it from a rectangle.
+const kindOf = (found: NewVectorElement) => (found.type === 'rectangle' && found.autoFit ? 'text' : found.type);
+
 const FILLED = solid('FF0000');
 
 const custGeom = (paths: string) => `<a:custGeom><a:avLst/><a:gdLst/><a:pathLst>${paths}</a:pathLst></a:custGeom>`;
@@ -212,7 +215,7 @@ describe('geometry', () => {
             }),
             { ...OPTIONS, deck: WIDE },
         );
-        expect(deck.slides[0].elements.map((found) => [found.type, Math.round(found.x ?? Number.NaN)])).toEqual([
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), Math.round(found.x ?? Number.NaN)])).toEqual([
             ['line', 256],
             ['rectangle', 1657],
         ]);
@@ -236,7 +239,7 @@ describe('kinds', () => {
             ['rect', 'roundRect', 'ellipse', 'diamond']
                 .map((geom) => sp({ xfrm: box(0, 0, 10, 10), geom, spPr: FILLED }))
                 .join(''),
-        ).map((found) => [found.type, found.corners]);
+        ).map((found) => [kindOf(found), found.corners]);
         expect(kinds).toEqual([
             ['rectangle', 'straight'],
             ['rectangle', 'curved'],
@@ -298,7 +301,7 @@ describe('kinds', () => {
         expect(elementsOf(cxn({ xfrm: box(0, 0, 100, 0), ln: '<a:ln><a:noFill/></a:ln>' }))).toEqual([]);
     });
 
-    test('a text box is one rich text box with its fill and border', () => {
+    test('a text box is one rectangle that fits its text, with its fill and border', () => {
         const [textBox] = elementsOf(
             sp({
                 xfrm: box(0, 0, 100, 50),
@@ -308,7 +311,8 @@ describe('kinds', () => {
             }),
         );
         expect(textBox).toMatchObject({
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             html: '<p>Hello &amp; &lt;world&gt;</p>',
             strokeColor: '#00ff00',
             corners: 'straight',
@@ -316,10 +320,11 @@ describe('kinds', () => {
         expect(JSON.parse(String(textBox.fill))).toMatchObject({ type: 'solid', color: '#ff0000' });
     });
 
-    test('a straight rect with text is a text box by txBox or any placeholder, and otherwise a rectangle holding it', () => {
+    test('a straight rect with text fits it by txBox, any placeholder or spAutoFit, and otherwise lets it spill', () => {
         const rect = (options: { txBox?: boolean; ph?: string }) =>
             sp({ xfrm: box(0, 0, 200, 100), geom: 'rect', spPr: FILLED, text: para('Label'), ...options });
         const marked = (value: string) => rect({}).replace('<p:cNvSpPr/>', `<p:cNvSpPr txBox="${value}"/>`);
+        const grows = (fit: string) => rect({}).replace('<a:bodyPr/>', `<a:bodyPr>${fit}</a:bodyPr>`);
         const found = elementsOf(
             rect({ txBox: true }) +
                 marked('true') +
@@ -327,15 +332,16 @@ describe('kinds', () => {
                 rect({ ph: '<p:ph type="ftr" sz="quarter" idx="11"/>' }) +
                 rect({ ph: '<p:ph type="dt" sz="half" idx="10"/>' }) +
                 rect({ ph: '<p:ph type="sldNum" sz="quarter" idx="12"/>' }) +
+                grows('<a:spAutoFit/>') +
                 rect({}) +
-                marked('0'),
+                marked('0') +
+                grows('<a:noAutofit/>'),
         );
-        expect(found.map((element) => [element.type, element.html, element.corners])).toEqual([
-            ...Array.from({ length: 6 }, () => ['richtext', '<p>Label</p>', 'straight']),
-            ['rectangle', '<p>Label</p>', 'straight'],
-            ['rectangle', '<p>Label</p>', 'straight'],
+        expect(found.map((element) => [kindOf(element), element.html, element.corners])).toEqual([
+            ...Array.from({ length: 7 }, () => ['text', '<p>Label</p>', 'straight']),
+            ...Array.from({ length: 3 }, () => ['rectangle', '<p>Label</p>', 'straight']),
         ]);
-        expect(JSON.parse(String(found[6].fill))).toMatchObject({ color: '#ff0000' });
+        expect(JSON.parse(String(found[7].fill))).toMatchObject({ color: '#ff0000' });
     });
 
     test('a shape marked txBox that is not a straight rect is drawn with its text in a box on top', () => {
@@ -344,13 +350,13 @@ describe('kinds', () => {
         const found = elementsOf(
             marked(FILLED, 'roundRect') + marked(FILLED, 'ellipse') + marked(custGeom(TRIANGLE) + FILLED),
         );
-        expect(found.map((element) => [element.type, element.html])).toEqual([
+        expect(found.map((element) => [kindOf(element), element.html])).toEqual([
             ['rectangle', undefined],
-            ['richtext', '<p>Label</p>'],
+            ['text', '<p>Label</p>'],
             ['ellipse', undefined],
-            ['richtext', '<p>Label</p>'],
+            ['text', '<p>Label</p>'],
             ['path', undefined],
-            ['richtext', '<p>Label</p>'],
+            ['text', '<p>Label</p>'],
         ]);
     });
 
@@ -368,7 +374,7 @@ describe('kinds', () => {
         const found = elementsOf(
             shape(TRIANGLE, '<a:noFill/>') + shape(TRIANGLE + noise, FILLED) + shape(unstroked, bordered),
         );
-        expect(found.map((element) => [element.type, element.html, element.closed])).toEqual([
+        expect(found.map((element) => [kindOf(element), element.html, element.closed])).toEqual([
             ['path', '<p>T</p>', true],
             ['path', '<p>T</p>', true],
             ['path', '<p>T</p>', true],
@@ -391,7 +397,7 @@ describe('kinds', () => {
             ['ellipse', 'roundRect', 'diamond', 'pie', 'star5'].map((geom) => shape(geom)).join('') +
                 shape('ellipse', '<a:noFill/>'),
         );
-        expect(found.map((element) => [element.type, element.html, element.verticalAlign])).toEqual([
+        expect(found.map((element) => [kindOf(element), element.html, element.verticalAlign])).toEqual([
             ...['ellipse', 'rectangle', 'diamond', 'pie', 'path'].map((type) => [type, '<p>Inside</p>', 'center']),
             ['ellipse', '<p>Inside</p>', 'center'],
         ]);
@@ -405,20 +411,20 @@ describe('kinds', () => {
         const open =
             '<a:path w="2" h="2" fill="none"><a:moveTo><a:pt x="0" y="0"/></a:moveTo><a:lnTo><a:pt x="2" y="2"/></a:lnTo></a:path>';
         const stroke = `<a:ln w="12700">${solid('00FF00')}</a:ln>`;
-        const kinds = (shapes: string) => elementsOf(shapes).map((element) => [element.type, element.html]);
+        const kinds = (shapes: string) => elementsOf(shapes).map((element) => [kindOf(element), element.html]);
         const can = kinds(sp({ xfrm: box(0, 0, 100, 100), geom: 'can', spPr: FILLED, text: para('Can') }));
         expect(can.length).toBeGreaterThan(2);
         expect(can.slice(0, -1).every(([type, html]) => type === 'path' && html === undefined)).toBe(true);
-        expect(can.at(-1)).toEqual(['richtext', '<p>Can</p>']);
+        expect(can.at(-1)).toEqual(['text', '<p>Can</p>']);
         expect(
             kinds(sp({ xfrm: box(0, 0, 100, 100), spPr: `${custGeom(open)}${stroke}`, text: para('Open') })),
         ).toEqual([
             ['path', undefined],
-            ['richtext', '<p>Open</p>'],
+            ['text', '<p>Open</p>'],
         ]);
         expect(kinds(sp({ xfrm: box(0, 0, 100, 0), geom: 'line', spPr: stroke, text: para('Line') }))).toEqual([
             ['line', undefined],
-            ['richtext', '<p>Line</p>'],
+            ['text', '<p>Line</p>'],
         ]);
     });
 
@@ -438,7 +444,7 @@ describe('kinds', () => {
             });
         };
         const up = turned(' vert="vert270"').slides[0].elements[0];
-        expect(up).toMatchObject({ type: 'richtext', html: '<p>Up</p>' });
+        expect(up).toMatchObject({ type: 'rectangle', autoFit: true, html: '<p>Up</p>' });
         expectBox(up, 250, -50, 100, 400);
         expect(up?.angle).toBeCloseTo(280, 6);
         expect(turned(' vert="vert"').slides[0].elements[0]?.angle).toBeCloseTo(100, 6);
@@ -583,8 +589,8 @@ describe('kinds', () => {
                 },
             ],
         });
-        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([
-            ['richtext', '<p>keep me</p>'],
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), found.html])).toEqual([
+            ['text', '<p>keep me</p>'],
         ]);
         expect(deck.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
@@ -702,7 +708,7 @@ describe('kinds', () => {
                 },
             ],
         });
-        expect(deck.slides[0].elements.map((found) => [found.type, found.closed, found.strokeColor])).toEqual([
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), found.closed, found.strokeColor])).toEqual([
             ['path', false, '#0000ff'],
             ['path', false, '#0000ff'],
         ]);
@@ -832,14 +838,14 @@ describe('kinds', () => {
                 ],
             });
         const closed = read(`${lines}<a:close/>`);
-        expect(closed.slides[0].elements.map((found) => found.type)).toEqual(['path']);
+        expect(closed.slides[0].elements.map(kindOf)).toEqual(['path']);
         expect(closed.warnings).toEqual([]);
         // No arrow draws lines and curves at once, nor an arc, so those open paths lose their heads.
         const mixed = read(`${lines}${curve}`);
-        expect(mixed.slides[0].elements.map((found) => found.type)).toEqual(['path']);
+        expect(mixed.slides[0].elements.map(kindOf)).toEqual(['path']);
         expect(mixed.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
         const arc = deckOf({ slides: [{ shapes: sp({ xfrm: box(0, 0, 10, 10), geom: 'arc', spPr: ln }) }] });
-        expect(arc.slides[0].elements.map((found) => found.type)).toEqual(['path']);
+        expect(arc.slides[0].elements.map(kindOf)).toEqual(['path']);
         expect(arc.warnings).toEqual([{ code: 'shapes-simplified', count: 1 }]);
     });
 
@@ -853,7 +859,7 @@ describe('kinds', () => {
                 },
             ],
         });
-        expect(deck.slides[0].elements.map((found) => [found.type, found.html])).toEqual([['richtext', '<p>Next</p>']]);
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), found.html])).toEqual([['text', '<p>Next</p>']]);
         expect(deck.warnings).toContainEqual({ code: 'shapes-simplified', count: 2 });
     });
 
@@ -866,7 +872,7 @@ describe('kinds', () => {
                 layouts: [{ shapes: placeholder(`${custGeom(TRIANGLE)}${FILLED}`) }],
                 slides: [{ shapes: placeholder('') }, { shapes: placeholder('') }, { shapes: placeholder('') }],
             });
-            expect(deck.slides.map((slide) => slide.elements.map((found) => [found.type, found.html]))).toEqual(
+            expect(deck.slides.map((slide) => slide.elements.map((found) => [kindOf(found), found.html]))).toEqual(
                 Array(3).fill([['path', '<p>x</p>']]),
             );
             expect(convert).toHaveBeenCalledTimes(1);
@@ -1008,7 +1014,12 @@ describe('style references', () => {
             slides: [{ shapes: sp({ ph: '<p:ph type="body" idx="1"/>', text: para('Body') }) }],
         }).slides[0].elements;
         expect(fillOf(found)).toBe('#ff8800');
-        expect(found).toMatchObject({ type: 'richtext', color: '#00aa00', fontFamily: 'Source Serif 4' });
+        expect(found).toMatchObject({
+            type: 'rectangle',
+            autoFit: true,
+            color: '#00aa00',
+            fontFamily: 'Source Serif 4',
+        });
     });
 });
 
@@ -1164,9 +1175,9 @@ describe('pictures', () => {
             OPTIONS,
         );
         expect(deck.media).toEqual([]);
-        expect(deck.slides[0].elements.map((found) => [found.type, found.html, found.mediaName])).toEqual([
-            ['richtext', '<p>Picture not imported</p>', undefined],
-            ['richtext', '<p>Picture not imported</p>', undefined],
+        expect(deck.slides[0].elements.map((found) => [kindOf(found), found.html, found.mediaName])).toEqual([
+            ['text', '<p>Picture not imported</p>', undefined],
+            ['text', '<p>Picture not imported</p>', undefined],
         ]);
         expect(deck.warnings).toEqual([{ code: 'images-dropped', count: 2 }]);
     });
@@ -1231,7 +1242,8 @@ describe('dropped objects', () => {
             '<p>Table not imported</p>',
         ]);
         expect(boxes[0]).toMatchObject({
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             strokeStyle: 'dashed',
             textAlign: 'center',
             verticalAlign: 'center',
@@ -1366,12 +1378,7 @@ describe('SmartArt', () => {
     test('its shapes come in at the frame offset plus their own, painted, with their text in the txXfrm box', () => {
         const deck = deckWith(smartArt([100, 50, 600, 400], { nodes: ['President'], drawing: ORG_CHART }));
         const [node, text, rectangle, rectangleText] = deck.slides[0].elements;
-        expect(deck.slides[0].elements.map((found) => found.type)).toEqual([
-            'rectangle',
-            'richtext',
-            'rectangle',
-            'richtext',
-        ]);
+        expect(deck.slides[0].elements.map(kindOf)).toEqual(['rectangle', 'text', 'rectangle', 'text']);
         expect(node).toMatchObject({ corners: 'curved', strokeColor: '#ffffff' });
         expect(fillOf(node)).toMatchObject({ color: '#4f81bd' });
         expectBox(node, 120, 60, 200, 100);
@@ -1417,7 +1424,7 @@ describe('SmartArt', () => {
                 txXfrm: textBox(200, 0, 100, 50),
             });
         const elements = deckWith(smartArt([0, 0, 400, 200], { drawing })).slides[0].elements;
-        const texts = elements.filter((found) => found.type === 'richtext');
+        const texts = elements.filter((found) => found.type === 'rectangle' && found.autoFit);
         expect(texts.map((found) => [found.html, Math.round(Number(found.angle))])).toEqual([
             ['<p>upright</p>', 0],
             ['<p>turned</p>', 30],
@@ -1435,7 +1442,7 @@ describe('SmartArt', () => {
             drawing,
             drawingRels: rel('rId1', 'hyperlink', 'https://eigen.is/', true),
         });
-        const text = deckWith(diagram).slides[0].elements.find((found) => found.type === 'richtext');
+        const text = deckWith(diagram).slides[0].elements.find((found) => found.type === 'rectangle' && found.autoFit);
         expect(text?.html).toBe('<p><a href="https://eigen.is/">site</a></p>');
     });
 
@@ -1456,7 +1463,8 @@ describe('SmartArt', () => {
         const [placeholder] = deck.slides[0].elements;
         expect(deck.slides[0].elements).toHaveLength(1);
         expect(placeholder).toMatchObject({
-            type: 'richtext',
+            type: 'rectangle',
+            autoFit: true,
             strokeStyle: 'dashed',
             html: '<p>SmartArt not imported</p><p>Plan</p><p>Build</p>',
         });

@@ -202,6 +202,7 @@ export function arrowXml(el: VectorArrowElement, slide: Slide, opacity: number):
             lineHeight: getFontMetrics(el.fontFamily).lineHeight,
             inset: ARROW_LABEL_PAD,
             wrap: false,
+            autoFit: false,
             opacity,
         },
     );
