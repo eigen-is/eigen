@@ -141,7 +141,7 @@ A per-home restore starts on **Restore**, which asks first, naming the home. The
 4. The home folder is renamed aside as `<id>.pre-restore-<date>-<time>`. A deleted user has none.
 5. The archive's home folder is installed. A `local` mount's files go in as they are, a `local-key` mount's under their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the upload queue drains them with its retry and backoff. Every restored row gets a fresh key, so no bucket object is overwritten.
 6. Only then do identity rows go into `users3.db`, because nothing takes a row back. A missing user is inserted from the archive; a present one is left alone, and the restore is refused when the email no longer matches. Missing share rows are inserted, and the avatar only when the server has none. The folder is whole now, so the home's data epoch rotates.
-8. The mark clears and the home is opened, so a remote mount's queue starts draining at once. The first load runs migrations and reseeds the byte counters.
+7. The mark clears and the home is opened, so a remote mount's queue starts draining at once. The first load runs migrations and reseeds the byte counters.
 
 A failure after step 4 parks the half-written folder as `<id>.failed-restore-<date>-<time>` and renames the original back.
 

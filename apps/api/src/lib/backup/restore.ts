@@ -138,7 +138,8 @@ export async function restoreSafetyCopy(
         // stamp has one-second steps, and it would then list the size measured for this folder.
         forgetSafetyCopySize(folder);
         onProgress?.('home files', 1, 1);
-        // Only once the copy is in place, so a refused restore leaves its trash dated as it was.
+        // Only once the copy is in place. A refusal here can leave some of the copy's trash re-dated, which only
+        // lengthens its retention.
         redateRestoredTrash(ownerId, homeDir, mountIds);
     };
 
