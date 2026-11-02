@@ -27,8 +27,8 @@ import { OverlayRegion } from './OverlayRegion';
 export const RowHeader: React.FC = () => {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const { onContextMenu, openAtPoint, anchor: rowMenuAnchor } = useSheetContextMenu('row');
-    // Long-press opens the row menu on touch, mirroring the cell area — headers otherwise
-    // have no menu entry where the browser never synthesises a contextmenu. bind carries no item.
+    // A long press opens the row menu on touch, as it does on the cell area. A touch browser sends no contextmenu,
+    // so without it a header has no menu there.
     const longPress = useLongPress<null>((_item, x, y) => openAtPoint(x, y));
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -167,8 +167,8 @@ export const RowHeader: React.FC = () => {
         };
     }, [refs.globalCache]);
 
-    // The header splits into the body's panes on its own axis: a pinned frozen band and a main band that scrolls,
-    // whose clip cuts the highlights at the freeze boundary.
+    // The header splits into the body's panes on its own axis: a frozen band that stays put and a main band that
+    // scrolls. Each band's clip cuts the highlights at the freeze boundary.
     const headerWidth = context.rowHeaderWidth - 1.5;
     const freeze = refs.globalCache.freezen?.[context.currentSheetId];
     const rowFreeze: Freezen | undefined = freeze?.horizontal ? { horizontal: freeze.horizontal } : undefined;
@@ -189,14 +189,12 @@ export const RowHeader: React.FC = () => {
             onContextMenu={onContextMenu}
             {...longPress.bind(null)}
         >
-            {/* Positioned 2px down so the regions inside live in grid
-                coordinates — the container itself is pulled up 2px
-                (margin-top -2 / padding-top 2). OverlayRegion pins its content
-                frame to the containing block's origin, so the offset must sit
-                on an ancestor, not on the region rects. */}
+            {/* The container is pulled up 2px by its margin and padding. This wrapper moves 2px back down, so the
+                regions inside use grid coordinates. The offset must sit on an ancestor, because OverlayRegion pins
+                its content to the origin of its containing block. */}
             <div style={{ position: 'absolute', top: 2, right: 0, bottom: 0, left: 0, pointerEvents: 'none' }}>
-                {/* Selected highlights are passive: render into every region in pure
-                    content coordinates; each region's clip shows exactly its portion. */}
+                {/* Each region draws every selected highlight in content coordinates. Its clip shows only its own
+                    part. */}
                 {regions.map(({ pane, ...rect }) => (
                     <OverlayRegion key={pane} {...rect}>
                         {selectedLocation.map(({ row, row_pre, r1, r2 }) => (
@@ -213,8 +211,7 @@ export const RowHeader: React.FC = () => {
                         ))}
                     </OverlayRegion>
                 ))}
-                {/* Hover highlight + resize handle are singletons in the single
-                    region containing the hovered row. */}
+                {/* The hover highlight and the resize handle exist once, in the region that holds the hovered row. */}
                 <OverlayRegion {...hoverRegion}>
                     <div
                         className="sheet-rows-change-size"
@@ -239,9 +236,9 @@ export const RowHeader: React.FC = () => {
                     ) : null}
                 </OverlayRegion>
             </div>
-            {/* The freeze handle's position adds the scroll offset, so in the translated content it stays put in the
-                viewport. It sits outside the panes, unclipped like the body's drag lines, and a freeze drag moves it
-                directly. */}
+            {/* The freeze handle's position adds the scroll offset, so it stays put in the viewport while the content
+                scrolls. It sits outside the panes, so no clip cuts it, as none cuts the body's drag lines. A freeze
+                drag moves it directly. */}
             <div ref={contentRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
                 <div
                     className="sheet-rows-freeze-handle"

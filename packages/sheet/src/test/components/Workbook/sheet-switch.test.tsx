@@ -229,3 +229,16 @@ test('Enter that ends a tab rename sends no keypress on to the notice', async ()
     });
     expect(enter.defaultPrevented).toBe(true);
 });
+
+// The column menu's arrow shows on a hovered column a user may edit. A read-only column beside it must not hide it.
+test("a column header's menu arrow asks only about the hovered column", async () => {
+    const data = sheets();
+    data[1].config = { colReadOnly: { 1: 1 } };
+    const { container } = await mountWorkbook({ data, showToolbar: false });
+    const header = container.querySelector('.sheet-col-header');
+    if (!header) throw new Error('no column header');
+    await act(async () => {
+        header.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, clientX: 10, clientY: 5 }));
+    });
+    expect(container.querySelector('[aria-label="Column options"]')).not.toBeNull();
+});
