@@ -173,6 +173,21 @@ describe('Home init', () => {
         const reopened = await getHome(user.id);
         expect(reopened.drive.getMounts().map((mount) => mount.config.id)).not.toContain('default');
     });
+
+    test('a user home whose default mount is off still answers its size, files included', async () => {
+        const user = await createTestUser(`size-off-${crypto.randomUUID()}@test.eigen.is`, 'testpassword123', 'Size');
+        const home = await getHome(user.id);
+        const root = await home.drive.getRootFolder('default');
+        if (!root) throw new Error('The default mount has no root folder');
+        await home.drive.createFileFromData('default', root.id, 'note.txt', 'text/plain', Buffer.from('some bytes'));
+        const before = await home.size();
+        expect(before.drive.default.used).toBeGreaterThan(0);
+        await home.settings.set({ mounts: { default: { enabled: false } } });
+        await evictHome(user.id);
+
+        const reopened = await getHome(user.id);
+        expect(await reopened.size()).toEqual(before);
+    });
 });
 
 function thrownBy(read: () => unknown): unknown {

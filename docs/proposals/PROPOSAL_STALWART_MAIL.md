@@ -236,15 +236,12 @@ The `MaildirStore` class already implements every one of these methods — that'
 of `MaildirStore` in `apps/api/src/lib/mail/maildir-store.ts`. Lift the interface from the class, no behavior
 change.
 
-Selection happens once, in `UserHome.init()`:
+Selection happens once, in the `UserHome` constructor, which today builds `new Mail(this, new MaildirStore(this))`. `Home.init` then opens the mail part with the others:
 
 ```typescript
-// apps/api/src/lib/home/user-home.ts (sketch)
+// apps/api/src/lib/home/user-home.ts, in the constructor (sketch)
 const backend = getServerSettings().defaults.mail.backend; // 'maildir' | 'stalwart'
-this.mail = backend === 'stalwart'
-    ? new StalwartMail(this)
-    : new Maildir(this);
-await this.mail.init();
+this._mail = new Mail(this, backend === 'stalwart' ? new StalwartMail(this) : new MaildirStore(this));
 ```
 
 Per-deployment global setting via `serverSettings.defaults.mail.backend`, matching the
@@ -519,9 +516,7 @@ adds some overhead vs raw EML files but compresses bodies.
 This proposal does **not** propose migrating existing users. If we ship it:
 
 - **Default**: Maildir/Dovecot/Postfix, exactly as today.
-- **New deployments** can opt for Stalwart by setting
-  `serverSettings.defaults.mail.backend = 'stalwart'` and including the Stalwart service in
-  their Compose file. Their `UserHome.init()` picks `StalwartMail`.
+- **New deployments** can opt for Stalwart by setting `serverSettings.defaults.mail.backend = 'stalwart'` and including the Stalwart service in their Compose file. Their `UserHome` constructor picks `StalwartMail`.
 - **Existing Maildir deployments** stay on Maildir. No automated migration.
 
 A *future* migration (not in this proposal) would iterate over a user's Maildir, JMAP

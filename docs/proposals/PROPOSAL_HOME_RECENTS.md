@@ -175,8 +175,7 @@ From the per-Home lifecycle — homes idle-evict on a per-type window (`UserHome
 scheduler tick. Recents lives on `UserHome` only, so the 5-minute window is the
 one that paces pruning:
 
-- On `UserHome.init()`, fire-and-forget per kind: drop rows older than `maxAge`,
-  then LRU-trim to `maxRows` by `lastUsedAt`.
+- When the home opens, in the part's own `init` that `Home.init` runs, fire-and-forget per kind: drop rows older than `maxAge`, then LRU-trim to `maxRows` by `lastUsedAt`.
 - Limits: email — 500 rows / 365 days; file — 200 rows / 90 days.
 - No useCount-weighted eviction (cut in review): at these sizes plain LRU is
   enough — a frequent contact is by definition recently used.

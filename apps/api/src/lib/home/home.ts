@@ -11,6 +11,7 @@ import type { SSEvent } from '@workspace/lib/types/sse';
 import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
+import { PATHS } from '../config/paths';
 import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
@@ -18,6 +19,7 @@ import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../
 import { ApiError, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
+import { createDefaultMountConfig, createMountConfig, DEFAULT_MOUNT_ID, readMountTotalSize } from '../mount/helpers';
 import type { NotificationCenter } from '../notification-center/notification-center';
 import type { User } from '../user';
 
@@ -244,12 +246,27 @@ export class Home {
     public async size(teamIds: string[] = []): Promise<HomeSizeResponse> {
         // A home without a drive has nothing to size.
         if (!this._drive) return homeSize();
-
-        const [dataUsed, driveUsed] = await Promise.all([this.dataSize(), this._drive.size('default')]);
-        const quotas = await resolveUserQuotas(this._drive.getMountConfig('default'), teamIds);
-
-        return homeSize(dataUsed, driveUsed, quotas);
+        return userHomeSize(this.homeDir, this.settings.get(), await this.dataSize(), teamIds);
     }
+}
+
+// Sizes the default drive from its files and the saved settings, not from the live mount. So it
+// answers the same for an open home, a closed one, and one whose default mount is switched off.
+export async function userHomeSize(
+    homeDir: string,
+    settings: HomeSettings,
+    dataUsed: number,
+    teamIds: string[],
+): Promise<HomeSizeResponse> {
+    const driveUsed = readMountTotalSize(
+        path.join(homeDir, PATHS.DRIVE.ROOT, DEFAULT_MOUNT_ID, PATHS.DRIVE.METADATA_DB),
+    );
+    const mountSettings = settings.mounts?.[DEFAULT_MOUNT_ID];
+    const quotas = await resolveUserQuotas(
+        mountSettings ? createMountConfig(DEFAULT_MOUNT_ID, mountSettings) : createDefaultMountConfig(),
+        teamIds,
+    );
+    return homeSize(dataUsed, driveUsed, quotas);
 }
 
 export function homeSize(

@@ -50,7 +50,7 @@ import type { Home } from '../home';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
-import { createMountConfig, Mount } from '../mount';
+import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
 import { getEntriesForTarget } from '../share';
@@ -110,7 +110,7 @@ export class Drive {
     private readonly home: Home;
     private readonly owner: User;
     private readonly mounts = new Map<string, Mount>();
-    private defaultMountId = 'default';
+    private defaultMountId: string = DEFAULT_MOUNT_ID;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private readonly documents: CollabRegistry;
     // The last change queued for each key, such as the ACL of one path or the settings of one mount.

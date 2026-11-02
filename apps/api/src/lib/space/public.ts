@@ -1,3 +1,7 @@
+// The public facts about a user or a team, such as its name and avatar, looked up from an id or an
+// email. The public routes serve them to anyone, and file history uses them to name who did what. An
+// owner without a picture, or an id nobody has, gets a drawn SVG whose color comes from the email or id.
+
 import * as path from 'node:path';
 import { parseOwnerId, teamOwnerId } from '@workspace/lib/types';
 import type { PublicUser } from '@workspace/lib/types/public';
@@ -6,7 +10,7 @@ import type { BunFile } from 'bun';
 import { getAvatarsDir } from '../config/paths';
 import { getTeam, getTeamExists } from '../team';
 import type { User } from '../user';
-import { getUserByEmail, getUserById } from '../user/';
+import { getUserByEmail, getUserById } from '../user';
 
 export async function getUserByEmailOrId(emailOrId: string): Promise<User | null> {
     return validateEmailAddress(emailOrId) ? getUserByEmail(emailOrId) : getUserById(emailOrId);
