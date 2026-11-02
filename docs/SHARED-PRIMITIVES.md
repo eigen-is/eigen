@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2073 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2077 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (189)
+## Components (190)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -159,6 +159,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ColorPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
 | `ColorPickerButton` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerMenuItem` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-menu-item.tsx |
+| `ColorPickerSwatch` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-swatch.tsx |
 | `FontPicker` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-picker.tsx |
 | `FontSizeStepper` | `@workspace/ui/components/media` | packages/ui/src/components/media/font-size-stepper.tsx |
 | `ImagePlaceholder` | `@workspace/ui/components/media` | packages/ui/src/components/media/image-placeholder.tsx |
@@ -548,7 +549,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (436)
+## Types (439)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -964,10 +965,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DriveCapabilities` | `@workspace/ui/components/drive/drive-capabilities` | packages/ui/src/components/drive/drive-capabilities.ts |
 | `FileActionRunner` | `@workspace/ui/components/file-actions` | packages/ui/src/components/file-actions/use-file-action-runner.tsx |
 | `LabelFilterHeaderProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-filter-header.tsx |
+| `LabelFormValues` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/label-dialog.tsx |
 | `LabelManagerProps` | `@workspace/ui/components/labels` | packages/ui/src/components/labels/types.ts |
 | `ColorPickerButtonProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-button.tsx |
 | `ColorPickerMenuItemProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-menu-item.tsx |
 | `ColorPickerProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker.tsx |
+| `ColorPickerSwatchProps` | `@workspace/ui/components/media` | packages/ui/src/components/media/color-picker-swatch.tsx |
 | `MountFormValues` | `@workspace/ui/components/mount` | packages/ui/src/components/mount/mount-form.tsx |
 | `BeginGesture` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `CoupledSize` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/use-coupled-size.ts |
@@ -986,6 +989,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `CanvasHandle` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/canvas-editor.tsx |
 | `PublishCursor` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-canvas-presence.ts |
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
+| `DialogAction` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 

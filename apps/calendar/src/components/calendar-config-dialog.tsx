@@ -12,8 +12,7 @@ import { DeleteDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@workspace/ui/components/form';
 import { Input } from '@workspace/ui/components/input';
-import { ColorPicker } from '@workspace/ui/components/media';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -90,7 +89,6 @@ function CalendarConfigForm({
     calendarCount: number;
     onDelete: () => void;
 }) {
-    const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [shares, setShares] = useState<CalendarShare[] | null>(calendar?.shares ?? null);
 
     const createCalendar = useCreateCalendar(ownerId);
@@ -139,25 +137,7 @@ function CalendarConfigForm({
                             <FormItem>
                                 <FormLabel className="invisible">Color</FormLabel>
                                 <FormControl>
-                                    <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
-                                        <PopoverTrigger asChild>
-                                            <button
-                                                type="button"
-                                                className="h-9 w-9 rounded-md border border-input shrink-0"
-                                                style={{ backgroundColor: field.value }}
-                                            />
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-3" align="start">
-                                            <ColorPicker
-                                                value={field.value}
-                                                onChange={(color) => {
-                                                    field.onChange(color);
-                                                    setColorPickerOpen(false);
-                                                }}
-                                                showReset={false}
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
+                                    <ColorPickerSwatch value={field.value} onChange={field.onChange} />
                                 </FormControl>
                             </FormItem>
                         )}

@@ -8,8 +8,7 @@ import type { CalendarShare, SharedCalendar } from '@workspace/lib/types/calenda
 import { DeleteDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
 import { Label } from '@workspace/ui/components/label';
-import { ColorPicker } from '@workspace/ui/components/media';
-import { Popover, PopoverContent, PopoverTrigger } from '@workspace/ui/components/popover';
+import { ColorPickerSwatch } from '@workspace/ui/components/media';
 import { Separator } from '@workspace/ui/components/separator';
 import { UserItem } from '@workspace/ui/components/user';
 import { useState } from 'react';
@@ -72,7 +71,6 @@ function SharedCalendarConfigForm({
     sharedCalendar: SharedCalendar;
     onRemove: () => void;
 }) {
-    const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [color, setColor] = useState(sharedCalendar.color || sharedCalendar.calendarColor);
 
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
@@ -100,25 +98,7 @@ function SharedCalendarConfigForm({
             <div className="space-y-4">
                 <div className="flex items-center gap-3">
                     <Label>Color</Label>
-                    <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
-                        <PopoverTrigger asChild>
-                            <button
-                                type="button"
-                                className="h-9 w-9 rounded-md border border-input shrink-0"
-                                style={{ backgroundColor: color }}
-                            />
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-3" align="start">
-                            <ColorPicker
-                                value={color}
-                                onChange={(c) => {
-                                    setColor(c);
-                                    setColorPickerOpen(false);
-                                }}
-                                showReset={false}
-                            />
-                        </PopoverContent>
-                    </Popover>
+                    <ColorPickerSwatch value={color} onChange={setColor} />
                 </div>
 
                 {!isTeamCalendar && (
