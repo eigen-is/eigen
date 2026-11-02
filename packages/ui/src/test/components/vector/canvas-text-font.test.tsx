@@ -1,7 +1,8 @@
-// An arrow label's width is measured on a canvas at commit and stored, and so is a pasted text box's, since ⌘V must take
-// or pass on a paste at once. Each face is cut into unicode-range slices, and a canvas measures a character whose slice
-// has not loaded in the fallback. So a label committed, or a box pasted, before its slices arrive is measured again once
-// the slices of its own text have loaded. One file holds both: the measurer keeps the first 2d context it is given.
+// An arrow label's width is measured on a canvas and stored, and so is a pasted text box's size. Each face is cut into
+// unicode-range slices, and a canvas measures a character whose slice has not loaded in the fallback. So a label is
+// measured whenever its text or font changes, once the slices of its text have loaded, and a box pasted before its
+// slices arrive is measured again once they have. One file holds both: the measurer keeps the first 2d context it is
+// given.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -33,15 +34,16 @@ Object.defineProperty(document, 'fonts', {
         },
     },
 });
-// A character measures `fallbackAdvance` px in the fallback, 10 unless a test says otherwise, and 20 px once its slice
-// has loaded. `measuredFonts` records the font of each measure.
+// At 20 px a character measures `fallbackAdvance` px in the fallback, 10 unless a test says otherwise, and 20 px once its
+// slice has loaded. It scales with the font size. `measuredFonts` records the font of each measure.
 let fallbackAdvance = 10;
 const measuredFonts: string[] = [];
 const measureContext = {
     font: '',
     measureText: (line: string) => {
         measuredFonts.push(measureContext.font);
-        return { width: [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : fallbackAdvance), 0) };
+        const scale = Number(/(\d+)px/.exec(measureContext.font)?.[1] ?? 20) / 20;
+        return { width: scale * [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : fallbackAdvance), 0) };
     },
 };
 Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
@@ -113,7 +115,7 @@ beforeEach(() => {
 let unmount = async () => {};
 afterEach(() => unmount());
 
-async function render(): Promise<HTMLElement> {
+async function render(canEdit = true): Promise<HTMLElement> {
     function Host() {
         const canvas = useCanvasDoc('owner', 'mount', 'drawing', VECTOR_STYLE_DEFAULTS);
         const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -125,7 +127,7 @@ async function render(): Promise<HTMLElement> {
             setTool: () => {},
             toolLocked: false,
             setToolLocked: () => {},
-            canEdit: true,
+            canEdit,
             ownerId: 'owner',
             mountId: 'mount',
             fileName: 'Plan',
@@ -150,6 +152,13 @@ async function render(): Promise<HTMLElement> {
     return rendered.container;
 }
 
+async function loadSlices(): Promise<void> {
+    await act(async () => {
+        release();
+        await network;
+    });
+}
+
 const labelText = () => {
     const arrow = readVectorFromDoc(doc).elements.find((el) => el.id === 'arrow');
     return arrow?.type === 'arrow' ? arrow.text : undefined;
@@ -160,8 +169,34 @@ const labelWidth = () => {
     return arrow?.type === 'arrow' ? arrow.labelWidth : undefined;
 };
 
-test('a label committed before its slices load is measured again in the slices of its own text', async () => {
-    const container = await render();
+const label = () => ({ text: labelText(), width: labelWidth() });
+
+function storedArrow(on = doc) {
+    const stored = on.getMap('elements').get('arrow');
+    if (!(stored instanceof Y.Map)) throw new Error('the arrow is not stored');
+    return stored;
+}
+
+// The arrow starts with the label "go", whose two slices have loaded, at the width they measure. The write is no undo
+// step, as if the label came with the file.
+function labelGo(labelWidth = 40) {
+    for (const char of 'go') loaded.add(char);
+    doc.transact(() => {
+        storedArrow().set('text', 'go');
+        storedArrow().set('labelWidth', labelWidth);
+    }, 'file');
+}
+
+// Every write this tab makes from here on, the file's and a peer's left out.
+function countWrites(): { count: number } {
+    const writes = { count: 0 };
+    doc.on('update', (_update: Uint8Array, origin: unknown) => {
+        if (origin !== 'file' && origin !== 'peer') writes.count += 1;
+    });
+    return writes;
+}
+
+async function editLabel(container: HTMLElement, text: string): Promise<void> {
     const layer = container.querySelector('[data-element-id="arrow"]');
     if (!layer) throw new Error('no arrow layer');
     await act(async () => {
@@ -170,57 +205,105 @@ test('a label committed before its slices load is measured again in the slices o
     const textarea = container.querySelector('textarea');
     if (!textarea) throw new Error('the label editor did not open');
     await act(async () => {
-        textarea.value = '茶 tea';
+        textarea.value = text;
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
     });
-
-    fontCalls.length = 0;
     await act(async () => {
         textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     });
-    // Five characters, each in the fallback.
-    expect(labelWidth()).toBe(50);
-    expect(fontCalls).toEqual(['check "茶 tea"', 'load "茶 tea"']);
+}
 
-    await act(async () => {
-        release();
-        await network;
-    });
+test('a label committed before its slices load is measured in the slices of its own text once they load', async () => {
+    const container = await render();
+    await editLabel(container, '茶 tea');
+    expect(labelText()).toBe('茶 tea');
+    expect(fontCalls.slice(-2)).toEqual(['check "茶 tea"', 'load "茶 tea"']);
+
+    await loadSlices();
     expect(labelWidth()).toBe(100);
 });
 
-// The heal corrects a measure the user never made, so ⌘Z takes back the label and not the heal alone, and ⌘⇧Z brings
-// the label back at its healed width.
-test("a label's heal is not an undo step of its own", async () => {
+// The width follows the text, which is no undo step of its own: ⌘Z takes back the edit, and the old text gets the
+// width it measures, never the width the new one healed to.
+test('an undone label edit measures the text it brings back, and a redo the text it brings again', async () => {
+    labelGo();
     const container = await render();
-    const layer = container.querySelector('[data-element-id="arrow"]');
-    if (!layer) throw new Error('no arrow layer');
-    await act(async () => {
-        layer.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 0 }));
-    });
-    const textarea = container.querySelector('textarea');
-    if (!textarea) throw new Error('the label editor did not open');
-    await act(async () => {
-        textarea.value = '茶 tea';
-        textarea.dispatchEvent(new Event('input', { bubbles: true }));
-    });
-    await act(async () => {
-        textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-    });
-    await act(async () => {
-        release();
-        await network;
-    });
-    expect(labelWidth()).toBe(100);
+    await editLabel(container, '茶 tea');
+    await loadSlices();
+    expect(label()).toEqual({ text: '茶 tea', width: 100 });
 
     await act(async () => {
         undoManager.undo();
     });
-    expect(labelText()).toBe('');
+    expect(label()).toEqual({ text: 'go', width: 40 });
+
     await act(async () => {
         undoManager.redo();
     });
-    expect({ text: labelText(), width: labelWidth() }).toEqual({ text: '茶 tea', width: 100 });
+    expect(label()).toEqual({ text: '茶 tea', width: 100 });
+});
+
+test("a peer's label edit is measured on this client", async () => {
+    labelGo();
+    await render();
+    const peer = new Y.Doc();
+    Y.applyUpdate(peer, Y.encodeStateAsUpdate(doc));
+    peer.on('update', (update: Uint8Array) => Y.applyUpdate(doc, update, 'peer'));
+    await act(async () => {
+        storedArrow(peer).set('text', 'tea');
+    });
+
+    await loadSlices();
+    expect(label()).toEqual({ text: 'tea', width: 60 });
+});
+
+// The Size row writes the font as the user's own step, and the canvas measures the label in it.
+test('a label measures again in a new font size, and an undone size in the old one', async () => {
+    labelGo();
+    await render();
+    await act(async () => {
+        undoManager.stopCapturing();
+        storedArrow().set('fontSize', 40);
+    });
+    expect(labelWidth()).toBe(80);
+
+    await act(async () => {
+        undoManager.undo();
+    });
+    expect(labelWidth()).toBe(40);
+});
+
+test('a label stored at a width its text does not measure is measured again when the drawing opens', async () => {
+    labelGo(7);
+    await render();
+    expect(labelWidth()).toBe(40);
+});
+
+// Every client measures each label, so one whose width is already true writes nothing: not when it opens, not while its
+// editor is open, and not on a peer's change that leaves its text and font alone.
+test('a label at its measured width is never written', async () => {
+    labelGo();
+    const writes = countWrites();
+    const container = await render();
+    const layer = container.querySelector('[data-element-id="arrow"]');
+    if (!layer) throw new Error('no arrow layer');
+    await act(async () => {
+        layer.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, clientX: 100, clientY: 0 }));
+    });
+    expect(container.querySelector('textarea')).not.toBeNull();
+    await act(async () => {
+        doc.transact(() => storedArrow().set('strokeColor', '#ff0000'), 'peer');
+    });
+    await loadSlices();
+    expect(writes.count).toBe(0);
+});
+
+test('a canvas that may not edit never writes a label width', async () => {
+    labelGo(7);
+    const writes = countWrites();
+    await render(false);
+    await loadSlices();
+    expect({ width: labelWidth(), writes: writes.count }).toEqual({ width: 7, writes: 0 });
 });
 
 async function paste(fill: (event: ClipboardEvent) => void): Promise<void> {
@@ -228,13 +311,6 @@ async function paste(fill: (event: ClipboardEvent) => void): Promise<void> {
     fill(event);
     await act(async () => {
         document.dispatchEvent(event);
-    });
-}
-
-async function loadSlices(): Promise<void> {
-    await act(async () => {
-        release();
-        await network;
     });
 }
 
@@ -361,4 +437,16 @@ test('a pasted box restyled before its slices load keeps the size it has', async
 
     await loadSlices();
     expect(textBox()).toEqual({ width: 50, height: oneLine });
+});
+
+// A fallback as wide as the face measures the same size, so the heal has nothing to correct.
+test('a pasted box whose late measure matches its size is not written again', async () => {
+    fallbackAdvance = 20;
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    expect(textBox()).toEqual({ width: 100, height: oneLine });
+    const writes = countWrites();
+
+    await loadSlices();
+    expect(writes.count).toBe(0);
 });

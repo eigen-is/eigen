@@ -1,10 +1,10 @@
 // Measures the plain text of a vector element on a canvas, in the font it is drawn in, such as an arrow label or a
-// pasted text box. Every writer of such a stored width and height measures here, such as the label editor's commit, a
-// font or size change and a paste, so the renderer, which never measures, draws what was stored. It needs the DOM, so
-// it lives in ui and never in lib.
+// pasted text box. Every writer of such a stored width and height measures here, such as the arrow label fit and a
+// paste, so the renderer, which never measures, draws what was stored. It needs the DOM, so it lives in ui and never
+// in lib.
 
 import { getFontFamily } from '@workspace/lib/constants/fonts';
-import type { Textual, VectorElement, VectorElementPatch } from '@workspace/lib/vector';
+import type { Textual } from '@workspace/lib/vector';
 import { getLineHeightPx } from '@workspace/lib/vector';
 
 type TextDimensions = { width: number; height: number };
@@ -13,15 +13,6 @@ type TextDimensions = { width: number; height: number };
 // so it draws at weight 400 with none. A text box's body writes both.
 export type VectorTextFont = Pick<Textual, 'fontSize' | 'fontFamily'> &
     Partial<Pick<Textual, 'fontWeight' | 'letterSpacing'>>;
-
-// Measures a text again once the slices of its font have loaded, and writes the fields `patch` makes of the new size
-// to the live element. `patch` returns null when that element no longer holds what was measured.
-export type HealTextSize = (
-    id: string,
-    text: string,
-    font: VectorTextFont,
-    patch: (el: VectorElement, size: TextDimensions) => VectorElementPatch | null,
-) => void;
 
 // measureText measures a character in the fallback font until the face that draws it has loaded, so
 // callers load the font before they measure. A face is cut into unicode-range slices, and the font
@@ -49,8 +40,7 @@ export function measureVectorText(text: string, font: VectorTextFont): TextDimen
 }
 
 // The measure once the slices of the text have loaded, so it is the face's and never the fallback's. A writer that
-// can wait, such as a font change, stores only this one. A writer that must store a size at once, such as a paste,
-// stores measureVectorText's and heals it with this one.
+// must store a size at once, such as a paste, stores measureVectorText's and heals it with this one.
 export async function measureLoadedVectorText(text: string, font: VectorTextFont): Promise<TextDimensions> {
     await loadVectorFont(text, font);
     return measureVectorText(text, font);

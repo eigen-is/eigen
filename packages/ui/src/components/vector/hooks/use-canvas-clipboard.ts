@@ -40,7 +40,7 @@ import { toast } from 'sonner';
 import type * as Y from 'yjs';
 import { isTypingTarget } from '../../../hooks/is-typing-target';
 import { downloadCanvasImage } from '../canvas-image';
-import type { HealTextSize } from '../text-measure';
+import { isVectorFontLoaded, measureLoadedVectorText } from '../text-measure';
 import { remapPastedArrows } from '../tools/binding';
 import { buildSelectionData, selectionPlainText } from '../tools/clipboard';
 import type { PastePlan } from '../tools/paste-elements';
@@ -80,8 +80,6 @@ type CanvasClipboardParams = {
     deleteElementsUntracked: (ids: string[]) => void;
     undoManager: Y.UndoManager | null;
     viewportCenterScene: () => Point;
-    // The canvas's heal of a size measured before the slices of its text loaded, which a pasted text box needs.
-    healTextSize: HealTextSize;
     // OS files on the clipboard go through the canvas's own image insert.
     insertImageFiles: (files: File[], anchor: Point) => Promise<void>;
     mediaFolderId: string | null;
@@ -93,8 +91,12 @@ type CanvasClipboardParams = {
 export function useCanvasClipboard(params: CanvasClipboardParams) {
     const { canEdit, textEditingRef, containerRef, viewport, frameId, styleDefaults, ordered, meta } = params;
     const { selectedIds, setSelectedIds, addElements, updateElements, updateElementUntracked } = params;
-    const { deleteElements, deleteElementsUntracked, undoManager, viewportCenterScene, healTextSize } = params;
+    const { deleteElements, deleteElementsUntracked, undoManager, viewportCenterScene } = params;
     const { insertImageFiles, mediaFolderId, resolveMediaPath, resolveMediaUrl, uploadFile } = params;
+
+    // The live scene, for a heal that lands after the render that started it.
+    const orderedRef = useRef(ordered);
+    orderedRef.current = ordered;
 
     // A deck converts a text item's size at its own width, and a drawing at 96 dpi.
     const slideWidth = viewport === 'frame' ? meta.slideWidth : undefined;
@@ -148,22 +150,29 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             if (!ids.length) return false;
             setSelectedIds(ids);
 
-            // A box whose text, font or width changed since the paste was edited or resized, and that edit owns its size.
-            // The heal writes the height too, because the fit only grows: a fallback that wrapped the text grew the box.
-            // The height is what textBoxFitHeight asks of a box with none yet: the text plus the inset and the border.
+            // A box measured before the slices of its text loaded holds the fallback's size, so it is measured again
+            // once they have. The write is untracked, so the paste stays one undo step, and ⌘Z removes the box whole.
+            // A box whose text, font or width changed since the paste was edited or resized, and that edit owns its
+            // size. The heal writes the height too, because the fit only grows: a fallback that wrapped the text grew
+            // the box. The height is what textBoxFitHeight asks of a box with none yet: the text plus the inset and the
+            // border.
             for (const { index, text, font, width } of plan.measuredText) {
+                if (isVectorFontLoaded(text, font)) continue;
+                const id = ids[index];
                 const html = textToParagraphHtml(text);
-                healTextSize(ids[index], text, font, (el, size) =>
-                    isTextBox(el) &&
-                    el.html === html &&
-                    el.width === width &&
-                    FONT_FIELDS.every((field) => el[field] === font[field])
-                        ? {
-                              width: textBoxWidth(size.width),
-                              height: textBoxFitHeight({ ...el, height: 0 }, size.height) ?? el.height,
-                          }
-                        : null,
-                );
+                measureLoadedVectorText(text, font)
+                    .then((size) => {
+                        const el = orderedRef.current.find((x) => x.id === id);
+                        if (!el || !isTextBox(el) || el.html !== html || el.width !== width) return;
+                        if (!FONT_FIELDS.every((field) => el[field] === font[field])) return;
+                        const healed = {
+                            width: textBoxWidth(size.width),
+                            height: textBoxFitHeight({ ...el, height: 0 }, size.height) ?? el.height,
+                        };
+                        if (healed.width !== el.width || healed.height !== el.height)
+                            updateElementUntracked(id, healed);
+                    })
+                    .catch(() => {});
             }
 
             // An image from another media folder is fetched from its source and uploaded into ours. Its pending name
@@ -198,7 +207,6 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
             updateElements,
             setSelectedIds,
             undoManager,
-            healTextSize,
             mediaFolderId,
             uploadFile,
             updateElementUntracked,
@@ -442,8 +450,8 @@ export function useCanvasClipboard(params: CanvasClipboardParams) {
 }
 
 // The canvas drops a text run selected outside it when the pointer lands on the canvas. The surface is `select-none`,
-// and the in-place editor swallows its own pointerdown, so nothing else collapses a selection made in, say, a comment. It would survive
-// the click that selects an element and keep ⌘C and ⌘X, which would copy that text and cut nothing.
+// and the in-place editor swallows its own pointerdown, so nothing else collapses a selection made in, say, a comment.
+// It would survive the click that selects an element and keep ⌘C and ⌘X, which would copy that text and cut nothing.
 export function dropOutsideTextSelection(container: HTMLElement | null): void {
     outsideTextSelection(container)?.removeAllRanges();
 }
