@@ -1501,7 +1501,8 @@ rollback() {
 # switch_back <archive>: an update makes a Light backup only when no database changed its form since, so the build
 # before it opens the data of today. A rollback after one keeps data/ and switches back to the pins the update
 # recorded, once that build, as the API's user while Eigen runs, has checked it opens every database here and the
-# operator said yes. The archive stays for ./eigen restore, the way back when the check fails.
+# operator said yes, and then warns the open tabs as put_back does. The archive stays for ./eigen restore, the way
+# back when the check fails.
 switch_back() {
     PINS=$(sed -n '2,$p' .eigen/last-update)
     old_image=$(answer EIGEN_API_IMAGE "$PINS")
@@ -1527,6 +1528,8 @@ switch_back() {
         *) die "Eigen $old cannot open the data here, and Eigen $current runs on as it was." \
             "Put the backup the update made back instead: ./eigen restore $1" ;;
     esac
+    # After the pull, the check and its question, so the wait is the last thing before the stop.
+    warn_restart rollback
     # From the stop on, whatever ends the rollback starts Eigen again, on the build .env.production pins by then.
     AT_EXIT=restart
     stop

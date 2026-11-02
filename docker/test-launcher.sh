@@ -1488,6 +1488,34 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: a rollback after a Light backup: exit $CODE, steps '$(steps)', '$OUT', '$ERR'"
     fi
+    # rollback --in after a Light backup waits after the check and its question, right before the stop. Cut off in the
+    # wait by Ctrl+C or a lost SSH session, it takes the notice back and stops and switches nothing.
+    light_steps() {
+        printf '%s\n' "$CALLS" | sed -n -e 's/^run .* restore --check-data .*$/checked/p' -e 's/^compose .* stop$/stop/p' \
+            -e 's/^compose .* exec .*\/entrypoint.sh \(restart-notice .*\)$/\1/p' | tr '\n' '|'
+    }
+    pinned="$light|EIGEN_REGISTRY=ghcr.io/eigen-is/eigen|EIGEN_VERSION=0.2.98|EIGEN_API_IMAGE=$old"
+    failed=''
+    for signal in TERM HUP; do
+        printf '%s\n' "$pinned" | tr '|' '\n' >"$FIX/release/.eigen/last-update"
+        LAUNCH_TERM='restart-notice --in 600' LAUNCH_SIGNAL=$signal launch release rollback --yes --in 10m
+        code=130
+        if [ "$signal" = HUP ]; then code=129; fi
+        if [ "$CODE" != "$code" ] ||
+            [ "$(light_steps)" != 'checked|restart-notice --in 600 --reason rollback|restart-notice --clear|' ] ||
+            printf '%s\n' "$CALLS" | grep -Eq ' bootstrap | configure --backfill$' || [ ! -e "$FIX/release/.eigen/last-update" ]; then
+            failed="$failed $signal (exit $CODE, steps '$(light_steps)', '$ERR')"
+        fi
+    done
+    launch release rollback --in 1s 'Back soon' --yes
+    if [ -z "$failed" ] && [ "$CODE" = 0 ] &&
+        [ "$(light_steps)" = 'checked|restart-notice --in 1 --reason rollback --message Back soon|stop|' ] &&
+        printf '%s\n' "$OUT" | grep -q '◆  Restarts in 1s, at 00:10:00 UTC. Ctrl+C cancels.$' &&
+        [ ! -e "$FIX/release/.eigen/last-update" ]; then
+        ok "$SHELL_NAME: rollback --in after a Light backup warns the open tabs after the check, waits right before the stop, and cut off there takes the notice back"
+    else
+        fail "$SHELL_NAME: rollback --in after a Light backup:$failed; --in 1s exit $CODE, steps '$(light_steps)', '$OUT', '$ERR'"
+    fi
     rm -f "$FIX/release/backups/$light" "$FIX/release/.eigen/bundle"
     reset_release
 
