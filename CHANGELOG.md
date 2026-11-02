@@ -30,6 +30,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
 - **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
+- **Dialogs in Calendar** — Enter in a new event's title saves it, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
 - **Editing together in Sheets** — every tab ends with the same cells, the later of two edits to a cell winning, edits made offline too. A row someone inserts or deletes moves your selection
 - **The grid in Sheets** — grid lines cross without a darker dot, the numbers in a row sit on one line, and underlines are level
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
