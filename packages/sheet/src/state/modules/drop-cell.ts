@@ -1899,8 +1899,8 @@ export function updateDropCell(ctx: Context) {
     const cfg = (file.config ??= {});
     cfg.borderInfo ??= {};
     // The cells each validation rule fills, by the rule's id: a filled cell takes the rule of the cell it repeats, as
-    // in Excel and Google. They land as rectangles once the fill is done, one write per rule.
-    const filledRules = new Map<string, [number, number][]>();
+    // in Excel and Google. They land once the fill is done, one write per rule.
+    const filledRules = new Map<string, SingleRange[]>();
 
     // Null only at module init, never on a real fill.
     const direction = dropCellCache.direction ?? 'down';
@@ -1990,15 +1990,14 @@ export function updateDropCell(ctx: Context) {
             const ruleId = validationEntryAt(file.dataValidations, bd_r, bd_c)?.[0];
             if (ruleId) {
                 const cells = filledRules.get(ruleId) ?? [];
-                cells.push([row, col]);
+                cells.push({ row: [row, row], column: [col, col] });
                 filledRules.set(ruleId, cells);
             }
         }
     }
     for (const [id, cells] of filledRules) {
         const rule = file.dataValidations?.[id]?.rule;
-        cells.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
-        if (rule) addValidation(file, id, rule, rectanglesOf(cells));
+        if (rule) addValidation(file, id, rule, cells);
     }
 
     // conditional format
@@ -2028,29 +2027,6 @@ export function updateDropCell(ctx: Context) {
 
     // A plain matrix keeps registering the filled formulas off the draft proxies.
     jfrefreshgrid(ctx, isDraft(d) ? current(d) : d, ctx.selections);
-}
-
-// Cells in row order as rectangles: a row's run of adjacent cells extends the rectangle of the same columns that ends
-// on the row above.
-function rectanglesOf(cells: [number, number][]): SingleRange[] {
-    const rectangles: SingleRange[] = [];
-    const open = new Map<string, SingleRange>();
-    let start = 0;
-    for (const [index, [row, column]] of cells.entries()) {
-        const next = cells[index + 1];
-        if (next && next[0] === row && next[1] === column + 1) continue;
-        const left = cells[start][1];
-        start = index + 1;
-        const columns = `${left}:${column}`;
-        const above = open.get(columns);
-        if (above && above.row[1] === row - 1) above.row[1] = row;
-        else {
-            const rectangle: SingleRange = { row: [row, row], column: [left, column] };
-            rectangles.push(rectangle);
-            open.set(columns, rectangle);
-        }
-    }
-    return rectangles;
 }
 
 // Excel refuses a fill that would split or overwrite a merge.

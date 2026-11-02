@@ -11,7 +11,12 @@ import type {
     Sheet,
     SingleRange,
 } from '@workspace/lib/sheets';
-import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
+import {
+    coalescedRanges,
+    MAX_VALIDATION_RANGES,
+    REFERENCE_COLUMN_COUNT,
+    REFERENCE_ROW_COUNT,
+} from '@workspace/lib/sheets';
 import { iscelldata, parseA1Range, toA1 } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../core/xml';
 import { xmlAttr, xmlChild, xmlChildren, xmlText } from '../../core/xml';
@@ -45,8 +50,8 @@ export type RulesContext = {
     charge(cells: number, text: number): void;
     // Called with each reference of a sqref before it is parsed, whatever it emits; throws past the budget.
     chargeElements(count: number): void;
-    // Counts a rule left out: a conditional format or a validation the engine has no rule for, or a conditional format
-    // over no range of the grid.
+    // Counts a rule left out: a conditional format or a validation the engine has no rule for, a conditional format
+    // over no range of the grid, or a validation over more ranges than a rule may hold.
     lost: Lost;
     // Writes the workbook's defined names into a rule's formula, so a list from a name reads the name's range.
     inline(formula: string): string;
@@ -159,9 +164,16 @@ export function readRules(
                 context.charge(1, 0);
                 ranges.push(range);
             }
+            if (ranges.length === 0) continue;
+            // A sqref may repeat or stack its ranges, so the rule keeps the fewest that cover the same cells. More
+            // than a rule may hold leaves the rule out, as a peer's would be.
+            const covered = coalescedRanges(ranges);
+            if (covered.length > MAX_VALIDATION_RANGES) {
+                context.lost('validations-dropped');
+                continue;
+            }
             // Numbered in the file's order, as the importer numbers charts: a fresh sheet holds no other rule.
-            if (ranges.length > 0)
-                dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = { ranges, rule };
+            dataValidations[`validation-${Object.keys(dataValidations).length + 1}`] = { ranges: covered, rule };
         }
     }
 

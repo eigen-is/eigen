@@ -42,7 +42,7 @@ export {
     isCurrentSheetsSnapshot,
 } from './snapshot-codec';
 export * from './types';
-export { wellFormedValidations } from './validations';
+export { coalescedRanges, MAX_VALIDATION_RANGES, wellFormedValidations } from './validations';
 export {
     readSheetsBase,
     readSheetsSnapshotJson,

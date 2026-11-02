@@ -3,6 +3,7 @@
 // also takes cells out of the rules and puts a rule on cells, for writers such as the validation dialog, a paste and
 // a fill. A cell has at most one rule, so putting a rule on cells first takes them out of every other rule.
 
+import { coalescedRanges } from '@workspace/lib/sheets';
 import { cfSplitRange } from '../../engine/conditional-format';
 import type { DataVerificationRule, Sheet, SheetValidation, SingleRange } from '../types';
 
@@ -60,11 +61,13 @@ export function clearValidations(sheet: Sheet, area: SingleRange) {
 }
 
 // Puts a rule on ranges of the sheet under an id. The ranges join the ones the id already has, and its rule stays.
-export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRule, ranges: SingleRange[]) {
-    for (const range of ranges) clearValidations(sheet, range);
+// They are coalesced on the way in, so a paste or a fill that lands one range per cell leaves the rule a few ranges.
+export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRule, ranges: readonly SingleRange[]) {
+    const landed = coalescedRanges(ranges);
+    for (const range of landed) clearValidations(sheet, range);
     const validations = (sheet.dataValidations ??= {});
     const entry = validations[id];
-    validations[id] = { ranges: [...(entry?.ranges ?? []), ...ranges], rule: entry?.rule ?? rule };
+    validations[id] = { ranges: coalescedRanges([...(entry?.ranges ?? []), ...landed]), rule: entry?.rule ?? rule };
 }
 
 function byId(a: string, b: string) {
