@@ -28,10 +28,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **The Sheets bar** — its format buttons fold into the **Format** menu a group at a time as the bar narrows, alignment first, as in Docs, and an open side panel counts. The menus no longer scroll sideways
 - **Sheet names** — a tab name may hold a fullwidth ： or ？, as in Excel. A refused name says why: at most 31 characters, none of `\ / ? * [ ] :`, and no `'` at either end
 - **Whole-column lookups in Sheets** — a sheet with 20,000 lookups into whole columns of 64,000 rows, such as INDEX and MATCH over `B:B`, opens about three seconds faster
-- **Dialogs in Sheets** — Custom sort, Split text, row height and column width, the custom number, date and currency formats, Insert function, conditional formatting, Data verification and the link editor have a close button in the corner, close on a click outside and apply on Enter
-- **Refused rules in Sheets** — a conditional format or Data verification rule Sheets can't take keeps its dialog open with the reason under the field, and what you typed stays
+- **Dialogs in Sheets** — Custom sort, Split text, row height and column width, the custom number, date and currency formats, Insert function, a conditional formatting rule, Data validation and the link editor have a close button in the corner, close on a click outside and apply on Enter
+- **Refused rules in Sheets** — a conditional format or Data validation rule Sheets can't take keeps its dialog open with the reason under the field, and what you typed stays
 - **Insert function in Sheets** — the search finds a function by its description, a name typed in full comes first, Up and Down move through the list, and Cancel leaves what you were typing in the cell
-- **Conditional formatting menu in Sheets** — **Management rules** is called **Manage rules**, and **Delete sheet rule**, which clears every rule on the sheet, is called **Delete sheet rules**
+- **Menu names in Sheets** — **Data verification** is called **Data validation**, with types such as Whole number and Text length. **Management rules** is **Manage rules**, **Delete sheet rule** is **Delete sheet rules**, and **Insert › Auto SUM › Learn more...** is **More functions…**
+- **Cell references in conditional formatting** — a value that starts with `=`, such as `=B1`, follows that cell as it changes, as in Excel and Google Sheets. Text such as `FY2024` stays text
+- **Colors in conditional formatting** — new color scales and data bars use Eigen's palette. Rules you already have keep their colors
+- **Sort range in Sheets** — **Data › Sort range** works on one selected range and stays grayed out until exactly one is selected
 - **Emoji** — emoji draw in one monochrome emoji font, in the color of the text, in the apps and in PDF, web page and SVG downloads, so they look the same on nearly every computer. Safari still draws keycap emoji such as 1️⃣ and some joined emoji in parts
 - **Chinese and Korean text** — draws in Noto Sans SC and Noto Sans KR in the apps and in PDF, web page and SVG downloads, where a PDF printed Korean as boxes. Japanese kanji draw in their Chinese forms
 - **Equations in Docs** — equations draw in New Computer Modern Math, so they look different, and the PDF and the web page show them in the editor's font
@@ -70,9 +73,11 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Keys in a dialog opened from Drive** — Enter, Space and the arrow keys in a dialog opened from a file's menu stay in the dialog, so Enter in **Import to Calendar** imports instead of opening the file
 - **Lists and dialogs over a file preview** — menus, lists, tooltips and the command palette show above an open preview, such as the right-click menu in **Save to Drive**, and a dialog over it closes on Escape or a click outside
 - **Retrying an import into a new calendar** — a new calendar whose import fails is removed, so trying again uses the name and calendar you pick then
+- **Groups in a contacts file** — a group card in an imported vCard file is no longer reported as a skipped duplicate
 - **Share for someone who may only view** — in Chat, a member who may not edit gets the list of who has access with **Close**, instead of a list whose **Save** fails
 - **Share on another item** — going back or forward to another document with **Share** open shows that item's people, not the ones you were editing
-- **The keyboard in Share** — Tab reaches the lock under **General access** and the list of people who have access, and Enter or Space works them. The same goes for an event's guest list and **Location** in **Copy to** and **Save to Drive**
+- **The keyboard in Share** — Tab reaches the lock under **General access** when you can change access, and a long list of people who have access, and Enter or Space works them. The same goes for an event's guest list and **Location** in **Copy to**, **Save to Drive** and **New chat**
+- **Previews opened from a card in Stickies** — the preview takes the keyboard, so Space closes it and Tab stays in it, a long preview scrolls, and a click beside it closes only the preview
 - **Keys on a row's menu button** — in Drive, Mail and contact lists, Enter and Space on a row's ⋮ button open its menu, and an arrow key after the menu closes moves on from that row
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
@@ -84,12 +89,13 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Typing after a menu in Sheets** — after a command from the Edit, View, Insert, Format or Data menu, such as inserting a row, typing and Delete work on the grid without a click first, as in Google Sheets
 - **Sheet names in formulas** — a formula finds a sheet even when its name's case differs, as in Excel, so `=data!A1` reads the tab Data. A tab can't take another tab's name in another case
 - **Formulas that didn't update in Sheets** — formulas with spaces such as `=A1 + 1`, INDEX, whole columns on another sheet, and whole columns after a row insert or a paste below the data recalculate when their cells change
-- **Conditional format values in Sheets** — a rule refuses text where it needs a number and a Between rule with one value, reads a cell typed as `A1`, and reads `Data!A1` from the Data tab
+- **Conditional format values in Sheets** — a rule refuses text where it needs a number and a Between rule with one value
 - **Custom sort in Sheets** — with **Data has a header row** ticked, the header row stays where it is
-- **Picking a range in Data verification** — choosing cells on the grid keeps the rest of what you typed, and **Delete verification** with no range says why
-- **Formats from the keyboard in Sheets** — Tab and Enter pick a preset or a currency in the custom number, date and currency formats
-- **Typing after a dialog in Sheets** — when a dialog closes, typing and the arrow keys work on the grid without a click first, and **Insert function** leaves you typing after the bracket
+- **Picking a range in Sheets** — choosing cells on the grid in Data validation or the link editor keeps the rest of what you typed, and opening another dialog meanwhile no longer leaves the cell editor hidden. **Delete validation** with no range says why
+- **Formats from the keyboard in Sheets** — in the custom number, date and currency formats, Tab moves to a preset or a currency and Enter picks it
+- **Typing after a dialog in Sheets** — when a dialog closes, the link editor included, typing and the arrow keys work on the grid without a click first, and **Insert function** leaves you typing after the bracket
 - **Deleting a rule on a protected sheet** — **Manage rules** refuses the delete, as **Delete sheet rules** already did
+- **Links with a space in Sheets** — the link editor keeps OK grayed out for an address with a space in it, such as `not a url`, which it used to save as a link
 - **Pasting from WPS Office** — a table pasted from WPS keeps its cell styles, such as bold and colors
 - **Filter buttons on narrow columns** — a column narrower than its filter button keeps the button inside it, so a click opens that column's filter
 - **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
