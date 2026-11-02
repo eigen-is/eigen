@@ -1,5 +1,6 @@
-// The panel that shows one event when it is clicked in the month or week view: its time, place, guests and
-// calendar, the reply to an invite, and the buttons that edit or delete it.
+// The panel that opens when you click an event in a calendar view, such as the month view. It shows the event's time,
+// place, guests and calendar. A guest of an invitation can reply to it here. Its buttons edit, delete or export the
+// event, and a delete or a reply on a repeating event first asks which occurrences it applies to.
 
 import { useAuth, useIsGuest } from '@workspace/lib/auth';
 import {
@@ -37,6 +38,13 @@ import { useMemo, useState } from 'react';
 import { EditEventDialog } from './edit-event-dialog';
 import type { RecurringAction } from './recurring-action-dialog';
 import { RecurringActionDialog } from './recurring-action-dialog';
+
+// The replies to an invitation, in the order the panel shows them.
+const RSVP_CHOICES = [
+    { status: 'accepted', icon: Check, label: 'Accept' },
+    { status: 'tentative', icon: HelpCircle, label: 'Maybe' },
+    { status: 'declined', icon: XIcon, label: 'Decline' },
+] as const;
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -76,8 +84,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const isException = !!event.parentEventId;
     const isPartOfSeries = isSeriesOccurrence(event);
     const calendarName = calendar?.name || (sharedCalendar ? sharedCalendarLabel(sharedCalendar) : null);
-    const isShared = !!sharedCalendar;
-    const canEdit = !isShared || sharedCalendar?.permission === 'write';
+    const canEdit = !sharedCalendar || sharedCalendar.permission === 'write';
     const canExport = !isGuest && isTransferableCalendarHome(eventOwnerId, user?.id ?? '');
     const isLinkedEvent = isFromOthers(event);
     const attendees = heldAttendees(event, series);
@@ -86,26 +93,17 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
     const handleDelete = async (action: RecurringAction) => {
         if (isLinkedEvent && isPartOfSeries) {
             const eventId = event.parentEventId || event.id;
-            if (action === 'this') {
-                await rsvp.mutateAsync({
-                    calendarId: event.calendarId,
-                    eventId,
-                    status: 'declined',
-                    scope: 'this',
-                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                    remove: true,
-                });
-            } else if (action === 'this-and-following') {
-                await rsvp.mutateAsync({
-                    calendarId: event.calendarId,
-                    eventId,
-                    status: 'declined',
-                    scope: 'this-and-following',
-                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                    remove: true,
-                });
-            } else {
+            if (action === 'all') {
                 await deleteEvent.mutateAsync({ id: eventId, calendarId: event.calendarId });
+            } else {
+                await rsvp.mutateAsync({
+                    calendarId: event.calendarId,
+                    eventId,
+                    status: 'declined',
+                    scope: action,
+                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                    remove: true,
+                });
             }
         } else {
             if (action === 'this') {
@@ -130,19 +128,19 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                     await deleteEvent.mutateAsync({ id: event.id, calendarId: event.calendarId });
                 }
             } else if (action === 'this-and-following') {
-                const parentId = event.parentEventId || event.id;
-                const occDate = parseOccurrenceDate(event.occurrenceDate);
-                const rrule = event.rrule || (isException && event.parentEventId ? null : null);
-                if (rrule) {
-                    const truncated = truncateRRule(rrule, occDate);
-                    await updateEvent.mutateAsync({ id: parentId, calendarId: event.calendarId, rrule: truncated });
+                if (event.rrule) {
+                    const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
+                    await updateEvent.mutateAsync({
+                        id: event.parentEventId || event.id,
+                        calendarId: event.calendarId,
+                        rrule: truncated,
+                    });
                 }
-            } else if (action === 'all') {
-                const targetId = event.parentEventId || event.id;
-                await deleteEvent.mutateAsync({ id: targetId, calendarId: event.calendarId });
+            } else {
+                await deleteEvent.mutateAsync({ id: event.parentEventId || event.id, calendarId: event.calendarId });
             }
         }
-        // Closing only after the await keeps the nested confirm dialog alive for a retry when the delete rejects.
+        // The panel closes only after the delete is done. If it fails, the confirm dialog stays open for a retry.
         onOpenChange(false);
     };
 
@@ -210,7 +208,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                             <div className="pt-3 mt-3 border-t">
                                 <div className="text-sm font-medium mb-2">RSVP</div>
                                 <div className="flex gap-2">
-                                    {(['accepted', 'tentative', 'declined'] as const).map((status) => (
+                                    {RSVP_CHOICES.map(({ status, icon: Icon, label }) => (
                                         <Button
                                             key={status}
                                             size="sm"
@@ -230,21 +228,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                             }}
                                             className="gap-1"
                                         >
-                                            {status === 'accepted' && (
-                                                <>
-                                                    <Check className="h-3 w-3" /> Accept
-                                                </>
-                                            )}
-                                            {status === 'tentative' && (
-                                                <>
-                                                    <HelpCircle className="h-3 w-3" /> Maybe
-                                                </>
-                                            )}
-                                            {status === 'declined' && (
-                                                <>
-                                                    <XIcon className="h-3 w-3" /> Decline
-                                                </>
-                                            )}
+                                            <Icon className="h-3 w-3" /> {label}
                                         </Button>
                                     ))}
                                 </div>
@@ -256,7 +240,7 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
                                 <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0" />
                                 <div className="text-sm text-muted-foreground min-w-0 break-words">
                                     {calendarName}
-                                    {isShared && sharedCalendar && !isLinkedEvent && (
+                                    {sharedCalendar && !isLinkedEvent && (
                                         <div className="text-xs">
                                             Created by: <UserName userId={event.createByUserId || undefined} />
                                         </div>
@@ -331,9 +315,9 @@ export function EventDetailDialog({ open, onOpenChange, event, calendar, sharedC
 
             <EditEventDialog
                 open={editOpen}
-                onOpenChange={(o: boolean) => {
-                    setEditOpen(o);
-                    if (!o) onOpenChange(false);
+                onOpenChange={(editing) => {
+                    setEditOpen(editing);
+                    if (!editing) onOpenChange(false);
                 }}
                 event={event}
                 ownerUserId={sharedCalendar?.ownerUserId}
