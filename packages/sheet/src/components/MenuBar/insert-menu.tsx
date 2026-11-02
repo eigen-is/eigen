@@ -24,7 +24,7 @@ import {
 } from '../../state';
 import { InsertFunctionDialog } from '../InsertFunctionDialog';
 
-// The Auto SUM functions after SUM, which has its own handler.
+// The functions of the Auto SUM submenu, each with its menu label.
 const AUTO_SUM_FUNCTIONS = [
     { formula: 'SUM', label: 'Sum (SUM)' },
     { formula: 'AVERAGE', label: 'Average' },
@@ -36,13 +36,13 @@ const AUTO_SUM_FUNCTIONS = [
 export function InsertMenu() {
     const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
-    const { showDialog, hideDialog } = useDialog();
+    const { showFormDialog } = useDialog();
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
     const columnFocus = selection?.column_focus;
 
-    const last = context.selections?.[context.selections.length - 1];
+    const last = context.selections?.at(-1);
     const commentRow = last?.row_focus ?? last?.row[0] ?? 0;
     const commentCol = last?.column_focus ?? last?.column[0] ?? 0;
 
@@ -66,8 +66,7 @@ export function InsertMenu() {
         );
     };
 
-    const fd = getFlowdata(context);
-    const commentCell = fd?.[commentRow]?.[commentCol];
+    const commentCell = getFlowdata(context)?.[commentRow]?.[commentCol];
     const hasComment = (commentCell?.commentCardIds?.length ?? 0) > 0;
 
     return (
@@ -161,7 +160,7 @@ export function InsertMenu() {
                         </DropdownMenuItem>
                     ))}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog onCancel={hideDialog} />)}>
+                    <DropdownMenuItem onClick={() => showFormDialog(<InsertFunctionDialog />)}>
                         Learn more...
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>

@@ -43,8 +43,6 @@
     "packages/lib/src/types/chart.ts": 1,
     "packages/lib/src/types/file-history.ts": 1,
     "packages/sheet/src/components/ContextMenu/FilterMenu.tsx": 3,
-    "packages/sheet/src/components/FormatDialogs/CustomCurrencies.tsx": 1,
-    "packages/sheet/src/components/InsertFunctionDialog/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/FormulaHint/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/OverlayVisuals.tsx": 1,

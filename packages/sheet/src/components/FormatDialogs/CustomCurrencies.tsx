@@ -1,30 +1,29 @@
 // The Custom currencies dialog: a currency symbol and a layout, such as symbol first with two decimals, built
 // into a number format with buildCurrencyPattern and applied to the selection.
 
-import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { update } from '../../engine/format';
-import { useDialog } from '../../hooks/useDialog';
+import { useDialogProps } from '../../hooks/useDialog';
 import { CURRENCIES, handleNumberFormat } from '../../state';
 import type { CurrencyVariantId } from './format-pattern';
 import { buildCurrencyPattern, CURRENCY_VARIANTS } from './format-pattern';
 
 export function CustomCurrencies() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
-    const { hideDialog } = useDialog();
+    const dialogProps = useDialogProps();
 
     const [symbol, setSymbol] = useState(settings.currency);
     const [variantId, setVariantId] = useState<CurrencyVariantId>('symbolFirst');
     const [selectedName, setSelectedName] = useState<string | null>(
         () => CURRENCIES.find((c) => c.value === settings.currency)?.name ?? null,
     );
-    // The field holds the active symbol, but only user-typed text filters the
-    // list — a prefilled or clicked symbol keeps the full list visible.
+    // The field holds the active symbol, and only text the user typed filters the list. A prefilled or picked symbol
+    // keeps the whole list in view.
     const [query, setQuery] = useState('');
 
     const allCurrencies = useMemo(
@@ -64,68 +63,66 @@ export function CustomCurrencies() {
         );
     };
 
-    const apply = () => {
-        const fa = buildCurrencyPattern(symbol, variantId);
-        setContext((ctx) => {
-            const cellInput = refs.cellInput.current;
-            if (!cellInput) return;
-            handleNumberFormat(ctx, cellInput, fa);
-        });
-        hideDialog();
-    };
-
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4">
-            <DialogHeader>
-                <DialogTitle>Custom currencies</DialogTitle>
-            </DialogHeader>
-            <div className="flex items-center gap-2 shrink-0">
-                <Input
-                    className="flex-1"
-                    value={symbol}
-                    onChange={(e) => {
-                        setSymbol(e.target.value);
-                        setQuery(e.target.value);
-                        setSelectedName(null);
-                    }}
-                />
-                <Select value={variantId} onValueChange={(v) => setVariantId(v as CurrencyVariantId)}>
-                    <SelectTrigger className="w-40">
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {CURRENCY_VARIANTS.map(({ id }) => (
-                            <SelectItem value={id} key={id}>
-                                {symbol ? update(buildCurrencyPattern(symbol, id), 1000) : ''}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
-                {currencies.map((currency) => (
-                    <div
-                        className={cn(
-                            'flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
-                            currency.name === selectedName && 'eigen-list-item-active',
-                        )}
-                        key={currency.name}
-                        onClick={() => selectCurrency(currency)}
-                        tabIndex={0}
+        <FormDialog {...dialogProps} title="Custom currencies" size="md">
+            <FormDialogForm
+                submitLabel="Apply"
+                canSubmit={!!symbol}
+                onSubmit={() =>
+                    setContext((ctx) => {
+                        const cellInput = refs.cellInput.current;
+                        if (!cellInput) return;
+                        handleNumberFormat(ctx, cellInput, buildCurrencyPattern(symbol, variantId));
+                    })
+                }
+            >
+                <div className="flex items-center gap-2">
+                    <Input
+                        className="flex-1"
+                        aria-label="Currency symbol"
+                        value={symbol}
+                        onChange={(e) => {
+                            setSymbol(e.target.value);
+                            setQuery(e.target.value);
+                            setSelectedName(null);
+                        }}
+                    />
+                    <Select
+                        value={variantId}
+                        onValueChange={(value) => {
+                            const variant = CURRENCY_VARIANTS.find(({ id }) => id === value);
+                            if (variant) setVariantId(variant.id);
+                        }}
                     >
-                        <span>{currency.name}</span>
-                        <span className="text-muted-foreground">{currency.example}</span>
-                    </div>
-                ))}
-            </div>
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    Cancel
-                </Button>
-                <Button size="sm" disabled={!symbol} onClick={apply}>
-                    Apply
-                </Button>
-            </DialogFooter>
-        </div>
+                        <SelectTrigger className="w-40">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {CURRENCY_VARIANTS.map(({ id }) => (
+                                <SelectItem value={id} key={id}>
+                                    {symbol ? update(buildCurrencyPattern(symbol, id), 1000) : ''}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
+                    {currencies.map((currency) => (
+                        <button
+                            type="button"
+                            className={cn(
+                                'flex w-full items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
+                                currency.name === selectedName && 'eigen-list-item-active',
+                            )}
+                            key={currency.name}
+                            onClick={() => selectCurrency(currency)}
+                        >
+                            <span>{currency.name}</span>
+                            <span className="text-muted-foreground">{currency.example}</span>
+                        </button>
+                    ))}
+                </div>
+            </FormDialogForm>
+        </FormDialog>
     );
 }

@@ -24,7 +24,8 @@ const refs: RefValues = {
         scrollListeners: new Set<() => void>(),
         notifyScrollListeners: () => {},
     },
-    cellInput: createRef<HTMLDivElement | null>(),
+    // The in-cell editor, which the grid always mounts: a format or a function is applied through it.
+    cellInput: { current: document.createElement('div') },
     fxInput: createRef<HTMLDivElement | null>(),
     canvas: createRef<HTMLCanvasElement | null>(),
     cellArea: createRef<HTMLDivElement | null>(),
@@ -79,20 +80,23 @@ export async function renderSheetDialog(
         [...document.querySelectorAll<HTMLButtonElement>('[role="dialog"] button')].find(
             (b) => b.textContent === label,
         );
-    // A field named by its aria-label, or by the text of the label that points at it.
+    // A field by its name: its aria-label, or the text of the label element that points at it.
     const field = (label: string) => {
-        const labelled = [...document.querySelectorAll<HTMLLabelElement>('[role="dialog"] label')].find(
-            (l) => l.textContent === label,
-        );
+        const labelled = [...document.querySelectorAll('[role="dialog"] label')].find((l) => l.textContent === label);
         const input =
             document.querySelector<HTMLInputElement>(`[role="dialog"] input[aria-label="${label}"]`) ??
-            document.querySelector<HTMLInputElement>(`[role="dialog"] input[id="${labelled?.htmlFor}"]`);
-        if (!input) throw new Error(`no field ${label}`);
+            (labelled instanceof HTMLLabelElement ? labelled.control : null);
+        if (!(input instanceof HTMLInputElement)) throw new Error(`no field ${label}`);
         return input;
     };
 
     return {
         context: () => harness.context,
+        // The text in the in-cell editor, where Insert function writes its pick.
+        editorText: () => refs.cellInput.current?.textContent,
+        setEditorText: (text: string) => {
+            if (refs.cellInput.current) refs.cellInput.current.textContent = text;
+        },
         // Every dialog in the document: one, unless a shell wraps another.
         dialogs: () => [...document.querySelectorAll('[role="dialog"]')],
         title: () => document.querySelector('[role="dialog"] h2')?.textContent,

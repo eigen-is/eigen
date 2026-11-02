@@ -69,7 +69,7 @@ Number formatting controls how a value is displayed. The stored value does not c
    | **Date time** | Date and time combined (e.g. `26/09/2008 15:59:00`) |
    | **Duration** | Elapsed time in hours, minutes, and seconds, counting past 24 hours (e.g. `24:01:00`) |
 
-3. For a format that isn't in the list, open **Custom currency**, **Custom date and time**, or **Custom number format** at the bottom of the **Number** submenu.
+3. For a format that isn't in the list, open **Custom currency**, **Custom date and time**, or **Custom number format** at the bottom of the **Number** submenu. Build the format in the dialog, or pick one from its list, then click **Apply**.
 
 ## Cell color
 
