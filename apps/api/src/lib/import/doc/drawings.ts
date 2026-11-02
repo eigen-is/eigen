@@ -5,7 +5,14 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import { heightAtWidth, isFigureFrameNode, mmToPx, pageTwips, readFrameSide } from '@workspace/lib/docs/eigendoc';
+import {
+    heightAtWidth,
+    isFigureFrameNode,
+    MAX_PAPER_PX,
+    mmToPx,
+    pageTwips,
+    readFrameSide,
+} from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
@@ -136,13 +143,14 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
-            const own = {
-                width: readFrameSide(boxedFigure.attrs?.['width']),
-                height: readFrameSide(boxedFigure.attrs?.['height']),
-            };
-            const width = textBoxWidth(extent, room);
-            const height =
-                own.width && own.height ? heightAtWidth({ width: own.width, height: own.height }, width) : null;
+            const ownWidth = readFrameSide(boxedFigure.attrs?.['width']);
+            const ownHeight = readFrameSide(boxedFigure.attrs?.['height']);
+            const own = ownWidth && ownHeight ? { width: ownWidth, height: ownHeight } : undefined;
+            // A tall node at the box's width could be taller than the largest paper, so it gets only the width that
+            // keeps it within that height.
+            const boxWidth = textBoxWidth(extent, room);
+            const width = own ? Math.min(boxWidth, (own.width * MAX_PAPER_PX) / own.height) : boxWidth;
+            const height = own ? heightAtWidth(own, width) : null;
             const size = shape
                 ? {
                       width: readFrameSide(Math.round(width)),

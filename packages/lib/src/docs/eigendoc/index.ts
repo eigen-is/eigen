@@ -106,6 +106,7 @@ export {
     cmText,
     DEFAULT_PAGE_SETUP,
     MAX_PAPER_MM,
+    MAX_PAPER_PX,
     MIN_TEXT_MM,
     matchPaperSize,
     mmToPt,

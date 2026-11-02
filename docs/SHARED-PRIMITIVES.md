@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2079 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2080 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -993,7 +993,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1122)
+## Utilities & constants (1123)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1419,6 +1419,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `MAX_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MAX_HEADING_LEVEL` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/heading.ts |
 | `MAX_PAPER_MM` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
+| `MAX_PAPER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/page.ts |
 | `MAX_TEXT_BOX_PADDING` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/text-box.ts |
 | `MIN_BORDER_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/nodes/border.ts |
 | `MIN_TABLE_COLUMN_PX` | `@workspace/lib/docs/eigendoc` | packages/lib/src/docs/eigendoc/table.ts |

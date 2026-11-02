@@ -1292,6 +1292,22 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
+    // At the 600 px box's width a 100 by 1000 px picture would be taller than the largest paper, so it is drawn as wide
+    // as keeps it on that paper: 211 by 2112 px.
+    test('a tall picture in an unpainted box keeps its shape', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const tall = paragraph(picture('rId9').replaceAll('cx="381000" cy="381000"', 'cx="952500" cy="9525000"'));
+        const { json } = await importDocxBody(
+            anchored({ content: tall, cx: 5715000, spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>' }),
+            parts,
+        );
+        const sides = nodesOfType(json, 'figure').map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']]);
+        expect(sides).toEqual([[Math.round(LARGEST_PAPER / 10), Math.round(LARGEST_PAPER)]]);
+    });
+
     // A box the picture's own size, as Word draws one around a picture, places the picture where it would stand alone.
     test('a picture in an unpainted box of its own size keeps its size and place', async () => {
         const parts = {
@@ -1602,6 +1618,17 @@ describe('charts', () => {
         const { json } = await imported(paragraph(`${box}<w:r><w:t>Anchor</w:t></w:r>`), [chartSpace(COLUMNS)]);
         expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([[96, 58]]);
         expect(onPaper(charts(json))).toEqual([[697, 793]]);
+    });
+
+    // At the 600 px box's width a 100 by 1000 px chart would be taller than the largest paper, so it is drawn as wide as
+    // keeps it on that paper: 211 by 2112 px.
+    test('a tall chart in an unpainted box keeps its shape', async () => {
+        const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+        const box = `<w:r><w:drawing><wp:anchor><wp:extent cx="5715000" cy="571500"/><wp:wrapTopAndBottom/><wp:docPr id="7" name="Text Box 7"/><a:graphic><a:graphicData uri="${WPS}"><wps:wsp xmlns:wps="${WPS}"><wps:spPr><a:noFill/><a:ln><a:noFill/></a:ln></wps:spPr><wps:txbx><w:txbxContent>${paragraph(chartRun('rId20', { extent: 'cx="952500" cy="9525000"' }))}</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+        const { json } = await imported(paragraph(box), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([
+            [Math.round(CHART_MAX_SIDE / 10), CHART_MAX_SIDE],
+        ]);
     });
 
     // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.
