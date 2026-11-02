@@ -12,7 +12,7 @@ type FormulaFunctionParam = {
 
 export type FormulaFunctionEntry = {
     n: string;
-    // Category id, one of FUNCTION_CATEGORIES' `t`, or one that has no category of its own.
+    // Category id, one of FUNCTION_CATEGORIES' ids, or one that has no category of its own.
     t: number;
     d: string;
     a: string;
@@ -21,22 +21,22 @@ export type FormulaFunctionEntry = {
 };
 
 // The categories Insert function offers. Their ids are FUNCTION_LIST's `t`.
-export const FUNCTION_CATEGORIES = [
-    { t: 0, n: 'Math' },
-    { t: 1, n: 'Statistical' },
-    { t: 2, n: 'Lookup' },
-    { t: 4, n: 'Data mining' },
-    { t: 5, n: 'Database' },
-    { t: 6, n: 'Date' },
-    { t: 7, n: 'Filter' },
-    { t: 8, n: 'Financial' },
-    { t: 9, n: 'Engineering' },
-    { t: 10, n: 'Logical' },
-    { t: 11, n: 'Operator' },
-    { t: 12, n: 'Text' },
-    { t: 13, n: 'Parser' },
-    { t: 14, n: 'Array' },
-    { t: -1, n: 'Other' },
+export const FUNCTION_CATEGORIES: readonly { id: number; name: string }[] = [
+    { id: 0, name: 'Math' },
+    { id: 1, name: 'Statistical' },
+    { id: 2, name: 'Lookup' },
+    { id: 4, name: 'Data mining' },
+    { id: 5, name: 'Database' },
+    { id: 6, name: 'Date' },
+    { id: 7, name: 'Filter' },
+    { id: 8, name: 'Financial' },
+    { id: 9, name: 'Engineering' },
+    { id: 10, name: 'Logical' },
+    { id: 11, name: 'Operator' },
+    { id: 12, name: 'Text' },
+    { id: 13, name: 'Parser' },
+    { id: 14, name: 'Array' },
+    { id: -1, name: 'Other' },
 ];
 
 export const FUNCTION_LIST: FormulaFunctionEntry[] = [

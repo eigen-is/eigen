@@ -20,15 +20,15 @@ describe('FUNCTION_LIST categories', () => {
     });
 
     test('every category id is a dialog tab or a known tab-less one', () => {
-        const known = new Set([...FUNCTION_CATEGORIES.map((c) => c.t), ...CATEGORIES_WITHOUT_A_TAB]);
+        const known = new Set([...FUNCTION_CATEGORIES.map((c) => c.id), ...CATEGORIES_WITHOUT_A_TAB]);
         const orphans = [...new Set(FUNCTION_LIST.filter((fn) => !known.has(fn.t)).map((fn) => fn.t))];
         expect(orphans).toEqual([]);
     });
 
     test('UNIQUE is reachable under the Array category, not only by search', () => {
-        const array = FUNCTION_CATEGORIES.find((c) => c.n === 'Array');
+        const array = FUNCTION_CATEGORIES.find((c) => c.name === 'Array');
         // The dialog's own predicate: an entry is listed under a category when its `t` is that category's.
-        const names = FUNCTION_LIST.filter((fn) => fn.t === array?.t).map((fn) => fn.n);
+        const names = FUNCTION_LIST.filter((fn) => fn.t === array?.id).map((fn) => fn.n);
         expect(names).toContain('UNIQUE');
     });
 });
