@@ -1207,8 +1207,8 @@ describe('text boxes as boxes', () => {
         expect(bare.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 
-    // The box is aligned by its width, so the picture takes that width and keeps its shape. A 400 by 40 px picture in a
-    // 96 px box is 96 by 9.6, and in a box wider than the paper it is the paper's 793 px wide.
+    // The box is aligned by its width, so the picture takes that width and keeps its shape, its height a whole px. A 400
+    // by 40 px picture in a 96 px box is 96 by 10, and in a box wider than the paper it is the paper's 793 px wide.
     test('a picture in an unpainted box is stored at the box’s width and lands on the paper', async () => {
         const parts = {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
@@ -1220,8 +1220,8 @@ describe('text boxes as boxes', () => {
         const { json } = await importDocxBody([bare(914400), bare(7620000)].join(''), parts);
         const figures = nodesOfType(json, 'figure');
         expect(figures.map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']])).toEqual([
-            [96, 9.6],
-            [793, 79.3],
+            [96, 10],
+            [793, 79],
         ]);
         expect(onPaper(figures)).toEqual([
             [697, 793],
@@ -1529,6 +1529,16 @@ describe('charts', () => {
             [295, 498],
             [495, 698],
         ]);
+    });
+
+    // The box is aligned by its width, so the chart takes that width and keeps its shape: 96 by 57.6 px for the 480 by
+    // 288 px chart, its height a whole px.
+    test('a chart in an unpainted box is stored at the box’s width and lands on the paper', async () => {
+        const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+        const box = `<w:r><w:drawing><wp:anchor><wp:positionH relativeFrom="page"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="914400" cy="571500"/><wp:wrapNone/><wp:docPr id="7" name="Text Box 7"/><a:graphic><a:graphicData uri="${WPS}"><wps:wsp xmlns:wps="${WPS}"><wps:spPr><a:noFill/><a:ln><a:noFill/></a:ln></wps:spPr><wps:txbx><w:txbxContent>${paragraph(chartRun('rId20'))}</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+        const { json } = await imported(paragraph(`${box}<w:r><w:t>Anchor</w:t></w:r>`), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([[96, 58]]);
+        expect(onPaper(charts(json))).toEqual([[697, 793]]);
     });
 
     // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.

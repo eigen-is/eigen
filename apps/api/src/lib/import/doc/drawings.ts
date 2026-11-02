@@ -129,13 +129,12 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             tail.every(isCaptionLike) &&
             !(shape && paintsBox(reader, shape))
         ) {
-            // An unpainted box around a picture is the picture: its place and width are the box's, and the picture keeps
-            // its shape.
+            // An unpainted box around a picture or a chart is that node: its place and width are the box's, and the
+            // node keeps its shape.
             if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
-            const size =
-                shape && boxedFigure.type === 'figure' ? pictureAtWidth(boxedFigure, boxWidth(extent, room)) : {};
+            const size = shape ? frameAtWidth(boxedFigure, boxWidth(extent, room)) : {};
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, ...size, caption } });
         } else if (shape) {
             const box = readTextBox(reader, shape, extent, layout, room, boxed);
@@ -250,11 +249,16 @@ function pictureSize(width: number, height: number | null, columnPx: number): Pi
 
 const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: null };
 
-// A figure at `width`, its height scaled to keep its shape. One of no known size takes its own height once it loads.
-function pictureAtWidth(figure: JSONContent, width: number): Pick<FigureAttrs, 'width' | 'height'> {
-    const own = { width: readFrameSide(figure.attrs?.['width']), height: readFrameSide(figure.attrs?.['height']) };
+// A figure or a chart at `width`, its height scaled to keep its shape and rounded to a whole px, as pictureSize rounds
+// one. Its sides go through readFrameSide, as either node reads them. A figure of no known size takes its own height
+// once it loads.
+function frameAtWidth(node: JSONContent, width: number): Pick<FigureAttrs, 'width' | 'height'> {
+    const own = { width: readFrameSide(node.attrs?.['width']), height: readFrameSide(node.attrs?.['height']) };
     const height = own.width && own.height ? heightAtWidth({ width: own.width, height: own.height }, width) : null;
-    return { width, height: readFrameSide(height) };
+    return {
+        width: readFrameSide(Math.round(width)),
+        height: readFrameSide(height && Math.max(1, Math.round(height))),
+    };
 }
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
