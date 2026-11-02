@@ -30,7 +30,7 @@ import { getSheet } from '../../state/api/common';
 import type { RangeOrWholeAxis } from '../../state/types';
 import { CellRangeDialog } from '../CellRangeDialog';
 
-const VERIFICATION_TYPES = [
+const VALIDATION_TYPES = [
     { value: 'dropdown', label: 'Drop-down list' },
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'number', label: 'Number' },
@@ -74,17 +74,17 @@ const HINT_TOGGLES = [
     { value: 'hintShow', label: 'Show prompt when the cell is selected' },
 ] as const;
 
-// What OK and Delete verification say when the range names no cells.
+// What OK and Delete validation say when the range names no cells.
 const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
 
 // The draft's text fields, each typed into an input.
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
 
-// Why OK or Delete verification refused the draft: its range, or the values its condition compares against.
+// Why OK or Delete validation refused the draft: its range, or the values its condition compares against.
 type Problem = { field: 'range' | 'value'; message: string };
 
 // `draft` is the rule as the user left it when the range picker took this dialog's place.
-export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulationProps }) {
+export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulationProps }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
@@ -117,7 +117,7 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
     // opens this dialog again with the pick, and Cancel or Escape with the draft as it was.
     const pickRange = (field: 'rangeTxt' | 'value1') => {
         const reopen = (picked?: string) =>
-            showDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
+            showDialog(<DataValidation draft={picked == null ? draft : { ...draft, [field]: picked }} />);
         setContext((ctx) => {
             ctx.rangeDialog.show = true;
         });
@@ -154,7 +154,7 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
         });
     };
 
-    const deleteVerification = () => {
+    const deleteValidation = () => {
         const target = rangeOrRefuse();
         if (!target) return;
         setContext((ctx) => {
@@ -164,13 +164,13 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
     };
 
     return (
-        <FormDialog {...dialogProps} title="Data verification" size="md">
+        <FormDialog {...dialogProps} title="Data validation" size="md">
             <FormDialogForm
                 submitLabel="OK"
                 onSubmit={apply}
                 footerStart={
-                    <Button variant="outline" onClick={deleteVerification}>
-                        Delete verification
+                    <Button variant="outline" onClick={deleteValidation}>
+                        Delete validation
                     </Button>
                 }
             >
@@ -197,7 +197,7 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
                     </div>
 
                     <div className="space-y-2">
-                        <div className="text-sm font-medium">Verification condition</div>
+                        <div className="text-sm font-medium">Validation condition</div>
                         <Select
                             value={draft.type}
                             onValueChange={(type) => {
@@ -216,7 +216,7 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {VERIFICATION_TYPES.map((v) => (
+                                {VALIDATION_TYPES.map((v) => (
                                     <SelectItem value={v.value} key={v.value}>
                                         {v.label}
                                     </SelectItem>

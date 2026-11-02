@@ -1,6 +1,6 @@
 // The data-validation dialog over a column header's selection names it B:B and puts the rule on the whole column, to
 // the grid's last row. OK checks the draft first: a refused range or value keeps the dialog open with the reason under
-// it and the draft as typed. Delete verification takes a range out of a rule and keeps the rest. A grid button swaps
+// it and the draft as typed. Delete validation takes a range out of a rule and keeps the rest. A grid button swaps
 // the dialog for the range picker, and the picker's OK or Cancel brings it back with the draft as the user left it.
 
 import { expect, test } from 'bun:test';
@@ -12,7 +12,7 @@ installHappyDom();
 const { act, createElement } = await import('react');
 const { REFERENCE_ROW_COUNT } = await import('@workspace/lib/sheets');
 const { renderSheetDialog } = await import('../sheet-dialog');
-const { DataVerification } = await import('../../../components/DataVerification');
+const { DataValidation } = await import('../../../components/DataValidation');
 type Selection = import('../../../state').Selection;
 
 const LAST = REFERENCE_ROW_COUNT - 1;
@@ -23,7 +23,7 @@ const NO_RANGE = 'Enter a cell range, such as A1:B10';
 
 // The dialog over a 1,000-row sheet.
 const openDialog = (selection: Selection, dataValidations = {}) =>
-    renderSheetDialog((d) => d.showDialog(createElement(DataVerification)), {
+    renderSheetDialog((d) => d.showDialog(createElement(DataValidation)), {
         sheets: [
             {
                 id: 'id_1',
@@ -61,8 +61,8 @@ test('a column header selection is named B:B, and OK puts the rule on the whole 
         column_select: true,
     });
     expect(dialog.dialogs()).toHaveLength(1);
-    expect(dialog.title()).toBe('Data verification');
-    expect(dialog.footer()).toEqual(['Delete verification', 'Cancel', 'OK']);
+    expect(dialog.title()).toBe('Data validation');
+    expect(dialog.footer()).toEqual(['Delete validation', 'Cancel', 'OK']);
     expect(dialog.button('OK')?.dataset.size).toBe('default');
     expect(document.querySelector('[data-slot="dialog-close"]')).not.toBeNull();
     expect(dialog.field('Cell range').value).toBe('B:B');
@@ -106,12 +106,12 @@ test('a range that names no cells keeps the dialog open and says why under the r
     expect(rules(dialog)).toEqual({});
 });
 
-test("opening on a rule's cell reads the rule, and Delete verification takes its range out of the rule", async () => {
+test("opening on a rule's cell reads the rule, and Delete validation takes its range out of the rule", async () => {
     const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, LAST], column: [1, 1] }], rule: LIST } });
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Options').value).toBe('Yes,No');
     await dialog.type('Cell range', 'B2:B3');
-    await dialog.click('Delete verification');
+    await dialog.click('Delete validation');
     expect(rules(dialog)).toEqual({
         v: {
             ranges: [
@@ -127,9 +127,9 @@ test("opening on a rule's cell reads the rule, and Delete verification takes its
 test('Delete with no range to take the rule from stays open and says why under the range', async () => {
     const dialog = await openDialog(B3, { v: { ranges: [{ row: [0, LAST], column: [1, 1] }], rule: LIST } });
     await dialog.type('Cell range', '');
-    await dialog.click('Delete verification');
+    await dialog.click('Delete validation');
     expect(dialog.dialogs()).toHaveLength(1);
-    expect(dialog.title()).toBe('Data verification');
+    expect(dialog.title()).toBe('Data validation');
     expect(problemOf(dialog.field('Cell range'))).toBe(NO_RANGE);
     expect(Object.keys(rules(dialog) ?? {})).toEqual(['v']);
 });
@@ -142,7 +142,7 @@ test('back from the range picker, the draft keeps every value the user typed', a
     expect(dialog.context().rangeDialog.show).toBe(true);
     await dialog.click('OK');
     expect(dialog.dialogs()).toHaveLength(1);
-    expect(dialog.title()).toBe('Data verification');
+    expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Cell range').value).toBe('B3');
     expect(dialog.field('Value 2').value).toBe('50');
     expect(dialog.context().rangeDialog.show).toBe(false);
@@ -153,7 +153,7 @@ test('Cancel in the range picker brings the dialog back with its draft too', asy
     await dialog.type('Value 2', '50');
     await pickWith('Select cell range');
     await dialog.click('Cancel');
-    expect(dialog.title()).toBe('Data verification');
+    expect(dialog.title()).toBe('Data validation');
     expect(dialog.field('Value 2').value).toBe('50');
     expect(dialog.context().rangeDialog.show).toBe(false);
 });

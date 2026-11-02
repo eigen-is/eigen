@@ -1,4 +1,4 @@
-// The menu bar's Data menu: sorting the selection, a filter, data verification and splitting text into columns. Each
+// The menu bar's Data menu: sorting the selection, a filter, data validation and splitting text into columns. Each
 // item runs its action on the workbook or opens its dialog.
 
 import {
@@ -15,7 +15,7 @@ import { useDialog } from '../../hooks/useDialog';
 import type { Context } from '../../state';
 import { clearFilter, createFilter, sortSelection } from '../../state';
 import { CustomSort } from '../CustomSort';
-import { DataVerification } from '../DataVerification';
+import { DataValidation } from '../DataValidation';
 import { SplitColumn } from '../SplitColumn';
 
 export function DataMenu() {
@@ -52,7 +52,7 @@ export function DataMenu() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<DataValidation />)}>Data validation</DropdownMenuItem>
             <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
         </>
     );

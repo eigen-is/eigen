@@ -39,8 +39,8 @@ import {
     ValidationLimitError,
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
-import { DropDownList } from '../DataVerification/DropdownList';
-import { ValidationHintCard } from '../DataVerification/HintCard';
+import { DropDownList } from '../DataValidation/DropdownList';
+import { ValidationHintCard } from '../DataValidation/HintCard';
 import { FloatingObjects } from '../FloatingObjects';
 import { LinkEditCard } from '../LinkEditCard';
 import { ColumnHeader } from './ColumnHeader';

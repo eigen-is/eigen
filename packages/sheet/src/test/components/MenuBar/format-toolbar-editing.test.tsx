@@ -298,7 +298,7 @@ test.each(['Format', 'Inter'])(
     },
 );
 
-// A menu item can open a dialog, such as Data verification, that takes the focus as the menu closes. The
+// A menu item can open a dialog, such as Data validation, that takes the focus as the menu closes. The
 // editor leaves the focus there.
 test('a closing menu leaves the focus in a dialog that took it', async () => {
     const { input } = await openEditor('hello big world');

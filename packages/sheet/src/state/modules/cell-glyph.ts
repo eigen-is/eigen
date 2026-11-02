@@ -12,7 +12,7 @@ import {
 } from './data-verification';
 import { colLocation, rowLocation } from './location';
 
-// The marks a cell paints in its own box: the two data-verification affordances
+// The marks a cell paints in its own box: the two data-validation affordances
 // and the corner triangles. A press on any of them belongs to the cell — it
 // opens the list, toggles the box, or just selects the marked cell — and never
 // to the selection's drag handles, whose DOM hit targets straddle the same
