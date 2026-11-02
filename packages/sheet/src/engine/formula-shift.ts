@@ -4,7 +4,7 @@
 // sheet state, so the editor, the op replay and the API's import share it.
 
 import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
-import { iscelldata, operatorjson } from './formula-utils';
+import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
 
@@ -43,36 +43,24 @@ function shiftRef(txt: string, rowOffset: number, colOffset: number): string {
     return `${prefix + toLabel(rowStart, colStart)}:${toLabel(rowEnd, colEnd)}`;
 }
 
-// Shared formula char-walker. Strips a single leading `=`, then splits the text into
-// reference tokens vs structure — paren depth, double-quote state, `,`, `&`, and the
-// operator handling (including glued two-char operators and leading-unary `-`) — and
-// recurses into each bracketed / comma- / operator-separated segment. Every leaf token
-// that `iscelldata` recognizes as a cell/range ref is passed to `onRef` and replaced by
-// its return value. Any other leaf, such as a name or a number, goes to `onName`, which
-// keeps it unless the caller says otherwise. A function's name is no leaf, and neither is
-// a string. Pure — no Context, no DOM.
+// The character walker every rewrite here shares. It drops one leading `=`, then reads the text as refs and the
+// structure around them: brackets, strings, commas, `&` and the operators, a two-character one or a leading minus
+// included. It walks into each part between them. Each leaf that `iscelldata` reads as a ref goes to `onRef`, which
+// returns its replacement. Any other leaf, such as a name or a number, goes to `onName`, which keeps it by default. A
+// function's name is no leaf, and neither is a string.
 //
-// `functionCopy` (relative shift) and `functionStrChange` (insert/delete shift) are the
-// main consumers; they differ only in the per-ref transform they hand to `onRef`. The
-// dependency walker `isFunctionRange` looks similar but is a genuinely
-// different machine — a shunting-yard compiler that emits nested `functions.*` calls and
-// carries single-quote / `{}` array / `""`-escape state this walker has no notion of —
-// so it is deliberately NOT built on this helper.
+// `isFunctionRange` looks similar, but it compiles the formula into nested `functions.*` calls, so it is a different
+// machine and not built on this walker.
 //
-// A leading `-` is classified as a unary sign (glued to the following number literal) rather
-// than a binary operator when the nearest non-space char before it is one of the unary-trigger
-// chars (opening paren, comma, another operator) or the start of the segment. The scan reads
-// i-1 first, then walks back over spaces: start at i-2 and the `-` in `CONCAT(-1:3)` reads as
-// binary, shifting the trailing range.
+// A `-` is a sign, glued to the number after it, when the nearest character before it that is no space is `(`, `,`,
+// another operator, or the start of the part. The scan reads the character just before the `-` first and then walks
+// back over spaces. Starting one further back would read the `-` in `CONCAT(-1:3)` as a minus and shift the range.
 function walkFormulaRefs(
     txt: string,
     onRef: (ref: string) => string,
     onName: (token: string) => string = (token) => token,
 ): string {
-    let stripped = txt;
-    if (stripped.startsWith('=')) stripped = stripped.slice(1);
-
-    const chars = stripped.split('');
+    const chars = (txt.startsWith('=') ? txt.slice(1) : txt).split('');
     let i = 0;
     let str = '';
     let result = '';
@@ -135,7 +123,7 @@ function walkFormulaRefs(
             } else {
                 result += '&';
             }
-        } else if (s in operatorjson && dquote === 0) {
+        } else if (formulaOperators.has(s) && dquote === 0) {
             const sNext = i + 1 < chars.length ? chars[i + 1] : '';
             let p = i - 1;
             let sPre: string | null = null;
@@ -146,7 +134,7 @@ function walkFormulaRefs(
                 } while (p >= 0 && sPre === ' ');
             }
 
-            if (s + sNext in operatorjson) {
+            if (formulaOperators.has(s + sNext)) {
                 if (str.length > 0) {
                     result += walkFormulaRefs(str, onRef, onName) + s + sNext;
                     str = '';
@@ -157,7 +145,7 @@ function walkFormulaRefs(
             } else if (
                 !/[^0-9]/.test(sNext) &&
                 s === '-' &&
-                (sPre === '(' || sPre == null || sPre === ',' || sPre === ' ' || sPre in operatorjson)
+                (sPre === '(' || sPre == null || sPre === ',' || sPre === ' ' || formulaOperators.has(sPre))
             ) {
                 str += s;
             } else if (str.length > 0) {
@@ -267,13 +255,10 @@ export function inlineNames(
     return txt.startsWith('=') ? `=${walked}` : walked;
 }
 
-// Shifts formula-text refs in response to an insert ('add') or delete ('del') row/col
-// op. `stindex` is the zero-based row/col index where the op starts; `step` is the
-// count. `orient` ('lefttop' / 'rightbottom') controls whether the boundary row is
-// included in the shift for insert ops. `targetSheet` names the sheet the op runs on
-// and `onTargetSheet` says whether `txt` itself lives on that sheet — only refs that
-// resolve to the target sheet move. Used by state/modules/rowcol.ts and (via
-// engine/rowcol.ts) by the context-free replay path.
+// Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
+// alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
+// `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
+// whether the formula lives on it. Only refs to that sheet move.
 export function functionStrChange(
     txt: string,
     type: 'add' | 'del',
@@ -288,13 +273,12 @@ export function functionStrChange(
         return '';
     }
     return walkFormulaRefs(txt, (ref) =>
-        functionStrChange_range(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
+        shiftRefForRowCol(ref, type, rc, orient, stindex, step, targetSheet, onTargetSheet),
     );
 }
 
-// Shifts a single cell or range ref string in response to an insert/delete row/col op.
-// Invoked (via walkFormulaRefs) by functionStrChange for each ref token it finds.
-function functionStrChange_range(
+// Moves one cell or range ref for functionStrChange.
+function shiftRefForRowCol(
     txt: string,
     type: 'add' | 'del',
     rc: 'row' | 'col',
@@ -335,66 +319,40 @@ function functionStrChange_range(
     };
 
     if (type === 'del') {
+        // A range wholly inside the deleted band is #REF!, and one that overlaps it loses the deleted part.
+        const last = stindex + step - 1;
+        const afterDelete = (from: number, to: number): [number, number] | null => {
+            if (from >= stindex && to <= last) return null;
+            let start = from;
+            if (from > last) start -= step;
+            else if (from >= stindex) start = stindex;
+            let end = to;
+            if (to > last) end -= step;
+            else if (to >= stindex) end = stindex - 1;
+            start = Math.max(start, 0);
+            return [start, Math.max(end, start)];
+        };
         if (rc === 'row' && !rowsMissing) {
-            if (r1 >= stindex && r2 <= stindex + step - 1) {
-                return error['r'];
-            }
-            if (r1 > stindex + step - 1) {
-                r1 -= step;
-            } else if (r1 >= stindex) {
-                r1 = stindex;
-            }
-            if (r2 > stindex + step - 1) {
-                r2 -= step;
-            } else if (r2 >= stindex) {
-                r2 = stindex - 1;
-            }
-            if (r1 < 0) {
-                r1 = 0;
-            }
-            if (r2 < r1) {
-                r2 = r1;
-            }
+            const rows = afterDelete(r1, r2);
+            if (rows == null) return error['r'];
+            [r1, r2] = rows;
         } else if (rc === 'col' && !colsMissing) {
-            if (c1 >= stindex && c2 <= stindex + step - 1) {
-                return error['r'];
-            }
-            if (c1 > stindex + step - 1) {
-                c1 -= step;
-            } else if (c1 >= stindex) {
-                c1 = stindex;
-            }
-            if (c2 > stindex + step - 1) {
-                c2 -= step;
-            } else if (c2 >= stindex) {
-                c2 = stindex - 1;
-            }
-            if (c1 < 0) {
-                c1 = 0;
-            }
-            if (c2 < c1) {
-                c2 = c1;
-            }
+            const columns = afterDelete(c1, c2);
+            if (columns == null) return error['r'];
+            [c1, c2] = columns;
         }
         return formatRange();
     }
 
+    // An insert at the boundary moves it for 'lefttop' and leaves it for 'rightbottom'.
+    const afterInsert = (index: number) =>
+        (orient === 'lefttop' ? index >= stindex : orient === 'rightbottom' && index > stindex) ? index + step : index;
     if (rc === 'row' && !rowsMissing) {
-        if (orient === 'lefttop') {
-            if (r1 >= stindex) r1 += step;
-            if (r2 >= stindex) r2 += step;
-        } else if (orient === 'rightbottom') {
-            if (r1 > stindex) r1 += step;
-            if (r2 > stindex) r2 += step;
-        }
+        r1 = afterInsert(r1);
+        r2 = afterInsert(r2);
     } else if (rc === 'col' && !colsMissing) {
-        if (orient === 'lefttop') {
-            if (c1 >= stindex) c1 += step;
-            if (c2 >= stindex) c2 += step;
-        } else if (orient === 'rightbottom') {
-            if (c1 > stindex) c1 += step;
-            if (c2 > stindex) c2 += step;
-        }
+        c1 = afterInsert(c1);
+        c2 = afterInsert(c2);
     }
     return formatRange();
 }

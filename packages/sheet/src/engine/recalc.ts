@@ -1,6 +1,7 @@
 // The server's recalc of a workbook nobody computed, such as an xlsx import whose recalc failed. recalcSheets takes
 // the replayed sheets, orders their formula cells through the dependency graph and writes each cell's computed value
 // and display string. A workbook the editor computed is marked computed, and sheetsNeedRecalc lets it skip this.
+// extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
 import { createArrayResolver } from './cell-resolver';
@@ -21,12 +22,12 @@ import type {
     SheetWithCalcChain,
 } from './types';
 
-// A sheet's dense `data`, by id, which the ported graph builder reads where the editor reads its Context.
-type WorkingSheet = { sheet: Sheet; id: string; name: string; data: CellMatrix };
+// A sheet's dense `data`, by id, which the pass reads and writes.
+type WorkingSheet = { id: string; name: string; data: CellMatrix };
 
+// What extractDependencies reads: the pass's working sheets, or the editor's.
 type GraphCtx = {
-    sheets: WorkingSheet[];
-    indexById: Map<string, number>;
+    sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[];
     // Resolved references, as the editor's formulaCache keeps them: by the reference's text for one into another
     // sheet, by `${text}_${sheetId}` for one into the formula's own.
     cellTextToIndexList: Record<string, FormulaDependency>;
@@ -37,7 +38,7 @@ type Extent = { rows: number; columns: number };
 // A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
 // recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
 // write a calcChain, so a computed workbook's read path pays nothing.
-export function sheetsNeedRecalc(sheets: SheetWithCalcChain[]): boolean {
+export function sheetsNeedRecalc(sheets: readonly SheetWithCalcChain[]): boolean {
     for (const sheet of sheets) {
         // recalcSheets skips a sheet without an id, so one must not arm the gate, or every read runs the pass for nothing.
         if (!sheet.id) continue;
@@ -76,7 +77,7 @@ function sheetHasFormula(sheet: Sheet): boolean {
 // recalc throws before the work, so many ranges over a large sheet can't cost minutes and gigabytes. The server passes
 // both for an untrusted workbook; without them there is no bound.
 export function recalcSheets(
-    sheets: Sheet[],
+    sheets: readonly Sheet[],
     { maxDependencyBlocks = Number.POSITIVE_INFINITY, maxCellsRead = Number.POSITIVE_INFINITY } = {},
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
@@ -85,10 +86,10 @@ export function recalcSheets(
     for (const sheet of sheets) {
         if (!sheet.id) continue;
         indexById.set(sheet.id, working.length);
-        working.push({ sheet, id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) });
+        working.push({ id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) });
     }
 
-    const g: GraphCtx = { sheets: working, indexById, cellTextToIndexList: {} };
+    const g: GraphCtx = { sheets: working, cellTextToIndexList: {} };
     const extents = new Map<string, Extent>();
     for (const w of working) {
         let columns = 0;
@@ -167,7 +168,7 @@ export function recalcSheets(
     };
     for (const info of order) {
         overRead();
-        if (isVolatileFormula(info.calc_funcStr)) continue;
+        if (VOLATILE_RE.test(info.calc_funcStr)) continue;
         try {
             const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
             const idx = indexById.get(info.id);
@@ -207,39 +208,30 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
     return celldataToData(sheet.celldata ?? [], row, column);
 }
 
-// The ranges a formula reads, as setFormulaCellInfo finds them in the editor. An INDIRECT, OFFSET or INDEX call goes
-// through isFunctionRange; any other formula runs the same quote-aware tokenizer.
-function extractDependencies(g: GraphCtx, formula: string, sheetId: string, data: CellMatrix): FormulaDependency[] {
+// The ranges a formula reads, for the server's pass and the editor's formula map alike. `data` is the matrix of the
+// formula's own sheet. An INDIRECT, OFFSET or INDEX call goes through isFunctionRange, and any other formula through
+// the quote-aware tokenizer.
+export function extractDependencies(
+    g: GraphCtx,
+    formula: string,
+    sheetId: string,
+    data: CellMatrix | null | undefined,
+): FormulaDependency[] {
     const upper = formula.toUpperCase();
     const buildsReference = upper.includes('INDIRECT(') || upper.includes('OFFSET(') || upper.includes('INDEX(');
 
     const dependencies: FormulaDependency[] = [];
+    const add = (reference: string) => {
+        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference.trim(), sheetId, data);
+        if (range != null) dependencies.push(range);
+    };
     if (buildsReference) {
-        isFunctionRange(formula, (reference: string) => {
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference.trim(), sheetId, data);
-            if (range != null) {
-                dependencies.push(range);
-            }
-        });
+        isFunctionRange(formula, add);
     } else {
         for (const token of tokenize(formula)) {
-            if (token.length <= 1) {
-                continue;
-            }
-
-            if (!iscelldata(token)) {
-                continue;
-            }
-
-            const range = resolveCellRange(g.sheets, g.cellTextToIndexList, token.trim(), sheetId, data);
-            if (range == null) {
-                continue;
-            }
-
-            dependencies.push(range);
+            if (token.length > 1 && iscelldata(token)) add(token);
         }
     }
-
     return dependencies;
 }
 
@@ -326,10 +318,6 @@ function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): Form
 // name wins.
 const VOLATILE_RE = /\b(?:NOW|TODAY|RANDBETWEEN|RAND)\s*\(/i;
 
-function isVolatileFormula(formula: string): boolean {
-    return VOLATILE_RE.test(formula);
-}
-
 // A name as Excel spells one: a letter, `_` or `\` first, then letters, digits, `_`, `.`, `\` or `?`.
 const NAME_RE = /^[\p{L}_\\][\p{L}\p{N}_.\\?]*$/u;
 
@@ -377,7 +365,11 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
     cell.m = result.value == null ? '' : String(result.value);
 }
 
-function finalize(working: WorkingSheet[], sheets: Sheet[], calcChainBySheet: Map<string, CalcChainEntry[]>): Sheet[] {
+function finalize(
+    working: readonly WorkingSheet[],
+    sheets: readonly Sheet[],
+    calcChainBySheet: Map<string, CalcChainEntry[]>,
+): Sheet[] {
     const byId = new Map<string, WorkingSheet>();
     for (const w of working) byId.set(w.id, w);
 

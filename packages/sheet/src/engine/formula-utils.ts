@@ -1,5 +1,5 @@
-// Plain helpers for reading formula text, shared by the editor and the server's recalc: operator priorities, whether
-// a string is a cell reference, resolving a reference to a range, and the walker that finds the ranges an INDIRECT,
+// Plain helpers for reading formula text, shared by the editor and the server's recalc: the operators and their
+// priorities, whether a string is a cell reference, resolving a reference to a range, and the walker that finds the ranges an INDIRECT,
 // OFFSET or INDEX call reads. Nothing here reads the workbook context.
 
 import type { CellMatrix, Sheet } from '@workspace/lib/sheets';
@@ -16,27 +16,28 @@ export const operatorPriority: Readonly<Record<string, number>> = {
     '-': 2,
 };
 
-const operatorArr = '==|!=|<>|<=|>=|=|+|-|>|<|/|*|%|&|^'.split('|');
-
-export const operatorjson: Readonly<Record<string, number>> = (() => {
-    const map: Record<string, number> = {};
-    for (let i = 0; i < operatorArr.length; i += 1) {
-        map[operatorArr[i]] = 1;
-    }
-    return map;
-})();
+// The operators a formula's text walkers stop at. A two-character one is matched before its first character.
+export const formulaOperators: ReadonlySet<string> = new Set([
+    '<>',
+    '<=',
+    '>=',
+    '=',
+    '+',
+    '-',
+    '>',
+    '<',
+    '/',
+    '*',
+    '%',
+    '&',
+    '^',
+]);
 
 // Handles single cells (A1, $A$1), ranges (A1:B3), column-only ranges (A:C),
 // and sheet-qualified references (Sheet1!A1).
 export function iscelldata(txt: string) {
     const val = txt.split('!');
-    let rangetxt: string;
-
-    if (val.length > 1) {
-        [, rangetxt] = val;
-    } else {
-        [rangetxt] = val;
-    }
+    const rangetxt = val.length > 1 ? val[1] : val[0];
 
     const reg_cell = /^(([a-zA-Z]+)|([$][a-zA-Z]+))(([0-9]+)|([$][0-9]+))$/;
 
@@ -190,7 +191,7 @@ export function calPostfixExpression(cal: string[]): string {
     const stack: string[] = [];
     for (let i = cal.length - 1; i >= 0; i -= 1) {
         const c = cal[i];
-        if (c in operatorjson) {
+        if (formulaOperators.has(c)) {
             const s2 = stack.pop();
             const s1 = stack.pop();
             const str = `compareWith(${s1},'${c}', ${s2})`;
@@ -234,11 +235,8 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
     let function_str = '';
 
     const matchConfig = {
-        bracket: 0,
-        comma: 0,
         squote: 0,
         dquote: 0,
-        compare: 0,
         braces: 0,
     };
 
@@ -332,19 +330,14 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
                 str += ',';
             }
         } else if (
-            s in operatorjson &&
+            formulaOperators.has(s) &&
             matchConfig.squote === 0 &&
             matchConfig.dquote === 0 &&
             matchConfig.braces === 0
         ) {
-            let s_next = '';
-            const op = operatorPriority;
+            const s_next = funcstack[i + 1] ?? '';
 
-            if (i + 1 < funcstack.length) {
-                s_next = funcstack[i + 1];
-            }
-
-            if (s + s_next in operatorjson) {
+            if (formulaOperators.has(s + s_next)) {
                 if (bracket.length === 0) {
                     if (str.trim().length > 0) {
                         cal2.unshift(isFunctionRange(str.trim(), cellRangeFunction));
@@ -352,12 +345,12 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
                         cal2.unshift(function_str.trim());
                     }
 
-                    if (cal1[0] in operatorjson) {
-                        let stackCeilPri = op[cal1[0]];
+                    if (formulaOperators.has(cal1[0])) {
+                        let stackCeilPri = operatorPriority[cal1[0]];
 
                         while (cal1.length > 0 && stackCeilPri != null) {
                             cal2.unshift(...cal1.splice(0, 1));
-                            stackCeilPri = op[cal1[0]];
+                            stackCeilPri = operatorPriority[cal1[0]];
                         }
                     }
 
@@ -378,18 +371,15 @@ export function isFunctionRange(txt: string, cellRangeFunction: (str: string) =>
                         cal2.unshift(function_str.trim());
                     }
 
-                    if (cal1[0] in operatorjson) {
-                        let stackCeilPri = op[cal1[0]];
-                        stackCeilPri = stackCeilPri == null ? 1000 : stackCeilPri;
+                    if (formulaOperators.has(cal1[0])) {
+                        let stackCeilPri = operatorPriority[cal1[0]] ?? 1000;
 
-                        let sPri = op[s];
-                        sPri = sPri == null ? 1000 : sPri;
+                        const sPri = operatorPriority[s] ?? 1000;
 
                         while (cal1.length > 0 && sPri >= stackCeilPri) {
                             cal2.unshift(...cal1.splice(0, 1));
 
-                            stackCeilPri = op[cal1[0]];
-                            stackCeilPri = stackCeilPri == null ? 1000 : stackCeilPri;
+                            stackCeilPri = operatorPriority[cal1[0]] ?? 1000;
                         }
                     }
 

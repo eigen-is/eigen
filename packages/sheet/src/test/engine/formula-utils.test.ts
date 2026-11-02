@@ -2,38 +2,24 @@ import { describe, expect, test } from 'bun:test';
 import {
     calPostfixExpression,
     checkBracketNum,
+    formulaOperators,
     iscelldata,
     isFunctionRange,
-    operatorjson,
     operatorPriority,
 } from '../../engine/formula-utils';
 
-// ─── operatorjson ───────────────────────────────────────────────────────────
+// ─── formulaOperators ───────────────────────────────────────────────────────
 
-describe('engine/formula-utils — operatorjson', () => {
-    test('contains all comparison operators', () => {
-        expect(operatorjson['==']).toBe(1);
-        expect(operatorjson['!=']).toBe(1);
-        expect(operatorjson['<>']).toBe(1);
-        expect(operatorjson['<=']).toBe(1);
-        expect(operatorjson['>=']).toBe(1);
+describe('engine/formula-utils — formulaOperators', () => {
+    test("holds Excel's operators and nothing else", () => {
+        expect([...formulaOperators].sort()).toEqual(
+            ['<>', '<=', '>=', '=', '+', '-', '>', '<', '/', '*', '%', '&', '^'].sort(),
+        );
     });
 
-    test('contains single-char operators', () => {
-        expect(operatorjson['=']).toBe(1);
-        expect(operatorjson['+']).toBe(1);
-        expect(operatorjson['-']).toBe(1);
-        expect(operatorjson['>']).toBe(1);
-        expect(operatorjson['<']).toBe(1);
-        expect(operatorjson['/']).toBe(1);
-        expect(operatorjson['*']).toBe(1);
-        expect(operatorjson['%']).toBe(1);
-        expect(operatorjson['&']).toBe(1);
-        expect(operatorjson['^']).toBe(1);
-    });
-
-    test('does not contain arbitrary strings', () => {
-        expect(operatorjson['abc']).toBeUndefined();
+    test("leaves out JavaScript's == and !=, which Excel has no operator for", () => {
+        expect(formulaOperators.has('==')).toBe(false);
+        expect(formulaOperators.has('!=')).toBe(false);
     });
 });
 
