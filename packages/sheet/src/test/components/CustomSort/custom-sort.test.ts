@@ -36,8 +36,8 @@ const openWithHeaders = () =>
         selections: [A1_B3],
     });
 
-// A1:B3 selected, rows of a letter and a number.
-const openCustomSort = () =>
+// A1:B3 selected, rows of a letter and a number. The sheet's own selection may differ from the dialog's.
+const openCustomSort = (selections = [A1_B3]) =>
     renderSheetDialog((d) => d.showDialog(createElement(CustomSort, { selection: A1_B3 })), {
         sheets: [
             {
@@ -52,7 +52,7 @@ const openCustomSort = () =>
                 ],
             },
         ],
-        selections: [A1_B3],
+        selections,
     });
 
 const columnA = (context: import('../../../state').Context) => context.sheets[0]?.data?.map((row) => row[0]?.v);
@@ -73,6 +73,15 @@ test('it names the range, sorts it descending by the first column and closes', a
     expect(columnA(dialog.context())).toEqual(['c', 'b', 'a']);
     expect(columnB(dialog.context())).toEqual([3, 2, 1]);
     expect(dialog.dialogs()).toHaveLength(0);
+});
+
+// The range the dialog names is the one it sorts, whatever the sheet has selected by the time Sort is pressed.
+test('it sorts the range it names', async () => {
+    const dialog = await openCustomSort([{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }]);
+    expect(dialog.dialogs()[0]?.textContent).toContain('Sort range from A1 to B3');
+    await dialog.click('Sort');
+    expect(columnA(dialog.context())).toEqual(['a', 'b', 'c']);
+    expect(columnB(dialog.context())).toEqual([1, 2, 3]);
 });
 
 test('Cancel closes it and leaves the range as it was', async () => {

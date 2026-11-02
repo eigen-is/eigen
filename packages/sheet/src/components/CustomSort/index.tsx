@@ -14,7 +14,7 @@ import { toA1 } from '../../engine/a1-notation';
 import { cellDisplay } from '../../engine/format';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { Selection } from '../../state';
-import { clipToUsedExtent, getFlowdata, sortSelection } from '../../state';
+import { clipToUsedExtent, getFlowdata, sortRange } from '../../state';
 
 // `selection` is the one range selected as the dialog opened, which the sort sorts.
 export function CustomSort({ selection }: { selection: Selection }) {
@@ -50,7 +50,7 @@ export function CustomSort({ selection }: { selection: Selection }) {
                 submitLabel="Sort"
                 onSubmit={() =>
                     setContext((draftCtx) => {
-                        sortSelection(draftCtx, ascending, Number(sortColumn), hasHeaderRow);
+                        sortRange(draftCtx, selection, ascending, Number(sortColumn), hasHeaderRow);
                     })
                 }
             >

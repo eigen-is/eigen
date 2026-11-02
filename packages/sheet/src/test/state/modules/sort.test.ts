@@ -1,5 +1,5 @@
 // Sorting has two layers: the pure `sortRows` comparator (numeric, 'en' text,
-// nulls last) and `sortSelection`, which picks the range then delegates. These
+// nulls last) and `sortRange`, which picks the rows then delegates. These
 // pin which rows the sort covers: a leading CJK cell sorts like any other value
 // with no header-guessing, a header row stays only when the caller says so, and
 // a merged cell stops the sort.
@@ -7,7 +7,7 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
-import { sortRows, sortSelection } from '../../../state/modules/sort';
+import { sortRange, sortRows, sortSelection } from '../../../state/modules/sort';
 import { contextFactory, selectionFactory } from '../factories/context';
 
 const cell = (v: Cell['v']): Cell => ({ v, m: String(v) });
@@ -47,7 +47,7 @@ describe('sortRows', () => {
     });
 });
 
-describe('sortSelection — CJK rows participate', () => {
+describe('sortRange — CJK rows participate', () => {
     test('a leading CJK cell is included in the sort range', () => {
         const data: (Cell | null)[][] = [
             [cell('要'), cell(3), null, null],
@@ -56,13 +56,12 @@ describe('sortSelection — CJK rows participate', () => {
             [null, null, null, null],
         ];
         const ctx = contextFactory({
-            selections: selectionFactory([0, 2], [0, 1], 0, 0),
             sheets: [{ name: 'sheet', id: 'id_1', data, order: 0 }],
         }) as Context;
 
         // Sort ascending by column 1 (values 3,1,2 → 1,2,3). If the CJK row in
         // column 0 is excluded, row 0 stays put; if included, it moves to the end.
-        sortSelection(ctx, true, 1);
+        sortRange(ctx, { row: [0, 2], column: [0, 1] }, true, 1);
 
         const d = ctx.sheets[0].data!;
         expect(d[0]?.[1]?.v).toBe(1);
@@ -70,7 +69,7 @@ describe('sortSelection — CJK rows participate', () => {
     });
 });
 
-describe('sortSelection — a header row', () => {
+describe('sortRange — a header row', () => {
     const data = (): (Cell | null)[][] => [
         [cell('Name'), cell('Score')],
         [cell('b'), cell(2)],
@@ -79,10 +78,9 @@ describe('sortSelection — a header row', () => {
     ];
     const sorted = (hasHeaderRow?: boolean) => {
         const ctx = contextFactory({
-            selections: selectionFactory([0, 3], [0, 1], 0, 0),
             sheets: [{ name: 'sheet', id: 'id_1', data: data(), order: 0 }],
         }) as Context;
-        sortSelection(ctx, true, 1, hasHeaderRow);
+        sortRange(ctx, { row: [0, 3], column: [0, 1] }, true, 1, hasHeaderRow);
         return ctx.sheets[0].data?.map((row) => row[0]?.v);
     };
 
@@ -105,6 +103,6 @@ test('sortSelection leaves a range that holds a merged cell as it is', () => {
         selections: selectionFactory([0, 1], [0, 1], 0, 0),
         sheets: [{ name: 'sheet', id: 'id_1', data, order: 0 }],
     }) as Context;
-    sortSelection(ctx, true, 0);
+    sortSelection(ctx, true);
     expect(ctx.sheets[0].data?.map((row) => row[0]?.v)).toEqual(['b', 'a']);
 });

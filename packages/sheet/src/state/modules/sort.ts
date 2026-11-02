@@ -1,30 +1,35 @@
-// Sorting the selected range by one of its columns, ascending or descending, from menus such as the Data menu and
-// the Custom sort dialog. A header row, when the caller says the range has one, stays in place. Formulas in the
-// sorted rows are shifted to the rows they land on and evaluated again.
+// Sorting a range of the sheet by one of its columns, ascending or descending: the selected range from a menu such
+// as the Data menu, or the range a dialog such as Custom sort names. A header row, when the caller says the range has
+// one, stays in place. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
 
 import numeral from 'numeral';
 import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import type { Context } from '..';
+import type { Context, Selection } from '..';
 import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
 import { createContextResolver, execfunction, functionCopy, numberDisplay } from '.';
 import { jfrefreshgrid } from './refresh';
 
-export function sortSelection(ctx: Context, isAsc: boolean, colIndex = 0, hasHeaderRow = false) {
-    if (ctx.allowEdit === false) return;
+// The menus' Ascending and Descending: the one selected range, by its first column.
+export function sortSelection(ctx: Context, isAsc: boolean) {
     if (ctx.selections?.length !== 1) return;
+    sortRange(ctx, ctx.selections[0], isAsc);
+}
+
+export function sortRange(ctx: Context, range: Selection, isAsc: boolean, columnOffset = 0, hasHeaderRow = false) {
+    if (ctx.allowEdit === false) return;
     const d = getFlowdata(ctx);
     if (d == null) return;
 
     const {
-        row: [selectionStart, selectionEnd],
+        row: [rangeStart, rangeEnd],
         column: [startColumn, endColumn],
-    } = ctx.selections[0];
+    } = range;
 
-    // The sort runs from the first to the last row with a value in the selection's first column.
+    // The sort runs from the first to the last row with a value in the range's first column.
     let startRow: number | undefined;
     let endRow: number | undefined;
-    for (let r = selectionStart + (hasHeaderRow ? 1 : 0); r <= selectionEnd; r += 1) {
+    for (let r = rangeStart + (hasHeaderRow ? 1 : 0); r <= rangeEnd; r += 1) {
         const cell = d[r]?.[startColumn];
         if (cell == null || cell.mc != null || isRealNull(cellValue(cell))) continue;
         startRow ??= r;
@@ -36,7 +41,7 @@ export function sortSelection(ctx: Context, isAsc: boolean, colIndex = 0, hasHea
     // A merged cell can't move with its row, so a range that holds one stays as it is.
     if (data.some((row) => row.some((cell) => cell?.mc != null))) return;
 
-    sortDataRange(ctx, d, data, colIndex, isAsc, startRow, endRow, startColumn, endColumn);
+    sortDataRange(ctx, d, data, columnOffset, isAsc, startRow, endRow, startColumn, endColumn);
 }
 
 export function sortDataRange(

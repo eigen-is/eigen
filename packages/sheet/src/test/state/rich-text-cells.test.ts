@@ -110,7 +110,7 @@ describe('readers of a rich cell', () => {
             [[rich('Cherry')], [plain('apple')], [rich('Banana')]],
             selectionFactory([0, 2], [0, 0], 0, 0),
         );
-        sortSelection(ctx, true, 0);
+        sortSelection(ctx, true);
         expect(ctx.sheets[0].data!.map((row) => cellValue(row[0]))).toEqual(['apple', 'Banana', 'Cherry']);
     });
 
