@@ -18,7 +18,8 @@
 #   - what rollback runs or prints;
 #   - setup: what it downloads with and without pins and the build it records, and setup in a folder that holds the
 #     launcher alone, with the registry or the build .env.production names;
-#   - the group and mode every start gives .env.production first, except on Docker Desktop, and the mode of a step's log;
+#   - the group and mode every start gives .env.production and backups/ first, except on Docker Desktop, the line it
+#     prints when other users share the install folder's group, and the mode of a step's log;
 #   - what status passes the CLI about backups/, the files of an unfinished update, the newest build of main, and its
 #     folder;
 #   - the installer script apps/index/public/install on this host, as a file and on stdin, for setup and restore.
@@ -191,6 +192,9 @@ done
 docker pull -q debian:bookworm-slim >/dev/null
 HOST_OS=$(docker info --format '{{.OperatingSystem}}')
 docker pull -q busybox >/dev/null
+FIX_GID=$(ls -ldn "$FIX/release" | awk '{ print $4 }')
+# regroup <folder> <gid>: the fixture folder in that group, which only root may give it.
+regroup() { docker run --rm -v "$FIX:$FIX" busybox chgrp "$2" "$FIX/$1"; }
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # launch <folder> <args…>: the launcher under $SHELL_NAME in $FIX/<folder>; sets CODE, OUT (stdout), ERR (stderr) and
@@ -201,6 +205,7 @@ PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 # killed, its container too, and exits 137, which fails the check and leaves the suite going. Without a terminal, the
 # container's shell writes the launcher's stdout and stderr into $FIX itself: docker run can lose what a short-lived
 # container printed, and a refusal check once saw exit 2 with its usage missing. What docker says itself joins ERR.
+# LAUNCH_GROUP=<file> is the /etc/group of a container shell; the host's own launch ignores it.
 launch() {
     local dir="$FIX/$1" vars=("STUB_LOG=$FIX/calls.log") flags=() run name var pid deadline
     shift
@@ -223,6 +228,7 @@ launch() {
         # As this user, or on a Linux host root's .eigen would refuse this script's own lock below.
         run=(docker run --rm --user "$(id -u):$(id -g)" -v "$FIX:$FIX" -v "$FIX/bin:/stub:ro" -w "$dir"
             -e PATH="$PATH_IN")
+        if [ -n "${LAUNCH_GROUP:-}" ]; then run+=(-v "$LAUNCH_GROUP:/etc/group:ro"); fi
         # docker run passes the TERM on to the shell in the container, which exec makes the launcher's own.
         if [ "${LAUNCH_TTY:-0}" = 1 ]; then
             run+=(-t "${flags[@]}" "$IMAGE" "$SHELL_CMD" ./eigen "$@")
@@ -273,14 +279,15 @@ first_setup() {
 }
 FIRST_SETUP='pull ghcr.io/eigen-is/eigen/api:latest|bootstrap ghcr.io/eigen-is/eigen/api:latest|pull ghcr.io/eigen-is/eigen/api:0.2.99|configure|'
 
-# The run that gives .env.production group 1000 and mode 0640, as root in a container, in the launcher's call log.
-SHARE='-c chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production'
+# The run that gives .env.production group 1000 and mode 0640, and backups/ the group after it with setgid and mode
+# 2750, as root in a container, in the launcher's call log. The group is empty when other users share it.
+SHARE='-c chgrp 1000 /install/.env.production && chmod 0640 /install/.env.production && if [ -n "$1" ] && [ "$(stat -c %u /install/backups 2>/dev/null)" = 1000 ]; then chgrp "$1" /install/backups && chmod 2750 /install/backups; fi sh'
 
-# shared <folder>: the last launch started Eigen, and gave .env.production of that folder to group 1000 right before
+# shared <folder>: the last launch started Eigen, and shared .env.production and backups/ of that folder right before
 # every start.
 shared() {
-    printf '%s\n' "$CALLS" | awk -v share="run --rm --user 0 --entrypoint sh -v $FIX/$1:/install " -v script=" $SHARE" '
-        / up -d --wait$/ { ups++; if (index(prev, share) == 1 && substr(prev, length(prev) - length(script) + 1) == script) shared++ }
+    printf '%s\n' "$CALLS" | awk -v share="run --rm --user 0 --entrypoint sh -v $FIX/$1:/install " -v script=" $SHARE " '
+        / up -d --wait$/ { ups++; if (index(prev, share) == 1 && index(prev, script)) shared++ }
         { prev = $0 }
         END { exit !(ups > 0 && ups == shared) }'
 }
@@ -293,7 +300,7 @@ ARCHIVE=server-manual-full-20260101-000000.tar
 steps() {
     printf '%s\n' "$CALLS" | sed -n -e 's/^compose .* run --rm --no-deps -T -e TERM -e NO_COLOR \(.*\)$/stage \1/p' \
         -e 's/^compose .* stop$/stop/p' -e 's/^compose .* up -d --wait$/up/p' -e 's/^\(pull .*\)$/\1/p' \
-        -e "s|^run --rm --user 0 --entrypoint sh .* $SHARE\$|share|p" \
+        -e 's|^run --rm --user 0 --entrypoint sh .* -c chgrp 1000 /install/\.env\.production .*|share|p' \
         -e 's/^run .* \([^ ]*\) restore \(.*\)$/restore \2 (\1)/p' \
         -e 's/^run .* \([^ ]*\) bootstrap --force --out \/install$/bootstrap \1/p' \
         -e 's/^run .* \([^ ]*\) configure --backfill$/configure \1/p' -e 's/^run .* rm -rf \(.*\)$/rm \1/p' | tr '\n' '|'
@@ -449,10 +456,43 @@ for SHELL_NAME in dash busybox host; do
     fi
     STUB_INFO='27.5.1 aarch64 Docker Desktop' launch release restart
     if [ "$CODE" = 0 ] && printf '%s\n' "$OUT" | grep -q '◇  Docker 27.5.1 on aarch64, Compose 2.29.1' &&
-        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -qF -- "$SHARE"; then
-        ok "$SHELL_NAME: on Docker Desktop, where uid 1000 reads the file already, restart leaves .env.production alone"
+        printf '%s\n' "$CALLS" | grep -q ' up -d --wait$' && ! printf '%s\n' "$CALLS" | grep -qF -- "$SHARE" &&
+        ! printf '%s\n' "$OUT" | grep -q 'backups/ stays open'; then
+        ok "$SHELL_NAME: on Docker Desktop, where uid 1000 reads the file already, restart leaves .env.production and backups/ alone"
     else
         fail "$SHELL_NAME: restart on Docker Desktop: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    if [ "$HOST_OS" = 'Docker Desktop' ]; then
+        skip "$SHELL_NAME: Docker Desktop keeps the host's group of a folder that root in a container gives another"
+    else
+        regroup release 4242
+        launch release restart
+        if [ "$CODE" = 0 ] && shared release && printf '%s\n' "$CALLS" | grep -qF -- "$SHARE 4242" &&
+            ! printf '%s\n' "$OUT" | grep -q 'backups/ stays open'; then
+            ok "$SHELL_NAME: restart gives backups/ the install folder's group, 4242, in the same root run"
+        else
+            fail "$SHELL_NAME: restart in group 4242: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fi
+        regroup release 100
+        launch release restart
+        if [ "$CODE" = 0 ] && shared release && printf '%s\n' "$CALLS" | grep -q -- "fi sh $" &&
+            printf '%s\n' "$OUT" | grep -qF "▲  Other users of this host share this folder's group, 100, so backups/ stays open to them."; then
+            ok "$SHELL_NAME: in a system group such as users, restart leaves backups/ as it is and says so"
+        else
+            fail "$SHELL_NAME: restart in group 100: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+        fi
+        if [ "$SHELL_NAME" != host ]; then
+            printf 'root:x:0:\nteam:x:4242:someone\n' >"$FIX/group"
+            regroup release 4242
+            LAUNCH_GROUP=$FIX/group launch release restart
+            if [ "$CODE" = 0 ] && shared release && printf '%s\n' "$CALLS" | grep -q -- "fi sh $" &&
+                printf '%s\n' "$OUT" | grep -qF "▲  Other users of this host share this folder's group, 4242, so backups/ stays open to them."; then
+                ok "$SHELL_NAME: in a group that lists another member, restart leaves backups/ as it is and says so"
+            else
+                fail "$SHELL_NAME: restart in group 4242 with a member: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+            fi
+        fi
+        regroup release "$FIX_GID"
     fi
     if [ "$(id -u)" = 0 ]; then
         skip "$SHELL_NAME: root writes a .env.production of mode 0440"

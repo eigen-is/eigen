@@ -2,8 +2,8 @@
 # Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
 # commands against it: status, the control socket, the setup link, reset-password, full and light backups on the running
 # API and restores of them with their refusals and an interrupt, stop, and what status, backup and reset-password say
-# with Eigen stopped. The main install is edge,mail as uid 1001 in a folder whose name has capitals and a space; a
-# second one is edge only, as root.
+# with Eigen stopped, and that another user of the host lists no backups/ and reads no backup's record. The main
+# install is edge,mail as uid 1001 in a folder whose name has capitals and a space; a second one is edge only, as root.
 #
 # Usage:  ./docker/test-cli.sh
 # Needs:  docker, curl, git. Builds every image in Docker (a few minutes on a cold cache).
@@ -17,9 +17,22 @@ OLD_PASSWORD="probe-old-$$"
 NEW_PASSWORD="probe-new-$$"
 OPERATOR=1001:1001
 
-# check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install.
+# A user of the host who is neither the API's, nor root, nor the operator, nor in the operator's group.
+STRANGER=1002:1002
+HOST_OS=$(docker info --format '{{.OperatingSystem}}')
+
+# as_user <uid:gid> <command…>: the command as that user, in a container that sees the scratch folder. Through sh, as
+# the image's entrypoint hands a first word that is a docker command to docker.
+as_user() {
+    local user="$1"
+    shift
+    docker run --rm --user "$user" -v "$SCRATCH:$SCRATCH" "$CLI_IMAGE" sh -c '"$@"' sh "$@"
+}
+
+# check_install <operator uid:gid>: the stack, the files and the Docker socket of a fresh install. backups/ is the
+# API's and the operator's group's, with setgid, or as setup made it on Docker Desktop, where ./eigen leaves it.
 check_install() {
-    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts data_stat backups_stat
+    local operator="$1" base="https://localhost:$PORT_HTTPS" status mounts data_stat backups_stat want
     probe "/eigen/health" "$base/eigen/health" 200 "OK"
     probe "/ (landing)" "$base/" 200
     probe "/admin/" "$base/admin/" 200 '"/admin/assets/'
@@ -38,10 +51,20 @@ check_install() {
     check_env "$operator" 'after setup'
     data_stat=$(owner_mode "$INSTALL/data")
     backups_stat=$(owner_mode "$INSTALL/backups")
-    case "$data_stat $backups_stat" in
-        "1000:1000 "*" 1000:1000 "*) ok "data/ and backups/ are 1000:1000" ;;
-        *) fail "data/ is '$data_stat' and backups/ is '$backups_stat', expected 1000:1000" ;;
+    want="1000:${operator#*:} 2750"
+    if [ "$HOST_OS" = 'Docker Desktop' ]; then want="1000:1000 ${backups_stat##* }"; fi
+    case "$data_stat" in
+        "1000:1000 "*) ok "data/ is 1000:1000" ;;
+        *) fail "data/ is '$data_stat', expected 1000:1000" ;;
     esac
+    if [ "$backups_stat" = "$want" ]; then ok "backups/ is $want"; else fail "backups/ is '$backups_stat', expected '$want'"; fi
+    if [ "$HOST_OS" = 'Docker Desktop' ]; then
+        skip "another user of the host lists backups/: Docker Desktop shows every file as the container user's"
+    elif as_user "$STRANGER" ls "$INSTALL" >/dev/null && ! as_user "$STRANGER" ls "$INSTALL/backups" >/dev/null 2>&1; then
+        ok "another user of the host reaches the install folder and cannot list backups/"
+    else
+        fail "uid ${STRANGER%%:*} lists backups/, or cannot reach the install folder"
+    fi
     mounts=$(docker ps -q --filter "label=com.docker.compose.project=$PROJECT" |
         xargs docker inspect --format '{{.Name}} {{range .Mounts}}{{.Source}} {{end}}' || true)
     if printf '%s\n' "$mounts" | grep -q 'docker.sock'; then
@@ -280,6 +303,15 @@ case $ARCHIVE in
     server-manual-full-*.tar) ok "it is a manual Full archive" ;;
     *) fail "the archive is named '$ARCHIVE'" ;;
 esac
+# ./eigen reads the record to tell whether a backup runs, as the operator, whose group is not the API's.
+if [ "$HOST_OS" = 'Docker Desktop' ]; then
+    skip "who reads the record of $ARCHIVE: Docker Desktop shows every file as the container user's"
+elif as_user "$OPERATOR" grep -q '"state": "done"' "$INSTALL/backups/$ARCHIVE.json" &&
+    ! as_user "$STRANGER" cat "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1; then
+    ok "the operator reads the record of $ARCHIVE, and another user of the host does not"
+else
+    fail "the record of $ARCHIVE: $(owner_mode "$INSTALL/backups/$ARCHIVE.json"), the operator cannot read it or uid ${STRANGER%%:*} can"
+fi
 eigen backup --light --s3
 if [ "$CODE" = 2 ] && says 'A light backup holds no files, so it takes no --s3.'; then
     ok "backup --light --s3 is refused with its usage (exit 2)"

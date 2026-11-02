@@ -41,15 +41,17 @@ export function getBackupsDir(): string {
 
 // Every job's scratch space lives under one folder in the backups folder, wiped at boot.
 export const STAGING_DIR = '.staging';
-// A job stages a home unpacked, auth rows and keys included, with the umask's modes. The backups folder stays
-// listable for ./eigen, so the staging folders are what keep other users of the host out.
+// A job stages a home unpacked, auth rows and keys included, with the umask's modes. The operator's group lists the
+// backups folder for ./eigen, so the staging folders are what keep that group out.
 const STAGING_MODE = 0o700;
 
 export function getStagingRoot(): string {
     return path.join(backupsDirPath(), STAGING_DIR);
 }
 
-// The chmod closes a staging root that was made with the umask's mode, such as an older build's.
+// The chmod closes a staging root that was made with the umask's mode, such as an older build's. It also clears the
+// setgid bit that Linux gives a folder made in the setgid backups folder. So a job's folder takes the API's own group,
+// and no setgid bit goes into data/ with a staged home.
 export function getBackupStagingDir(jobId: string): string {
     // Makes backups/ first with its own mode, or the recursive mkdir below would make it 0700 too.
     getBackupsDir();
