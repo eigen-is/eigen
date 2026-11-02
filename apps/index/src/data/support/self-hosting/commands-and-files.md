@@ -30,7 +30,7 @@ Everything you do with Eigen on the server goes through `./eigen` in the install
 
 ## Status
 
-`./eigen status` also names the install folder, and the newest backup with its age and size. The Backup row turns red when the last nightly backup failed. It warns when the last backup has warnings, when that backup did not reach your backup bucket, when there is no backup yet, and when nightly backups are on but no Full backup has verified in two days. An update or a restore that stopped while writing the launcher and Compose files shows as `files of <version>, running <version>`, and `./eigen restart` writes the files of the version that runs.
+`./eigen status` also names the install folder, and the newest backup with its age and size. The Backup row turns red when the last nightly backup failed. It warns when the last backup has warnings, when that backup did not reach your backup bucket, when there is no backup yet, and when nightly backups are on but no Full backup has verified in two days. It names the Light backups of Eigen 0.4.1 and before in `backups/`, which this version cannot restore, with the command that deletes them. An update or a restore that stopped while writing the launcher and Compose files shows as `files of <version>, running <version>`, and `./eigen restart` writes the files of the version that runs.
 
 A setup that finds accounts on the server, such as those of an earlier attempt that failed, first saves a copy of them in `data/server/users3.backup-<time>.db`. Eigen never deletes it, because it may be the only copy of real accounts. A Setup copy row warns about each one. Delete it with `sudo rm` once you need none of the accounts in it.
 
@@ -63,7 +63,7 @@ Everything is in the install folder, like `/opt/eigen`:
 | `docker-compose.yml` | Which services run. An update rewrites it. |
 | `docker-compose.override.yml` | Your own Compose settings, if you made one. An update leaves it alone. |
 | `data/home/`, `data/team/`, `data/org/` | Every user's, team's, and organization's files, mail, calendars, and contacts |
-| `data/guest/` | The workspaces of guests, people who sign in with a code. A backup leaves them out: after a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves them as they are. |
+| `data/guest/` | The workspaces of guests, people who sign in with a code. A backup leaves them out: after a restore, a guest keeps their account and starts with an empty workspace. |
 | `data/server/` | The accounts, the server settings, and the organization |
 | `data/dkim/` | The key that signs outgoing mail |
 | `data/certs/` | The certificate of the mail server |

@@ -6,7 +6,7 @@ import { basename, dirname, join } from 'node:path';
 import type { BackupManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { parseBackupManifest } from '@workspace/lib/validation';
-import { HOME_DATABASE_PATHS, MAILDIR_ROOT } from '../../lib/backup/archive-layout';
+import { MAILDIR_ROOT } from '../../lib/backup/archive-layout';
 import * as captureModule from '../../lib/backup/capture';
 import { archiveHomePath, archiveMountPath } from '../../lib/backup/paths';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
@@ -14,7 +14,6 @@ import { verifyFolder } from '../../lib/backup/verify';
 import type { Home } from '../../lib/home';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import { createMountConfig } from '../../lib/mount';
-import * as mountHelpers from '../../lib/mount/helpers';
 import { Mount } from '../../lib/mount/mount';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { deleteUserCompletely } from '../../lib/user/delete-user';
@@ -33,9 +32,9 @@ import {
 } from '../setup';
 import { MARKER_DB_CONFIG, MARKER_SCHEMA, readMarkers, snapshotInto } from './backup-test-helpers';
 
-// The two capture modes a whole-server archive adds to snapshotHome, and the manifest fields that
-// say a member is not a complete home: Light keeps every database and no file bodies or mail, Full
-// keeps an s3 mount's metadata.db and staged uploads and leaves its objects to the bucket.
+// The capture mode a whole-server archive adds to snapshotHome, and the manifest field that says a
+// member is not a complete home: Full keeps an s3 mount's metadata.db and staged uploads and leaves
+// its objects to the bucket.
 
 const S3_MOUNT_ID = 'modes-s3';
 // A flat-key mount on local disk: remote in its key shape, local in where its bytes live.
@@ -177,30 +176,6 @@ afterAll(async () => {
 });
 
 describe('Backup capture modes', () => {
-    test('a Light snapshot holds every database and no file bodies or mail, and says so', async () => {
-        const { manifest, folder } = await snapshotInto(home, 'light');
-        expect(manifest.level).toBe('light');
-
-        const paths = entryPaths(manifest);
-        const homeDatabases = [...HOME_DATABASE_PATHS].filter((rel) => existsSync(join(home.homeDir, rel)));
-        const mountDatabases = [defaultMountId, LOCAL_KEY_MOUNT_ID, S3_MOUNT_ID].map(
-            (id) => `mounts/${id}/metadata.db`,
-        );
-        for (const rel of [...homeDatabases, ...mountDatabases]) expect(paths).toContain(`home/${rel}`);
-        expect(manifest.counts.databases).toBe(homeDatabases.length + mountDatabases.length);
-
-        // A mount contributes its metadata.db and nothing else: no data/, thumbs/ or staging/.
-        expect(paths.filter((p) => /^home\/mounts\/[^/]+\/(?!metadata\.db$)/.test(p))).toEqual([]);
-        expect(paths.filter((p) => p.startsWith(`${MAILDIR}/`))).toEqual([]);
-        expect(existsSync(join(folder, MAILDIR))).toBe(false);
-        expect(paths).toContain('auth.json');
-
-        for (const summary of manifest.mounts) {
-            expect(summary).toMatchObject({ contents: 'metadata', files: 0, bytes: 0 });
-        }
-        expect((await verifyFolder(folder)).status).toBe('verified');
-    });
-
     test('a Full snapshot keeps an s3 mount to its metadata.db and staged uploads, and says so', async () => {
         const { manifest, folder } = await snapshotInto(home, 'full');
         expect(manifest.level).toBe('full');
@@ -224,7 +199,7 @@ describe('Backup capture modes', () => {
         expect(s3Summary?.contents).toBe('metadata');
         expect(s3Summary?.files).toBe(staged.length);
 
-        // A mount on local disk is complete at every level above Light, whatever shape its keys have.
+        // A mount on local disk is complete at every level, whatever shape its keys have.
         for (const [mountId, name] of [
             [defaultMountId, 'kept.png'],
             [LOCAL_KEY_MOUNT_ID, 'flat.png'],
@@ -407,50 +382,6 @@ describe('Backup capture modes', () => {
     });
 });
 
-describe('Backup capture modes of a disabled mount', () => {
-    const DISABLED_MOUNT_ID = 'modes-disabled';
-
-    // Light reads no storage, so a disabled mount's storage being out of reach is no reason to drop
-    // it: it keeps its metadata.db as every other mount does at Light.
-    test('a Light snapshot keeps the metadata.db of a disabled mount whose storage cannot be built', async () => {
-        await getTestContext();
-        const owner = await createTestUser('backup-modes-disabled@test.eigen.is', 'testpassword123', 'Modes Off');
-        const ownerHome = await getHome(owner.id);
-        const on = await ownerHome.settings.set({
-            mounts: {
-                [DISABLED_MOUNT_ID]: { storageType: 'local', maxSizeMB: 100, enabled: true, name: 'Switched Off' },
-            },
-        });
-        await ownerHome.drive.addMount(createMountConfig(DISABLED_MOUNT_ID, on.mounts![DISABLED_MOUNT_ID]));
-        const off = await ownerHome.settings.set({
-            mounts: { [DISABLED_MOUNT_ID]: { ...on.mounts![DISABLED_MOUNT_ID], enabled: false } },
-        });
-        await ownerHome.drive.updateMount(createMountConfig(DISABLED_MOUNT_ID, off.mounts![DISABLED_MOUNT_ID]), false);
-
-        const spy = spyOn(mountHelpers, 'createMountStorage').mockImplementation(() => {
-            throw new Error('storage unreachable');
-        });
-        let manifest: BackupManifest;
-        try {
-            manifest = await snapshotHome(ownerHome, mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-disabled-')), {
-                level: 'light',
-            });
-        } finally {
-            spy.mockRestore();
-        }
-
-        const summary = manifest.mounts.find((mount) => mount.id === DISABLED_MOUNT_ID);
-        expect(summary).toEqual({
-            id: DISABLED_MOUNT_ID,
-            storageType: 'local',
-            files: 0,
-            bytes: 0,
-            contents: 'metadata',
-        });
-        expect(entryPaths(manifest)).toContain(`home/mounts/${DISABLED_MOUNT_ID}/metadata.db`);
-    });
-});
-
 describe('Backup of a disabled mount enabled while it is captured', () => {
     const MOUNT_ID = 'modes-enabled-mid-capture';
 
@@ -526,11 +457,9 @@ describe('Backup of an enabled mount being added', () => {
         });
         expect(existsSync(join(ownerHome.homeDir, 'mounts/adding'))).toBe(false);
 
-        for (const level of ['light', 'full'] as const) {
-            const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-adding-'));
-            const manifest = await snapshotHome(ownerHome, target, { level });
-            expect(manifest.mounts.map((mount) => mount.id)).not.toContain('adding');
-        }
+        const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-adding-'));
+        const manifest = await snapshotHome(ownerHome, target, { level: 'full' });
+        expect(manifest.mounts.map((mount) => mount.id)).not.toContain('adding');
     });
 });
 
@@ -551,10 +480,8 @@ describe('Backup of an enabled mount the drive could not open', () => {
         expect(reopened.drive.getMounts().map((mount) => mount.id)).not.toContain('broken');
 
         try {
-            for (const level of ['light', 'full'] as const) {
-                const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-broken-'));
-                await expect(snapshotHome(reopened, target, { level })).rejects.toThrow('broken');
-            }
+            const target = mkdtempSync(join(TEST_DATA_DIR, 'backup-modes-broken-'));
+            await expect(snapshotHome(reopened, target, { level: 'full' })).rejects.toThrow('broken');
         } finally {
             // Every whole-server backup after this file would fail on this home.
             await deleteUserCompletely(owner.id, null);

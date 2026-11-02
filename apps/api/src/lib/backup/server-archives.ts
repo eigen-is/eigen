@@ -81,7 +81,7 @@ export type ServerBackupStatus = {
     scheduledNotUploaded: ArchiveLine | null;
     // The newest scheduled archive or the newest archive, when it was backed up with warnings; `error` names the homes.
     warned: ArchiveLine | null;
-    newestGoodFullAt: string | null;
+    newestGoodAt: string | null;
     // The server backup and the uploads that run now, from the job list: what ./eigen waits for before a stop.
     running: { kind: 'server-backup' | 'upload'; archive: string }[];
 };
@@ -90,7 +90,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
     const archives = await listServerArchives();
     const [newest] = archives;
     const scheduled = archives.find((archive) => archive.reason === 'scheduled');
-    const goodFull = archives.find((archive) => archive.level !== 'light' && isGood(archive.record));
+    const good = archives.find((archive) => isGood(archive.record));
     const warned = [scheduled, newest].find((archive) => archive?.record?.state === 'done' && !isGood(archive.record));
     const { schedule, upload } = getServerSettings().backups;
     const jobs = listBackupJobs();
@@ -114,7 +114,7 @@ export async function getServerBackupStatus(): Promise<ServerBackupStatus> {
                       .join(', '),
               )
             : null,
-        newestGoodFullAt: goodFull?.createdAt.toISOString() ?? null,
+        newestGoodAt: good?.createdAt.toISOString() ?? null,
         running: jobs.flatMap(({ kind, state, artifact }) =>
             state === 'running' && isServerJob(kind) && artifact ? [{ kind, archive: artifact }] : [],
         ),

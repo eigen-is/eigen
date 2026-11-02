@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2076 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2075 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -547,7 +547,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (441)
+## Types (440)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -795,7 +795,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BackupSafetyCopy` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupShare` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BackupVerifyRecord` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
-| `FullBackupLevel` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchive` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveList` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `ServerArchiveManifest` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
@@ -1702,7 +1701,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `BACKUP_LEVELS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_REASONS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `BACKUP_VERIFY_STATUSES` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
-| `FULL_BACKUP_LEVELS` | `@workspace/lib/types/backup` | packages/lib/src/types/backup.ts |
 | `CHART_AXIS_KINDS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_BLANKS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
 | `CHART_LOOK_FIELDS` | `@workspace/lib/types/chart` | packages/lib/src/types/chart.ts |
@@ -1726,6 +1724,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `FAILED_RESTORE_SUFFIX` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
+| `LIGHT_SERVER_ARCHIVE` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_RESTART_MESSAGE_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `MAX_RESTART_WAIT_SECONDS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |

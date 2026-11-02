@@ -1,32 +1,22 @@
 // The first half of restoring a whole server: unpacking and checking the server archive into a staging folder in
 // the data root, while Eigen still runs. The homes are rebuilt there from the archive, so that the later swap only
-// has to rename folders. For a Light archive it also counts the files here that the swap leaves out of Drive. The
-// restore command of the launcher calls it. It runs beside the live API, whose own users3.db sits next to the tree
-// it writes, so nothing it imports may open a file on load.
+// has to rename folders. The restore command of the launcher calls it. It runs beside the live API, whose own
+// users3.db sits next to the tree it writes, so nothing it imports may open a file on load.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { BackupManifest, ServerArchiveManifest } from '@workspace/lib/types/backup';
-import { DRIVE_TYPE_FOLDER } from '@workspace/lib/types/drive';
+import type { ServerArchiveManifest } from '@workspace/lib/types/backup';
 import { BACKUP_OWNER_ID, buildBackupStamp, parseBackupManifest } from '@workspace/lib/validation';
 import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUNTIME_FILES } from '../config/paths';
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
 import type { HashedArchiveMember } from './archive';
 import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
-import type { MountPathRow } from './archive-layout';
-import { flatStorageKey, insideDocument, readMountPathRows, rowArchivePath, storageKeyOf } from './archive-layout';
+import { flatStorageKey, readMountPathRows, rowArchivePath } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
-import {
-    checkRestoredDatabases,
-    materializeMount,
-    mountIdsIn,
-    movePath,
-    openToCheck,
-    redateTrash,
-} from './materialize-mount';
+import { checkRestoredDatabases, materializeMount, movePath, openToCheck, redateTrash } from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
@@ -53,16 +43,6 @@ export type ServerArchiveFile = {
 // canceled, `missing` the ones whose bytes the archive does not hold. Their rows name missing files, which
 // reconcile drops.
 type NotReplayed = { settled: number; missing: number };
-
-// The files of a home here that a Light swap leaves out of Drive or puts back without their bytes: `created` since the
-// backup, which have no row in it; `moved`, renamed, moved or trashed since on a mount that stores files by name,
-// whose row names a path their bytes left; `deleted` for good since, whose row comes back; and `unmounted`, those of a
-// mount removed since, whose rows come back and may not open. The stage prints them per home before it asks to swap,
-// and a home whose count is null as not counted.
-type LostFiles = { created: number; moved: number; deleted: number; unmounted: number };
-type StagedArchive = NotReplayed & { lost: { home: string; count: LostFiles | null }[] };
-
-const NOTHING_LOST: LostFiles = { created: 0, moved: 0, deleted: 0, unmounted: 0 };
 
 type StageContext = {
     dataDir: string;
@@ -92,7 +72,7 @@ export async function stageServerArchive(
     archive: ServerArchiveFile,
     restoringDir: string,
     { s3FromArchive, onStep }: { s3FromArchive: boolean; onStep: (step: string) => void },
-): Promise<StagedArchive> {
+): Promise<NotReplayed> {
     const context: StageContext = {
         dataDir: path.join(restoringDir, RESTORING_DATA_DIR),
         unpackDir: path.join(restoringDir, 'unpack'),
@@ -119,13 +99,12 @@ export async function stageServerArchive(
     }
 
     const homes = archive.manifest.homes.flatMap((home) => (home.member ? [{ ...home, member: home.member }] : []));
-    const staged: StagedArchive = { settled: 0, missing: 0, lost: [] };
+    const staged: NotReplayed = { settled: 0, missing: 0 };
     for (const [index, home] of homes.entries()) {
         onStep(`home ${index + 1} of ${homes.length}: ${home.name}`);
-        const { settled, missing, lost } = await stageHome(archive, home, context);
+        const { settled, missing } = await stageHome(archive, home, context);
         staged.settled += settled;
         staged.missing += missing;
-        if (!lost || Object.values(lost).some(Boolean)) staged.lost.push({ home: home.name, count: lost });
     }
     fs.rmSync(context.unpackDir, { recursive: true, force: true });
     return staged;
@@ -153,15 +132,14 @@ async function stageServerMember(archive: ServerArchiveFile, dataDir: string, un
     }
 }
 
-// One home member into the staged tree, by the mode of each mount. Light carries every database and no files:
-// the swap merges it into the live home. An s3 mount stays on the bucket as it is, with its staged uploads
-// replayed, unless the archive holds its objects and the operator asked for them (fresh keys, as a per-home
-// restore does).
+// One home member into the staged tree, by the mode of each mount. An s3 mount stays on the bucket as it is, with its
+// staged uploads replayed, unless the archive holds its objects and the operator asked for them (fresh keys, as a
+// per-home restore does).
 async function stageHome(
     archive: ServerArchiveFile,
     home: ServerArchiveManifest['homes'][number] & { member: string },
     { dataDir, unpackDir, s3FromArchive, stamp, now }: StageContext,
-): Promise<NotReplayed & { lost: LostFiles | null }> {
+): Promise<NotReplayed> {
     if (!BACKUP_OWNER_ID.test(home.ownerId)) throw new ApiError(400, `${home.ownerId} is not a home id`);
     const member = archive.members.get(home.member);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${home.member}`);
@@ -169,7 +147,7 @@ async function stageHome(
     await extractArtifact(member, unpacked);
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
-    // The swap goes by the outer level: a light home under a full one would replace a home with no files.
+    // --s3-from-archive trusts the outer level, so every home in the archive is captured at it.
     const { level } = manifest;
     if (level !== archive.manifest.level) {
         throw new ApiError(400, `${home.member} is a ${level} capture in a ${archive.manifest.level} archive`);
@@ -181,8 +159,7 @@ async function stageHome(
     const carried = manifest.mounts.filter((summary) => !summary.skipped);
     const containerDatabases: VersionedDatabase[] = [];
     const notReplayed: NotReplayed = { settled: 0, missing: 0 };
-    // A Light home carries no files, so its mounts have nothing to put in place.
-    for (const summary of level === 'light' ? [] : carried) {
+    for (const summary of carried) {
         if (summary.storageType !== 's3' || (s3FromArchive && summary.contents !== 'metadata')) {
             containerDatabases.push(...materializeMount(homeDir, summary, stamp));
             continue;
@@ -203,8 +180,7 @@ async function stageHome(
         throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
     }
     fs.rmSync(unpacked, { recursive: true, force: true });
-    const lost = level === 'light' ? countLostFiles(homeDir, liveHomeDir, carried) : NOTHING_LOST;
-    return { ...notReplayed, lost };
+    return notReplayed;
 }
 
 // An s3 mount the bucket stays as it is for. Each pending row's bytes go to staging/ under the name its row gives
@@ -253,76 +229,23 @@ function replayPendingUploads(mountDir: string, liveMountDir: string, fromFiles:
     return notReplayed;
 }
 
-// The storage keys the live mount still has to upload, or null when its metadata.db cannot tell.
+// The storage keys the live mount still has to upload, or null for a mount that never ran here or whose metadata.db
+// does not read: a damaged live database is a reason to restore, not to refuse one, and the warning says what that
+// costs.
 function livePendingKeys(liveMountDir: string): Set<string> | null {
-    const rows = readMetadata(
-        liveMountDir,
-        (db) => db.query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads').all(),
-        'every pending upload in the archive is replayed',
-    );
-    return rows && new Set(rows.map((row) => row.storageKey));
-}
-
-// What `read` finds in a mount's metadata.db, or null for a mount that never ran here or whose metadata.db does not
-// read: a damaged live database is a reason to restore, not to refuse one, and the warning says what that costs.
-function readMetadata<T>(mountDir: string, read: (db: Database) => T, otherwise: string): T | null {
-    const metadata = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
+    const metadata = path.join(liveMountDir, PATHS.DRIVE.METADATA_DB);
     if (!fs.existsSync(metadata)) return null;
     let db: Database | undefined;
     try {
         db = openToCheck(metadata);
-        return read(db);
+        const rows = db.query<{ storageKey: string }, []>('SELECT storageKey FROM pending_uploads').all();
+        return new Set(rows.map((row) => row.storageKey));
     } catch (error) {
-        console.warn(`${metadata} does not read (${describeError(error)}): ${otherwise}`);
+        console.warn(
+            `${metadata} does not read (${describeError(error)}): every pending upload in the archive is replayed`,
+        );
         return null;
     } finally {
         db?.close();
     }
-}
-
-// Against each mount of the home, here or in the archive: a mount only here drops out of Drive whole. The files of one
-// only in the archive come back and may not open, but they are not `deleted`: an s3 mount's objects may still be in
-// its bucket. A folder is not counted, and neither is anything inside a document, such as its databases, media and
-// versions: a document made or renamed since counts once, and every file in a folder renamed since counts. A home that
-// is not here yet is not counted, since the stage already said it comes back without its files. Null when a
-// metadata.db does not read: the count must not come out lower than the loss.
-function countLostFiles(homeDir: string, liveHomeDir: string, mounts: BackupManifest['mounts']): LostFiles | null {
-    if (!fs.existsSync(liveHomeDir)) return NOTHING_LOST;
-    const lost: LostFiles = { ...NOTHING_LOST };
-    const archivedMounts = new Map(mounts.map((summary) => [summary.id, summary.storageType]));
-    for (const id of new Set([...archivedMounts.keys(), ...mountIdsIn(liveHomeDir)])) {
-        const liveMountDir = path.join(liveHomeDir, PATHS.DRIVE.ROOT, id);
-        const isGone = !fs.existsSync(path.join(liveMountDir, PATHS.DRIVE.METADATA_DB));
-        const live = mountRows(liveMountDir);
-        const archived = archivedMounts.has(id) ? mountRows(requireMountDir(homeDir, id)) : [];
-        if (!live || !archived) return null;
-        const liveById = new Map(live.map((row) => [row.id, row]));
-        const archivedById = new Map(archived.map((row) => [row.id, row]));
-        const isPathBased = archivedMounts.get(id) === 'local';
-        for (const row of live) {
-            if (!isCounted(row, liveById)) continue;
-            const before = archivedById.get(row.id);
-            if (!before) lost.created++;
-            else if (isPathBased && storageKeyOf(before, archivedById, true) !== storageKeyOf(row, liveById, true)) {
-                lost.moved++;
-            }
-        }
-        for (const row of archived) {
-            if (!isCounted(row, archivedById) || liveById.has(row.id)) continue;
-            if (isGone) lost.unmounted++;
-            else lost.deleted++;
-        }
-    }
-    return lost;
-}
-
-// Whether Drive shows a row as a file of its own.
-function isCounted(row: MountPathRow, byId: ReadonlyMap<string, MountPathRow>): boolean {
-    return row.type !== DRIVE_TYPE_FOLDER && !insideDocument(row, byId);
-}
-
-// A mount's rows: none for a mount with no metadata.db, and null for one whose metadata.db does not read.
-function mountRows(mountDir: string): MountPathRow[] | null {
-    if (!fs.existsSync(path.join(mountDir, PATHS.DRIVE.METADATA_DB))) return [];
-    return readMetadata(mountDir, readMountPathRows, 'the files of its home are not counted');
 }

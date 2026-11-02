@@ -148,24 +148,22 @@ describe('Backup of a home whose drives hold rows that do not reach the root', (
         await seed(LOCAL_MOUNT_ID);
     });
 
-    for (const level of ['full', 'light'] as const) {
-        test(`a ${level} archive leaves them out, names them and verifies, and the live table keeps them`, async () => {
-            const { manifest, folder } = await snapshotInto(home, level);
-            expect((await verifyFolder(folder)).failures).toEqual([]);
-            for (const [mountId, { ids }] of orphans) {
-                const warning = warningOf(manifest, mountId, ORPHAN_WARNING);
-                for (const name of ['lost-child.png', 'Loop A', 'Loop B', 'looped.txt', 'same.txt']) {
-                    expect(warning).toContain(name);
-                }
-                const archived = rowIds(join(folder, 'home', PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB));
-                const live = rowIds(metadataPath(home.homeDir, mountId));
-                for (const id of ids) {
-                    expect(archived.has(id)).toBe(false);
-                    expect(live.has(id)).toBe(true);
-                }
+    test('a full archive leaves them out, names them and verifies, and the live table keeps them', async () => {
+        const { manifest, folder } = await snapshotInto(home, 'full');
+        expect((await verifyFolder(folder)).failures).toEqual([]);
+        for (const [mountId, { ids }] of orphans) {
+            const warning = warningOf(manifest, mountId, ORPHAN_WARNING);
+            for (const name of ['lost-child.png', 'Loop A', 'Loop B', 'looped.txt', 'same.txt']) {
+                expect(warning).toContain(name);
             }
-        });
-    }
+            const archived = rowIds(join(folder, 'home', PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB));
+            const live = rowIds(metadataPath(home.homeDir, mountId));
+            for (const id of ids) {
+                expect(archived.has(id)).toBe(false);
+                expect(live.has(id)).toBe(true);
+            }
+        }
+    });
 
     test('a full archive holds no thumbnail of them, and the bytes of a root file named like one stay its own', async () => {
         const { manifest, folder } = await snapshotInto(home, 'full');
@@ -185,9 +183,7 @@ describe('Backup of a home whose drives hold rows that do not reach the root', (
     test('a drive whose root row is gone fails the home', async () => {
         const { home: rootless, mountId } = await newUser('rootless');
         writeWithoutForeignKeys(rootless.homeDir, mountId, [['DELETE FROM paths WHERE parentId IS NULL', []]]);
-        for (const level of ['full', 'light'] as const) {
-            await expect(snapshotInto(rootless, level)).rejects.toThrow(`mount ${mountId}: the table has no root row`);
-        }
+        await expect(snapshotInto(rootless, 'full')).rejects.toThrow(`mount ${mountId}: the table has no root row`);
     });
 });
 
@@ -218,29 +214,25 @@ describe('Backup of a home whose drive holds a name no path can hold', () => {
         unusable.push(control.id, folder.id);
     });
 
-    for (const level of ['full', 'light'] as const) {
-        test(`a ${level} archive leaves them out with what is inside them, names them and verifies`, async () => {
-            const { manifest, folder } = await snapshotInto(home, level);
-            expect((await verifyFolder(folder)).failures).toEqual([]);
-            const warning = warningOf(manifest, mountId, UNUSABLE_WARNING);
-            expect(warning).toStartWith(`mount ${mountId}: ${UNUSABLE_WARNING} with 1 more inside them:`);
-            expect(warning).toContain('control\x01.txt');
-            expect(warning).toContain('Sepa/rated');
-            expect(manifest.warnings?.some((line) => line.includes(ORPHAN_WARNING))).toBe(false);
-            const archived = rowIds(join(folder, 'home', PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB));
-            const live = rowIds(metadataPath(home.homeDir, mountId));
-            for (const id of [...unusable, insideId]) {
-                expect(archived.has(id)).toBe(false);
-                expect(live.has(id)).toBe(true);
-            }
-            if (level === 'full') {
-                const data = `home/${PATHS.DRIVE.ROOT}/${mountId}/${PATHS.DRIVE.DATA_DIR}`;
-                expect(manifest.entries.map((entry) => entry.path).filter((path) => path.startsWith(data))).toEqual([
-                    `${data}/kept.txt`,
-                ]);
-            }
-        });
-    }
+    test('a full archive leaves them out with what is inside them, names them and verifies', async () => {
+        const { manifest, folder } = await snapshotInto(home, 'full');
+        expect((await verifyFolder(folder)).failures).toEqual([]);
+        const warning = warningOf(manifest, mountId, UNUSABLE_WARNING);
+        expect(warning).toStartWith(`mount ${mountId}: ${UNUSABLE_WARNING} with 1 more inside them:`);
+        expect(warning).toContain('control\x01.txt');
+        expect(warning).toContain('Sepa/rated');
+        expect(manifest.warnings?.some((line) => line.includes(ORPHAN_WARNING))).toBe(false);
+        const archived = rowIds(join(folder, 'home', PATHS.DRIVE.ROOT, mountId, PATHS.DRIVE.METADATA_DB));
+        const live = rowIds(metadataPath(home.homeDir, mountId));
+        for (const id of [...unusable, insideId]) {
+            expect(archived.has(id)).toBe(false);
+            expect(live.has(id)).toBe(true);
+        }
+        const data = `home/${PATHS.DRIVE.ROOT}/${mountId}/${PATHS.DRIVE.DATA_DIR}`;
+        expect(manifest.entries.map((entry) => entry.path).filter((path) => path.startsWith(data))).toEqual([
+            `${data}/kept.txt`,
+        ]);
+    });
 });
 
 describe('Backup of a home whose drive lost files', () => {

@@ -24,15 +24,14 @@ On a temp-copy backend (`s3`, `local`) the mount downloads the object to a temp 
 
 drizzle's bun-sqlite driver types `.run()` as void, so a write that must count the rows it matched uses `.returning().all()`.
 
-`users3.db` is the one database `ManagedDatabase` does not open. better-auth owns the connection, there are no versioned migrations, and `ensureAuthSchemaColumns` (`apps/api/src/lib/auth/auth-schema-columns.ts`) adds any missing column at boot. A column added there is a migration too: it needs the `(full backup)` line below, which the same check enforces.
-
+`users3.db` is the one database `ManagedDatabase` does not open. better-auth owns the connection, there are no versioned migrations, and `ensureAuthSchemaColumns` (`apps/api/src/lib/auth/auth-schema-columns.ts`) adds any missing column at boot.
 ## A migration runs in its own transaction
 
 `__schema_version` holds the version stamp. Each pending migration runs between `BEGIN` and `COMMIT` together with the stamp update, so a failing one rolls back and leaves the version where it was. Any failure inside `open()` closes the raw handle before it rethrows, so the same file reopens cleanly once repaired.
 
 ## An open refuses a schema newer than the binary
 
-Before applying anything, `runMigrations` refuses a database whose stamp is higher than `config.currentVersion` with a 503. After a deploy migrated a database forward, an older server would otherwise open it and keep writing to a schema it doesn't understand. The domain answers 503 until the binary is rolled forward, and nothing on disk is touched meanwhile. Bumping the `currentVersion` of any `db-config.ts` needs a `(full backup)` line in CHANGELOG.md, which publish.yml enforces on a release tag: the backup `./eigen update` makes first is then Full, and a rollback restores it. Without the mark the backup is Light, and the rollback starts the build before on the migrated data, which this guard refuses ([BACKUP.md](BACKUP.md#eigen-update-backs-up-before-it-writes-a-file)). Write it under `[Unreleased]` in the commit that bumps the version: a build of the main channel reads it there, and nothing enforces it before the release.
+Before applying anything, `runMigrations` refuses a database whose stamp is higher than `config.currentVersion` with a 503. After a deploy migrated a database forward, an older server would otherwise open it and keep writing to a schema it doesn't understand. The domain answers 503 until the binary is rolled forward, and nothing on disk is touched meanwhile. The same guard sends a rollback to the backup: `./eigen rollback` first has the build before check that it opens today's data, a migrated database fails that check, and the rollback restores the Full backup `./eigen update` made first ([BACKUP.md](BACKUP.md#a-rollback-keeps-the-data-when-the-build-before-opens-it)). So a migration needs no mark in CHANGELOG.md.
 
 A stamp that is not an integer is refused the same way (503 `unreadable schema stamp`). Only Eigen's migrations write it, and a non-number compares false against every migration, so the database would open with nothing migrated and fail on its first query instead.
 

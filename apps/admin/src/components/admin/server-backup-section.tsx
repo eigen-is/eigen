@@ -13,8 +13,8 @@ import {
 import { getIndexAppUrl } from '@workspace/lib/api';
 import { BACKUP_KEEP_MAX, BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatTime } from '@workspace/lib/date';
-import type { FullBackupLevel } from '@workspace/lib/types/backup';
-import { FULL_BACKUP_LEVELS } from '@workspace/lib/types/backup';
+import type { BackupLevel } from '@workspace/lib/types/backup';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import type { ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { canUploadServerArchive } from '@workspace/lib/validation';
@@ -70,7 +70,7 @@ export function ServerBackupSection({
     saveNotice,
     onDismissNotice,
 }: ServerBackupSectionProps) {
-    const [level, setLevel] = useState<FullBackupLevel>('full');
+    const [level, setLevel] = useState<BackupLevel>('full');
     const [deleting, setDeleting] = useState<string | null>(null);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [dismissed, setDismissed] = useState<string[]>([]);
@@ -83,7 +83,7 @@ export function ServerBackupSection({
     const checkDestination = useCheckBackupDestination();
 
     const hasS3Mounts = !!data?.hasS3Mounts;
-    const levels = FULL_BACKUP_LEVELS.filter((option) => option !== 'full-s3' || hasS3Mounts);
+    const levels = BACKUP_LEVELS.filter((option) => option !== 'full-s3' || hasS3Mounts);
     // The last S3 mount can go while the page is open.
     const shownLevel = levels.includes(level) ? level : 'full';
     // Newest first. An upload starts as its backup ends and can run beside the next one, so every running job gets

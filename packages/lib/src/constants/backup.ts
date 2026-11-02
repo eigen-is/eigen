@@ -1,3 +1,6 @@
+// The backup limits and names the API and the Admin app share, such as how large an uploaded archive may be, how many
+// archives the owner may keep, and how a level reads.
+
 import type { BackupLevel } from '../types/backup';
 import { MAX_REQUEST_BODY_BYTES } from './mount';
 
@@ -13,4 +16,4 @@ export const BACKUP_UPLOAD_MAX_LABEL = `${BACKUP_UPLOAD_MAX_BYTES / 1024 ** 3} G
 export const BACKUP_KEEP_MAX = 365;
 
 // A level as the owner reads it, in ./eigen backup and the admin pane alike.
-export const BACKUP_LEVEL_NAMES: Record<BackupLevel, string> = { light: 'Light', full: 'Full', 'full-s3': 'Full + S3' };
+export const BACKUP_LEVEL_NAMES: Record<BackupLevel, string> = { full: 'Full', 'full-s3': 'Full + S3' };

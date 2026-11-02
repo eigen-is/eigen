@@ -16,6 +16,8 @@ REGISTRY=ghcr.io/eigen-is/eigen
 IMAGES='api frontend postfix dovecot unbound'
 # The CLI's exit code for a question answered no, its DECLINED.
 DECLINED=3
+# The exit code of restore --check-data for a database the build cannot open, its CANNOT_OPEN.
+CANNOT_OPEN=4
 # The CLI's SWAP_MARKER, and its RESTORING_DIR inside data/.
 SWAP_MARKER=.eigen/restore-swap
 UNSTAGE='cli_as 0 rm -rf data/.restoring'
@@ -69,14 +71,13 @@ EOF
             ;;
         backup)
             cat <<EOF
-Usage: ./eigen backup [--light | --full] [--s3] [--wait]
+Usage: ./eigen backup [--full | --s3] [--wait]
 
 Backs up the whole server into backups/ while Eigen runs, and checks the archive. It
 stops nothing. With Eigen stopped, a copy of data/ and .env.production is a backup too.
 Exits 0 once the archive verified, 1 when it failed, 2 on a wrong argument, and 4
 when it verified but did not reach the backup bucket.
 
-  --light   Accounts, settings and databases: no files and no mail
   --full    Everything but the files in S3 buckets, which keep their own history (the default)
   --s3      The files in S3 buckets too
   --wait    Wait for a backup that runs to end, instead of failing
@@ -108,20 +109,18 @@ EOF
         update)
             cat <<EOF
 Usage: ./eigen update [version] [--in <time> [message]] [--check] [--accept-breaking]
-                     [--full | --no-backup]
+                     [--no-backup]
 
 Updates Eigen to the newest release, or to <version>. First, while Eigen runs, it makes
-a backup: a light one, of the accounts, settings and databases, unless the new version
-lists breaking changes or marks a change (full backup), when it is full and ./eigen
-rollback puts it back. ./eigen update main follows the main channel instead of releases.
-Every open tab is told before Eigen restarts.
+a full backup, which ./eigen rollback puts back when the version before cannot open the
+data as it is. ./eigen update main follows the main channel instead of releases. Every
+open tab is told before Eigen restarts.
 
   --in <time>         Warn everyone first, then wait: 10m, 90s, up to 1h. A message after the
                       time goes with the warning, as with shutdown: --in 10m "Back at three".
                       Ctrl+C cancels, and so does a lost SSH session: run a long wait in tmux.
   --check             Only tell whether there is an update, and what it brings
   --accept-breaking   Update even when the new version lists breaking changes
-  --full              Make a full backup, files and mail too
   --no-backup         Make none, as with Eigen stopped: copy data/ and .env.production first
 EOF
             ;;
@@ -130,10 +129,10 @@ EOF
             cat <<EOF
 Usage: ./eigen rollback [--in <time> [message]] [--yes]
 
-Goes back to the version before the last ./eigen update. After a light backup, the usual kind,
-nothing in the data changed its form, so the data stays as it is: that version checks it opens
-every database here, then starts on it. The backup stays in backups/ for ./eigen restore. After
-a full backup, the rollback puts it back, and the current data is kept aside.
+Goes back to the version before the last ./eigen update. First that version checks it opens
+every database here: when it does, it starts on the data as it is, and the backup the update
+made stays in backups/ for ./eigen restore. When it does not, the rollback puts that backup
+back, and the current data is kept aside.
 
 To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:
 ${kept:-  none}
@@ -1058,21 +1057,16 @@ status() {
 # The running API makes the backup: its job map keeps a backup off a home a restore writes and waits for it at shutdown.
 # It stops nothing, so it takes no lock.
 backup() {
-    level=full s3='' wait=''
+    level=full wait=''
     help_flag backup "$@"
     for arg in "$@"; do
         case $arg in
-            --light) level=light ;;
-            --full) level=full ;;
-            --s3) s3=1 ;;
+            --full) ;;
+            --s3) level=full-s3 ;;
             --wait) wait=--wait ;;
             *) refuse backup "$arg" ;;
         esac
     done
-    if [ -n "$s3" ]; then
-        if [ "$level" = light ]; then refuse_usage backup "A light backup holds no files, so it takes no --s3."; fi
-        level='full-s3'
-    fi
     need_install
     wordmark backup
     preflight
@@ -1253,7 +1247,7 @@ restore_fresh() {
 }
 
 update() {
-    target='' check=0 accept='' pulled=0 full='' saved='' no_backup='' previous=''
+    target='' check=0 accept='' pulled=0 saved='' no_backup='' previous=''
     help_flag update "$@"
     for arg in "$@"; do
         case $previous in --saved)
@@ -1265,7 +1259,6 @@ update() {
         case $arg in
             --check) check=1 ;;
             --accept-breaking) accept=--accept-breaking ;;
-            --full) full=--full ;;
             --no-backup) no_backup=--no-backup ;;
             # The handover from the launcher that got the new version to the one that came with it, with the backup
             # it made, or --no-backup.
@@ -1384,23 +1377,17 @@ update_get() {
         die "$tag moved while downloading: the notes were of Eigen $new." "Run ./eigen update again."
     fi
     pin_images "$tag"
-    # Before the files of the new version, which a failure would leave with the old images, and before its
-    # configure --backfill, so the archive holds the .env.production this build runs on. A breaking release, or one
-    # marked (full backup), gets a full backup, since it may convert what a light one leaves out.
-    level=full
-    if [ -z "$full" ] && [ -z "$no_backup" ]; then
-        levels=$(cli update-check --from "$old_version" --level </dev/null)
-        level=$(answer level "$levels")
-    fi
     # The pulls and the questions are done, so the wait comes right before the backup, which then misses little.
     warn_restart update
     handover=--no-backup
     if [ -z "$no_backup" ]; then
         # The operator may have edited the file during the wait.
         if [ "$IN_SECONDS" -gt 0 ]; then need_env_mounted; fi
+        # Before the files of the new version, which a failure would leave with the old images, and before its
+        # configure --backfill, so the archive holds the .env.production this build runs on.
         NEXT="Eigen $current runs on as it was. Fix what it says, then run ./eigen update again. Or copy data/ and .env.production somewhere safe, then run ./eigen update --no-backup."
-        step "Backing up Eigen $current, $level" "Backed up Eigen $current" "Could not back up Eigen $current" \
-            api_cli backup --level "$level" --reason pre-update --wait
+        step "Backing up Eigen $current" "Backed up Eigen $current" "Could not back up Eigen $current" \
+            api_cli backup --reason pre-update --wait
         NEXT=''
         saved=$(answer archive "$(cat "$LOG")")
         if [ -z "$saved" ]; then
@@ -1452,7 +1439,7 @@ update_apply() {
     step "Switching to Eigen $new" "Switched to Eigen $new" "Could not write Eigen $new into .env.production" \
         with_pins cli configure --backfill
     # Only a switch makes the backup the way back; an update without one leaves none to an older build. Its pins
-    # follow, for a rollback after a Light backup, which keeps the data.
+    # follow, for a rollback that keeps the data.
     if [ -n "$saved" ]; then printf '%s\n%s\n' "$saved" "$old_pins" >.eigen/last-update; else rm -f .eigen/last-update; fi
     AT_EXIT=''
     restart "Fix what it says, then run ./eigen restart, or ./eigen rollback to go back to Eigen $old."
@@ -1466,9 +1453,9 @@ update_apply() {
     fi
 }
 
-# Goes back to the build before the last update. After a Light backup, switch_back keeps the data as it is. After a
-# full one, the backup brings back the data and .env.production, staged while Eigen runs, then the images it pins and
-# their bundle files.
+# Goes back to the build before the last update. switch_back keeps the data as it is when that build opens it. When
+# it does not, the backup the update made brings back the data and .env.production, staged while Eigen runs, then the
+# images it pins and their bundle files.
 rollback() {
     yes=''
     help_flag rollback "$@"
@@ -1491,6 +1478,12 @@ rollback() {
         no_rollback "There is no update to roll back." "./eigen rollback goes back after an ./eigen update."
     fi
     archive=$(sed -n 1p .eigen/last-update)
+    # Only a launcher of 0.4.1 or before made a Light backup, and it recorded no build to switch back to.
+    case $archive in server-pre-update-light-*)
+        no_rollback "The last update made a Light backup, backups/$archive, which this version of Eigen cannot put back." \
+            "./eigen restore <archive> puts back a Full backup instead."
+        ;;
+    esac
     if [ ! -f "backups/$archive" ]; then
         no_rollback "The backup the last update made, backups/$archive, is gone." \
             "./eigen rollback has nothing to go back to. To put back another backup: ./eigen restore <archive>"
@@ -1498,11 +1491,8 @@ rollback() {
     lock
     api_here
     current=$(describe "$(image api)")
-    case $archive in server-pre-update-light-*)
-        switch_back "$archive"
-        return
-        ;;
-    esac
+    switch_back "$archive"
+    if [ -n "$switched" ]; then return; fi
     say "$ACCENT" '◆' "Back from Eigen $current to the backup the last update made"
     s3=''
     where_archive "$archive"
@@ -1524,25 +1514,29 @@ no_rollback() {
 }
 
 # pre_update_archives: the backups updates made that retention kept in backups/, newest first by the stamp in the name.
+# A Light one, which no restore takes, is left out.
 pre_update_archives() {
     for archive in backups/server-pre-update-*.tar; do
+        case $archive in backups/server-pre-update-light-*) continue ;; esac
         if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
-    done | sort -t- -k5r
+    done | awk -F- '{ print $(NF - 1) $NF, $0 }' | sort -r | cut -d' ' -f2-
 }
 
-# switch_back <archive>: an update makes a Light backup only when no database changed its form since, so the build
-# before it opens the data of today. A rollback after one keeps data/ and switches back to the pins the update
-# recorded, once that build, as the API's user while Eigen runs, has checked it opens every database here and the
-# operator said yes, and then warns the open tabs as put_back does. The archive stays for ./eigen restore, the way
-# back when the check fails.
+# switch_back <archive>: the first way back, which keeps data/. The build before the update, as the API's user while
+# Eigen runs, checks it opens every database here and asks; then the rollback switches back to the pins the update
+# recorded and warns the open tabs as put_back does. The archive stays for ./eigen restore. Sets switched once Eigen
+# runs on that build. Leaves it empty, and says why, when that build cannot open the data, is too old to check it, or
+# the launcher that made the update recorded no pins: the rollback then puts the archive back. A check that stopped
+# without a verdict on the data ends the rollback, which keeps today's data.
 switch_back() {
+    switched=''
     PINS=$(sed -n '2,$p' .eigen/last-update)
     old_image=$(answer EIGEN_API_IMAGE "$PINS")
     if [ -z "$old_image" ]; then
-        die "The launcher that made the last update kept no note of the build before it." \
-            "Put its backup back instead: ./eigen restore $1"
+        say "$YELLOW" '▲' "The launcher that made the last update kept no note of the build before it."
+        return
     fi
-    NEXT="Eigen $current runs on as it was. Put the backup the update made back instead: ./eigen restore $1"
+    NEXT="Eigen $current runs on as it was. Check the network, then run ./eigen rollback again."
     step "Getting the build before the update" "The build before the update is here" \
         "Could not get the build before the update" \
         pull_refs $(printf '%s\n' "$PINS" | sed -n 's/^EIGEN_[A-Z]*_IMAGE=//p')
@@ -1551,14 +1545,26 @@ switch_back() {
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
     checked=0
     with_image "$old_image" cli_as 1000:1000 restore --check-data $yes || checked=$?
-    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2.
+    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2. 130 is a Ctrl+C at
+    # its question, which the operator saw.
     case $checked in
         0) ;;
+        "$CANNOT_OPEN")
+            say "$YELLOW" '▲' "Eigen $old cannot open the data here."
+            return
+            ;;
+        2)
+            say "$YELLOW" '▲' "Eigen $old is too old to check the data here."
+            return
+            ;;
         "$DECLINED") exit 0 ;;
-        2) die "Eigen $old is too old to check the data here, and Eigen $current runs on as it was." \
-            "Put the backup the update made back instead: ./eigen restore $1" ;;
-        *) die "Eigen $old cannot open the data here, and Eigen $current runs on as it was." \
-            "Put the backup the update made back instead: ./eigen restore $1" ;;
+        130) exit 130 ;;
+        # The check could not run to the end, as when a database stays locked, Docker cannot run the image or the OOM
+        # killer ends it: it said nothing of the data.
+        *)
+            die "The check stopped (exit $checked); Eigen $current runs on as it was." \
+                "Fix what it says, then run ./eigen rollback again."
+            ;;
     esac
     # After the pull, the check and its question, so the wait is the last thing before the stop.
     warn_restart rollback
@@ -1574,6 +1580,7 @@ switch_back() {
     restart
     say "$GREEN" '◇' "Eigen $current → $old is running at https://$(env_value DOMAIN)/"
     say "$GRAY" '└' "The data stayed as it was. backups/$1 stays, for ./eigen restore."
+    switched=1
 }
 
 COMMAND=${1:-}

@@ -5,7 +5,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { serverBackupApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { FullBackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
+import type { BackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
@@ -44,7 +44,7 @@ export function useStartServerBackup() {
     const queryClient = useQueryClient();
     const serverOwnerId = useServerOwnerId();
     return useMutation({
-        mutationFn: async (level: FullBackupLevel): Promise<{ jobId: string }> => {
+        mutationFn: async (level: BackupLevel): Promise<{ jobId: string }> => {
             const response = await serverBackupApi.post({ level });
             if (response.error) throw new AppError(response);
             return response.data;

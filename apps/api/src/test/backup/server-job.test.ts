@@ -144,19 +144,17 @@ describe('Server backup job', () => {
     );
 
     test(
-        'a home that stores files by name, with renamed, trashed and versioned items, is in a Full and a Light archive',
+        'a home that stores files by name, with renamed, trashed and versioned items, is in a Full archive',
         async () => {
             quietRelay();
-            for (const level of ['full', 'light'] as const) {
-                const { job, archivePath } = await runJob({ level });
-                expect(job.error).toBeUndefined();
-                expect(job.state).toBe('done');
-                const home = (await readServerManifest(archivePath)).manifest.homes.find(
-                    (h) => h.ownerId === realShape.user.id,
-                );
-                expect(home?.failed).toBeUndefined();
-                expect(home?.member).toBeDefined();
-            }
+            const { job, archivePath } = await runJob();
+            expect(job.error).toBeUndefined();
+            expect(job.state).toBe('done');
+            const home = (await readServerManifest(archivePath)).manifest.homes.find(
+                (h) => h.ownerId === realShape.user.id,
+            );
+            expect(home?.failed).toBeUndefined();
+            expect(home?.member).toBeDefined();
         },
         JOB_TIMEOUT_MS,
     );
@@ -274,7 +272,7 @@ describe('Server backup job', () => {
             db.run('PRAGMA foreign_keys = OFF');
             db.run('DELETE FROM paths WHERE id = ?', [folderId]);
             db.close();
-            const goodBefore = (await getServerBackupStatus()).newestGoodFullAt;
+            const goodBefore = (await getServerBackupStatus()).newestGoodAt;
             // Archive times have a resolution of one second, so this one cannot share the good one's.
             await Bun.sleep(1_000);
             try {
@@ -296,7 +294,7 @@ describe('Server backup job', () => {
                 expect(status.warned?.name).toBe(basename(archivePath));
                 expect(status.warned?.error).toBe('Warned');
                 // A warned Full is no good one: the newest good Full stays where it was.
-                expect(status.newestGoodFullAt).toBe(goodBefore);
+                expect(status.newestGoodAt).toBe(goodBefore);
             } finally {
                 await deleteUserCompletely(damaged.id, null);
             }

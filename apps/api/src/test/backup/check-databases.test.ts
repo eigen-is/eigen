@@ -1,8 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { afterAll, describe, expect, test } from 'bun:test';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { checkDatabases } from '../../lib/backup/materialize-mount';
+import { checkDatabases, UnopenableDatabaseError } from '../../lib/backup/materialize-mount';
 import { SHARE_REGISTRY_DB_CONFIG } from '../../lib/share/db-config';
 import { TEST_DATA_DIR } from '../setup';
 import { holdLock } from './backup-test-helpers';
@@ -40,6 +40,24 @@ describe('checkDatabases', () => {
         );
         expect(await lock.exited).toBe(0);
     }, 20_000);
+
+    test('calls a database that is damaged or newer unopenable, and a lock held past the wait no verdict', async () => {
+        const check = (filePath: string) => checkDatabases([{ filePath, config: SHARE_REGISTRY_DB_CONFIG }]);
+        const newer = stampedDatabase('newer-verdict.db', SHARE_REGISTRY_DB_CONFIG.currentVersion + 1);
+        await expect(check(newer)).rejects.toBeInstanceOf(UnopenableDatabaseError);
+        const text = join(dir, 'text.db');
+        writeFileSync(text, 'not a database at all, only text that is long enough to fill a header of one');
+        await expect(check(text)).rejects.toBeInstanceOf(UnopenableDatabaseError);
+
+        // A rollback reads this as a check that could not run, so it keeps today's data rather than put a backup back.
+        // The lock outlasts both waits: the one for the schema stamp, then the one for the quick_check.
+        const busy = stampedDatabase('busy.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);
+        const lock = await holdLock(busy, 12_000);
+        const error = await check(busy).catch((caught: unknown) => caught);
+        expect(error).toBeInstanceOf(Error);
+        expect(error).not.toBeInstanceOf(UnopenableDatabaseError);
+        expect(await lock.exited).toBe(0);
+    }, 30_000);
 
     test('lets other work run between databases, so the API serves while it checks a large home', async () => {
         const current = stampedDatabase('many.db', SHARE_REGISTRY_DB_CONFIG.currentVersion);

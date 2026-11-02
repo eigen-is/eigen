@@ -53,7 +53,7 @@ describe('status', () => {
 
     test('without the API, names the newest archive in backups/ by the time in its name', async () => {
         const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000);
-        const newest = buildServerArchiveName('pre-update', 'light', hoursAgo(2));
+        const newest = buildServerArchiveName('pre-update', 'full', hoursAgo(2));
         const listing = [
             buildServerArchiveName('scheduled', 'full', hoursAgo(26)),
             `${newest}.json`,
@@ -62,7 +62,7 @@ describe('status', () => {
             'notes.txt',
         ];
         const result = await status(`--backups=${listing.join('\n')}`);
-        expect(result.stdout).toMatch(new RegExp(`◇ {2}Backup +${newest.replaceAll('.', '\\.')}, Light, 2h ago\n`));
+        expect(result.stdout).toMatch(new RegExp(`◇ {2}Backup +${newest.replaceAll('.', '\\.')}, Full, 2h ago\n`));
         expect((await status('--backups=notes.txt')).stdout).toMatch(
             /▲ {2}Backup +none yet; \.\/eigen backup makes one/,
         );
@@ -127,7 +127,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
             running: [],
         };
         try {
@@ -142,6 +142,29 @@ describe('the Backup row', () => {
         }
     });
 
+    test('is followed by a row naming the Light backups in backups/, running or not, and how to delete them', async () => {
+        backup = {
+            scheduleEnabled: false,
+            newest: null,
+            scheduledFailure: null,
+            scheduledNotUploaded: null,
+            warned: null,
+            newestGoodAt: null,
+        };
+        const light = ['server-pre-update-light-20260101-000000.tar', 'server-manual-light-20260102-000000.tar'];
+        const listing = [...light, `${light[0]}.json`, buildServerArchiveName('manual', 'full', hoursAgo(1))];
+        const row = `▲  Light backups  ${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/server-*-light-* deletes them and their records`;
+        const running = await runCli(
+            ['status', '--services=eigen-api\trunning\thealthy', `--backups=${listing.join('\n')}`],
+            {
+                env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET },
+            },
+        );
+        expect(running.stdout).toContain(`\n${row}\n`);
+        expect((await status(`--backups=${listing.join('\n')}`)).stdout).toContain(`\n${row}\n`);
+        expect((await status(`--backups=${listing.slice(2).join('\n')}`)).stdout).not.toContain('Light');
+    });
+
     test('names the newest archive, its age and size', async () => {
         const newest = archive('scheduled', hoursAgo(3));
         const row = await backupRow({
@@ -150,7 +173,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: hoursAgo(3).toISOString(),
+            newestGoodAt: hoursAgo(3).toISOString(),
             running: [],
         });
         expect(row).toBe(`◇  Backup       ${newest.name}, 3h ago, 1.0 MB`);
@@ -164,7 +187,7 @@ describe('the Backup row', () => {
             scheduledFailure: { ...failed, error: 'no room' },
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: hoursAgo(1).toISOString(),
+            newestGoodAt: hoursAgo(1).toISOString(),
             running: [],
         });
         expect(row).toBe(`■  Backup       ${failed.name} failed, 5h ago: no room`);
@@ -178,7 +201,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: { ...missed, error: 'bucket refused' },
             warned: null,
-            newestGoodFullAt: hoursAgo(5).toISOString(),
+            newestGoodAt: hoursAgo(5).toISOString(),
             running: [],
         });
         expect(row).toBe(`▲  Backup       ${missed.name} not uploaded, 5h ago: bucket refused`);
@@ -192,7 +215,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: { ...warned, error: 'Alice, Team Blue' },
-            newestGoodFullAt: hoursAgo(29).toISOString(),
+            newestGoodAt: hoursAgo(29).toISOString(),
             running: [],
         });
         expect(row).toBe(`▲  Backup       ${warned.name} backed up with warnings, 5h ago: Alice, Team Blue`);
@@ -206,7 +229,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: { ...night, error: 'bucket refused' },
             warned: { ...night, error: 'Alice' },
-            newestGoodFullAt: hoursAgo(29).toISOString(),
+            newestGoodAt: hoursAgo(29).toISOString(),
             running: [],
         });
         expect(row).toBe(`▲  Backup       ${night.name} not uploaded, 5h ago: bucket refused`);
@@ -219,13 +242,13 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: hoursAgo(49).toISOString(),
+            newestGoodAt: hoursAgo(49).toISOString(),
             running: [],
         };
         expect(await backupRow({ scheduleEnabled: true, ...facts })).toBe(
             `▲  Backup       ${newest.name}, 1h ago, 1.0 KB; no good Full backup in two days`,
         );
-        expect(await backupRow({ scheduleEnabled: true, ...facts, newestGoodFullAt: null })).toStartWith('▲');
+        expect(await backupRow({ scheduleEnabled: true, ...facts, newestGoodAt: null })).toStartWith('▲');
         expect(await backupRow({ scheduleEnabled: false, ...facts })).toStartWith('◇');
     });
 
@@ -238,7 +261,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
             running: [],
         });
         expect(running).toBe(`◇  Backup       ${name}, just now, running`);
@@ -248,7 +271,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
             running: [],
         });
         expect(failed).toBe(`▲  Backup       ${name}, just now, failed: no room`);
@@ -258,7 +281,7 @@ describe('the Backup row', () => {
             scheduledFailure: null,
             scheduledNotUploaded: null,
             warned: null,
-            newestGoodFullAt: null,
+            newestGoodAt: null,
             running: [],
         });
         expect(none).toBe('▲  Backup       none yet; ./eigen backup makes one');
@@ -275,7 +298,7 @@ describe('the Backup row', () => {
                 scheduledFailure: null,
                 scheduledNotUploaded: null,
                 warned: null,
-                newestGoodFullAt: null,
+                newestGoodAt: null,
                 running,
             };
             return runCli(['status', '--running'], { env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET } });

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Installs Eigen as a stranger does, with ./eigen in a docker:cli container that has no Bun, and runs the operator
-# commands against it: status, the control socket, the setup link, reset-password, full and light backups on the running
-# API and restores of them with their refusals and an interrupt, stop, and what status, backup and reset-password say
+# commands against it: status, the control socket, the setup link, reset-password, full backups on the running API and
+# restores of them with their refusals and an interrupt, stop, and what status, backup and reset-password say
 # with Eigen stopped, and that another user of the host lists no backups/ and reads no backup's record. The main
 # install is edge,mail as uid 1001 in a folder whose name has capitals and a space; a second one is edge only, as root.
 #
@@ -313,11 +313,11 @@ elif as_user "$OPERATOR" ls "$INSTALL/backups/$ARCHIVE.json" >/dev/null 2>&1 &&
 else
     fail "the record of $ARCHIVE: $(owner_mode "$INSTALL/backups/$ARCHIVE.json"), the operator cannot list it or someone reads it"
 fi
-eigen backup --light --s3
-if [ "$CODE" = 2 ] && says 'A light backup holds no files, so it takes no --s3.'; then
-    ok "backup --light --s3 is refused with its usage (exit 2)"
+eigen backup --light
+if [ "$CODE" = 2 ] && says 'Unknown argument "--light".'; then
+    ok "backup --light, a level that is gone, is refused with its usage (exit 2)"
 else
-    fail "backup --light --s3: exit $CODE"
+    fail "backup --light: exit $CODE"
 fi
 eigen status
 if says "Backup  *$ARCHIVE, "; then
@@ -478,42 +478,21 @@ fi
 scratch_run sh -c 'rm "$1"*' sh "$INSTALL/backups/$BIG"
 
 ##############################################################################
-header "./eigen backup --light, and a light restore"
+header "./eigen restore refuses a Light backup"
 ##############################################################################
-eigen backup --light
-show
-LIGHT=$(saved_archive)
-case "$CODE $LIGHT" in
-    "0 server-manual-light-"*.tar) ok "./eigen backup --light saved backups/$LIGHT" ;;
-    *) fail "./eigen backup --light: exit $CODE, '$LIGHT'" ;;
-esac
-full_size=$(scratch_run stat -c %s "$INSTALL/backups/$ARCHIVE")
-light_size=$(scratch_run stat -c %s "$INSTALL/backups/$LIGHT")
-log "full $full_size bytes, light $light_size bytes: $(awk -v l="$light_size" -v f="$full_size" 'BEGIN { printf "%.1f%%", 100 * l / f }') of the full one"
-
-# What is on disk is the files, what the listing shows is the drive's database.
-files() {
-    { scratch_run ls "$INSTALL/data/home/$ADMIN_ID/mounts/default/data" 2>/dev/null || true; } |
-        grep -v -e '-wal$' -e '-shm$' || true
-}
-before=$(files)
-api POST "$FOLDER/$root_id/create/doc" '{"fileName":"Made after the light backup"}' >/dev/null
+# A launcher of 0.4.1 or before could make one. It is refused by its name, before anything is read or stopped.
+LIGHT=server-manual-light-20260101-000000.tar
+scratch_run cp -p "$INSTALL/backups/$ARCHIVE" "$INSTALL/backups/$LIGHT"
 aside=$(aside_count)
 eigen restore "$LIGHT" --yes
 show
-listing=$(api GET "$FOLDER/$root_id")
-if [ "$CODE" = 0 ] && stack_up && ! printf '%s' "$listing" | grep -q '"Made after the light backup"'; then
-    ok "a light restore puts the databases back: the document made since is out of the drive"
+if [ "$CODE" = 1 ] && says "$LIGHT is a Light backup, which this version of Eigen no longer restores." && stack_up &&
+    [ "$(aside_count)" = "$aside" ]; then
+    ok "./eigen restore refuses a Light backup by its name, and Eigen runs on with nothing kept aside"
 else
-    fail "the light restore: exit $CODE, listing $listing"
+    fail "./eigen restore of a Light backup: exit $CODE, kept aside $(aside_count), was $aside"
 fi
-# Names hold spaces, so they compare line by line.
-lost=$(printf '%s\n' "$before" | grep -vxF -e "$(files)" || true)
-if [ -z "$lost" ] && [ "$(aside_count)" = $((aside + 1)) ]; then
-    ok "and leaves the files on disk as they are, with what it replaced kept aside"
-else
-    fail "files after the light restore: lost '$lost'; kept aside $(aside_count), was $aside"
-fi
+scratch_run rm "$INSTALL/backups/$LIGHT"
 
 ##############################################################################
 header "./eigen stop, and with Eigen stopped"
@@ -535,7 +514,7 @@ if [ "$CODE" = 1 ] && says '■  Eigen is not running.' && says '└  Run ./eige
 else
     fail "status with Eigen stopped: exit $CODE"
 fi
-if says '■  eigen-api  *exited' && says "Backup  *$LIGHT, Light, "; then
+if says '■  eigen-api  *exited' && says "Backup  *$ARCHIVE, Full, "; then
     ok "status still lists the services, and the newest backup from what backups/ holds"
 else
     fail "status does not list eigen-api as exited, or the newest backup"
