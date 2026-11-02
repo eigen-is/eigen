@@ -77,9 +77,10 @@ export async function withDatabase<S extends SchemaType, T>(
 }
 
 // withDatabase for a holder that outlives one call, such as an open collab document, which writes
-// every edit to its data.db. It lets go in its own close, before it closes the database. Whatever
-// closes such a database, such as a trash, closes the document first. So this holder alone may take
-// the container path lock while it holds, as a workbook's version before its compaction does.
+// every edit to its data.db. It lets go in its own close, before it closes the database. What closes
+// such a database, such as a trash, closes the document first. So this holder alone may take the
+// container path lock while it holds, as a workbook's version before its compaction does. Only a
+// document that moves into a folder while the folder is trashed makes a close wait out HOLDER_WAIT_MS.
 export async function holdDatabase<S extends SchemaType>(
     mount: Mount,
     config: DatabaseConfig<S>,
@@ -202,18 +203,19 @@ async function buildDocumentDb<S extends SchemaType>(
     const onSnapshot: SyncCallbacks['onSnapshot'] = snapshot
         ? async () => {
               const path = await mount.getPath(pathId);
-              // standalone or already-deleted: 'taken' so the watermark advances and the
-              // tick doesn't re-probe every 30s ('skipped' is strictly for lock contention).
+              // A database outside a container, or one whose row is gone, has nothing to snapshot.
+              // It answers 'taken', so the watermark moves and the tick doesn't try again every 30 s.
+              // 'skipped' means only that the container lock was busy.
               if (!path?.parentId) return 'taken';
               return mount.trySnapshotContainerDataDb(path.parentId, snapshot.policy);
           }
         : undefined;
 
-    // Set when onOpen reuses a temp that survived an unclean shutdown — those bytes
-    // never synced, so the DB must be force-dirtied after open (crash recovery, below).
+    // Set when onOpen adopts a temp that an unclean shutdown left. Those bytes never synced, so the
+    // database is marked dirty after the open.
     let recoveredFromCrash = false;
 
-    // Captured by onSync to VACUUM INTO-stage the live DB.
+    // onSync stages a copy of this live database with VACUUM INTO.
     const managed = new ManagedDatabase(
         config,
         localPath,
@@ -259,16 +261,15 @@ async function buildDocumentDb<S extends SchemaType>(
                           // mustExist guard (openCold refuses to open an empty working copy as a fresh db).
                       });
                   },
-                  // isRemote: stage a frozen copy + enqueue, off the request/close path.
-                  // Local path-based: keep the synchronous local copy (Bun.write never 503s,
-                  // and async-queuing it would only weaken its on-completion durability).
+                  // On s3 the sync stages a frozen copy and queues its upload, off the request and close
+                  // path. On a path-based local mount it copies at once: a local write never answers
+                  // 503, and a queue would only make the copy less durable when the sync returns.
                   onSync: () =>
                       mount.withTreeShared(async () => {
-                          // Resolve the key on EVERY sync and under the mount's tree lock: on `local`
-                          // it is the hierarchical path, so a move since open, or one landing between
-                          // the resolve and the write, would rebuild the old tree and orphan the sync.
-                          // A vanished row means the doc was deleted — skip, so a stale sync can't
-                          // resurrect a dead key. (s3/local-key keys are id-stable and take no lock.)
+                          // The key is resolved on every sync, under the tree lock. On `local` it is the
+                          // name path, so a move since the open, or during the sync, would write the old
+                          // tree back. A missing row means the document was deleted, and a sync then
+                          // must not bring its key back. Keys on s3 and local-key never change.
                           const currentKey = await mount.findStorageKey(pathId);
                           if (currentKey === null) return;
                           if (mount.uploadQueue) {
@@ -277,7 +278,8 @@ async function buildDocumentDb<S extends SchemaType>(
                               // A VACUUM INTO copy of a managed database, so the queue holds it to the
                               // SQLite header check before the PUT (schema.ts, `isDatabase`).
                               mount.uploadQueue.enqueueStaged(currentKey, stagingPath, true);
-                              // The staged copy is the object ranges and HEAD are served against; the queue unlinks it only after its PUT.
+                              // Ranges and HEAD are served from the staged copy until its PUT lands. The queue
+                              // removes it only after that.
                               await syncDocumentDbSize(mount, pathId, stagingPath);
                           } else {
                               await mount.uploadFromTemp(currentKey, pathId);
@@ -288,9 +290,8 @@ async function buildDocumentDb<S extends SchemaType>(
                   // Re-stat only where the live file is the object; a queued row already matches its staged copy.
                   onClose: async (syncFailed) => {
                       if (!mount.uploadQueue) await syncDocumentDbSize(mount, pathId, localPath);
-                      // A failed final sync means the temp is the only copy holding the tail —
-                      // leave it as the unclean-shutdown marker (adopted + re-synced
-                      // on the next open), never delete it.
+                      // After a failed final sync the temp is the only copy of the newest writes. It
+                      // stays as the crash temp, which the next open adopts and syncs again.
                       if (!syncFailed) await mount.cleanupTemp(pathId);
                   },
                   onSnapshot,
@@ -365,16 +366,14 @@ export async function closeInSlot(
     await db.close(opts);
 }
 
-// Flush + close every cached document DB at or below `rootId` (the container's own data.db, its
-// comments.db, any nested doc/chat). The documentDbs cache is otherwise decoupled from row
-// mutations — trash/delete change rows without it noticing — so a still-open dirty DB keeps its
-// 30s timer alive and syncs data.db to the pre-mutation key: a zombie tree on `local`, a
-// resurrected object on `s3`. Callers invoke this while the rows still exist (the walk needs
-// them): trashPath before the storage rename so the final bytes ride into .trash/ with the rest;
-// deletePath before the row/storage removal so cancel()/deleteDir() then clears what was flushed.
-// Yjs collab docs are already torn down by Drive.closeCollabDocumentsRecursively; this catches
-// the rest (chat data.db, comments.db). skipFinalSnapshot: the container is going away, and a
-// snapshot would re-enter its path lock.
+// Syncs and closes every open document database at or below rootId, such as a container's data.db
+// and comments.db and those of a nested chat. A trash or a delete changes rows without the cache
+// knowing. A dirty database left open would then sync to the old key on its next tick, which writes
+// a dead tree back on `local` and a deleted object back on `s3`. The walk needs the rows, so callers
+// run this before they change them: trashPath before its storage rename, so the last bytes move to
+// the trash with the rest, and deletePath before it removes rows and bytes. Open collab documents
+// are closed before this, so it closes what readers and chats left open. skipFinalSnapshot: the
+// container is going away, and a snapshot would take its path lock again.
 export async function closeCachedDbsUnder(mount: Mount, rootId: string): Promise<void> {
     for (const id of [rootId, ...mount.collectDescendantIds(rootId)]) {
         if (mount.documentDbs.has(id)) {
@@ -390,9 +389,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     // The abort stops the trash purge between items. The one in flight finishes before metadata.db closes.
     await mount.trashPurge;
 
-    // Cancel the init-scheduled history prune so a fast teardown doesn't fire it against a
-    // metadata.db the Home is about to close (the mount stops its own timers here — the same seam
-    // as the upload/reindex queues below).
+    // The history prune that init scheduled is cancelled, so a fast teardown doesn't run it against a
+    // metadata.db the Home is about to close.
     if (mount.pruneTimer) {
         clearTimeout(mount.pruneTimer);
         mount.pruneTimer = null;
@@ -437,8 +435,8 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     }
 }
 
-// Update paths.size for a ManagedDatabase row from disk, then invalidate
-// ancestors — eigendoc containers stay in sync with data.db growth.
+// Copies the database file's size into its paths row and refreshes the folder sizes above it, so a
+// container's size follows its data.db.
 async function syncDocumentDbSize(mount: Mount, pathId: string, localPath: string): Promise<void> {
     if (!fs.existsSync(localPath)) {
         console.warn(`[Mount] syncDocumentDbSize ${pathId}: localPath missing at ${localPath}`);

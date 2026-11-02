@@ -9,13 +9,6 @@ import { COLLAB_DB_CONFIG } from '../collab/db-config';
 import { loadYjsState } from '../collab/yjs-loader';
 import type { Mount } from '../mount';
 
-// Card and column fields are untyped in the Y.Map root; this reader only wants the
-// ones the editor writes as plain strings.
-function stringField(item: Y.Map<unknown>, field: string): string | undefined {
-    const value = item.get(field);
-    return typeof value === 'string' ? value : undefined;
-}
-
 export type StickiesContent = {
     tasks: { title?: string; description?: string }[];
     columns: { title?: string }[];
@@ -41,4 +34,11 @@ export async function readStickiesContent(mount: Mount, drivePath: DrivePath): P
     }
 
     return { tasks, columns };
+}
+
+// The fields of a card or column are untyped in the Y.Map root. This reader keeps only the ones the
+// editor writes as plain strings.
+function stringField(item: Y.Map<unknown>, field: string): string | undefined {
+    const value = item.get(field);
+    return typeof value === 'string' ? value : undefined;
 }
