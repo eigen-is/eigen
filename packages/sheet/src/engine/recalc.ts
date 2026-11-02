@@ -4,6 +4,7 @@
 // extractDependencies, the walk that finds the cells a formula reads, builds the editor's formula map too.
 
 import type { Cell, CellMatrix, Sheet } from '@workspace/lib/sheets';
+import { escapeRegExp } from 'es-toolkit';
 import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
@@ -13,7 +14,7 @@ import { cellsOf, DependencyIndex, dependencySlots } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
 import { inlineNames } from './formula-shift';
-import { iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
+import { formulaOperators, iscelldata, matrixWidth, resolveCellRange } from './formula-utils';
 import { valueIsError } from './parser/error';
 import type {
     CalcChainEntry,
@@ -226,9 +227,18 @@ export function extractDependencies(
     return dependencies;
 }
 
-// The operators a formula splits at. A `:` that joins a reference to a function call, as in A1:INDEX(…) or
-// INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
-const OPERATORS = /==|!=|<>|<=|>=|[-,()=+/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
+// What a formula splits at: its operators, commas and brackets, and the name of a function it calls, so the LOG10 of
+// LOG10(A1) reads as no cell. A `:` that joins a reference to a function call, as in A1:INDEX(…) or INDEX(…):B3, is
+// one too, or A1 would read as a range up to a column named INDEX.
+const OPERATORS = new RegExp(
+    [
+        ...[...formulaOperators].map(escapeRegExp),
+        '[,()]',
+        '[A-Za-z_][\\w.]*(?=\\s*\\()',
+        ':(?=[A-Za-z_][\\w.]*\\()',
+        '(?<=\\)):',
+    ].join('|'),
+);
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
