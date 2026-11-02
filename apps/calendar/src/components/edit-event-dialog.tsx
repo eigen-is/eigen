@@ -1,7 +1,8 @@
-// The Edit event dialog: every field of an existing event, its guests, and the choice of which occurrences of a
-// repeating event a change applies to. The event detail dialog opens it.
+// The Edit event dialog: every field of an existing event and its guests. Save, or Enter in a field, saves the change,
+// after asking which occurrences of a repeating event it applies to, or before a move to another owner's calendar
+// that loses something. An invitation from someone else only lets you pick the calendar that holds it. It opens over
+// an event, such as from the event detail dialog.
 
-import { wasToasted } from '@workspace/lib/api-error';
 import { useAuth } from '@workspace/lib/auth';
 import {
     heldAttendees,
@@ -23,17 +24,8 @@ import {
     viewerTimeZone,
 } from '@workspace/lib/calendar';
 import type { Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar } from '@workspace/lib/types/calendar';
-import { ConfirmDialog } from '@workspace/ui';
-import { Button } from '@workspace/ui/components/button';
+import { ConfirmDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { AttendeeList } from '@workspace/ui/components/calendar';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
 import { UsersRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { AttendeeEditor } from './attendee-editor';
@@ -71,6 +63,8 @@ export function EditEventDialog({
 
     const calendarOptions = useCalendarOptions(ownerId, calendars, sharedCalendars);
 
+    // The fields live here, not in a child that mounts with the dialog as New event's do. Edit event hides behind the
+    // recurring choice or the move warning, and a cancel there brings it back with the edits still in it.
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
@@ -86,9 +80,9 @@ export function EditEventDialog({
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
     // A retry after a failed source delete must not create the destination twice, nor fan invitations out again.
-    const createdDestRef = useRef(false);
+    const createdDestinationRef = useRef(false);
     useEffect(() => {
-        if (open) createdDestRef.current = false;
+        if (open) createdDestinationRef.current = false;
     }, [open]);
 
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
@@ -108,14 +102,12 @@ export function EditEventDialog({
         event ? event.parentEventId || event.id : '',
         open && !!event && isSeriesOccurrence(event),
     );
-    const saving =
-        updateEvent.isPending || createEvent.isPending || deleteEventOnSource.isPending || moveEvent.isPending;
 
     useEffect(() => {
         if (event && open) {
             setTitle(event.title);
-            setDescription(event.description || '');
-            setLocation(event.location || '');
+            setDescription(event.description ?? '');
+            setLocation(event.location ?? '');
             setAllDay(event.allDay);
             setRruleString(event.rrule);
             setAttendees(heldAttendees(event, master));
@@ -126,10 +118,11 @@ export function EditEventDialog({
             setSelectedCalKey(currentCal ? calendarKey(currentCal) : '');
 
             if (event.allDay) {
-                const sd = event.startTime;
-                const ed = new Date(event.endTime.getTime() - 86400_000);
-                setStartDate(toLocalDateString(new Date(sd.getUTCFullYear(), sd.getUTCMonth(), sd.getUTCDate())));
-                setEndDate(toLocalDateString(new Date(ed.getUTCFullYear(), ed.getUTCMonth(), ed.getUTCDate())));
+                // An all-day event runs from UTC midnight to the UTC midnight after its last day.
+                const utcDay = (date: Date) =>
+                    toLocalDateString(new Date(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+                setStartDate(utcDay(event.startTime));
+                setEndDate(utcDay(new Date(event.endTime.getTime() - 86400_000)));
                 setStartTime('00:00');
                 setEndTime('00:00');
             } else {
@@ -158,21 +151,7 @@ export function EditEventDialog({
     else if (attendees.length) moveLossReasons.push('guests will be notified it was canceled and re-invited');
     if (isRecurring) moveLossReasons.push("modified occurrences of the series won't move");
 
-    const handleSaveClick = () => {
-        if (!title.trim()) return;
-        if (crossHomeMove && moveLossReasons.length > 0) {
-            setShowMoveConfirm(true);
-        } else if (isPartOfSeries && !calendarChanged) {
-            setShowRecurringDialog(true);
-        } else {
-            // A failed save was toasted by its mutation hook, and the dialog stays open for another try.
-            doSave('all').catch((error: unknown) => {
-                if (!wasToasted(error)) throw error;
-            });
-        }
-    };
-
-    const doSave = async (action: RecurringAction) => {
+    const save = async (action: RecurringAction) => {
         const { start, end } = buildEventTimes(allDay, startDate, endDate, startTime, endTime);
 
         const data = { ...event.data, attendees: attendees.length > 0 ? attendees : undefined };
@@ -214,13 +193,14 @@ export function EditEventDialog({
                     targetCalendarId: selectedCal.id,
                 });
             } else {
-                // Two Homes have no atomic move: recreate, then delete, and the organizer link and overrides stay behind.
-                if (!createdDestRef.current) {
+                // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
+                // overrides stay behind.
+                if (!createdDestinationRef.current) {
                     await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
-                    createdDestRef.current = true;
+                    createdDestinationRef.current = true;
                 }
                 await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId });
-                createdDestRef.current = false;
+                createdDestinationRef.current = false;
             }
         } else if (action === 'all') {
             await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
@@ -228,38 +208,49 @@ export function EditEventDialog({
             await createEvent.mutateAsync({
                 calendarId: event.calendarId,
                 ...updates,
-                allDay: Boolean(allDay),
                 rrule: null,
                 parentEventId: targetId,
                 recurrenceDate: occurrenceDateToString(event.occurrenceDate),
             });
         } else if (action === 'this-and-following') {
-            const occDate = parseOccurrenceDate(event.occurrenceDate);
             if (event.rrule) {
-                const truncated = truncateRRule(event.rrule, occDate);
+                const truncated = truncateRRule(event.rrule, parseOccurrenceDate(event.occurrenceDate));
                 await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, rrule: truncated });
             }
-            await createEvent.mutateAsync({
-                calendarId: event.calendarId,
-                ...updates,
-                allDay: Boolean(allDay),
-            });
+            await createEvent.mutateAsync({ calendarId: event.calendarId, ...updates });
         }
+    };
 
+    // Edit event is hidden while the recurring choice or the move warning is up, so their save closes it too.
+    const saveAndClose = async (action: RecurringAction) => {
+        await save(action);
         onOpenChange(false);
     };
 
     return (
         <>
-            <Dialog open={open && !showRecurringDialog && !showMoveConfirm} onOpenChange={onOpenChange}>
-                <DialogContent size="md">
-                    <DialogHeader>
-                        <DialogTitle>Edit event</DialogTitle>
-                        <DialogDescription className="sr-only">
-                            Change the title, time, guests and details of this event.
-                        </DialogDescription>
-                    </DialogHeader>
-
+            <FormDialog
+                open={open && !showRecurringDialog && !showMoveConfirm}
+                onOpenChange={onOpenChange}
+                title="Edit event"
+                size="md"
+            >
+                <FormDialogForm
+                    canSubmit={title.trim() !== '' && (!isPartOfSeries || !!master)}
+                    submitLabel="Save"
+                    readOnly={!canSave}
+                    onSubmit={async () => {
+                        if (crossHomeMove && moveLossReasons.length > 0) {
+                            setShowMoveConfirm(true);
+                            return false;
+                        }
+                        if (isPartOfSeries && !calendarChanged) {
+                            setShowRecurringDialog(true);
+                            return false;
+                        }
+                        await save('all');
+                    }}
+                >
                     {isLinkedEvent && (
                         <p className="text-xs text-muted-foreground">
                             You were invited to this event. Only the organizer can change its details.
@@ -324,28 +315,14 @@ export function EditEventDialog({
                             )
                         }
                     />
-
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-                            {canSave ? 'Cancel' : 'Close'}
-                        </Button>
-                        {canSave && (
-                            <Button
-                                onClick={handleSaveClick}
-                                disabled={saving || !title.trim() || (isPartOfSeries && !master)}
-                            >
-                                {saving ? 'Saving...' : 'Save'}
-                            </Button>
-                        )}
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+                </FormDialogForm>
+            </FormDialog>
 
             <RecurringActionDialog
                 open={showRecurringDialog}
                 onOpenChange={setShowRecurringDialog}
                 title="Edit recurring event"
-                onConfirm={doSave}
+                onConfirm={saveAndClose}
                 options={isOverride ? ['this', 'all'] : undefined}
             />
 
@@ -355,7 +332,7 @@ export function EditEventDialog({
                 title="Move to another calendar owner?"
                 description={`Moving this event to a calendar owned by someone else recreates it there, so ${moveLossReasons.join(', and ')}.`}
                 confirmText="Move"
-                onConfirm={() => doSave('all')}
+                onConfirm={() => saveAndClose('all')}
             />
         </>
     );
