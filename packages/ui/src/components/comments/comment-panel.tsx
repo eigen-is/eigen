@@ -2,6 +2,8 @@
 // comment filter, with a line saying how many the filter hides. Each card shows its replies, status and assignee,
 // and a dot while its thread holds an unread notification. Opening a card is the host's to handle.
 
+import { useAuth } from '@workspace/lib/auth';
+import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import type { useCommentFilter } from '@workspace/lib/comments';
 import { matchesCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
@@ -52,7 +54,7 @@ type CommentPanelProps = {
     entries: CommentEntry[];
     activeCardIds: Set<string>;
     anchorTexts: Map<string, string>;
-    unreadChatNames: ReadonlySet<string>;
+    pathId: string;
     currentUserEmail: string;
     filter: ReturnType<typeof useCommentFilter>;
     onCommentClick?: (cardId: string) => void;
@@ -65,13 +67,15 @@ export function CommentPanel({
     entries,
     activeCardIds,
     anchorTexts,
-    unreadChatNames,
+    pathId,
     currentUserEmail,
     filter,
     onCommentClick,
     onCommentContextMenu,
     className,
 }: CommentPanelProps) {
+    const { user } = useAuth();
+    const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', pathId);
     const { active, visible } = useMemo(() => {
         const byChatName = new Map(entries.map((e) => [e.chatName, e]));
         const all: { card: CommentCard; entry: CommentEntry | undefined }[] = [];

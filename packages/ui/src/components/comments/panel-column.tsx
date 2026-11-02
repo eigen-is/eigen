@@ -3,8 +3,6 @@
 // mobile and the fixed-width sibling on desktop. Mount it outside any <ColumnLayout mobileColumn="…">: a Column
 // whose id doesn't match hides itself, so a host that wraps this one silently gets no pane at all.
 
-import { useAuth } from '@workspace/lib/auth';
-import { useUnreadCommentChatNames } from '@workspace/lib/chat';
 import type { useCommentFilter } from '@workspace/lib/comments';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { ActiveComments, CommentCard, DocumentPanel } from '@workspace/lib/types/comments';
@@ -57,8 +55,6 @@ export function PanelColumn({
     onAddComment,
 }: PanelColumnProps) {
     const { isMobile } = useLayout();
-    const { user } = useAuth();
-    const unreadChatNames = useUnreadCommentChatNames(user?.id ?? '', path.id);
     const showComments = activePanel === 'comments';
 
     return (
@@ -94,7 +90,7 @@ export function PanelColumn({
                     entries={entries}
                     activeCardIds={activeComments.ids}
                     anchorTexts={activeComments.anchorTexts}
-                    unreadChatNames={unreadChatNames}
+                    pathId={path.id}
                     currentUserEmail={currentUserEmail}
                     filter={filter}
                     className="w-full border-l-0"

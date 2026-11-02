@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, test } from 'bun:test';
 import { QueryClient } from '@tanstack/react-query';
 import { notificationKeys } from '../../../../core/notification/hooks/keys';
 import { chatActivityTag, chatMentionTag, commentAssignedTag } from '../../../../core/notification/tags';
@@ -8,7 +8,12 @@ import { renderHook } from '../../../render-hook';
 
 installHappyDom();
 
-const { useUnreadCommentChatNames } = await import('../../../../core/chat/hooks/use-chat-unread');
+const { useAutoMarkChatRead, useUnreadCommentChatNames } = await import('../../../../core/chat/hooks/use-chat-unread');
+
+const realFetch = globalThis.fetch;
+afterEach(() => {
+    globalThis.fetch = realFetch;
+});
 
 const USER = 'user-1';
 const BOARD = { ownerId: USER, mountId: 'm1', pathId: 'board-1' };
@@ -53,5 +58,29 @@ describe('useUnreadCommentChatNames', () => {
             row('file-event', `file-event:${BOARD.pathId}`),
         ]);
         expect(names).toEqual([]);
+    });
+
+    test('opening a card clears its own dot and leaves the other cards alone', async () => {
+        // The read PATCH answers OK, so only the hook's own cache update decides the result.
+        globalThis.fetch = Object.assign(async () => Response.json({ success: true }), {
+            preconnect: realFetch.preconnect,
+        });
+        const queryClient = new QueryClient();
+        queryClient.setQueryData(notificationKeys.list(USER), [
+            row('comment-reply', chatActivityTag({ ...BOARD, chatName: 'open.eigenchat' })),
+            row('mention-comment', chatMentionTag({ ...BOARD, chatName: 'open.eigenchat' }, 'me@example.com')),
+            row('comment-reply', chatActivityTag({ ...BOARD, chatName: 'other.eigenchat' })),
+        ]);
+        const { unmount } = await renderHook(
+            () => useAutoMarkChatRead(USER, BOARD.pathId, 'open.eigenchat'),
+            queryClient,
+        );
+        await unmount();
+        const { latest, unmount: unmountNames } = await renderHook(
+            () => useUnreadCommentChatNames(USER, BOARD.pathId),
+            queryClient,
+        );
+        await unmountNames();
+        expect([...latest]).toEqual(['other.eigenchat']);
     });
 });

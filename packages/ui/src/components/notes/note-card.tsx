@@ -1,7 +1,6 @@
 // A card as it sits on a board or in a list, such as a sticky: its cover image, title, a preview of the
 // description, how far its checklist is done, a footer with replies, attachments and the assignee, and a dot
-// while its thread holds an unread notification. Clicking it is the caller's to handle, usually by opening
-// NoteCardDialog.
+// when the caller marks it unread. Clicking it is the caller's to handle, usually by opening NoteCardDialog.
 
 import { EIGEN_STICKIES_INDICATOR_MAP, isLightColor, lightenColor } from '@workspace/lib/constants';
 import { countTaskItems } from '@workspace/lib/html';

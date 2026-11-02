@@ -1,6 +1,6 @@
 // Unread state of chats and comments, read from the notification list. A Drive row asks which items hold an unread
-// thread, a comment card asks whether its own thread is unread, and an open chat or comment card marks its own
-// notifications read while it is on screen.
+// thread, a comment list asks which of its cards do, and an open chat or comment card marks its own notifications
+// read while it is on screen.
 
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo } from 'react';
@@ -49,7 +49,7 @@ export function useUnreadCommentChatNames(userId: string, containerPathId: strin
 
 // Auto-mark a single thread's notifications as read when it is being viewed. A comment card passes the
 // container's pathId with its own chat name — the pair its notifications are tagged with.
-export function useAutoMarkChatRead(userId: string, pathId: string, chatName?: string) {
+export function useAutoMarkChatRead(userId: string, pathId: string, chatName?: string): void {
     const { data: notifications = [] } = useNotifications(userId);
     const markChatRead = useMarkChatRead(userId);
     const key = chatThreadKey({ pathId, chatName });
@@ -61,7 +61,7 @@ export function useAutoMarkChatRead(userId: string, pathId: string, chatName?: s
     }, [pathId, chatName, hasUnread, markChatRead]);
 }
 
-function useMarkChatRead(userId: string) {
+function useMarkChatRead(userId: string): (pathId: string, chatName?: string) => void {
     const queryClient = useQueryClient();
 
     return useCallback(

@@ -16,7 +16,7 @@ import type { ColumnItem } from './types';
 type ColumnProps = {
     column: ColumnItem;
     cards: CommentCard[];
-    entryByChatName: Map<string, CommentEntry>;
+    entryByChatName: ReadonlyMap<string, CommentEntry>;
     unreadChatNames: ReadonlySet<string>;
     canWrite?: boolean;
     onAddCard: (columnId: string) => void;
