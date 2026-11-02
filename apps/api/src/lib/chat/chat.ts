@@ -108,10 +108,8 @@ export class ChatRoom {
         const now = new Date();
         const attachmentData = attachments && attachments.length > 0 ? attachments : null;
 
-        // A comment thread inside a document keeps the document's comment index up to date.
-        const indexed = this.containerPath !== null && type !== 'whisper';
-        // Everything below that reads the room is read here too, so data.db is held only this long.
-        const { participantRows, recentText } = await this.withDb(async (db) => {
+        // The participants are read here too, so data.db is held only this long.
+        const participantRows = await this.withDb(async (db) => {
             await db.insert(schema.messages).values({
                 id,
                 authorEmail,
@@ -122,17 +120,12 @@ export class ChatRoom {
                 replyTo: replyTo ?? null,
                 createdAt: now,
             });
-            return {
-                participantRows:
-                    type === 'message' || type === 'emote'
-                        ? await db
-                              .selectDistinct({ authorEmail: schema.messages.authorEmail })
-                              .from(schema.messages)
-                              .where(isNull(schema.messages.deletedAt))
-                              .all()
-                        : [],
-                recentText: indexed ? await buildRecentText(db) : '',
-            };
+            if (type !== 'message' && type !== 'emote') return [];
+            return db
+                .selectDistinct({ authorEmail: schema.messages.authorEmail })
+                .from(schema.messages)
+                .where(isNull(schema.messages.deletedAt))
+                .all();
         });
 
         const message: ChatMessage = {
@@ -156,18 +149,15 @@ export class ChatRoom {
         // one, so no other tab misses such an event.
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_POSTED, type === 'system' ? [] : members);
 
-        if (indexed) {
-            await this.updateCommentIndex(
-                async (index) => {
-                    await index.ensureComment(this.path.name, { createdBy: authorEmail });
-                    await index.updateActivity(this.path.name, authorEmail);
-                    for (const email of extractMentionedEmails(content)) {
-                        await index.addMention(this.path.name, email);
-                    }
-                },
-                recentText,
-                members,
-            );
+        // A comment thread inside a document keeps the document's comment index up to date.
+        if (type !== 'whisper') {
+            await this.updateCommentIndex(async (index) => {
+                await index.ensureComment(this.path.name, { createdBy: authorEmail });
+                await index.updateActivity(this.path.name, authorEmail);
+                for (const email of extractMentionedEmails(content)) {
+                    await index.addMention(this.path.name, email);
+                }
+            }, members);
         }
 
         if (type !== 'system') {
@@ -359,16 +349,13 @@ export class ChatRoom {
 
     public async editMessage(messageId: string, content: string, userEmail: string): Promise<ChatMessage> {
         const now = new Date();
-        const { existing, recentText } = await this.withDb(async (db) => {
+        const existing = await this.withDb(async (db) => {
             const existing = await db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
             if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
                 throw new ApiError(404, 'Message not found or not owned');
             }
             await db.update(schema.messages).set({ content, editedAt: now }).where(eq(schema.messages.id, messageId));
-            return {
-                existing,
-                recentText: this.containerPath && existing.type !== 'whisper' ? await buildRecentText(db) : '',
-            };
+            return existing;
         });
 
         const updated = { ...existing, content, editedAt: now };
@@ -376,24 +363,20 @@ export class ChatRoom {
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_EDITED, members);
 
-        if (this.containerPath && existing.type !== 'whisper') {
-            await this.updateCommentIndex(
-                async (index) => {
-                    await index.updateActivity(this.path.name, existing.authorEmail, false);
-                    for (const email of extractMentionedEmails(content)) {
-                        await index.addMention(this.path.name, email);
-                    }
-                },
-                recentText,
-                members,
-            );
+        if (existing.type !== 'whisper') {
+            await this.updateCommentIndex(async (index) => {
+                await index.updateActivity(this.path.name, existing.authorEmail, false);
+                for (const email of extractMentionedEmails(content)) {
+                    await index.addMention(this.path.name, email);
+                }
+            }, members);
         }
 
         return updated;
     }
 
     public async deleteMessage(messageId: string, userEmail: string): Promise<void> {
-        const { existing, recentText } = await this.withDb(async (db) => {
+        const existing = await this.withDb(async (db) => {
             const existing = await db.select().from(schema.messages).where(eq(schema.messages.id, messageId)).get();
             if (!existing || existing.authorEmail.toLowerCase() !== userEmail.toLowerCase()) {
                 throw new ApiError(404, 'Message not found or not owned');
@@ -402,10 +385,7 @@ export class ChatRoom {
                 .update(schema.messages)
                 .set({ deletedAt: new Date(), content: '' })
                 .where(eq(schema.messages.id, messageId));
-            return {
-                existing,
-                recentText: this.containerPath && existing.type !== 'whisper' ? await buildRecentText(db) : '',
-            };
+            return existing;
         });
 
         if (existing.attachments) {
@@ -424,8 +404,8 @@ export class ChatRoom {
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_DELETED, members);
 
-        if (this.containerPath && existing.type !== 'whisper') {
-            await this.updateCommentIndex((index) => index.decrementCount(this.path.name), recentText, members);
+        if (existing.type !== 'whisper') {
+            await this.updateCommentIndex((index) => index.decrementCount(this.path.name), members);
         }
     }
 
@@ -450,16 +430,19 @@ export class ChatRoom {
         );
     }
 
-    // recentText is the thread's newest text, which the caller read from data.db.
+    // Applies fn to the thread's row in the document's comment index, and writes the thread's newest
+    // text. A chat on its own has no index.
     private async updateCommentIndex(
         fn: (index: CommentIndex) => Promise<void>,
-        recentText: string,
         members: EffectiveMember[],
     ): Promise<void> {
         if (!this.containerPath) return;
         try {
             await withCommentIndex(this.drive, this.containerPath.mountId, this.containerPath.id, async (index) => {
                 await fn(index);
+                // The text is read again right before it is written. Of two posts at once, the one that
+                // writes last then also writes the text that holds both.
+                const recentText = await this.withDb(buildRecentText);
                 await index.setRecentText(this.path.name, recentText);
             });
 

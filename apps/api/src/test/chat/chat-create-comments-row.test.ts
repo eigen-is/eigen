@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import type { CommentEntry } from '@workspace/lib/types/chat';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileEvent } from '@workspace/lib/types/file-history';
@@ -194,5 +194,41 @@ describe('Comment lifecycle via chat-create', () => {
             );
         });
         expect(ghostEvent).toBe(false);
+    });
+    // The second post lands while the first waits for its members. The first then writes the
+    // index last, and its text must still hold both messages.
+    test('two posts at once leave both messages in the thread search text', async () => {
+        const { sessionToken: token, id: ownerId } = ctx.alice.user;
+        const chat = await drivePost<DrivePath>(token, ownerId, mountId, `folder/${docChatFolderId}/create/chat`, {
+            fileName: 'two-posts',
+        });
+        const home = await getHome(ownerId);
+        const entered = Promise.withResolvers<void>();
+        const gate = Promise.withResolvers<void>();
+        const members = home.drive.getEffectiveMembers.bind(home.drive);
+        const spy = spyOn(home.drive, 'getEffectiveMembers').mockImplementationOnce(async (...args) => {
+            entered.resolve();
+            await gate.promise;
+            return members(...args);
+        });
+        try {
+            const first = chatPost(token, ownerId, mountId, `${chat.id}/messages`, { content: 'first post' });
+            await entered.promise;
+            await chatPost(token, ownerId, mountId, `${chat.id}/messages`, { content: 'second post' });
+            gate.resolve();
+            await first;
+        } finally {
+            gate.resolve();
+            spy.mockRestore();
+        }
+
+        const recentText = await withCommentIndex(
+            home.drive,
+            mountId,
+            docId,
+            async (index) => (await index.get('two-posts.eigenchat'))?.recentText,
+        );
+        expect(recentText).toContain('first post');
+        expect(recentText).toContain('second post');
     });
 });
