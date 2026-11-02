@@ -5,7 +5,7 @@ import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
 import { Trash2 } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
-import type { DriveActionRunner } from '../../../components/drive/drive-layout-dialogs';
+import type { DriveActionRunner } from '../../../components/drive/drive-action-runner';
 import type { UseListSelectionReturn } from '../../../hooks/use-list-selection';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';

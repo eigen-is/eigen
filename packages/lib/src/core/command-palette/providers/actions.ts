@@ -5,7 +5,7 @@
 import type { Command, CommandContext, PaletteResult } from '@workspace/lib/types/command-palette';
 import { useMemo } from 'react';
 import { allCommands } from '../commands';
-import { selectionCommands } from '../commands/drive';
+import { selectionCommands } from '../commands/selection';
 import { actionBoosts } from '../rank';
 
 export function useActionResults(ctx: CommandContext, input: string): PaletteResult[] {

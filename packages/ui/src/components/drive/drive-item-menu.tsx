@@ -17,7 +17,7 @@ import { MenuSections } from '../context-menu/menu-sections';
 import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import type { FileActionRunner } from '../file-actions/use-file-action-runner';
 import { WatchMenuItem } from '../layout/toolbar/watch-toggle-button';
-import type { DriveActionRunner } from './drive-layout-dialogs';
+import type { DriveActionRunner } from './drive-action-runner';
 
 type DriveItemMenuItemsProps = {
     items: DrivePath[];

@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { selectionCommands } from '../../../../core/command-palette/commands/drive';
 import { navCommands } from '../../../../core/command-palette/commands/nav';
+import { selectionCommands } from '../../../../core/command-palette/commands/selection';
 import { DRIVE_ACTIONS } from '../../../../core/drive/drive-actions';
 import type {
     CommandContext,

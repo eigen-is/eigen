@@ -10,7 +10,7 @@ import { useListDrag } from '../../hooks/use-list-drag';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { useSelectableContextMenu } from '../../hooks/use-selectable-context-menu';
-import type { DriveActionRunner } from './drive-layout-dialogs';
+import type { DriveActionRunner } from './drive-action-runner';
 
 export type UseDriveItemControllerOptions = {
     // Already sorted by the caller: the controller selects and navigates over them as they are.

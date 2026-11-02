@@ -8,8 +8,8 @@ import type React from 'react';
 import { useMemo } from 'react';
 import { ContextMenuAnchor } from '../context-menu';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
+import type { DriveActionRunner } from './drive-action-runner';
 import { DriveItemMenuItems } from './drive-item-menu';
-import type { DriveActionRunner } from './drive-layout-dialogs';
 import type { useDriveItemController } from './use-drive-item-controller';
 
 type DriveItemContextMenuProps = {

@@ -12,7 +12,7 @@ import { useMemo } from 'react';
 import { MENU_SECTIONS } from '../context-menu/menu-sections';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { useWatchToggle } from '../layout/toolbar/watch-toggle-button';
-import type { DriveActionRunner } from './drive-layout-dialogs';
+import type { DriveActionRunner } from './drive-action-runner';
 
 type DrivePaletteSelectionProps = {
     items: DrivePath[];
