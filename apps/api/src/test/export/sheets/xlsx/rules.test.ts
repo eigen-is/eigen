@@ -8,7 +8,7 @@ import type {
 } from '@workspace/lib/sheets';
 import { MAX_VALIDATION_RANGES, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import type { CountedWarningCode } from '../../../../lib/document/transform/protocol';
-import { rulesXml } from '../../../../lib/export/sheets/xlsx/rules';
+import { rulesXml, withoutOverlaps } from '../../../../lib/export/sheets/xlsx/rules';
 import { styleRegistry } from '../../../../lib/export/sheets/xlsx/styles';
 import { readRules } from '../../../../lib/import/sheets/rules';
 import { readDxfs } from '../../../../lib/import/sheets/styles';
@@ -370,6 +370,56 @@ describe('a data validation', () => {
         expect(lost).toEqual([]);
         for (const r of [0, count - 1, count * 64 - 1]) {
             expect(ruleAt(read.dataValidations, r, 1)).toEqual(ruleAt(dataValidations, r, 1));
+        }
+    });
+
+    // Each rule in a band of rows of its own, with as many ranges as a rule may hold side by side, so a lookup that
+    // walks a rule's own ranges, or every range above it, takes most of a minute.
+    const bands = (height: number) =>
+        Object.fromEntries(
+            Array.from({ length: 64 }, (_, k) => [
+                `validation-${k + 1}`,
+                {
+                    ranges: Array.from({ length: MAX_VALIDATION_RANGES }, (_, i) => ({
+                        row: [height * k, height * k + height - 1],
+                        column: [i, i],
+                    })),
+                    rule: validation({ type: 'dropdown', type2: '', value1: 'a,b', value2: '' }),
+                },
+            ]),
+        );
+
+    test('many rules of many ranges, each in a band of its own, are kept whole in a moment', () => {
+        for (const height of [64, 16384]) {
+            const dataValidations = bands(height);
+            const started = performance.now();
+            const kept = withoutOverlaps(dataValidations, () => {});
+            expect(performance.now() - started).toBeLessThan(2000);
+            expect(kept).toEqual(dataValidations);
+        }
+    });
+
+    test('many rules of many ranges, each in a band a higher rule touches once, are cut in a moment', () => {
+        const dataValidations = {
+            ...bands(64),
+            'validation-65': {
+                ranges: Array.from({ length: 64 }, (_, k) => ({ row: [64 * k, 64 * k], column: [0, 0] })),
+                rule: validation({ type: 'dropdown', type2: '', value1: 'x', value2: '' }),
+            },
+        };
+        const lost: CountedWarningCode[] = [];
+        const started = performance.now();
+        const kept = withoutOverlaps(dataValidations, (code) => lost.push(code));
+        expect(performance.now() - started).toBeLessThan(2000);
+        expect(lost).toEqual([]);
+        for (const [r, c] of [
+            [0, 0],
+            [1, 0],
+            [0, 1],
+            [64 * 63, 0],
+            [64 * 63 + 63, MAX_VALIDATION_RANGES - 1],
+        ]) {
+            expect(ruleAt(kept, r, c)).toEqual(ruleAt(dataValidations, r, c));
         }
     });
 
