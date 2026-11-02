@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
-import { recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
+import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
 
@@ -405,12 +405,21 @@ describe('engine/recalc — recalcSheets', () => {
     });
 
     test('past its dependency budget a recalc throws before it computes', () => {
-        // On a sheet 128 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
-        const rows = Array.from({ length: 128 }, (): (Cell | null)[] => [null, null, null, null]);
+        // On a sheet 129 rows deep, A1:A128 meets 2 blocks of 64 × 16, D1:D2 one.
+        const rows = Array.from({ length: 129 }, (): (Cell | null)[] => [null, null, null, null]);
         rows[0] = [num(1), formula('=SUM(A1:A128)', num(7)), formula('=SUM(D1:D2)'), null];
         const sheets = [sheet('s1', 'Sheet1', rows)];
         expect(() => recalcSheets(sheets, { maxDependencyBlocks: 2 })).toThrow(RangeError);
         expect(recalcSheets(sheets, { maxDependencyBlocks: 3 })[0].data![0][1]?.v).toBe(1);
+    });
+
+    test('a range down every row of its sheet costs the budget one per column', () => {
+        // Data is 6,400 rows deep, so each Data!A:A would meet 100 blocks of 64 × 16.
+        const data = Array.from({ length: 6_400 }, (): (Cell | null)[] => [num(1), null]);
+        const report = Array.from({ length: 10 }, (): (Cell | null)[] => [formula('=SUM(Data!A:A)')]);
+        const sheets = [sheet('d', 'Data', data), sheet('r', 'Report', report)];
+        expect(() => recalcSheets(sheets, { maxDependencyBlocks: 9 })).toThrow(RangeError);
+        expect(recalcSheets(sheets, { maxDependencyBlocks: 10 })[1].data?.[9][0]?.v).toBe(6_400);
     });
 
     test('past its budget of cells read a recalc throws, before it reads them', () => {
@@ -494,5 +503,20 @@ describe('engine/recalc — sheetsNeedRecalc', () => {
         const idless: Sheet = { name: 'Loose', order: 0, config: {}, data: [[num(1), formula('=A1+1')]] };
         const out = recalcSheets([sheet('s1', 'Sheet1', [[num(1), formula('=A1+1')]]), idless]);
         expect(sheetsNeedRecalc(out)).toBe(false);
+    });
+});
+
+describe('engine/recalc — extractDependencies', () => {
+    // Each quoted sheet name is glued to the reference after it as the formula is split, never by moving the rest of
+    // the parts, so a crafted file can't make the walk quadratic.
+    test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
+        const g = { sheets: [{ id: 's2', name: 'My Data', data: [[num(1)]] }], cellTextToIndexList: {} };
+        const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
+        expect(f.length).toBeGreaterThan(2_000_000);
+        const start = performance.now();
+        const deps = extractDependencies(g, f, 's1', null);
+        expect(performance.now() - start).toBeLessThan(1_000);
+        expect(deps).toHaveLength(160_000);
+        expect(deps[0]).toEqual({ row: [0, 0], column: [0, 0], sheetId: 's2' });
     });
 });

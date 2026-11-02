@@ -10,6 +10,8 @@ import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
 import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import { insertRowCol } from '../../../state/modules/rowcol';
+import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
 
 enablePatches();
@@ -325,5 +327,66 @@ describe('updateCell — the formulas that read an edited cell through a functio
         cellModule.updateCell(ctx, 0, 0, null, 10);
         groupValuesRefresh(ctx);
         expect(shown()).toEqual(['10', '18', '#NAME?', '#ERROR!', '33', '15', '10', '11']);
+    });
+});
+
+// The editor keeps each reference it resolved, by its text, from one edit to the next. A change to the sheets must
+// drop them: a whole column ends where its sheet ended when it was resolved, and a sheet name names the sheet that had
+// it then.
+describe('execFunctionGroup — references resolved before the sheets changed', () => {
+    // One!A1 = 1, and B1 of One or Two holds the formula.
+    function workbook(formula: string, id = 'id_2'): Context {
+        const one = grid(4, 4);
+        one[0][0] = { v: 1, m: '1' };
+        const two = grid(4, 4);
+        (id === 'id_1' ? one : two)[0][1] = { f: formula, v: 1, m: '1' };
+        return contextFactory({
+            currentSheetId: 'id_1',
+            sheets: [
+                { name: 'One', id: 'id_1', order: 0, data: one },
+                { name: 'Two', id: 'id_2', order: 1, data: two },
+            ].map((sheet) => ({ ...sheet, calcChain: sheet.id === id ? [{ r: 0, c: 1, id }] : [] })),
+        }) as Context;
+    }
+    const growOne = (ctx: Context) =>
+        insertRowCol(ctx, { type: 'row', index: 3, count: 4, direction: 'rightbottom', id: 'id_1' });
+
+    it('a whole column on another sheet reads the rows an insert added', () => {
+        const ctx = workbook('=SUM(One!A:A)');
+        warmFormulaCellInfoMap(ctx);
+        growOne(ctx);
+        editCell(ctx, 6, 0, 5, 'id_1');
+        expect(ctx.sheets[1].data?.[0][1]?.v).toBe(6);
+    });
+
+    it('a whole column on its own sheet reads the rows an insert added', () => {
+        const ctx = workbook('=SUM(A:A)', 'id_1');
+        warmFormulaCellInfoMap(ctx);
+        growOne(ctx);
+        editCell(ctx, 6, 0, 5, 'id_1');
+        expect(ctx.sheets[0].data?.[0][1]?.v).toBe(6);
+    });
+
+    it('a sheet name reads the sheet added under it after a delete', () => {
+        const ctx = workbook('=One!A1');
+        warmFormulaCellInfoMap(ctx);
+        deleteSheet(ctx, 'id_1');
+        addSheet(ctx, 'id_3', false, 'One');
+        ctx.sheets[1].data = grid(4, 4);
+        editCell(ctx, 0, 0, 100, 'id_3');
+        expect(ctx.sheets[0].data?.[0][1]?.v).toBe(100);
+    });
+
+    it('a sheet name reads the sheet a peer renamed to it', () => {
+        const ctx = workbook('=Old!A1');
+        warmFormulaCellInfoMap(ctx);
+        ctx.sheets[0].name = 'Old';
+        ctx.formulaCache.updateFormulaCache(
+            ctx,
+            { patches: [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'Old' }], inversePatches: [] },
+            'redo',
+        );
+        editCell(ctx, 0, 0, 7, 'id_1');
+        expect(ctx.sheets[1].data?.[0][1]?.v).toBe(7);
     });
 });

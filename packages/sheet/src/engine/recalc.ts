@@ -8,6 +8,7 @@ import { createArrayResolver } from './cell-resolver';
 import { celldataToData, dataToCelldata } from './celldata';
 import { gridSize } from './defaults';
 import { getCalculationOrder } from './dependency-graph';
+import type { SheetExtent } from './dependency-index';
 import { cellsOf, DependencyIndex, dependencyBlocks } from './dependency-index';
 import { booleanDisplay, numberDisplay } from './format';
 import { FormulaEngine, isFormula } from './formula-engine';
@@ -26,14 +27,12 @@ import type {
 type WorkingSheet = { id: string; name: string; data: CellMatrix };
 
 // What extractDependencies reads: the pass's working sheets, or the editor's.
-type GraphCtx = {
+type WalkContext = {
     sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[];
     // Resolved references, as the editor's formulaCache keeps them: by the reference's text for one into another
     // sheet, by `${text}_${sheetId}` for one into the formula's own.
     cellTextToIndexList: Record<string, FormulaDependency>;
 };
-
-type Extent = { rows: number; columns: number };
 
 // A workbook needs the server's recalc when a sheet has formula cells but no calcChain, such as an import whose
 // recalc failed, or a workbook a tab from such a file was added to. The editor's ops and the import's recalc both
@@ -82,20 +81,22 @@ export function recalcSheets(
 ): Sheet[] {
     // 1. Materialize each sheet's dense data, by id.
     const working: WorkingSheet[] = [];
-    const indexById = new Map<string, number>();
+    const byId = new Map<string, WorkingSheet>();
     for (const sheet of sheets) {
         if (!sheet.id) continue;
-        indexById.set(sheet.id, working.length);
-        working.push({ id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) });
+        const w = { id: sheet.id, name: sheet.name, data: ensureWorkingData(sheet) };
+        byId.set(w.id, w);
+        working.push(w);
     }
 
-    const g: GraphCtx = { sheets: working, cellTextToIndexList: {} };
-    const extents = new Map<string, Extent>();
+    const walk: WalkContext = { sheets: working, cellTextToIndexList: {} };
+    const extents = new Map<string, SheetExtent>();
     for (const w of working) {
         let columns = 0;
         for (const row of w.data) columns = Math.max(columns, row?.length ?? 0);
         extents.set(w.id, { rows: w.data.length, columns });
     }
+    const extentOf = (sheetId: string) => extents.get(sheetId);
 
     // 2. Find the formula cells by scanning the data, never trusting calcChain, and index the ranges each one reads.
     const infoMap: FormulaCellInfoMap = {};
@@ -115,7 +116,7 @@ export function recalcSheets(
                 const key = `r${r}c${c}i${w.id}`;
                 let deps: FormulaDependency[];
                 try {
-                    deps = extractDependencies(g, f, w.id, w.data);
+                    deps = extractDependencies(walk, f, w.id, w.data);
                 } catch {
                     // A malformed formula must not stop the scan. It reads nothing here and still evaluates below.
                     deps = [];
@@ -132,9 +133,9 @@ export function recalcSheets(
                     color: 'w',
                 };
                 const indexed = deps.flatMap((dep) => withinSheet(dep, extents) ?? []);
-                blocks += dependencyBlocks(indexed);
+                blocks += dependencyBlocks(indexed, extentOf);
                 if (blocks > maxDependencyBlocks) throw new RangeError('Formula ranges past the dependency budget');
-                depIndex.set(key, indexed);
+                depIndex.set(key, indexed, extentOf);
             }
         }
     }
@@ -142,7 +143,7 @@ export function recalcSheets(
     const allInfos = Object.values(infoMap);
     if (allInfos.length === 0) {
         // No formulas: still write celldata and an empty calcChain, so the read gate sees the doc as computed.
-        return finalize(working, sheets, calcChainBySheet);
+        return finalize(byId, sheets, calcChainBySheet);
     }
 
     // 3. Link each formula to the formulas that read its cell: parents[key] means the formula at key reads this one.
@@ -171,9 +172,7 @@ export function recalcSheets(
         if (VOLATILE_RE.test(info.calc_funcStr)) continue;
         try {
             const result = engine.evaluate(info.calc_funcStr, info.id, resolver);
-            const idx = indexById.get(info.id);
-            if (idx == null) continue;
-            const rowArr = working[idx].data[info.r];
+            const rowArr = byId.get(info.id)?.data[info.r];
             if (!rowArr) continue;
             const existing = rowArr[info.c];
             if (existing == null) continue;
@@ -195,7 +194,7 @@ export function recalcSheets(
     overRead();
 
     // 6. Write celldata from the computed data, and stamp each sheet's calcChain.
-    return finalize(working, sheets, calcChainBySheet);
+    return finalize(byId, sheets, calcChainBySheet);
 }
 
 // A sheet's dense `data`, built from `celldata` when it has none, as the editor's initSheetData does: a resolver over
@@ -213,7 +212,7 @@ function ensureWorkingData(sheet: Sheet): CellMatrix {
 // The reference INDEX returns lies inside its range argument, so that argument covers it. OFFSET and INDIRECT build a
 // reference the text doesn't hold, which only matters once the engine can compute them.
 export function extractDependencies(
-    g: GraphCtx,
+    walk: WalkContext,
     formula: string,
     sheetId: string,
     data: CellMatrix | null | undefined,
@@ -222,8 +221,10 @@ export function extractDependencies(
     for (const token of tokenize(formula)) {
         // A token keeps the spaces around it, as in `=A1 + B1`.
         const reference = token.trim();
-        if (reference.length < 2 || !iscelldata(reference)) continue;
-        const range = resolveCellRange(g.sheets, g.cellTextToIndexList, reference, sheetId, data);
+        // resolveCellRange checks a reference that names a sheet with its own pattern, which also reads a quoted name
+        // on both ends of a range, as in 'My Data'!A1:'My Data'!B2.
+        if (reference.length < 2 || (!reference.includes('!') && !iscelldata(reference))) continue;
+        const range = resolveCellRange(walk.sheets, walk.cellTextToIndexList, reference, sheetId, data);
         if (range != null) dependencies.push(range);
     }
     return dependencies;
@@ -231,74 +232,64 @@ export function extractDependencies(
 
 // The operators a formula splits at. A `:` that joins a reference to a function call, as in A1:INDEX(…) or
 // INDEX(…):B3, is one too, or A1 would read as a range up to a column named INDEX.
-const OPERATORS = /==|!=|<>|<=|>=|[,()=+-/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
+const OPERATORS = /==|!=|<>|<=|>=|[-,()=+/*%&^><]|:(?=[A-Za-z_][\w.]*\()|(?<=\)):/;
 
 // Splits a formula at its operators, where a split on the operators alone would cut a quoted sheet name such as
 // '1-2' or a string. A double-quoted string is one token. A single-quoted sheet name is one token with the reference
-// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5.
+// after it, so ='1-2'!A1+5 gives '1-2'!A1 and 5. A name that ends a range joins its start, as in '1-2'!A1:'1-2'!B2.
 function tokenize(formula: string): string[] {
     let tokenStart = 0;
     let singleQuoteStart = -1;
     let doubleQuoteStart = -1;
     const tokens: string[] = [];
-    // The index in tokens of each single-quoted sheet name.
-    const sheetNameTokens: number[] = [];
+    // A single-quoted sheet name waits here for the token after it, its `!A1`.
+    let sheetName: string | null = null;
+    const push = (parts: string[]) => {
+        if (sheetName != null) {
+            parts[0] = sheetName + parts[0];
+            sheetName = null;
+        }
+        for (const part of parts) tokens.push(part);
+    };
     for (let j = 0; j < formula.length; j += 1) {
         const char = formula.charAt(j);
         if (char === "'" && doubleQuoteStart === -1) {
             if (singleQuoteStart === -1) {
-                if (tokenStart !== j) {
-                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
-                }
+                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
                 singleQuoteStart = j;
                 tokenStart = j;
-            } else {
+            } else if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
                 // Two quotes in a row are an escaped quote inside the name.
-                if (j < formula.length - 1 && formula.charAt(j + 1) === "'") {
-                    j += 1;
-                } else {
-                    tokenStart = j + 1;
-                    tokens.push(formula.substring(singleQuoteStart, tokenStart));
-                    sheetNameTokens.push(tokens.length - 1);
-                    singleQuoteStart = -1;
-                }
+                j += 1;
+            } else {
+                const name = formula.substring(singleQuoteStart, j + 1);
+                const rangeStart = formula.charAt(singleQuoteStart - 1) === ':' && tokens.at(-1)?.endsWith(':');
+                sheetName = rangeStart ? `${tokens.pop()}${name}` : name;
+                tokenStart = j + 1;
+                singleQuoteStart = -1;
             }
         } else if (char === '"' && singleQuoteStart === -1) {
             if (doubleQuoteStart === -1) {
-                if (tokenStart !== j) {
-                    tokens.push(...formula.substring(tokenStart, j).split(OPERATORS));
-                }
+                if (tokenStart !== j) push(formula.substring(tokenStart, j).split(OPERATORS));
                 doubleQuoteStart = j;
                 tokenStart = j;
+            } else if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
+                j += 1;
             } else {
-                if (j < formula.length - 1 && formula.charAt(j + 1) === '"') {
-                    j += 1;
-                } else {
-                    tokenStart = j + 1;
-                    tokens.push(formula.substring(doubleQuoteStart, tokenStart));
-                    doubleQuoteStart = -1;
-                }
+                tokenStart = j + 1;
+                push([formula.substring(doubleQuoteStart, tokenStart)]);
+                doubleQuoteStart = -1;
             }
         }
     }
-    if (tokenStart !== formula.length) {
-        tokens.push(...formula.substring(tokenStart).split(OPERATORS));
-    }
-    // Glue each sheet name to the token after it, its `!A1`. Back to front, so the splices don't move the indexes
-    // still to come.
-    for (let k = sheetNameTokens.length - 1; k >= 0; k -= 1) {
-        const index = sheetNameTokens[k];
-        if (index !== tokens.length - 1) {
-            tokens[index] += tokens[index + 1];
-            tokens.splice(index + 1, 1);
-        }
-    }
+    if (tokenStart !== formula.length) push(formula.substring(tokenStart).split(OPERATORS));
+    if (sheetName != null) tokens.push(sheetName);
     return tokens;
 }
 
 // A dependency cut to the cells its sheet holds, null when it holds none. Only a formula cell is looked up in the
 // index, and each lies in its sheet's data, so `SUM(A1:XFD1048576)` costs the blocks the sheet spans, not 16 million.
-function withinSheet(dep: FormulaDependency, extents: Map<string, Extent>): FormulaDependency | null {
+function withinSheet(dep: FormulaDependency, extents: ReadonlyMap<string, SheetExtent>): FormulaDependency | null {
     const cells = cellsOf(dep);
     const extent = cells && extents.get(cells.sheetId);
     if (!cells || extent == null) return null;
@@ -362,13 +353,10 @@ function writeCellValue(cell: Cell, result: EvaluationResult): void {
 }
 
 function finalize(
-    working: readonly WorkingSheet[],
+    byId: ReadonlyMap<string, WorkingSheet>,
     sheets: readonly Sheet[],
-    calcChainBySheet: Map<string, CalcChainEntry[]>,
+    calcChainBySheet: ReadonlyMap<string, CalcChainEntry[]>,
 ): Sheet[] {
-    const byId = new Map<string, WorkingSheet>();
-    for (const w of working) byId.set(w.id, w);
-
     return sheets.map((sheet) => {
         if (!sheet.id) return sheet;
         const w = byId.get(sheet.id);
