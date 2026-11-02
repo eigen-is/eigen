@@ -100,9 +100,9 @@ export function useArrowLabelFit(
     }, [elements, onFit]);
 }
 
-// The width patches for labels as they were when measuring began, read against the live scene. A load can outlast a
-// newer change, and the run that change started measures the label again, so a label whose text or font changed is
-// skipped here.
+// The width patches for labels as they were when measuring began, read against the latest rendered scene. That
+// scene can trail the Y.Doc for a moment, and the next render corrects it. A load can outlast a newer change, and the
+// run that change started measures the label again, so a label whose text or font changed is skipped here.
 function labelWidthPatches(
     labels: readonly { label: VectorArrowElement; loaded: boolean }[],
     scene: readonly VectorElement[],

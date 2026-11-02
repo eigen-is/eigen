@@ -167,8 +167,8 @@ type CanvasEditorProps = {
     viewport: 'infinite' | 'frame';
     // The active frame, or '' on the infinite canvas: the home stamped on every new element.
     frameId?: string;
-    // The host's style table (the same one its useCanvasDoc writes through), so a drag-create preview
-    // looks exactly like the element that lands.
+    // The host's style table, the same one its useCanvasDoc writes through, so a drag-create preview looks exactly like
+    // the element that lands.
     styleDefaults: StyleDefaults;
     tool: VectorTool;
     setTool: (t: VectorTool) => void;
@@ -321,11 +321,11 @@ export function CanvasEditor({
     // apps.
     const [hoveringSelectable, setHoveringSelectable] = useState(false);
     const [editing, setEditing] = useState<EditingState | null>(null);
-    // In-place rich-text editing. Separate from `editing` (the arrow-label TextOverlay session) because
-    // the two never coexist and each owns a different commit contract: a label commits once on close,
-    // an element's rich text writes on every change.
+    // In-place rich-text editing. It is separate from `editing`, the arrow label's TextOverlay session, because the two
+    // never coexist and each commits differently: a label commits once on close, and an element's rich text writes on
+    // every change.
     const [richTextEditId, setRichTextEditId] = useState<string | null>(null);
-    // The element whose kind's EditDialog a double-click opened (a chart's Edit data).
+    // The element whose kind's EditDialog a double-click opened, such as a chart's Edit data.
     const [editDialogId, setEditDialogId] = useState<string | null>(null);
     // The object context menu. Its item is the right-clicked element's id, and its rows act on the selection.
     const objectContextMenu = useContextMenu<string>();
@@ -361,18 +361,18 @@ export function CanvasEditor({
     );
     const ordered = useMemo(() => orderByFractionalIndex(visibleElements), [visibleElements]);
 
-    // The marked elements: those carrying at least one comment card, with the corner the mark sits on
-    // (a zero-size box, so boxToStyle maps it to the screen point at render time) and the card's color.
-    // A card id with no card is skipped: `comments` is not a declared yjsRoot, so restoring a version
-    // from before a delete brings the element's id back without its card.
+    // The marked elements: those carrying at least one comment card, with the card's color and the corner the mark sits
+    // on. The corner is a zero-size box, so boxToStyle maps it to the screen point at render time. A card id with no
+    // card is skipped: `comments` is not a declared yjsRoot, so restoring a version from before a delete brings the
+    // element's id back without its card.
     const commentedElements = useMemo(
         () =>
             ordered.flatMap((el) => {
                 const cardId = parseIdList(el.commentCardIds).find((id) => commentCards?.[id]);
                 if (!cardId) return [];
                 const box = elementBox(el);
-                // The corner travels with the element's rotation, like every other chrome layer, so the
-                // mark stays on a rotated shape instead of floating beside it.
+                // The corner travels with the element's rotation, like every other chrome layer, so the mark stays on
+                // a rotated shape instead of floating beside it.
                 const { x, y } = rotatePoint({ x: box.x + box.width, y: box.y }, boxCenter(box), box.angle);
                 return [
                     {
@@ -386,8 +386,8 @@ export function CanvasEditor({
         [ordered, commentCards],
     );
 
-    // The ringed elements. Only what this canvas renders: a match on another frame is revealed by the
-    // host activating that frame, and the ring follows.
+    // The ringed elements. Only what this canvas renders: a match on another frame is revealed by the host activating
+    // that frame, and the ring follows.
     const matchedElements = useMemo(
         () => (searchMatchedIds ? ordered.filter((el) => searchMatchedIds.has(el.id)) : []),
         [ordered, searchMatchedIds],
@@ -568,9 +568,9 @@ export function CanvasEditor({
     escRef.current = { hasSelection: selectedIds.length > 0, tool, toolLocked, dialogOpen };
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
-            // A dialog, a menu or a palette input owns its own Escape (close, clear). No gesture can be
-            // active while one is up, so skipping the whole handler is safe. A menu closes in the capture
-            // phase and is gone before this runs, but Radix marks the Escape it handled as prevented.
+            // A dialog, a menu or a palette input owns its own Escape, to close or to clear. No gesture can be active
+            // while one is up, so skipping the whole handler is safe. A menu closes in the capture phase and is gone
+            // before this runs, but Radix marks the Escape it handled as prevented.
             if (e.key !== 'Escape' || e.defaultPrevented || isTypingTarget() || escRef.current.dialogOpen) return;
             const g = gestureRef.current;
             const s = escRef.current;
@@ -715,9 +715,9 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it. An empty text box that paints nothing is deleted. A shape stays, because the user drew it. Otherwise the
-    // trailing seal closes the session's writes. It reads the live element: the session wrote through updateElement, so
-    // React state may be one tick behind.
+    // Close it. An empty text box that paints nothing is deleted. A shape stays, because the user drew it. Otherwise
+    // the trailing seal closes the session's writes. It reads the live element: the session wrote through
+    // updateElement, so React state may be one tick behind.
     const closeRichText = useCallback(() => {
         const id = richTextEditRef.current;
         richTextEditRef.current = null;
@@ -736,7 +736,7 @@ export function CanvasEditor({
         undoManager?.stopCapturing();
     }, [deleteElements, setSelectedIds, undoManager]);
 
-    // A paste carries no coordinates (unlike a drop), so it anchors on the visible viewport center.
+    // A paste carries no coordinates, unlike a drop, so it anchors on the visible viewport center.
     const viewportCenterScene = useCallback(() => {
         const rect = containerRef.current?.getBoundingClientRect();
         if (!rect) return { x: 0, y: 0 };
@@ -746,7 +746,7 @@ export function CanvasEditor({
     // Boxes at natural size for a batch of images, each fitted into the visible viewport without upscaling, centered on
     // `anchor`, and each next one offset by the cascade. Every image insert shares it.
     const imagePlacements = useCallback(
-        (intrinsics: (ImageSize | null)[], anchor: { x: number; y: number }) => {
+        (intrinsics: (ImageSize | null)[], anchor: Point) => {
             const rect = containerRef.current?.getBoundingClientRect();
             const { zoom: live } = viewportRef.current;
             const view = { width: (rect?.width ?? 0) / live, height: (rect?.height ?? 0) / live };
@@ -764,7 +764,7 @@ export function CanvasEditor({
     // an await between adds could split it past the undo window. Each element draws at once from its pending blob URL.
     // The swap to the real media name is a late write of its own, and useUploadFile shows the failure toast.
     const insertImageFiles = useCallback(
-        async (files: File[], anchor: { x: number; y: number }) => {
+        async (files: File[], anchor: Point) => {
             if (!mediaFolderId) return; // no folder to upload into
             const images = files.filter((f) => f.type.startsWith('image/'));
             if (!images.length) return;
@@ -1068,9 +1068,9 @@ export function CanvasEditor({
         if (touch.onPointerDown(e)) return;
         // A press that closes an open menu, such as File, only closes it.
         if (closesMenu) return;
-        // The open text editor stops its own presses, so a press that reaches the container lands outside
-        // it and ends the session. The session's effect lifts the viewport freeze on the next render. So
-        // this click only closes the editor, and the next one selects or draws.
+        // The open text editor stops its own presses, so a press that reaches the container lands outside it and ends
+        // the session. The session's effect lifts the viewport freeze on the next render. So this click only closes the
+        // editor, and the next one selects or draws.
         if (richTextEditRef.current) closeRichText();
         // The surface is select-none, so a run selected elsewhere would survive this click and keep ⌘C and ⌘X from the
         // element it selects.
@@ -1088,8 +1088,8 @@ export function CanvasEditor({
         if (!canEdit) return;
 
         const p = clientToScene(e.clientX, e.clientY);
-        // A creation gesture starting on the backdrop is ignored. Select and eraser still work out
-        // there, so a marquee may sweep across the page from outside.
+        // A creation gesture starting on the backdrop is ignored. Select and eraser still work out there, so a marquee
+        // may sweep across the page from outside.
         if (tool !== 'select' && tool !== 'eraser' && offPage(p)) return;
 
         // A freehand stroke, a line and the eraser run their own gestures. The tools hook takes the event for those
@@ -1170,8 +1170,8 @@ export function CanvasEditor({
         const scene = clientToScene(e.clientX, e.clientY);
         publishCursor(scene);
         const g = gestureRef.current;
-        // Pan first: a multi-point line draft leaves the surface unfrozen, so a space-pan can start
-        // mid-polyline and must keep driving over the draft's trailing point.
+        // Pan first: a multi-point line draft leaves the surface unfrozen, so a space-pan can start mid-polyline and
+        // must keep driving over the draft's trailing point.
         if (g?.kind === 'pan') {
             if (e.pointerId !== g.pointerId) return;
             panBy(e.clientX - g.lastX, e.clientY - g.lastY);
@@ -1353,7 +1353,8 @@ export function CanvasEditor({
         finishGesture(e.altKey);
     };
 
-    // The scan of every element is memoized. The map over the selection reads the live previews, so it runs each render.
+    // The scan of every element is memoized. The map over the selection reads the live previews, so it runs each
+    // render.
     const selectedElements = useMemo(() => ordered.filter((el) => selectedIds.includes(el.id)), [ordered, selectedIds]);
     const selectedRender = selectedElements.map(renderEl);
     const single = selectedRender.length === 1 ? selectedRender[0] : null;
@@ -1363,14 +1364,14 @@ export function CanvasEditor({
     // A single line or arrow with two points, and any elbow arrow, gets no transform box: its round end dots, and an
     // elbow's pin dots, are its whole affordance. The elbow check asks `elbow`, not the stored point count, because a
     // pinned elbow stores its whole polyline. A straight line of three or more points keeps the box.
-    const singleLinear2pt =
+    const singleDotsOnly =
         single !== null &&
         (single.type === 'line' || single.type === 'arrow') &&
         ((single.type === 'arrow' && single.elbow) || parsePoints(single.points).length <= 2);
     // The chrome hides during a create or marquee drag, so the grips don't flicker, during a vertex drag, so no stale
     // box lingers over the reshaped draft, and while a text editor is open. A move keeps it.
     const showChrome = !creating && !marquee && !textEditing && !drawing.active && !drawing.hiddenId;
-    const showTransform = showChrome && canEdit && single !== null && !singleLinear2pt;
+    const showTransform = showChrome && canEdit && single !== null && !singleDotsOnly;
 
     const cursor = pointerCursor({ panning, panMode, tool, hoveringSelectable });
     // The scene paints the infinite canvas's background. A frame paints its own, and the surface around it stays the
@@ -1447,8 +1448,8 @@ export function CanvasEditor({
         <div
             ref={containerRef}
             tabIndex={-1}
-            // overflow-clip for the same reason the page below uses it: the infinite canvas is not a
-            // scroll container, so a caret scroll must not be able to slide the scene under the chrome.
+            // overflow-clip for the same reason the page below uses it: the infinite canvas is not a scroll container,
+            // so a caret scroll must not be able to slide the scene under the chrome.
             className={cn(
                 'relative h-full w-full select-none overflow-clip touch-none outline-none',
                 canvasSurfaceClass(frame !== undefined),
@@ -1630,7 +1631,7 @@ export function CanvasEditor({
                 {drawing.handles}
                 {/* A dashed ring around a multiple selection, or a read-only single one. A line or arrow of two points
                     the user can edit shows only its handles. */}
-                {showChrome && !showTransform && unionBox && !(singleLinear2pt && canEdit) && (
+                {showChrome && !showTransform && unionBox && !(singleDotsOnly && canEdit) && (
                     <div
                         className="eigen-selection-ring eigen-selection-ring-dashed pointer-events-none absolute"
                         style={boxToStyle(unionBox)}
