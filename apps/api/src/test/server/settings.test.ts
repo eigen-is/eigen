@@ -37,7 +37,7 @@ import {
     getTestContext,
 } from '../setup';
 
-// A new mount answers with its id; a list or an update answers with the settings alone.
+// A new mount answers with its id. A list or an update answers with the settings alone.
 type AddedMount = Awaited<ReturnType<TeamHome['addMount']>>;
 
 describe('Server Settings', () => {

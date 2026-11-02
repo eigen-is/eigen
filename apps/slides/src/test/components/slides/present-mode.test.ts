@@ -2,8 +2,8 @@ import { describe, expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 
 // The predicate walks up from the clicked node, so `instanceof Element` needs the window's Element as the global one.
-// The module comes in after the window: it pulls in React and the vector UI, which bun keeps for the next test file,
-// and those must not load without a window.
+// The module is imported after the window is in place. It pulls in React and the vector UI, and bun keeps those
+// modules for the next test file, so they must not load without a window.
 installHappyDom();
 
 const { deckOwnsClick, presentStep } = await import('../../../components/slides/present-mode');
