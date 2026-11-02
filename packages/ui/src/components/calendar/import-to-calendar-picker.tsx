@@ -105,7 +105,7 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
                 <ErrorState
                     message="Could not load your calendars"
                     action={
-                        <Button type="button" variant="outline" onClick={() => refetch()}>
+                        <Button variant="outline" onClick={() => refetch()}>
                             Try again
                         </Button>
                     }
