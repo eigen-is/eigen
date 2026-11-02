@@ -109,7 +109,7 @@ export class CollabDocument {
         if (!dataDbPath) throw new ApiError(503, `${this.path.name} has no data.db yet`);
 
         // comments.db opens now, so the editor's first comments request finds it ready. It closes after a
-        // quiet minute like any reader's. Nothing waits for it, because that request reports any real
+        // few idle minutes like any reader's. Nothing waits for it, because that request reports any real
         // problem itself.
         if (commentsDbPath) {
             this.drive

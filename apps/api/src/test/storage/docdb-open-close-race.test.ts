@@ -590,7 +590,7 @@ describe('an open still loading from storage', () => {
     }, 10_000);
 });
 
-// A reader holds its database only while it runs. The database then closes after a quiet minute, and
+// A reader holds its database only while it runs. The database then closes after IDLE_CLOSE_MS, and
 // a close that comes earlier waits for the holder, for a few seconds at most.
 describe('holders', () => {
     afterEach(() => {
@@ -634,6 +634,23 @@ describe('holders', () => {
         jest.advanceTimersByTime(1);
         await slot?.tail;
         expect(slot?.db).toBeNull();
+    });
+
+    test('a second release of one hold lets go of nothing', async () => {
+        const { mount } = await createGatedLocalMount('release-twice');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        const first = await mount.holdDatabase(docConfig, dataDbId);
+        const second = await mount.holdDatabase(docConfig, dataDbId);
+        const slot = mount.documentDbs.get(dataDbId);
+
+        first.release();
+        first.release();
+        expect(slot?.holders).toBe(1);
+        expect(slot?.idleTimer).toBeNull();
+
+        second.release();
+        expect(slot?.holders).toBe(0);
+        expect(slot?.idleTimer).not.toBeNull();
     });
 
     test('a close waits for a reader in flight, which reads the open database', async () => {

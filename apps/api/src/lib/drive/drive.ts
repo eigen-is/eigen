@@ -1246,7 +1246,7 @@ export class Drive {
     // ---- Document databases ----
 
     // Runs fn with the database open, such as a chat room's data.db for one request. It closes after
-    // a quiet minute.
+    // a few idle minutes.
     public async withDatabase<S extends SchemaType, T>(
         mountId: string,
         config: DatabaseConfig<S>,

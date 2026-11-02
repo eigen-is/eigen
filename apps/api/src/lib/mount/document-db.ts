@@ -1,6 +1,6 @@
 // The document databases of a mount, such as a container's data.db and comments.db. Each one is a
 // SQLite working copy that is opened from storage, synced back to it and closed, one call at a time per
-// path. A reader holds one only while it runs, and the database closes after a quiet minute without
+// path. A reader holds one only while it runs, and the database closes after a few idle minutes without
 // holders. Mount is how callers reach it, and closeAllDatabases tears every one down when a Home closes
 // or a mount goes away.
 
@@ -16,11 +16,11 @@ import { paths } from './schema';
 import { markContainerContentDirty } from './search-index';
 import { getShutdownDrainDeadline } from './upload-limits';
 
-// A database with no holder stays open this long. On s3, and on a local mount that works on a temp
-// copy, an open is a download and a close an upload. So a chat that gets a message every few seconds
-// must not move its data.db both ways for each one. A close this late also never comes sooner than
-// the 30 s sync would.
-export const IDLE_CLOSE_MS = 60_000;
+// A database with no holder stays open as long as an idle Home does, five minutes. A close takes a
+// version snapshot, and on s3, or on a local mount that works on a temp copy, it is also an upload. So
+// a chat that gets a message now and then must not pay that for each one. The content reindex reads a
+// changed container again two minutes later, and it must not reopen what the idle close just closed.
+export const IDLE_CLOSE_MS = 5 * 60_000;
 // A close waits this long for the holders to let go. Then it closes anyway and logs, so a holder that
 // hangs can't hang a shutdown.
 export const HOLDER_WAIT_MS = 5_000;
@@ -56,7 +56,12 @@ export async function createDatabase<S extends SchemaType>(
     if (mount.documentDbs.has(pathId)) {
         throw new Error(`Mount.createDatabase ${pathId}: already in cache`);
     }
-    return openDocumentDb(mount, config, pathId, 'create');
+    return withDocumentDb(mount, pathId, async (slot) => {
+        const db = await openInSlot(mount, slot, config, pathId, 'create');
+        // Nobody holds a database that was just made, so it closes when idle, as after a last reader.
+        if (slot.holders === 0) armIdleClose(mount, pathId, slot);
+        return db;
+    });
 }
 
 // Runs fn with the database open, and closes it IDLE_CLOSE_MS after the last holder lets go. A close
@@ -91,7 +96,14 @@ export async function holdDatabase<S extends SchemaType>(
         slot.holders++;
         if (slot.idleTimer) clearTimeout(slot.idleTimer);
         slot.idleTimer = null;
-        return { db, release: () => releaseHold(mount, pathId, slot) };
+        // A second call of release must not let go for another holder.
+        let released = false;
+        const release = () => {
+            if (released) return;
+            released = true;
+            releaseHold(mount, pathId, slot);
+        };
+        return { db, release };
     });
 }
 
@@ -160,6 +172,11 @@ function releaseHold(mount: Mount, pathId: string, slot: DocumentDbSlot): void {
         slot.lastHolderGone();
         return;
     }
+    armIdleClose(mount, pathId, slot);
+}
+
+// Closes the slot's database IDLE_CLOSE_MS from now, unless a holder comes back first.
+function armIdleClose(mount: Mount, pathId: string, slot: DocumentDbSlot): void {
     if (!slot.db) return;
     slot.idleTimer = setTimeout(() => {
         slot.idleTimer = null;

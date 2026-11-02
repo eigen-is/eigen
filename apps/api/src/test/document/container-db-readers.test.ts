@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import * as Y from 'yjs';
 import { readChatContent } from '../../lib/document/chat';
@@ -17,13 +17,18 @@ describe('container database readers', () => {
     let home: Home;
     const mountId = 'default';
     let rootId: string;
+    let releaseHome: () => void;
 
     beforeAll(async () => {
         ctx = await getTestContext();
         const root = await driveGet<DrivePath>(ctx.alice.user.sessionToken, ctx.alice.user.id, mountId, 'root');
         rootId = root.id;
         home = await getHome(ctx.alice.user.id);
+        // The Home idles out as fast as a database does, so the fake clock below would close it too.
+        releaseHome = home.hold();
     });
+
+    afterAll(() => releaseHome());
 
     afterEach(() => {
         jest.useRealTimers();
@@ -42,6 +47,16 @@ describe('container database readers', () => {
         jest.advanceTimersByTime(IDLE_CLOSE_MS);
         await slot?.tail;
     }
+
+    test('a new board that nobody reads closes after the idle window', async () => {
+        jest.useFakeTimers();
+        const board = await home.drive.create(mountId, rootId, 'created-never-read', 'stickies');
+        const { mount, dataDbId } = await dataDbOf(board.id);
+
+        expect(mount.documentDbs.get(dataDbId)?.db).toBeTruthy();
+        await passIdleWindow(mount, dataDbId);
+        expect(mount.documentDbs.get(dataDbId)?.db ?? null).toBeNull();
+    });
 
     test('readStickiesContent leaves the board closed after the idle window', async () => {
         const board = await home.drive.create(mountId, rootId, 'reader-closes-board', 'stickies');

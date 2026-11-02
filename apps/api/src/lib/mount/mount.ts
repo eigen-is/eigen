@@ -1324,7 +1324,7 @@ export class Mount {
         return documentDb.createDatabase(this, config, pathId);
     }
 
-    // Runs fn with the database open, which then closes after a quiet minute. A reader uses this
+    // Runs fn with the database open, which then closes after a few idle minutes. A reader uses this
     // rather than openDatabase, so no close runs under it.
     public async withDatabase<S extends SchemaType, T>(
         config: DatabaseConfig<S>,
