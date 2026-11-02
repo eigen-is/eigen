@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
 import type { Context } from '../../index';
-import { handleCut } from '../../state/modules/clipboard';
+import { handleCut } from '../../state/events/copy';
 import { contextFactory } from './factories/context';
 
 // sessionStorage is not available in Bun's test environment.

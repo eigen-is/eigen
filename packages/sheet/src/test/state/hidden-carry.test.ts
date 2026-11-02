@@ -10,9 +10,9 @@
 import { describe, expect, test } from 'bun:test';
 import type { DataVerificationRule } from '@workspace/lib/sheets';
 import type { Context } from '../../state/context';
-import { handleCopy } from '../../state/events/copy';
+import { handleCopy, handleCut } from '../../state/events/copy';
 import { handlePasteByClick } from '../../state/events/paste';
-import { consumePendingCopy, handleCut } from '../../state/modules/clipboard';
+import { consumePendingCopy } from '../../state/modules/clipboard';
 import { onCellsMoveEnd } from '../../state/modules/move-cells';
 import { pasteHandlerOfPaintModel, rangeValueToClipboard } from '../../state/modules/selection';
 import { handleFormatPainter } from '../../state/modules/toolbar';

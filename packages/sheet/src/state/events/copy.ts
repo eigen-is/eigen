@@ -104,3 +104,7 @@ export function handleCopy(ctx: Context, { cut = false }: { cut?: boolean } = {}
     ctx.pasteIsCut = cut;
     return true;
 }
+
+export function handleCut(ctx: Context) {
+    handleCopy(ctx, { cut: true });
+}
