@@ -6,19 +6,7 @@
 import { bundledFontOfStack, readCssFontSize } from '@workspace/lib/constants/fonts';
 import type { CellBorderSides, ConditionalFormatRule, DataVerificationRule } from '@workspace/lib/sheets';
 import { BORDER_SIDE_CSS, SHEET_DEFAULT_FONT_SIZE } from '@workspace/lib/sheets';
-import {
-    cloneDeep,
-    forEach,
-    fromPairs,
-    has,
-    includes,
-    initial,
-    isEmpty,
-    isNil,
-    isPlainObject,
-    trim,
-    zip,
-} from 'es-toolkit/compat';
+import { cloneDeep, forEach, has, includes, isEmpty, isNil, isPlainObject, trim } from 'es-toolkit/compat';
 import { cfSplitRange, withCfRanges } from '../../engine/conditional-format';
 import { numberDisplay, parseCellInput, richText } from '../../engine/format';
 import { functionCopy } from '../../engine/formula-shift';
@@ -955,6 +943,29 @@ function handleFormulaStringPaste(ctx: Context, formulaStr: string) {
     ctx.formulaCache.execFunctionGlobalData = null;
 }
 
+// Reads a pasted <style> block into each rule's declarations, keyed by selector. Office wraps the block in an
+// HTML comment and writes properties a browser's own CSS parser drops, such as mso-rotate, so the paste reads
+// the text itself. A rule for `td.xl65` is filed under `.xl65`. An at-rule such as @page or @media is skipped,
+// with the rules nested inside it.
+function readStyleRules(css: string): Map<string, Record<string, string>> {
+    const rules = new Map<string, Record<string, string>>();
+    const text = css
+        .replace(/<!--|-->|\/\*[\s\S]*?\*\//g, ' ')
+        .replace(/@[^{};]*(?:;|\{(?:[^{}]|\{[^{}]*\})*\})/g, ' ');
+    for (const [, selectors, body] of text.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+        const declarations: Record<string, string> = {};
+        for (const [declaration] of body.matchAll(/(?:[^;"']|"[^"]*"|'[^']*')+/g)) {
+            const colon = declaration.indexOf(':');
+            if (colon > 0) declarations[declaration.slice(0, colon).trim()] = declaration.slice(colon + 1).trim();
+        }
+        for (const selector of selectors.split(',')) {
+            const key = selector.trim().replace(/^td(?=\.)/, '');
+            rules.set(key, { ...rules.get(key), ...declarations });
+        }
+    }
+    return rules;
+}
+
 export function handlePaste(ctx: Context, e: ClipboardEvent) {
     const allowEdit = isAllowEdit(ctx);
     if (!allowEdit) return;
@@ -1098,15 +1109,8 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                 let r = 0;
                 const borderInfo: Record<string, CellBorderSides> = {};
-                const styleInner = parsed.querySelectorAll('style')[0]?.innerHTML || '';
-                const patternReg = /{([^}]*)}/g;
-                const patternStyle = styleInner.match(patternReg);
-                const nameReg = /^\S.*/gm;
-                const patternName = initial(styleInner.match(nameReg));
-                const allStyleList: Record<string, string> =
-                    patternName.length === patternStyle?.length && typeof patternName === typeof patternStyle
-                        ? fromPairs(zip(patternName, patternStyle))
-                        : {};
+                const styleRules = readStyleRules(parsed.querySelector('style')?.textContent ?? '');
+                const tdVerticalAlign = styleRules.get('td')?.['vertical-align'];
 
                 const index = getSheetIndex(ctx, ctx.currentSheetId);
                 const anchor = ctx.selections?.[0];
@@ -1129,8 +1133,6 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                         }
 
                         forEach(tr.querySelectorAll('td'), (td) => {
-                            // build cell from td
-                            const { className } = td;
                             const cell: Cell = {};
                             const txt = td.innerText || td.innerHTML;
                             if (trim(txt).length === 0) {
@@ -1140,18 +1142,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                 const mask = parseCellInput(txt);
                                 [cell.m, cell.ct, cell.v] = mask;
                             }
-                            const styleString =
-                                typeof allStyleList[`.${className}`] === 'string'
-                                    ? allStyleList[`.${className}`]
-                                          .substring(1, allStyleList[`.${className}`].length - 1)
-                                          .split(/\n\s*/)
-                                    : [];
-                            const styles: Record<string, string> = {};
-                            forEach(styleString, (s) => {
-                                const styleList = s.split(':');
-                                if (styleList.length < 2) return;
-                                styles[styleList[0].trim()] = styleList[1].replace(';', '').trim();
-                            });
+                            const styles = styleRules.get(`.${td.className}`) ?? {};
                             if (!isNil(styles.border)) td.style.border = styles.border;
                             let bg: string | undefined = td.style.backgroundColor || styles.background;
                             if (bg === 'rgba(0, 0, 0, 0)' || isEmpty(bg)) {
@@ -1160,9 +1151,9 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
 
                             cell.bg = bg;
 
-                            const fontWight = td.style.fontWeight;
+                            const fontWeight = td.style.fontWeight;
                             cell.bl =
-                                (fontWight.toString() === '400' || fontWight === 'normal' || isEmpty(fontWight)) &&
+                                (fontWeight === '400' || fontWeight === 'normal' || isEmpty(fontWeight)) &&
                                 !includes(styles['font-style'], 'bold') &&
                                 (!styles['font-weight'] || styles['font-weight'] === '400')
                                     ? 0
@@ -1205,14 +1196,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                 cell.ht = 1;
                             }
 
-                            const regex = /vertical-align:\s*(.*?);/;
-                            const tdStyle = allStyleList.td;
-                            const tdMatch = tdStyle ? tdStyle.match(regex) : null;
-                            const vt =
-                                td.style.verticalAlign ||
-                                styles['vertical-align'] ||
-                                (tdMatch && tdMatch.length > 0 && tdMatch[1]) ||
-                                'top';
+                            const vt = td.style.verticalAlign || styles['vertical-align'] || tdVerticalAlign || 'top';
                             if (vt === 'middle') {
                                 cell.vt = 0;
                             } else if (vt === 'top' || vt === 'text-top') {
@@ -1221,10 +1205,7 @@ export function handlePaste(ctx: Context, e: ClipboardEvent) {
                                 cell.vt = 2;
                             }
 
-                            if ('mso-rotate' in styles) {
-                                const rt = styles['mso-rotate'];
-                                cell.rt = parseFloat(rt);
-                            }
+                            if ('mso-rotate' in styles) cell.rt = parseFloat(styles['mso-rotate']);
 
                             while (c < colLen && !isNil(data[r][c])) {
                                 c += 1;
