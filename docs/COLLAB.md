@@ -56,7 +56,7 @@ Three failed opens close with their own codes, so the tab knows what to do ([Eac
 
 Binary frames arrive as Bun `Buffer`s. A string frame is `ping` or `pong`, or it is ignored.
 
-The route keeps its per-socket state (the `opened` gate, the drive, the document, the keepalive) in a `WeakMap` keyed by the raw Bun socket. That socket is the one identity that survives Elysia's fresh wrapper per event. User and params come from the typed `ws.data`.
+The route keeps its per-socket state (the `opened` gate, the drive, the document, the keepalive, the hold on the Home) in a `WeakMap` keyed by the raw Bun socket. That socket is the one identity that survives Elysia's fresh wrapper per event. User and params come from the typed `ws.data`.
 
 ## Read is checked at open, write on every message
 
@@ -76,7 +76,7 @@ So a server-side writer opens the document right before it writes, with no await
 
 Once `Drive.destruct` starts its sweep of the open documents, the registry (`apps/api/src/lib/drive/collab-registry.ts`) answers every open with a 503. A document that registered after that sweep would never be destructed, and the mount teardown that follows would close its database under it.
 
-One mount closes the same way. When a team mount gets new storage or is turned off, `Drive.removeMount` destructs that mount's open documents before it closes the mount's databases, so each document saves its last edits. The registry then answers an open on the old `Mount` with a 503. The closed sockets reconnect to the new `Mount`, and the handshake syncs the edits a tab made in between. `apps/api/src/test/drive/collab-registry.test.ts` pins it.
+One mount closes the same way. When a team mount gets new storage or is turned off, `Drive.removeMount` destructs that mount's open documents before it closes the mount's databases, so each document saves its last edits. The registry then answers an open on the old `Mount` with a 503. A destruct closes its sockets with the retry close, 1013, so each tab reconnects to the new `Mount` after its retry delay, and the handshake syncs the edits a tab made in between. `apps/api/src/test/drive/collab-registry.test.ts` pins it.
 
 A trash closes the documents under a path, then the databases, and only then marks the path trashed. A document opened in between would save its edits into a closed `data.db`. So while `Drive.deletePath` runs, the registry answers an open of the path or of anything under it with a 503 ([SOFT-DELETE.md](SOFT-DELETE.md#trash-closes-what-is-open-under-the-item-first)). The registry collects those ids before the trash starts, so a document created or moved inside the folder meanwhile is not refused. Its database closes with the rest, so the trash closes every document still open under the path right after `Mount.trashPath` returns.
 
@@ -96,7 +96,9 @@ The walker handles every Y subtype an Eigen container uses (`Y.Map`, `Y.Array`, 
 
 ## Home replacement closes every socket
 
-When a backup restore replaces a home's folder, `closeCollabConnectionsForHome` (`apps/api/src/lib/collab/connections.ts`) closes every socket of that home with `COLLAB_STORAGE_UNAVAILABLE_CLOSE`, and a socket that connects while the restore runs meets the home's 503 and the same close. The tab keeps its document and retries, so the close alone does not stop it from syncing its old state back. The home's data epoch does: a restore rotates it once the new folder is whole, so the first reconnect after it names the old epoch and gets `COLLAB_HOME_REPLACED_CLOSE`, and the tab reloads instead of syncing the document it holds back over the restored copy. A restore that fails leaves the epoch, and the reconnect syncs the tab's edits. See [BACKUP.md](BACKUP.md).
+A socket holds the Home of its document's owner (`Drive.holdHome`) from the moment `getSharedDrive` finds it until `cleanupSession` lets go, so the Home never idles out under an editor who only types. A Home that closes anyway, such as for a backup restore, a deletion or the shutdown, destructs its open documents, and `CollabDocument.destruct` closes every socket with `COLLAB_STORAGE_UNAVAILABLE_CLOSE`. A Home that began to close after `getSharedDrive` found it refuses the hold with a 503, and a socket that connects while a restore runs meets the restore's 503. The route closes both with the same code. `apps/api/src/test/collab/collab-home-pin.test.ts` pins the hold and the close.
+
+The tab keeps its document and retries, so the close alone does not stop it from syncing its old state back. The home's data epoch does: a restore rotates it once the new folder is whole, so the first reconnect after it names the old epoch and gets `COLLAB_HOME_REPLACED_CLOSE`, and the tab reloads instead of syncing the document it holds back over the restored copy. A restore that fails leaves the epoch, and the reconnect syncs the tab's edits. See [BACKUP.md](BACKUP.md).
 
 A tab that was offline through a restore, or through `./eigen restore`, has no socket to close. The home's data epoch catches it ([SSE.md](SSE.md#a-restore-reloads-every-tab-of-the-home) defines it). Every open sends the epoch of the document's home in a `COLLAB_EPOCH_MESSAGE` frame before the sync, `useCollabDoc` reconnects with `?epoch=`, and the route closes a reconnect that names another epoch with `COLLAB_HOME_REPLACED_CLOSE` before it syncs anything. A restart keeps the epoch, so an offline edit still syncs. An update changes it, so a tab from before the update reloads without syncing its edits: they may hold structures the new code no longer reads. The hook keeps BroadcastChannel off until the first epoch arrives and then joins a channel named after it: a reloaded tab never takes state from a sibling tab still holding the document from before the restore.
 
