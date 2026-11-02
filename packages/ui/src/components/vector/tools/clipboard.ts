@@ -16,7 +16,7 @@ import { sanitizeToLightEditorHtml } from '@workspace/lib/html-dom';
 import type { EigenClipboardData, EigenClipboardItem } from '@workspace/lib/types/clipboard';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { VectorElement, VectorMeta } from '@workspace/lib/vector';
-import { buildElementsClipboardItem, canvasPxToPt, eigenMediaHref, sceneToSvg } from '@workspace/lib/vector';
+import { buildElementsClipboardItem, canvasPxToPt, eigenMediaHref, isTextBox, sceneToSvg } from '@workspace/lib/vector';
 
 // The items a foreign host reads: an image item per selected image (also the cross-mount re-upload
 // manifest a canvas→canvas paste keys on by `mediaName`), a text item per text box carrying
@@ -36,7 +36,7 @@ function foreignItems(
         } else if (el.type === 'chart') {
             const item = buildChartClipboardItem({ chart: el, box, look: el });
             if (item) items.push(item);
-        } else if (el.type === 'rectangle' && el.autoFit) {
+        } else if (isTextBox(el)) {
             items.push(
                 buildTextClipboardItem({
                     text: stripTagsServer(el.html),
@@ -86,7 +86,7 @@ function selectionSvg(
     resolveMediaPath: (name: string) => DrivePath | undefined,
 ): string | undefined {
     if (selected.length === 0) return undefined;
-    const textBoxes = selected.every((el) => el.type === 'rectangle' && el.autoFit);
+    const textBoxes = selected.every(isTextBox);
     if (textBoxes || selected.every((el) => el.type === 'chart')) return undefined;
     if (selected.length > CLIPBOARD_SVG_MAX_ELEMENTS) return undefined;
     // The `html` of a text box or a shape is a stored scalar, so it arrives verbatim from any peer with write
@@ -150,7 +150,7 @@ export function buildSelectionData(
 export function selectionPlainText(ordered: VectorElement[], selectedIds: string[]): string | undefined {
     const texts: string[] = [];
     for (const el of ordered) {
-        if (!selectedIds.includes(el.id) || el.type !== 'rectangle' || !el.autoFit) continue;
+        if (!selectedIds.includes(el.id) || !isTextBox(el)) continue;
         const text = stripTagsServer(el.html);
         if (text.length > 0) texts.push(text);
     }

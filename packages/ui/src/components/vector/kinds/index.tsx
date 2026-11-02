@@ -5,6 +5,7 @@
 
 import type { LetterKey, NumberKey } from '@tanstack/react-hotkeys';
 import type { NewVectorElement, VectorElement, VectorElementPatch, VectorElementType } from '@workspace/lib/vector';
+import { isTextBox } from '@workspace/lib/vector';
 import type { LucideIcon } from 'lucide-react';
 import {
     ChartColumn,
@@ -74,8 +75,11 @@ export const ELEMENT_KIND_UI: Record<VectorElementType, ElementKindUi> = {
     image: { icon: ImageIcon, label: 'Image', PanelSection: ImagePanelSection },
 };
 
-// The name an element shows, such as the panel's title or a comment's anchor. A text box is a rectangle that fits its
-// text, so it shows as Text rather than as a rectangle.
+// A text box is a rectangle that fits its text, not a kind, so its name lives beside the kinds' own: the Text tool and
+// every text box show it.
+export const TEXT_BOX_LABEL = 'Text';
+
+// The name an element shows, such as the panel's title or a comment's anchor.
 export function elementLabel(el: VectorElement): string {
-    return el.type === 'rectangle' && el.autoFit ? 'Text' : ELEMENT_KIND_UI[el.type].label;
+    return isTextBox(el) ? TEXT_BOX_LABEL : ELEMENT_KIND_UI[el.type].label;
 }

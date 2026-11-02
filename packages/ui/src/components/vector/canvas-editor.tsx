@@ -43,6 +43,7 @@ import {
     getElementsBounds,
     IMAGE_CASCADE_OFFSET,
     isLinearElement,
+    isTextBox,
     isTextual,
     isTransparentColor,
     marqueeMode,
@@ -774,17 +775,16 @@ export function CanvasEditor({
         setRichTextEditId(id);
     };
 
-    // Close it. An empty text box (a rectangle with `autoFit`) that paints nothing is deleted. A shape stays, because
-    // the user drew it.
-    // Otherwise the trailing seal closes the session's writes. Reads the LIVE element: the session wrote
-    // through updateElement, so React state may be one tick behind.
+    // Close it. An empty text box that paints nothing is deleted. A shape stays, because the user drew it. Otherwise the
+    // trailing seal closes the session's writes. It reads the live element: the session wrote through updateElement, so
+    // React state may be one tick behind.
     const closeRichText = useCallback(() => {
         const id = richTextEditRef.current;
         richTextEditRef.current = null;
         setRichTextEditId(null);
         if (!id) return;
         const el = visibleRef.current.find((e) => e.id === id);
-        if (el && el.type === 'rectangle' && el.autoFit && paintsNothing(el)) {
+        if (el && isTextBox(el) && paintsNothing(el)) {
             // Sealed on BOTH sides: without the leading seal the delete lands inside Y.UndoManager's 500ms
             // captureTimeout and merges into the session's last keystroke, so whether it is its own undo
             // step would depend on how fast the user clicked away.

@@ -19,9 +19,8 @@ import type {
 import {
     canvasImageScene,
     canvasImageSlices,
+    drawsTextBody,
     eigenMediaHref,
-    hasText,
-    isTextual,
     layerInnerHtml,
     richTextCssText,
     richTextSvg,
@@ -64,32 +63,27 @@ export async function downloadCanvasImage(
 // Each text box and shape with text, laid out as its canvas layer is: the layer's own markup and style at
 // the box's size, under the app's canvas-text.css. It is read back as where every character landed.
 async function measureRichText(elements: VectorElement[]): Promise<Map<string, MeasuredRichText>> {
-    const boxes = elements
-        .filter(
-            (el): el is VectorTextualElement =>
-                isTextual(el) && ((el.type === 'rectangle' && el.autoFit) || hasText(el)),
-        )
-        .map((el) => {
-            const host = document.createElement('div');
-            host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
-            // Stored html arrives verbatim from any peer, so it is sanitized here as at every seam that renders it.
-            host.innerHTML = layerInnerHtml({
-                svg: '',
-                html: sanitizeToLightEditorHtml(el.html),
-                style: richTextCssText(el),
-            });
-            // A list marker is a ::marker no Range reaches, so the measured copy carries a number as text where the
-            // browser draws it: its own figures, ending where the item starts. A disc is no text (discOf).
-            for (const item of host.querySelectorAll<HTMLLIElement>('ol > li')) {
-                const marker = document.createElement('span');
-                marker.style.cssText = 'position:absolute;right:100%;white-space:pre;font-variant-numeric:tabular-nums';
-                marker.textContent = `${[...(item.parentElement?.children ?? [])].indexOf(item) + 1}. `;
-                item.style.position = 'relative';
-                item.prepend(marker);
-            }
-            document.body.append(host);
-            return { el, host };
+    const boxes = elements.filter(drawsTextBody).map((el) => {
+        const host = document.createElement('div');
+        host.style.cssText = `position:fixed;left:0;top:0;width:${el.width}px;height:${el.height}px;visibility:hidden;pointer-events:none`;
+        // Stored html arrives verbatim from any peer, so it is sanitized here as at every seam that renders it.
+        host.innerHTML = layerInnerHtml({
+            svg: '',
+            html: sanitizeToLightEditorHtml(el.html),
+            style: richTextCssText(el),
         });
+        // A list marker is a ::marker no Range reaches, so the measured copy carries a number as text where the
+        // browser draws it: its own figures, ending where the item starts. A disc is no text (discOf).
+        for (const item of host.querySelectorAll<HTMLLIElement>('ol > li')) {
+            const marker = document.createElement('span');
+            marker.style.cssText = 'position:absolute;right:100%;white-space:pre;font-variant-numeric:tabular-nums';
+            marker.textContent = `${[...(item.parentElement?.children ?? [])].indexOf(item) + 1}. `;
+            item.style.position = 'relative';
+            item.prepend(marker);
+        }
+        document.body.append(host);
+        return { el, host };
+    });
     try {
         // Laying the boxes out asks for every face they draw in; the characters are read once those have loaded.
         for (const { host } of boxes) host.getBoundingClientRect();

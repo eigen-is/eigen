@@ -1,11 +1,11 @@
-// A text box's auto-fit seam: the ONE place the stored height of a rectangle with `autoFit` is measured back off the
-// text that renders in it. It hangs on the layer, so every surface that renders a live box runs it — the painted
+// A text box's auto-fit seam: the ONE place the stored height of a text box is measured back off the text that renders
+// in it. It hangs on the layer, so every surface that renders a live box runs it — the painted
 // layer AND the in-place editor mounted inside that same layer. A typed line, a paste, a panel change
 // (inset, font, size, leading, tracking) and a width resize therefore all re-fit through one path
 // instead of one write seam per feature, and a peer's change re-fits on every client that renders it.
 
 import type { VectorElement } from '@workspace/lib/vector';
-import { richTextFitHeight } from '@workspace/lib/vector';
+import { isTextBox, textBoxFitHeight } from '@workspace/lib/vector';
 import type { RefObject } from 'react';
 import { useLayoutEffect } from 'react';
 
@@ -27,7 +27,7 @@ export type FitHeight = (id: string, height: number, editing: boolean) => void;
 // or the in-place editor's box, which carries the same CSS and holds the editor as its one block child.
 // Last, not first: a painted box draws its backdrop svg before the body, in both of those states.
 // No handler (a thumbnail, present mode, a read-only canvas) means no measuring at all.
-export function useRichTextAutoFit(
+export function useTextBoxAutoFit(
     host: RefObject<HTMLDivElement | null>,
     el: VectorElement,
     onFit: FitHeight | undefined,
@@ -35,11 +35,11 @@ export function useRichTextAutoFit(
 ) {
     useLayoutEffect(() => {
         const body = host.current?.lastElementChild;
-        if (!onFit || el.type !== 'rectangle' || !el.autoFit || !body) return;
+        if (!onFit || !isTextBox(el) || !body) return;
         const box = el;
         const fit = () => {
             const content = textBodyHeight(body);
-            const height = content === null ? null : richTextFitHeight(box, content);
+            const height = content === null ? null : textBoxFitHeight(box, content);
             if (height !== null) onFit(box.id, height, editing);
         };
         fit();

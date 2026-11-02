@@ -100,8 +100,8 @@ export type Textual = {
     padding: number; // px inset between the box edge and the text; the box keeps its stored size
 };
 
-// A rectangle with `autoFit` is a text box: it grows to fit its text and is deleted when its text is emptied. A plain
-// one keeps its size, lets text that does not fit spill out, and stays when empty.
+// A rectangle with `autoFit` is a text box: it grows to fit its text, and an empty one that paints nothing is deleted
+// when its editor closes. A plain one keeps its size, lets text that does not fit spill out, and stays when empty.
 export type VectorRectangleElement = VectorElementBase &
     Fillable &
     Textual & { type: 'rectangle'; corners: Corners; autoFit: boolean };

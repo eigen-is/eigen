@@ -1,5 +1,5 @@
-// Each element as the DrawingML shape that draws it, its box, geometry, fill and text, each length in the deck's EMU; a
-// chart as a graphic frame showing its own chart part.
+// Each element as the DrawingML shape that draws it: its box, geometry, fill and text, each length in the deck's EMU. A
+// chart is a graphic frame showing its own chart part.
 
 import { gradientStops } from '@workspace/lib/background';
 import { readChartLook, readChartSpec } from '@workspace/lib/charts';
@@ -16,9 +16,9 @@ import {
     capabilitiesOf,
     cornerRadius,
     diamondOutline,
-    hasText,
+    drawsTextBody,
     isBordered,
-    isTextual,
+    isTextBox,
     isTransparentFill,
     parseFill,
     parsePoints,
@@ -48,8 +48,7 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     const opacity = el.opacity / 100;
     countPlainLook(el, slide);
     // A shape writes a text body only once it holds text. A text box writes one even empty, as PowerPoint does.
-    const text =
-        isTextual(el) && ((el.type === 'rectangle' && el.autoFit) || hasText(el)) ? textXml(el, slide, opacity) : '';
+    const text = drawsTextBody(el) ? textXml(el, slide, opacity) : '';
     switch (el.type) {
         case 'rectangle': {
             // A text box is marked txBox. A rounded preset insets its text by its corners, where Eigen's keeps the box,
@@ -145,8 +144,9 @@ export function elementXml(el: VectorElement, slide: Slide): string {
     }
 }
 
-// An element's text as a text body, inset by its padding and its border, as the canvas insets it. A text box's body
-// grows its shape to its text, as the canvas grows the box.
+// An element's text as a text body, inset by its padding and its border, as the canvas insets it. A top-aligned text
+// box's body grows its shape to its text, as the canvas grows the box. A centered or bottom-aligned one keeps its height,
+// because PowerPoint shrinks a growing shape to its text on the next edit, which would move that text up.
 function textXml(el: VectorTextualElement, slide: Slide, opacity: number): string {
     const inset = el.padding + (isBordered(el) ? el.strokeWidth : 0);
     const paragraphs = paragraphsOf(el.html);
@@ -160,7 +160,7 @@ function textXml(el: VectorTextualElement, slide: Slide, opacity: number): strin
         strike: el.textDecoration === 'line-through',
         inset,
         wrap: true,
-        autoFit: el.type === 'rectangle' && el.autoFit,
+        autoFit: isTextBox(el) && el.verticalAlign === 'top',
         opacity,
     });
 }

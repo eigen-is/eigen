@@ -1,6 +1,6 @@
 // An element's HTML as the paragraphs and runs of a DrawingML text body, laid out as the canvas's text stylesheet lays
-// it out: its lists, quotes, links and marks, and its sizes and spacing in the deck's points. A text box's body grows
-// its shape to its text, as the canvas grows the box.
+// it out: its lists, quotes, links and marks, and its sizes and spacing in the deck's points. Its caller says whether
+// the body grows its shape to its text or leaves the shape its size.
 
 import { isElement } from '@workspace/lib/html';
 import type { TextAlign, VerticalAlign } from '@workspace/lib/vector';
@@ -52,8 +52,7 @@ type TextBox = {
     lineHeight: number;
     inset: number;
     wrap: boolean;
-    // Whether the body grows its shape to its text (a:spAutoFit), as a text box grows. Otherwise the shape keeps its
-    // size and the text spills.
+    // Whether the body grows its shape to its text (a:spAutoFit). Otherwise the shape keeps its size and the text spills.
     autoFit: boolean;
     opacity: number;
 };

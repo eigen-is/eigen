@@ -14,13 +14,12 @@ import { capPreviewElements } from './preview-scene';
 
 const EMPTY_PREVIEW_HEIGHT = 120;
 
-// The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The
-// reader is the trust boundary for every scalar field (XML-invalid characters stripped, colors
-// reduced to hex or 'transparent', coordinates clamped) but NOT for a rich-text box's `html`, which
-// it caps and cleans without filtering tags: each of those goes through the shared ref restriction
-// first, so a collaborator's `<img src=https://…>` or `background:url(https://…)` cannot beacon
-// every viewer. The assembled page then goes through DOMPurify as a whole, after the compositor has
-// added the media hrefs and `url(#…)` gradient refs of its own that must survive.
+// The body renders as live DOM in the drive hero and the preview pane, so it is filtered twice. The reader is the trust
+// boundary for every scalar field: it strips XML-invalid characters, reduces colors to hex or 'transparent' and clamps
+// coordinates. It only caps and cleans the `html` of a text box or a shape, without filtering tags. So that html first
+// goes through the shared ref restriction, and a collaborator's `<img src=https://…>` or `background:url(https://…)`
+// cannot beacon every viewer. The assembled page then goes through DOMPurify as a whole, after the compositor has added
+// its own media hrefs and `url(#…)` gradient refs, which must survive.
 export function renderEigenvectorPreviewBody(
     doc: Y.Doc,
     mediaUrls: Map<string, string>,

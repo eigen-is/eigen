@@ -1,14 +1,9 @@
 import { afterAll, describe, expect, test } from 'bun:test';
 import type { VectorElement, VectorRectangleElement } from '@workspace/lib/vector';
-import {
-    DEFAULT_ELEMENT_PROPS,
-    richTextFitHeight,
-    textBoxDefaults,
-    VECTOR_STYLE_DEFAULTS,
-} from '@workspace/lib/vector';
+import { DEFAULT_ELEMENT_PROPS, textBoxDefaults, textBoxFitHeight, VECTOR_STYLE_DEFAULTS } from '@workspace/lib/vector';
 import { Window } from 'happy-dom';
 import type { FitHeight } from '../../../components/vector/text-fit';
-import { textBodyHeight, useRichTextAutoFit } from '../../../components/vector/text-fit';
+import { textBodyHeight, useTextBoxAutoFit } from '../../../components/vector/text-fit';
 
 // A DOM at module scope, the element-layer suite's recipe — the measure reads layout properties off
 // real nodes, and `instanceof HTMLElement` needs the constructor to be the global one.
@@ -88,7 +83,7 @@ describe('textBodyHeight', () => {
     });
 
     test('counts the inset the first child is pushed down by only once', () => {
-        // The body's own padding offsets every child; it is chrome, added by richTextFitHeight.
+        // The body's own padding offsets every child; it is chrome, added by textBoxFitHeight.
         expect(
             textBodyHeight(
                 body([
@@ -114,17 +109,17 @@ describe('the fit a measured body drives', () => {
             ]),
         );
         expect(measured).not.toBeNull();
-        expect(measured === null ? null : richTextFitHeight(box({ height: 40 }), measured)).toBe(72);
+        expect(measured === null ? null : textBoxFitHeight(box({ height: 40 }), measured)).toBe(72);
     });
 
     test('deleting lines leaves the box as tall as the user has it', () => {
         const measured = textBodyHeight(body([{ top: 0, height: 24 }]));
-        expect(measured === null ? null : richTextFitHeight(box({ height: 72 }), measured)).toBeNull();
+        expect(measured === null ? null : textBoxFitHeight(box({ height: 72 }), measured)).toBeNull();
     });
 
     test('an unchanged body writes nothing', () => {
         const measured = textBodyHeight(body([{ top: 0, height: 24 }]));
-        expect(measured === null ? null : richTextFitHeight(box({ height: 24 }), measured)).toBeNull();
+        expect(measured === null ? null : textBoxFitHeight(box({ height: 24 }), measured)).toBeNull();
     });
 });
 
@@ -132,7 +127,7 @@ describe('the fit a measured body drives', () => {
 // the <svg> a painted box draws behind its text, which is the sibling the body must not be confused with.
 function Harness({ backdrop, onFit, el = box() }: { backdrop: boolean; onFit: FitHeight; el?: VectorElement }) {
     const host = useRef<HTMLDivElement>(null);
-    useRichTextAutoFit(host, el, onFit, false);
+    useTextBoxAutoFit(host, el, onFit, false);
     return createElement(
         'div',
         { ref: host },

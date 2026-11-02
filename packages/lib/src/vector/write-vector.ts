@@ -8,9 +8,9 @@ import { isValidFractionalIndex, keysAfter, orderByFractionalIndex } from './fra
 import type { VectorFrame } from './frames';
 import { DEFAULT_FRAME_BACKGROUND, FRAME_FIELDS } from './frames';
 import type { StyleDefaults } from './kinds';
-import { baseDefaultsFor, ELEMENT_KINDS, storedElementFields, storedFields, textualDefaults } from './kinds';
+import { baseDefaultsFor, ELEMENT_KINDS, isTextBox, storedElementFields, storedFields } from './kinds';
+import { textBoxOverrides } from './kinds/rectangle';
 import type { NewVectorElement, VectorElementType } from './types';
-import { DEFAULT_TEXT_BOX_PROPS } from './types';
 
 export function newElementId(): string {
     return `el-${nanoid(10)}`;
@@ -34,22 +34,16 @@ export function kindDefaults<T extends VectorElementType>(type: T, style: StyleD
     return { ...baseDefaultsFor(type, style), ...ELEMENT_KINDS[type].defaults(style) };
 }
 
-// A new text box: a rectangle that fits its text, with no border and its text at the top left, flush with its edge.
+// A new text box: a new rectangle under the text box's own overrides.
 export function textBoxDefaults(style: StyleDefaults) {
-    return {
-        ...baseDefaultsFor('rectangle', style, true),
-        ...ELEMENT_KINDS.rectangle.defaults(style),
-        ...textualDefaults(style, DEFAULT_TEXT_BOX_PROPS),
-        autoFit: true,
-    };
+    return { ...kindDefaults('rectangle', style), ...textBoxOverrides(style) };
 }
 
-// One element into the doc's `elements` map at the given fractional index, under the kind's defaults, or a text
-// box's for a rectangle with `autoFit`, and the host's style table. Honors a caller-supplied seed so a drag-create preview and its committed
-// element share the same roughjs jitter (no visual pop on release). A caller-supplied `id` is the
-// seeders': two peers seeding one empty deck write the same key, so they converge on one element
-// instead of two. Nested in a live transact it joins that one, so a caller's origin and single-atom
-// guarantee both survive.
+// One element into the doc's `elements` map at the given fractional index, under its kind's defaults in the host's
+// style table, or a text box's. A caller-supplied seed lets a drag-create preview and its committed element share one
+// roughjs jitter, so nothing pops on release. A caller-supplied `id` is the seeders': two peers seeding one empty deck
+// write the same key, so they converge on one element instead of two. Nested in a live transact it joins that one, so
+// a caller's origin and single-atom guarantee both survive.
 export function writeElementInDoc(
     doc: Y.Doc,
     partial: NewVectorElement,
@@ -64,9 +58,7 @@ export function writeElementInDoc(
         width: 0,
         height: 0,
         angle: 0,
-        ...(partial.type === 'rectangle' && partial.autoFit
-            ? textBoxDefaults(style)
-            : kindDefaults(partial.type, style)),
+        ...(isTextBox(partial) ? textBoxDefaults(style) : kindDefaults(partial.type, style)),
         ...partial,
         id,
         type: partial.type,

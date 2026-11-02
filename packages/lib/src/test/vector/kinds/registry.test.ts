@@ -446,12 +446,10 @@ describe('capabilitiesOf', () => {
 
 describe('baseDefaults', () => {
     test('a new text box or image paints no border until a stroke colour is picked', () => {
-        expect(baseDefaultsFor('rectangle', VECTOR_STYLE_DEFAULTS, true).strokeColor).toBe('transparent');
+        const newTextBox = textBox({ id: 'rt', ...textBoxDefaults(VECTOR_STYLE_DEFAULTS) });
+        expect(newTextBox.strokeColor).toBe('transparent');
         expect(baseDefaultsFor('image', VECTOR_STYLE_DEFAULTS).strokeColor).toBe('transparent');
-        const out = ELEMENT_KINDS.rectangle.render(
-            textBox({ id: 'rt', ...textBoxDefaults(VECTOR_STYLE_DEFAULTS) }),
-            {},
-        );
+        const out = ELEMENT_KINDS.rectangle.render(newTextBox, {});
         expect('html' in out && out.style).not.toContain('border:');
     });
 
@@ -475,9 +473,8 @@ describe('baseDefaults', () => {
         }
     });
 
-    test('baseDefaultsFor answers what creating the kind would give it — what a panel reset restores', () => {
-        // The reset bug: an image whose border was colored must reset to none, not to the shared ink
-        // color. The panel reads this, the creation path spreads it, so the two cannot drift.
+    test('baseDefaultsFor answers what creating the kind would give it', () => {
+        // An image starts with no border, not the shared ink color: the kind's own overrides win.
         for (const [type, kind] of Object.entries(ELEMENT_KINDS)) {
             expect([type, baseDefaultsFor(kind.type, VECTOR_STYLE_DEFAULTS)]).toEqual([
                 type,
