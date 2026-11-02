@@ -29,6 +29,7 @@ import type React from 'react';
 import { useCallback, useContext } from 'react';
 import type { SetContextOptions } from '../../context';
 import { WorkbookContext } from '../../context';
+import { useCellEditorRefocus } from '../../hooks/useCellEditorRefocus';
 import { useDialog } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
@@ -417,6 +418,7 @@ const STATE_AREA = { cell: 'cell', row: 'rowHeader', column: 'columnHeader' } as
 export function useSheetContextMenu(area: SheetMenuArea) {
     const { context, setContext, refs } = useContext(WorkbookContext);
     const contextMenu = useContextMenu<boolean>();
+    const refocusCellEditor = useCellEditorRefocus();
     const { allowEdit } = context;
     const openMenu = contextMenu.handleContextMenu;
     const openMenuAt = contextMenu.openAt;
@@ -454,15 +456,7 @@ export function useSheetContextMenu(area: SheetMenuArea) {
         onContextMenu,
         openAtPoint,
         anchor: (
-            <ContextMenuAnchor
-                contextMenu={contextMenu}
-                // The focus goes back to the sheet's cell input, not to what had it before the menu opened. Undo
-                // and the other grid shortcuts read their keys on the Workbook container around that input.
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    refs.cellInput.current?.focus();
-                }}
-            >
+            <ContextMenuAnchor contextMenu={contextMenu} onCloseAutoFocus={refocusCellEditor}>
                 {area === 'cell' && <CellMenu />}
                 {area === 'row' && <RowMenu />}
                 {area === 'column' && <ColumnMenu />}
