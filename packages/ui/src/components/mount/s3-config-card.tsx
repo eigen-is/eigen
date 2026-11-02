@@ -154,7 +154,7 @@ export function S3ConfigCard({
             </div>
 
             <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={handleCheck} disabled={!valid || checking}>
+                <Button variant="outline" size="sm" onClick={handleCheck} disabled={!valid || checking}>
                     {checking ? <EigenLoader className="mr-1 text-current" /> : <Wifi className="h-4 w-4 mr-1" />}
                     Test connection
                 </Button>
@@ -238,7 +238,7 @@ function BucketSafetyPanel({
             <div className="flex items-center justify-between gap-3">
                 <h5 className="text-sm font-medium">Bucket safety</h5>
                 {canApply && (
-                    <Button type="button" size="sm" onClick={onEnable}>
+                    <Button size="sm" onClick={onEnable}>
                         <ShieldCheck className="h-4 w-4 mr-1" />
                         Enable safe defaults
                     </Button>
