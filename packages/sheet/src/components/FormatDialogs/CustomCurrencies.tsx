@@ -87,7 +87,13 @@ export function CustomCurrencies() {
                             setSelectedName(null);
                         }}
                     />
-                    <Select value={variantId} onValueChange={(v) => setVariantId(v as CurrencyVariantId)}>
+                    <Select
+                        value={variantId}
+                        onValueChange={(value) => {
+                            const variant = CURRENCY_VARIANTS.find(({ id }) => id === value);
+                            if (variant) setVariantId(variant.id);
+                        }}
+                    >
                         <SelectTrigger className="w-40">
                             <SelectValue />
                         </SelectTrigger>
