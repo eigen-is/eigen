@@ -70,7 +70,7 @@ function DriveItemActionsMenu({
         <>
             <ContextMenuAnchor contextMenu={contextMenu} className="min-w-48">
                 {contextItems.length > 0 && (
-                    <DriveItemMenuItems items={contextItems} actions={actions} runner={runner} />
+                    <DriveItemMenuItems items={contextItems} actions={actions} runner={runner} shortcuts />
                 )}
             </ContextMenuAnchor>
             {runner.dialogs}

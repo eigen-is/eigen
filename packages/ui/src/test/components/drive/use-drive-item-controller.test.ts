@@ -1,6 +1,7 @@
 // The Delete key runs the listing's delete row and no other destructive row. A folder is a drop target
 // only where the view can move items.
 import { expect, test } from 'bun:test';
+import { DELETE_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DriveAction, DriveActionId } from '@workspace/lib/types/drive-actions';
 import { Trash2 } from 'lucide-react';
@@ -73,14 +74,16 @@ function render(actions: DriveActionRunner) {
     return seen.controller;
 }
 
-test('Delete runs the row that shows the Delete key, even after another destructive row', () => {
-    const { actions, ran } = runner([destructive('rename'), { ...destructive('trash'), shortcut: 'Delete' }]);
-    render(actions).handleKeyDown({
-        key: 'Delete',
-        preventDefault: () => {},
-        stopPropagation: () => {},
-    } as unknown as KeyboardEvent<HTMLElement>);
-    expect(ran).toEqual(['trash']);
+test('Delete and Backspace run the row that shows the delete key, even after another destructive row', () => {
+    for (const key of ['Delete', 'Backspace']) {
+        const { actions, ran } = runner([destructive('rename'), { ...destructive('trash'), shortcut: DELETE_HOTKEY }]);
+        render(actions).handleKeyDown({
+            key,
+            preventDefault: () => {},
+            stopPropagation: () => {},
+        } as unknown as KeyboardEvent<HTMLElement>);
+        expect(ran).toEqual(['trash']);
+    }
 });
 
 test('a folder is a drop target only where the view can move', () => {

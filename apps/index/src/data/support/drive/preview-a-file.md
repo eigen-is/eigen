@@ -29,7 +29,7 @@ Quick preview lets you glance at any file without leaving the list.
 1. Right-click the file (or click its **⋮** button) to open the menu.
 2. Choose **Quick preview**.
 
-The preview opens as an overlay on top of the list. On a computer, the menu shows **Space** next to **Quick preview**, the key that does the same. Press **Esc** or click the dark area around the file to close it.
+The preview opens as an overlay on top of the list. On a computer, the menu shows **␣** next to **Quick preview**, on a Mac and on Windows alike. That is the **Space** key, which does the same. Press **Esc** or click the dark area around the file to close it.
 
 You can also select a file with the keyboard (use the arrow keys to move through the list) and press **Space** to open Quick preview. Press **Space** again to close it.
 

@@ -24,9 +24,11 @@ type DriveItemMenuItemsProps = {
     actions: DriveActionRunner;
     // Built by the host on the single item, or on null for a multi-selection, which has no file actions.
     runner: FileActionRunner;
+    // The host is the listing, whose keys run the rows, so the menu names them. The detail column's ⋮ isn't.
+    shortcuts?: boolean;
 };
 
-export function DriveItemMenuItems({ items, actions, runner }: DriveItemMenuItemsProps) {
+export function DriveItemMenuItems({ items, actions, runner, shortcuts = false }: DriveItemMenuItemsProps) {
     const rows = actions.actionsFor(items);
     const [item] = items;
 
@@ -35,7 +37,7 @@ export function DriveItemMenuItems({ items, actions, runner }: DriveItemMenuItem
             key={action.id}
             action={action}
             count={items.length}
-            shortcut={action.shortcut}
+            shortcut={shortcuts ? action.shortcut : undefined}
             onClick={() => actions.run(action.id, items)}
         />
     );
@@ -50,7 +52,7 @@ export function DriveItemMenuItems({ items, actions, runner }: DriveItemMenuItem
             open={
                 <>
                     {rowsIn('open')}
-                    <FileActionMenuItems runner={runner} group="open" shortcuts={{ 'quick-look': 'Space' }} />
+                    <FileActionMenuItems runner={runner} group="open" shortcuts={shortcuts} />
                 </>
             }
             create={rowsIn('create')}

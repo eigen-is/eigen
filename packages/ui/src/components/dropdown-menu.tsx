@@ -334,11 +334,12 @@ function DropdownMenuSeparator({ className, ...props }: React.ComponentProps<typ
     );
 }
 
+// A touch screen has no keyboard to name, so a shortcut hint shows on a fine pointer only.
 function DropdownMenuShortcut({ className, ...props }: React.ComponentProps<'span'>) {
     return (
         <span
             data-slot="dropdown-menu-shortcut"
-            className={cn('text-muted-foreground ml-auto text-xs tracking-widest', className)}
+            className={cn('text-muted-foreground ml-auto text-xs tracking-widest pointer-coarse:hidden', className)}
             {...props}
         />
     );

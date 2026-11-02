@@ -1,7 +1,7 @@
 // The things a user can do with Drive items in a Drive view, such as rename, move, share or trash, each
-// with its label and the gate that says when it applies. Surfaces such as the Drive item menu and the
-// command palette draw their rows from driveActionsFor. File actions that any surface offers, such as
-// Quick preview or a convert, are a separate list, FILE_ACTIONS. Watch is not a row here: it shows the
+// with its label, its gate and the key that runs it. Surfaces such as the Drive item menu and the command
+// palette draw their rows from driveActionsFor and word them with labelFor. File actions that any surface
+// offers, such as Quick preview, are a separate list, FILE_ACTIONS. Watch is not a row here: it shows the
 // item's live watch state, so the surfaces draw it from useWatchToggle.
 
 import {
@@ -17,6 +17,7 @@ import {
     Trash2,
     UserRoundPlus,
 } from 'lucide-react';
+import { DELETE_HOTKEY } from '../../constants/hotkeys';
 import type { DrivePath } from '../../types/drive';
 import { exportFormatsFor, isOpenable } from '../../types/drive';
 import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
@@ -26,7 +27,7 @@ import { copyToClipboard } from '../clipboard/clipboard';
 const one = ({ items }: DriveActionSubject) => items.length === 1;
 
 // A row with a plural label is one a multi-selection offers too; the others act on a single item.
-export const DRIVE_ACTIONS: readonly DriveAction[] = [
+const DRIVE_ACTIONS: readonly DriveAction[] = [
     { id: 'open', label: 'Open', icon: ArrowRight, group: 'open', applies: (s) => one(s) && isOpenable(s.items[0]) },
     {
         id: 'open-new-tab',
@@ -112,7 +113,7 @@ export const DRIVE_ACTIONS: readonly DriveAction[] = [
         icon: Trash2,
         group: 'destructive',
         applies: (s) => s.capabilities.canDelete && !s.sharedWithMe,
-        shortcut: 'Delete',
+        shortcut: DELETE_HOTKEY,
     },
     {
         id: 'remove-shared',
@@ -122,7 +123,7 @@ export const DRIVE_ACTIONS: readonly DriveAction[] = [
         group: 'destructive',
         // The server leaves a direct share instead of trashing it, so the row says so.
         applies: (s) => s.capabilities.canDelete && s.sharedWithMe,
-        shortcut: 'Delete',
+        shortcut: DELETE_HOTKEY,
     },
 ];
 

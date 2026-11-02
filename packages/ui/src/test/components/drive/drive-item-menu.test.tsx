@@ -31,7 +31,7 @@ const doc = drivePath({ name: 'Plan.eigendoc', mimeType: 'application/eigendoc',
 const pdf = drivePath({ id: 'path-2', name: 'Report.pdf', mimeType: 'application/pdf', parentId: 'root' });
 
 // A runner drawn by hand, as a host's hooks would build it for a viewer on a server with mail.
-async function openMenu(items: DrivePath[], capabilities: DriveCapabilities, sharedWithMe = false) {
+async function openMenu(items: DrivePath[], capabilities: DriveCapabilities, sharedWithMe = false, shortcuts = true) {
     const ran: DriveActionId[] = [];
     const actions = {
         capabilities,
@@ -51,7 +51,7 @@ async function openMenu(items: DrivePath[], capabilities: DriveCapabilities, sha
         isPending: false,
     };
     const { createElement } = await import('react');
-    ({ unmount } = await renderOpenMenu(createElement(DriveItemMenuItems, { items, actions, runner })));
+    ({ unmount } = await renderOpenMenu(createElement(DriveItemMenuItems, { items, actions, runner, shortcuts })));
     return ran;
 }
 
@@ -147,14 +147,18 @@ test('a multi-selection shared with the viewer is removed', async () => {
     expect(menuRows().at(-1)).toBe('Remove 2 shared items');
 });
 
-test('Quick preview and the delete row name their keys', async () => {
+const shortcutHints = () => [...document.querySelectorAll('[data-slot="dropdown-menu-shortcut"]')];
+
+// formatForDisplay draws Space and Backspace as these symbols on every platform. A touch screen hides them.
+test('in a listing, Quick preview and the delete row name their keys', async () => {
     await openMenu([pdf], DRIVE_CAPABILITIES.browse);
-    const shortcuts = [...document.querySelectorAll('[data-slot="dropdown-menu-shortcut"]')].map((key) => [
-        key.textContent,
-        key.className.includes('pointer-coarse:hidden'),
+    expect(shortcutHints().map((key) => [key.textContent, key.className.includes('pointer-coarse:hidden')])).toEqual([
+        ['␣', true],
+        ['⌫', true],
     ]);
-    expect(shortcuts).toEqual([
-        ['Space', true],
-        ['Delete', true],
-    ]);
+});
+
+test('a host whose keys don’t reach the listing, such as the detail column, names none', async () => {
+    await openMenu([pdf], DRIVE_CAPABILITIES.browse, false, false);
+    expect(shortcutHints()).toEqual([]);
 });

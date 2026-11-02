@@ -38,7 +38,7 @@ export type DriveAction = {
     icon: LucideIcon;
     group: DriveActionGroup;
     applies: (subject: DriveActionSubject) => boolean;
-    // The key that runs the row from the listing, shown beside it in the menu.
+    // The hotkey that runs the row from a Drive listing, which the listing's menu names beside it.
     shortcut?: string;
     // The route behind the row refuses a guest, and `applies` is never told who is asking.
     guestDenied?: true;
