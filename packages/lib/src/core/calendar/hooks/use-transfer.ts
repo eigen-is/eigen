@@ -16,7 +16,8 @@ import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../tran
 import { invalidateEventList } from './keys';
 import { useCreateCalendar, useDeleteCalendar } from './use-calendar';
 
-// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is refused.
+// The transfer routes resolve only the viewer's own home and a team's, so a calendar shared out of another home is
+// refused.
 export function isTransferableCalendarHome(ownerId: string, viewerId: string): boolean {
     return ownerId === viewerId || parseOwnerId(ownerId).type === 'team';
 }
@@ -63,7 +64,8 @@ export function useImportCalendarFromDevice() {
     });
 }
 
-// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts them.
+// A mail part or chat attachment has no Drive path for the server to copy, so the browser reads its bytes and posts
+// them.
 export function useImportCalendar() {
     const queryClient = useQueryClient();
 

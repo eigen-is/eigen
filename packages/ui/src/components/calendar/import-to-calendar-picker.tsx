@@ -89,7 +89,7 @@ function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; 
             await importToCalendar(source, { kind: 'new', name: name.trim(), color });
             return;
         }
-        // The chosen calendar can be gone from a later fetch, such as a team calendar the viewer may no longer write in.
+        // A later fetch can drop the chosen calendar, such as a team calendar the viewer may no longer write in.
         const chosen = options.find((option) => targetValue(option) === target);
         if (!chosen) return false;
         await importToCalendar(source, { kind: 'existing', ownerId: chosen.ownerId, calendarId: chosen.id });

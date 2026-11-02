@@ -1,7 +1,7 @@
 // The small dialog that asks for one name, such as a new folder's in a Drive picker or the new name Rename gives an
-// item. It shows the folder it works in under the field. Its submit, Create unless the caller names it, waits for a name
-// with more than spaces and hands the name on as typed. The caller's promise decides the rest: a save closes the dialog, and a failure keeps it open with
-// the typed name, beside the mutation's toast.
+// item. It shows the folder it works in under the field. Its submit button, Create unless the caller names it, waits
+// for a name with more than spaces and hands the name on as typed. The caller's promise decides the rest: a save
+// closes the dialog, and a failure keeps it open with the typed name, beside the mutation's toast.
 
 import { useBreadcrumb } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
