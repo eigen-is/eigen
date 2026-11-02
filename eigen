@@ -193,52 +193,6 @@ arguments() {
     fi
 }
 
-# in_argument <command> <argument>: takes --in, its time and the message that may follow it, as shutdown takes
-# `+10 "message"`, into IN_SECONDS and IN_MESSAGE. Returns 1 for any other argument, which the command parses itself.
-# A time is digits and s, m or h, or 0 alone, so a bare 10 never waits ten seconds for someone who meant minutes.
-# Checked before anything runs; dash counts the message in bytes, so one with accents may hold fewer characters.
-IN_TIME='' IN_SECONDS=0 IN_MESSAGE='' IN_NEXT=''
-in_argument() {
-    case $IN_NEXT in
-        time)
-            IN_TIME=$2 IN_NEXT=message
-            number=${2%[smh]}
-            case $2 in
-                0) return 0 ;;
-                *s) unit=1 ;;
-                *m) unit=60 ;;
-                *h) unit=3600 ;;
-                *) number='' ;;
-            esac
-            case $number in '' | *[!0-9]*)
-                refuse_usage "$1" "--in takes a time with its unit, such as 10m, 90s or 1h, or 0; not \"$2\"."
-                ;;
-            esac
-            # Without its leading zeros, which $(( )) would read as octal.
-            number=${number#"${number%%[!0]*}"}
-            if [ ${#number} -gt 4 ] || [ $((${number:-0} * unit)) -gt "$MAX_WAIT" ]; then
-                refuse_usage "$1" "--in waits an hour at most."
-            fi
-            IN_SECONDS=$((${number:-0} * unit))
-            return 0
-            ;;
-        message)
-            IN_NEXT=''
-            case $2 in -*) return 1 ;; esac
-            if [ ${#2} -gt "$MAX_MESSAGE" ]; then refuse_usage "$1" "The message is over $MAX_MESSAGE characters."; fi
-            IN_MESSAGE=$2
-            return 0
-            ;;
-    esac
-    if [ "$2" != --in ]; then return 1; fi
-    IN_NEXT=time
-}
-
-# need_in_time <command>: after the arguments, a --in without its time is refused.
-need_in_time() {
-    if [ "$IN_NEXT" = time ]; then refuse_usage "$1" "--in takes a time, such as 10m."; fi
-}
-
 # The glyphs are GLYPHS in apps/api/src/cli/ui.ts, so the CLI's lines read like these.
 # A write to a terminal that hung up fails; the command must not end with it.
 say() { printf '%s%s%s  %s\n' "$1" "$2" "$RESET" "$3" || :; }
@@ -718,68 +672,6 @@ before_stop() {
     done
 }
 
-# warn_restart <reason>: when Eigen runs, tells every open tab that it restarts, for an update or a rollback, then
-# waits out --in. From here an exit, Ctrl+C or a hangup takes the notice back through AT_EXIT, so no tab warns of a
-# restart that does not come. dash runs no EXIT trap on a hangup it does not trap.
-warn_restart() {
-    if ! api_running; then return 0; fi
-    AT_EXIT="${AT_EXIT:+$AT_EXIT; }unannounce"
-    trap 'exit 129' HUP
-    announce "$IN_SECONDS" "$1"
-    if [ "$IN_SECONDS" -gt 0 ]; then countdown; fi
-}
-
-# announce <seconds> <reason>: the notice of a restart in <seconds>, with IN_MESSAGE, on the running API. It runs in
-# this process, not as a step's job, so a hangup cannot leave a notice landing after unannounce took it back. One with
-# a wait stops the command when it fails, since the wait would warn nobody. One for now is best-effort: an API that
-# cannot take it holds nothing up.
-announce() {
-    told=$(api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
-        </dev/null 2>&1) || {
-        if [ "$1" = 0 ]; then
-            say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
-            return 0
-        fi
-        {
-            say "$RED" '■' "Could not tell the open tabs; Eigen runs on as it was"
-            printf '%s\n' "$told" | tail -n 20 | sed "s/^/${GRAY}│${RESET}  /"
-            say "$GRAY" '└' "Fix what it says, then run ./eigen $COMMAND again."
-        } >&2
-        exit 1
-    }
-    if [ "$1" = 0 ]; then return 0; fi
-    say "$GREEN" '◇' "Told the open tabs"
-    RESTART_AT=$(answer at "$told" | sed 's/^.*T//; s/\.[0-9]*Z$/ UTC/')
-}
-
-# unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
-unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
-
-# countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
-# sees one line count down, as shutdown warns; a log gets it once.
-countdown() {
-    end=$(($(date +%s) + IN_SECONDS)) left=$IN_SECONDS
-    if [ -n "$IN_MESSAGE" ]; then say "$GRAY" '│' "$IN_MESSAGE"; fi
-    trap 'if [ -t 1 ]; then printf "\r\033[K" || :; fi
-        say "$RED" "■" "The wait was cancelled. Eigen runs on as it was." >&2; exit 130' INT TERM
-    while [ "$left" -gt 0 ]; do
-        line="Restarts in $(duration "$left"), at $RESTART_AT. Ctrl+C cancels."
-        if [ -t 1 ]; then
-            # A line that wraps leaves a line a second: \r only goes back to the start of the last one.
-            width=$(columns)
-            if [ "$width" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$((width - 4))"); fi
-            printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
-        elif [ "$left" = "$IN_SECONDS" ]; then
-            say "$ACCENT" '◆' "$line"
-        fi
-        sleep 1
-        left=$((end - $(date +%s)))
-    done
-    trap 'exit 130' INT TERM
-    if [ -t 1 ]; then printf '\r\033[K' || :; fi
-    say "$GREEN" '◇' "Waited until $RESTART_AT"
-}
-
 # The server runs as 1000:1000. Only an empty folder is handed over: an existing one keeps its owners.
 prepare_data() {
     mkdir -p data backups || return 1
@@ -1157,6 +1049,114 @@ backup() {
     fi
     need_env_mounted
     api_cli backup --level "$level" $wait
+}
+
+# in_argument <command> <argument>: takes --in, its time and the message that may follow it, as shutdown takes
+# `+10 "message"`, into IN_SECONDS and IN_MESSAGE. Returns 1 for any other argument, which the command parses itself.
+# A time is digits and s, m or h, or 0 alone, so a bare 10 never waits ten seconds for someone who meant minutes.
+# Checked before anything runs; dash counts the message in bytes, so one with accents may hold fewer characters.
+IN_TIME='' IN_SECONDS=0 IN_MESSAGE='' IN_NEXT=''
+in_argument() {
+    case $IN_NEXT in
+        time)
+            IN_TIME=$2 IN_NEXT=message
+            number=${2%[smh]}
+            case $2 in
+                0) return 0 ;;
+                *s) unit=1 ;;
+                *m) unit=60 ;;
+                *h) unit=3600 ;;
+                *) number='' ;;
+            esac
+            case $number in '' | *[!0-9]*)
+                refuse_usage "$1" "--in takes a time with its unit, such as 10m, 90s or 1h, or 0; not \"$2\"."
+                ;;
+            esac
+            # Without its leading zeros, which $(( )) would read as octal.
+            number=${number#"${number%%[!0]*}"}
+            if [ ${#number} -gt 4 ] || [ $((${number:-0} * unit)) -gt "$MAX_WAIT" ]; then
+                refuse_usage "$1" "--in waits an hour at most."
+            fi
+            IN_SECONDS=$((${number:-0} * unit))
+            return 0
+            ;;
+        message)
+            IN_NEXT=''
+            case $2 in -*) return 1 ;; esac
+            if [ ${#2} -gt "$MAX_MESSAGE" ]; then refuse_usage "$1" "The message is over $MAX_MESSAGE characters."; fi
+            IN_MESSAGE=$2
+            return 0
+            ;;
+    esac
+    if [ "$2" != --in ]; then return 1; fi
+    IN_NEXT=time
+}
+
+# need_in_time <command>: after the arguments, a --in without its time is refused.
+need_in_time() {
+    if [ "$IN_NEXT" = time ]; then refuse_usage "$1" "--in takes a time, such as 10m."; fi
+}
+
+# warn_restart <reason>: when Eigen runs, tells every open tab that it restarts, for an update or a rollback, then
+# waits out --in. From here an exit, Ctrl+C or a hangup takes the notice back through AT_EXIT, so no tab warns of a
+# restart that does not come. dash runs no EXIT trap on a hangup it does not trap.
+warn_restart() {
+    if ! api_running; then return 0; fi
+    AT_EXIT="${AT_EXIT:+$AT_EXIT; }unannounce"
+    trap 'exit 129' HUP
+    announce "$IN_SECONDS" "$1"
+    if [ "$IN_SECONDS" -gt 0 ]; then countdown; fi
+}
+
+# announce <seconds> <reason>: the notice of a restart in <seconds>, with IN_MESSAGE, on the running API. It runs in
+# this process, not as a step's job, so a hangup cannot leave a notice landing after unannounce took it back. One with
+# a wait stops the command when it fails, since the wait would warn nobody. One for now is best-effort: an API that
+# cannot take it holds nothing up.
+announce() {
+    told=$(api_cli restart-notice --in "$1" --reason "$2" ${IN_MESSAGE:+--message} ${IN_MESSAGE:+"$IN_MESSAGE"} \
+        </dev/null 2>&1) || {
+        if [ "$1" = 0 ]; then
+            say "$YELLOW" '▲' "Could not tell the open tabs that Eigen restarts now."
+            return 0
+        fi
+        {
+            say "$RED" '■' "Could not tell the open tabs; Eigen runs on as it was"
+            printf '%s\n' "$told" | tail -n 20 | sed "s/^/${GRAY}│${RESET}  /"
+            say "$GRAY" '└' "Fix what it says, then run ./eigen $COMMAND again."
+        } >&2
+        exit 1
+    }
+    if [ "$1" = 0 ]; then return 0; fi
+    say "$GREEN" '◇' "Told the open tabs"
+    RESTART_AT=$(answer at "$told" | sed 's/^.*T//; s/\.[0-9]*Z$/ UTC/')
+}
+
+# unannounce: takes the notice back. The API it asks may be an older version's, without the command, or down.
+unannounce() { api_cli restart-notice --clear </dev/null >/dev/null 2>&1 || :; }
+
+# countdown: waits out IN_SECONDS in this process, a second at a time, so a hangup's trap runs at once. A terminal
+# sees one line count down, as shutdown warns; a log gets it once.
+countdown() {
+    end=$(($(date +%s) + IN_SECONDS)) left=$IN_SECONDS
+    if [ -n "$IN_MESSAGE" ]; then say "$GRAY" '│' "$IN_MESSAGE"; fi
+    trap 'if [ -t 1 ]; then printf "\r\033[K" || :; fi
+        say "$RED" "■" "The wait was cancelled. Eigen runs on as it was." >&2; exit 130' INT TERM
+    while [ "$left" -gt 0 ]; do
+        line="Restarts in $(duration "$left"), at $RESTART_AT. Ctrl+C cancels."
+        if [ -t 1 ]; then
+            # A line that wraps leaves a line a second: \r only goes back to the start of the last one.
+            width=$(columns)
+            if [ "$width" -gt 4 ]; then line=$(printf '%s\n' "$line" | cut -c "1-$((width - 4))"); fi
+            printf '\r\033[K%s◆%s  %s' "$ACCENT" "$RESET" "$line" || :
+        elif [ "$left" = "$IN_SECONDS" ]; then
+            say "$ACCENT" '◆' "$line"
+        fi
+        sleep 1
+        left=$((end - $(date +%s)))
+    done
+    trap 'exit 130' INT TERM
+    if [ -t 1 ]; then printf '\r\033[K' || :; fi
+    say "$GREEN" '◇' "Waited until $RESTART_AT"
 }
 
 # A new machine: the launcher alone, as the installer leaves it, or beside a mirror's .env.production. The archive's
