@@ -310,7 +310,7 @@ export function ServerSettingsPage() {
                         setS3Dirty(true);
                         setS3Draft(config);
                     }}
-                    checkS3={s3Check.mutateAsync}
+                    checkS3={(config) => s3Check.mutateAsync(config)}
                     hardenS3={(config, noncurrentDays) => s3Harden.mutateAsync({ ...config, noncurrentDays })}
                 />
             </SettingsSection>
@@ -417,8 +417,8 @@ export function ServerSettingsPage() {
     );
 }
 
-// The server takes only links with a title and a URL that starts with a lowercase http:// or https://. So a save trims
-// both fields, drops a row that misses either, writes the scheme in lowercase and gives a URL without one https://.
+// The server refuses an empty title or URL, and a URL that does not start with http:// or https://. A save also trims
+// both fields, drops a row that misses one, lowercases the scheme and puts https:// before a URL that has none.
 function normalizeLinks(links: readonly LandingLink[]): LandingLink[] {
     return links
         .map((link) => ({ title: link.title.trim(), url: link.url.trim() }))

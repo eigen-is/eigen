@@ -39,8 +39,8 @@ const SETTINGS: ServerSettings = {
 const mutation = { mutate: () => {}, mutateAsync: async () => {}, isPending: false };
 
 // The settings hooks and the public config are stubbed so the page needs no server. The sections this test doesn't
-// read draw nothing, and so does the save footer, whose leave guard needs a router. Copies, because mock.module rewrites a loaded module's exports in place, and afterAll
-// puts the originals back.
+// read draw nothing, and so does the save footer, whose leave guard needs a router. Copies, because mock.module
+// rewrites a loaded module's exports in place, and afterAll puts the originals back.
 const realSettings = { ...(await import('@workspace/lib/settings')) };
 mock.module('@workspace/lib/settings', () => ({
     ...realSettings,
