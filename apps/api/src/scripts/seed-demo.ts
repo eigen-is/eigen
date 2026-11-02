@@ -107,13 +107,6 @@ const ADMIN_PASSWORD = process.env['EIGEN_DEMO_ADMIN_PASSWORD'] || randomBytes(1
 const PERSONA_PASSWORD = randomBytes(18).toString('base64url');
 
 const emailFor = (localPart: string) => `${localPart}@${MAIL_DOMAIN}`;
-
-// A seeded user or folder by its key. The seed data is ours, so a key it names and nothing holds is a bug in it.
-function lookup<V>(map: ReadonlyMap<string, V>, key: string): V {
-    const value = map.get(key);
-    if (value === undefined) throw new Error(`The seed data names '${key}', which nothing holds`);
-    return value;
-}
 const ADMIN_EMAIL = emailFor(ADMIN_LOCALPART);
 
 if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
@@ -122,6 +115,13 @@ if (existsSync(join(DATA_ROOT, 'server', 'config.json'))) {
 }
 mkdirSync(join(DATA_ROOT, 'server'), { recursive: true });
 mkdirSync(join(DATA_ROOT, 'home'), { recursive: true });
+
+// A seeded user or folder by its key. The seed data is ours, so a key it names and nothing holds is a bug in it.
+function lookup<V>(map: ReadonlyMap<string, V>, key: string): V {
+    const value = map.get(key);
+    if (value === undefined) throw new Error(`The seed data names '${key}', which nothing holds`);
+    return value;
+}
 
 // Same MIME engine the real app uses for outbound mail (composeRfc822), used directly rather than through
 // composeRfc822/OutboundMail so the thread-linking headers
