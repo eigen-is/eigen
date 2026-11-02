@@ -2,18 +2,10 @@
 // Yjs document itself. A delete takes the column's cards with it, as one undo step.
 
 import { getIdArray, getIdArrayRoot, getItemMapRoot } from '@workspace/lib/collab';
-import { DeleteDialog } from '@workspace/ui';
+import { DeleteDialog, FormDialog, FormDialogForm } from '@workspace/ui';
 import { Button } from '@workspace/ui/components/button';
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from '@workspace/ui/components/dialog';
+import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
-import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
 import * as Y from 'yjs';
 
@@ -22,9 +14,9 @@ type ColumnSettingsDialogProps = {
     onClose: () => void;
     columnId: string;
     columnTitle: string;
-    cardCount?: number;
+    cardCount: number;
     yjsDoc: Y.Doc | null;
-    // Seals the column delete as its own undo step (U6e).
+    // Seals the column delete as its own undo step.
     undoManager: Y.UndoManager | null;
 };
 
@@ -33,23 +25,20 @@ export function ColumnSettingsDialog({
     onClose,
     columnId,
     columnTitle,
-    cardCount = 0,
+    cardCount,
     yjsDoc,
     undoManager,
 }: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!title.trim() || !yjsDoc) return;
+    const handleSubmit = () => {
+        if (!yjsDoc) return false;
 
         yjsDoc.transact(() => {
             const columnMap = getItemMapRoot(yjsDoc, 'columns').get(columnId);
             if (columnMap instanceof Y.Map) columnMap.set('title', title.trim());
         });
-
-        onClose();
     };
 
     const handleDelete = () => {
@@ -83,37 +72,24 @@ export function ColumnSettingsDialog({
     };
 
     return (
-        <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-            <DialogContent size="sm">
-                <DialogHeader>
-                    <DialogTitle>Column settings</DialogTitle>
-                    <DialogDescription className="sr-only">Rename this column or delete it.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleSubmit}>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
-                            <Label htmlFor="title">Title</Label>
-                            <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            className="mr-auto"
-                            onClick={() => setIsDeleteDialogOpen(true)}
-                        >
+        <>
+            <FormDialog open={isOpen} onOpenChange={onClose} title="Column settings" size="sm">
+                <FormDialogForm
+                    canSubmit={title.trim() !== ''}
+                    submitLabel="Save changes"
+                    onSubmit={handleSubmit}
+                    footerStart={
+                        <Button type="button" variant="destructive" onClick={() => setIsDeleteDialogOpen(true)}>
                             Delete column
                         </Button>
-                        <Button type="button" variant="outline" onClick={onClose}>
-                            Cancel
-                        </Button>
-                        <Button type="submit" disabled={!title.trim()}>
-                            Save changes
-                        </Button>
-                    </DialogFooter>
-                </form>
-            </DialogContent>
+                    }
+                >
+                    <Field>
+                        <FieldLabel htmlFor="title">Title</FieldLabel>
+                        <Input id="title" value={title} onChange={(e) => setTitle(e.target.value)} />
+                    </Field>
+                </FormDialogForm>
+            </FormDialog>
 
             <DeleteDialog
                 open={isDeleteDialogOpen}
@@ -126,6 +102,6 @@ export function ColumnSettingsDialog({
                 }
                 onDelete={handleDelete}
             />
-        </Dialog>
+        </>
     );
 }
