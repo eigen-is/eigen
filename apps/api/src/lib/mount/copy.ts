@@ -4,7 +4,7 @@
 // also records where each copy came from. Mount.copyPath calls it, and a copy between mounts has its
 // own walk, copyPathAcross.
 
-import type { DriveContainerType, DrivePath } from '@workspace/lib/types/drive';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { DRIVE_TYPE_FOLDER, isContainerType } from '@workspace/lib/types/drive';
 import { storageGone } from '../core';
 import { copyThumbnail } from '../shared/thumbnails';
@@ -30,8 +30,7 @@ export async function copyPath(
     if (isContainerType(src.type)) {
         const isEigenDoc = src.type !== DRIVE_TYPE_FOLDER;
         if (isEigenDoc) await mount.flushContainerDb(srcPathId);
-        const containerType: DriveContainerType | undefined = isEigenDoc ? src.type : undefined;
-        const newId = await mount.createFolder(destParentId, name, containerType);
+        const newId = await mount.createFolder(destParentId, name, src.type);
         if (actor) {
             mount.history.record({ pathId: newId, eventType: 'copied', actor, details: copiedFrom });
         }

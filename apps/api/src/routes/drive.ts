@@ -55,8 +55,8 @@ import {
     eigenDocTypeSchema,
 } from './shared-schemas';
 
-// One cap for every free-text share note (collaborator email + access request), so a single
-// oversized body can't be persisted or mailed.
+// One cap for every free-text share note, such as a mail to the collaborators or an access request. So no
+// oversized note is stored or mailed.
 const MAX_SHARE_MESSAGE_LENGTH = 12000;
 
 // How often a copy picks a new free name after another create took the one it picked. Each parallel
@@ -91,8 +91,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .get(
         '/drive/:ownerId/shared/by-me',
         async ({ params, user }) => {
-            // Shared-by-me listings are owner-only (the SharedDrive surface deliberately omits
-            // them). Reject cross-owner calls explicitly rather than relying on a runtime stub.
+            // SharedDrive has no shared-by-me listing, so a call for another owner's drive is refused here.
             requireSelf(params.ownerId, user.id);
             const drive = await getDrive(user);
             return await drive.getSharedPathsByMe();
@@ -193,14 +192,14 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // Without this the client would retry and copy the tree twice.
             server?.timeout(request, 0);
             const sourceDrive = await getSharedDrive(params.ownerId, user);
-            const src = await sourceDrive.getPath(params.mountId, params.pathId);
-            if (!src) throw new ApiError(404, 'Source not found');
+            const source = await sourceDrive.getPath(params.mountId, params.pathId);
+            if (!source) throw new ApiError(404, 'Source not found');
 
             // The per-file upload cap bounds a single file. A folder or a document only has to fit in the
             // free space.
-            if (isContainerType(src.type)) {
-                await enforceMountQuota(body.targetOwnerId, body.targetMountId, await copySize(sourceDrive, src));
-            } else if (src.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
+            if (isContainerType(source.type)) {
+                await enforceMountQuota(body.targetOwnerId, body.targetMountId, await copySize(sourceDrive, source));
+            } else if (source.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
                 throw new ApiError(413, 'Source file too large');
             }
 
@@ -211,7 +210,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
             // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
-            const desired = (body.name ?? src.name).replace(/[/\\]/g, '_').normalize('NFC');
+            const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
             // Two copies into one folder at once can both pick the same free name. The one that creates
             // second gets a 409, so it reads the folder again and picks the next free name.
             for (let attempt = 1; ; attempt++) {
@@ -230,7 +229,7 @@ export const driveRouter = new Elysia({ name: 'drive' })
                     }
                     return await copyPathAcross(
                         sourceDrive,
-                        src,
+                        source,
                         targetDrive,
                         body.targetMountId,
                         body.targetParentId,
@@ -301,7 +300,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
                 throw new ApiError(403, 'No write permission');
             }
             const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
-            // Bounded reader: Content-Length over the ceiling is refused before any read, a lying stream is cancelled as it crosses it.
+            // A Content-Length over the cap is refused before any read. A stream that goes past the cap is
+            // cancelled there.
             const bytes = await readBoundedBodyBytes(request, maxSize);
             const summary = await importIntoDocument(
                 drive,
@@ -371,8 +371,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }
             setCacheHeaders(set, PREVIEW_MAX_AGE_SECONDS);
             set.headers['Content-Type'] = result.contentType;
-            // SVG previews are served as-is (uploaded SVGs are user bytes) and rendered inline on the API
-            // origin, so a scriptable payload gets the same sandbox CSP as /embed (scriptableInlineHeaders).
+            // An SVG preview is the user's own bytes, shown inline on the API origin. So a payload that can
+            // run script gets the same sandbox CSP as /embed.
             Object.assign(set.headers, scriptableInlineHeaders(result.contentType));
             return result.data;
         },
@@ -445,8 +445,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             await drive.restoreContainer(params.mountId, params.pathId, params.snapshotName, user);
             return { success: true };
         },
-        // Constrain the user-supplied snapshot name to the snapshot filename shape so
-        // a bogus value 422s here instead of falling through to a deep 404.
+        // The snapshot name must have the shape of a snapshot file name, so a bogus one answers 422 here
+        // and not 404 deep down.
         {
             auth: true,
             params: t.Object({

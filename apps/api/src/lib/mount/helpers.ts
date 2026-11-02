@@ -6,6 +6,7 @@ import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
 import type { MountConfig, MountSettings } from '@workspace/lib/types';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
+import { DEFAULT_MOUNT_ID } from '@workspace/lib/types/mount';
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { getS3Config } from '../config/server-settings';
@@ -141,7 +142,6 @@ export function isViableRecoveryTemp(tempPath: string, knownSize: number): boole
 }
 
 const DEFAULT_MOUNT_NAME = 'My Drive';
-const DEFAULT_MOUNT_ID = 'default';
 
 export function createDefaultMountConfig(): MountConfig {
     return { id: DEFAULT_MOUNT_ID, name: DEFAULT_MOUNT_NAME, storageType: 'local', isDefault: true };
