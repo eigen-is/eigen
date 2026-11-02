@@ -6,7 +6,7 @@
 export const BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'] as const;
 export type BorderStyle = (typeof BORDER_STYLES)[number];
 
-// Null means Eigen's own look, so a border a node sets is either drawn or none.
+// A border a node sets: drawn, or none.
 export type Border = 'none' | { width: number; style: BorderStyle; color: string };
 
 // In px: Word's thinnest and thickest borders, a quarter point and twelve, clamped to what still draws on screen.
@@ -21,6 +21,7 @@ export function fitBorderPx(px: number): number {
 
 const BORDER = /^(\d{1,3}(?:\.\d{1,2})?)px ([a-z]+) (#[0-9a-f]{6})$/;
 
+// Any value but the stored form reads as null, which means Eigen's own look.
 export function readBorder(value: unknown): Border | null {
     const text = typeof value === 'string' ? value.toLowerCase() : '';
     if (text === 'none') return 'none';

@@ -17,7 +17,6 @@ import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css'
 import type { ExportMedia, TransformWarning } from '../../../../lib/document/transform/protocol';
 import { lossCounter, toTransferableText } from '../../../../lib/document/transform/protocol';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/doc/docx/fonts';
-import { clampInt } from '../../../../lib/export/doc/docx/paragraphs';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import type { DrawingTheme } from '../../../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
@@ -905,11 +904,6 @@ describe('docx writer — a doc no editor writes', () => {
             'Heading1',
             'Heading1',
         ]);
-    });
-
-    // A cell in the last column has no columns left to span, so its range's min is above its max.
-    test('a whole number with its min above its max reads as the max', () => {
-        expect([clampInt(3, 1, 0, 1), clampInt(0.4, 1, 0, 1), clampInt(Number.NaN, 1, 0, 1)]).toEqual([0, 0, 1]);
     });
 });
 

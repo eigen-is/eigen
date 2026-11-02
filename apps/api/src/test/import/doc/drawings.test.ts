@@ -603,6 +603,50 @@ describe('size', () => {
             [null, null],
         ]);
     });
+
+    describe('in a group', () => {
+        const WPG = 'http://schemas.microsoft.com/office/word/2010/wordprocessingGroup';
+        const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+        // Word writes useLocalDpi in the blip's own a:extLst, as an a:ext before the picture's a:xfrm.
+        const LOCAL_DPI =
+            '<a:extLst><a:ext uri="{28A0092B-C50C-407E-A947-70E740481C1C}"><a14:useLocalDpi xmlns:a14="http://schemas.microsoft.com/office/drawing/2010/main" val="0"/></a:ext></a:extLst>';
+        const pic = (cx: number, cy: number) =>
+            `<pic:pic><pic:nvPicPr><pic:cNvPr id="1" name="p"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rId4">${LOCAL_DPI}</a:blip></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></pic:spPr></pic:pic>`;
+        const box = (cx: number, cy: number) =>
+            `<wps:wsp><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm></wps:spPr><wps:txbx><w:txbxContent><w:p><w:r><w:t>Beside it</w:t></w:r></w:p></w:txbxContent></wps:txbx></wps:wsp>`;
+        const group = (cx: number, cy: number, shapes: string) =>
+            `<w:r><w:drawing><wp:inline><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="9" name="Group 9"/><a:graphic><a:graphicData uri="${WPG}"><wpg:wgp xmlns:wpg="${WPG}" xmlns:wps="${WPS}">${shapes}</wpg:wgp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+        const sizesOf = async (body: string) =>
+            nodesOfType((await importDocxBody(body)).json, 'figure').map((node) => [
+                node.attrs?.['width'],
+                node.attrs?.['height'],
+            ]);
+
+        test("a picture beside a text box keeps its own size, not the group's", async () => {
+            expect(
+                await sizesOf(paragraph(group(6000000, 571500, `${pic(381000, 381000)}${box(5000000, 381000)}`))),
+            ).toEqual([[40, 40]]);
+        });
+
+        test('each of two pictures keeps its own size', async () => {
+            expect(
+                await sizesOf(paragraph(group(1143000, 381000, `${pic(381000, 381000)}${pic(762000, 190500)}`))),
+            ).toEqual([
+                [40, 40],
+                [80, 20],
+            ]);
+        });
+
+        // govuk-Shigellosis_interim_enhanced_surveil.docx: a 153 by 104 px logo grouped with a 484 px title box, the
+        // group 630 by 92 px.
+        test("the GOV.UK form's logo keeps its shape beside its title", async () => {
+            const [[width, height] = []] = await sizesOf(
+                paragraph(group(6000751, 878205, `${pic(1454376, 992778)}${box(4612074, 863566)}`)),
+            );
+            expect([width, height]).toEqual([153, 104]);
+            expect(Number(width) / Number(height)).toBeCloseTo(1.46, 1);
+        });
+    });
 });
 
 // VML's office attributes are read by their namespace, whatever prefix binds it.
@@ -704,6 +748,13 @@ describe('text boxes', () => {
             expect(
                 await read(`${item(`${text('One')}${shape(box('Boxed', '000000'))}`)}${item(text('Two'))}${quoted}`),
             ).toEqual(['bulletList[listItem[OnetextBox[Boxed]] | listItem[Two]]', 'blockquote[SaidtextBox[Inside]]']);
+        });
+
+        // The item's indent comes off a box's offset, which still reads no further than the largest paper.
+        test('a box in front of the text, far off the paper, stores an offset in range', async () => {
+            const far = `<w:r><w:pict><v:rect xmlns:v="urn:schemas-microsoft-com:vml" style="position:absolute;margin-left:-99999px;margin-top:0;width:100px;height:50px;mso-position-horizontal-relative:text;mso-position-vertical-relative:text"><v:textbox>${box('Far', '000000')}</v:textbox></v:rect></w:pict></w:r>`;
+            const { json } = await importDocxBody(item(`${text('One')}${far}`), { numbering: NUMBERING });
+            expect(nodesOfType(json, 'textBox').map((node) => node.attrs?.['offsetX'])).toEqual([-LARGEST_PAPER]);
         });
 
         test('a table and a list in it are its paragraphs', async () => {
@@ -1002,6 +1053,20 @@ describe('text boxes as boxes', () => {
         expect(boxes[0]?.attrs).toMatchObject({ paddingX: null, paddingY: null });
     });
 
+    // Word writes a theme color with its slot after it. A named color, such as black, has no reader yet, so it reads as
+    // none, slot or not.
+    test("a VML box reads a color past Word's theme slot", async () => {
+        const colored = (fill: string, stroke: string) =>
+            vmlBox(PLACED)
+                .replace('fillcolor="#ffeeaa"', `fillcolor="${fill}"`)
+                .replace('strokecolor="#0000ff"', `strokecolor="${stroke}"`);
+        const boxes = await vmlBoxesOf(colored('#4f81bd [3204]', '#1f497d [3215]'), colored('#4f81bd', 'black [3213]'));
+        expect(boxes.map((box) => [box.attrs?.['fill'], box.attrs?.['outline']])).toEqual([
+            ['#4f81bd', '2px solid #1f497d'],
+            ['#4f81bd', null],
+        ]);
+    });
+
     // As VML reads a length with no unit: px in the CSS style, as a browser reads one, and EMU in an attribute.
     test('a VML box reads a unitless style length as px, and a unitless inset or stroke weight as EMU', async () => {
         const unitless = PLACED.replace('margin-left:30pt', 'margin-left:40')
@@ -1097,6 +1162,17 @@ describe('text boxes as boxes', () => {
         expect(boxes.map((box) => box.attrs?.['layout'])).toEqual(['wrap-left', 'wrap-right']);
     });
 
+    // Word writes mso-position-horizontal:absolute for a box placed by its margin, which names no side.
+    test('a VML box at an absolute horizontal position wraps on the side its center is on', async () => {
+        const at = (left: string) =>
+            vmlBox(
+                PLACED.replace('margin-left:30pt', `margin-left:${left};mso-position-horizontal:absolute`),
+                '<w10:wrap type="square"/>',
+            );
+        const boxes = await vmlBoxesOf(at('0pt'), at('350pt'));
+        expect(boxes.map((box) => box.attrs?.['layout'])).toEqual(['wrap-left', 'wrap-right']);
+    });
+
     test("a VML box grows by its textbox's mso-fit-shape-to-text and aligns its text by v-text-anchor", async () => {
         const boxes = await vmlBoxesOf(
             vmlBox(`${PLACED};v-text-anchor:middle`, '', ' style="mso-fit-shape-to-text:t"'),
@@ -1163,8 +1239,8 @@ describe('text boxes as boxes', () => {
         expect(bare.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
     });
 
-    // The box is aligned by its width, so the picture takes that width and keeps its shape. A 400 by 40 px picture in a
-    // 96 px box is 96 by 9.6, and in a box wider than the paper it is the paper's 793 px wide.
+    // The box is aligned by its width, so the picture takes that width and keeps its shape, its height a whole px. A 400
+    // by 40 px picture in a 96 px box is 96 by 10, and in a box wider than the paper it is the paper's 793 px wide.
     test('a picture in an unpainted box is stored at the box’s width and lands on the paper', async () => {
         const parts = {
             rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
@@ -1176,8 +1252,8 @@ describe('text boxes as boxes', () => {
         const { json } = await importDocxBody([bare(914400), bare(7620000)].join(''), parts);
         const figures = nodesOfType(json, 'figure');
         expect(figures.map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']])).toEqual([
-            [96, 9.6],
-            [793, 79.3],
+            [96, 10],
+            [793, 79],
         ]);
         expect(onPaper(figures)).toEqual([
             [697, 793],
@@ -1485,6 +1561,16 @@ describe('charts', () => {
             [295, 498],
             [495, 698],
         ]);
+    });
+
+    // The box is aligned by its width, so the chart takes that width and keeps its shape: 96 by 57.6 px for the 480 by
+    // 288 px chart, its height a whole px.
+    test('a chart in an unpainted box is stored at the box’s width and lands on the paper', async () => {
+        const WPS = 'http://schemas.microsoft.com/office/word/2010/wordprocessingShape';
+        const box = `<w:r><w:drawing><wp:anchor><wp:positionH relativeFrom="page"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:extent cx="914400" cy="571500"/><wp:wrapNone/><wp:docPr id="7" name="Text Box 7"/><a:graphic><a:graphicData uri="${WPS}"><wps:wsp xmlns:wps="${WPS}"><wps:spPr><a:noFill/><a:ln><a:noFill/></a:ln></wps:spPr><wps:txbx><w:txbxContent>${paragraph(chartRun('rId20'))}</w:txbxContent></wps:txbx><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing></w:r>`;
+        const { json } = await imported(paragraph(`${box}<w:r><w:t>Anchor</w:t></w:r>`), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([[96, 58]]);
+        expect(onPaper(charts(json))).toEqual([[697, 793]]);
     });
 
     // tdf124398: Word groups a chart with its caption's text box; the chart's own frame sizes it.

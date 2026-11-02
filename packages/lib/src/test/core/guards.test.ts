@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { isRecord, readNumberIn } from '../../core/guards';
+import { isRecord, readIntIn, readNumberIn } from '../../core/guards';
 
 describe('isRecord', () => {
     test('a plain object is a record, and an array, null or a primitive is not', () => {
@@ -40,5 +40,23 @@ describe('readNumberIn', () => {
     test('a range whose min passes its max reads as the max, as Math.min over Math.max gives', () => {
         expect(readNumberIn(5, 10, 2)).toBe(2);
         expect(readNumberIn(-5, 10, 2)).toBe(2);
+    });
+});
+
+describe('readIntIn', () => {
+    test('a number is held to the range, then rounded', () => {
+        expect([readIntIn(2.4, 1, 6), readIntIn(2.5, 1, 6), readIntIn(0.4, 1, 6), readIntIn(9.7, 1, 6)]).toEqual([
+            2, 3, 1, 6,
+        ]);
+    });
+
+    test('anything but a finite number reads as null', () => {
+        for (const value of [Number.NaN, Number.POSITIVE_INFINITY, '3', null, undefined])
+            expect(readIntIn(value, 1, 6)).toBeNull();
+    });
+
+    // A table cell in the last column has no columns left to span, so its range's min is above its max.
+    test('a range whose min passes its max reads as the max', () => {
+        expect([readIntIn(3, 1, 0), readIntIn(0.4, 1, 0)]).toEqual([0, 0]);
     });
 });

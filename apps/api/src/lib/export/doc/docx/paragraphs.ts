@@ -11,7 +11,7 @@ import {
     readFigureFrameAttrs,
     readParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
-import { readNumberIn } from '@workspace/lib/guards';
+import { readIntIn } from '@workspace/lib/guards';
 import type { RunFace, WordBorder } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
@@ -163,7 +163,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     [
         'heading',
         (node, context) => {
-            const level = clampInt(node.attrs?.['level'], 1, MAX_HEADING_LEVEL, 1);
+            const level = readIntIn(node.attrs?.['level'], 1, MAX_HEADING_LEVEL) ?? 1;
             const { sizePt } = textMetrics(`.eigen-prose h${level}`, context.pkg.normal.size);
             const firstMargin = context.firstInFlow
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
@@ -227,7 +227,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
             const type = node.attrs?.['type'];
             const format =
                 (typeof type === 'string' && LIST_FORMATS.get(type)) || untypedListFormat(context.orderedListsAround);
-            return listOf(node, context, 'ol', { format, start: clampInt(node.attrs?.['start'], 0, 32767, 1) });
+            return listOf(node, context, 'ol', { format, start: readIntIn(node.attrs?.['start'], 0, 32767) ?? 1 });
         },
     ],
     ['taskList', (node, context) => listOf(node, context, 'ul', undefined)],
@@ -606,10 +606,4 @@ function codeLines(tree: HastNode, pkg: Package): string[] {
 function justification(node: JSONContent): string | undefined {
     const textAlign = node.attrs?.['textAlign'];
     return typeof textAlign === 'string' ? JUSTIFICATION.get(textAlign) : undefined;
-}
-
-// A stored whole number, such as a heading level or a cell's span: held to its range, then rounded. The bounds and the
-// fallback are whole numbers, so rounding after the range gives what rounding before it would.
-export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-    return Math.round(readNumberIn(value, min, max) ?? fallback);
 }

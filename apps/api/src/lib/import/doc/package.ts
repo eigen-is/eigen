@@ -230,11 +230,14 @@ export function descendants(root: XmlElement, ns: string, local: string): XmlEle
 // ── Floats ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 // The side a floating drawing or table wraps on: the one its alignment names, where it names one, else the half of the
-// column its center is in. Outside counts as the right, as on an odd page.
+// column its center is in. Outside counts as the right, as on an odd page. Any other value names no side, such as
+// VML's absolute, which Word writes for a box its margin places.
 export function floatSide(named: string | undefined, center: number, column: number): 'left' | 'right' {
-    if (named) return named === 'right' || named === 'outside' ? 'right' : 'left';
+    if (named && ALIGNED_SIDES.has(named)) return named === 'right' || named === 'outside' ? 'right' : 'left';
     return center > column / 2 ? 'right' : 'left';
 }
+
+const ALIGNED_SIDES = new Set(['left', 'right', 'center', 'inside', 'outside']);
 
 // ── VML ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
