@@ -40,9 +40,9 @@ export function canvasHtmlDocument(options: CanvasDocumentOptions): string {
     const rendered = pages.map((page) =>
         pdf ? renderPrintPage(page, resolveMedia) : renderFittedPage(page, scale, resolveMedia),
     );
-    // Every page in a document is the same size (a deck has one slide size; a drawing has one page), and it
-    // is rounded exactly as the page box is — a sheet a fraction narrower than its content is an extra
-    // blank page in WeasyPrint. Callers guarantee at least one page.
+    // Every page in a document is the same size, since a deck has one slide size and a drawing one page. It is
+    // rounded exactly as the page box is, because WeasyPrint adds a blank page for a sheet a fraction narrower than
+    // its content. Callers pass at least one page.
     const width = round(pages[0].width * scale);
     const height = round(pages[0].height * scale);
     // The raw HTML of each text box and shape was filtered at the scene; the builder sanitizes the assembled body. No
@@ -85,8 +85,8 @@ export async function renderEigenslidesHtml(
     return { data: toTransferableText(html), warnings: [] };
 }
 
-// The reset zeroes every padding, which would otherwise pull the list markers of a text box or a shape
-// outside its box — canvas-text.css puts that one back.
+// The reset zeroes every padding, which would pull the list markers of a text box or a shape outside its box, so
+// the canvas's text stylesheet puts that one back.
 const SHARED_CSS = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 img { display: block; max-width: 100%; }
@@ -96,8 +96,8 @@ svg { display: block; }
 // The viewport widths of the fit box's fallback ladder, for a browser that cannot divide `100cqw` by a length.
 const FALLBACK_BREAKPOINTS = [960, 768, 640, 480, 360];
 
-// The narrowest viewport the ladder serves. The bottom step has no lower breakpoint — it applies all
-// the way down — so this is the width it must fit, or a phone crops the page it was meant to save.
+// The narrowest viewport the ladder serves. The bottom step has no lower breakpoint and applies all the way down,
+// so it must fit this width, or a phone crops the page.
 const NARROWEST_VIEWPORT = 320;
 
 // The body's padding is 2rem a side, so a page gets the viewport less 64px. A step is sized for the narrow end of its

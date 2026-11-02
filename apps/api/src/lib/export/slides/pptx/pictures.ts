@@ -30,7 +30,7 @@ export function pictureXml(el: VectorImageElement, slide: Slide, opacity: number
     }
     const fit = fitOf(image, el.width, el.height);
     const cover = el.objectFit === 'cover';
-    const insets = fit && el.objectFit !== 'fill' ? insetsOf(fit, cover, !cover) : '';
+    const insets = fit && el.objectFit !== 'fill' ? insetsOf(fit, { cover, outward: !cover }) : '';
     const crop = insets && `<a:srcRect${insets}/>`;
     const id = ++slide.shapes;
     return `<p:pic><p:nvPicPr><p:cNvPr id="${id}" name="Picture ${id}"/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr><p:nvPr/></p:nvPicPr><p:blipFill>${slideBlipXml(image, slide, opacity)}${crop}<a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xfrmXml(slide, el)}${boxGeometry(el)}${line}</p:spPr></p:pic>`;
@@ -48,7 +48,7 @@ export function backgroundXml(background: BackgroundFill | null, frame: VectorFr
     }
     const fit = fitOf(image, frame.width, frame.height);
     const cover = background.fit === 'cover';
-    const insets = fit ? insetsOf(fit, cover, cover) : '';
+    const insets = fit ? insetsOf(fit, { cover, outward: cover }) : '';
     return `<p:bg><p:bgPr><a:blipFill dpi="0" rotWithShape="1">${slideBlipXml(image, slide, 1)}<a:stretch><a:fillRect${insets}/></a:stretch></a:blipFill><a:effectLst/></p:bgPr></p:bg>`;
 }
 
@@ -65,7 +65,7 @@ function fitOf(image: OfficeImage, width: number, height: number): Fit | null {
 // The insets of a crop or a fill rectangle that fit the picture to its box, or none when they round to nothing. Cover
 // acts on the axis where the picture overshoots its box, and contain on the other. An inward inset pulls the rectangle
 // in and is positive. An outward one pushes it out past its edges and is negative.
-function insetsOf(fit: Fit, cover: boolean, outward: boolean): string {
+function insetsOf(fit: Fit, { cover, outward }: { cover: boolean; outward: boolean }): string {
     const inset = drawingShare(outward ? -(fit.ratio - 1) / 2 : (1 - 1 / fit.ratio) / 2);
     if (inset === 0) return '';
     const leftAndRight = cover ? fit.wide : !fit.wide;

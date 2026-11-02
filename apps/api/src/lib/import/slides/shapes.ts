@@ -408,10 +408,10 @@ function readPicture(
     });
 }
 
-// The pptx export fits a picture with a crop centered on one axis: negative, past the picture, to contain it, and
-// positive, into it, to cover it. The reader keeps a picture's bytes unparsed, so it can't check the crop against the
-// picture's aspect, and reads any such crop as that fit. A side that doesn't read counts as uncropped. Any other crop
-// is drawn uncropped and counted.
+// The pptx export fits a picture with a crop centered on one axis. A negative crop reaches past the picture to
+// contain it, and a positive one cuts into it to cover it. The reader never decodes a picture, so it can't check the
+// crop against the picture's aspect, and it reads any such crop as that fit. A side that doesn't read counts as
+// uncropped. Any other crop draws the picture uncropped and is counted.
 function objectFitOf(blipFill: XmlElement | undefined, lost: Lost): ObjectFit {
     const rect = blipFill && childOf(blipFill, A_NS, 'srcRect');
     if (!rect) return 'fill';
@@ -503,8 +503,8 @@ const TRANSPARENT_FILL_JSON = PPTX_STYLE.fill;
 type Stroke = { strokeColor: string; strokeWidth: number; strokeStyle: StrokeStyle };
 const NO_STROKE: Stroke = { strokeColor: TRANSPARENT_COLOR, strokeWidth: PPTX_STYLE.strokeWidth, strokeStyle: 'solid' };
 
-// The first fill the chain states, a placeholder's own before its layout's and master's; else p:style's fillRef, its
-// color the style matrix entry's phClr.
+// The first fill the chain states, a placeholder's own before its layout's and master's. Without one, the fill is
+// p:style's fillRef, whose phClr is that style's color.
 function fillOf(
     chain: ShapeProperties[],
     walk: Walk,
@@ -560,8 +560,8 @@ const LINES = new Set(['line', 'straightConnector1']);
 
 const outlines = cachedBy<string, GeometryPath[] | undefined>();
 
-// A custGeom's or preset's paths in the shape's own extents, its guides' w and h, mirrored as it lands; worked out once
-// for its geometry however many slides show it.
+// A custGeom's or preset's paths in the shape's own extents, which are its guides' w and h, mirrored as the shape
+// lands. They are worked out once per geometry, however many slides show it.
 function outlineOf(
     geom: XmlElement | undefined,
     geometry: string,
@@ -758,8 +758,9 @@ function place(placeIn: Place, xfrm: Xfrm): Placed {
     };
 }
 
-// A box wholly off the slide (a master's guide or note, copied onto every slide) would be stored unseen past the frame,
-// which the canvas clips, or drawn in the bands beside a letterboxed slide; a box a group scaled past a double is none.
+// Whether a box is on the slide. A box wholly off it, such as a master's guide or note copied onto every slide, would
+// be stored unseen past the frame, which the canvas clips, or drawn in the bands beside a letterboxed slide. A box a
+// group scaled past what a double holds is on no slide.
 function onSlide(box: Box, deck: DeckWalk): boolean {
     if (![box.x, box.y, box.width, box.height].every(Number.isFinite)) return false;
     const r = (box.angle * Math.PI) / 180;
