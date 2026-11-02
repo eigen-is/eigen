@@ -67,9 +67,11 @@ export function resolveCellRange(
         const match = reference.match(SHEET_REFERENCE);
         if (match == null) return null;
         const [, startSheet, start, endSheet, end] = match;
-        if (endSheet != null && startSheet !== endSheet) return null;
+        const sheetName = unquoteSheetName(startSheet);
+        // The engine reads Data!A1:'Data'!B2 as one sheet's range, so only the names count, quoted or not.
+        if (endSheet != null && unquoteSheetName(endSheet) !== sheetName) return null;
         cells = end ? `${start}:${end}` : start;
-        const sheet = sheets.find((s) => s.name === unquoteSheetName(startSheet));
+        const sheet = sheets.find((s) => s.name === sheetName);
         sheetId = sheet?.id;
         matrix = sheet?.data;
     } else if (!sheets.some((s) => s.id === formulaSheetId)) {
