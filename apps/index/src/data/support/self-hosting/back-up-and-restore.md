@@ -6,7 +6,7 @@ category: Maintenance
 tags: [self-hosting, backup, restore, s3, cron]
 related: [self-hosting/move-to-another-server, self-hosting/update, admin/server-settings, admin/back-up-home, admin/backup-contents]
 order: 90
-updated: 2026-10-28
+updated: 2026-11-02
 ---
 
 Eigen backs up the whole server while it runs: every account's mail, files, contacts, and calendars, the settings, the server databases, `.env.production`, the key that signs your mail, and the mail server's certificate. Nobody is signed out and nothing stops: only a rename or move on a drive, and the saves and uploads on that drive after it, can wait while the backup copies one very large file there. This page shows how to back up every night, how to keep a copy off the server, and what a backup leaves out. To put one back, go to [Put a backup back](#put-a-backup-back).
@@ -165,7 +165,7 @@ Each server backup holds a backup of every user and team, under `homes/`. Copy o
 
 ```bash
 cd /opt/eigen
-tar -tf backups/server-scheduled-full-<date>-<time>.tar | grep homes/
+sudo tar -tf backups/server-scheduled-full-<date>-<time>.tar | grep homes/
 sudo sh -c 'tar -xOf backups/server-scheduled-full-<date>-<time>.tar homes/home-<id>-<date>-<time>.tar.zst > backups/home-<id>-<date>-<time>.tar.zst'
 sudo chown 1000:1000 backups/home-<id>-<date>-<time>.tar.zst
 ```
