@@ -3,13 +3,13 @@
 // still exists, so a home that is busy with a restore or a backup keeps the team.
 
 import { teamOwnerId } from '@workspace/lib/types/owner';
-import { getTeamDataPath } from '../config/paths';
+import { getTeamHomePath } from '../config/paths';
 import { deleteHomeData } from '../home/delete-home';
 import { removeEntriesForTarget, removeEntriesFromSource } from '../share/registry';
 
 export async function teardownTeamData(teamId: string): Promise<void> {
     const ownerId = teamOwnerId(teamId);
-    await deleteHomeData(ownerId, getTeamDataPath(teamId));
+    await deleteHomeData(ownerId, getTeamHomePath(teamId));
     await removeEntriesFromSource(ownerId);
     await removeEntriesForTarget(ownerId);
 }

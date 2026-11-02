@@ -13,10 +13,10 @@ export function isDemo(): boolean {
     return process.env['EIGEN_DEMO'] === '1';
 }
 
-// Hosted mailboxes come with the `mail` docker profile (postfix + dovecot). A deployment that
-// runs without it sets MAIL_ENABLED=0, and the apps then hide every Mail entry point. A restore asks it of the
-// .env.production it restores with.
-export function isMailEnabled(env: Record<string, string | undefined> = process.env): boolean {
+// Hosted mailboxes come with the `mail` docker profile (postfix + dovecot). A deployment that runs without it sets
+// MAIL_ENABLED=0, and the apps then hide every Mail entry point. A restore asks it of the .env.production it restores
+// with.
+export function isMailEnabled(env: Readonly<Record<string, string | undefined>> = process.env): boolean {
     return env['MAIL_ENABLED'] !== '0';
 }
 
@@ -25,7 +25,8 @@ export function isMailAppEnabled(): boolean {
     return isMailEnabled() || isDemo();
 }
 
-// The `edge` docker profile runs the bundled Caddy; the API reads COMPOSE_PROFILES from .env.production through env_file.
+// The `edge` docker profile runs the bundled Caddy. The API reads COMPOSE_PROFILES from .env.production through
+// env_file.
 export function isBundledCaddy(): boolean {
     return (process.env['COMPOSE_PROFILES'] ?? '').split(',').includes('edge');
 }
@@ -35,12 +36,13 @@ export function getRelayHost(): string | undefined {
     return process.env['SMTP_RELAY_HOST'] || undefined;
 }
 
-// The commit the API image was built from, set by its Dockerfile and by ./eigen for a local build; unset in `bun run dev`.
+// The commit the API image was built from, set by its Dockerfile and by ./eigen for a local build. It is unset in
+// `bun run dev`.
 export function getBuildCommit(): string | undefined {
     return process.env['EIGEN_COMMIT'] || undefined;
 }
 
-// The install's .env.production, which Compose mounts read-only for the server backup; unset in `bun run dev`.
+// The install's .env.production, which Compose mounts read-only for the server backup. It is unset in `bun run dev`.
 export function getEnvFile(): string | undefined {
     return process.env['EIGEN_ENV_FILE'] || undefined;
 }
