@@ -17,12 +17,7 @@ import {
 } from '@workspace/lib/settings';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { EMPTY_S3, isS3ConfigValid, keepsSavedSecret } from '@workspace/lib/types/mount';
-import type {
-    LandingLink,
-    ServerSettings,
-    ServerSettingsSaved,
-    ServerStorageType,
-} from '@workspace/lib/types/settings';
+import type { LandingLink, ServerSettings, ServerSettingsSaved } from '@workspace/lib/types/settings';
 import type { DeepPartial } from '@workspace/lib/types/util';
 import { validateEmailAddress } from '@workspace/lib/validation';
 import { LoadingState, SettingsFooter, SettingsSection, TooltipButton } from '@workspace/ui';
@@ -75,7 +70,7 @@ export function ServerSettingsPage() {
             email: { ...settings.notifications.email, ...draft.notifications?.email },
         },
         landing: {
-            links: draft.landing?.links ?? settings.landing?.links ?? [],
+            links: draft.landing?.links ?? settings.landing.links,
         },
         backups: {
             schedule: { ...settings.backups.schedule, ...draft.backups?.schedule },
@@ -111,7 +106,8 @@ export function ServerSettingsPage() {
         setDraft((prev) => ({ ...prev, landing: { links } }));
     };
 
-    // Only the half the owner touched is sent: an upload part in the body runs the destination check.
+    // The draft keeps only the half of the backup settings the owner changed. The server checks the bucket only when a
+    // save carries the upload half, so a change to the schedule alone skips that check.
     const updateBackups = (patch: DeepPartial<ServerSettings['backups']>) => {
         setDirty(true);
         setDraft((prev) => ({
@@ -132,13 +128,11 @@ export function ServerSettingsPage() {
     const saving = updateSettings.isPending || updateS3Config.isPending || updateOrgName.isPending;
     // The test mail goes out from the saved sender, so an unsaved one would test the wrong thing.
     const senderDirty = draft.mail !== undefined || orgNameDraft !== null;
-    // Without mailboxes, mail goes out through the relay setup named, if any. Unknown until the status loads.
+    // A server without mailboxes sends its mail through the relay named at setup, if there is one. The status says
+    // which, so relayHost is undefined until it loads.
     const relayHost = status?.relayHost;
     const mailOff = !mailEnabled && relayHost === null;
     const senderAddressInvalid = current.mail.senderAddress !== '' && !validateEmailAddress(current.mail.senderAddress);
-    const handleS3Check = (config: S3Config) => s3Check.mutateAsync(config);
-    const handleS3Harden = (config: S3Config, noncurrentDays: number) =>
-        s3Harden.mutateAsync({ ...config, noncurrentDays });
     const savedDestination = settings.backups.upload.s3;
     const backupSecretSaved =
         savedDestination.accessKeyId !== '' && keepsSavedSecret(current.backups.upload.s3, savedDestination);
@@ -151,8 +145,9 @@ export function ServerSettingsPage() {
             const saved = await updateSettings.mutateAsync(
                 draft.landing ? { ...draft, landing: { links: normalizeLinks(draft.landing.links ?? []) } } : draft,
             );
-            // The notice comes once, for a new backup bucket: its keys are the one thing to keep off this server. The
-            // warning comes from the bucket check, which every save with the upload on runs, bucket changed or not.
+            // The notice comes once, when the backup bucket is new: it asks the owner to keep the bucket's keys
+            // somewhere other than this server. The warning comes from the bucket check. That check runs on every
+            // save of the upload settings while the upload is on, even when the bucket stayed the same.
             if (saved.notice || saved.warning) setBackupNotice({ notice: saved.notice, warning: saved.warning });
         }
         handleReset();
@@ -306,7 +301,7 @@ export function ServerSettingsPage() {
             >
                 <StorageTypePicker
                     storageType={current.defaults.mount.storageType}
-                    onStorageTypeChange={(type: ServerStorageType) => {
+                    onStorageTypeChange={(type) => {
                         setDirty(true);
                         setDraft((prev) => ({ ...prev, defaults: { mount: { storageType: type } } }));
                     }}
@@ -315,8 +310,8 @@ export function ServerSettingsPage() {
                         setS3Dirty(true);
                         setS3Draft(config);
                     }}
-                    checkS3={handleS3Check}
-                    hardenS3={handleS3Harden}
+                    checkS3={(config) => s3Check.mutateAsync(config)}
+                    hardenS3={(config, noncurrentDays) => s3Harden.mutateAsync({ ...config, noncurrentDays })}
                 />
             </SettingsSection>
 
@@ -388,7 +383,7 @@ export function ServerSettingsPage() {
                             />
                             <TooltipButton
                                 icon={Trash2}
-                                tooltipText="Remove"
+                                tooltipText={`Remove ${link.title.trim() || link.url.trim() || 'empty link'}`}
                                 onClick={() => updateLinks(current.landing.links.filter((_, j) => j !== i))}
                             />
                         </div>
@@ -422,14 +417,16 @@ export function ServerSettingsPage() {
     );
 }
 
-function normalizeLinks(links: LandingLink[]): LandingLink[] {
+// The server refuses an empty title or URL, and a URL that does not start with http:// or https://. A save also trims
+// both fields, drops a row that misses one, lowercases the scheme and puts https:// before a URL that has none.
+function normalizeLinks(links: readonly LandingLink[]): LandingLink[] {
     return links
-        .map((l) => ({ title: l.title.trim(), url: l.url.trim() }))
-        .filter((l) => l.title !== '' && l.url !== '')
-        .map((l) => {
-            const scheme = l.url.match(/^https?:\/\//i)?.[0];
+        .map((link) => ({ title: link.title.trim(), url: link.url.trim() }))
+        .filter((link) => link.title !== '' && link.url !== '')
+        .map((link) => {
+            const scheme = link.url.match(/^https?:\/\//i)?.[0];
             return scheme
-                ? { ...l, url: scheme.toLowerCase() + l.url.slice(scheme.length) }
-                : { ...l, url: `https://${l.url}` };
+                ? { ...link, url: scheme.toLowerCase() + link.url.slice(scheme.length) }
+                : { ...link, url: `https://${link.url}` };
         });
 }

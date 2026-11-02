@@ -33,7 +33,7 @@ The **New event** form opens as a dialog. Fill in the fields you need:
 
 1. Click the event in the calendar. A detail panel opens showing the time, location, description, and any guests.
 2. Click the pencil icon in the bottom-left corner of the panel. The **Edit event** dialog opens with all the same fields.
-3. Make your changes, then click **Save**.
+3. Make your changes, then click **Save**, or press Enter in the title field.
 
 On an event someone else invited you to, the details are grayed out, because only the organizer can change them. You can still move it to a different calendar, and you can [respond to the invitation](/support/calendar/respond-to-invitation).
 
