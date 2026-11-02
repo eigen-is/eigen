@@ -44,8 +44,6 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
     const pendingFontWrites = useRef(0);
     // The panel mounts a kind's section only when every selected element is of that kind, so this only narrows.
     const arrows = elements.filter((el): el is VectorArrowElement => el.type === 'arrow');
-    // An elbow arrow's route lives in its unrotated local frame. So when every selected arrow is an elbow, the
-    // panel also pins its Angle input, through a check of its own.
     const allElbow = arrows.length > 0 && arrows.every((el) => el.elbow);
     // An empty label has no font to tune.
     const allLabeled = arrows.length > 0 && arrows.every((el) => el.text !== '');
@@ -66,8 +64,8 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
             if (next !== 'elbow' || el.type !== 'arrow') return base;
             const pts = parsePoints(el.points);
             const collapsed = pts.length >= 2 ? [pts[0], pts[pts.length - 1]] : pts;
-            // A bound end's fixedPoint was stored for the straight read; re-dock it for the elbow read so
-            // the endpoint sits on the outline, not inside the shape. followBindings re-glues after.
+            // A bound end's fixedPoint was stored for a straight arrow. It docks again for the elbow, so the end sits
+            // on the outline and not inside the shape. followBindings glues the arrow to its shapes after.
             const redocked = redockBindingsForElbow(el, scene);
             return { ...base, ...redocked, angle: 0, ...normalizeLinear({ ...el, angle: 0 }, collapsed) };
         });
@@ -87,10 +85,7 @@ export function ArrowPanelSection({ elements, scene, slideWidth, onChange, onCha
                 await Promise.all(
                     arrows.map(async (el) => {
                         const patch = fields(el);
-                        const font = {
-                            fontSize: patch.fontSize ?? el.fontSize,
-                            fontFamily: patch.fontFamily ?? el.fontFamily,
-                        };
+                        const font = { fontSize: el.fontSize, fontFamily: el.fontFamily, ...patch };
                         const { width } = await measureLoadedVectorText(el.text, font);
                         return [el.id, { ...patch, labelWidth: width }] as const;
                     }),
