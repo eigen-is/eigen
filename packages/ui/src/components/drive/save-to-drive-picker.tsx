@@ -13,7 +13,7 @@ import { useOptionalPreview } from '../preview-provider/preview-context';
 import { DriveLocationPicker } from './drive-location-picker';
 
 type SaveToDrivePickerProps = {
-    subjects: FileSubject[];
+    subjects: readonly FileSubject[];
     open: boolean;
     onClose: () => void;
     // What the save created: the runner converts what it just saved for a subject with no Drive path.
@@ -29,12 +29,14 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
     const source = subjects[0]?.drive;
     const mail = subjects[0]?.mail;
     const { mutateAsync: copyToFolder } = useCopyToFolder();
+    const saveMailAttachments = useSaveMailAttachmentsToDrive();
     // After a partial failure a retry sends only the files that failed, or the ones that copied would land twice.
     const [failed, setFailed] = useState<DrivePath[] | null>(null);
     useEffect(() => {
         if (!open) setFailed(null);
     }, [open]);
-    const saveMailAttachments = useSaveMailAttachmentsToDrive();
+    const items = failed ?? subjects.flatMap((subject) => (subject.drive ? [subject.drive] : []));
+    const count = mail ? subjects.length : items.length;
     const downloadTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
     useEffect(
         () => () => {
@@ -63,7 +65,7 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
             // The picker opens over the preview overlay when one is showing, and has to outrank it.
             abovePreview={preview?.isPreviewOpen}
             mode="folder"
-            title={title ?? (subjects.length > 1 ? `Save ${subjects.length} files to Drive` : 'Save to Drive')}
+            title={title ?? (count > 1 ? `Save ${count} files to Drive` : 'Save to Drive')}
             confirmLabel={confirmLabel ?? 'Save here'}
             defaultOwnerId={source?.ownerId}
             defaultMountId={source?.mountId}
@@ -80,10 +82,7 @@ export function SaveToDrivePicker({ subjects, open, onClose, onSaved, title, con
                           indexes: subjects.flatMap((subject) => (subject.mail ? [subject.mail.index] : [])),
                           ...target,
                       })
-                    : await copyToFolder({
-                          items: failed ?? subjects.flatMap((subject) => (subject.drive ? [subject.drive] : [])),
-                          ...target,
-                      }).catch((error) => {
+                    : await copyToFolder({ items, ...target }).catch((error) => {
                           if (error instanceof PartialCopyError) setFailed(error.failed);
                           throw error;
                       });
