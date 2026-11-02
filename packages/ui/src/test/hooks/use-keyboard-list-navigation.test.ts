@@ -5,7 +5,7 @@ import { renderInDocument } from '../render-in-document';
 
 installHappyDom();
 
-const { act, createElement, createRef } = await import('react');
+const { act, createElement, useRef, useState } = await import('react');
 const { createPortal } = await import('react-dom');
 const { useKeyboardListNavigation } = await import('../../hooks/use-keyboard-list-navigation');
 
@@ -32,25 +32,29 @@ function selectionOf(ids: string[]): UseListSelectionReturn<Row> {
 }
 
 // A list with one row that holds a ⋮ button, and a field portaled out of it to the body, the way a dialog opened from a row's menu sits in
-// the list's React tree but not in its DOM. The cursor is lifted (mail's mode) to put the list on a known row; -1 is
-// the no-selection state every list starts in. Each callback is recorded as `kind:id`.
-async function mountList(cursorIndex: number, selection?: UseListSelectionReturn<Row>) {
+// the list's React tree but not in its DOM. The cursor is lifted (mail's mode) and starts on a known row; -1 is
+// the no-selection state every list starts in. A move opens nothing, as in Drive with no row open. Each callback is
+// recorded as `kind:id`.
+async function mountList(startIndex: number, selection?: UseListSelectionReturn<Row>) {
     const calls: string[] = [];
     function Harness() {
+        const containerRef = useRef<HTMLDivElement>(null);
+        const [cursorIndex, setCursorIndex] = useState(startIndex);
         const { handleKeyDown } = useKeyboardListNavigation<Row>({
             items: ROWS,
             getId: (item) => item.id,
             onSelect: (id) => calls.push(`open:${id}`),
             onQuickLook: (id) => calls.push(`look:${id}`),
             onDelete: (item) => calls.push(`delete:${item.id}`),
-            containerRef: createRef<HTMLElement>(),
+            shouldNotify: () => false,
+            containerRef,
             selection,
             cursorIndex,
-            onCursorChange: () => {},
+            onCursorChange: setCursorIndex,
         });
         return createElement(
             'div',
-            { tabIndex: 0, onKeyDown: handleKeyDown },
+            { ref: containerRef, tabIndex: 0, onKeyDown: handleKeyDown },
             createElement('div', { 'data-row': '' }, createElement('button', { type: 'button', 'data-menu': '' })),
             createPortal(createElement('input', { 'data-dialog-field': '' }), document.body),
         );
@@ -143,6 +147,20 @@ describe('useKeyboardListNavigation Space and Enter', () => {
         }
         expect(calls).toEqual([]);
         await unmount();
+    });
+
+    // A row's menu hands the focus back to its ⋮ button when it closes.
+    test('a key that moves the cursor off a row’s button hands the focus back, so Enter opens the new row', async () => {
+        for (const key of ['ArrowDown', 'End']) {
+            const { calls, list, menuButton, keydown, unmount } = await mountList(0);
+            if (!(menuButton instanceof HTMLElement)) throw new Error('no menu button');
+            menuButton.focus();
+            await keydown(menuButton, key);
+            expect(document.activeElement).toBe(list);
+            await keydown(list, 'Enter');
+            expect(calls).toEqual([key === 'End' ? 'open:c' : 'open:b']);
+            await unmount();
+        }
     });
 });
 
