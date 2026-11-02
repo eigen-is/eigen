@@ -79,7 +79,7 @@ export async function restoreHome(
             const shares = readShares(folder);
 
             return async (stamp) => {
-                // The archive's `home/` IS the home folder, one for one.
+                // The archive's `home/` is the home folder, one for one.
                 onProgress?.('home files', 0, 1);
                 await movePathAsync(path.join(folder, ARCHIVE_HOME_DIR), homeDir);
                 onProgress?.('home files', 1, 1);
@@ -92,7 +92,8 @@ export async function restoreHome(
                     onProgress?.('mounts', index + 1, carried.length);
                 }
 
-                // Before the identity write: the rollback moves folders, and nothing takes a users3.db row back.
+                // Before the identity write: a failure from here on only puts the folders back, and nothing takes a
+                // users3.db row back.
                 checkRestoredDatabases(
                     homeDir,
                     carried.map((summary) => summary.id),
@@ -165,7 +166,7 @@ export function readShares(folder: string): BackupShare[] {
 }
 
 // Inserts only the missing rows: a registry row that is already there describes a live share.
-export async function restoreShares(ownerId: string, rows: BackupShare[]): Promise<void> {
+export async function restoreShares(ownerId: string, rows: readonly BackupShare[]): Promise<void> {
     for (const row of rows) await addRegistryEntry(ownerId, row.targetIdentifier);
 }
 
@@ -242,7 +243,7 @@ async function replaceHomeFolder(
             throw error;
         }
     } finally {
-        // Whatever happened above is over, and the rollback put the home back itself. Neither call
+        // Whatever happened above is over, and a failed install put the home back itself. Neither call
         // may throw over the failure that brought us here.
         clearHomeRestoring(ownerId);
         try {

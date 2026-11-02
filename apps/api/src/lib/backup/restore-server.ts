@@ -194,32 +194,6 @@ async function stageHome(
     return { ...notReplayed, ...lost };
 }
 
-// Against each live mount of the home. A folder and a document's own databases are not counted, only what a user
-// put in them: a document made since counts once, and every file in a folder renamed since counts.
-function countLostFiles(homeDir: string, liveHomeDir: string, mounts: BackupManifest['mounts']): LostFiles {
-    const lost: LostFiles = { created: 0, moved: 0 };
-    for (const { id, storageType } of mounts) {
-        const otherwise = 'its files are not counted';
-        const live = readMetadata(path.join(liveHomeDir, PATHS.DRIVE.ROOT, id), readMountPathRows, otherwise);
-        const restored = readMetadata(requireMountDir(homeDir, id), readMountPathRows, otherwise);
-        if (!live || !restored) continue;
-        const liveById = new Map(live.map((row) => [row.id, row]));
-        const archived = new Map(restored.map((row) => [row.id, row]));
-        for (const row of live) {
-            if (row.type === DRIVE_TYPE_FOLDER || managedDbContainer(row, liveById)) continue;
-            const before = archived.get(row.id);
-            if (!before) lost.created++;
-            else if (
-                storageType === 'local' &&
-                storageKeyOf(before, archived, true) !== storageKeyOf(row, liveById, true)
-            ) {
-                lost.moved++;
-            }
-        }
-    }
-    return lost;
-}
-
 // An s3 mount the bucket stays as it is for. Each pending row's bytes go to staging/ under the name its row gives
 // them: from staging/ as archived, or, when the archive holds the mount's files, from its data/, which goes.
 // A key the live mount has no row for any more was acked or canceled here: replaying it puts older bytes on the
@@ -304,4 +278,30 @@ function redateTrash(metadataPath: string, now: number): void {
     } finally {
         db.close();
     }
+}
+
+// Against each live mount of the home. A folder and a document's own databases are not counted, only what a user
+// put in them: a document made since counts once, and every file in a folder renamed since counts.
+function countLostFiles(homeDir: string, liveHomeDir: string, mounts: BackupManifest['mounts']): LostFiles {
+    const lost: LostFiles = { created: 0, moved: 0 };
+    for (const { id, storageType } of mounts) {
+        const otherwise = 'its files are not counted';
+        const live = readMetadata(path.join(liveHomeDir, PATHS.DRIVE.ROOT, id), readMountPathRows, otherwise);
+        const restored = readMetadata(requireMountDir(homeDir, id), readMountPathRows, otherwise);
+        if (!live || !restored) continue;
+        const liveById = new Map(live.map((row) => [row.id, row]));
+        const archived = new Map(restored.map((row) => [row.id, row]));
+        for (const row of live) {
+            if (row.type === DRIVE_TYPE_FOLDER || managedDbContainer(row, liveById)) continue;
+            const before = archived.get(row.id);
+            if (!before) lost.created++;
+            else if (
+                storageType === 'local' &&
+                storageKeyOf(before, archived, true) !== storageKeyOf(row, liveById, true)
+            ) {
+                lost.moved++;
+            }
+        }
+    }
+    return lost;
 }

@@ -1,13 +1,8 @@
 // Fails a release that migrates any database since the previous release unless CHANGELOG.md marks it (full backup).
-// A rollback after a Light backup keeps the data as it is and starts the build before the update, which refuses a
-// schema newer than its own. So only the Full backup the marker gets ./eigen update to make lets a rollback go back
-// over a migration. publish.yml runs it on a version tag, and with --main on a push to main, where the mark goes under
-// [Unreleased] since the main channel reads it there.
-//
-// Usage: bun apps/api/src/scripts/check-schema-marker.ts <version> [--main]
-//
-// The previous release's versions come from its tag through git grep and git show: a worktree of the tag would resolve
-// @workspace/* through this checkout's node_modules.
+// A rollback after a Light backup starts the build before the update on today's data, and that build refuses a schema
+// newer than its own, so a migration needs the Full backup the mark makes ./eigen update take. publish.yml runs it on
+// a version tag, and with --main on a push to main, where the mark goes under [Unreleased].
+
 import { readFileSync } from 'node:fs';
 import { ROOT, VERSION_PATTERN } from '../cli/install';
 import { CHANGELOG_PATH, FULL_BACKUP_MARKER, releaseNotes } from '../cli/update-check';
@@ -18,16 +13,17 @@ const DB_CONFIG_FILES = 'apps/api/src/lib/*/*db-config.ts';
 const CURRENT_VERSION = /currentVersion:\s*(\w+)/;
 const NAME = /name:\s*'([^']+)'/;
 
-function git(args: string[]): { code: number; stdout: string } {
+// Exit code 1 is git grep finding nothing, which is an answer.
+function git(args: readonly string[]): string {
     const run = Bun.spawnSync(['git', ...args], { cwd: ROOT });
     if (run.exitCode > 1) throw new Error(`git ${args.join(' ')}: ${run.stderr.toString().trim()}`);
-    return { code: run.exitCode, stdout: run.stdout.toString() };
+    return run.stdout.toString();
 }
 
 // Why this checkout cannot be checked, or null: a shallow clone has no tags below it, so it would read as the first
 // release and pass.
 export function shallowCloneError(): string | null {
-    if (git(['rev-parse', '--is-shallow-repository']).stdout.trim() !== 'true') return null;
+    if (git(['rev-parse', '--is-shallow-repository']).trim() !== 'true') return null;
     return 'This checkout is a shallow clone, so the release before it cannot be read. Check it out with full history (fetch-depth: 0).';
 }
 
@@ -35,7 +31,7 @@ export function shallowCloneError(): string | null {
 // Prerelease tags are skipped, so a release whose candidates' sections were folded into its own still compares
 // with the release before them. On main, package.json keeps the version of the last release until the next one, so
 // there it is the highest release tag up to `version`.
-export function previousRelease(tags: string[], version: string, onMain = false): string | null {
+export function previousRelease(tags: readonly string[], version: string, onMain = false): string | null {
     let previous: string | null = null;
     for (const tag of tags) {
         const release = RELEASE_TAG.exec(tag)?.[1];
@@ -47,16 +43,17 @@ export function previousRelease(tags: string[], version: string, onMain = false)
     return previous;
 }
 
-// Every database's currentVersion at `ref`, by the name its db-config.ts gives it there, one config a file.
+// Every database's currentVersion at `ref`, by the name its db-config.ts gives it there, one config a file. Read with
+// git grep and git show: a worktree of a tag would resolve @workspace/* through this checkout's node_modules.
 export function schemaVersionsAt(ref: string): Map<string, number> {
     const versions = new Map<string, number>();
-    const files = git(['grep', '-l', 'currentVersion:', ref, '--', DB_CONFIG_FILES]).stdout.split('\n').filter(Boolean);
+    const files = git(['grep', '-l', 'currentVersion:', ref, '--', DB_CONFIG_FILES]).split('\n').filter(Boolean);
     for (const file of files) {
-        const source = git(['show', file]).stdout;
+        const source = git(['show', file]);
         const name = NAME.exec(source)?.[1];
         const value = CURRENT_VERSION.exec(source)?.[1] ?? '';
         const version = /^\d+$/.test(value) ? value : new RegExp(`const ${value} = (\\d+);`).exec(source)?.[1];
-        if (!name || !version) throw new Error(`${file} declares no literal name and currentVersion`);
+        if (!name || !version) throw new Error(`${file} declares no name or currentVersion this check can read`);
         if (versions.has(name)) throw new Error(`two db-config.ts files at ${ref} name the database ${name}`);
         versions.set(name, Number(version));
     }
@@ -71,10 +68,10 @@ export function schemaMarkerError(
     previous: string,
     version: string,
     before: ReadonlyMap<string, number>,
-    after: { name: string; currentVersion: number }[],
+    after: ReadonlyMap<string, number>,
     onMain = false,
 ): string | null {
-    const moved = after.flatMap(({ name, currentVersion }) => {
+    const moved = [...after].flatMap(([name, currentVersion]) => {
         const old = before.get(name);
         return old === undefined || old === currentVersion ? [] : [`${name} ${old} → ${currentVersion}`];
     });
@@ -98,18 +95,17 @@ if (import.meta.main) {
         console.error(shallow);
         process.exit(1);
     }
-    const previous = previousRelease(git(['tag', '--list', 'v*']).stdout.split('\n'), version, onMain);
+    const previous = previousRelease(git(['tag', '--list', 'v*']).split('\n'), version, onMain);
     if (!previous) {
         console.log(`No release before ${version} to compare with.`);
         process.exit(0);
     }
-    const after = [...schemaVersionsAt('HEAD')].map(([name, currentVersion]) => ({ name, currentVersion }));
     const error = schemaMarkerError(
         readFileSync(CHANGELOG_PATH, 'utf8'),
         previous,
         version,
         schemaVersionsAt(`v${previous}`),
-        after,
+        schemaVersionsAt('HEAD'),
         onMain,
     );
     if (error) {

@@ -1,5 +1,6 @@
-// A home folder's mounts put back from an archive, and the check of what landed. The restores use it, such as
-// ./eigen restore, whose stage runs beside a live API. So nothing imported here opens a file on load.
+// A home folder's mounts put back from an archive, and the check of what landed, which a rollback also runs on the
+// data in place. The restores use it, such as ./eigen restore, whose stage runs beside a live API. So nothing imported
+// here opens a file on load.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -134,12 +135,12 @@ export function materializeMount(
 // What landed has to be a database this server can still open: SQLite's own verdict on the bytes,
 // and the schema stamp against the config that will open them. A database from a newer server passes
 // quick_check and is then refused by ManagedDatabase's forward-version guard, which fails the whole
-// home on the next load, long after the job said it was done. The home is evicted and the restoring
-// mark is still set, so this is the one place a live home's databases are opened directly.
+// home on the next load, long after the job said it was done. It opens the files directly, never through the home:
+// a restore has evicted the home, and a rollback's check runs in another process than the API.
 export function checkRestoredDatabases(
     homeDir: string,
-    mountIds: string[],
-    containerDatabases: VersionedDatabase[],
+    mountIds: readonly string[],
+    containerDatabases: readonly VersionedDatabase[],
 ): void {
     const targets: VersionedDatabase[] = HOME_DATABASES.map(([config, relPath]) => ({
         filePath: path.join(homeDir, relPath),
@@ -156,7 +157,7 @@ export function checkRestoredDatabases(
 }
 
 // The same verdict on any databases, such as the server's own. One that is not there is skipped.
-export function checkDatabases(targets: VersionedDatabase[]): void {
+export function checkDatabases(targets: readonly VersionedDatabase[]): void {
     for (const target of targets) {
         if (!fs.existsSync(target.filePath)) continue;
         const version = schemaVersionOf(target.filePath);
@@ -196,7 +197,7 @@ export function mountIdsIn(homeDir: string): string[] {
 // from: every mount's paths table, keyed the way that mount's own backend keys its objects. A
 // remote mount's are in its bucket, so the path derived for one does not exist and the check skips
 // it. That is exactly what materializeMount returns for the same mount.
-export function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
+export function containerDatabasesIn(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
         const mountDir = requireMountDir(homeDir, mountId);

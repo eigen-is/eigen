@@ -33,8 +33,8 @@ const before = new Map([
     ['mail', 2],
     ['comment-index', 5],
 ]);
-const unmoved = [...before].map(([name, currentVersion]) => ({ name, currentVersion }));
-const moved = unmoved.map((db) => (db.name === 'comment-index' ? { ...db, currentVersion: 6 } : db));
+const unmoved = new Map(before);
+const moved = new Map([...before, ['comment-index', 6]]);
 
 describe('previousRelease', () => {
     test('is the highest release tag below the version, for a backport too', () => {
@@ -62,7 +62,7 @@ describe('schemaMarkerError', () => {
     });
 
     test('a database a Light backup holds counts too: the build before cannot open it either', () => {
-        const mail = unmoved.map((db) => (db.name === 'mail' ? { ...db, currentVersion: 3 } : db));
+        const mail = new Map([...before, ['mail', 3]]);
         expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, mail)).toContain('mail 2 → 3');
     });
 
@@ -72,7 +72,7 @@ describe('schemaMarkerError', () => {
 
     test('nothing moved passes without the marker, and a database new since the previous release is no move', () => {
         expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, unmoved)).toBeNull();
-        const added = [...unmoved, { name: 'whiteboard', currentVersion: 3 }];
+        const added = new Map([...before, ['whiteboard', 3]]);
         expect(schemaMarkerError(CHANGELOG, '0.3.2', '0.3.3', before, added)).toBeNull();
     });
 
