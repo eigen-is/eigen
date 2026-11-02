@@ -486,13 +486,19 @@ async function checkData(flags: Flags): Promise<void> {
             { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
         ]);
         checkPages(join(server, SERVER_DATABASES.users));
-        for (const homes of homeKinds.map((dir) => join(DATA, dir)).filter(existsSync)) {
-            for (const entry of readdirSync(homes, { withFileTypes: true })) {
-                if (!entry.isDirectory() || parseSafetyCopyName(entry.name)) continue;
-                const homeDir = join(homes, entry.name);
-                const mountIds = mountIdsIn(homeDir);
-                checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
-            }
+        const homeDirs = homeKinds
+            .map((dir) => join(DATA, dir))
+            .filter(existsSync)
+            .flatMap((homes) =>
+                readdirSync(homes, { withFileTypes: true })
+                    .filter((entry) => entry.isDirectory() && !parseSafetyCopyName(entry.name))
+                    .map((entry) => join(homes, entry.name)),
+            );
+        // A large server takes minutes, so each home gets a line.
+        for (const [index, homeDir] of homeDirs.entries()) {
+            console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
+            const mountIds = mountIdsIn(homeDir);
+            checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
         }
     } catch (error) {
         console.error(glyphLine('bad', `${describeError(error)}.`));

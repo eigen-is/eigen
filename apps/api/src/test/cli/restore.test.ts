@@ -1416,6 +1416,11 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
             expect(passed.stderr).toBe('');
             expect(passed.code).toBe(0);
             expect(passed.stdout).toContain('This build opens every database in data/');
+            // One line per home, so a large server is not silent for minutes.
+            const progress = passed.stdout.split('\n').filter((line) => / home \d+ of \d+: data\//.test(line));
+            expect(progress.length).toBeGreaterThan(1);
+            expect(progress.at(-1)).toContain(`home ${progress.length} of ${progress.length}: `);
+            expect(passed.stdout).toContain(`: ${relative(dir, homeDirOf(dir, realShape.user.id))}\n`);
             // Without --yes it asks, and a no is the launcher's sign to change nothing.
             const declined = await restoreCli(dir, ['--check-data'], { input: 'n\n' });
             expect(declined.code).toBe(DECLINED);
