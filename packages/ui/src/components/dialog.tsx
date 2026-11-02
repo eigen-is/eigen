@@ -78,17 +78,12 @@ function DialogContent({
                     size ? dialogSizeMap[size] : 'sm:max-w-xl',
                     className,
                 )}
-                // While a preview is open, a click outside never closes the dialog. Radix checks each layer on its
-                // own, so a click in a picker over the preview counts as outside the dialog under the preview. A
-                // dialog above the preview covers it with its overlay, so a click on that overlay closes the
-                // preview. Under the preview, the preview closes itself when its own overlay is clicked.
+                // A dialog under an open preview stays open on a click outside it: Radix checks each layer on its
+                // own, so a click in a picker over the preview counts as outside the dialog under the preview. The
+                // preview closes itself when its own overlay is clicked. A dialog above the preview closes alone,
+                // as anywhere else, so a click outside New folder over the Save to Drive picker leaves the picker.
                 onPointerDownOutside={(e) => {
-                    if (preview?.isPreviewOpen) {
-                        e.preventDefault();
-                        const onPreviewOverlay =
-                            e.target instanceof Element && e.target.closest('[data-preview-overlay]') !== null;
-                        if (abovePreview && !onPreviewOverlay) preview.closePreview();
-                    }
+                    if (preview?.isPreviewOpen && !abovePreview) e.preventDefault();
                     onPointerDownOutside?.(e);
                 }}
                 // Escape over an open preview is the preview's to close, not the dialog's under it. Escape in a
