@@ -482,6 +482,31 @@ describe('round trip', () => {
         ]);
     });
 
+    // A rule over the whole sheet under many scattered cells. A cut of the whole grid at every range's edges makes
+    // millions of blocks, which took most of a minute and gigabytes.
+    test('a sheet-wide rule under many scattered cells compares in a moment', () => {
+        const list = (value1: string) => ({ type: 'dropdown', type2: '', value1, value2: '' });
+        const scattered = Array.from({ length: 2000 }, (_, i) => ({ row: [3 * i, 3 * i], column: [3 * i, 3 * i] }));
+        const sheet = (value1: string): Sheet[] => [
+            {
+                name: 'S',
+                dataValidations: {
+                    'validation-1': { ranges: [{ row: [0, 1048575], column: [0, 16383] }], rule: list(value1) },
+                    'validation-2': { ranges: scattered, rule: list('b') },
+                },
+            },
+        ];
+        const started = performance.now();
+        const groups = classifyDifferences({
+            warnings: new Map(),
+            a: sheet('a'),
+            b: sheet('c'),
+            media: { a: new Map(), b: new Map() },
+        });
+        expect(performance.now() - started).toBeLessThan(3000);
+        expect(groups.map(({ kind, listed, count }) => [kind, listed, count])).toEqual([['dataValidations', false, 1]]);
+    });
+
     test('a prompt cut to the length Excel holds is listed when the cut is counted', () => {
         const prompt = (hintValue: string): Sheet[] => [
             {

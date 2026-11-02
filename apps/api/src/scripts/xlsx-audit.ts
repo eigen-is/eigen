@@ -27,6 +27,7 @@ import {
     cellFontName,
     coalescedRanges,
     compareValidationIds,
+    rangesOverlap,
     SHEET_DEFAULT_FONT,
     SHEET_DEFAULT_FONT_SIZE,
 } from '@workspace/lib/sheets';
@@ -1027,52 +1028,92 @@ export function diffWorkbooks(a: Sheet[], b: Sheet[], media: RoundtripContext['m
 
 // The cells whose rule two sheets' validations give differently, one difference for each pair of rules. Each side is
 // read as the editor reads a cell: of the rules that cover it, the highest id wins. Each import numbers its rules
-// afresh, so the sides compare by the rule each cell gets, never by ids or ranges. The grid is cut at every edge of
-// every range on either side, so each block of cells gets one rule on each side, and only the blocks a range covers
-// are read.
+// afresh, so the sides compare by the rule each cell gets, never by ids or ranges. The walk starts from the block
+// around every range and cuts a block in two at a range's edge until each side gives the whole block one rule. So a
+// large block no edge crosses, such as most of a sheet-wide rule, is read once.
 function validationDifferences(
     a: Sheet['dataValidations'],
     b: Sheet['dataValidations'],
 ): { at: string; a?: DataVerificationRule; b?: DataVerificationRule }[] {
-    const sides = [a ?? {}, b ?? {}];
-    const ranges = sides.flatMap((rules) => Object.values(rules).flatMap((validation) => validation.ranges));
-    const edges = (axis: 'row' | 'column') =>
-        [...new Set(ranges.flatMap((range) => [range[axis][0], range[axis][1] + 1]))].sort((x, y) => x - y);
-    const rows = edges('row');
-    const columns = edges('column');
-    const rowAt = new Map(rows.map((edge, index) => [edge, index]));
-    const columnAt = new Map(columns.map((edge, index) => [edge, index]));
-    const [blocksA, blocksB] = sides.map((rules) => {
-        const blocks = new Map<number, DataVerificationRule>();
-        // The lowest id first, so a higher id paints over it.
-        for (const id of Object.keys(rules).sort(compareValidationIds)) {
-            for (const { row, column } of rules[id].ranges) {
-                for (let r = rowAt.get(row[0]) ?? rows.length; rows[r] <= row[1]; r += 1) {
-                    for (let c = columnAt.get(column[0]) ?? columns.length; columns[c] <= column[1]; c += 1)
-                        blocks.set(r * columns.length + c, rules[id].rule);
-                }
-            }
-        }
-        return blocks;
-    });
-    const pairs = new Map<string, { a?: DataVerificationRule; b?: DataVerificationRule; blocks: SingleRange[] }>();
-    for (const block of new Set([...blocksA.keys(), ...blocksB.keys()])) {
-        const pair = { a: blocksA.get(block), b: blocksB.get(block) };
-        const [x, y] = [canonical(pair.a ?? null), canonical(pair.b ?? null)];
-        if (x === y) continue;
-        const r = Math.floor(block / columns.length);
-        const c = block % columns.length;
-        const cells = { row: [rows[r], rows[r + 1] - 1], column: [columns[c], columns[c + 1] - 1] };
-        const held = pairs.get(`${x} ${y}`);
-        if (held) held.blocks.push(cells);
-        else pairs.set(`${x} ${y}`, { ...pair, blocks: [cells] });
+    // Each side's ranges, each with its rule's place in id order, so the highest place wins a cell.
+    const [rankedA, rankedB] = [a ?? {}, b ?? {}].map((rules) =>
+        Object.keys(rules)
+            .sort(compareValidationIds)
+            .flatMap((id, rank) => rules[id].ranges.map((range) => ({ range, rank, rule: rules[id].rule }))),
+    );
+    const all = [...rankedA, ...rankedB];
+    if (all.length === 0) return [];
+    const around = { row: [...all[0].range.row], column: [...all[0].range.column] };
+    for (const { range } of all) {
+        around.row = [Math.min(around.row[0], range.row[0]), Math.max(around.row[1], range.row[1])];
+        around.column = [Math.min(around.column[0], range.column[0]), Math.max(around.column[1], range.column[1])];
     }
+    const pairs = new Map<string, { a?: DataVerificationRule; b?: DataVerificationRule; blocks: SingleRange[] }>();
+    const walk = (block: SingleRange, inA: readonly RankedRange[], inB: readonly RankedRange[]) => {
+        const pair = { a: blockRule(block, inA), b: blockRule(block, inB) };
+        if (pair.a && pair.b) {
+            const [x, y] = [canonical(pair.a.rule ?? null), canonical(pair.b.rule ?? null)];
+            if (x === y) return;
+            const held = pairs.get(`${x} ${y}`);
+            if (held) held.blocks.push(block);
+            else pairs.set(`${x} ${y}`, { a: pair.a.rule, b: pair.b.rule, blocks: [block] });
+            return;
+        }
+        for (const half of halves(block, [...inA, ...inB])) {
+            const meets = ({ range }: RankedRange) => rangesOverlap(range, half);
+            walk(half, inA.filter(meets), inB.filter(meets));
+        }
+    };
+    walk(around, rankedA, rankedB);
     return [...pairs.values()].map(({ blocks, ...pair }) => ({
         at: coalescedRanges(blocks)
             .map((range) => rangeToA1(range))
             .join(' '),
         ...pair,
     }));
+}
+
+type RankedRange = { range: SingleRange; rank: number; rule: DataVerificationRule };
+
+// The rule one side gives every cell of a block, with no rule when no range meets it, or undefined when its cells get
+// different rules. Every range given meets the block. The highest place wins a cell, so the block is one rule's when a
+// range of the highest place covers it whole.
+function blockRule(block: SingleRange, ranked: readonly RankedRange[]): { rule?: DataVerificationRule } | undefined {
+    if (ranked.length === 0) return {};
+    let top = 0;
+    for (const { rank } of ranked) top = Math.max(top, rank);
+    const covering = ranked.find(
+        ({ range, rank }) =>
+            rank === top &&
+            range.row[0] <= block.row[0] &&
+            range.row[1] >= block.row[1] &&
+            range.column[0] <= block.column[0] &&
+            range.column[1] >= block.column[1],
+    );
+    return covering && { rule: covering.rule };
+}
+
+// A block cut in two at the middle one of the range edges inside it, along the axis more edges cross. A block whose
+// cells get different rules always has such an edge: a range of the highest place meets it without covering it.
+function halves(block: SingleRange, ranked: readonly RankedRange[]): SingleRange[] {
+    const inside = (axis: 'row' | 'column') =>
+        [...new Set(ranked.flatMap(({ range }) => [range[axis][0], range[axis][1] + 1]))]
+            .filter((edge) => edge > block[axis][0] && edge <= block[axis][1])
+            .sort((x, y) => x - y);
+    const rows = inside('row');
+    const columns = inside('column');
+    if (rows.length >= columns.length) {
+        const edge = rows[rows.length >> 1];
+        return [
+            { row: [block.row[0], edge - 1], column: block.column },
+            { row: [edge, block.row[1]], column: block.column },
+        ];
+    }
+    const edge = columns[columns.length >> 1];
+    return [
+        { row: block.row, column: [block.column[0], edge - 1] },
+        { row: block.row, column: [edge, block.column[1]] },
+    ];
 }
 
 // A sheet's pictures in paint order, by place, their media by order of first use, as an import names both afresh, and
