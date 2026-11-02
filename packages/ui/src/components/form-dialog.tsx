@@ -97,6 +97,8 @@ export function FormDialogForm({
             noValidate
             onSubmit={(e) => {
                 e.preventDefault();
+                // React passes a portaled submit up to a form that holds the dialog, and that form must not submit too.
+                e.stopPropagation();
                 if (canSubmit && !readOnly) submit(onSubmit);
             }}
         >
