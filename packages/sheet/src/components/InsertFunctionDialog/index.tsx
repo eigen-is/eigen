@@ -10,6 +10,7 @@ import { cn } from '@workspace/ui/lib/utils';
 import { useContext, useMemo, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
+import type { FormulaFunctionEntry } from '../../state';
 import { FUNCTION_LIST, setCaretPosition } from '../../state';
 
 // The categories of the dropdown. Their ids are FUNCTION_LIST's `t`.
@@ -44,12 +45,17 @@ export function InsertFunctionDialog() {
     const functions = useMemo(() => {
         const text = searchText.trim().toLowerCase();
         if (!text) return FUNCTION_LIST.filter((fn) => fn.t === category);
-        const matches = (s: string) => s.toLowerCase().includes(text);
-        // The names that match come first, so Enter after a typed name inserts a function of that name.
-        return [
-            ...FUNCTION_LIST.filter((fn) => matches(fn.n)),
-            ...FUNCTION_LIST.filter((fn) => !matches(fn.n) && matches(fn.a)),
-        ];
+        // The typed name comes first, then the names that start with it, the other names that hold it and the
+        // descriptions that do, so Enter after a typed name inserts that function.
+        const rank = (fn: FormulaFunctionEntry) => {
+            const name = fn.n.toLowerCase();
+            if (name === text) return 0;
+            if (name.startsWith(text)) return 1;
+            return name.includes(text) ? 2 : 3;
+        };
+        return FUNCTION_LIST.filter(
+            (fn) => fn.n.toLowerCase().includes(text) || fn.a.toLowerCase().includes(text),
+        ).sort((a, b) => rank(a) - rank(b));
     }, [category, searchText]);
 
     // The caret goes after the bracket, and the function's hint shows. An edit already open in the cell is replaced.

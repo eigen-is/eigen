@@ -103,3 +103,14 @@ test('the search matches a description in any case, after the names that match',
     const byName = listed().map((name) => name?.includes('SUM'));
     expect(byName.indexOf(false)).toBeGreaterThan(byName.lastIndexOf(true));
 });
+
+test('a typed name lists that function first, then the names that start with it, so Enter inserts it', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'cos');
+    expect(listed().slice(0, 2)).toEqual(['COS', 'COSH']);
+    expect(listed()).toContain('ACOS');
+    await dialog.type(SEARCH, 'sum');
+    expect(highlighted()).toBe('SUM');
+    await act(async () => pressEnter(dialog.field(SEARCH)));
+    expect(dialog.editorText()).toBe('=SUM(');
+});
