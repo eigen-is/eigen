@@ -13,6 +13,7 @@ import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { useState } from 'react';
+import { LoadingState } from '../layout/app/loading-state';
 
 type DriveEmailCollaboratorsProps = {
     path: DrivePath;
@@ -31,10 +32,17 @@ export function DriveEmailCollaborators({ path, open, onOpenChange }: DriveEmail
     );
 }
 
-// The editor takes its content only when it mounts, so the form waits for the settings that hold the signature.
+// The editor takes its content only when it mounts, so the form waits for the settings that hold the signature. Settings
+// that fail to load leave the message empty.
 function EmailCollaboratorsBody({ path }: { path: DrivePath }) {
     const { data: spaceSettings, isLoading } = useSpaceSettings();
-    if (isLoading) return null;
+    if (isLoading) {
+        return (
+            <FormDialogForm canSubmit={false} submitLabel="Send" onSubmit={() => {}}>
+                <LoadingState />
+            </FormDialogForm>
+        );
+    }
     return <EmailCollaboratorsForm path={path} signature={spaceSettings?.email?.signatures?.[0]?.html ?? ''} />;
 }
 
