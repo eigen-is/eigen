@@ -161,7 +161,7 @@ export const getMailComposeUrl = (address: string) =>
 // passes the full `ownerId/mountId/pathId` tuple per item in the URL so the Mail
 // route can re-fetch each DrivePath, build an AttachmentReference, and seed the
 // composer with `driveReferences` — same flow Reply/Forward uses via history state.
-export function openMailComposeWith(opts: { to?: string; attachments?: DrivePath[] }): void {
+export function openMailComposeWith(opts: { to?: string; attachments?: readonly DrivePath[] }): void {
     const params = new URLSearchParams({ mode: 'compose' });
     if (opts.to) params.set('to', opts.to);
     if (opts.attachments?.length) {

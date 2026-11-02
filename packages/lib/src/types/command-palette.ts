@@ -30,7 +30,7 @@ type ResultGroup =
     | 'actions';
 
 // What a page has selected: Drive's selected rows, or the open document as a one-item selection.
-export type PaletteSelection = { items: DrivePath[] } | null;
+export type PaletteSelection = { items: readonly DrivePath[] } | null;
 
 // One row a page offers for its selection, already bound to those items: the menu row it draws, whose
 // label and icon the palette shows, and the run that performs it. Download as names its format.
@@ -62,7 +62,7 @@ export type CommandContext = {
     docCommentSearch: DocCommentSearch;
     navigate: (to: string) => void;
     openDriveCreate: (kind: EigenDocType | 'folder') => void;
-    openMailComposeWith: (opts: { to?: string; attachments?: DrivePath[] }) => void;
+    openMailComposeWith: (opts: { to?: string; attachments?: readonly DrivePath[] }) => void;
     openPreview: (path: DrivePath) => void;
     toggleTheme: () => void;
 };

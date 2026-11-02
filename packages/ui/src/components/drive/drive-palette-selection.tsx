@@ -3,12 +3,12 @@
 // file actions of a single item and Watch with its live state. A listing with actions of its own, such
 // as Trash, hands over its own rows instead. DriveList mounts one beside its rows.
 
-import { usePaletteSelection } from '@workspace/lib/command-palette';
+import { useCommandPalette, usePaletteSelection } from '@workspace/lib/command-palette';
 import { useWatchToggle } from '@workspace/lib/drive';
 import { subjectFromPath } from '@workspace/lib/file-subject';
 import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath, ExportFormat } from '@workspace/lib/types/drive';
-import { Bell } from 'lucide-react';
+import { Bell, BellRing } from 'lucide-react';
 import { useMemo } from 'react';
 import { MENU_SECTIONS } from '../context-menu/menu-sections';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
@@ -39,14 +39,27 @@ function DriveActionsPalette({ items, listing, actions }: DrivePaletteSelectionP
         [single, listing, canWrite],
     );
     const runner = useFileActionRunner(subject, siblings);
-    const watch = useWatchToggle(single?.ownerId ?? '', single?.mountId ?? '', single?.id ?? '');
+    // The watch state is a request per item, so it is read only while the palette shows it.
+    const { open } = useCommandPalette();
+    const watched = open ? single : null;
+    const watch = useWatchToggle(watched?.ownerId ?? '', watched?.mountId ?? '', watched?.id ?? '');
 
     const rows = [
         ...actions
             .actionsFor(items)
             .map((action) => ({ action, run: (format?: ExportFormat) => actions.run(action.id, items, format) })),
         ...(single
-            ? [{ action: { id: 'watch', label: watch.label, icon: Bell, group: 'collaborate' }, run: watch.toggle }]
+            ? [
+                  {
+                      action: {
+                          id: 'watch',
+                          label: watch.label,
+                          icon: watch.direct ? BellRing : Bell,
+                          group: 'collaborate',
+                      },
+                      run: watch.toggle,
+                  },
+              ]
             : []),
         ...runner.actions.map((action) => ({ action, run: () => runner.run(action) })),
     ];
