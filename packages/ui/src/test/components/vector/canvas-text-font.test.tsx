@@ -1,9 +1,9 @@
 // An arrow label's width is measured on a canvas and stored, and so is a pasted text box's size. Each face is cut into
 // unicode-range slices, and a canvas measures a character whose slice has not loaded in the fallback. So a label is
 // measured whenever its text or font changes, once the slices of its text have loaded, and a box pasted before its
-// slices arrive is measured again once they have. One file holds both: the measurer keeps the first 2d context it is
-// given.
+// slices arrive is measured again once they have.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { stubCanvasMeasure } from '../../canvas-measure';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
 
@@ -41,18 +41,11 @@ Object.defineProperty(document, 'fonts', {
 let fallbackAdvance = 10;
 const measuredFonts: string[] = [];
 const measuredLines: string[] = [];
-const measureContext = {
-    font: '',
-    measureText: (line: string) => {
-        measuredFonts.push(measureContext.font);
-        measuredLines.push(line);
-        const scale = Number(/(\d+)px/.exec(measureContext.font)?.[1] ?? 20) / 20;
-        return { width: scale * [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : fallbackAdvance), 0) };
-    },
-};
-Object.defineProperty(HTMLCanvasElement.prototype, 'getContext', {
-    configurable: true,
-    value: () => measureContext,
+stubCanvasMeasure((line, font) => {
+    measuredFonts.push(font);
+    measuredLines.push(line);
+    const scale = Number(/(\d+)px/.exec(font)?.[1] ?? 20) / 20;
+    return scale * [...line].reduce((w, char) => w + (loaded.has(char) ? 20 : fallbackAdvance), 0);
 });
 
 const Y = await import('yjs');

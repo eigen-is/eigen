@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test';
+import { stubCanvasMeasure } from '../../../canvas-measure';
 import { installHappyDom } from '../../../happy-dom';
 
 // ⌘C/⌘X leave the clipboard to a live text selection outside the canvas — the user is copying that
@@ -8,8 +9,7 @@ import { installHappyDom } from '../../../happy-dom';
 // elements item as itself.
 installHappyDom();
 // A pasted text box is measured on a 2d canvas, which happy-dom does not implement.
-// biome-ignore lint/suspicious/noExplicitAny: test-only DOM stub happy-dom does not implement
-(window.HTMLCanvasElement.prototype as any).getContext = () => ({ font: '', measureText: () => ({ width: 40 }) });
+stubCanvasMeasure(() => 40);
 
 const { createElement } = await import('react');
 const { MAX_CHART_SPEC_BYTES, newChartSpecParts, sampleChartSpec } = await import('@workspace/lib/charts');
