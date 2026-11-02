@@ -17,7 +17,7 @@ export const comments = sqliteTable('comments', {
     messageCount: integer('messageCount').notNull().default(0),
     createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().default(sql`(unixepoch())`),
     createdBy: text('createdBy'),
-    // The newest 8 KB of the thread's text, newest message first. Comment search indexes it.
+    // The newest RECENT_TEXT_CAP characters of the thread's text, newest message first. Comment search indexes it.
     recentText: text('recentText'),
     // The assigned member's email in lower case, or null when nobody is assigned.
     assignee: text('assignee'),

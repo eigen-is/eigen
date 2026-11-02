@@ -1,6 +1,7 @@
 // One chat room: a .eigenchat file in Drive, which is a standalone chat or a comment thread inside a
-// document. Drive opens a room for each chat request. The room stores, edits and deletes messages,
-// and after a post it notifies the people mentioned, the earlier participants and the file's watchers.
+// document. Drive opens a room for each chat request. The room stores, edits and deletes messages, and
+// keeps a comment thread's row in the document's comment index up to date. After a post it notifies
+// the people mentioned, the earlier participants and the file's watchers.
 
 import { chatActivityTag, chatMentionTag } from '@workspace/lib/notification/tags';
 import type { ChatAttachment, ChatMessage } from '@workspace/lib/types/chat';
@@ -144,7 +145,7 @@ export class ChatRoom {
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
 
         // A system message notifies nobody, and its event reaches only the owner's tabs. No route can post
-        // one, so no tab misses an event today.
+        // one, so no other tab misses such an event.
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_POSTED, type === 'system' ? [] : members);
 
         // A comment thread inside a document keeps the document's comment index up to date.
@@ -320,8 +321,7 @@ export class ChatRoom {
             .all();
 
         const viewerEmail = userEmail.toLowerCase();
-        return rows.reverse().map((row) => {
-            const msg = this.toMessage(row);
+        return rows.reverse().map((msg) => {
             if (msg.type === 'whisper') {
                 const isAuthor = msg.authorEmail.toLowerCase() === viewerEmail;
                 const isRecipient = msg.whisperTo?.toLowerCase() === viewerEmail;
@@ -358,7 +358,7 @@ export class ChatRoom {
         const now = new Date();
         await this.db.update(schema.messages).set({ content, editedAt: now }).where(eq(schema.messages.id, messageId));
 
-        const updated = this.toMessage({ ...existing, content, editedAt: now });
+        const updated = { ...existing, content, editedAt: now };
 
         const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
         this.broadcastMessageEvent(SSEventType.CHAT_MESSAGE_EDITED, members);
@@ -469,20 +469,5 @@ export class ChatRoom {
             if (text.length >= RECENT_TEXT_CAP) break;
         }
         return text.slice(0, RECENT_TEXT_CAP);
-    }
-
-    private toMessage(row: typeof schema.messages.$inferSelect): ChatMessage {
-        return {
-            id: row.id,
-            authorEmail: row.authorEmail,
-            type: row.type,
-            content: row.content,
-            attachments: row.attachments ?? null,
-            whisperTo: row.whisperTo ?? null,
-            replyTo: row.replyTo ?? null,
-            editedAt: row.editedAt ?? null,
-            deletedAt: row.deletedAt ?? null,
-            createdAt: row.createdAt,
-        };
     }
 }
