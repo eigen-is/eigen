@@ -1,6 +1,7 @@
-// An arrow label's width is measured on a canvas at commit and stored. Each face is cut into unicode-range slices, and
-// a canvas measures a character whose slice has not loaded in the fallback. So a label committed before its slices
-// arrive is measured again once the slices of its own text have loaded.
+// An arrow label's width is measured on a canvas at commit and stored, and so is a pasted text box's, since ⌘V must take
+// or pass on a paste at once. Each face is cut into unicode-range slices, and a canvas measures a character whose slice
+// has not loaded in the fallback. So a label committed, or a box pasted, before its slices arrive is measured again once
+// the slices of its own text have loaded. One file holds both: the measurer keeps the first 2d context it is given.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -8,11 +9,9 @@ import { renderInDocument } from '../../render-in-document';
 installHappyDom();
 
 // The font set as a sliced face behaves: a load fetches the slices of its text, and a check without text tests a
-// space. Nothing loads until the test releases the network.
+// space. Nothing loads until the test releases the network, which each test starts cold.
 let release = () => {};
-const network = new Promise<void>((resolve) => {
-    release = resolve;
-});
+let network = Promise.resolve();
 const loaded = new Set<string>();
 const fontCalls: string[] = [];
 Object.defineProperty(document, 'fonts', {
@@ -42,8 +41,11 @@ const Y = await import('yjs');
 const { WebsocketProvider } = await import('y-websocket');
 const { act, createElement, useEffect, useRef, useState } = await import('react');
 const realCollab = await import('@workspace/lib/collab');
+const { writeEigenClipboard } = await import('@workspace/lib/clipboard');
 const { MediaResolverProvider } = await import('@workspace/lib/drive');
-const { readVectorFromDoc, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import('@workspace/lib/vector');
+const { getLineHeightPx, readVectorFromDoc, VECTOR_STYLE_DEFAULTS, writeElementInDoc } = await import(
+    '@workspace/lib/vector'
+);
 type UseCollabDocOptions = Parameters<typeof realCollab.useCollabDoc>[0];
 
 let doc = new Y.Doc();
@@ -79,6 +81,10 @@ beforeEach(() => {
     provider.destroy();
     doc = new Y.Doc();
     provider = new WebsocketProvider('ws://localhost:1', 'test', doc, { connect: false });
+    loaded.clear();
+    network = new Promise<void>((resolve) => {
+        release = resolve;
+    });
     writeElementInDoc(
         doc,
         { type: 'arrow', x: 0, y: 0, width: 200, height: 0, points: '[[0,0],[200,0]]' },
@@ -160,4 +166,64 @@ test('a label committed before its slices load is measured again in the slices o
         await network;
     });
     expect(labelWidth()).toBe(100);
+});
+
+async function paste(fill: (event: ClipboardEvent) => void): Promise<void> {
+    const event = new ClipboardEvent('paste', { clipboardData: new DataTransfer(), bubbles: true, cancelable: true });
+    fill(event);
+    await act(async () => {
+        document.dispatchEvent(event);
+    });
+}
+
+async function loadSlices(): Promise<void> {
+    await act(async () => {
+        release();
+        await network;
+    });
+}
+
+const textBox = () => {
+    const box = readVectorFromDoc(doc).elements.find((el) => el.type === 'rectangle' && el.autoFit);
+    return box && { width: box.width, height: box.height };
+};
+
+// One line of the host's font: the height a measure in any face gives.
+const oneLine = getLineHeightPx(VECTOR_STYLE_DEFAULTS.fontFamily, VECTOR_STYLE_DEFAULTS.fontSize);
+
+test('pasted plain text sized before its slices load is measured again in the slices of its own text', async () => {
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    // Five characters, each in the fallback.
+    expect(textBox()).toEqual({ width: 50, height: oneLine });
+
+    await loadSlices();
+    expect(textBox()).toEqual({ width: 100, height: oneLine });
+});
+
+test("another app's text item sized before its slices load is measured again in the slices of its own text", async () => {
+    await render();
+    await paste((event) =>
+        writeEigenClipboard(event, { version: 1, items: [{ type: 'text', text: '茶 tea', width: 1, height: 1 }] }),
+    );
+    expect(textBox()).toEqual({ width: 50, height: oneLine });
+
+    await loadSlices();
+    expect(textBox()).toEqual({ width: 100, height: oneLine });
+});
+
+// A box resized while the slices load has a width the user chose, which a late measure must not take back.
+test('a pasted box resized before its slices load keeps the width it was given', async () => {
+    await render();
+    await paste((event) => event.clipboardData?.setData('text/plain', '茶 tea'));
+    const box = readVectorFromDoc(doc).elements.find((el) => el.type === 'rectangle');
+    if (!box) throw new Error('nothing was pasted');
+    const stored = doc.getMap('elements').get(box.id);
+    if (!(stored instanceof Y.Map)) throw new Error('the box is not stored');
+    await act(async () => {
+        stored.set('width', 300);
+    });
+
+    await loadSlices();
+    expect(textBox()).toEqual({ width: 300, height: oneLine });
 });
