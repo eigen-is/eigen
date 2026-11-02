@@ -1,6 +1,8 @@
+// Google Docs' List options › Restart numbering: the number a numbered list starts at, from the item the caret is in.
+// The toolbar opens it from the Format menu, and OK restarts the numbering there.
+
 import type { Editor } from '@tiptap/react';
-import { Button } from '@workspace/ui/components/button';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Field, FieldLabel } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { useState } from 'react';
@@ -10,46 +12,31 @@ type RestartNumberingDialogProps = {
     editor: Editor;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
 };
 
-// Google Docs' List options › Restart numbering, at the item the caret is in.
-export function RestartNumberingDialog({ editor, open, onOpenChange }: RestartNumberingDialogProps) {
+export function RestartNumberingDialog({ editor, open, onOpenChange, onCloseAutoFocus }: RestartNumberingDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="sm"
-                showCloseButton={false}
-                aria-describedby={undefined}
-                onCloseAutoFocus={(e) => {
-                    e.preventDefault();
-                    editor.commands.focus();
-                }}
-            >
-                <DialogHeader>
-                    <DialogTitle>Restart numbering</DialogTitle>
-                </DialogHeader>
-                <RestartNumberingForm editor={editor} onDone={() => onOpenChange(false)} />
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Restart numbering"
+            size="sm"
+            onCloseAutoFocus={onCloseAutoFocus}
+        >
+            <RestartNumberingForm editor={editor} />
+        </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening starts at 1.
-function RestartNumberingForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
+function RestartNumberingForm({ editor }: { editor: Editor }) {
     const [startAt, setStartAt] = useState('1');
     const start = Number(startAt);
     const valid = Number.isInteger(start) && start >= 1;
 
     return (
-        <form
-            className="flex flex-col gap-4"
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (!valid) return;
-                restartNumbering(editor, start);
-                onDone();
-            }}
-        >
+        <FormDialogForm canSubmit={valid} submitLabel="OK" onSubmit={() => restartNumbering(editor, start)}>
             <Field orientation="horizontal">
                 <FieldLabel htmlFor="restart-numbering-start">Start at</FieldLabel>
                 <Input
@@ -62,14 +49,6 @@ function RestartNumberingForm({ editor, onDone }: { editor: Editor; onDone: () =
                     onChange={(e) => setStartAt(e.target.value)}
                 />
             </Field>
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onDone}>
-                    Cancel
-                </Button>
-                <Button type="submit" disabled={!valid}>
-                    OK
-                </Button>
-            </DialogFooter>
-        </form>
+        </FormDialogForm>
     );
 }

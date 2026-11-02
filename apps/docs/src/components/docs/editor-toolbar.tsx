@@ -641,6 +641,7 @@ export const EditorToolbar = ({
                 editor={editor}
                 open={restartNumberingOpen}
                 onOpenChange={setRestartNumberingOpen}
+                onCloseAutoFocus={keepActiveEditorFocus}
             />
 
             <CustomSpacingDialog
@@ -648,6 +649,7 @@ export const EditorToolbar = ({
                 normal={editor.storage.eigenFontSize.normalStyle()}
                 open={customSpacingOpen}
                 onOpenChange={setCustomSpacingOpen}
+                onCloseAutoFocus={keepActiveEditorFocus}
             />
 
             <IndentationOptionsDialog
@@ -655,6 +657,7 @@ export const EditorToolbar = ({
                 normal={editor.storage.eigenFontSize.normalStyle()}
                 open={indentationOpen}
                 onOpenChange={setIndentationOpen}
+                onCloseAutoFocus={keepActiveEditorFocus}
             />
 
             <ExportProgressDialog open={isExporting} />

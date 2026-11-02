@@ -14,9 +14,8 @@ import {
 } from '@workspace/lib/docs/eigendoc';
 import type { DocsTextWidth } from '@workspace/lib/types/settings';
 import { DOCS_TEXT_WIDTHS } from '@workspace/lib/types/settings';
-import { Button } from '@workspace/ui/components/button';
+import { FormDialog, FormDialogForm } from '@workspace/ui';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import { Field, FieldDescription, FieldError, FieldLabel, FieldLegend, FieldSet } from '@workspace/ui/components/field';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
@@ -95,34 +94,28 @@ export function PageSetupDialog({
     onTextWidthChange,
 }: PageSetupDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="md"
-                showCloseButton={false}
-                aria-describedby={undefined}
-                onCloseAutoFocus={onCloseAutoFocus}
-            >
-                <DialogHeader>
-                    <DialogTitle>Page setup</DialogTitle>
-                </DialogHeader>
-                <PageSetupForm
-                    setup={setup}
-                    canWrite={canWrite}
-                    onSubmit={onSetupChange}
-                    onDone={() => onOpenChange(false)}
-                    textWidth={textWidth}
-                    onTextWidthChange={onTextWidthChange}
-                />
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Page setup"
+            size="md"
+            onCloseAutoFocus={onCloseAutoFocus}
+        >
+            <PageSetupForm
+                setup={setup}
+                canWrite={canWrite}
+                onSetupChange={onSetupChange}
+                textWidth={textWidth}
+                onTextWidthChange={onTextWidthChange}
+            />
+        </FormDialog>
     );
 }
 
 type PageSetupFormProps = TextWidthProps & {
     setup: PageSetup;
     canWrite: boolean;
-    onSubmit: (from: PageSetup, to: PageSetup) => void;
-    onDone: () => void;
+    onSetupChange: (from: PageSetup, to: PageSetup) => void;
 };
 
 const PAGES = 'pages';
@@ -130,7 +123,7 @@ const PAGELESS = 'pageless';
 
 // Mounted with the dialog, so each opening starts from the doc's page as it was then. A viewer can't change the doc's
 // format, but on a page-less doc still picks their own text width, which OK saves.
-function PageSetupForm({ setup, canWrite, onSubmit, onDone, textWidth, onTextWidthChange }: PageSetupFormProps) {
+function PageSetupForm({ setup, canWrite, onSetupChange, textWidth, onTextWidthChange }: PageSetupFormProps) {
     const [initial] = useState(setup);
     const [pageless, setPageless] = useState(initial.pageless);
     const [width, setWidth] = useState(textWidth);
@@ -166,16 +159,13 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone, textWidth, onTextWid
         );
 
     return (
-        <form
-            className="flex flex-col gap-6"
-            // The forms check their fields themselves; the browser's step check would refuse a margin typed to 0.001 cm.
-            noValidate
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (!valid) return;
-                if (canWrite) onSubmit(initial, candidate);
+        <FormDialogForm
+            canSubmit={valid}
+            submitLabel="OK"
+            readOnly={!editable}
+            onSubmit={() => {
+                if (canWrite) onSetupChange(initial, candidate);
                 if (widthShown && width !== textWidth) onTextWidthChange(width);
-                onDone();
             }}
         >
             <Tabs value={pageless ? PAGELESS : PAGES} onValueChange={(value) => setPageless(value === PAGELESS)}>
@@ -290,20 +280,7 @@ function PageSetupForm({ setup, canWrite, onSubmit, onDone, textWidth, onTextWid
                     )}
                 </TabsContent>
             </Tabs>
-
-            {editable ? (
-                <DialogFooter>
-                    <Button type="button" variant="outline" onClick={onDone}>
-                        Cancel
-                    </Button>
-                    <Button type="submit" disabled={!valid}>
-                        OK
-                    </Button>
-                </DialogFooter>
-            ) : (
-                <DialogFooter showCloseButton />
-            )}
-        </form>
+        </FormDialogForm>
     );
 }
 
@@ -333,24 +310,20 @@ export function HeadersAndFootersDialog({
     onSetupChange,
 }: HeadersAndFootersDialogProps) {
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent
-                size="xs"
-                showCloseButton={false}
-                aria-describedby={undefined}
-                onCloseAutoFocus={onCloseAutoFocus}
-            >
-                <DialogHeader>
-                    <DialogTitle>Headers and footers</DialogTitle>
-                </DialogHeader>
-                <HeadersAndFootersForm setup={setup} onSubmit={onSetupChange} onDone={() => onOpenChange(false)} />
-            </DialogContent>
-        </Dialog>
+        <FormDialog
+            open={open}
+            onOpenChange={onOpenChange}
+            title="Headers and footers"
+            size="xs"
+            onCloseAutoFocus={onCloseAutoFocus}
+        >
+            <HeadersAndFootersForm setup={setup} onSetupChange={onSetupChange} />
+        </FormDialog>
     );
 }
 
 // Mounted with the dialog, as the page setup form is.
-function HeadersAndFootersForm({ setup, onSubmit, onDone }: Omit<PageSetupFormProps, 'canWrite'>) {
+function HeadersAndFootersForm({ setup, onSetupChange }: Pick<PageSetupFormProps, 'setup' | 'onSetupChange'>) {
     const [initial] = useState(setup);
     const [text, setText] = useState({
         headerDistance: marginText(initial.headerDistance),
@@ -371,17 +344,7 @@ function HeadersAndFootersForm({ setup, onSubmit, onDone }: Omit<PageSetupFormPr
     const valid = DISTANCE_FIELDS.every(({ key }) => read[key] === candidate[key]);
 
     return (
-        <form
-            className="flex flex-col gap-6"
-            // The forms check their fields themselves; the browser's step check would refuse a margin typed to 0.001 cm.
-            noValidate
-            onSubmit={(e) => {
-                e.preventDefault();
-                if (!valid) return;
-                onSubmit(initial, candidate);
-                onDone();
-            }}
-        >
+        <FormDialogForm canSubmit={valid} submitLabel="Apply" onSubmit={() => onSetupChange(initial, candidate)}>
             <FieldSet className="gap-3">
                 <FieldLegend variant="label">Margins</FieldLegend>
                 {DISTANCE_FIELDS.map(({ key, label }) => (
@@ -415,15 +378,6 @@ function HeadersAndFootersForm({ setup, onSubmit, onDone }: Omit<PageSetupFormPr
                     </Label>
                 </div>
             </FieldSet>
-
-            <DialogFooter>
-                <Button type="button" variant="outline" onClick={onDone}>
-                    Cancel
-                </Button>
-                <Button type="submit" disabled={!valid}>
-                    Apply
-                </Button>
-            </DialogFooter>
-        </form>
+        </FormDialogForm>
     );
 }
