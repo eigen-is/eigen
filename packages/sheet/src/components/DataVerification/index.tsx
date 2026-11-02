@@ -75,7 +75,7 @@ const HINT_TOGGLES = [
 ] as const;
 
 // What OK and Delete verification say when the range names no cells.
-const NO_RANGE_MESSAGE = 'The selection operation has not been performed yet';
+const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
 
 // The draft's text fields, each typed into an input.
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';

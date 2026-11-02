@@ -19,7 +19,7 @@ const LAST = REFERENCE_ROW_COUNT - 1;
 const LIST = { type: 'dropdown', type2: '', value1: 'Yes,No', value2: '' };
 const NUMBER = { type: 'number', type2: 'between', value1: '1', value2: '10' };
 const B3 = { row: [2, 2], column: [1, 1], row_focus: 2, column_focus: 1 };
-const NO_RANGE = 'The selection operation has not been performed yet';
+const NO_RANGE = 'Enter a cell range, such as A1:B10';
 
 // The dialog over a 1,000-row sheet.
 const openDialog = (selection: Selection, dataValidations = {}) =>
