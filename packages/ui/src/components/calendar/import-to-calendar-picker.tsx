@@ -53,8 +53,7 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
     );
 }
 
-// Mounted with the dialog, so each opening asks for the calendars and starts from the defaults. The import hook lives
-// here too: a new calendar it made for a failed try is reused by the next try, and forgotten when the dialog closes.
+// Mounted with the dialog, so each opening asks for the calendars and starts from the defaults.
 function ImportToCalendarForm({ subject, fileName }: { subject: FileSubject | null; fileName: string }) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
