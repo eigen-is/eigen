@@ -23,7 +23,7 @@ const NO_RANGE = 'The selection operation has not been performed yet';
 
 // The dialog over a 1,000-row sheet.
 const openDialog = (selection: Selection, dataValidations = {}) =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(DataVerification)), {
+    renderSheetDialog((d) => d.showDialog(createElement(DataVerification)), {
         sheets: [
             {
                 id: 'id_1',

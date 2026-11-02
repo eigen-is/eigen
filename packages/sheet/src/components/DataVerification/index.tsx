@@ -87,7 +87,7 @@ type Problem = { field: 'range' | 'value'; message: string };
 export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulationProps }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
-    const { showFormDialog, showNonModalDialog, hideDialog } = useDialog();
+    const { showDialog, showNonModalDialog, hideDialog } = useDialog();
     const [draft, setDraft] = useState(() => reopenedDraft ?? draftAtSelection(context));
     const [problem, setProblem] = useState<Problem>();
     const problemId = useId();
@@ -120,7 +120,7 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
             setContext((ctx) => {
                 ctx.rangeDialog.show = false;
             });
-            showFormDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
+            showDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
         };
         setContext((ctx) => {
             ctx.rangeDialog.show = true;

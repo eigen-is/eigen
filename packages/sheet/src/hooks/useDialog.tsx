@@ -1,48 +1,35 @@
-// How the sheet opens its dialogs in the one slot ModalProvider holds: a notice or a yes or no, such as a refused edit
-// or a delete confirm, a dialog on FormDialog such as Custom sort, a dialog in the shared shell, or the range picker
-// that leaves the grid usable. A dialog on FormDialog takes its open and close from useDialogProps.
+// How the sheet opens a dialog in the one slot ModalProvider holds. Each dialog, such as Custom sort, draws its own
+// FormDialog and takes its open and close from useDialogProps. A notice or a yes or no, such as a refused edit or a
+// delete confirm, is a message with a type. The range picker opens non-modal, so the grid stays usable to pick on.
 
 import { Button } from '@workspace/ui/components/button';
 import { DialogDescription, DialogFooter } from '@workspace/ui/components/dialog';
 import { FormDialog } from '@workspace/ui/components/form-dialog';
 import type React from 'react';
 import { useCallback, useContext } from 'react';
-import type { DialogProps, ModalOptions } from '../context/modal';
+import type { DialogProps } from '../context/modal';
 import { DialogPropsContext, ModalContext } from '../context/modal';
 
 export function useDialog() {
-    const { showModal, hideModal } = useContext(ModalContext);
+    const { showModal, showNonModal, hideModal } = useContext(ModalContext);
 
     // With a type, the content is the message of a notice, and onOk runs before the notice closes.
     const showDialog = useCallback(
         (content: React.ReactNode, type?: 'ok' | 'yesno', onOk?: () => void) => {
-            if (type) {
-                showModal(
-                    <NoticeDialog type={type} onOk={onOk}>
-                        {content}
-                    </NoticeDialog>,
-                    { ownsDialog: true },
-                );
-            } else {
+            if (!type) {
                 showModal(content);
+                return;
             }
+            showModal(
+                <NoticeDialog type={type} onOk={onOk}>
+                    {content}
+                </NoticeDialog>,
+            );
         },
         [showModal],
     );
 
-    const showFormDialog = useCallback(
-        (content: React.ReactNode) => showModal(content, { ownsDialog: true }),
-        [showModal],
-    );
-
-    const showNonModalDialog = useCallback(
-        (content: React.ReactNode, options: Omit<ModalOptions, 'modal'> = {}) => {
-            showModal(content, { ...options, modal: false });
-        },
-        [showModal],
-    );
-
-    return { showDialog, showFormDialog, showNonModalDialog, hideDialog: hideModal };
+    return { showDialog, showNonModalDialog: showNonModal, hideDialog: hideModal };
 }
 
 // The open and close of the dialog in the slot, for its FormDialog to spread.

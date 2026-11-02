@@ -54,7 +54,7 @@ import { CustomBorder } from './CustomBorder';
 
 function NumberFormatSubmenu() {
     const { setContext, refs, settings } = useContext(WorkbookContext);
-    const { showFormDialog } = useDialog();
+    const { showDialog } = useDialog();
     const { currency } = settings;
     const groups = numberMenuPresets(currency);
 
@@ -96,7 +96,7 @@ function NumberFormatSubmenu() {
                 ))}
                 <DropdownMenuSeparator />
                 {customItems.map(({ text, dialog }) => (
-                    <DropdownMenuItem key={text} inset onClick={() => showFormDialog(dialog)}>
+                    <DropdownMenuItem key={text} inset onClick={() => showDialog(dialog)}>
                         {text}
                     </DropdownMenuItem>
                 ))}
@@ -554,7 +554,7 @@ function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
 
 function ConditionalFormattingSubmenu() {
     const { setContext } = useContext(WorkbookContext);
-    const { showFormDialog } = useDialog();
+    const { showDialog } = useDialog();
 
     return (
         <DropdownMenuSub>
@@ -567,7 +567,7 @@ function ConditionalFormattingSubmenu() {
                             <DropdownMenuItem
                                 key={v.text}
                                 onClick={() => {
-                                    showFormDialog(<ConditionRules type={v.text} />);
+                                    showDialog(<ConditionRules type={v.text} />);
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
@@ -586,7 +586,7 @@ function ConditionalFormattingSubmenu() {
                             <DropdownMenuItem
                                 key={v.text}
                                 onClick={() => {
-                                    showFormDialog(<ConditionRules type={v.text} />);
+                                    showDialog(<ConditionRules type={v.text} />);
                                 }}
                             >
                                 <div className="flex items-center justify-between w-full">
@@ -630,7 +630,7 @@ function ConditionalFormattingSubmenu() {
 
                 <DropdownMenuSeparator />
 
-                <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
+                <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
 
                 <DropdownMenuSub>
                     <DropdownMenuSubTrigger>Delete rule</DropdownMenuSubTrigger>
@@ -646,9 +646,7 @@ function ConditionalFormattingSubmenu() {
                             Delete sheet rule
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => showFormDialog(<ManageRules />)}>
-                            Manage rules
-                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => showDialog(<ManageRules />)}>Manage rules</DropdownMenuItem>
                     </DropdownMenuSubContent>
                 </DropdownMenuSub>
             </DropdownMenuSubContent>

@@ -16,7 +16,7 @@ const SEARCH = 'Search function';
 
 // B2 selected, with no edit open unless the test opens one.
 const openInsertFunction = (editingCellPosition: number[] = []) =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(InsertFunctionDialog)), {
+    renderSheetDialog((d) => d.showDialog(createElement(InsertFunctionDialog)), {
         selections: [{ row: [1, 1], column: [1, 1], row_focus: 1, column_focus: 1 }],
         editingCellPosition,
         functionHint: null,

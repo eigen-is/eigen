@@ -1,8 +1,8 @@
-// The sheet's modal host. A dialog on FormDialog renders as the only dialog, closes through its own opening, and keeps
-// its mouse events from the handlers above the host, as the shell around the other dialogs does. A close from an
-// opening the slot no longer holds does nothing, so a submit that opens a confirm leaves the confirm open. The anchored
-// dialog (the cell-range picker) opens at a viewport point the caller computed, so the host clamps it on screen: a
-// dialog larger than the viewport pins to the top-left margin instead of being pushed off the opposite edge.
+// The sheet's modal host. A dialog in it draws its own FormDialog, renders as the only dialog, closes through its own
+// opening, and keeps its mouse events from the handlers above the host. A close from an opening the slot no longer
+// holds does nothing, so a submit that opens a confirm leaves the confirm open. The range picker opens at a viewport
+// point the caller computed, so the host clamps it on screen: a picker larger than the viewport pins to the top-left
+// margin instead of being pushed off the opposite edge.
 
 import { describe, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -88,7 +88,7 @@ const button = (label: string) =>
 describe('a FormDialog in the host', () => {
     test('is the only dialog, with its corner X, and the X closes it', async () => {
         const { dialogs } = await renderHost();
-        await act(async () => dialogs.showFormDialog(createElement(Rename)));
+        await act(async () => dialogs.showDialog(createElement(Rename)));
         expect(openDialogs()).toHaveLength(1);
         expect(title()).toBe('Rename');
         await click(document.querySelector('[data-slot="dialog-close"]'));
@@ -98,9 +98,7 @@ describe('a FormDialog in the host', () => {
     test('a submit that opens another dialog leaves that one open', async () => {
         const { dialogs } = await renderHost();
         await act(async () =>
-            dialogs.showFormDialog(
-                createElement(Rename, { onSubmit: () => dialogs.showDialog('Replace it?', 'yesno') }),
-            ),
+            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showDialog('Replace it?', 'yesno') })),
         );
         await click(button('Save'));
         expect(title()).toBe('Notice');
@@ -109,7 +107,7 @@ describe('a FormDialog in the host', () => {
 
     test('a press, a drag and a right click inside it reach no handler above the host', async () => {
         const { dialogs } = await renderHost();
-        await act(async () => dialogs.showFormDialog(createElement(Rename)));
+        await act(async () => dialogs.showDialog(createElement(Rename)));
         const input = document.querySelector('[role="dialog"] input');
         if (!input) throw new Error('no field');
         await act(async () => {
@@ -124,7 +122,7 @@ describe('a FormDialog in the host', () => {
 test('a dialog that leaves the grid usable runs its onClose once, however often it is hidden', async () => {
     const { host } = await renderHost();
     const onClose = mock(() => {});
-    await act(async () => host.showModal('Pick a range', { modal: false, onClose }));
+    await act(async () => host.showNonModal('Pick a range', { onClose }));
     await act(async () => {
         host.hideModal();
         host.hideModal();

@@ -18,7 +18,7 @@ const cell = (v: number) => ({ v, m: String(v), ct: { fa: 'General', t: 'n' } })
 
 // A1 holds 5, and B2:C3 is selected.
 const openRule = (type: RuleType) =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(ConditionRules, { type })), {
+    renderSheetDialog((d) => d.showDialog(createElement(ConditionRules, { type })), {
         sheets: [
             {
                 name: 'sheet',

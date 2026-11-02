@@ -18,7 +18,7 @@ const cell = (v: string | number) => ({ v, m: String(v) });
 
 // A1:B3 selected, with a header row whose two columns share a name.
 const openWithHeaders = () =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(CustomSort)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomSort)), {
         sheets: [
             {
                 name: 'sheet',
@@ -37,7 +37,7 @@ const openWithHeaders = () =>
 
 // A1:B3 selected, rows of a letter and a number.
 const openCustomSort = () =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(CustomSort)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomSort)), {
         sheets: [
             {
                 name: 'sheet',

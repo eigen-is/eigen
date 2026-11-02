@@ -27,7 +27,7 @@ const COLOR_SCALE: Rule = {
 };
 
 const openManageRules = (rules: Rule[]) =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(ManageRules)), {
+    renderSheetDialog((d) => d.showDialog(createElement(ManageRules)), {
         sheets: [{ name: 'sheet', id: 'id_1', order: 0, config: {}, data: [[null]], conditionalFormatRules: rules }],
     });
 

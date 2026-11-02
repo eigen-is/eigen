@@ -17,7 +17,7 @@ const SEPARATOR = 'Separator text';
 
 // A1 selected, holding a number with no date format, so the dialog opens on dd/MM/yyyy.
 const openDateTimeFormats = () =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(CustomDateTimeFormats)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomDateTimeFormats)), {
         sheets: [{ name: 'sheet', id: 'id_1', order: 0, config: {}, data: [[{ v: 45000, m: '45000' }]] }],
         selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
         editingCellPosition: [],

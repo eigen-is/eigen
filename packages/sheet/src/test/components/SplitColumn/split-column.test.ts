@@ -20,7 +20,7 @@ const cell = (v: string) => ({ v, m: v });
 
 // A1:A2 selected.
 const openSplitText = (data: (Cell | null)[][]) =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(SplitColumn)), {
+    renderSheetDialog((d) => d.showDialog(createElement(SplitColumn)), {
         sheets: [{ name: 'sheet', id: 'id_1', order: 0, config: {}, data }],
         selections: [{ row: [0, 1], column: [0, 0], row_focus: 0, column_focus: 0 }],
     });
