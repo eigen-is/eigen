@@ -1,6 +1,6 @@
 // The detail column of a Drive view: the selected item's preview, its Open, Download, Share and Watch
 // buttons, a ⋮ with the item's whole menu, and its details, sharing and recent activity. DriveLayout
-// draws it beside the list, and a file's own page, such as the text editor's, draws it too.
+// draws it beside the list.
 
 import { formatDateTime } from '@workspace/lib/date';
 import { subjectFromPath } from '@workspace/lib/file-subject';
@@ -15,7 +15,6 @@ import { WatchToggleButton } from '@workspace/ui/components/layout/toolbar/watch
 import { Download, UserRoundPlus, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
-import { FileActionMenuItems } from '../file-actions/file-action-menu-items';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { useLayout } from '../layout/app/layout-context';
 import { TooltipButton } from '../layout/toolbar/tooltip-button';
@@ -27,7 +26,7 @@ import { getFilePresentation } from './file-presentation';
 import { RecentActivity } from './recent-activity';
 
 type DriveDetailToolbarProps = {
-    onClose?: () => void;
+    onClose: () => void;
 };
 
 export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
@@ -35,7 +34,7 @@ export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
 
     return (
         <div className="flex items-center w-full justify-end">
-            {!isMobile && onClose && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
+            {!isMobile && <TooltipButton onClick={onClose} tooltipText="Close" icon={X} />}
         </div>
     );
 }
@@ -43,16 +42,15 @@ export function DriveDetailToolbar({ onClose }: DriveDetailToolbarProps) {
 type DriveDetailProps = {
     path: DrivePath | null;
     // The listing this item sits in, in its display order: Quick preview pages through it.
-    siblings?: DrivePath[];
-    // The view's Drive actions. Without them, as beside a file being edited, the menu offers file actions only.
-    actions?: DriveActionRunner;
+    siblings: readonly DrivePath[];
+    actions: DriveActionRunner;
 };
 
 export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
-    const canWrite = actions?.capabilities.canWrite ?? true;
+    const canWrite = actions.capabilities.canWrite;
     const subject = useMemo(() => (path ? subjectFromPath(path, canWrite) : null), [path, canWrite]);
     const siblingSubjects = useMemo(
-        () => siblings?.map((sibling) => subjectFromPath(sibling, canWrite)),
+        () => siblings.map((sibling) => subjectFromPath(sibling, canWrite)),
         [siblings, canWrite],
     );
     const runner = useFileActionRunner(subject, siblingSubjects);
@@ -61,7 +59,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
 
     // A Drive action's handler, when the view offers it for this item.
     const driveAction = (id: DriveActionId) =>
-        actions?.actionsFor([path]).some((action) => action.id === id) ? () => actions.run(id, [path]) : undefined;
+        actions.actionsFor([path]).some((action) => action.id === id) ? () => actions.run(id, [path]) : undefined;
     const fileAction = (id: FileActionId) => runner.actions.find((action) => action.id === id);
     const open = driveAction('open');
     const share = driveAction('share');
@@ -105,11 +103,7 @@ export function DriveDetail({ path, siblings, actions }: DriveDetailProps) {
                         <DropdownMenu>
                             <KebabTrigger variant="outline" />
                             <DropdownMenuContent className="w-48">
-                                {actions ? (
-                                    <DriveItemMenuItems items={[path]} actions={actions} runner={runner} />
-                                ) : (
-                                    <FileActionMenuItems runner={runner} />
-                                )}
+                                <DriveItemMenuItems items={[path]} actions={actions} runner={runner} />
                             </DropdownMenuContent>
                         </DropdownMenu>
                     </div>
