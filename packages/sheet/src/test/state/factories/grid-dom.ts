@@ -6,7 +6,6 @@
 import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleOverlayMouseUp } from '../../../state/events/mouse-drag';
-import type { Settings } from '../../../state/settings';
 import type { GlobalCache } from '../../../state/types';
 
 const win = new Window();
@@ -45,6 +44,6 @@ export function mouseUpAt(pageX: number, pageY: number) {
     return (ctx: Context) => {
         const { container, scrollEl } = gridElements();
         const event = { button: 0, pageX, pageY } as unknown as MouseEvent;
-        handleOverlayMouseUp(ctx, {} as GlobalCache, {} as Settings, event, scrollEl, container, null, null);
+        handleOverlayMouseUp(ctx, {} as GlobalCache, event, scrollEl, container, null, null);
     };
 }

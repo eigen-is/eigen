@@ -18,7 +18,6 @@ import { getFrozenHandleLeft, getFrozenHandleTop, scrollToFrozenRowCol } from '.
 import { colLocation, rowLocation } from '../modules/location';
 import { checkProtectionSelectLockedOrUnLockedCells } from '../modules/protection';
 import { pasteHandlerOfPaintModel } from '../modules/selection';
-import type { Settings } from '../settings';
 import type { GlobalCache } from '../types';
 import { getSheetIndex } from '../utils';
 import { fixPositionOnFrozenCells } from './mouse-resize';
@@ -55,7 +54,6 @@ export function handleOverlayMouseMove(
 export function handleOverlayMouseUp(
     ctx: Context,
     globalCache: GlobalCache,
-    _settings: Settings,
     e: MouseEvent,
     scrollEl: HTMLDivElement,
     container: HTMLDivElement,
@@ -103,9 +101,8 @@ export function handleOverlayMouseUp(
         const maxY = winH - 20 + scrollTop;
         if (y > maxY) delta -= y - maxY;
 
-        // No movement is a click, not a resize: skip the write (a stray boundary click must not
-        // ship an op or take an undo step), but let the rest of mouseup run — a freeze-drag end
-        // below shares this handler and a bare `return` here would swallow it.
+        // A press without movement is a click on the boundary, not a resize, so it writes nothing and takes no undo
+        // step. The handler goes on rather than returning, because the end of a freeze drag below shares it.
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (delta !== 0 && idx != null) {
             const row = ctx.rowsResizeStart[1];
@@ -145,7 +142,7 @@ export function handleOverlayMouseUp(
         const maxX = winW - 100 + scrollLeft;
         if (x > maxX) delta -= x - maxX;
 
-        // No movement is a click, not a resize — see the row axis above.
+        // A press without movement writes nothing, as on the row axis.
         const idx = getSheetIndex(ctx, ctx.currentSheetId);
         if (delta !== 0 && idx != null) {
             const columnlen = ctx.sheets[idx].config?.columnlen;
@@ -187,10 +184,6 @@ export function handleOverlayMouseUp(
             if (frozen && freezesColumns(frozen)) {
                 if (freezesRows(frozen)) frozen.type = 'rangeRow';
                 else delete sheet.frozen;
-            }
-            const freezeHandle = container.querySelector('.sheet-cols-freeze-handle');
-            if (freezeHandle instanceof HTMLElement) {
-                freezeHandle.style.left = `${ctx.scrollLeft}px`;
             }
         } else if (!frozen) {
             sheet.frozen = {
@@ -251,11 +244,10 @@ export function handleOverlayMouseUp(
     }
 }
 
-// Track which canvas-drawn affordance the pointer is over — a filter button, a
-// cell glyph; written only on change so idle mousemoves stay redraw-free. The
-// cursor reads both (SheetOverlay), the filter hover fill ctx.filterButtonHover;
-// a hovered glyph also stands the drag handles' cursors down, since a press on
-// it goes to the cell, not the handle (cellGlyphAtPointer).
+// Records which painted affordance the pointer is over, such as a filter button or a cell glyph. It writes only on a
+// change, so a mouse move that changes nothing redraws nothing. The cursor reads both, and the filter button's hover
+// fill reads ctx.filterButtonHover. Over a glyph the drag handles drop their cursors, because a press there goes to
+// the cell, not the handle.
 function updateCanvasHover(ctx: Context, globalCache: GlobalCache, e: MouseEvent, scrollEl: HTMLDivElement) {
     const setHover = (col: number | undefined, glyph: CellGlyph | undefined) => {
         if (ctx.filterButtonHover !== col) ctx.filterButtonHover = col;
@@ -454,9 +446,8 @@ function renderColResize(
         if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.left = `${x}px`;
         }
-        // The header handle lives in the pane region of the resized column:
-        // live-translated main coordinates normally, pinned frozen-band
-        // coordinates when that column is frozen.
+        // The header handle sits in the pane of the resized column. In the main pane it follows the scroll, and in the
+        // frozen band it stays put.
         const vData = globalCache.freezen?.[ctx.currentSheetId]?.vertical?.freezenverticaldata;
         const inFreeze = vData != null && ctx.colsResizeStart[1] < vData.boundary;
         const handleX = inFreeze ? x - scrollEl.scrollLeft + vData.scroll : x;
@@ -481,9 +472,7 @@ function renderRowResize(
         if (changeSizeLine instanceof HTMLElement) {
             changeSizeLine.style.top = `${y}px`;
         }
-        // Same pane-region mapping as renderColResize, on the row axis. The -2
-        // preserves the view position the handle had inside the old header
-        // content frame (shifted up 2px by the header's negative margin).
+        // The handle sits in the pane of the resized row, as renderColResize places it on the other axis.
         const hData = globalCache.freezen?.[ctx.currentSheetId]?.horizontal?.freezenhorizontaldata;
         const inFreeze = hData != null && ctx.rowsResizeStart[1] < hData.boundary;
         const handleY = inFreeze ? y - scrollEl.scrollTop + hData.scroll : y;
