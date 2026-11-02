@@ -20,7 +20,17 @@ import type {
 import { parseBackupManifest, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core/errors';
 import { ARCHIVE_MANIFEST_FILE, buildHomeFolderName, getBackupTempPath, sidecarPath } from './paths';
-import { archiveEnd, BLOCK, collect, fileChunks, headerChunks, padding, tarEntries } from './tar';
+import {
+    archiveEnd,
+    BLOCK,
+    collect,
+    DIRECTORY_TYPEFLAG,
+    FILE_TYPEFLAG,
+    fileChunks,
+    headerChunks,
+    padding,
+    tarEntries,
+} from './tar';
 
 // An archive holds password hashes, keys and every file of a home, so only the API's own user may read it. Every
 // file inside an archive has this mode too, a home's files and a whole-server archive's members alike, so a
@@ -60,7 +70,7 @@ async function* entryChunks(dir: string, rootName: string, onProgress?: BackupPr
     relPaths.sort();
     // Directories get entries of their own: an empty one (a Maildir `new/`, a container's `versions/`
     // before its first snapshot) is part of the home and has to survive the round trip.
-    yield* headerChunks(`${rootName}/`, 0, fs.statSync(dir).mtimeMs, '5', ARCHIVE_FOLDER_MODE);
+    yield* headerChunks(`${rootName}/`, 0, fs.statSync(dir).mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
     for (const [index, rel] of relPaths.entries()) {
         // Packing dominates a large home's wall clock, so it reports per entry.
         onProgress?.('pack', index + 1, relPaths.length);
@@ -68,10 +78,10 @@ async function* entryChunks(dir: string, rootName: string, onProgress?: BackupPr
         const abs = path.join(dir, rel);
         const stat = fs.statSync(abs);
         if (stat.isDirectory()) {
-            yield* headerChunks(`${name}/`, 0, stat.mtimeMs, '5', ARCHIVE_FOLDER_MODE);
+            yield* headerChunks(`${name}/`, 0, stat.mtimeMs, DIRECTORY_TYPEFLAG, ARCHIVE_FOLDER_MODE);
             continue;
         }
-        yield* headerChunks(name, stat.size, stat.mtimeMs, '0', ARCHIVE_MODE);
+        yield* headerChunks(name, stat.size, stat.mtimeMs, FILE_TYPEFLAG, ARCHIVE_MODE);
         yield* fileChunks(name, abs, stat.size);
         yield padding(stat.size);
     }
@@ -101,7 +111,7 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
     return {
         async appendFile(name, sourcePath) {
             const { size, mtimeMs } = fs.statSync(sourcePath);
-            for (const chunk of headerChunks(name, size, mtimeMs, '0', ARCHIVE_MODE)) await put(chunk);
+            for (const chunk of headerChunks(name, size, mtimeMs, FILE_TYPEFLAG, ARCHIVE_MODE)) await put(chunk);
             const hasher = new Bun.CryptoHasher('sha256');
             for await (const chunk of fileChunks(name, sourcePath, size)) {
                 hasher.update(chunk);
@@ -113,7 +123,13 @@ export async function createServerArchiveWriter(archivePath: string): Promise<Se
         async finish(fields) {
             const manifest: ServerArchiveManifest = { ...fields, entries };
             const body = Buffer.from(JSON.stringify(manifest, null, 2));
-            for (const chunk of headerChunks(ARCHIVE_MANIFEST_FILE, body.length, Date.now(), '0', ARCHIVE_MODE)) {
+            for (const chunk of headerChunks(
+                ARCHIVE_MANIFEST_FILE,
+                body.length,
+                Date.now(),
+                FILE_TYPEFLAG,
+                ARCHIVE_MODE,
+            )) {
                 await put(chunk);
             }
             await put(body);
@@ -163,7 +179,7 @@ function memberStream(member: ArchiveMemberAt): fs.ReadStream {
 export async function hashArchiveMembers(archivePath: string): Promise<ArchiveMember[]> {
     const members: ArchiveMember[] = [];
     for await (const entry of tarEntries(fs.createReadStream(archivePath))) {
-        if (entry.typeflag === '5') continue;
+        if (entry.typeflag === DIRECTORY_TYPEFLAG) continue;
         const hasher = new Bun.CryptoHasher('sha256');
         for await (const chunk of entry.body) hasher.update(chunk);
         members.push({
@@ -197,7 +213,7 @@ export async function listArchiveMembers(archivePath: string): Promise<ArchiveMe
         };
         const members: ArchiveMemberAt[] = [];
         for await (const entry of tarEntries(blocks(), seek)) {
-            if (entry.typeflag === '5') continue;
+            if (entry.typeflag === DIRECTORY_TYPEFLAG) continue;
             members.push({ archivePath, name: entry.path, offset: entry.offset, bytes: entry.size });
         }
         return members;
@@ -250,7 +266,7 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
-            if (entry.typeflag === '5') {
+            if (entry.typeflag === DIRECTORY_TYPEFLAG) {
                 makeFolder(target);
                 continue;
             }

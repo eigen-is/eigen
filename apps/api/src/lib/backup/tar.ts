@@ -7,6 +7,8 @@
 import * as path from 'node:path';
 
 export const BLOCK = 512;
+export const FILE_TYPEFLAG = '0';
+export const DIRECTORY_TYPEFLAG = '5';
 const NAME_FIELD = 100;
 // The biggest size a header's 11 octal digits hold (8 GiB); above it the size goes in base-256.
 const MAX_OCTAL_SIZE = 0o77777777777;
@@ -231,7 +233,7 @@ export async function* tarEntries(
             if (LINKS_AND_DEVICES.has(typeflag)) {
                 throw new Error(`backup archive: refusing tar entry "${entryPath}", a link or a device`);
             }
-            if (typeflag === '' || typeflag === '0' || typeflag === '5') {
+            if (typeflag === '' || typeflag === FILE_TYPEFLAG || typeflag === DIRECTORY_TYPEFLAG) {
                 const mtime = headerNumber(header, 136, 12);
                 yield { path: entryPath, typeflag, mtime, size, offset: position, body: body() };
             }
