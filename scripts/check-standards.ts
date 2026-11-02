@@ -27,7 +27,7 @@ function inScope(path: string): boolean {
 const MODULE_STATEMENT =
     /(?:^|\n)[ \t]*(?:import|export)\b[^;=]*?from[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*import[ \t]*(?:'[^'\n]*'|"[^"\n]*")|(?:^|\n)[ \t]*export[ \t]*\{[^}=;]*\}/g;
 const DEEP_IMPORT = /@workspace\/(?:lib\/core\/|lib\/src\/|ui\/src\/)|['"]@workspace\/[\w@./-]+\.tsx?['"]/g;
-// Tailwind's default palette — theme tokens replace every one of these (CODE-STANDARDS § Code Style).
+// Tailwind's default palette. A theme token replaces every one of these (CODE-STANDARDS § Code Style).
 const PALETTE =
     'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose';
 const RAW_COLOR = new RegExp(
@@ -36,9 +36,8 @@ const RAW_COLOR = new RegExp(
 );
 const APP_LAYER = /\b(?:useQuery|useMutation|useInfiniteQuery)\(|\btoast\.(?:error|success)\(/g;
 
-// Every Eigen document MIME, read from the one file that declares them so a seventh type never needs a
-// second list here. `application/eigen-*` — the drag and clipboard wire formats — is a different family,
-// not a document MIME, hence the `(?!-)`.
+// Every Eigen document MIME, read from the one file that declares them, so a new type needs no second list here. The
+// drag and clipboard formats, `application/eigen-*`, are not document MIMEs, hence the `(?!-)`.
 const MIME_SOURCE = 'packages/lib/src/types/drive.ts';
 const EIGEN_MIME = /application\/eigen(?!-)[a-z]*/g;
 const CANONICAL_MIMES = new Set(
@@ -47,7 +46,7 @@ const CANONICAL_MIMES = new Set(
     ),
 );
 if (CANONICAL_MIMES.size === 0) {
-    console.error(`ERROR: no DRIVE_MIME_* constants found in ${MIME_SOURCE} — the mime gate has nothing to check`);
+    console.error(`ERROR: no DRIVE_MIME_* constants found in ${MIME_SOURCE}, so the mime gate has nothing to check`);
     process.exit(1);
 }
 
@@ -88,14 +87,13 @@ const OWNER_ID_EXEMPT = new Set([
 ]);
 // One chunk per route: from its `.method('/…` to the next one.
 const ROUTE_START = /\.(?:get|post|put|patch|delete|ws|head|options|all)\(\s*['"]\//;
-// `/ws` is a transport prefix rather than a path segment — the collab socket's `:ownerId` sits behind it.
+// `/ws` is a transport prefix, not a path segment: the collab socket's `:ownerId` comes after it.
 const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
-// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must
-// rest visible on touch, which has no hover. Only a hidden element is at risk — a decorative
-// `group-hover:scale-105` reveals nothing — so the trigger is a hiding utility plus a revealing
-// `group-hover:` in the same class string.
-// `pointer-fine:group-hover:` declares the hover desktop-only on purpose and is not a gap.
+// docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must rest visible
+// on touch, which has no hover. Only a hidden element is at risk, since a decorative `group-hover:scale-105` reveals
+// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string.
+// `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
 const HOVER_REVEAL =
