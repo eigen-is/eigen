@@ -1,9 +1,10 @@
 // The one thing an .ics import needs that the other two do not: a target. What is pinned here is which calendars are
 // offered: the home's own, plus a team calendar the viewer may write in. A calendar shared from another user's home is
 // refused by the import route, so it is not on the list. Also pinned: the file and target the dialog hands
-// `useImportToCalendar`, that a later fetch overwrites no choice, that Enter submits, that a failure or a calendar
-// that went away keeps the dialog open, and that a list that would not load offers a retry rather than loading for
-// ever. Making, filling and deleting a new calendar is the hook's, pinned in packages/lib's use-transfer test.
+// `useImportToCalendar`, that a later fetch overwrites no choice, that Enter submits, that a failure keeps the dialog
+// open, that a calendar that went away can't be imported into, and that a list that would not load offers a retry
+// rather than loading for ever. Making, filling and deleting a new calendar is the hook's, pinned in packages/lib's
+// use-transfer test.
 import { expect, mock, test } from 'bun:test';
 import { importSourceOf, subjectFromMailAttachment } from '@workspace/lib/file-subject';
 import { installHappyDom } from '../../happy-dom';
@@ -333,15 +334,20 @@ test('over an open preview the calendar list is lifted above the dialog, and oth
     await over.cleanup();
 });
 
-test('a calendar that went away after it was chosen imports nothing and keeps the dialog open', async () => {
-    const { chooseCalendar, click, closed, cleanup, draw } = await open();
+test('a calendar that went away after it was chosen greys Import out until another is picked', async () => {
+    const { button, chooseCalendar, click, closed, cleanup, draw, trigger } = await open();
     await chooseCalendar('Marketing');
 
     served.sharedCalendars = [];
     await draw();
+    expect(trigger().textContent).toBe('Select calendar');
+    expect(button('Import')?.disabled).toBe(true);
     await click('button', 'Import');
     expect(handed).toEqual([]);
     expect(closed.count).toBe(0);
+
+    await chooseCalendar('Work');
+    expect(button('Import')?.disabled).toBe(false);
     served.sharedCalendars = sharedCalendars;
     await cleanup();
 });

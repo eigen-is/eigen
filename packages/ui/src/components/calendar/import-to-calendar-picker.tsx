@@ -87,30 +87,31 @@ function ImportToCalendarForm({
     const defaultCalendarId = calendars?.find((cal) => cal.isDefault)?.id ?? calendars?.[0]?.id;
     const defaultTarget = defaultCalendarId ? `${ownerId}/${defaultCalendarId}` : NEW_CALENDAR;
     // Until the user picks one, the target follows the default, so a later fetch never overwrites a choice. While the
-    // calendars load there is none, and the Select shows its placeholder.
+    // calendars load there is none, and the Select shows its placeholder. A later fetch can also drop the chosen
+    // calendar, such as a team calendar the viewer may no longer write in. Then nothing is chosen until the user picks
+    // again, rather than a quiet switch to another calendar.
     const [chosenTarget, setChosenTarget] = useState<string>();
-    const target = chosenTarget ?? (calendars ? defaultTarget : '');
+    const picked = chosenTarget ?? (calendars ? defaultTarget : '');
+    const chosen = options.find((option) => targetValue(option) === picked);
+    const isNew = picked === NEW_CALENDAR;
+    const target = chosen || isNew ? picked : '';
     const [name, setName] = useState(fileName.replace(/\.ics$/i, '') || 'Imported calendar');
-    const isNew = target === NEW_CALENDAR;
 
     const handleSubmit = async () => {
-        // A new calendar is always made in the viewer's own home; a team home is only ever written into.
-        if (isNew) {
-            const color =
-                EIGEN_ACCENT_COLORS_SHUFFLED[(calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
-            await importToCalendar(source, { kind: 'new', name: name.trim(), color });
+        if (chosen) {
+            await importToCalendar(source, { kind: 'existing', ownerId: chosen.ownerId, calendarId: chosen.id });
             return;
         }
-        // A later fetch can drop the chosen calendar, such as a team calendar the viewer may no longer write in.
-        const chosen = options.find((option) => targetValue(option) === target);
-        if (!chosen) return false;
-        await importToCalendar(source, { kind: 'existing', ownerId: chosen.ownerId, calendarId: chosen.id });
+        // A new calendar is always made in the viewer's own home; a team home is only ever written into.
+        const color =
+            EIGEN_ACCENT_COLORS_SHUFFLED[(calendars?.length ?? 0) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
+        await importToCalendar(source, { kind: 'new', name: name.trim(), color });
     };
 
     return (
         <FormDialogForm
             onSubmit={handleSubmit}
-            canSubmit={!isError && target !== '' && (!isNew || name.trim() !== '')}
+            canSubmit={!isError && (chosen !== undefined || (isNew && name.trim() !== ''))}
             submitLabel="Import"
         >
             {isError ? (
