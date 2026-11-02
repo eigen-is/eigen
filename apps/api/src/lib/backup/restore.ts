@@ -28,6 +28,7 @@ import {
     materializeMount,
     mountIdsIn,
     movePathAsync,
+    redateTrash,
 } from './materialize-mount';
 import {
     ARCHIVE_AVATAR_DIR,
@@ -94,11 +95,9 @@ export async function restoreHome(
 
                 // Before the identity write: a failure from here on only puts the folders back, and nothing takes a
                 // users3.db row back.
-                checkRestoredDatabases(
-                    homeDir,
-                    carried.map((summary) => summary.id),
-                    containerDatabases,
-                );
+                const mountIds = carried.map((summary) => summary.id);
+                checkRestoredDatabases(homeDir, mountIds, containerDatabases);
+                redateTrash(homeDir, mountIds, Math.floor(Date.now() / 1000));
 
                 // The rows that live outside the home folder (users only).
                 restoreAuthRows(ownerId, manifest, folder);
@@ -141,6 +140,7 @@ export async function restoreSafetyCopy(
         // server does not, and that has to surface here rather than on the next load.
         const mountIds = mountIdsIn(homeDir);
         checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+        redateTrash(homeDir, mountIds, Math.floor(Date.now() / 1000));
     };
 
     await replaceHomeFolder(

@@ -140,7 +140,7 @@ A per-home restore starts on **Restore**, which asks first, naming the home. The
 3. The home's collab sockets are closed, then the home is evicted.
 4. The home folder is renamed aside as `<id>.pre-restore-<date>-<time>`. A deleted user has none.
 5. The archive's home folder is installed. A `local` mount's files go in as they are, a `local-key` mount's under their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the upload queue drains them with its retry and backoff. Every restored row gets a fresh key, so no bucket object is overwritten.
-6. Every restored database gets `quick_check` and a schema check against this server.
+6. Every restored database gets `quick_check` and a schema check against this server, and the trash starts over ([The trash starts over after every restore](#the-trash-starts-over-after-every-restore)).
 7. Only then do identity rows go into `users3.db`, because nothing takes a row back. A missing user is inserted from the archive; a present one is left alone, and the restore is refused when the email no longer matches. Missing share rows are inserted, and the avatar only when the server has none. The folder is whole now, so the home's data epoch rotates.
 8. The mark clears and the home is opened, so a remote mount's queue starts draining at once. The first load runs migrations and reseeds the byte counters.
 
@@ -332,9 +332,9 @@ By default an `s3` mount comes back on its bucket as it stands: `metadata.db` as
 
 `--s3-from-archive` uploads a Full + S3 archive's objects under fresh keys instead, as a per-home restore does. It is for a damaged bucket. The default avoids doubling an intact one.
 
-## The trash starts over after a whole-server restore
+## The trash starts over after every restore
 
-Every trashed file of every restored mount is re-dated to the restore, whatever its storage and whatever the level (`redateTrash` in `apps/api/src/lib/backup/restore-server.ts`). The operator gets the whole retention window to look through what came back, and no purge deletes an `s3` object the data kept aside may still name.
+Every trashed file of every restored mount is re-dated to the restore, whatever its storage and whatever the level, by a whole-server stage, a per-home restore and **Restore this copy** alike (`redateTrash` in `apps/api/src/lib/backup/materialize-mount.ts`). The home's first load purges the trash older than the retention, so without it a file trashed before the backup would be deleted for good seconds after the restore that brought it back. The operator gets the whole retention window to look through what came back, and no purge deletes an `s3` object the data kept aside may still name.
 
 ## A restore refuses what root must not swap in
 

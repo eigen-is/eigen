@@ -28,7 +28,7 @@ import {
     buildHomeFolderName,
     getBackupsDir,
 } from '../../lib/backup/paths';
-import { readShares, restoreHome, restoreShares } from '../../lib/backup/restore';
+import { readShares, restoreHome, restoreSafetyCopy, restoreShares } from '../../lib/backup/restore';
 import { snapshotHome } from '../../lib/backup/snapshot-home';
 import { getAvatarsDir } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
@@ -1461,5 +1461,70 @@ describe('Backup round trip of a home that stores files by name', () => {
         const { user } = shape;
         await restoreAcrossDisks(await backUp(user.id), user.id, `restore-cross-device-${Date.now()}`);
         expectRealShape(join(TEST_DATA_DIR, 'home', user.id), shape);
+    });
+});
+
+describe('Backup restore of one home starts the trash over', () => {
+    let user: TestUser;
+    let mountId: string;
+    let rootId: string;
+    let trashedId: string;
+
+    beforeAll(async () => {
+        await getTestContext();
+        user = await createTestUser('restore-judged@test.eigen.is', PASSWORD, 'Restore Judged');
+        mountId = await firstMountId(user.sessionToken, user.id);
+        rootId = (
+            await assertJson<DrivePath>(await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/root`))
+        ).id;
+        await driveUpload(user.sessionToken, user.id, mountId, rootId, new File(['kept'], 'kept.txt'));
+        trashedId = (
+            await driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, new File(['old'], 'old.txt'))
+        ).id;
+        const deleted = await authedRequest(user.sessionToken, `/drive/${user.id}/${mountId}/path/${trashedId}`, {
+            method: 'DELETE',
+        });
+        expect(deleted.status).toBe(200);
+    });
+
+    // Trashed long ago, past any retention, so the purge at the restored home's first load would delete it.
+    function trashLongAgo(homeDir: string): void {
+        const db = openMountMetadata(join(homeDir, 'mounts', mountId, 'metadata.db'));
+        try {
+            db.run('UPDATE paths SET trashedAt = 1000 WHERE id = ?', [trashedId]);
+        } finally {
+            db.close();
+        }
+    }
+
+    function trashedAtIn(homeDir: string): number | null {
+        const db = openMountMetadata(join(homeDir, 'mounts', mountId, 'metadata.db'));
+        try {
+            return db
+                .query<{ trashedAt: number | null }, [string]>('SELECT trashedAt FROM paths WHERE id = ?')
+                .get(trashedId)!.trashedAt;
+        } finally {
+            db.close();
+        }
+    }
+
+    test('a restore, and a restore of the copy it left, start the trash over', async () => {
+        const homeDir = join(TEST_DATA_DIR, 'home', user.id);
+        trashLongAgo(homeDir);
+        const artifact = await backup(user.id, new Date(Date.now() + 120_000));
+        const restoredAt = Math.floor(Date.now() / 1000);
+        await restoreHome(artifact, user.id, `restore-trash-${Date.now()}`);
+        expect(trashedAtIn(homeDir)).toBeGreaterThanOrEqual(restoredAt);
+
+        const [copy] = safetyCopies(user.id, PRE_RESTORE_SUFFIX);
+        expect(trashedAtIn(join(TEST_DATA_DIR, 'home', copy))).toBe(1000);
+        const putBackAt = Math.floor(Date.now() / 1000);
+        await restoreSafetyCopy(user.id, copy, `restore-trash-copy-${Date.now()}`);
+        expect(trashedAtIn(homeDir)).toBeGreaterThanOrEqual(putBackAt);
+
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+        for (const name of safetyCopies(user.id, PRE_RESTORE_SUFFIX)) {
+            rmSync(join(TEST_DATA_DIR, 'home', name), { recursive: true, force: true });
+        }
     });
 });

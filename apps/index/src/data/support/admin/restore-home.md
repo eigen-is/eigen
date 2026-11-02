@@ -34,6 +34,8 @@ Three kinds of archive have no **Restore** button:
 
 Eigen verifies the archive before it touches anything. If the check fails, the job stops and the account is left exactly as it was.
 
+What was in the Trash comes back with its full time in the Trash, counted from the restore, so it is not deleted right after the restore for having been there too long. The same goes for **Restore this copy**.
+
 <div class="eigen-callout">
 
 Only one backup job runs per account at a time. If a backup, verify, or another restore is already running for this user or team, wait for it to finish before you start the restore.

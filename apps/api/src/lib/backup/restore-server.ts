@@ -19,7 +19,14 @@ import type { MountPathRow } from './archive-layout';
 import { flatStorageKey, insideDocument, readMountPathRows, rowArchivePath, storageKeyOf } from './archive-layout';
 import { describeError } from './errors';
 import type { VersionedDatabase } from './materialize-mount';
-import { checkRestoredDatabases, materializeMount, mountIdsIn, movePath, openToCheck } from './materialize-mount';
+import {
+    checkRestoredDatabases,
+    materializeMount,
+    mountIdsIn,
+    movePath,
+    openToCheck,
+    redateTrash,
+} from './materialize-mount';
 import {
     ARCHIVE_HOME_DIR,
     ARCHIVE_MANIFEST_FILE,
@@ -189,13 +196,10 @@ async function stageHome(
     }
     const mountIds = carried.map((summary) => summary.id);
     checkRestoredDatabases(homeDir, mountIds, containerDatabases);
-    for (const id of mountIds) {
-        const metadata = path.join(requireMountDir(homeDir, id), PATHS.DRIVE.METADATA_DB);
-        try {
-            redateTrash(metadata, now);
-        } catch (error) {
-            throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
-        }
+    try {
+        redateTrash(homeDir, mountIds, now);
+    } catch (error) {
+        throw new ApiError(400, `the trash of ${home.name} cannot be dated: ${describeError(error)}`);
     }
     fs.rmSync(unpacked, { recursive: true, force: true });
     const lost = level === 'light' ? countLostFiles(homeDir, liveHomeDir, carried) : NOTHING_LOST;
@@ -272,17 +276,6 @@ function readMetadata<T>(mountDir: string, read: (db: Database) => T, otherwise:
         return null;
     } finally {
         db?.close();
-    }
-}
-
-// The trash starts over, so a purge never deletes bucket objects the data/ kept aside may still name, and the
-// operator has the whole retention window. In seconds, as trashPath writes it.
-function redateTrash(metadataPath: string, now: number): void {
-    const db = new Database(metadataPath, { readwrite: true, create: false });
-    try {
-        db.run('UPDATE paths SET trashedAt = ? WHERE trashedAt IS NOT NULL', [now]);
-    } finally {
-        db.close();
     }
 }
 

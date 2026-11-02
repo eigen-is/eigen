@@ -1,6 +1,6 @@
-// A home folder's mounts put back from an archive, and the check of what landed, which a rollback also runs on the
-// data in place. The restores use it, such as ./eigen restore, whose stage runs beside a live API. So nothing imported
-// here opens a file on load.
+// A home folder's mounts put back from an archive, their trash started over, and the check of what landed, which a
+// rollback also runs on the data in place. The restores use it, such as ./eigen restore, whose stage runs beside a
+// live API. So nothing imported here opens a file on load.
 
 import { Database } from 'bun:sqlite';
 import * as fs from 'node:fs';
@@ -183,6 +183,23 @@ export function checkDatabases(targets: readonly VersionedDatabase[]): void {
     }
 }
 
+// Every restore starts the trash of each restored mount over at `now`, in seconds as trashPath writes it. Whoever
+// restored gets the whole retention window to look through what came back, and the purge at the home's first load
+// deletes nothing whose time ran out since the backup. It also keeps that purge off bucket objects that a folder kept
+// aside may still name. A mount with no metadata.db has no trash.
+export function redateTrash(homeDir: string, mountIds: readonly string[], now: number): void {
+    for (const mountId of mountIds) {
+        const metadataPath = path.join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB);
+        if (!fs.existsSync(metadataPath)) continue;
+        const db = new Database(metadataPath, { readwrite: true, create: false });
+        try {
+            db.run('UPDATE paths SET trashedAt = ? WHERE trashedAt IS NOT NULL', [now]);
+        } finally {
+            db.close();
+        }
+    }
+}
+
 // The mounts a home folder holds, by their folders, for a check with no manifest to name them.
 export function mountIdsIn(homeDir: string): string[] {
     const mountsDir = path.join(homeDir, PATHS.DRIVE.ROOT);
@@ -243,6 +260,15 @@ export async function movePathAsync(from: string, to: string): Promise<void> {
     });
 }
 
+// A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is
+// read-write, because a closed WAL database has no -shm and a read-only open of it fails. A writer is waited out as
+// long as the API waits for one, so a busy database is not read as damaged.
+export function openToCheck(filePath: string): Database {
+    const db = new Database(filePath, { readwrite: true, create: false });
+    db.run('PRAGMA busy_timeout = 5000;');
+    return db;
+}
+
 // A database with no stamp, or one that does not open, reads as 0, which ManagedDatabase takes as "never migrated".
 // The quick_check after it names the failure.
 function schemaVersionOf(filePath: string): number {
@@ -256,15 +282,6 @@ function schemaVersionOf(filePath: string): number {
     } finally {
         db?.close();
     }
-}
-
-// A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is
-// read-write, because a closed WAL database has no -shm and a read-only open of it fails. A writer is waited out as
-// long as the API waits for one, so a busy database is not read as damaged.
-export function openToCheck(filePath: string): Database {
-    const db = new Database(filePath, { readwrite: true, create: false });
-    db.run('PRAGMA busy_timeout = 5000;');
-    return db;
 }
 
 // Verify refuses a paths table that could leave its mount (checkArchivedPathRows). This second guard resolves every
