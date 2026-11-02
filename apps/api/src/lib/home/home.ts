@@ -14,7 +14,7 @@ import type { ResolvedQuotas } from '../config/quota';
 import { resolveUserQuotas } from '../config/quota';
 import type { Contacts } from '../contacts/contacts';
 import type { DatabaseConfig, JsonStore, ManagedDatabase, SchemaType } from '../core';
-import { LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
+import { ApiError, LocalFilesystem, openLocalDatabase, STALE_TEMP_MAX_AGE_MS } from '../core';
 import type { Drive } from '../drive';
 import type { Mail } from '../mail/mail-domain';
 import type { NotificationCenter } from '../notification-center/notification-center';
@@ -184,10 +184,13 @@ export class Home {
     }
 
     // One shared connection per database file under the home, closed when the home goes idle.
+    // A closing home refuses, because the close might miss a database opened now, and the next
+    // home would open the same file a second time.
     public async getLocalDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         relativePath: string,
     ): Promise<ManagedDatabase<S>> {
+        if (this._closing) throw new ApiError(503, 'Home is closing');
         let open = this.managedDatabases.get(relativePath);
         if (!open) {
             open = createAsyncSingleton(() => openLocalDatabase(config, path.join(this.homeDir, relativePath)));
