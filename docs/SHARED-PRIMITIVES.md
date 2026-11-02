@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2070 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2072 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -987,7 +987,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1119)
+## Utilities & constants (1121)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1581,10 +1581,12 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isCurrentSheetsSnapshot` | `@workspace/lib/sheets` | packages/lib/src/sheets/snapshot-codec.ts |
 | `isExcelFunction` | `@workspace/lib/sheets` | packages/lib/src/sheets/excel-functions.ts |
 | `MAX_VALIDATION_RANGES` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
+| `MAX_VALIDATIONS` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `mergedBorderSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `mergeEdgeSides` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
 | `nextFloatingIndex` | `@workspace/lib/sheets` | packages/lib/src/sheets/floating.ts |
 | `parseCellKey` | `@workspace/lib/sheets` | packages/lib/src/sheets/borders.ts |
+| `rangesOverlap` | `@workspace/lib/sheets` | packages/lib/src/sheets/validations.ts |
 | `readSheetsBase` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `readSheetsSnapshotJson` | `@workspace/lib/sheets` | packages/lib/src/sheets/yjs-state.ts |
 | `REFERENCE_COLUMN_COUNT` | `@workspace/lib/sheets` | packages/lib/src/sheets/defaults.ts |
