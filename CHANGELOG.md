@@ -33,6 +33,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
 - **Dialogs in Calendar** — Enter in a new event's title saves it, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving the calendar and closing the dialog
+- **Edit event in Calendar** — Enter in the title saves the event, as in **New event**, and **Cancel** and Esc wait until a running save is done
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
 - **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone
