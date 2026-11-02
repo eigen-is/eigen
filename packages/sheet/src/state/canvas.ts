@@ -6,8 +6,8 @@
 import type { Context } from './context';
 import { getFlowdata } from './context';
 import { getComputeMap } from './modules/condition-format';
-import { validationLookup } from './modules/data-verification';
 import { clearMeasureTextCache, defaultFont } from './modules/text';
+import { validationLookup } from './modules/validation-rules';
 import { drawCellBorders } from './render/borders';
 import { canvasColors } from './render/colors';
 import { drawFilterUI } from './render/filter-ui';

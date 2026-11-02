@@ -15,12 +15,12 @@ import type { Rect } from '../types';
 import { getSheetIndex, isAllowEdit } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { setCellValue } from './cell';
-import { addValidation, validationEntryAt } from './data-verification';
 import { createContextResolver } from './formula-cache';
 import { execFunctionGroup, execfunction } from './formula-exec';
 import { colLocation, rowLocation } from './location';
 import { jfrefreshgrid } from './refresh';
 import { normalizeSelection } from './selection';
+import { addValidation, validationEntryAt } from './validation-rules';
 
 function toPx(v: number) {
     return `${v}px`;

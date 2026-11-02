@@ -1,11 +1,10 @@
-// Data-validation rules on the grid: a rule per cell key in a sheet's dataVerification, such as a
-// drop-down list, a tick box or a number condition. This module checks a value against its rule, lays
-// out and toggles tick boxes and list chevrons for the painter and the hit test, writes the hint a
-// selected cell shows, and validates and applies the draft the data-validation dialog edits.
+// What a data-validation rule does on the grid, such as a drop-down list, a tick box or a number condition. This
+// module checks a value against its rule, lays out and toggles tick boxes and list chevrons for the painter and the hit
+// test, writes the hint a selected cell shows, and validates and applies the draft the data-validation dialog edits.
+// Which rule covers a cell is the rule store's to say (validationAt).
 
 import { REFERENCE_COLUMN_COUNT, REFERENCE_ROW_COUNT } from '@workspace/lib/sheets';
 import { isNil } from 'es-toolkit/compat';
-import { cfSplitRange } from '../../engine/conditional-format';
 import { booleanDisplay, cellDisplay, cellValue } from '../../engine/format';
 import { iscelldata } from '../../engine/formula-utils';
 import type { Cell } from '../../engine/types';
@@ -29,8 +28,9 @@ import {
     setCellValue,
 } from '..';
 import { getSheet } from '../api/common';
-import type { Rect, Sheet, SheetValidation } from '../types';
+import type { Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
+import { addValidation, validationAt } from './validation-rules';
 
 // Lowercase phrase fragments the hint sentences slot into `${type}`/`${condition}`, keyed
 // loosely because `type`/`type2` are free-form strings. Text rules get their own frames —
@@ -261,83 +261,6 @@ export function validateCellData(ctx: Context, item: DataVerificationRule, cellV
         }
     }
     return true;
-}
-
-// --- Rules over ranges --------------------------------------------------------
-// A sheet keeps each rule once, with the ranges it covers, under an id (dataValidations). A cell has at most one
-// rule, so putting a rule on cells first takes them out of every other rule.
-
-// The rule over one cell, with its id. Two peers putting rules on one cell at once can leave the cell in two rules,
-// and an xlsx file can hold overlapping ones. The highest id then wins on every tab: a longer id is higher, and ids of
-// one length compare by their characters. So of the rules an import numbers in the file's order, the last one wins.
-export function validationEntryAt(
-    validations: Sheet['dataValidations'],
-    r: number,
-    c: number,
-): [string, SheetValidation] | undefined {
-    let found: [string, SheetValidation] | undefined;
-    for (const [id, entry] of Object.entries(validations ?? {})) {
-        if ((!found || byId(id, found[0]) > 0) && entry.ranges.some((range) => covers(range, r, c))) {
-            found = [id, entry];
-        }
-    }
-    return found;
-}
-
-export function validationAt(validations: Sheet['dataValidations'], r: number, c: number) {
-    return validationEntryAt(validations, r, c)?.[1].rule;
-}
-
-// The painter's lookup for one paint. The rules are cut down once to the ranges inside the window it paints, so a
-// cell checks only those, however many rules the sheet has elsewhere. A cell outside the window, which the text
-// overflow can ask about, is looked up in full.
-export function validationLookup(
-    validations: Sheet['dataValidations'],
-    window: SingleRange,
-): (r: number, c: number) => DataVerificationRule | undefined {
-    const inView: [string, SheetValidation][] = [];
-    for (const [id, { ranges, rule }] of Object.entries(validations ?? {})) {
-        const near = ranges.filter((range) => overlaps(range, window));
-        if (near.length > 0) inView.push([id, { ranges: near, rule }]);
-    }
-    inView.sort(([a], [b]) => byId(b, a));
-    return (r, c) =>
-        covers(window, r, c)
-            ? inView.find(([, { ranges }]) => ranges.some((range) => covers(range, r, c)))?.[1].rule
-            : validationAt(validations, r, c);
-}
-
-// Takes an area out of every rule on the sheet, and drops a rule left with no cell. A changed rule is written whole
-// under its id: a write into its ranges alone would fail where a peer deleted the rule meanwhile, and take the rest
-// of its batch with it.
-export function clearValidations(sheet: Sheet, area: SingleRange) {
-    const validations = (sheet.dataValidations ??= {});
-    for (const [id, entry] of Object.entries(validations)) {
-        if (!entry.ranges.some((range) => overlaps(range, area))) continue;
-        const ranges = entry.ranges.flatMap((range) => cfSplitRange(range, area, area, 'restPart'));
-        if (ranges.length > 0) validations[id] = { ...entry, ranges };
-        else delete validations[id];
-    }
-}
-
-// Puts a rule on ranges of the sheet under an id. The ranges join the ones the id already has, and its rule stays.
-export function addValidation(sheet: Sheet, id: string, rule: DataVerificationRule, ranges: SingleRange[]) {
-    for (const range of ranges) clearValidations(sheet, range);
-    const validations = (sheet.dataValidations ??= {});
-    const entry = validations[id];
-    validations[id] = { ranges: [...(entry?.ranges ?? []), ...ranges], rule: entry?.rule ?? rule };
-}
-
-function byId(a: string, b: string) {
-    return a.length - b.length || (a < b ? -1 : a > b ? 1 : 0);
-}
-
-function covers(range: SingleRange, r: number, c: number) {
-    return r >= range.row[0] && r <= range.row[1] && c >= range.column[0] && c <= range.column[1];
-}
-
-function overlaps(a: SingleRange, b: SingleRange) {
-    return a.row[0] <= b.row[1] && b.row[0] <= a.row[1] && a.column[0] <= b.column[1] && b.column[0] <= a.column[1];
 }
 
 // --- Tick boxes -------------------------------------------------------------

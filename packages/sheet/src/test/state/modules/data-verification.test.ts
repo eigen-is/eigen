@@ -25,10 +25,9 @@ import {
     isDropdownChevronClick,
     showsCheckboxLabel,
     validateCellData,
-    validationAt,
-    validationLookup,
     validationRange,
 } from '../../../state/modules/data-verification';
+import { validationAt, validationLookup } from '../../../state/modules/validation-rules';
 import type { Cell, DataRegulationProps, DataVerificationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { cellsWithRules, validationsByCell } from '../factories/validations';

@@ -28,13 +28,7 @@ import type { Range, RangeOrWholeAxis, Selection, SingleRange } from '../types';
 import { getSheetIndex, rgbToHex } from '../utils';
 import { carrySides, getBorderInfoCompute } from './border';
 import { checkCF, getComputeMap } from './condition-format';
-import {
-    addValidation,
-    clearValidations,
-    describeValidationRule,
-    validateCellData,
-    validationAt,
-} from './data-verification';
+import { describeValidationRule, validateCellData } from './data-verification';
 import { setFormulaCellInfo } from './formula-cache';
 import { functionHTMLGenerate } from './formula-editor';
 import { delFunctionGroup, execFunctionGroup, execfunction, getcellrange } from './formula-exec';
@@ -50,6 +44,7 @@ import {
 } from './inline-string';
 import { getCellTextInfo } from './text';
 import { ID_CARD_NUMBER, isPlainNumber, isRealNull, isRealNum, valueIsError } from './validation';
+import { addValidation, clearValidations, validationAt } from './validation-rules';
 
 // Returns the cell attribute value, normalized to a default when missing. Result is a
 // value-space union (string for color/format/alignment, number for fs, CellType for ct, …);
@@ -144,7 +139,7 @@ export function getCellValue(r: number, c: number, data: CellMatrix, attr?: keyo
 }
 
 // `v` covers every shape callers feed in: scalar (string/number/boolean), Cell-like patch
-// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, dataVerification,
+// ({v, f, ct, …}), or null/undefined. Re-used by formula-eval, search/replace, data validation,
 // the public API, etc. — keeping the parameter shape here is the project-wide escape hatch.
 // biome-ignore lint/suspicious/noExplicitAny: cross-cutting setter, callers pass scalars and Cell-like patches indistinguishably
 export function setCellValue(ctx: Context, r: number, c: number, d: CellMatrix | null | undefined, v: any) {
