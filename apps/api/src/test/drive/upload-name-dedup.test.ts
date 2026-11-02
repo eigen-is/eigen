@@ -1,8 +1,18 @@
-import { describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { NameFolder } from '../../lib/drive/naming';
 import { withFreeName } from '../../lib/drive/naming';
-import { authedRequest, createTestUserOnStorage, driveGet, drivePost, TEST_PNG_BYTES } from '../setup';
+import type { TestUser } from '../setup';
+import {
+    authedRequest,
+    createTestUserOnStorage,
+    driveDelete,
+    driveGet,
+    drivePost,
+    driveUpload,
+    driveUploadMultiple,
+    TEST_PNG_BYTES,
+} from '../setup';
 
 const MOUNT = 'default';
 
@@ -48,6 +58,73 @@ describe('upload route name dedup', () => {
             expect(names.toSorted()).toEqual(freeNames('screenshot', '.png', 1, 16).toSorted());
         },
     );
+
+    // The files of one request land at once, so each needs its own name there too.
+    test('same-named files in one upload request all land, with distinct names', async () => {
+        const user = await createTestUserOnStorage('local-fullnames', 'Upload Batch');
+        const root = await driveGet<DrivePath>(user.sessionToken, user.id, MOUNT, 'root');
+        const files = Array.from({ length: 4 }, (_, n) => new File([`${n}`], 'same.txt'));
+        const landed = await driveUploadMultiple(user.sessionToken, user.id, MOUNT, root.id, files);
+        expect(landed.map((p) => p.name).toSorted()).toEqual(freeNames('same', '.txt', 1, 4).toSorted());
+    });
+});
+
+// A create that never ends, such as a copy the client stopped reading, keeps its own name only. A name
+// another create took, then gave up, is free again while it runs.
+describe('a name freed while another create runs in the folder', () => {
+    let user: TestUser;
+    let rootId: string;
+
+    beforeAll(async () => {
+        user = await createTestUserOnStorage('local-id', 'Freed Name');
+        rootId = (await driveGet<DrivePath>(user.sessionToken, user.id, MOUNT, 'root')).id;
+    });
+
+    // A new folder with a create held in flight in it. The returned function lets that create end.
+    async function busyFolder(): Promise<{ id: string; release: () => Promise<void> }> {
+        const folder = await drivePost<DrivePath>(user.sessionToken, user.id, MOUNT, `folder/${rootId}`, {
+            folderName: `busy-${crypto.randomUUID()}`,
+        });
+        const held = Promise.withResolvers<void>();
+        const nameFolder = {
+            ownerId: user.id,
+            mountId: MOUNT,
+            parentId: folder.id,
+            isTaken: () => false,
+            childNames: () => [],
+        };
+        const running = withFreeName(nameFolder, 'held.bin', () => held.promise);
+        return {
+            id: folder.id,
+            release: () => {
+                held.resolve();
+                return running;
+            },
+        };
+    }
+
+    test('an upload, trashed and uploaded again, keeps its name', async () => {
+        const folder = await busyFolder();
+        const first = await driveUpload(user.sessionToken, user.id, MOUNT, folder.id, new File(['1'], 'x.txt'));
+        await driveDelete(user.sessionToken, user.id, MOUNT, `path/${first.id}`);
+        const second = await driveUpload(user.sessionToken, user.id, MOUNT, folder.id, new File(['2'], 'x.txt'));
+        expect(second.name).toBe('x.txt');
+        await folder.release();
+    });
+
+    test('an upload, trashed and restored, keeps its name', async () => {
+        const folder = await busyFolder();
+        const uploaded = await driveUpload(user.sessionToken, user.id, MOUNT, folder.id, new File(['1'], 'x.txt'));
+        await driveDelete(user.sessionToken, user.id, MOUNT, `path/${uploaded.id}`);
+        const res = await authedRequest(user.sessionToken, `/drive/${user.id}/${MOUNT}/trash/${uploaded.id}/restore`, {
+            method: 'POST',
+        });
+        expect(res.status).toBe(200);
+        expect((await driveGet<DrivePath>(user.sessionToken, user.id, MOUNT, `path/${uploaded.id}`)).name).toBe(
+            'x.txt',
+        );
+        await folder.release();
+    });
 });
 
 describe('withFreeName', () => {
@@ -58,8 +135,8 @@ describe('withFreeName', () => {
             ownerId: 'owner',
             mountId: MOUNT,
             parentId: crypto.randomUUID(),
-            isTaken: async () => false,
-            childNames: async () => [],
+            isTaken: () => false,
+            childNames: () => [],
         };
     }
 
@@ -83,21 +160,9 @@ describe('withFreeName', () => {
         const failed = withFreeName(folder, 'a.txt', async () => {
             throw new Error('create failed');
         });
-        expect(failed).rejects.toThrow('create failed');
-        await failed.catch(() => {});
+        await expect(failed).rejects.toThrow('create failed');
         expect(await withFreeName(folder, 'a.txt', async (name) => name)).toBe('a.txt');
         held.resolve();
         await busy;
-    });
-
-    // The second create reads the folder before the first one's row lands, and picks after the first one
-    // ended. It must still see the first one's name.
-    test('a create whose read was older than a finished create still skips its name', async () => {
-        const folder = emptyFolder();
-        const read = Promise.withResolvers<boolean>();
-        const late = withFreeName({ ...folder, isTaken: () => read.promise }, 'a.txt', async (name) => name);
-        expect(await withFreeName(folder, 'a.txt', async (name) => name)).toBe('a.txt');
-        read.resolve(false);
-        expect(await late).toBe('a (2).txt');
     });
 });

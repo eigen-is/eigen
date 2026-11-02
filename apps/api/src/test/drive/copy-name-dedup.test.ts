@@ -118,6 +118,36 @@ describe('copy route name dedup', () => {
         expect(names.toSorted()).toEqual(landedNames(1).toSorted());
     });
 
+    // A copy needs read on the folder it lands in, wherever its source lives, the same as before copies
+    // picked their names in flight.
+    test('a folder shared write-only refuses a copy from the same drive and from another one', async () => {
+        const bob = ctx.bob.user;
+        const bobRoot = await driveGet<DrivePath>(bob.sessionToken, bob.id, MOUNT, 'root');
+        const shareFolder = async (read: boolean, write: boolean): Promise<DrivePath> => {
+            const folder = await drivePost<DrivePath>(bob.sessionToken, bob.id, MOUNT, `folder/${bobRoot.id}`, {
+                folderName: `acl-${crypto.randomUUID()}`,
+            });
+            await drivePut(bob.sessionToken, bob.id, MOUNT, `path/${folder.id}/acl`, {
+                add: [{ id: ctx.alice.user.email, read, write }],
+            });
+            return folder;
+        };
+        const target = await shareFolder(false, true);
+        const readable = await shareFolder(true, false);
+        const bobFile = await driveUpload(bob.sessionToken, bob.id, MOUNT, readable.id, new File(['b'], 'bob.txt'));
+        const aliceFile = await driveUpload(
+            ctx.alice.user.sessionToken,
+            ctx.alice.user.id,
+            MOUNT,
+            folderId,
+            new File(['a'], 'alice.txt'),
+        );
+
+        const sameDrive = await copyInto(bobFile, bob.id, target.id);
+        const otherDrive = await copyInto(aliceFile, bob.id, target.id);
+        expect([sameDrive.status, otherDrive.status]).toEqual([403, 403]);
+    });
+
     // A name already at the 255-byte limit still gets a copy: the dedup suffix trims the stem to fit.
     test('a max-length name copied next to itself gets a suffix that still fits 255 bytes', async () => {
         const long = `${'y'.repeat(251)}.txt`;

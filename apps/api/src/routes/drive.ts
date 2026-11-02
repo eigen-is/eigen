@@ -1,6 +1,8 @@
-// The Drive HTTP routes, for example listing a folder, reading and writing files, sharing, trash and
-// previews. Each route checks who is asking and then goes through SharedDrive, which applies the
-// access rules before the Drive underneath does the work.
+// The Drive HTTP routes, for example listing a folder, reading, writing and copying files, sharing,
+// trash and previews. A route may serve another owner's drive, such as a team drive or a path shared
+// with the user. So most routes get their drive from getSharedDrive, which checks the access, and never
+// compare ownerId with user.id themselves. A route that reads only the caller's own data calls
+// requireSelf instead.
 
 import { MAX_SEND_RECIPIENTS } from '@workspace/lib/constants/mail';
 import type { DriveAccessCheckResult, DrivePath, ImportResult } from '@workspace/lib/types/drive';
@@ -24,7 +26,7 @@ import { getDrive, getSharedDrive, readImportSourceBytes } from '../lib/drive';
 import { propagateAccessRequest } from '../lib/drive/access-request-propagation';
 import { aggregateMimeContents, aggregateWatches } from '../lib/drive/aggregate';
 import { copyPathAcross, copySize } from '../lib/drive/copy-across';
-import { withFreeName } from '../lib/drive/naming';
+import { folderIn, withFreeName } from '../lib/drive/naming';
 import { serveFile } from '../lib/drive/serve-file';
 import { exportDocument } from '../lib/export/export-document';
 import { EXPORT_CSP } from '../lib/export/sanitize';
@@ -53,18 +55,15 @@ import {
     eigenDocTypeSchema,
 } from './shared-schemas';
 
-// One cap for every free-text share note, such as a mail to the collaborators or an access request. So no
-// oversized note is stored or mailed.
+// The longest free-text note a share route takes, such as a mail to the collaborators or an access
+// request. A longer note is never stored or mailed.
 const MAX_SHARE_MESSAGE_LENGTH = 12000;
 
 // Preview and thumb URLs carry updatedAt, so a content change is a new URL and the entry can live a day.
 const PREVIEW_MAX_AGE_SECONDS = 86400;
 
-// A drive route may serve another owner's drive, such as a team drive or a path shared with the user.
-// getSharedDrive checks the access, so a route never compares ownerId with user.id itself.
 export const driveRouter = new Elysia({ name: 'drive' })
     .use(betterAuth)
-    // Mount management
     .get(
         '/drive/:ownerId/mounts',
         async ({ params, user }) => {
@@ -73,7 +72,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Root and sharing routes
     .get(
         '/drive/:ownerId/:mountId/root',
         async ({ params, user }) => {
@@ -109,7 +107,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Folder operations
     .get(
         '/drive/:ownerId/:mountId/folder/:pathId',
         async ({ params, user }) => {
@@ -146,7 +143,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             auth: true,
         },
     )
-    // File operations
     .get(
         '/drive/:ownerId/:mountId/file/:pathId',
         async ({ params, user }) => {
@@ -199,36 +195,26 @@ export const driveRouter = new Elysia({ name: 'drive' })
 
             const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
-            // The copy gets a free name in the target folder here and not in Drive.copyPath, because a
-            // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
-            // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
+            // Every copy needs read on the target folder, wherever it comes from.
             const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
+            const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
+            if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
+
             // NFC first: the store keeps names NFC, so the compare below has to see the same form.
             const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
-            const copy = (name: string): Promise<DrivePath> =>
+            const copyAcross = (name: string): Promise<DrivePath> =>
+                copyPathAcross(sourceDrive, source, targetDrive, body.targetMountId, body.targetParentId, name, user);
+            // A file copied to another mount is uploaded there, and the upload picks its free name.
+            if (!sameMount && !isContainerType(source.type)) return copyAcross(desired);
+
+            // Any other copy gets a free name in the target folder here and not in Drive.copyPath, because a
+            // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
+            // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
+            return withFreeName(folderIn(target.mount, body.targetParentId), desired, (name) =>
                 sameMount
                     ? sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user)
-                    : copyPathAcross(
-                          sourceDrive,
-                          source,
-                          targetDrive,
-                          body.targetMountId,
-                          body.targetParentId,
-                          name,
-                          user,
-                      );
-            // A file copied to another mount is uploaded there, and the upload picks its own free name.
-            if (!sameMount && !isContainerType(source.type)) return copy(desired);
-            const folder = {
-                ownerId: body.targetOwnerId,
-                mountId: body.targetMountId,
-                parentId: body.targetParentId,
-                isTaken: async (name: string) =>
-                    (await targetDrive.getChildByName(body.targetMountId, body.targetParentId, name)) !== null,
-                childNames: async () =>
-                    (await targetDrive.getFolderContents(body.targetMountId, body.targetParentId)).map((s) => s.name),
-            };
-            return withFreeName(folder, desired, copy);
+                    : copyAcross(name),
+            );
         },
         {
             body: t.Object({
@@ -446,7 +432,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             }),
         },
     )
-    // Path operations (rename, move, delete, acl, breadcrumb)
     .get(
         '/drive/:ownerId/:mountId/path/:pathId',
         async ({ params, user }) => {
@@ -493,8 +478,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
             requireNonGuest(user);
             const drive = await getSharedDrive(params.ownerId, user);
             // The server merges the change onto the ACL as it is now, so two people sharing at once
-            // can't undo each other's entries. The owner's own Drive needs the actor for the share
-            // emails, and SharedDrive uses its own user.
+            // can't undo each other's entries. The user is passed as the actor of the share emails.
+            // On another owner's drive, SharedDrive ignores it and uses its own user.
             await drive.updateACLDelta(
                 params.mountId,
                 params.pathId,
@@ -583,6 +568,31 @@ export const driveRouter = new Elysia({ name: 'drive' })
             auth: true,
         },
     )
+    .post(
+        '/drive/:ownerId/:mountId/path/:pathId/request-access',
+        async ({ params, user, body }) => {
+            // A guest can't be given a share, so there is nothing to request, the same as on the other
+            // share routes.
+            requireNonGuest(user);
+            // This skips SharedDrive on purpose, because the caller has no access yet, which is why they
+            // ask. propagateAccessRequest only notifies the owner through the home relay. It never
+            // reads the path for the requester or answers with its data.
+            await propagateAccessRequest(
+                params.ownerId,
+                params.mountId,
+                params.pathId,
+                { name: user.name, email: user.email },
+                body.message ?? null,
+            );
+            return { success: true };
+        },
+        {
+            auth: true,
+            body: t.Object({
+                message: t.Optional(t.String({ maxLength: MAX_SHARE_MESSAGE_LENGTH })),
+            }),
+        },
+    )
     .get(
         '/drive/:ownerId/:mountId/path/:pathId/permissions',
         async ({ params, user }) => {
@@ -595,7 +605,8 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Mime type filter (aggregates over all mounts). ?teams=1 also fans out over the caller's teams via home-relay.
+    // The files of one MIME type in every mount of the drive. With ?teams=1 the caller's team drives
+    // are searched too.
     .get(
         '/drive/:ownerId/mime/:mimeType',
         async ({ params, query, user }) => {
@@ -612,7 +623,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true, query: t.Object({ teams: t.Optional(t.String()) }) },
     )
-    // Mime type filter scoped to a single mount
     .get(
         '/drive/:ownerId/:mountId/mime/:mimeType',
         async ({ params, user }) => {
@@ -621,7 +631,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Thumbnail
     .get(
         '/drive/:ownerId/:mountId/thumb/:fileName',
         async ({ params, user, set }) => {
@@ -636,7 +645,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
         },
         { auth: true },
     )
-    // Trash management
     .get(
         '/drive/:ownerId/:mountId/trash',
         async ({ params, user }) => {
@@ -662,31 +670,6 @@ export const driveRouter = new Elysia({ name: 'drive' })
             return { success: true };
         },
         { auth: true },
-    )
-    .post(
-        '/drive/:ownerId/:mountId/path/:pathId/request-access',
-        async ({ params, user, body }) => {
-            // A guest can't be given a share, so there is nothing to request, the same as on the other
-            // share routes.
-            requireNonGuest(user);
-            // This skips SharedDrive on purpose, because the caller has no access yet, which is why they
-            // ask. propagateAccessRequest only notifies the owner through the home relay. It never
-            // reads the path for the requester or answers with its data.
-            await propagateAccessRequest(
-                params.ownerId,
-                params.mountId,
-                params.pathId,
-                { name: user.name, email: user.email },
-                body.message ?? null,
-            );
-            return { success: true };
-        },
-        {
-            auth: true,
-            body: t.Object({
-                message: t.Optional(t.String({ maxLength: MAX_SHARE_MESSAGE_LENGTH })),
-            }),
-        },
     )
     .delete(
         '/drive/:ownerId/:mountId/trash',
