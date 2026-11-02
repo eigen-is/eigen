@@ -24,6 +24,7 @@ const win = new Window();
 g.window = win;
 g.document = win.document;
 g.HTMLElement = win.HTMLElement;
+g.DOMParser = win.DOMParser;
 
 const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
 
@@ -108,6 +109,38 @@ describe('handleCellAreaMouseDown — tick box', () => {
         // The click did its editing job: A2 is the range the formula picked up.
         expect(ctx.formulaCache.func_selectedrange?.row).toEqual([1, 1]);
         expect(ctx.formulaCache.func_selectedrange?.column).toEqual([0, 0]);
+    });
+});
+
+// A Ctrl-click while composing adds another reference, after a comma unless the formula already ends in one, an `=`
+// or an opening bracket.
+describe('handleCellAreaMouseDown — a Ctrl-click while composing a formula', () => {
+    function ctrlClickA2(text: string): string {
+        const ctx = tickBoxContext();
+        ctx.editingCellPosition = [0, 0];
+        ctx.formulaCache.rangestart = true;
+        ctx.formulaRangeHighlight = [];
+        const container = win.document.createElement('div') as unknown as HTMLDivElement;
+        container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
+        const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
+        cellInput.innerText = text;
+        const event = {
+            button: 0,
+            pageX: 30,
+            pageY: 30,
+            ctrlKey: true,
+            preventDefault: () => {},
+        } as unknown as MouseEvent;
+        handleCellAreaMouseDown(ctx, quietCache(), event, cellInput, container);
+        return cellInput.innerText;
+    }
+
+    test('adds no comma after an opening bracket', () => {
+        expect(ctrlClickA2('=SUM(')).toBe('=SUM(A2');
+    });
+
+    test('adds a comma after a reference', () => {
+        expect(ctrlClickA2('=SUM(A1')).toStartWith('=SUM(A1,');
     });
 });
 

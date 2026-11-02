@@ -119,10 +119,10 @@ export const SheetOverlay: React.FC = () => {
             setContext((draftCtx) => {
                 const cellArea = refs.cellArea.current;
                 if (!cellArea) return;
-                handleCellAreaDoubleClick(draftCtx, refs.globalCache, settings, nativeEvent, cellArea);
+                handleCellAreaDoubleClick(draftCtx, refs.globalCache, nativeEvent, cellArea);
             });
         },
-        [refs.cellArea, refs.globalCache, setContext, settings],
+        [refs.cellArea, refs.globalCache, setContext],
     );
 
     // cellArea is the native scroll surface; its scroll event is the single
