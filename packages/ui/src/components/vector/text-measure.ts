@@ -23,22 +23,6 @@ export type HealTextSize = (
     patch: (el: VectorElement, size: TextDimensions) => VectorElementPatch | null,
 ) => void;
 
-// One offscreen context, made on first use so that importing this module needs no DOM.
-let context: CanvasRenderingContext2D | null = null;
-function measureContext(): CanvasRenderingContext2D {
-    if (!context) {
-        context = document.createElement('canvas').getContext('2d');
-        if (!context) throw new Error('2d canvas context unavailable');
-    }
-    return context;
-}
-
-// The canvas font that matches the rendered text: its weight, its size and the family stack getFontFamily writes.
-// measureText's advance width in this font is the width the text lays out at.
-function vectorFontString({ fontSize, fontFamily, fontWeight = 'normal' }: VectorTextFont): string {
-    return `${fontWeight} ${fontSize}px ${getFontFamily(fontFamily)}`;
-}
-
 // measureText measures a character in the fallback font until the face that draws it has loaded, so
 // callers load the font before they measure. A face is cut into unicode-range slices, and the font
 // set loads and checks only the slices of the text it is given. Without text it tests a space, so
@@ -70,4 +54,20 @@ export function measureVectorText(text: string, font: VectorTextFont): TextDimen
 export async function measureLoadedVectorText(text: string, font: VectorTextFont): Promise<TextDimensions> {
     await loadVectorFont(text, font);
     return measureVectorText(text, font);
+}
+
+// One offscreen context, made on first use so that importing this module needs no DOM.
+let context: CanvasRenderingContext2D | null = null;
+function measureContext(): CanvasRenderingContext2D {
+    if (!context) {
+        context = document.createElement('canvas').getContext('2d');
+        if (!context) throw new Error('2d canvas context unavailable');
+    }
+    return context;
+}
+
+// The canvas font that matches the rendered text: its weight, its size and the family stack getFontFamily writes.
+// measureText's advance width in this font is the width the text lays out at.
+function vectorFontString({ fontSize, fontFamily, fontWeight = 'normal' }: VectorTextFont): string {
+    return `${fontWeight} ${fontSize}px ${getFontFamily(fontFamily)}`;
 }
