@@ -145,10 +145,12 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string, co
             }
 
             if (files && files.length > 0 && chatPath && mediaFolder) {
-                const uploaded = await Promise.all(
-                    files.map((file) => uploadFile.mutateAsync({ parentId: mediaFolder.id, file })),
-                );
-                attachments = [...(attachments ?? []), ...uploaded.map((u) => u.name)];
+                // One at a time: the server gives each file a free name, and two pasted screenshots share one.
+                const uploaded: string[] = [];
+                for (const file of files) {
+                    uploaded.push((await uploadFile.mutateAsync({ parentId: mediaFolder.id, file })).name);
+                }
+                attachments = [...(attachments ?? []), ...uploaded];
             }
 
             if (isUnknownCommand(rawContent)) {
