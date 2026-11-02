@@ -143,7 +143,7 @@ export async function writeSidecar(
     manifest: BackupManifest,
     verify: BackupVerifyRecord,
 ): Promise<void> {
-    // It names every file of the home, and ./eigen never reads it.
+    // Private like the archive: it names every file of the home, and ./eigen never reads it.
     await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
 }
 

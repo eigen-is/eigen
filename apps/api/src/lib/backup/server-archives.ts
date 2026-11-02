@@ -24,6 +24,9 @@ import { pruneServerArchives } from './retention';
 
 const INTERRUPTED = 'interrupted by a restart';
 
+// A server sidecar keeps the umask's mode, because ./eigen reads it on the host as the operator. 0640 would lock the
+// operator out: the rename keeps the group the file got in the staging folder, and that is the API's group, not
+// the operator's. The backups folder is what keeps other users of the host away from it.
 export function writeServerSidecar(archivePath: string, sidecar: ServerArchiveSidecar): Promise<void> {
     return writeRecord(serverSidecarPath(archivePath), sidecar);
 }
