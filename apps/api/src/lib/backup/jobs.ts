@@ -90,17 +90,16 @@ export function startBackupJob(
 // still walking. A second restore would move aside a folder the first is writing. A safety-copy delete
 // during a restore would judge the wrong home's keys as garbage. An archive deleted under a verify would
 // get its sidecar back. A server job's archive is the owner's to know, so only another server job is told
-// its name.
+// its name. A job holds the slot until it has settled, the same span slotBusy makes a waiter wait for.
 export function requireHomeSlotFree(ownerId: string, starting?: BackupJob['kind']): void {
-    dropExpiredJobs();
     const held = heldSlots.get(ownerId);
     if (held) throw new ApiError(409, `A ${held.holder} of this home is running`);
-    for (const running of jobs.values()) {
-        if (running.ownerId === ownerId && running.state === 'running' && holdsSlot(running.kind)) {
-            const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
-            const named = running.artifact && shown ? `: ${running.artifact}` : '';
-            throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
-        }
+    for (const [id, running] of inFlight) {
+        if (running.ownerId !== ownerId || !holdsSlot(running.kind)) continue;
+        const artifact = jobs.get(id)?.artifact;
+        const shown = !isServerJob(running.kind) || (starting && isServerJob(starting));
+        const named = artifact && shown ? `: ${artifact}` : '';
+        throw new ApiError(409, `A ${running.kind} of this home is already running${named}`);
     }
 }
 

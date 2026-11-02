@@ -3,7 +3,13 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import { and, eq } from 'drizzle-orm';
 import { member as memberSchema } from '../../../auth-schema';
 import { auth, getAuthDrizzleDb } from '../../lib/auth/auth';
-import { drainBackupJobs, getBackupJob, startBackupJob } from '../../lib/backup/jobs';
+import {
+    drainBackupJobs,
+    getBackupJob,
+    requireHomeSlotFree,
+    startBackupJob,
+    whenHomeSlotFree,
+} from '../../lib/backup/jobs';
 import { getServerConfig } from '../../lib/config/server-config';
 import { ApiError } from '../../lib/core/errors';
 import * as homeRelay from '../../lib/home/home-relay';
@@ -121,6 +127,30 @@ describe('Backup job slot', () => {
             expect(refuse('server-backup').message).toContain('server-manual-full-20260930-120000.tar');
         } finally {
             gate.resolve();
+            await drainBackupJobs();
+            spy.mockRestore();
+        }
+    });
+
+    test('a job that has finished its work holds the slot for a route until it settles, as for a waiter', async () => {
+        const ownerId = `slot-settle-${crypto.randomUUID()}`;
+        const spy = spyOn(homeRelay, 'sendToHome').mockResolvedValue(undefined);
+        try {
+            const job = startBackupJob('backup', ownerId, undefined, async () => 'settle.tar');
+            // The job reads done a few microtasks before it has settled and let go of the slot.
+            for (let tick = 0; tick < 100 && job.state === 'running'; tick++) await Promise.resolve();
+            expect(job.state).toBe('done');
+            expect(job.finishedAt).toBeUndefined();
+
+            expect(() => requireHomeSlotFree(ownerId)).toThrow(/already running/);
+            let waited = false;
+            const waiter = whenHomeSlotFree(ownerId, () => {
+                waited = true;
+            });
+            expect(waited).toBe(false);
+            await waiter;
+            expect(() => requireHomeSlotFree(ownerId)).not.toThrow();
+        } finally {
             await drainBackupJobs();
             spy.mockRestore();
         }
