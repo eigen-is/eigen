@@ -16,9 +16,8 @@ import { API_IMAGE_KEY } from '../config/release';
 import { getServerSettings } from '../config/server-settings';
 import { ApiError } from '../core';
 import { alertOwner } from '../user/alert-owner';
-import { writeRecord } from './archive';
 import { listBackupJobs, runningJobOn } from './jobs';
-import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath } from './paths';
+import { backupsDirPath, SERVER_SIDECAR_SUFFIX, serverSidecarPath, writeRecord } from './paths';
 import type { RetentionCandidate } from './retention';
 import { pruneServerArchives } from './retention';
 

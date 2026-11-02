@@ -9,8 +9,8 @@ import type { BackupArtifact, BackupManifest, BackupVerifyRecord } from '@worksp
 import { BACKUP_ARTIFACT_EXTENSION, parseBackupArtifactName, parseBackupSidecar } from '@workspace/lib/validation';
 import { ApiError } from '../core';
 import { errnoOf, writeTempWithHash } from '../storage';
-import { ARCHIVE_MODE, readArtifactManifest, writeRecord } from './archive';
-import { backupsDirPath, getBackupTempPath, sidecarPath } from './paths';
+import { ARCHIVE_MODE, readArtifactManifest } from './archive';
+import { backupsDirPath, getBackupTempPath, sidecarPath, writeRecord } from './paths';
 
 // One home's artifacts, newest first, read from the sidecars alone: opening an archive to answer a
 // page load would decompress the whole thing. An artifact with no sidecar (one copied in by hand)
