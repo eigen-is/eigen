@@ -43,6 +43,7 @@ import { createSSEStream } from '../../lib/home/sse-stream';
 import { createMountConfig } from '../../lib/mount';
 import { paths } from '../../lib/mount/schema';
 import { getEigenDb } from '../../lib/share/db';
+import * as registryModule from '../../lib/share/registry';
 import { shareRegistry } from '../../lib/share/schema';
 import { saveThumbnail } from '../../lib/shared/thumbnails';
 import { createHomeFaultMount, registerFaultMount, unregisterFaultMount } from '../fault-storage-helpers';
@@ -1049,6 +1050,71 @@ describe('Backup restore when an auth row cannot be re-inserted', () => {
 
         expect(authDb.select().from(userScheme).where(eq(userScheme.id, user.id)).all()).toEqual([]);
         authDb.delete(apikeyScheme).where(eq(apikeyScheme.id, apiKeyId)).run();
+        rmSync(join(getBackupsDir(), artifact), { force: true });
+    });
+});
+
+describe('Backup restore when a share row cannot be written', () => {
+    test('the restored home stays with its account, and a retry writes the rest', async () => {
+        const ctx = await getTestContext();
+        const user = await createTestUser('restore-sharefail@test.eigen.is', PASSWORD, 'Restore Share Fail');
+        const mounts = await assertJson<{ id: string }[]>(
+            await authedRequest(user.sessionToken, `/drive/${user.id}/mounts`),
+        );
+        const rootId = (
+            await assertJson<DrivePath>(
+                await authedRequest(user.sessionToken, `/drive/${user.id}/${mounts[0].id}/root`),
+            )
+        ).id;
+        const file = await driveUpload(
+            user.sessionToken,
+            user.id,
+            mounts[0].id,
+            rootId,
+            new File([TEST_PNG_BYTES], 'kept.png', { type: 'image/png' }),
+        );
+        expect(
+            (
+                await authedRequest(user.sessionToken, `/drive/${user.id}/${mounts[0].id}/path/${file.id}/acl`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ add: [{ id: SHARE_TARGET, read: true, write: false }] }),
+                })
+            ).status,
+        ).toBe(200);
+        const artifact = await backup(user.id, new Date());
+        expect(
+            (await authedRequest(ctx.alice.user.sessionToken, `/settings/user/${user.id}`, { method: 'DELETE' }))
+                .status,
+        ).toBe(200);
+        const authDb = getAuthDrizzleDb();
+        const sharesOf = async () =>
+            (await getEigenDb())
+                .select()
+                .from(shareRegistry)
+                .where(eq(shareRegistry.fromUserId, user.id))
+                .all()
+                .map((row) => row.targetIdentifier);
+
+        const spy = spyOn(registryModule, 'addRegistryEntry').mockRejectedValue(new Error('failed by the test'));
+        try {
+            await expect(restoreHome(artifact, user.id, `restore-sharefail-${Date.now()}`)).rejects.toThrow(
+                'failed by the test',
+            );
+        } finally {
+            spy.mockRestore();
+        }
+
+        // The account and the home it signs in to are both there. Only the share row is missing.
+        expect(authDb.select().from(userScheme).where(eq(userScheme.id, user.id)).all().length).toBe(1);
+        expect(existsSync(join(TEST_DATA_DIR, 'home', user.id))).toBe(true);
+        expect(safetyCopies(user.id, FAILED_RESTORE_SUFFIX)).toEqual([]);
+        expect(await sharesOf()).toEqual([]);
+
+        await restoreHome(artifact, user.id, `restore-sharefail-retry-${Date.now()}`);
+
+        expect(await sharesOf()).toEqual([SHARE_TARGET]);
+        removeSafetyCopies(user.id);
         rmSync(join(getBackupsDir(), artifact), { force: true });
     });
 });

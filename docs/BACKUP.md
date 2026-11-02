@@ -135,13 +135,14 @@ The verdict goes into the sidecar, which the admin pane's list reads. The manife
 
 A per-home restore starts on **Restore**, which asks first, naming the home. Then:
 
-1. While the home still serves, the home archive is extracted into staging and judged: a member that is not a whole home, a failed verify, a database this server cannot open or a mount it cannot put back (`checkUnpackedHome` in `materialize-mount.ts`), a trash that cannot be re-dated, a `shares.json` that does not read and an `auth.json` that is not this user's (`authRowsToRestore` in `auth-rows.ts`, with the email check) each end the job with nothing touched. The trash starts over here, in the unpacked folder ([The trash starts over after every restore](#the-trash-starts-over-after-every-restore)). A share row that does not read must stop the restore before any identity row goes in.
+1. While the home still serves, the home archive is extracted into staging and judged: a member that is not a whole home, a failed verify, a database this server cannot open or a mount it cannot put back (`checkUnpackedHome` in `materialize-mount.ts`), a trash that cannot be re-dated, a `shares.json` that does not read and an `auth.json` that is not this user's (`authRowsToRestore` in `auth-rows.ts`, with the email check) each end the job with nothing touched. The trash starts over here, in the unpacked folder ([The trash starts over after every restore](#the-trash-starts-over-after-every-restore)).
 2. The home is marked as restoring (`markHomeRestoring` in `apps/api/src/lib/home/get-home.ts`), which refuses a second restore or a deletion of the home. From here every request to it answers 503.
 3. The home's collab sockets are closed, then the home is evicted.
 4. The home folder is renamed aside as `<id>.pre-restore-<date>-<time>`. A deleted user has none.
 5. The archive's home folder is installed. A `local` mount's files go in as they are, a `local-key` mount's under their flat keys, and an `s3` mount's are staged with a pending-upload row each, so the upload queue drains them with its retry and backoff. Every restored row gets a fresh key, so no bucket object is overwritten.
-6. Only then do identity rows go into `users3.db`, because nothing takes a row back. A missing user is inserted from the archive; a present one is left alone, and the restore is refused when the email no longer matches. Missing share rows are inserted, and the avatar only when the server has none. The folder is whole now, so the home's data epoch rotates.
+6. The folder is whole now, so the home's data epoch rotates.
 7. The mark clears and the home is opened, so a remote mount's queue starts draining at once. The first load runs migrations and reseeds the byte counters.
+8. Only then do the rows step 1 judged go in: the identity rows into `users3.db`, the missing share rows, and the avatar only when the server has none. A missing user is inserted from the archive; a present one is left alone. Nothing takes a row back and nothing rolls the folder back for them. Each write inserts only what is missing, so a failure here ends the job with the home restored, and a retry finishes it.
 
 A failure after step 4 parks the half-written folder as `<id>.failed-restore-<date>-<time>` and renames the original back.
 

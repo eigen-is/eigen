@@ -166,8 +166,9 @@ export async function checkRestoredDatabases(
         const mountDir = requireMountDir(homeDir, mountId);
         targets.push({ filePath: path.join(mountDir, PATHS.DRIVE.METADATA_DB), config: MOUNT_DB_CONFIG });
     }
-    // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
-    // knowable path; verify read every one of them in the folder this restore unpacked minutes ago.
+    // The caller names the container databases, because only it knows where they are. A per-home restore passes
+    // every one at its path in the unpacked archive, an s3 mount's included. The server stage passes none for an s3
+    // mount, whose copies are staged for the bucket, and refuses an archive of a newer Eigen outright instead.
     targets.push(...containerDatabases);
     await checkDatabases(targets);
 }
