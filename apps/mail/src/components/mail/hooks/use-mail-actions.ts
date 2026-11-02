@@ -207,8 +207,14 @@ export function useMailActions() {
         if (results.some((r) => r.status === 'fulfilled')) navigateToList();
         const failures = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
         if (failures.length === 0) return;
-        keepFailed(pendingEmails.filter((_, i) => results[i].status === 'rejected'));
-        // A refusal closes the dialog, so it is thrown only when no failure is worth another try.
+        // A refused email, such as one already gone, gets the same no again, so only the others stay for a retry. A
+        // refusal closes the dialog, so it is thrown only when no failure is worth another try.
+        keepFailed(
+            pendingEmails.filter((_, i) => {
+                const result = results[i];
+                return result.status === 'rejected' && !isRefusal(result.reason);
+            }),
+        );
         throw (failures.find((f) => !isRefusal(f.reason)) ?? failures[0]).reason;
     };
 

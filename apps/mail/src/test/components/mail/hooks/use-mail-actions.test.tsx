@@ -111,7 +111,7 @@ function trashed(id: string): Email {
     };
 }
 
-test('a permanent delete that fails for one email keeps the dialog open on what failed, quietly, though another was refused', async () => {
+test('a permanent delete that fails for one email keeps the dialog open on what may succeed, quietly, and drops what was refused', async () => {
     const onOpenChange = mock((_open: boolean) => {});
     const seen: { pending: Email[] } = { pending: [] };
     function Route() {
@@ -135,6 +135,6 @@ test('a permanent delete that fails for one email keeps the dialog open on what 
         del.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
 
-    expect(seen.pending.map((e) => e.id)).toEqual(['m3', 'm2']);
+    expect(seen.pending.map((e) => e.id)).toEqual(['m2']);
     expect(onOpenChange).not.toHaveBeenCalled();
 });
