@@ -8,8 +8,8 @@ import {
     BACKUP_LEVELS,
     MAX_RESTART_MESSAGE_LENGTH,
     MAX_RESTART_WAIT_SECONDS,
-    NO_CONTROL_PATTERN,
     ON_DEMAND_BACKUP_REASONS,
+    RESTART_MESSAGE_PATTERN,
     RESTART_REASONS,
 } from '@workspace/lib/validation';
 import { Elysia, t } from 'elysia';
@@ -65,7 +65,7 @@ export const controlRouter = new Elysia({ name: 'control' })
                 inSeconds: t.Integer({ minimum: 0, maximum: MAX_RESTART_WAIT_SECONDS }),
                 reason: t.UnionEnum(RESTART_REASONS),
                 message: t.Optional(
-                    t.String({ minLength: 1, maxLength: MAX_RESTART_MESSAGE_LENGTH, pattern: NO_CONTROL_PATTERN }),
+                    t.String({ maxLength: MAX_RESTART_MESSAGE_LENGTH, pattern: RESTART_MESSAGE_PATTERN }),
                 ),
             }),
         },

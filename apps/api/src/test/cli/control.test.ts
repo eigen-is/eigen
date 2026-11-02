@@ -406,7 +406,7 @@ describe('the restart notice on the control socket', () => {
             expect(notice()).toEqual({ reason: 'rollback', message: null, msLeft: 0 });
         });
 
-        test('takes whole seconds up to an hour, the two reasons, and a short line without control characters', async () => {
+        test('takes whole seconds up to an hour, the two reasons, and a short line of text without control characters', async () => {
             for (const body of [
                 { inSeconds: -1, reason: 'update' },
                 { inSeconds: 3601, reason: 'update' },
@@ -416,6 +416,9 @@ describe('the restart notice on the control socket', () => {
                 { inSeconds: 60, reason: 'update', message: 'x'.repeat(201) },
                 { inSeconds: 60, reason: 'update', message: 'Back\nin five' },
                 { inSeconds: 60, reason: 'update', message: 'Back \x1b[31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back \x9b31min five' },
+                { inSeconds: 60, reason: 'update', message: 'Back\x85in five' },
+                { inSeconds: 60, reason: 'update', message: ' \u00a0 ' },
             ]) {
                 expect({ body, status: (await post('/restart-notice', body)).status }).toEqual({ body, status: 422 });
             }

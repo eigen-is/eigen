@@ -24,6 +24,8 @@ export function announceRestart(inSeconds: number, reason: RestartReason, messag
     const at = Date.now() + inSeconds * 1000;
     current = { at, reason, message };
     expiry = setTimeout(clearRestartNotice, inSeconds * 1000 + EXPIRY_MS);
+    // A notice must never hold the process open at shutdown.
+    expiry.unref();
     broadcastToLoadedHomes(buildRestartNoticeEvent());
     return { at: new Date(at).toISOString() };
 }
