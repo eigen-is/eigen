@@ -6,8 +6,9 @@ import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
+import { useScrollToIndex } from '@workspace/ui/hooks/use-scroll-to-index';
 import { cn } from '@workspace/ui/lib/utils';
-import { useContext, useMemo, useState } from 'react';
+import { useContext, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
@@ -41,6 +42,8 @@ export function InsertFunctionDialog() {
     const [category, setCategory] = useState(0);
     const [highlight, setHighlight] = useState(0);
     const [searchText, setSearchText] = useState('');
+    const listRef = useRef<HTMLDivElement>(null);
+    useScrollToIndex(listRef, highlight);
 
     const functions = useMemo(() => {
         const text = searchText.trim().toLowerCase();
@@ -97,6 +100,13 @@ export function InsertFunctionDialog() {
                                 setSearchText(e.target.value);
                                 setHighlight(0);
                             }}
+                            // Up and Down move the highlight through the list, and the caret stays where it is.
+                            onKeyDown={(e) => {
+                                if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+                                e.preventDefault();
+                                const step = e.key === 'ArrowDown' ? 1 : -1;
+                                setHighlight((i) => Math.max(0, Math.min(i + step, functions.length - 1)));
+                            }}
                         />
                     </div>
                     <div className="space-y-1.5">
@@ -121,7 +131,7 @@ export function InsertFunctionDialog() {
                         </Select>
                     </div>
                 </div>
-                <div className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
+                <div ref={listRef} className="max-h-[40vh] border border-border rounded-md overflow-y-auto">
                     {functions.map((fn, index) => (
                         <button
                             type="button"

@@ -114,3 +114,33 @@ test('a typed name lists that function first, then the names that start with it,
     await act(async () => pressEnter(dialog.field(SEARCH)));
     expect(dialog.editorText()).toBe('=SUM(');
 });
+
+// Cancelable, as a browser's is, so the test sees whether the field kept the key from moving its caret.
+const pressArrow = (key: 'ArrowUp' | 'ArrowDown', field: HTMLInputElement) =>
+    act(async () => {
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+        field.dispatchEvent(event);
+        expect(event.defaultPrevented).toBe(true);
+    });
+
+test('Up and Down in the search field move the highlight, and Enter inserts it', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'cos');
+    await pressArrow('ArrowUp', dialog.field(SEARCH));
+    expect(highlighted()).toBe('COS');
+    await pressArrow('ArrowDown', dialog.field(SEARCH));
+    await pressArrow('ArrowDown', dialog.field(SEARCH));
+    await pressArrow('ArrowUp', dialog.field(SEARCH));
+    expect(highlighted()).toBe('COSH');
+    await act(async () => pressEnter(dialog.field(SEARCH)));
+    expect(dialog.editorText()).toBe('=COSH(');
+});
+
+test('Down stops at the last function', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'cosh');
+    expect(listed()).toEqual(['COSH', 'ACOSH']);
+    await pressArrow('ArrowDown', dialog.field(SEARCH));
+    await pressArrow('ArrowDown', dialog.field(SEARCH));
+    expect(highlighted()).toBe('ACOSH');
+});
