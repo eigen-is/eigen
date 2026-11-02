@@ -56,15 +56,7 @@ The auth foundation already fits; all of the following was re-verified against s
   `member`) and reconciles pending shares (`reconcileSharesForNewUser` in
   `../../apps/api/src/lib/share/reconciliation.ts`). A JIT-created SSO user goes through the same
   create path, so org membership and share reconciliation come for free.
-- **Home provisioning is lazy, not waitlist-driven.** The waitlist
-  (`../../apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls
-  `auth.api.createUser` and signs the user in — it creates *no* Home. The Home, maildir, default
-  mount and quota all materialize on the first `getHome(userId)`
-  (`../../apps/api/src/lib/home/get-home.ts` → `Home.init()`, where `UserHome.loadSettings` seeds the
-  default mount from server settings, then `Drive.init()` +
-  `Mail.init()` etc.; quotas are resolved at read time by `resolveUserQuotas`). `getHome` is
-  idempotent and concurrent-safe (`createAsyncSingleton` + install-race retry loop). An SSO user
-  is therefore provisioned exactly like a waitlist user: on their first authenticated request.
+- **Home provisioning is lazy, not waitlist-driven.** The waitlist (`../../apps/api/src/lib/waitlist/waitlist.ts`, `registerFromInvite`) only calls `auth.api.createUser` and signs the user in — it creates *no* Home. The Home, maildir, default mount and quota all materialize on the first `getHome(userId)` (`../../apps/api/src/lib/home/get-home.ts` → `Home.init()`, where `UserHome.loadSettings` seeds the default mount from server settings, then `Drive.init()` + `Mail.init()` etc.; quotas are resolved at read time by `resolveUserQuotas`). `getHome` is idempotent and concurrent-safe (`createAsyncSingleton` + install-race retry loop). An SSO user is therefore provisioned exactly like a waitlist user: on their first authenticated request.
 - `verifyProtocolAuth` (`../../apps/api/src/lib/auth/protocol-auth.ts`) already checks the **app
   password (API key) first** and only then falls back to `signInEmail` — so IMAP/CalDAV/WebDAV
   already work for passwordless accounts that hold an app password.
