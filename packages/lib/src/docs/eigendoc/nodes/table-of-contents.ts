@@ -9,7 +9,7 @@ import { canInsertNode, getChangedRanges, mergeAttributes, Node } from '@tiptap/
 import type { EditorState } from '@tiptap/pm/state';
 import { NodeSelection, TextSelection } from '@tiptap/pm/state';
 import { EIGEN_FONT_NAMES, getFontFamily, readFontSize } from '../../../constants/fonts';
-import { isRecord } from '../../../core/guards';
+import { isRecord, readNumberIn } from '../../../core/guards';
 import { MAX_HEADING_LEVEL } from '../heading';
 
 // The look of one level's entries. A fact left out draws as the body text: a bundled font's name, a size in pt, and
@@ -51,9 +51,9 @@ const DEFAULT_TOC_LEVELS = 3;
 // The deepest heading level a table of contents lists. Any peer writes the attribute, so a number is held to the
 // heading levels, and anything else lists the default.
 export function readTocLevels(value: unknown): number {
-    return typeof value === 'number' && Number.isFinite(value)
-        ? Math.min(MAX_HEADING_LEVEL, Math.max(1, Math.round(value)))
-        : DEFAULT_TOC_LEVELS;
+    return (
+        readNumberIn(typeof value === 'number' ? Math.round(value) : value, 1, MAX_HEADING_LEVEL) ?? DEFAULT_TOC_LEVELS
+    );
 }
 
 // One level's look as a peer, a paste or the import wrote it: the font and size are held to what a font and a size mark
