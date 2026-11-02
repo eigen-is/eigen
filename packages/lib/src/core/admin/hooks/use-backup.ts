@@ -1,3 +1,7 @@
+// The admin's hooks for backing up and restoring one user or team: the archives and safety copies of a home, the jobs
+// that run, and the actions that back up, verify, restore, upload and delete. The backups folder on the server is the
+// durable record: the SSE poke and the polling below only decide when to ask it again.
+
 import type { QueryKey } from '@tanstack/react-query';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { backupApi, getBackupUploadUrl } from '@workspace/lib/api';
@@ -9,9 +13,6 @@ import { useEffect, useRef } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { useIsGuest } from '../../auth/hooks/use-is-guest';
 import { backupKeys, invalidateBackup } from './keys';
-
-// Admin-only hooks over /admin/backup. The backups folder on the server is the durable record: the
-// SSE poke and the polling below only decide when to ask it again.
 
 // While a job of this home runs the job list polls: the SSE poke reaches every admin's home, and an
 // admin restoring their OWN home stops receiving it for the length of the restore. One mechanism

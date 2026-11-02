@@ -1,7 +1,7 @@
 // Where backups live and what they are called. It builds the names of archives, home folders and safety copies,
 // and the places inside an archive where each part of a home goes. It makes the private staging folder every job
-// works in. It also resolves a path inside a folder without ever leaving it, which every restore step needs before
-// it touches the disk.
+// works in, and writes the record kept beside an archive through it. It also resolves a path inside a folder without
+// ever leaving it, which every restore step needs before it touches the disk.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -198,6 +198,20 @@ export function sidecarPath(artifactPath: string): string {
 
 export function serverSidecarPath(archivePath: string): string {
     return `${archivePath}${SERVER_SIDECAR_SUFFIX}`;
+}
+
+// Writes the JSON record beside an archive, its sidecar. It is written in the staging folder and renamed into
+// place, so a reader never sees half of one. The two-space indent matters: ./eigen finds a server sidecar's
+// top-level "state" line by it. Without a `mode` the file keeps the umask's mode.
+export async function writeRecord(target: string, value: unknown, mode?: number): Promise<void> {
+    const tempPath = getBackupTempPath('.json');
+    try {
+        await fsp.writeFile(tempPath, JSON.stringify(value, null, 2), { mode });
+    } catch (error) {
+        fs.rmSync(tempPath, { force: true });
+        throw error;
+    }
+    fs.renameSync(tempPath, target);
 }
 
 // The stamp a new whole-server archive takes, under the same rule; its members carry it too. A

@@ -5,7 +5,8 @@
 import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatFileSize } from '@workspace/lib/format';
-import { BACKUP_LEVELS, ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
+import { ON_DEMAND_BACKUP_REASONS } from '@workspace/lib/validation';
 import type { ControlBackupJob } from '../lib/backup/server-job';
 import { callControl } from './control-socket';
 import { createUi, glyphLine, refuseUsage } from './ui';

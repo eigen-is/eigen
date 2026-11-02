@@ -9,7 +9,7 @@ order: 80
 updated: 2026-11-02
 ---
 
-An update is one command, and so is going back. Eigen backs itself up before every update, so a rollback puts back the old version with the accounts, settings, and databases it had.
+An update is one command, and so is going back. Eigen backs itself up before every update, so you can go back to the version you had.
 
 ## Update to the newest release
 
@@ -47,9 +47,9 @@ The wait comes after the download and the question about breaking changes, and b
 
 ## The backup an update makes
 
-Usually the backup is a Light one: the accounts, settings, and databases, without the files and the mail. It is a Full one, files and mail included, when a release since yours marks a change as breaking or as `(full backup)`, or when you run `./eigen update --full`. A `(full backup)` change converts how documents, chats, or comments store their data and keeps working after the update, so Eigen does not ask about it, but only a Full backup can bring the old version back.
+Usually the backup is a Light one: the accounts, settings, and databases, without the files and the mail. It is a Full one, files and mail included, when a release since yours marks a change as breaking or as `(full backup)`, or when you run `./eigen update --full`. A `(full backup)` change converts how Eigen stores some of its data and keeps working after the update, so Eigen does not ask about it. The version before cannot read the converted data, so only a Full backup can bring it back.
 
-It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest good ones, and always the one `./eigen rollback` would restore. They stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
+It is named `server-pre-update-<level>-<date>-<time>.tar`. Eigen keeps the two newest good ones, and always the one the last update made. They stay on the server: they are not sent to your backup bucket. They do not replace your nightly backups: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore).
 
 The backup runs on the running server, so with Eigen stopped `./eigen update` refuses. Start Eigen with `./eigen restart`, or copy `data/` and `.env.production` somewhere safe and run `./eigen update --no-backup`. Without a backup, `./eigen rollback` has nothing to go back to.
 
@@ -61,11 +61,13 @@ On 0.3.2 and later, it refuses too when you edited `.env.production` since Eigen
 ./eigen rollback
 ```
 
-This goes back to the version before the last update. It puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first, and asks again when the folder of a user or team made since would move aside: `./eigen rollback --yes` skips the questions, for scripts. Like a restore, it needs `data/` as a plain folder inside the install folder, on the same disk, with room to unpack the backup.
+This goes back to the version before the last update. What it does with your data depends on the backup the update made.
 
-After a Full backup, a rollback puts back everything, files and mail included. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
+After a Light backup, the usual kind, the update did not change how your data is stored, so the rollback keeps the data as it is now. Files, documents, mail, calendars, and contacts stay as users left them. While Eigen keeps running, the version before checks that it can open all of the data, and asks whether to go on. Then the rollback stops Eigen, switches back to the version before, and starts Eigen. The backup stays in `backups/`. When that version cannot open the data, or is too old to check, the rollback changes nothing and names the backup to put back instead with [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back). That restore brings back the accounts, settings, and databases of before the update: see [A Light backup leaves the files where they are](/support/self-hosting/back-up-and-restore#a-light-backup-leaves-the-files-where-they-are).
 
-After a Light backup, the usual kind, a rollback puts back the accounts, settings, databases, and `.env.production`. The files and the mail stay on disk as they are now, but Drive lists only what it held before the update. Files and documents made since no longer show in Drive, and on drives that store files by their names, files renamed, moved, or put in the Trash since do not open. Calendars and contacts go back to before the update, and mail stays as it is. Nothing is deleted from disk. See [A Light backup leaves the files where they are](/support/self-hosting/back-up-and-restore#a-light-backup-leaves-the-files-where-they-are). To be able to go back with the files too, update with `./eigen update --full`.
+After a Full backup, a rollback puts back the backup the update made, the way [`./eigen restore`](/support/self-hosting/back-up-and-restore#put-a-backup-back) does, with the version that backup names, and starts Eigen. Everything comes back as it was before the update, files and mail included. The data it replaces is kept aside, not deleted. Every open browser tab reloads once. It asks first, and asks again when the folder of a user or team made since would move aside. Like a restore, it needs `data/` as a plain folder inside the install folder, on the same disk, with room to unpack the backup.
+
+`./eigen rollback --yes` skips the questions, for scripts. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
 
 ### After the update from 0.3.0
 

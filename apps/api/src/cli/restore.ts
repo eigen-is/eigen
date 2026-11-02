@@ -1,7 +1,8 @@
 // The restore command of the eigen launcher: it puts a whole-server archive back. The stage unpacks and checks the
 // archive while Eigen runs, and the swap, with Eigen stopped, moves the staged tree in and keeps what it replaces
 // aside. Between them the launcher asks which images the staged archive pins, and on a fresh machine it first takes
-// the archive's .env.production. Every refusal comes before anything in the data folder moves.
+// the archive's .env.production. Every refusal comes before anything in the data folder moves. A rollback after a
+// Light backup restores nothing: the build it goes back to only checks here that it opens the data as it is.
 
 import type { Database } from 'bun:sqlite';
 import {
@@ -33,10 +34,18 @@ import { isLightSkipped } from '../lib/backup/archive-layout';
 import { enumerateHomes } from '../lib/backup/enumerate-homes';
 import { describeError } from '../lib/backup/errors';
 import {
+    checkDatabases,
+    checkRestoredDatabases,
+    containerDatabasesIn,
+    mountIdsIn,
+    openToCheck,
+} from '../lib/backup/materialize-mount';
+import {
     backupsDirPath,
     buildSafetyCopyName,
     INSTALL_FOLDERS,
     nextFreeTime,
+    parseSafetyCopyName,
     roomShortfall,
     SERVER_ARCHIVE_ENV_MEMBER,
     STAGING_DIR,
@@ -48,6 +57,7 @@ import { readServerArchive, readServerArchiveMember } from '../lib/backup/verify
 import { DATA_LEASE_FILE, DATA_LOCK_FILE, liveLeaseHolder, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
+    GUEST_HOMES_DIR,
     getDataRoot,
     homeDirUnder,
     ORG_HOMES_DIR,
@@ -57,10 +67,12 @@ import {
     TEAM_HOMES_DIR,
     USER_HOMES_DIR,
 } from '../lib/config/paths';
-import { API_IMAGE_KEY, PIN_KEYS } from '../lib/config/release';
+import { API_IMAGE_KEY, isNewerBuild, PIN_KEYS } from '../lib/config/release';
+import { SHARE_REGISTRY_DB_CONFIG } from '../lib/share/db-config';
+import { WAITLIST_DB_CONFIG } from '../lib/waitlist/db-config';
 import { readEnvFile } from './env-file';
 import type { Owner } from './install';
-import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION, VERSION_PATTERN } from './install';
+import { BACKUPS, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
 import type { Ui } from './ui';
 import { createUi, glyphLine, refuseUsage } from './ui';
 
@@ -72,6 +84,7 @@ export const RESTORE_OPTIONS = {
     staged: { type: 'boolean' },
     swap: { type: 'boolean' },
     env: { type: 'boolean' },
+    'check-data': { type: 'boolean' },
     yes: { type: 'boolean' },
     's3-from-archive': { type: 'boolean' },
 } as const;
@@ -79,6 +92,7 @@ export const RESTORE_USAGE = `Usage: restore <archive> --stage [--yes] [--s3-fro
        restore --staged
        restore --swap
        restore <archive> --env
+       restore --check-data [--yes]
 
 Puts a whole-server archive back in two steps, run by ./eigen restore.
 
@@ -91,19 +105,22 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
   --swap             With Eigen stopped: swap the staged tree in and keep what it replaces aside. Finishes a swap
                      that was cut off
   --env              On a fresh machine, before the stage: write the ${ENV_PATH} of <archive> here, which pins
-                     the build that restores it`;
+                     the build that restores it
+  --check-data       While Eigen runs, as the API's user: check that this build opens every database in data/ as
+                     it is, then ask to go back to it. ./eigen rollback runs it with the build it goes back to`;
 
 type Flags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
 export async function restore(archive: string | undefined, flags: Flags): Promise<void> {
-    const modes = [flags.stage, flags.staged, flags.swap, flags.env].filter(Boolean).length;
+    const modes = [flags.stage, flags.staged, flags.swap, flags.env, flags['check-data']].filter(Boolean).length;
     if (modes !== 1 || (!flags.stage && !flags.env && archive !== undefined)) {
         return refuseUsage(
-            'Pass one of --stage, --staged, --swap or --env; only --stage and --env take an archive.',
+            'Pass one of --stage, --staged, --swap, --env or --check-data; only --stage and --env take an archive.',
             RESTORE_USAGE,
         );
     }
     if (flags.env) return writeArchiveEnv(archive);
+    if (flags['check-data']) return checkData(flags);
     if (flags.stage) return stage(archive, flags);
     if (flags.staged) return printStaged();
     return swap();
@@ -281,8 +298,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
     if (read.verify.status !== 'verified') {
         return refuse(`${name} is damaged: ${describeFailures(read.verify)}.`, 'Restore another archive.');
     }
-    // Bun.semver.order throws on what is not a version.
-    if (!VERSION_PATTERN.test(manifest.appVersion) || Bun.semver.order(manifest.appVersion, VERSION) > 0) {
+    if (isNewerBuild(manifest.appVersion, VERSION)) {
         return refuse(
             `${name} is an archive of Eigen ${manifest.appVersion}; this install runs ${VERSION}.`,
             'Update first, then restore.',
@@ -351,8 +367,6 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
             bare
                 ? `A light archive holds no files and no mail: ${bare} homes come back without their files and mail`
                 : 'A light archive holds no files and no mail: the mail here stays',
-            'Files and documents added since drop out of Drive; their bytes stay on disk',
-            'Files renamed, moved or trashed since are listed at their old place and do not open',
         );
     }
     ui.note(name, lines);
@@ -365,7 +379,7 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         if (!go) decline();
     }
 
-    const notReplayed = await stageServerArchive(archived, restoring, {
+    const staged = await stageServerArchive(archived, restoring, {
         s3FromArchive: flags['s3-from-archive'] === true,
         onStep: (step) => console.log(glyphLine('bar', step)),
     }).catch((error) => refuse(`${name} cannot be restored: ${describeError(error)}.`, 'Restore another archive.'));
@@ -374,34 +388,60 @@ async function stage(archive: string | undefined, flags: Flags): Promise<void> {
         manifest.level === 'light'
             ? enumerateHomes(join(restoring, RESTORING_DATA_DIR, SERVER_DIR, SERVER_DATABASES.users))
             : { orphans: [] };
-    // The first yes came before anyone knew of these homes, so the operator says yes to them on their own.
+    // A file that drops out of Drive keeps its bytes on disk, or in the bucket, and the live databases go aside.
+    const clause = (count: number, one: string, many: string) =>
+        count ? [`${count} ${count === 1 ? one : many}`] : [];
+    for (const { home, count } of staged.lost) {
+        const clauses = count
+            ? [
+                  ...clause(count.created, 'file made since drops out of Drive', 'files made since drop out of Drive'),
+                  ...clause(
+                      count.moved,
+                      'renamed, moved or trashed since does not open',
+                      'renamed, moved or trashed since do not open',
+                  ),
+                  ...clause(
+                      count.deleted,
+                      'deleted since comes back without its bytes',
+                      'deleted since come back without their bytes',
+                  ),
+                  ...clause(
+                      count.unmounted,
+                      'file of a mount removed since may not open',
+                      'files of a mount removed since may not open',
+                  ),
+              ]
+            : ['files not counted, as a metadata.db does not read'];
+        console.log(glyphLine('warn', `${home}: ${clauses.join(', ')}`));
+    }
     if (orphans.length) {
         console.log(glyphLine('warn', `Homes no account in the archive owns go aside: ${orphans.join(', ')}`));
-        if (!flags.yes) {
-            const go = await ui.confirm({
-                message: `Set these homes aside and swap ${name} in? Eigen stops for the swap.`,
-                initial: false,
-                flag: '--yes',
-            });
-            if (!go) decline();
-        }
+    }
+    // The first yes came before anyone knew of these files and homes, so the operator says yes to them on their own.
+    if ((orphans.length || staged.lost.length) && !flags.yes) {
+        const go = await ui.confirm({
+            message: `${orphans.length ? 'Set these homes aside and swap' : 'Swap'} ${name} in? Eigen stops for the swap.`,
+            initial: false,
+            flag: '--yes',
+        });
+        if (!go) decline();
     }
     const record: StagedRestore = { archive: name, level: manifest.level, appVersion: manifest.appVersion, orphans };
     writeFileSync(join(restoring, STAGE_RECORD), JSON.stringify(record));
     console.log(glyphLine('ok', `Staged ${name} in data/${RESTORING_DIR}`));
-    if (notReplayed.settled) {
+    if (staged.settled) {
         console.log(
             glyphLine(
                 'warn',
-                `${notReplayed.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
+                `${staged.settled} pending upload(s) in the archive are not replayed: data/ here already uploaded, replaced or deleted them`,
             ),
         );
     }
-    if (notReplayed.missing) {
+    if (staged.missing) {
         console.log(
             glyphLine(
                 'warn',
-                `${notReplayed.missing} pending upload(s) are not replayed: the archive does not hold their bytes`,
+                `${staged.missing} pending upload(s) are not replayed: the archive does not hold their bytes`,
             ),
         );
     }
@@ -439,6 +479,71 @@ async function printStaged(): Promise<void> {
     const env = readEnvFile(join(restoring, ENV_PATH));
     const pins = PIN_KEYS.flatMap((key) => (env.has(key) ? [`${key}=${env.get(key)}`] : []));
     console.log([`version=${record.appVersion}`, `level=${record.level}`, ...pins].join('\n'));
+}
+
+// A Light backup is made only when no schema moved since, so the build before the update opens the data of today, and
+// a rollback keeps it. This checks that before the switch, with that build: its verdict on every home of every kind,
+// as a restore gives it, on the server's own versioned databases, and on the pages of users3.db. Safety copies are
+// left out, as no home opens them, and so are the container databases of an s3 mount, which live in the bucket.
+// The launcher says what to do when it fails.
+async function checkData(flags: Flags): Promise<void> {
+    const ui = await createUi(flags.yes === true);
+    const server = join(DATA, SERVER_DIR);
+    const homeKinds = [USER_HOMES_DIR, TEAM_HOMES_DIR, ORG_HOMES_DIR, GUEST_HOMES_DIR];
+    try {
+        await checkDatabases([
+            { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
+            { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
+        ]);
+        checkPages(join(server, SERVER_DATABASES.users));
+        const homeDirs = homeKinds
+            .map((dir) => join(DATA, dir))
+            .filter(existsSync)
+            .flatMap((homes) =>
+                readdirSync(homes, { withFileTypes: true })
+                    .filter((entry) => entry.isDirectory() && !parseSafetyCopyName(entry.name))
+                    .map((entry) => join(homes, entry.name)),
+            );
+        // A large server takes minutes, so each home gets a line.
+        for (const [index, homeDir] of homeDirs.entries()) {
+            console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
+            const mountIds = mountIdsIn(homeDir);
+            await checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+        }
+    } catch (error) {
+        console.error(glyphLine('bad', `${describeError(error)}.`));
+        process.exit(1);
+    }
+    console.log(glyphLine('ok', 'This build opens every database in data/'));
+    if (flags.yes) return;
+    const go = await ui.confirm({
+        message: `Go back to Eigen ${VERSION}, keeping the data as it is? Eigen stops for the switch.`,
+        initial: false,
+        flag: '--yes',
+    });
+    if (!go) {
+        ui.outro('Nothing was changed.');
+        process.exit(DECLINED);
+    }
+}
+
+// users3.db has no schema version to compare, so only its pages are checked. A file that is no database at all makes
+// SQLite throw rather than answer, and the error names the file either way. The API runs beside this check, and its
+// journal locks out readers while a sign-in writes, so that writer is waited out as for every other database.
+function checkPages(filePath: string): void {
+    if (!existsSync(filePath)) return;
+    let verdict: string;
+    try {
+        const db = openToCheck(filePath);
+        try {
+            verdict = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
+        } finally {
+            db.close();
+        }
+    } catch (error) {
+        verdict = describeError(error);
+    }
+    if (verdict !== 'ok') throw new Error(`${filePath} is damaged: ${verdict}`);
 }
 
 // Why root must not swap the staged tree in, or null. It drops the fifos and sockets. The stage writes files and

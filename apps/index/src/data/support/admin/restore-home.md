@@ -32,7 +32,9 @@ Three kinds of archive have no **Restore** button:
 - One copied into the backups folder by hand. Its row says **Verify first**: click **Verify**.
 - One that holds only part of the account, like an archive out of a Light backup of the whole server. Its row says what it leaves out.
 
-Eigen verifies the archive before it touches anything. If the check fails, the job stops and the account is left exactly as it was.
+Eigen unpacks and checks the archive first, while the account keeps working. The job stops there, and the account stays exactly as it was, when the check fails, when this server can't open one of its databases, or when the person's email address is no longer the one in the archive.
+
+What was in the Trash comes back with its full time in the Trash, counted from the restore, so it is not deleted right after the restore for having been there too long. The same goes for **Restore this copy**.
 
 <div class="eigen-callout">
 
@@ -42,7 +44,7 @@ Only one backup job runs per account at a time. If a backup, verify, or another 
 
 ## What people see while it runs
 
-The account is unavailable for the length of the restore, which is usually seconds to a few minutes. During that time:
+The account is unavailable while the archive is put in place, which is usually seconds to a few minutes. During that time:
 
 - Anyone using that account gets a "Restore in progress" message. Requests fail until the restore finishes, then work again.
 - Nobody is signed out. Sessions stay as they are.

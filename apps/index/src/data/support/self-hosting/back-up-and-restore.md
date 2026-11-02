@@ -51,7 +51,7 @@ Eigen never shows the secret key again. Leave the field empty to keep the saved 
 
 ## Back up now
 
-In **Settings → Backups**, pick a level and click **Back up now**. Or, on the server, run this in the install folder:
+In **Settings → Backups**, pick **Full**, or **Full + S3**, and click **Back up now**. Or, on the server, run this in the install folder:
 
 ```bash
 ./eigen backup
@@ -63,7 +63,7 @@ It prints each step, then the name and size of the backup. Pick what goes in:
 |---|---|---|
 | **Full** | `./eigen backup` | Everything, except the files of drives stored in an S3 bucket. This is the default and what the nightly backup makes. |
 | **Full + S3** | `./eigen backup --s3` | Everything, the files in S3 buckets too |
-| **Light** | `./eigen backup --light` | The accounts, settings, and databases: no files and no mail |
+| **Light** | `./eigen backup --light` | The accounts, settings, and databases: no files and no mail. Only on the server, since its restore leaves out the files changed since. |
 
 `--wait` waits for a backup that is running to end, instead of refusing. `./eigen backup` exits with 0 when the backup verified, 1 when it failed, 2 on a wrong argument, and 4 when it verified but did not reach the bucket, so a script can tell them apart. For a backup every night, use [Back up every night](#back-up-every-night) rather than cron: Eigen keeps the newest of those and deletes the rest, but keeps every backup `./eigen backup` makes.
 
@@ -100,7 +100,7 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 
 `./eigen restore` then does three things:
 
-1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. For a Light backup it also says what happens to the files changed since. Then it unpacks it, still while Eigen runs.
+1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. Then it unpacks it, still while Eigen runs. For a Light backup it then counts, for each user and team, the files made since, which will not show in Drive, the files renamed, moved, or put in the Trash since, which will not open, and the files deleted for good since, which come back without their content. A document counts once, whatever it holds. When there are any, or when it could not count them, it asks again.
 2. It stops Eigen, moves the current `data/` and `.env.production` aside as `data.pre-restore-<date>-<time>` and `.env.production.pre-restore-<date>-<time>`, and puts the backup in their place.
 3. It starts Eigen again, on the version that made the backup.
 
@@ -129,11 +129,12 @@ A Light backup holds no files and no mail. Its restore puts back the accounts, t
 - Files and documents made since the backup no longer show in Drive. Their content stays on disk.
 - On drives that store files by their names, the default **Local (full names)**, a file renamed, moved, or put in the Trash since shows at its old place and does not open. Its content is under the new name, or in the trash folder.
 - A file deleted for good since comes back without its content.
+- The files of a drive removed since come back in Drive, and may not open.
 - Calendars and contacts go back to the time of the backup.
 - Mail stays as it is now.
 - The folder of a user or team made since the backup, which has no account any more, moves to `data.pre-restore-<date>-<time>`. Before it stops Eigen, the restore names these folders and asks again whether to go on. A no leaves everything as it was.
 
-Nothing is deleted from disk, and what the restore replaced is in `data.pre-restore-<date>-<time>`. A rollback after a usual update is a Light restore: see [Update Eigen](/support/self-hosting/update#go-back-with-a-rollback).
+Nothing is deleted from disk, and what the restore replaced is in `data.pre-restore-<date>-<time>`. A rollback after a usual update does not do this: it keeps the data as it is. See [Update Eigen](/support/self-hosting/update#go-back-with-a-rollback).
 
 ## Try a restore without moving
 

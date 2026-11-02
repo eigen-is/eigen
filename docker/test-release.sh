@@ -7,12 +7,13 @@
 # the new release. With ./eigen in a docker:cli container that has no Bun:
 # install .8 on the default storage and seed a document, sheet, event, contact, chat message, a renamed file and a
 # trashed file and folder; update to :latest, which waits out a backup that runs and makes its own on the running API
-# first; roll back to that backup; refuse and then accept the breaking
+# first; roll back on the data as it is, after the Light backup; refuse and then accept the breaking
 # release; refuse an unknown version and a downgrade; refuse the backup of .8 while the registry is down, before
 # anything stops; restore the backup of .8, which brings its launcher and Compose files back; move .8 onto the main
 # channel, update it to a second build of main, roll back one build, and leave main for .10; install from main; install
 # .9 from the launcher alone; install .9 twice, on one digest. The published release updates through its own launcher,
-# which backs it up first, and ./eigen rollback restores that backup.
+# which backs it up first, and ./eigen rollback restores that backup when it is Full, else keeps the data, or names
+# ./eigen restore when the published build is too old to check the data.
 #
 # Usage:  ./docker/test-release.sh
 #         ACCEPT_BREAKING=1 is for a new release that lists breaking changes since the published one: the update takes
@@ -386,7 +387,7 @@ upgrade_published() {
     level=$(docker run --rm "$(api_image)" update-check --from "$PUBLISHED" --level </dev/null | sed -n 's/^level=//p' || :)
     # A breaking release may convert what a light archive leaves out, whatever the CLI answers.
     [ -z "$breaking" ] || [ "$level" = full ] || fail "$RELEASE is breaking, but update-check --level answers '$level', not full"
-    saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+    saved=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update" 2>/dev/null || true)
     if [[ $saved == server-pre-update-$level-*.tar ]] && backups | grep -qxF "$saved"; then
         ok ".eigen/last-update names backups/$saved, made on $PUBLISHED before the update"
     else
@@ -397,18 +398,40 @@ upgrade_published() {
     started=$SECONDS
     eigen rollback --yes
     show
-    if [ "$CODE" = 0 ] && says "A $level archive of Eigen $PUBLISHED for localhost, made on " &&
+    if [ "$level" = full ]; then
+        if [ "$CODE" = 0 ] && says "A full archive of Eigen $PUBLISHED for localhost, made on " &&
+            says "◇  Eigen $RELEASE ($RELEASE_COMMIT) → $PUBLISHED (.*) is running at https://localhost/"; then
+            ok "./eigen rollback --yes restored the Full backup of $PUBLISHED in $((SECONDS - started))s"
+        else
+            fail "./eigen rollback after the update from $PUBLISHED exited $CODE"
+        fi
+    elif says 'is too old to check the data here'; then
+        # A published build from before restore --check-data cannot say it opens the data, so the way back after a
+        # Light backup is the restore the refusal names.
+        if [ "$CODE" = 1 ] && says "./eigen restore $saved"; then
+            ok "./eigen rollback to $PUBLISHED, too old to check the data, changes nothing and names ./eigen restore"
+        else
+            fail "./eigen rollback to $PUBLISHED, too old to check the data: exit $CODE"
+        fi
+        eigen restore "$saved" --yes
+        show
+        if [ "$CODE" = 0 ] && says "A light archive of Eigen $PUBLISHED for localhost, made on "; then
+            ok "./eigen restore $saved went back to $PUBLISHED in $((SECONDS - started))s"
+        else
+            fail "./eigen restore of the Light backup of $PUBLISHED exited $CODE"
+        fi
+    elif [ "$CODE" = 0 ] && says "on the data as it is" &&
         says "◇  Eigen $RELEASE ($RELEASE_COMMIT) → $PUBLISHED (.*) is running at https://localhost/"; then
-        ok "./eigen rollback --yes went back to $PUBLISHED in $((SECONDS - started))s"
+        ok "./eigen rollback --yes went back to $PUBLISHED on the data as it is in $((SECONDS - started))s"
     else
-        fail "./eigen rollback after the update from $PUBLISHED exited $CODE"
+        fail "./eigen rollback after the Light backup of $PUBLISHED exited $CODE"
     fi
     check_running "$PUBLISHED" "$PUBLISHED" "$PUBLISHED_REGISTRY"
     check_pins "$pinned"
-    if [ ! -e "$INSTALL/.eigen/last-update" ] && ls -d "$INSTALL"/data.pre-restore-* >/dev/null 2>&1; then
-        ok "the pointer is gone and the data of $RELEASE is kept aside"
+    if [ ! -e "$INSTALL/.eigen/last-update" ]; then
+        ok "the pointer to the backup the update made is gone"
     else
-        fail "after the rollback: .eigen/last-update is left, or no data.pre-restore-*"
+        fail "after the rollback: .eigen/last-update is left"
     fi
     probe_site "https://localhost:$PORT_HTTPS"
 }
@@ -478,7 +501,7 @@ if [ "$CODE" = 0 ] && says "◆  Eigen $NEW" && says "The harness's new release"
 else
     fail "./eigen update exited $CODE"
 fi
-saved=$(scratch_run cat "$INSTALL/.eigen/last-update" 2>/dev/null || true)
+saved=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update" 2>/dev/null || true)
 manual=$(sed -n 's/^archive=//p' "$SCRATCH/running-backup.log")
 if [ "$backed_up" != 0 ] || [ -z "$manual" ] || [[ $saved != server-pre-update-light-*.tar ]] ||
     ! says "Saved before the update: backups/$saved"; then
@@ -528,14 +551,16 @@ fi
 ##############################################################################
 header "./eigen rollback"
 ##############################################################################
+# The update made a Light backup, so the rollback keeps the data: the build before checks it opens it, and asks.
 eigen_piped n rollback
-if [ "$CODE" = 0 ] && says "A light archive of Eigen $PREVIOUS for localhost, made on " && says 'Nothing was changed.' &&
-    [ "$(api_started)" = "$started" ] && ! scratch_run test -e "$INSTALL/data/.restoring"; then
-    ok "rollback asks with the level, the version, the date and the age, and a no stops nothing"
+if [ "$CODE" = 0 ] && says 'This build opens every database in data/' && says 'keeping the data as it is?' &&
+    says 'Nothing was changed.' && [ "$(api_started)" = "$started" ]; then
+    ok "rollback after a Light backup checks the data with the build before, asks, and a no stops nothing"
 else
     fail "rollback answered no: exit $CODE"
     show
 fi
+kept_before=$(ls -d "$INSTALL"/data.pre-restore-* 2>/dev/null || :)
 started=$SECONDS
 eigen rollback --yes
 show
@@ -546,10 +571,10 @@ else
 fi
 check_running "$PREVIOUS"
 check_pins "$PINS_BEFORE"
-if [ ! -e "$INSTALL/.eigen/last-update" ] && ls -d "$INSTALL"/data.pre-restore-* >/dev/null 2>&1; then
-    ok "the pointer is gone and the data of $NEW is kept aside"
+if [ ! -e "$INSTALL/.eigen/last-update" ] && [ "$(ls -d "$INSTALL"/data.pre-restore-* 2>/dev/null || :)" = "$kept_before" ]; then
+    ok "the pointer is gone, and data/ stayed where it was"
 else
-    fail "after the rollback: .eigen/last-update is left, or no data.pre-restore-*"
+    fail "after the rollback: .eigen/last-update is left, or data/ was set aside"
 fi
 scratch_run rm -f "$BALLAST"
 eigen rollback --yes
@@ -631,7 +656,7 @@ unchanged() {
 }
 
 # The backup the update to $BREAKING made of $PREVIOUS.
-archive=$(scratch_run cat "$INSTALL/.eigen/last-update")
+archive=$(scratch_run sed -n 1p "$INSTALL/.eigen/last-update")
 # Only the registry has the images of $PREVIOUS now.
 for name in $IMAGES; do docker image rm "$REGISTRY/$name:$PREVIOUS" >/dev/null; done
 docker stop "eigentest-registry-$RUN" >/dev/null
@@ -722,7 +747,8 @@ fi
 
 eigen rollback --yes
 show
-if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to the backup the last update made" &&
+# Light or Full, as [Unreleased] marks this tree: a restore of the backup, or the data kept.
+if [ "$CODE" = 0 ] && says "Back from Eigen $NEW (main2) to " &&
     says "◇  Eigen $NEW (main2) → $NEW (main1) is running at https://localhost/"; then
     ok "./eigen rollback went back to the previous build of main"
 else

@@ -4,8 +4,8 @@
 // with mode 0600.
 
 import * as fs from 'node:fs';
+import { BACKUP_LEVELS } from '@workspace/lib/types/backup';
 import {
-    BACKUP_LEVELS,
     MAX_RESTART_MESSAGE_LENGTH,
     MAX_RESTART_WAIT_SECONDS,
     ON_DEMAND_BACKUP_REASONS,

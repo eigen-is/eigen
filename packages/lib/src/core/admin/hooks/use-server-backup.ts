@@ -1,7 +1,11 @@
+// The owner's hooks for the whole-server backup in Settings: the archive list, the jobs that run, and the actions
+// that start a backup, upload or delete an archive, and test the backup bucket. Only the server's owner may call
+// the routes behind them.
+
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { serverBackupApi } from '@workspace/lib/api';
 import { STALE_TIME } from '@workspace/lib/constants/stale-time';
-import type { BackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
+import type { FullBackupLevel, ServerArchiveList } from '@workspace/lib/types/backup';
 import type { S3Config } from '@workspace/lib/types/mount';
 import { orgOwnerId } from '@workspace/lib/types/owner';
 import type { S3CheckResult } from '@workspace/lib/types/settings';
@@ -11,8 +15,7 @@ import { usePublicConfig } from '../../public/hooks/use-public';
 import { invalidateServerBackup, serverBackupKeys } from './keys';
 import { useBackupJobs } from './use-backup';
 
-// Owner-only hooks over /admin/server-backup. A server job belongs to the org, so it is listed under the org's
-// owner id, the one its SSE poke carries.
+// A server job belongs to the org, so it is listed under the org's owner id, the one its SSE poke carries.
 function useServerOwnerId(): string {
     const { data: config } = usePublicConfig();
     return config ? orgOwnerId(config.orgId) : '';
@@ -41,7 +44,7 @@ export function useStartServerBackup() {
     const queryClient = useQueryClient();
     const serverOwnerId = useServerOwnerId();
     return useMutation({
-        mutationFn: async (level: BackupLevel): Promise<{ jobId: string }> => {
+        mutationFn: async (level: FullBackupLevel): Promise<{ jobId: string }> => {
             const response = await serverBackupApi.post({ level });
             if (response.error) throw new AppError(response);
             return response.data;

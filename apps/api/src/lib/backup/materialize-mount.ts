@@ -1,4 +1,5 @@
-// A home folder's mounts put back from an archive, and the check of what landed. The restores use it, such as
+// A home folder's mounts put back from an archive, their trash started over, and the checks of an archive before it
+// goes in and of what landed, which a rollback also runs on the data in place. The restores use it, such as
 // ./eigen restore, whose stage runs beside a live API. So nothing imported here opens a file on load.
 
 import { Database } from 'bun:sqlite';
@@ -27,6 +28,9 @@ import { requireMountDir, resolveInside } from './paths';
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
 
+// How many databases checkDatabases opens before it gives the event loop back.
+const DATABASES_PER_YIELD = 50;
+
 // Puts one mount's files where the restored mount looks for them. The archive holds them by path, so each backend
 // derives its keys again; an `s3` mount stages each file with a pending upload, which the UploadQueue drains with
 // its retry. Returns the container databases that stayed on local disk.
@@ -35,24 +39,11 @@ export function materializeMount(
     summary: BackupManifest['mounts'][number],
     stamp: string,
 ): VersionedDatabase[] {
+    const metadataPath = requireMaterializable(homeDir, summary);
     const mountDir = requireMountDir(homeDir, summary.id);
     const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
-    const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
-    if (!fs.existsSync(metadataPath)) {
-        throw new ApiError(400, `The archive promises mount ${summary.id} but carries no metadata.db for it`);
-    }
     const isPathBased = summary.storageType === 'local';
     const isRemote = summary.storageType === 's3';
-    // The pending rows written below need the `isDatabase` column: without it every restored file would later be
-    // dropped as a corrupt staged copy.
-    const metadataVersion = schemaVersionOf(metadataPath);
-    if (isRemote && metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
-        throw new ApiError(
-            400,
-            `Mount ${summary.id} was archived at metadata schema v${metadataVersion}, too old to restore ` +
-                `(v${PENDING_UPLOAD_KIND_VERSION} or newer needed)`,
-        );
-    }
 
     const db = new Database(metadataPath);
     try {
@@ -131,16 +122,42 @@ export function materializeMount(
     }
 }
 
+// Refuses a home folder still in the archive's layout that materializeMount could not put back or this server could
+// not open. A per-home restore runs it on the unpacked archive while the home still serves, so a refusal costs nobody
+// a page. In that layout every document database of a mount is at its archive path, an s3 mount's included.
+export async function checkUnpackedHome(homeDir: string, mounts: BackupManifest['mounts']): Promise<void> {
+    const containerDatabases: VersionedDatabase[] = [];
+    for (const summary of mounts) {
+        const dataDir = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.DATA_DIR);
+        const db = openToCheck(requireMaterializable(homeDir, summary));
+        try {
+            for (const entry of listManagedDatabases(readMountPathRows(db))) {
+                containerDatabases.push({
+                    filePath: inMountData(dataDir, summary.id, entry.path),
+                    config: entry.config,
+                });
+            }
+        } finally {
+            db.close();
+        }
+    }
+    await checkRestoredDatabases(
+        homeDir,
+        mounts.map((summary) => summary.id),
+        containerDatabases,
+    );
+}
+
 // What landed has to be a database this server can still open: SQLite's own verdict on the bytes,
 // and the schema stamp against the config that will open them. A database from a newer server passes
 // quick_check and is then refused by ManagedDatabase's forward-version guard, which fails the whole
-// home on the next load, long after the job said it was done. The home is evicted and the restoring
-// mark is still set, so this is the one place a live home's databases are opened directly.
-export function checkRestoredDatabases(
+// home on the next load, long after the job said it was done. It opens the files directly, never through a home: the
+// folder a restore checks is not the home's folder yet, and a rollback's check runs in another process than the API.
+export async function checkRestoredDatabases(
     homeDir: string,
-    mountIds: string[],
-    containerDatabases: VersionedDatabase[],
-): void {
+    mountIds: readonly string[],
+    containerDatabases: readonly VersionedDatabase[],
+): Promise<void> {
     const targets: VersionedDatabase[] = HOME_DATABASES.map(([config, relPath]) => ({
         filePath: path.join(homeDir, relPath),
         config,
@@ -152,8 +169,15 @@ export function checkRestoredDatabases(
     // An s3 mount's container databases are staged copies on their way to the bucket, not files at a
     // knowable path; verify read every one of them in the folder this restore unpacked minutes ago.
     targets.push(...containerDatabases);
+    await checkDatabases(targets);
+}
 
-    for (const target of targets) {
+// The same verdict on any databases, such as the server's own. One that is not there is skipped. A home can hold tens
+// of thousands of document databases, and each open blocks the thread. The API runs this for a restore, so it lets
+// other requests run between every few databases.
+export async function checkDatabases(targets: readonly VersionedDatabase[]): Promise<void> {
+    for (const [index, target] of targets.entries()) {
+        if (index > 0 && index % DATABASES_PER_YIELD === 0) await new Promise(setImmediate);
         if (!fs.existsSync(target.filePath)) continue;
         const version = schemaVersionOf(target.filePath);
         if (version > target.config.currentVersion) {
@@ -163,7 +187,7 @@ export function checkRestoredDatabases(
                     `supports (v${target.config.currentVersion}) — restore it on a server at least as new`,
             );
         }
-        const db = new Database(target.filePath, { readwrite: true, create: false });
+        const db = openToCheck(target.filePath);
         try {
             const row = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get();
             if (row?.quick_check !== 'ok') {
@@ -178,18 +202,45 @@ export function checkRestoredDatabases(
     }
 }
 
+// Every restore starts the trash of each restored mount over at `now`, in seconds as trashPath writes it. Whoever
+// restored gets the whole retention window to look through what came back, and the purge at the home's first load
+// deletes nothing whose time ran out since the backup. It also keeps that purge off bucket objects that a folder kept
+// aside may still name. A mount with no metadata.db has no trash.
+export function redateTrash(homeDir: string, mountIds: readonly string[], now: number): void {
+    for (const mountId of mountIds) {
+        const metadataPath = path.join(requireMountDir(homeDir, mountId), PATHS.DRIVE.METADATA_DB);
+        if (!fs.existsSync(metadataPath)) continue;
+        const db = new Database(metadataPath, { readwrite: true, create: false });
+        try {
+            db.run('UPDATE paths SET trashedAt = ? WHERE trashedAt IS NOT NULL', [now]);
+        } finally {
+            db.close();
+        }
+    }
+}
+
+// The mounts a home folder holds, by their folders, for a check with no manifest to name them.
+export function mountIdsIn(homeDir: string): string[] {
+    const mountsDir = path.join(homeDir, PATHS.DRIVE.ROOT);
+    if (!fs.existsSync(mountsDir)) return [];
+    return fs
+        .readdirSync(mountsDir, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+}
+
 // The managed databases a home folder holds, for a restore with no manifest to enumerate them
 // from: every mount's paths table, keyed the way that mount's own backend keys its objects. A
 // remote mount's are in its bucket, so the path derived for one does not exist and the check skips
 // it. That is exactly what materializeMount returns for the same mount.
-export function containerDatabasesIn(homeDir: string, mountIds: string[]): VersionedDatabase[] {
+export function containerDatabasesIn(homeDir: string, mountIds: readonly string[]): VersionedDatabase[] {
     const found: VersionedDatabase[] = [];
     for (const mountId of mountIds) {
         const mountDir = requireMountDir(homeDir, mountId);
         const dataDir = path.join(mountDir, PATHS.DRIVE.DATA_DIR);
         const metadataPath = path.join(mountDir, PATHS.DRIVE.METADATA_DB);
         if (!fs.existsSync(metadataPath)) continue;
-        const db = new Database(metadataPath, { readwrite: true, create: false });
+        const db = openToCheck(metadataPath);
         try {
             const rows = readMountPathRows(db);
             const byId = new Map(rows.map((row) => [row.id, row]));
@@ -228,13 +279,41 @@ export async function movePathAsync(from: string, to: string): Promise<void> {
     });
 }
 
+// A database that is there, opened to be read beside a process that may be writing it, such as the live API. It is
+// read-write, because a closed WAL database has no -shm and a read-only open of it fails. A writer is waited out as
+// long as the API waits for one, so a busy database is not read as damaged.
+export function openToCheck(filePath: string): Database {
+    const db = new Database(filePath, { readwrite: true, create: false });
+    db.run('PRAGMA busy_timeout = 5000;');
+    return db;
+}
+
+// The metadata.db of a mount the archive promises, refused when materializeMount could not restore from it.
+function requireMaterializable(homeDir: string, summary: BackupManifest['mounts'][number]): string {
+    const metadataPath = path.join(requireMountDir(homeDir, summary.id), PATHS.DRIVE.METADATA_DB);
+    if (!fs.existsSync(metadataPath)) {
+        throw new ApiError(400, `The archive promises mount ${summary.id} but carries no metadata.db for it`);
+    }
+    if (summary.storageType !== 's3') return metadataPath;
+    // The pending rows materializeMount writes need the `isDatabase` column: without it every restored file would
+    // later be dropped as a corrupt staged copy.
+    const metadataVersion = schemaVersionOf(metadataPath);
+    if (metadataVersion < PENDING_UPLOAD_KIND_VERSION) {
+        throw new ApiError(
+            400,
+            `Mount ${summary.id} was archived at metadata schema v${metadataVersion}, too old to restore ` +
+                `(v${PENDING_UPLOAD_KIND_VERSION} or newer needed)`,
+        );
+    }
+    return metadataPath;
+}
+
 // A database with no stamp, or one that does not open, reads as 0, which ManagedDatabase takes as "never migrated".
-// The quick_check after it names the failure. The open is read-write, because a closed WAL database has no -shm and
-// a read-only open of it fails.
+// The quick_check after it names the failure.
 function schemaVersionOf(filePath: string): number {
     let db: Database | null = null;
     try {
-        db = new Database(filePath, { readwrite: true, create: false });
+        db = openToCheck(filePath);
         const row = db.query<{ version: number }, []>('SELECT version FROM __schema_version WHERE id = 1').get();
         return row?.version ?? 0;
     } catch {
