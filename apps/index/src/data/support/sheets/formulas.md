@@ -6,7 +6,7 @@ category: Formulas
 tags: [sheets, formulas, functions, autocomplete]
 related: [sheets/get-started, sheets/enter-and-edit-data]
 order: 40
-updated: 2026-09-13
+updated: 2026-11-02
 ---
 
 Formulas let you calculate values from other cells. You type them directly in the grid or in the formula bar, and Sheets updates the result whenever the referenced cells change.
@@ -54,8 +54,8 @@ To find a function you do not know by name:
 
 1. Open **Insert → Auto SUM → Learn more...**
 2. The **Select a function** dialog opens. Type a name or description in the **Search function** box to filter the list, or pick a category from the **Or select a category** dropdown (such as **Statistical**, **Logical**, or **Text**).
-3. Click a function in the list to read its description.
-4. Click **OK** to insert it into the active cell, or **Cancel** to close without inserting.
+3. Click a function in the list to choose it, or press the **↑** and **↓** arrow keys in the search box to move through the list.
+4. Click **OK** or press **Enter**. The active cell opens with the function and an opening bracket, so you can type its arguments. Click **Cancel** to close without inserting.
 
 ## Correct a formula
 
