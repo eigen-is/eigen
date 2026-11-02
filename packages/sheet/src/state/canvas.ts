@@ -1,7 +1,6 @@
-// Canvas renderer facade. The drawing itself lives in the render passes: drawMain
-// runs them over one rect of one pane (collect cells -> render cells -> reprocess
-// merges -> grid lines -> borders -> edge clear -> filter UI), and each pane or
-// part of one is its own call with its own offsets.
+// The canvas renderer's entry points. The drawing itself lives in the render passes, such as the cells, the grid
+// lines and the borders. drawMain runs them over one rect of one pane, and each pane, or part of one, is its own call
+// with its own offsets.
 
 import type { Context } from './context';
 import { getFlowdata } from './context';

@@ -1,7 +1,7 @@
 // Rewrites the references in a formula's text without parsing it: a copy or a fill shifts its relative refs, an inserted
 // or deleted row or column moves the refs past it, a renamed sheet renames them, and an xlsx import replaces each
 // defined name with what it refers to. One character walker finds the refs and the names for all of them. It needs no
-// sheet state, so the editor, the op replay and the API's import share it.
+// sheet state, so the editor and the server share it, for example in the op replay and the xlsx import.
 
 import {
     a1RangeRef,
