@@ -4,7 +4,7 @@
 
 import { sheetDefaultColWidth, sheetDefaultRowHeight } from '@workspace/lib/sheets';
 import { isNil, times } from 'es-toolkit/compat';
-import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN } from '../../engine/a1-notation';
+import { MAX_SHEET_NAME_LENGTH, SHEET_NAME_FORBIDDEN, sheetNameKey } from '../../engine/a1-notation';
 import { celldataToData } from '../../engine/celldata';
 import { MAX_SHEET_COLUMN_COUNT, MAX_SHEET_ROW_COUNT } from '../../engine/defaults';
 import { normalizeSheetConfig } from '../../engine/sheet-config';
@@ -204,7 +204,7 @@ export function editSheetName(ctx: Context, editable: HTMLSpanElement) {
 
     if (index == null || ctx.sheets[index].name === txt) return;
 
-    if (ctx.sheets.some((sheet, i) => i !== index && sheet.name === txt)) {
+    if (ctx.sheets.some((sheet, i) => i !== index && sheetNameKey(sheet.name) === sheetNameKey(txt))) {
         editable.innerText = oldtxt;
         return;
     }

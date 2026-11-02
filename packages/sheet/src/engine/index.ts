@@ -12,6 +12,7 @@ export {
     rangeToA1,
     rowIndexToLabel,
     SHEET_NAME_FORBIDDEN,
+    sheetNameKey,
     toA1,
     unquoteSheetName,
 } from './a1-notation';

@@ -396,6 +396,11 @@ describe('engine/recalc — recalcSheets', () => {
         expect(entry?.v?.v).toBe(6);
     });
 
+    test('a sheet name in another case reads that sheet, as in Excel', () => {
+        const sheets = [sheet('s1', 'Sheet1', [[formula('=data!A1*2')]]), sheet('s2', 'Data', [[num(4)]])];
+        expect(recalcSheets(sheets)[0].data![0][0]?.v).toBe(8);
+    });
+
     test('one poisoned formula does not kill the pass', () => {
         // =NoSheet!A1 throws ERROR_REF (unresolvable sheet name); the sibling
         // formula must still compute.

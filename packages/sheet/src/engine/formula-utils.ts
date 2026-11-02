@@ -4,7 +4,7 @@
 
 import type { CellMatrix, Sheet } from '@workspace/lib/sheets';
 import { columnLabelToIndex } from '@workspace/lib/sheets';
-import { SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
+import { SHEET_NAME_PREFIX, sheetNameKey, unquoteSheetName } from './parser/helper/cell';
 import type { FormulaDependency } from './types';
 
 // The operators a formula's text walkers stop at. A two-character one is matched before its first character.
@@ -69,11 +69,11 @@ export function resolveCellRange(
         const [, startSheet, start, endSheet, end] = match;
         // A1:Data!B2 names a sheet on its end only, which the engine can't read as a range.
         if (startSheet == null) return null;
-        const sheetName = unquoteSheetName(startSheet);
+        const sheetName = sheetNameKey(unquoteSheetName(startSheet));
         // The engine reads Data!A1:'Data'!B2 as one sheet's range, so only the names count, quoted or not.
-        if (endSheet != null && unquoteSheetName(endSheet) !== sheetName) return null;
+        if (endSheet != null && sheetNameKey(unquoteSheetName(endSheet)) !== sheetName) return null;
         cells = end ? `${start}:${end}` : start;
-        const sheet = sheets.find((s) => s.name === sheetName);
+        const sheet = sheets.find((s) => sheetNameKey(s.name) === sheetName);
         sheetId = sheet?.id;
         matrix = sheet?.data;
     } else if (!sheets.some((s) => s.id === formulaSheetId)) {

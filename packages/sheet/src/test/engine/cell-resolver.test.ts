@@ -79,6 +79,11 @@ describe('engine/cell-resolver — getSheetIdByName', () => {
     test('returns null for unknown name', () => {
         expect(resolver.getSheetIdByName('NoSuchSheet')).toBeNull();
     });
+
+    test('finds a sheet whatever the case of its name, as Excel does', () => {
+        expect(resolver.getSheetIdByName('sheet2')).toBe('sheet2');
+        expect(resolver.getSheetIdByName('SHEET1')).toBe('sheet1');
+    });
 });
 
 // ─── getSheetData ────────────────────────────────────────────────────────────

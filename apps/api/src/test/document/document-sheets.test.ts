@@ -890,6 +890,13 @@ describe('document/sheets — appendSheetsToYjs', () => {
         expect(added.calcChain).toEqual([{ r: 0, c: 0, id: added.id }]);
     });
 
+    test('a name the workbook holds in another case is taken, as Excel compares names', () => {
+        const doc = workbook();
+        append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'DATA' }], { computed: true }));
+        const { sheets } = readSheetsFromDoc(doc, { recalc: false });
+        expect(sheets.map((sheet) => sheet.name)).toEqual(['Data', 'DATA(Copy)']);
+    });
+
     test('a workbook never compacted takes the file beside the default sheet the editor opens on', () => {
         const doc = new Y.Doc();
         append(doc, encodeSheetsSnapshot([{ ...file[0], name: 'Sheet1' }], { computed: true }));

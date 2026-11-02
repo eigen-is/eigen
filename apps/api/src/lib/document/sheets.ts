@@ -23,6 +23,7 @@ import {
     recalcSheets,
     renameSheetRefs,
     replaySheetsOps,
+    sheetNameKey,
     sheetsNeedRecalc,
     withMaterializedData,
 } from '@workspace/sheet/engine';
@@ -122,7 +123,8 @@ export function appendSheetsToYjs(doc: Y.Doc, snapshotJson: string, current: She
     const taken = current.map((sheet) => sheet.name);
     const renames = new Map<string, string>();
     const fresh = imported.map((sheet) => {
-        const name = taken.includes(sheet.name) ? copySheetName(sheet.name, taken) : sheet.name;
+        const clashes = taken.some((other) => sheetNameKey(other) === sheetNameKey(sheet.name));
+        const name = clashes ? copySheetName(sheet.name, taken) : sheet.name;
         if (name !== sheet.name) renames.set(sheet.name, name);
         taken.push(name);
         return { id: crypto.randomUUID(), name };
