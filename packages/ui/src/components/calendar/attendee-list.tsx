@@ -10,7 +10,6 @@ import { TooltipButton } from '../layout/toolbar/tooltip-button';
 import { CollapsibleUserList } from '../user/collapsible-user-list';
 import { UserItem } from '../user/user-item';
 
-// How a reply reads, for the list here and for the editor that collects the replies.
 export const ATTENDEE_STATUS_ICON: Record<Attendee['status'], typeof Check> = {
     accepted: Check,
     declined: XIcon,
@@ -60,7 +59,7 @@ export function AttendeeList({ attendees, organizer, remaining = 0 }: AttendeeLi
                     tooltipText="Copy emails"
                     variant="ghost"
                     className="h-7 w-7"
-                    // The list may sit in a form, such as Edit event's, where a plain button would submit it.
+                    // The list may sit in a form, such as Edit event's, where a button with no type would submit it.
                     type="button"
                     onClick={handleCopyEmails}
                 />

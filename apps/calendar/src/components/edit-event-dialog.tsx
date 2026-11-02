@@ -1,7 +1,7 @@
-// The Edit event dialog: every field of an existing event and its guests. Save, or Enter in a field, saves the change,
-// after asking which occurrences of a repeating event it applies to, or before a move to another owner's calendar
-// that loses something. An invitation from someone else only lets you pick the calendar that holds it. It opens over
-// an event, such as from the event detail dialog.
+// The Edit event dialog: every field of an existing event and its guests. Save, or Enter in the title, saves the
+// change. A change to a repeating event first asks which occurrences it applies to. A move to another owner's calendar
+// that loses something, such as a series' changed occurrences, warns first. An invitation from someone else only lets
+// you pick the calendar that holds it. It opens over an event, such as from the event detail dialog.
 
 import { useAuth } from '@workspace/lib/auth';
 import {
@@ -79,10 +79,11 @@ export function EditEventDialog({
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
     const [showMoveConfirm, setShowMoveConfirm] = useState(false);
 
-    // A retry after a failed source delete must not create the destination twice, nor fan invitations out again.
-    const createdDestinationRef = useRef(false);
+    // The calendar a cross-home move already created its copy in. A retry after a failed source delete must not create
+    // that copy twice, nor send its invitations again. A retry into another calendar still creates the copy there.
+    const createdDestinationRef = useRef<string | null>(null);
     useEffect(() => {
-        if (open) createdDestinationRef.current = false;
+        if (open) createdDestinationRef.current = null;
     }, [open]);
 
     const selectedCal = calendarOptions.find((c) => calendarKey(c) === selectedCalKey);
@@ -195,12 +196,12 @@ export function EditEventDialog({
             } else {
                 // Two Homes have no atomic move. The event is recreated, then deleted, and the organizer link and the
                 // overrides stay behind.
-                if (!createdDestinationRef.current) {
+                if (createdDestinationRef.current !== selectedCalKey) {
                     await createEvent.mutateAsync({ calendarId: selectedCal.id, ...updates });
-                    createdDestinationRef.current = true;
+                    createdDestinationRef.current = selectedCalKey;
                 }
                 await deleteEventOnSource.mutateAsync({ id: targetId, calendarId: event.calendarId });
-                createdDestinationRef.current = false;
+                createdDestinationRef.current = null;
             }
         } else if (action === 'all') {
             await updateEvent.mutateAsync({ id: targetId, calendarId: event.calendarId, ...seriesUpdates });
