@@ -300,8 +300,6 @@ function mouseRender(
         if (x < 0 || x > winW) scrollEl.scrollLeft = ctx.scrollLeft + (x < 0 ? x : x - winW) / 2;
     }
 
-    if (ctx.rangeDialog.singleSelect) return;
-
     if (ctx.selectionActive) {
         renderCellSelection(ctx, globalCache, e, container);
     } else if (ctx.formulaCache.rangestart) {

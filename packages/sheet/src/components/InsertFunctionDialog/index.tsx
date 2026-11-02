@@ -12,26 +12,7 @@ import { useContext, useMemo, useRef, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
 import type { FormulaFunctionEntry } from '../../state';
-import { FUNCTION_LIST, setCaretPosition } from '../../state';
-
-// The categories of the dropdown. Their ids are FUNCTION_LIST's `t`.
-export const FUNCTION_CATEGORIES = [
-    { t: 0, n: 'Math' },
-    { t: 1, n: 'Statistical' },
-    { t: 2, n: 'Lookup' },
-    { t: 4, n: 'Data mining' },
-    { t: 5, n: 'Database' },
-    { t: 6, n: 'Date' },
-    { t: 7, n: 'Filter' },
-    { t: 8, n: 'Financial' },
-    { t: 9, n: 'Engineering' },
-    { t: 10, n: 'Logical' },
-    { t: 11, n: 'Operator' },
-    { t: 12, n: 'Text' },
-    { t: 13, n: 'Parser' },
-    { t: 14, n: 'Array' },
-    { t: -1, n: 'Other' },
-];
+import { FUNCTION_CATEGORIES, FUNCTION_LIST, setCaretPosition } from '../../state';
 
 export function InsertFunctionDialog() {
     const {

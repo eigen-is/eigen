@@ -20,7 +20,7 @@ import { SplitColumn } from '../SplitColumn';
 
 export function DataMenu() {
     const { context, setContext } = useContext(WorkbookContext);
-    const { showFormDialog } = useDialog();
+    const { showDialog } = useDialog();
 
     const dispatch = (fn: (ctx: Context) => void) => () => setContext((draftCtx) => fn(draftCtx));
 
@@ -36,7 +36,7 @@ export function DataMenu() {
                         Descending
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showFormDialog(<CustomSort />)}>Custom sort</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => showDialog(<CustomSort />)}>Custom sort</DropdownMenuItem>
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
 
@@ -48,8 +48,8 @@ export function DataMenu() {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onClick={() => showFormDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
-            <DropdownMenuItem onClick={() => showFormDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<DataVerification />)}>Data verification</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => showDialog(<SplitColumn />)}>Split text</DropdownMenuItem>
         </>
     );
 }

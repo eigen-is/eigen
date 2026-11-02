@@ -17,7 +17,6 @@ import type { FloatingRef } from './modules/floating';
 import { normalizeSelection } from './modules/selection';
 import type { Hooks } from './settings';
 import type {
-    ConditionRulesProps,
     FilterEntry,
     FilterOptions,
     GlobalCache,
@@ -65,13 +64,13 @@ export type Context = {
     searchHighlights?: SearchHighlight[];
     searchActive?: SearchHighlight | null;
     linkCard?: LinkCardProps;
-    rangeDialog: RangeDialogProps; // coordinate range mouse selection
+    // The data-verification range picker is open, so the cell editor keeps out of the way of the pick.
+    rangeDialog: RangeDialogProps;
     // warning dialog
     warnDialog?: string;
     currency?: string;
     // Whether a list cell's drop-down is open.
     validationListOpen?: boolean;
-    conditionRules: ConditionRulesProps; // conditional formatting
 
     filterContextMenu?: {
         x: number;
@@ -225,23 +224,9 @@ export function defaultContext(refs: RefValues): Context {
         currency: '€',
         rangeDialog: {
             show: false,
-            rangeTxt: '',
-            type: '',
-            singleSelect: false,
         },
 
         validationListOpen: false,
-
-        conditionRules: {
-            rulesType: '',
-            rulesValue: '',
-            textColor: { check: true, color: '#000000' },
-            cellColor: { check: true, color: '#000000' },
-            betweenValue: { value1: '', value2: '' },
-            dateValue: '',
-            repeatValue: '0',
-            projectValue: '10',
-        },
 
         visibledatarow: [],
         visibledatacolumn: [],

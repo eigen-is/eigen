@@ -16,7 +16,7 @@ const ROW_HEIGHT = 'Row height in pixels';
 
 // Rows 1 and 2 selected, both 30 px high.
 const openRowHeight = () =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(ResizeDialog, { mode: 'row' })), {
+    renderSheetDialog((d) => d.showDialog(createElement(ResizeDialog, { mode: 'row' })), {
         config: { rowlen: { 0: 30, 1: 30 } },
         selections: [{ row: [0, 1], column: [0, 3], row_focus: 0, column_focus: 0, row_select: true }],
     });
@@ -55,7 +55,7 @@ test('a size past the limit disables OK, says why, and keeps the typed value', a
 });
 
 test('a column takes a width past the row limit', async () => {
-    const dialog = await renderSheetDialog((d) => d.showFormDialog(createElement(ResizeDialog, { mode: 'column' })), {
+    const dialog = await renderSheetDialog((d) => d.showDialog(createElement(ResizeDialog, { mode: 'column' })), {
         selections: [{ row: [0, 3], column: [2, 2], row_focus: 0, column_focus: 2, column_select: true }],
     });
     expect(dialog.title()).toBe('Column width');

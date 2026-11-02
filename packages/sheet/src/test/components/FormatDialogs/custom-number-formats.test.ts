@@ -17,7 +17,7 @@ const PATTERN = 'Number format';
 
 // A1:B1 selected, A1 holding 1234.5 in the two-decimal format.
 const openNumberFormats = () =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(CustomNumberFormats)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomNumberFormats)), {
         sheets: [
             {
                 name: 'sheet',

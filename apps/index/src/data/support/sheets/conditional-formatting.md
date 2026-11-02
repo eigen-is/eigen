@@ -56,4 +56,4 @@ A data bar draws a colored bar inside each cell proportional to its value.
 
 To see all the rules on the current sheet, open **Format → Conditional formatting → Manage rules**. The dialog lists every rule, shows a color preview, and shows the range it applies to. Click the **×** next to a rule to delete it.
 
-To remove all conditional formatting from the current sheet at once, open **Format → Conditional formatting → Delete rule → Delete sheet rule**.
+To remove all conditional formatting from the current sheet at once, open **Format → Conditional formatting → Delete rule → Delete sheet rules**.

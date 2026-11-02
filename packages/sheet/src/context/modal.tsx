@@ -1,27 +1,24 @@
-// The sheet's one dialog slot, which useDialog opens and closes. A dialog on FormDialog draws its own shell and takes
-// its open and close from the slot's DialogPropsContext. The others get the shared shell drawn here, such as the
-// range picker, which leaves the grid usable and opens at a point on screen. Either way the slot keeps a dialog's mouse
-// events from the React handlers above it.
+// The sheet's one dialog slot, which useDialog opens and closes. A dialog in it draws its own FormDialog and takes its
+// open and close from the slot's DialogPropsContext, and the focus goes back to the grid when it closes. The range
+// picker is the one exception: it leaves the grid usable to pick on and can open at a point on screen, so the slot
+// draws a shell around it. Either way the slot keeps a dialog's mouse events from the React handlers above it.
 
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCellEditorRefocus } from '../hooks/useCellEditorRefocus';
 import type { ViewportPoint } from '../state';
 
-export type ModalOptions = {
-    // When false, the shell draws no backdrop and the rest of the page stays usable, as the range picker needs.
-    modal?: boolean;
-    // The shell's width in pixels. A small picker sets its own.
+// The range picker's shell. It draws no backdrop, and a click on the grid picks a range instead of closing it.
+type NonModalOptions = {
+    // The shell's width in pixels.
     width?: number;
     // The point on screen where the shell's top-left corner opens, kept on screen. Centered when absent.
     anchor?: ViewportPoint;
-    // The content is a FormDialog, so the slot draws no shell around it and the options above don't apply. The
-    // dialogs not yet on FormDialog leave it off and get the shell.
-    ownsDialog?: boolean;
-    // Runs once on every way the dialog closes, such as Cancel or Escape, so a caller that holds state for the open
-    // dialog, like the range picker's grid-select flag, resets it in one place. Opening another dialog in the slot
-    // drops it unrun. Data verification's confirm commits the picked range and opens its own dialog again, and a late
-    // onClose would run the teardown a second time over the dialog it just opened.
+    // Runs once on every way the picker closes, such as Cancel or Escape, so a caller that holds state for the open
+    // picker, like the grid-select flag, resets it in one place. Opening another dialog in the slot drops it unrun.
+    // Data verification's picker commits the picked range and opens its own dialog again, and a late onClose would
+    // run the teardown a second time over the dialog it just opened.
     onClose?: () => void;
 };
 
@@ -48,7 +45,8 @@ type ModalState = {
     // A new number for each opening, so a close from an opening the slot no longer holds is ignored.
     id: number;
     content: React.ReactNode;
-    options: ModalOptions;
+    // Set for the range picker, which gets the shell.
+    nonModal?: NonModalOptions;
 };
 
 // What a FormDialog in the slot spreads on itself. Its close does nothing once another dialog holds the slot, so a
@@ -56,9 +54,14 @@ type ModalState = {
 export type DialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
 };
 
-export const DialogPropsContext = React.createContext<DialogProps>({ open: false, onOpenChange: () => {} });
+export const DialogPropsContext = React.createContext<DialogProps>({
+    open: false,
+    onOpenChange: () => {},
+    onCloseAutoFocus: () => {},
+});
 
 // React passes a portaled dialog's mouse events up the component tree, past the slot to the handlers of the
 // workbook's ancestors, so the slot stops them. Native listeners on the document still hear them.
@@ -66,12 +69,14 @@ const stop = (e: React.SyntheticEvent) => e.stopPropagation();
 const STOP_MOUSE_EVENTS = { onMouseDown: stop, onMouseMove: stop, onMouseUp: stop, onContextMenu: stop };
 
 type ModalContextType = {
-    showModal: (c: React.ReactNode, options?: ModalOptions) => void;
+    showModal: (content: React.ReactNode) => void;
+    showNonModal: (content: React.ReactNode, options: NonModalOptions) => void;
     hideModal: () => void;
 };
 
 const ModalContext = React.createContext<ModalContextType>({
     showModal: () => {},
+    showNonModal: () => {},
     hideModal: () => {},
 });
 
@@ -80,20 +85,19 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
     const [placement, setPlacement] = useState<ViewportPoint | null>(null);
     const contentRef = useRef<HTMLDivElement>(null);
     const lastId = useRef(0);
-    const open = state !== null;
-    const isModal = state?.options.modal !== false;
-    const anchor = state?.options.anchor;
+    const anchor = state?.nonModal?.anchor;
 
     // A ref, not `state`: hideModal must stay identity-stable for its consumers, and it has to see the opening that
     // holds the slot right now.
     const openingRef = useRef<{ id: number; onClose?: () => void } | null>(null);
 
-    const showModal = useCallback((content: React.ReactNode, options: ModalOptions = {}) => {
+    const open = useCallback((content: React.ReactNode, nonModal?: NonModalOptions) => {
         lastId.current += 1;
         const id = lastId.current;
-        openingRef.current = { id, onClose: options.onClose };
-        setState({ id, content, options });
+        openingRef.current = { id, onClose: nonModal?.onClose };
+        setState({ id, content, nonModal });
     }, []);
+    const showModal = useCallback((content: React.ReactNode) => open(content), [open]);
     const hideModal = useCallback(() => {
         const opening = openingRef.current;
         openingRef.current = null;
@@ -101,6 +105,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
         opening?.onClose?.();
     }, []);
 
+    const refocusGrid = useCellEditorRefocus();
     const openId = state?.id;
     const dialogProps = useMemo<DialogProps>(
         () => ({
@@ -108,11 +113,14 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
             onOpenChange: (o) => {
                 if (!o && openingRef.current?.id === openId) hideModal();
             },
+            // Radix runs this a moment after the dialog is gone, so a dialog opened in its place, such as a confirm,
+            // already has the focus and keeps it.
+            onCloseAutoFocus: refocusGrid,
         }),
-        [hideModal, openId],
+        [hideModal, openId, refocusGrid],
     );
 
-    // useLayoutEffect, not useEffect: the clamp needs the dialog's rendered height, so it
+    // useLayoutEffect, not useEffect: the clamp needs the picker's rendered height, so it
     // renders once at the raw anchor and is corrected before the browser paints either frame.
     useLayoutEffect(() => {
         const el = contentRef.current;
@@ -129,21 +137,21 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
         );
     }, [anchor]);
 
-    const providerValue = useMemo(() => ({ showModal, hideModal }), [hideModal, showModal]);
+    const providerValue = useMemo(() => ({ showModal, showNonModal: open, hideModal }), [hideModal, open, showModal]);
     const position = anchor && (placement ?? anchor);
 
     return (
         <ModalContext.Provider value={providerValue}>
             {children}
-            {state?.options.ownsDialog ? (
+            {state && !state.nonModal ? (
                 // Keyed by the opening, so each one mounts its fields fresh, even the same dialog opened twice.
                 <div key={state.id} className="contents" {...STOP_MOUSE_EVENTS}>
                     <DialogPropsContext.Provider value={dialogProps}>{state.content}</DialogPropsContext.Provider>
                 </div>
             ) : (
                 <Dialog
-                    open={open}
-                    modal={isModal}
+                    open={state !== null}
+                    modal={false}
                     onOpenChange={(o) => {
                         if (!o) hideModal();
                     }}
@@ -152,28 +160,19 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
                         ref={contentRef}
                         aria-describedby={undefined}
                         showCloseButton={false}
-                        onPointerDownOutside={(e) => e.preventDefault()}
+                        // A press on the grid, and the focus that moves there with it, picks a range. Neither may
+                        // close the picker.
                         onInteractOutside={(e) => e.preventDefault()}
-                        // An anchored dialog drops DialogContent's centering translate. The left and top below
+                        // An anchored picker drops DialogContent's centering translate. The left and top below
                         // place it instead.
-                        className={cn('max-w-[90vw]', position && 'translate-x-0 translate-y-0')}
+                        className={cn(position && 'translate-x-0 translate-y-0')}
                         style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            maxHeight: '75vh',
-                            overflow: 'hidden',
-                            width: state?.options.width ?? DEFAULT_WIDTH,
+                            width: state?.nonModal?.width ?? DEFAULT_WIDTH,
                             ...(position && { left: position.left, top: position.top }),
                         }}
+                        {...STOP_MOUSE_EVENTS}
                     >
-                        <div
-                            // The inline flex above overrides DialogContent's grid, so gap-4 gives back its rhythm.
-                            // This wrapper is the real parent of the header, the body and the footer.
-                            className="flex flex-col gap-4 min-h-0 flex-1"
-                            {...STOP_MOUSE_EVENTS}
-                        >
-                            {state?.content}
-                        </div>
+                        {state?.content}
                     </DialogContent>
                 </Dialog>
             )}

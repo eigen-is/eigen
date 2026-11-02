@@ -23,7 +23,7 @@ If you selected a whole column by clicking its header letter, the field shows it
 
 ## Add a dropdown list
 
-1. Under **Verification condition**, choose **drop-down list** from the menu.
+1. Under **Verification condition**, choose **Drop-down list** from the menu.
 2. In the field below, type the options separated by commas, for example `Yes,No,Maybe`. To use values from existing cells instead, click the grid icon next to the field and select the range.
 3. Tick **Allow multiple selection** if you want people to be able to pick more than one option from the list.
 4. Click **OK**.

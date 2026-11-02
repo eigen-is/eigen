@@ -31,7 +31,7 @@ import type { RangeOrWholeAxis } from '../../state/types';
 import { CellRangeDialog } from '../CellRangeDialog';
 
 const VERIFICATION_TYPES = [
-    { value: 'dropdown', label: 'drop-down list' },
+    { value: 'dropdown', label: 'Drop-down list' },
     { value: 'checkbox', label: 'Checkbox' },
     { value: 'number', label: 'Number' },
     { value: 'number_integer', label: 'Number-integer' },
@@ -75,7 +75,7 @@ const HINT_TOGGLES = [
 ] as const;
 
 // What OK and Delete verification say when the range names no cells.
-const NO_RANGE_MESSAGE = 'The selection operation has not been performed yet';
+const NO_RANGE_MESSAGE = 'Enter a cell range, such as A1:B10';
 
 // The draft's text fields, each typed into an input.
 type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
@@ -87,7 +87,7 @@ type Problem = { field: 'range' | 'value'; message: string };
 export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulationProps }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
-    const { showFormDialog, showNonModalDialog, hideDialog } = useDialog();
+    const { showDialog, showNonModalDialog, hideDialog } = useDialog();
     const [draft, setDraft] = useState(() => reopenedDraft ?? draftAtSelection(context));
     const [problem, setProblem] = useState<Problem>();
     const problemId = useId();
@@ -120,7 +120,7 @@ export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulat
             setContext((ctx) => {
                 ctx.rangeDialog.show = false;
             });
-            showFormDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
+            showDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
         };
         setContext((ctx) => {
             ctx.rangeDialog.show = true;

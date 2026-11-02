@@ -1,6 +1,7 @@
 // The Insert function dialog lists the functions of a category, or those the search matches, with one highlighted. OK,
 // or Enter in the search field, opens the in-cell editor on the focus cell with `=NAME(` and closes. Cancel and Escape
-// close it and leave the cell, and an edit already open in it, as they were.
+// close it and leave the cell, and an edit already open in it, as they were. After OK the editor has the focus, with
+// the caret after the bracket, so the user types the arguments straight away.
 
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -16,7 +17,7 @@ const SEARCH = 'Search function';
 
 // B2 selected, with no edit open unless the test opens one.
 const openInsertFunction = (editingCellPosition: number[] = []) =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(InsertFunctionDialog)), {
+    renderSheetDialog((d) => d.showDialog(createElement(InsertFunctionDialog)), {
         selections: [{ row: [1, 1], column: [1, 1], row_focus: 1, column_focus: 1 }],
         editingCellPosition,
         functionHint: null,
@@ -40,6 +41,23 @@ test('OK opens the editor on the focus cell with the highlighted function and cl
     expect(dialog.context().functionHint).toBe('SUMIF');
     expect(dialog.editorText()).toBe('=SUMIF(');
     expect(dialog.dialogs()).toHaveLength(0);
+});
+
+test('after OK the editor has the focus, with the caret after the bracket', async () => {
+    const dialog = await openInsertFunction();
+    await dialog.type(SEARCH, 'SUMIF');
+    await dialog.click('OK');
+    // Radix hands the focus on a moment after the dialog unmounts.
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+    const editor = document.activeElement;
+    const caret = document.getSelection()?.getRangeAt(0);
+    if (!editor || !caret) throw new Error('no caret');
+    const before = document.createRange();
+    before.setStart(editor, 0);
+    before.setEnd(caret.startContainer, caret.startOffset);
+    expect(caret.collapsed).toBe(true);
+    expect(before.toString()).toBe('=SUMIF(');
 });
 
 test('Enter in the search field inserts the highlighted function', async () => {

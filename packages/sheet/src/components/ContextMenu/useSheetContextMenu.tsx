@@ -208,10 +208,10 @@ function ShowHiddenItem({ type, label }: { type: RowColType; label: string }) {
 }
 
 function ResizeItem({ type, label }: { type: RowColType; label: string }) {
-    const { showFormDialog } = useDialog();
+    const { showDialog } = useDialog();
     const Icon = type === 'row' ? MoveVertical : MoveHorizontal;
     return (
-        <DropdownMenuItem onClick={() => showFormDialog(<ResizeDialog mode={type} />)}>
+        <DropdownMenuItem onClick={() => showDialog(<ResizeDialog mode={type} />)}>
             <Icon className="size-4" />
             {label}
         </DropdownMenuItem>

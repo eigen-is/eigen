@@ -181,9 +181,6 @@ export type LinkCardProps = {
 
 export type RangeDialogProps = {
     show: boolean;
-    rangeTxt: string;
-    type: string;
-    singleSelect: boolean;
 };
 
 // The rule the data-validation dialog edits, every field set, with '' or false where the rule has none. OK spreads it

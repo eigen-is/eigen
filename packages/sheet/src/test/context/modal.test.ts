@@ -1,8 +1,9 @@
-// The sheet's modal host. A dialog on FormDialog renders as the only dialog, closes through its own opening, and keeps
-// its mouse events from the handlers above the host, as the shell around the other dialogs does. A close from an
-// opening the slot no longer holds does nothing, so a submit that opens a confirm leaves the confirm open. The anchored
-// dialog (the cell-range picker) opens at a viewport point the caller computed, so the host clamps it on screen: a
-// dialog larger than the viewport pins to the top-left margin instead of being pushed off the opposite edge.
+// The sheet's modal host. A dialog in it draws its own FormDialog, renders as the only dialog, closes through its own
+// opening, and keeps its mouse events from the handlers above the host. A close from an opening the slot no longer
+// holds does nothing, so a submit that opens a confirm leaves the confirm open. However a dialog closes, the focus goes
+// back to the grid's keyboard target, unless another dialog took the slot. The range picker opens at a viewport
+// point the caller computed, so the host clamps it on screen: a picker larger than the viewport pins to the top-left
+// margin instead of being pushed off the opposite edge.
 
 import { describe, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -17,6 +18,7 @@ const { FormDialog, FormDialogForm } = await import('@workspace/ui/components/fo
 const { Input } = await import('@workspace/ui/components/input');
 const { clampToViewport, ModalContext, ModalProvider, VIEWPORT_MARGIN } = await import('../../context/modal');
 const { useDialog, useDialogProps } = await import('../../hooks/useDialog');
+const { renderSheetDialog } = await import('../components/sheet-dialog');
 type DialogAction = import('@workspace/ui/hooks/use-dialog-pending').DialogAction;
 
 const VIEWPORT = { width: 1200, height: 800 };
@@ -88,7 +90,7 @@ const button = (label: string) =>
 describe('a FormDialog in the host', () => {
     test('is the only dialog, with its corner X, and the X closes it', async () => {
         const { dialogs } = await renderHost();
-        await act(async () => dialogs.showFormDialog(createElement(Rename)));
+        await act(async () => dialogs.showDialog(createElement(Rename)));
         expect(openDialogs()).toHaveLength(1);
         expect(title()).toBe('Rename');
         await click(document.querySelector('[data-slot="dialog-close"]'));
@@ -98,9 +100,7 @@ describe('a FormDialog in the host', () => {
     test('a submit that opens another dialog leaves that one open', async () => {
         const { dialogs } = await renderHost();
         await act(async () =>
-            dialogs.showFormDialog(
-                createElement(Rename, { onSubmit: () => dialogs.showDialog('Replace it?', 'yesno') }),
-            ),
+            dialogs.showDialog(createElement(Rename, { onSubmit: () => dialogs.showDialog('Replace it?', 'yesno') })),
         );
         await click(button('Save'));
         expect(title()).toBe('Notice');
@@ -109,7 +109,7 @@ describe('a FormDialog in the host', () => {
 
     test('a press, a drag and a right click inside it reach no handler above the host', async () => {
         const { dialogs } = await renderHost();
-        await act(async () => dialogs.showFormDialog(createElement(Rename)));
+        await act(async () => dialogs.showDialog(createElement(Rename)));
         const input = document.querySelector('[role="dialog"] input');
         if (!input) throw new Error('no field');
         await act(async () => {
@@ -124,10 +124,69 @@ describe('a FormDialog in the host', () => {
 test('a dialog that leaves the grid usable runs its onClose once, however often it is hidden', async () => {
     const { host } = await renderHost();
     const onClose = mock(() => {});
-    await act(async () => host.showModal('Pick a range', { modal: false, onClose }));
+    await act(async () => host.showNonModal('Pick a range', { onClose }));
     await act(async () => {
         host.hideModal();
         host.hideModal();
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+});
+
+// Radix hands the focus on a moment after a dialog unmounts.
+const focusSettled = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+
+const pressEscape = () =>
+    act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+
+describe('the focus after a dialog closes', () => {
+    const renderRename = () => renderSheetDialog((d) => d.showDialog(createElement(Rename)));
+
+    test('goes back to the grid on Cancel', async () => {
+        const dialog = await renderRename();
+        await dialog.click('Cancel');
+        await focusSettled();
+        expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+    });
+
+    test('goes back to the grid on Escape', async () => {
+        const dialog = await renderRename();
+        await pressEscape();
+        expect(dialog.dialogs()).toHaveLength(0);
+        await focusSettled();
+        expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+    });
+
+    test('goes back to the grid on a submit', async () => {
+        const dialog = await renderRename();
+        await dialog.click('Save');
+        await focusSettled();
+        expect(document.activeElement?.id).toBe('sheet-rich-text-editor');
+    });
+
+    test('stays in the confirm a submit opened', async () => {
+        const dialog = await renderSheetDialog((d) =>
+            d.showDialog(createElement(Rename, { onSubmit: () => d.showDialog('Replace it?', 'yesno') })),
+        );
+        await dialog.click('Save');
+        await focusSettled();
+        const [confirm] = dialog.dialogs();
+        expect(dialog.title()).toBe('Notice');
+        expect(confirm?.contains(document.activeElement)).toBe(true);
+    });
+
+    // The picker leaves the grid usable, so no focus trap would pull the focus back to it.
+    test('stays in the range picker a dialog opened in its place', async () => {
+        const dialog = await renderSheetDialog((d) =>
+            d.showDialog(createElement(Rename, { onSubmit: () => d.showNonModalDialog('Pick a range', {}) })),
+        );
+        await dialog.click('Save');
+        await focusSettled();
+        const [picker] = dialog.dialogs();
+        expect(picker?.textContent).toBe('Pick a range');
+        expect(picker?.contains(document.activeElement)).toBe(true);
+    });
 });

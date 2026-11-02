@@ -36,7 +36,7 @@ const AUTO_SUM_FUNCTIONS = [
 export function InsertMenu() {
     const { context, getContext, setContext, refs, settings } = useContext(WorkbookContext);
     const { showAlert } = useAlert();
-    const { showFormDialog } = useDialog();
+    const { showDialog } = useDialog();
 
     const selection = context.selections?.[0];
     const rowFocus = selection?.row_focus;
@@ -160,7 +160,7 @@ export function InsertMenu() {
                         </DropdownMenuItem>
                     ))}
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={() => showFormDialog(<InsertFunctionDialog />)}>
+                    <DropdownMenuItem onClick={() => showDialog(<InsertFunctionDialog />)}>
                         Learn more...
                     </DropdownMenuItem>
                 </DropdownMenuSubContent>

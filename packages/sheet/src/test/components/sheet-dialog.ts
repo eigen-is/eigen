@@ -15,28 +15,30 @@ import type { Context, SheetConfig } from '../../state';
 import { defaultSettings } from '../../state';
 import { workbookContextFactory } from '../state/factories/context';
 
-const refs: RefValues = {
-    globalCache: {
-        undoList: [],
-        redoList: [],
-        scrollLeft: 0,
-        scrollTop: 0,
-        scrollListeners: new Set<() => void>(),
-        notifyScrollListeners: () => {},
-    },
-    // The in-cell editor, which the grid always mounts: a format or a function is applied through it.
-    cellInput: { current: document.createElement('div') },
-    fxInput: createRef<HTMLDivElement | null>(),
-    canvas: createRef<HTMLCanvasElement | null>(),
-    cellArea: createRef<HTMLDivElement | null>(),
-    workbookContainer: createRef<HTMLDivElement | null>(),
-};
+// The workbook's refs, fresh for each render.
+function workbookRefs(): RefValues {
+    return {
+        globalCache: {
+            undoList: [],
+            redoList: [],
+            scrollLeft: 0,
+            scrollTop: 0,
+            scrollListeners: new Set<() => void>(),
+            notifyScrollListeners: () => {},
+        },
+        cellInput: createRef<HTMLDivElement | null>(),
+        fxInput: createRef<HTMLDivElement | null>(),
+        canvas: createRef<HTMLCanvasElement | null>(),
+        cellArea: createRef<HTMLDivElement | null>(),
+        workbookContainer: createRef<HTMLDivElement | null>(),
+    };
+}
 
 type Dialogs = ReturnType<typeof useDialog>;
 
 // What the test reads back: the workbook as the last write left it, and the opener the host handed out. `grid` draws
 // what the workbook draws under the host from its context.
-type Harness = { context: Context; dialogs?: Dialogs; grid?: (context: Context) => ReactNode };
+type Harness = { context: Context; refs: RefValues; dialogs?: Dialogs; grid?: (context: Context) => ReactNode };
 
 function Opener({ harness }: { harness: Harness }) {
     harness.dialogs = useDialog();
@@ -53,14 +55,22 @@ function Workbook({ harness }: { harness: Harness }) {
             setRendered(harness.context);
         },
         settings: defaultSettings,
-        refs,
+        refs: harness.refs,
         handleUndo: () => {},
         handleRedo: () => {},
     };
     return createElement(
         WorkbookContext.Provider,
         { value },
-        createElement(ModalProvider, null, createElement(Opener, { harness }), harness.grid?.(rendered)),
+        createElement(
+            ModalProvider,
+            null,
+            createElement(Opener, { harness }),
+            // The in-cell editor, which the grid always mounts. A format or a function is applied through it, and it
+            // takes the grid's keys.
+            createElement('div', { ref: harness.refs.cellInput, id: 'sheet-rich-text-editor', contentEditable: true }),
+            harness.grid?.(rendered),
+        ),
     );
 }
 
@@ -69,7 +79,7 @@ export async function renderSheetDialog(
     params: Partial<Context> & { config?: SheetConfig } = {},
     grid?: (context: Context) => ReactNode,
 ) {
-    const harness: Harness = { context: workbookContextFactory(params), grid };
+    const harness: Harness = { context: workbookContextFactory(params), refs: workbookRefs(), grid };
     await renderInDocument(createElement(Workbook, { harness }));
     await act(async () => {
         if (!harness.dialogs) throw new Error('the host did not render');
@@ -90,12 +100,14 @@ export async function renderSheetDialog(
         return input;
     };
 
+    const { cellInput } = harness.refs;
+
     return {
         context: () => harness.context,
         // The text in the in-cell editor, where Insert function writes its pick.
-        editorText: () => refs.cellInput.current?.textContent,
+        editorText: () => cellInput.current?.textContent,
         setEditorText: (text: string) => {
-            if (refs.cellInput.current) refs.cellInput.current.textContent = text;
+            if (cellInput.current) cellInput.current.textContent = text;
         },
         // Every dialog in the document: one, unless a shell wraps another.
         dialogs: () => [...document.querySelectorAll('[role="dialog"]')],

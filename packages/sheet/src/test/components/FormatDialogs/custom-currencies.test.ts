@@ -17,7 +17,7 @@ const SYMBOL = 'Currency symbol';
 
 // A1 selected, holding a number.
 const openCurrencies = () =>
-    renderSheetDialog((d) => d.showFormDialog(createElement(CustomCurrencies)), {
+    renderSheetDialog((d) => d.showDialog(createElement(CustomCurrencies)), {
         sheets: [{ name: 'sheet', id: 'id_1', order: 0, config: {}, data: [[{ v: 1000, m: '1000' }]] }],
         selections: [{ row: [0, 0], column: [0, 0], row_focus: 0, column_focus: 0 }],
         editingCellPosition: [],
