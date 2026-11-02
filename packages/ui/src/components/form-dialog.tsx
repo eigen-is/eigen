@@ -13,7 +13,7 @@ type FormDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title: string;
-    // For a screen reader. Without one the dialog has no description.
+    // What a screen reader reads after the title.
     description?: string;
     size?: ComponentProps<typeof DialogContent>['size'];
     onCloseAutoFocus?: (event: Event) => void;
@@ -48,17 +48,10 @@ export function FormDialog({
 
     return (
         <Dialog open={open} onOpenChange={pending.handleOpenChange}>
-            <DialogContent
-                size={size}
-                onCloseAutoFocus={onCloseAutoFocus}
-                // Radix links a description itself, and warns about a dialog without one unless told there is none.
-                {...(description === undefined && { 'aria-describedby': undefined })}
-            >
+            <DialogContent size={size} onCloseAutoFocus={onCloseAutoFocus}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
-                    {description !== undefined && (
-                        <DialogDescription className="sr-only">{description}</DialogDescription>
-                    )}
+                    {description && <DialogDescription className="sr-only">{description}</DialogDescription>}
                 </DialogHeader>
                 <FormDialogPending.Provider value={pending}>{children}</FormDialogPending.Provider>
             </DialogContent>

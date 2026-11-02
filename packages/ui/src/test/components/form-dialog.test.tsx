@@ -23,11 +23,13 @@ async function render({
     canSubmit,
     footerStart,
     readOnly,
+    description,
 }: {
     onSubmit?: () => void | Promise<void>;
     canSubmit?: boolean;
     footerStart?: ReactNode;
     readOnly?: boolean;
+    description?: string;
 } = {}) {
     onOpenChange.mockClear();
     ({ unmount } = await renderInDocument(
@@ -35,6 +37,7 @@ async function render({
             open: true,
             onOpenChange,
             title: 'Rename',
+            description,
             children: createElement(FormDialogForm, {
                 onSubmit,
                 canSubmit,
@@ -151,4 +154,13 @@ test('readOnly shows only Close, and Enter submits nothing', async () => {
     expect(onSubmit).not.toHaveBeenCalled();
     await click('Close');
     expect(onOpenChange.mock.calls).toEqual([[false]]);
+});
+
+test('a description is what a screen reader reads for the dialog, and without one it reads none', async () => {
+    await render({ description: 'Give the file a new name.' });
+    const describedBy = dialog()?.getAttribute('aria-describedby');
+    expect(describedBy ? document.getElementById(describedBy)?.textContent : null).toBe('Give the file a new name.');
+    await unmount();
+    await render();
+    expect(dialog()?.hasAttribute('aria-describedby')).toBe(false);
 });
