@@ -211,8 +211,8 @@ function shapeFill(reader: Reader, spPr: XmlElement | undefined, style: XmlEleme
     return readHexColor(drawingColor(ref, reader.colors)?.slice(0, 7));
 }
 
-// The shape's own line, else its style's, in the cell-border form: its width in px between a cell border's bounds, its
-// dash and its compound line read as the nearest style.
+// The shape's own line, else its style's, as a border value. Its width goes through fitBorderPx, and its dash and its
+// compound line are read as the nearest border style.
 function shapeOutline(reader: Reader, spPr: XmlElement | undefined, style: XmlElement | undefined): string | null {
     const line = spPr && xmlChild(spPr, A_NS, 'ln');
     const ref = style && xmlChild(style, A_NS, 'lnRef');

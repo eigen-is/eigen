@@ -1,7 +1,7 @@
 // The one stored form of a doc's border, such as a table cell's side or a text box's outline: a string
 // "<px>px <style> <#rrggbb>" or "none". A peer or a paste can write any value, and the value lands in an inline style
 // and a docx, so every reader goes through readBorder, which keeps only that form. borderValue writes it back, and
-// fitBorderPx brings a width from elsewhere into it.
+// fitBorderPx fits a width from Word or a paste into the range a border draws at and rounds it.
 
 export const BORDER_STYLES = ['solid', 'dashed', 'dotted', 'double'] as const;
 export type BorderStyle = (typeof BORDER_STYLES)[number];
