@@ -1,7 +1,7 @@
 // The Drive action runner: performs a Drive action on a set of items, such as rename, move, share or
 // delete, and owns the dialogs behind them. DriveLayout builds one and hands it to the list, the detail
-// column and the toolbar. Which rows a surface draws comes from driveActionsFor, read through the
-// view's capabilities, so every surface and the command palette offer the same set.
+// column and the toolbar. Which rows apply comes from driveActionsFor, read through the view's
+// capabilities: the item menu and the command palette draw those rows, and run refuses any other.
 
 import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
 import { copyToClipboard } from '@workspace/lib/clipboard';
@@ -25,7 +25,6 @@ import type {
 } from '@workspace/lib/types/drive';
 import { EIGEN_DOC_TYPES } from '@workspace/lib/types/drive';
 import type { ReactNode } from 'react';
-import { useCallback } from 'react';
 import { toast } from 'sonner';
 import { DriveAccessDialog } from './drive-access-dialog';
 import { DriveCreateEigenDoc } from './drive-create-eigendoc';
@@ -98,61 +97,47 @@ export function useDriveActionRunner({
         });
     };
 
-    const handleDuplicate = useCallback(
-        (items: DrivePath[]) => {
-            // A root has no folder to hold its copy.
-            const copies = items.flatMap((source) =>
-                source.parentId
-                    ? [
-                          {
-                              source,
-                              targetOwnerId: source.ownerId,
-                              targetMountId: source.mountId,
-                              targetParentId: source.parentId,
-                              name: `Copy of ${source.name}`,
-                          },
-                      ]
-                    : [],
-            );
-            if (copies.length) copyPaths(copies);
-        },
-        [copyPaths],
-    );
+    const handleDuplicate = (items: DrivePath[]) => {
+        // A root has no folder to hold its copy.
+        const copies = items.flatMap((source) =>
+            source.parentId
+                ? [
+                      {
+                          source,
+                          targetOwnerId: source.ownerId,
+                          targetMountId: source.mountId,
+                          targetParentId: source.parentId,
+                          name: `Copy of ${source.name}`,
+                      },
+                  ]
+                : [],
+        );
+        if (copies.length) copyPaths(copies);
+    };
 
-    const handlePickDestination = useCallback(
-        async (location: { ownerId: string; mountId: string; folderId: string }) => {
-            const items = dialogs.copyMove.items;
-            if (dialogs.copyMove.mode === 'move') {
-                if (location.ownerId !== ownerId || location.mountId !== mountId) {
-                    toast.error('Moving across drives isn’t supported yet — use Copy to…');
-                    return;
-                }
-                await Promise.all(
-                    items.map((item) => movePath.mutateAsync({ pathId: item.id, targetParentId: location.folderId })),
-                );
-            } else {
-                await copyToFolder({
-                    items,
-                    targetOwnerId: location.ownerId,
-                    targetMountId: location.mountId,
-                    targetParentId: location.folderId,
-                }).catch((error) => {
-                    // The picker stays open, and a retry sends only the failures, or what copied would land twice.
-                    if (error instanceof PartialCopyError) dialogs.copyMove.openDialog(error.failed, 'copy');
-                    throw error;
-                });
+    const handlePickDestination = async (location: { ownerId: string; mountId: string; folderId: string }) => {
+        const items = dialogs.copyMove.items;
+        if (dialogs.copyMove.mode === 'move') {
+            if (location.ownerId !== ownerId || location.mountId !== mountId) {
+                toast.error('Moving across drives isn’t supported yet — use Copy to…');
+                return;
             }
-        },
-        [
-            dialogs.copyMove.items,
-            dialogs.copyMove.mode,
-            dialogs.copyMove.openDialog,
-            ownerId,
-            mountId,
-            movePath,
-            copyToFolder,
-        ],
-    );
+            await Promise.all(
+                items.map((item) => movePath.mutateAsync({ pathId: item.id, targetParentId: location.folderId })),
+            );
+        } else {
+            await copyToFolder({
+                items,
+                targetOwnerId: location.ownerId,
+                targetMountId: location.mountId,
+                targetParentId: location.folderId,
+            }).catch((error) => {
+                // The picker stays open, and a retry sends only the failures, or what copied would land twice.
+                if (error instanceof PartialCopyError) dialogs.copyMove.openDialog(error.failed, 'copy');
+                throw error;
+            });
+        }
+    };
 
     const run = (id: DriveActionId, items: DrivePath[], format?: ExportFormat) => {
         if (!actionsFor(items).some((action) => action.id === id)) return;
