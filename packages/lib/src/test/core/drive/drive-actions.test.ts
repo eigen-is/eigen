@@ -115,6 +115,10 @@ describe('driveActionsFor on one item', () => {
         expect(ids).not.toContain('trash');
     });
 
+    test('an item shared with the viewer is not duplicated, as its copy would land in the owner’s folder', () => {
+        expect(idsFor({ items: [sharedDoc], sharedWithMe: true })).not.toContain('duplicate');
+    });
+
     test('no delete without canDelete', () => {
         const caps = { ...browse, canDelete: false };
         expect(idsFor({ items: [doc], capabilities: caps })).not.toContain('trash');
@@ -137,13 +141,7 @@ describe('driveActionsFor on a multi-selection', () => {
     });
 
     test('a set shared with the viewer is removed', () => {
-        expect(idsFor({ items, sharedWithMe: true })).toEqual([
-            'duplicate',
-            'move-to',
-            'copy-to',
-            'mail-to',
-            'remove-shared',
-        ]);
+        expect(idsFor({ items, sharedWithMe: true })).toEqual(['move-to', 'copy-to', 'mail-to', 'remove-shared']);
     });
 
     test('a set with a root in it is not duplicated', () => {

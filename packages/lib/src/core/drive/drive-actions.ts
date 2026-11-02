@@ -47,8 +47,9 @@ export const DRIVE_ACTIONS: readonly DriveAction[] = [
         pluralLabel: 'Duplicate {n} items',
         icon: CopyPlus,
         group: 'create',
-        // A copy lands beside its source, and a root has no folder to land in.
-        applies: (s) => s.capabilities.canWrite && s.items.every((item) => item.parentId !== null),
+        // A copy lands beside its source, so a root has no folder to land in. An item shared with the
+        // viewer sits in its owner's folder, where the server refuses the copy.
+        applies: (s) => s.capabilities.canWrite && !s.sharedWithMe && s.items.every((item) => item.parentId !== null),
     },
     {
         id: 'move-to',
