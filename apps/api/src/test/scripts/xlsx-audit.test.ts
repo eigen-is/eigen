@@ -443,7 +443,43 @@ describe('round trip', () => {
             classify(
                 rules({ ranges: [cell(50, 4)], value: 'wall' }, { ranges: [cell(54, 2), column], value: 'yes,no' }),
             ),
-        ).toEqual([['dataValidations', false, 4]]);
+        ).toEqual([['dataValidations', false, 1]]);
+    });
+
+    // The audit reads which rule decides each cell on each side by itself, never through the writer's cut, so a cut
+    // that gives a cell to the wrong rule, or drops a rule, shows.
+    test("a cut that gives a cell to the wrong rule, or drops a rule the cap didn't count, differs", () => {
+        const list = (value1: string) => ({ type: 'dropdown', type2: '', value1, value2: '' });
+        const range = (row: number[], column: number[]) => ({ row, column });
+        const classify = (warnings: Map<string, number>, a: Sheet['dataValidations'], b: Sheet['dataValidations']) =>
+            classifyDifferences({
+                warnings,
+                a: [{ name: 'S', dataValidations: a }],
+                b: [{ name: 'S', dataValidations: b }],
+                media: { a: new Map(), b: new Map() },
+            }).map(({ kind, listed, count }) => [kind, listed, count]);
+        // A cut that lets the lower rule keep the cell the higher one holds.
+        const overlapping = {
+            'validation-1': { ranges: [range([0, 9], [0, 0])], rule: list('a') },
+            'validation-2': { ranges: [range([4, 4], [0, 0])], rule: list('b') },
+        };
+        const reversed = {
+            'validation-1': { ranges: [range([4, 4], [0, 0])], rule: list('b') },
+            'validation-2': { ranges: [range([0, 9], [0, 0])], rule: list('a') },
+        };
+        expect(classify(new Map(), overlapping, reversed)).toEqual([['dataValidations', false, 1]]);
+        // A rule the cuts leave past the range cap is dropped, which only the counted warning lists.
+        const rows = Array.from({ length: 8192 }, (_, r) => range([r, r], [0, 9]));
+        const cells = Array.from({ length: 8192 }, (_, i) => range([2 * i, 2 * i], [4, 4]));
+        const capped = {
+            'validation-1': { ranges: rows, rule: list('a') },
+            'validation-2': { ranges: cells, rule: list('b') },
+        };
+        const written = { 'validation-1': { ranges: cells, rule: list('b') } };
+        expect(classify(new Map(), capped, written)).toEqual([['dataValidations', false, 1]]);
+        expect(classify(new Map([['validations-dropped', 1]]), capped, written)).toEqual([
+            ['validations dropped', true, 1],
+        ]);
     });
 
     test('a prompt cut to the length Excel holds is listed when the cut is counted', () => {

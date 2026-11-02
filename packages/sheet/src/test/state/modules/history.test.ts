@@ -438,38 +438,56 @@ describe("an open cell editor follows a peer's row or column op", () => {
     });
 });
 
-// A row step the sheet now refuses sends nothing and says why. Its entry stays where it was, so the stacks still
-// hold every step in order, and the step runs once the row may change again.
-test('an undo or redo whose row op a read-only row refuses stays on its stack and says why', () => {
+// A row step the sheet now refuses sends nothing and says why, once. Its entry leaves its stack and goes to neither,
+// so the next press steps the entry before it.
+test('an undo whose row op a read-only row refuses says why and leaves its stack', () => {
     const s = session(workbook());
-    s.edit(s.a, ...insertRows(4, 1));
-    const [entry] = s.a.history.undoList;
     const readOnly = (rows: Record<number, number>) =>
         s.edit(s.b, (ctx) => {
             ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: rows };
         });
-    const refused = (step: () => void) => {
+    const refused = (step: () => void, notice: string) => {
         const sent = s.batches.length;
         s.a.ctx = produce(s.a.ctx, (ctx: Context) => {
             ctx.warnDialog = undefined;
         });
         step();
         expect(s.batches.length).toBe(sent);
-        expect(s.a.ctx.warnDialog).toBe("Sorry, this change can't be undone anymore.");
+        expect(s.a.ctx.warnDialog).toBe(notice);
     };
 
+    s.edit(s.a, typedAt('B2', 'typed'));
+    s.edit(s.a, ...insertRows(4, 1));
+    const [typedEntry] = s.a.history.undoList;
     readOnly({ 4: 1 });
-    refused(() => s.undo(s.a));
-    expect(s.a.history).toEqual({ undoList: [entry], redoList: [] });
-
-    readOnly({});
+    refused(() => s.undo(s.a), "Sorry, this change can't be undone anymore.");
+    expect(s.a.history).toEqual({ undoList: [typedEntry], redoList: [] });
     s.undo(s.a);
-    expect(s.a.history).toEqual({ undoList: [], redoList: [entry] });
-    expect(s.a.ctx.sheets[0].data?.length).toBe(40);
+    expect(cellAt(s.a, 'B2')?.v).toBeUndefined();
+    expect(s.a.history).toEqual({ undoList: [], redoList: [typedEntry] });
+    expect(s.a.ctx.sheets[0].data?.length).toBe(41);
+    expectAgree(s);
+});
 
-    readOnly({ 4: 1 });
-    refused(() => s.redo(s.a));
-    expect(s.a.history).toEqual({ undoList: [], redoList: [entry] });
+test('a redo whose row op a read-only row refuses says why and leaves its stack', () => {
+    const s = session(workbook());
+    s.edit(s.a, ...insertRows(4, 1));
+    s.edit(s.a, typedAt('B2', 'typed'));
+    s.undo(s.a);
+    s.undo(s.a);
+    const [typedEntry] = s.a.history.redoList;
+    s.edit(s.b, (ctx) => {
+        ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
+    });
+    const sent = s.batches.length;
+    s.redo(s.a);
+    expect(s.batches.length).toBe(sent);
+    expect(s.a.ctx.warnDialog).toBe("Sorry, this change can't be redone anymore.");
+    expect(s.a.history).toEqual({ undoList: [], redoList: [typedEntry] });
+    s.redo(s.a);
+    expect(cellAt(s.a, 'B2')?.v).toBe('typed');
+    expect(s.a.history).toEqual({ undoList: [typedEntry], redoList: [] });
+    expect(s.a.ctx.sheets[0].data?.length).toBe(40);
     expectAgree(s);
 });
 

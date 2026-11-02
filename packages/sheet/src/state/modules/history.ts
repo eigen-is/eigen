@@ -36,7 +36,7 @@ import { execFunctionGroup, execfunction, groupValuesRefresh } from './formula-e
 import { rowColMove } from './history-shift';
 import { settleCurrentSheet, shiftSheetOrders } from './sheet';
 
-// A row or column step the sheet refused sends nothing, and its entry stays on its stack.
+// A row or column step the sheet refused sends nothing, and its entry leaves the stacks.
 type Step = { ctx: Context; ops: Op[]; refused?: boolean };
 
 // What setContextWithProduce keeps of one edit. Its options are the ones the edit's batch is built from: a sheet delete
@@ -89,7 +89,8 @@ function holdsWholeMatrices({ patches, inversePatches, options }: History): bool
 }
 
 // Runs the newest entry of `from` and moves it onto `to`: an undo takes it from the undo stack to the redo stack, and a
-// redo back. A step the sheet refused stays where it was, so both stacks still hold every step in order.
+// redo back. A step the sheet refused says so once and leaves `from` for neither stack, so the next press steps the
+// entry before it, rather than meeting the same refusal until a peer lifts its cause.
 export function stepNewestEntry(
     ctx: Context,
     from: History[],
@@ -99,9 +100,8 @@ export function stepNewestEntry(
     const entry = from.at(-1);
     if (!entry) return undefined;
     const next = step(ctx, entry);
-    if (next.refused) return next;
     from.pop();
-    to.push(entry);
+    if (!next.refused) to.push(entry);
     return next;
 }
 
@@ -118,7 +118,7 @@ export function undoEntry(ctx: Context, entry: History): Step {
         return sheet ? sheetStep(ctx, (sheets) => deleteSheetOps(sheet, sheets)) : { ctx, ops: [] };
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {});
+        return rowColStep(ctx, entry.patches, entry.inversePatches, inverseRowColOptions(options) ?? {}, 'undo');
     }
     return patchStep(ctx, entry.inversePatches, entry.patches);
 }
@@ -143,7 +143,7 @@ export function redoEntry(ctx: Context, entry: History): Step {
         return sheetStep(ctx, (sheets) => addSheetOps(added, sheets));
     }
     if (options?.insertRowColOp || options?.deleteRowColOp) {
-        return rowColStep(ctx, entry.inversePatches, entry.patches, options);
+        return rowColStep(ctx, entry.inversePatches, entry.patches, options, 'redo');
     }
     return patchStep(ctx, entry.patches, entry.inversePatches);
 }
@@ -268,7 +268,7 @@ function recalculate(ctx: Context, patches: Patch[]) {
 // repair of the cells. The fields are what the marker makes of the live sheet, so a peer's edit since survives, with
 // what the entry restores beyond that. The live context gets only the ops. The repaired cells hold the values the
 // entry recorded, so the step then recalculates them and their dependents, as a cell undo does, and sends those too.
-function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions): Step {
+function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOptions, stack: 'undo' | 'redo'): Step {
     const marker = rowColMarker(options);
     const index = marker?.id == null ? undefined : getSheetIndex(ctx, marker.id);
     if (!marker || index == null) return { ctx, ops: [] };
@@ -280,12 +280,12 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
     const trial = (start: Context) => applyOpBatch({ ...start, formulaCache: new FormulaCache() }, [marker]);
     const made = trial(applyPatches(ctx, left));
     const live = trial(ctx);
-    if (!made || !live) return refusedStep(ctx);
+    if (!made || !live) return refusedStep(ctx, stack);
     const fields = restoredFields(index, target, restored, made.ctx, live.ctx);
     const step = { fields, repair: repairOps(ctx, left, target, options) };
     const writes = restoredRuleWrites(index, target, restored, made.ctx, live.ctx);
     const applied = applyBatch(ctx, patchToOp(restored, writes, options, step));
-    if (applied.ops.length === 0) return refusedStep(ctx);
+    if (applied.ops.length === 0) return refusedStep(ctx, stack);
     const [repaired] = opToPatch(applied.ctx, step.repair);
     const [next, recalculated] = produceWithPatches(applied.ctx, (draft: Context) => recalculate(draft, repaired));
     return { ctx: next, ops: [...applied.ops, ...patchToOp(next, filterPatch(recalculated))] };
@@ -293,9 +293,9 @@ function rowColStep(ctx: Context, from: Patch[], to: Patch[], options: PatchOpti
 
 // The sheet refuses a row or column op that would change a read-only row or column, or grow past its size limit. A peer
 // can make that true of a step after the step was recorded.
-function refusedStep(ctx: Context): Step {
+function refusedStep(ctx: Context, stack: 'undo' | 'redo'): Step {
     const next = produce(ctx, (draft: Context) => {
-        draft.warnDialog = "Sorry, this change can't be undone anymore.";
+        draft.warnDialog = `Sorry, this change can't be ${stack === 'undo' ? 'undone' : 'redone'} anymore.`;
     });
     return { ctx: next, ops: [], refused: true };
 }

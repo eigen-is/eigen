@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { findSheetByName, sheetNameKey } from '../../engine/a1-notation';
+import { findSheetByName, sheetFinder, sheetNameKey } from '../../engine/a1-notation';
 import { copySheetName } from '../../engine/sheet-name';
 
 describe('engine/sheet-name — copySheetName', () => {
@@ -44,5 +44,21 @@ describe('engine/sheet-name — findSheetByName', () => {
         expect(findSheetByName(sheets, 'Data')).toBe(sheets[0]);
         expect(findSheetByName(sheets, 'DATA')).toBe(sheets[0]);
         expect(findSheetByName(sheets, 'Other')).toBeUndefined();
+    });
+
+    test('a sheetFinder reads each name as findSheetByName does', () => {
+        const workbook = [...sheets, { name: 'ΟΔΟΣ' }, { name: 'Straße' }];
+        const findSheet = sheetFinder(workbook);
+        for (const name of ['data', 'Data', 'DATA', 'οδος', 'STRAßE', 'STRASSE', 'Other']) {
+            expect(findSheet(name)).toBe(findSheetByName(workbook, name));
+        }
+    });
+
+    // A name no sheet holds is compared with each sheet's name, so it must not build the key of each.
+    test('a name no sheet holds is missed among many sheets in a moment', () => {
+        const many = Array.from({ length: 1000 }, (_, i) => ({ name: `Sheet number ${i}`.padEnd(31, '_') }));
+        const started = performance.now();
+        for (let i = 0; i < 10_000; i += 1) expect(findSheetByName(many, 'nosuch')).toBeUndefined();
+        expect(performance.now() - started).toBeLessThan(1000);
     });
 });

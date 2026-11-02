@@ -3,15 +3,7 @@
 // defined name with what it refers to. One character walker finds the refs and the names for all of them. It needs no
 // sheet state, so the editor and the server share it, for example in the op replay and the xlsx import.
 
-import {
-    a1RangeRef,
-    extractLabel,
-    findSheetByName,
-    parseA1Range,
-    sheetRefName,
-    toLabel,
-    unquoteSheetName,
-} from './a1-notation';
+import { a1RangeRef, extractLabel, parseA1Range, sheetRefName, toLabel, unquoteSheetName } from './a1-notation';
 import { formulaOperators, iscelldata } from './formula-utils';
 import { offsetCoordinate, offsetRange, sortLegs } from './parser/helper/cell';
 import { error } from './validation';
@@ -23,17 +15,18 @@ export function functionCopy(txt: string, rowOffset: number, colOffset: number):
 }
 
 // Points every ref naming a renamed sheet at its new name, `Sheet1!A1` → `'Sheet1(Copy)'!A1`: Import… renames an
-// imported tab whose name the workbook holds. `sheets` are the sheets the formula's workbook holds, which a ref's name
-// is read against, and `renames` maps the name of each renamed one to its new name. A leading `=` is kept.
+// imported tab whose name the workbook holds. `findSheet` reads a ref's name against the sheets of the formula's
+// workbook, as a sheetFinder over them does, and `renames` maps the name of each renamed one to its new name. A
+// leading `=` is kept.
 export function renameSheetRefs(
     txt: string,
-    sheets: readonly { name: string }[],
+    findSheet: (name: string) => { name: string } | undefined,
     renames: ReadonlyMap<string, string>,
 ): string {
     if (renames.size === 0 || !txt.includes('!')) return txt;
     const renamed = walkFormulaRefs(txt, (ref) => {
         const sheetEnd = ref.lastIndexOf('!');
-        const sheet = sheetEnd > 0 ? findSheetByName(sheets, unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
+        const sheet = sheetEnd > 0 ? findSheet(unquoteSheetName(ref.slice(0, sheetEnd))) : undefined;
         const name = sheet && renames.get(sheet.name);
         return name === undefined ? ref : `${sheetRefName(name)}${ref.slice(sheetEnd)}`;
     });
@@ -72,8 +65,8 @@ export function inlineNames(
 // Moves a formula's refs for a row or column insert ('add') or delete ('del'), on the editor and in the op replay
 // alike. `stindex` is the first row or column the op touches and `step` how many. `orient` says whether an insert at
 // `stindex` moves a ref that starts there. `targetSheet` names the sheet the op runs on, and `onTargetSheet` says
-// whether the formula lives on it. Only refs to that sheet move. `sheets` are the workbook's sheets, which a ref's
-// name is read against, so in a workbook holding Data and data an op on one moves only its own refs.
+// whether the formula lives on it. Only refs to that sheet move. `findSheet` reads a ref's name against the
+// workbook's sheets, so in a workbook holding Data and data an op on one moves only its own refs.
 export function functionStrChange(
     txt: string,
     type: 'add' | 'del',
@@ -83,7 +76,7 @@ export function functionStrChange(
     step: number,
     targetSheet: string,
     onTargetSheet: boolean,
-    sheets: readonly { name: string }[],
+    findSheet: (name: string) => { name: string } | undefined,
 ): string {
     if (!txt) {
         return '';
@@ -92,7 +85,7 @@ export function functionStrChange(
         const sheetEnd = ref.lastIndexOf('!') + 1;
         const onSheet =
             sheetEnd > 0
-                ? findSheetByName(sheets, unquoteSheetName(ref.slice(0, sheetEnd - 1)))?.name === targetSheet
+                ? findSheet(unquoteSheetName(ref.slice(0, sheetEnd - 1)))?.name === targetSheet
                 : onTargetSheet;
         return onSheet ? shiftRefForRowCol(ref, sheetEnd, type, rc, orient, stindex, step) : ref;
     });

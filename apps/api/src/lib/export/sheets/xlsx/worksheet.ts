@@ -29,8 +29,9 @@ import { argbOf } from './styles';
 export type WorksheetContext = GridContext & {
     // As the workbook names it.
     name: string;
-    // The name the workbook gives each sheet, by the name it has here.
-    names: ReadonlyMap<string, string>;
+    // The name the workbook gives the sheet a name reads, as the editor reads it: its exact spelling first, then any
+    // case.
+    writtenName: (name: string) => string | undefined;
     selected: boolean;
     // The drawing relationship's target, when the sheet floats anything.
     drawing?: string;
@@ -157,16 +158,16 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
         const text = v.ct?.s ? v.ct.s.map((run) => run.v ?? '').join('') : String(v.m ?? v.v ?? '');
         shown.set(key, text);
     }
-    const renamed = (name: string) => quoteSheetName(context.names.get(name) ?? name);
     const items: string[] = [];
     for (const [key, { linkType, linkAddress }] of entries) {
         const [r, c] = parseCellKey(key);
         if (!inGrid(r, c)) continue;
         const ref = toA1(r, c);
+        const sheetName = linkType === 'sheet' ? context.writtenName(linkAddress) : undefined;
         const location =
             linkType === 'sheet'
-                ? context.names.has(linkAddress)
-                    ? `${renamed(linkAddress)}!A1`
+                ? sheetName !== undefined
+                    ? `${quoteSheetName(sheetName)}!A1`
                     : linkAddress
                 : linkType === 'cellrange'
                   ? cellrangeLocation(linkAddress, context)
@@ -192,7 +193,7 @@ function linksXml(sheet: Sheet, context: WorksheetContext, relationships: Relati
 
 // Stored as written in the editor or the file: a sheet's prefix, quoted or bare, and a cell or a range; a bare ref is the
 // sheet's own.
-function cellrangeLocation(address: string, { name: own, names }: WorksheetContext): string | undefined {
+function cellrangeLocation(address: string, { name: own, writtenName }: WorksheetContext): string | undefined {
     const quoted = address.match(/^('(?:[^']|'')*')!(.+)$/);
     const bang = address.lastIndexOf('!');
     const [prefix, ref] = quoted
@@ -204,6 +205,6 @@ function cellrangeLocation(address: string, { name: own, names }: WorksheetConte
     if (!range || range.sheet !== undefined) return undefined;
     if (prefix === undefined) return `${quoteSheetName(own)}!${ref}`;
     const name = unquoteSheetName(prefix);
-    const written = names.get(name);
+    const written = writtenName(name);
     return `${written !== undefined && written !== name ? quoteSheetName(written) : prefix}!${ref}`;
 }

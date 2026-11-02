@@ -216,8 +216,8 @@ function hyperlinkOf(target: string | undefined): { linkType: string; linkAddres
     // don't split the quoted form on it.
     const quoted = location.match(/^('(?:[^']|'')*')(!.+)?$/);
     if (quoted) {
-        // The editor finds a sheet link's sheet by its exact name, so the quotes go. A cell range keeps them, as the
-        // editor's range parser reads the quoted form.
+        // The editor reads a sheet link's address as a sheet's name, unquoted, so the quotes go. A cell range keeps them,
+        // as the editor's range parser reads the quoted form.
         return quoted[2]
             ? { linkType: 'cellrange', linkAddress: location }
             : { linkType: 'sheet', linkAddress: unquoteSheetName(quoted[1]) };

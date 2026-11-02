@@ -4,7 +4,7 @@
 
 import type { CellMatrix, Sheet } from '@workspace/lib/sheets';
 import { columnLabelToIndex } from '@workspace/lib/sheets';
-import { findSheetByName, SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
+import { SHEET_NAME_PREFIX, unquoteSheetName } from './parser/helper/cell';
 import type { FormulaDependency } from './types';
 
 // The operators a formula's text walkers stop at. A two-character one is matched before its first character.
@@ -44,13 +44,21 @@ export function iscelldata(txt: string): boolean {
     return RANGE_END.test(start) && RANGE_END.test(end);
 }
 
+// What resolving a reference reads: the workbook's sheets, the sheet each name reads, and the references resolved so
+// far, as the editor's formulaCache keeps them. A walk over many formulas builds one, so the name lookup and the
+// cache serve every formula. The server's recalc and the editor's formula map each build theirs.
+export type WalkContext = {
+    sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[];
+    findSheet: (name: string) => Pick<Sheet, 'id' | 'name' | 'data'> | undefined;
+    cellTextToIndexList: Record<string, FormulaDependency>;
+};
+
 // The cells a reference covers, or null when it is none or names a sheet that isn't there. `data` is the matrix of
 // sheet `formulaSheetId`. A whole column or row ends where its sheet's matrix ends. The answer is kept in
 // `cellTextToIndexList`: by the reference's text when it names a sheet, by `${reference}_${formulaSheetId}` when it
 // doesn't.
 export function resolveCellRange(
-    sheets: readonly Pick<Sheet, 'id' | 'name' | 'data'>[],
-    cellTextToIndexList: Record<string, FormulaDependency>,
+    { sheets, findSheet, cellTextToIndexList }: WalkContext,
     reference: string,
     formulaSheetId: string,
     data: CellMatrix | null | undefined,
@@ -69,9 +77,9 @@ export function resolveCellRange(
         const [, startSheet, start, endSheet, end] = match;
         // A1:Data!B2 names a sheet on its end only, which the engine can't read as a range.
         if (startSheet == null) return null;
-        const sheet = findSheetByName(sheets, unquoteSheetName(startSheet));
+        const sheet = findSheet(unquoteSheetName(startSheet));
         // The engine reads Data!A1:'Data'!B2 as one sheet's range, so only the sheets the names read count.
-        if (endSheet != null && findSheetByName(sheets, unquoteSheetName(endSheet)) !== sheet) return null;
+        if (endSheet != null && findSheet(unquoteSheetName(endSheet)) !== sheet) return null;
         cells = end ? `${start}:${end}` : start;
         sheetId = sheet?.id;
         matrix = sheet?.data;

@@ -209,52 +209,86 @@ function dataValidationsXml(rules: Record<string, SheetValidation>, lost: Lost):
 // counted, since the importer would drop it.
 export function withoutOverlaps(rules: Record<string, SheetValidation>, lost: Lost): Record<string, SheetValidation> {
     const kept: Record<string, SheetValidation> = {};
-    // Every rule's ranges in one lookup, each with its rule's place from the highest id down, so a range finds the
-    // ranges of the higher rules that overlap it.
-    const ids = Object.keys(rules).sort((a, b) => compareValidationIds(b, a));
-    const overlapping = overlapLookup(
-        ids.flatMap((id, place) => rules[id].ranges.map((range) => ({ ...range, place }))),
-    );
-    for (const [place, id] of ids.entries()) {
+    // The rules from the highest id down. The index holds the ranges of the rules already walked, the higher ones.
+    const above = rangeIndex();
+    const aboveBounds: SingleRange[] = [];
+    for (const id of Object.keys(rules).sort((a, b) => compareValidationIds(b, a))) {
         const { ranges } = rules[id];
-        let cuts = false;
-        const pieces = ranges.flatMap((range) => {
-            const above = overlapping(range).filter((other) => other.place < place);
-            if (above.length === 0) return [range];
-            cuts = true;
-            return cutOut(range, above);
-        });
-        const cut = cuts ? coalescedRanges(pieces) : ranges;
+        const bounds = boundsOf(ranges);
+        let cut = ranges;
+        // A rule whose bounds meet no higher rule's bounds loses no cell, and asks the index nothing.
+        if (aboveBounds.some((higher) => rangesOverlap(higher, bounds))) {
+            let cuts = false;
+            const pieces = ranges.flatMap((range) => {
+                const overlapping = above.overlapping(range);
+                if (overlapping.length === 0) return [range];
+                cuts = true;
+                return cutOut(range, overlapping);
+            });
+            if (cuts) cut = coalescedRanges(pieces);
+        }
+        aboveBounds.push(bounds);
+        for (const range of ranges) above.add(range);
         if (cut.length > MAX_VALIDATION_RANGES) lost('validations-dropped');
         else if (cut.length > 0) kept[id] = { ...rules[id], ranges: cut };
     }
     return kept;
 }
 
-// A short range ends fewer than this many rows past its first, so it overlaps a range only when it starts fewer than
-// this many rows above that range.
-const SHORT_RANGE_ROWS = 64;
+// The smallest range around a rule's ranges. A spread would overflow the stack on a rule of many ranges.
+function boundsOf(ranges: readonly SingleRange[]): SingleRange {
+    const bounds = { row: [...ranges[0].row], column: [...ranges[0].column] };
+    for (const { row, column } of ranges) {
+        bounds.row = [Math.min(bounds.row[0], row[0]), Math.max(bounds.row[1], row[1])];
+        bounds.column = [Math.min(bounds.column[0], column[0]), Math.max(bounds.column[1], column[1])];
+    }
+    return bounds;
+}
 
-// The ranges that overlap a range, found without a check against every range. The short ones are sorted by their
-// first row, so a binary search finds the few that start near the range. The tall ones, such as a whole column, are
-// few, and each is checked.
-function overlapLookup<R extends SingleRange>(ranges: readonly R[]): (range: SingleRange) => R[] {
-    const tall = ranges.filter(({ row }) => row[1] - row[0] >= SHORT_RANGE_ROWS);
-    const short = ranges.filter(({ row }) => row[1] - row[0] < SHORT_RANGE_ROWS).sort((a, b) => a.row[0] - b.row[0]);
-    return (range) => {
-        const from = range.row[0] - SHORT_RANGE_ROWS;
-        let low = 0;
-        let high = short.length;
-        while (low < high) {
-            const middle = (low + high) >> 1;
-            if (short[middle].row[0] <= from) low = middle + 1;
-            else high = middle;
+// The index keeps each range in the square tiles of this many rows and columns that it covers.
+const TILE = 64;
+// A range over more tiles than this, such as a whole column, is kept outside the tiles.
+const MAX_TILES = 16;
+const COLUMN_TILES = Math.ceil(REFERENCE_COLUMN_COUNT / TILE);
+
+// The ranges added so far, which a range asks for the ones it overlaps without a check against each of them. A small
+// range is kept in every tile it covers, so a small range checks only the ranges in its own tiles, and the large ones.
+// A large range checks every range. Large ranges are rare, and a rule of them mostly meets no other rule's bounds.
+function rangeIndex() {
+    const all: SingleRange[] = [];
+    const large: SingleRange[] = [];
+    const tiles = new Map<number, SingleRange[]>();
+    const tilesOf = ({ row, column }: SingleRange): number[] | undefined => {
+        const rows = [Math.floor(row[0] / TILE), Math.floor(row[1] / TILE)];
+        const columns = [Math.floor(column[0] / TILE), Math.floor(column[1] / TILE)];
+        if ((rows[1] - rows[0] + 1) * (columns[1] - columns[0] + 1) > MAX_TILES) return undefined;
+        const keys: number[] = [];
+        for (let r = rows[0]; r <= rows[1]; r += 1) {
+            for (let c = columns[0]; c <= columns[1]; c += 1) keys.push(r * COLUMN_TILES + c);
         }
-        const hits = tall.filter((other) => rangesOverlap(other, range));
-        for (let i = low; i < short.length && short[i].row[0] <= range.row[1]; i += 1) {
-            if (rangesOverlap(short[i], range)) hits.push(short[i]);
-        }
-        return hits;
+        return keys;
+    };
+    return {
+        add(range: SingleRange): void {
+            all.push(range);
+            const keys = tilesOf(range);
+            if (!keys) large.push(range);
+            for (const key of keys ?? []) {
+                const tile = tiles.get(key);
+                if (tile) tile.push(range);
+                else tiles.set(key, [range]);
+            }
+        },
+        overlapping(range: SingleRange): SingleRange[] {
+            const keys = tilesOf(range);
+            if (!keys) return all.filter((other) => rangesOverlap(other, range));
+            // A range over several tiles is in each of them, and is found once.
+            const hits = new Set(large.filter((other) => rangesOverlap(other, range)));
+            for (const key of keys) {
+                for (const other of tiles.get(key) ?? []) if (rangesOverlap(other, range)) hits.add(other);
+            }
+            return [...hits];
+        },
     };
 }
 

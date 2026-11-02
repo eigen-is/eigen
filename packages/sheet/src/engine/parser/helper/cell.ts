@@ -57,7 +57,22 @@ export function findSheetByName<S extends { name: string }>(sheets: readonly S[]
     const exact = sheets.find((sheet) => sheet.name === name);
     if (exact) return exact;
     const key = sheetNameKey(name);
-    return sheets.find((sheet) => sheetNameKey(sheet.name) === key);
+    // A key is as long as its name, so a name of another length never matches, and its key is never built.
+    return sheets.find((sheet) => sheet.name.length === name.length && sheetNameKey(sheet.name) === key);
+}
+
+// The sheet each name reads, as findSheetByName reads it, through maps built once. A walk that reads many names, such
+// as a recalc or a row insert over every formula, builds one, so a name no sheet holds costs no walk of the sheets.
+export function sheetFinder<S extends { name: string }>(sheets: readonly S[]): (name: string) => S | undefined {
+    const byName = new Map<string, S>();
+    const byKey = new Map<string, S>();
+    for (const sheet of sheets) {
+        // The first wins, as in findSheetByName.
+        if (!byName.has(sheet.name)) byName.set(sheet.name, sheet);
+        const key = sheetNameKey(sheet.name);
+        if (!byKey.has(key)) byKey.set(key, sheet);
+    }
+    return (name) => byName.get(name) ?? byKey.get(sheetNameKey(name));
 }
 
 // Inverse of unquoteSheetName: single-quote wrap with embedded quotes doubled.

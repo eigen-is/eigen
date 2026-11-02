@@ -6,9 +6,10 @@ import {
     inlineNames,
     renameSheetRefs,
 } from '../../engine/formula-shift';
+import { sheetFinder } from '../../engine/parser/helper/cell';
 
 // The sheets a row or column op's workbook holds, which functionStrChange reads each ref's sheet name against.
-const workbook = [{ name: 'Sheet1' }, { name: 'Sheet2' }, { name: 'Sheet 1' }, { name: 'My Sheet' }];
+const workbook = sheetFinder([{ name: 'Sheet1' }, { name: 'Sheet2' }, { name: 'Sheet 1' }, { name: 'My Sheet' }]);
 
 describe('engine/formula-shift — functionCopy single-cell refs', () => {
     test('shifts a relative ref down', () => {
@@ -233,7 +234,7 @@ describe('functionStrChange — sheet names on both legs', () => {
     });
 
     test('in a workbook holding Data and data, an op on one moves only its own refs', () => {
-        const twins = [{ name: 'Data' }, { name: 'data' }];
+        const twins = sheetFinder([{ name: 'Data' }, { name: 'data' }]);
         const formula = '=Data!A1+data!A1+DATA!A1';
         expect(functionStrChange(formula, 'add', 'row', 'lefttop', 0, 1, 'data', false, twins)).toBe(
             'Data!A1+data!A2+DATA!A1',
@@ -510,7 +511,7 @@ describe('engine/formula-shift — functionCopy functions in a range and structu
 });
 
 describe('engine/formula-shift — renameSheetRefs', () => {
-    const sheets = [{ name: 'Data' }, { name: 'My data' }, { name: 'Other' }];
+    const sheets = sheetFinder([{ name: 'Data' }, { name: 'My data' }, { name: 'Other' }]);
     const renames = new Map([
         ['Data', 'Data(Copy)'],
         ['My data', 'Totals'],
@@ -535,7 +536,7 @@ describe('engine/formula-shift — renameSheetRefs', () => {
     });
 
     test('in a workbook holding Data and data, each name renames only its own sheet', () => {
-        const twins = [{ name: 'Data' }, { name: 'data' }];
+        const twins = sheetFinder([{ name: 'Data' }, { name: 'data' }]);
         const renamed = renameSheetRefs('=Data!A1+data!A1+DATA!A1', twins, new Map([['data', 'data(Copy)']]));
         expect(renamed).toBe("=Data!A1+'data(Copy)'!A1+DATA!A1");
     });

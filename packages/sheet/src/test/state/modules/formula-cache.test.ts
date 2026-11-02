@@ -1,5 +1,6 @@
 import { describe, expect, it, spyOn } from 'bun:test';
 import { dependencySlots } from '../../../engine/dependency-index';
+import { sheetFinder } from '../../../engine/parser/helper/cell';
 import { extractDependencies } from '../../../engine/recalc';
 import type { Cell, FormulaDependency } from '../../../engine/types';
 import type { Context } from '../../../state/context';
@@ -268,7 +269,12 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         const ctx = workbook();
         expect(reads(ctx, f)).toEqual(cells);
         expect(
-            extractDependencies({ sheets: ctx.sheets, cellTextToIndexList: {} }, f, 's1', ctx.sheets[0].data),
+            extractDependencies(
+                { sheets: ctx.sheets, findSheet: sheetFinder(ctx.sheets), cellTextToIndexList: {} },
+                f,
+                's1',
+                ctx.sheets[0].data,
+            ),
         ).toEqual(cells);
     });
 

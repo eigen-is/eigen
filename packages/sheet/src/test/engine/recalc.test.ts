@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { Cell, Sheet } from '@workspace/lib/sheets';
+import { sheetFinder } from '../../engine/parser/helper/cell';
 import { extractDependencies, recalcSheets, sheetsNeedRecalc } from '../../engine/recalc';
 
 // ── Builders ────────────────────────────────────────────────────────────────
@@ -34,6 +35,23 @@ describe('engine/recalc — recalcSheets', () => {
         expect(before[0].data![0][1]?.v).toBe('Hello world!');
         const after = recalcSheets([sheet('s1', 'Sheet1', [[rich('Bye'), formula('=A1&"!"')]])]);
         expect(after[0].data![0][1]?.v).toBe('Bye!');
+    });
+
+    // Each ref names a sheet no sheet holds, among many sheets of names as long, so a name read against each sheet in
+    // turn made the pass take seconds.
+    test('formulas of many refs to a missing sheet, among many sheets, recalc in a moment', () => {
+        const name = (base: string) => base.padEnd(31, '_');
+        const f = `=${Array.from({ length: 800 }, () => `${name('Nosuch')}!A1`).join('+')}`;
+        const sheets = Array.from({ length: 1000 }, (_, i) => sheet(`s${i}`, name(`Sheet_${i}`), [[null]]));
+        sheets[0] = sheet(
+            's0',
+            name('Sheet_0'),
+            Array.from({ length: 20 }, () => [formula(f, { v: 0 })]),
+        );
+        const started = performance.now();
+        const out = recalcSheets(sheets);
+        expect(performance.now() - started).toBeLessThan(2_000);
+        expect(out[0].data?.[0][0]?.f).toBe(f);
     });
 
     test('chained dependencies evaluate in order', () => {
@@ -568,10 +586,16 @@ describe('engine/recalc — sheetsNeedRecalc', () => {
 });
 
 describe('engine/recalc — extractDependencies', () => {
+    const walkOver = (sheets: Pick<Sheet, 'id' | 'name' | 'data'>[]) => ({
+        sheets,
+        findSheet: sheetFinder(sheets),
+        cellTextToIndexList: {},
+    });
+
     // Each quoted sheet name is glued to the reference after it as the formula is split, never by moving the rest of
     // the parts, so a crafted file can't make the walk quadratic.
     test('walks a 2 MB formula of quoted sheet names in well under a second', () => {
-        const g = { sheets: [{ id: 's2', name: 'My Data', data: [[num(1)]] }], cellTextToIndexList: {} };
+        const g = walkOver([{ id: 's2', name: 'My Data', data: [[num(1)]] }]);
         const f = `=${"'My Data'!A1+".repeat(160_000)}1`;
         expect(f.length).toBeGreaterThan(2_000_000);
         const start = performance.now();
@@ -584,7 +608,7 @@ describe('engine/recalc — extractDependencies', () => {
     // A function's name is matched only where a word starts, so a long run of letters with no bracket after it is
     // read once, not once per letter.
     test('walks a 1 MB run of letters in well under a second', () => {
-        const g = { sheets: [{ id: 's1', name: 'Sheet1', data: [[num(1)]] }], cellTextToIndexList: {} };
+        const g = walkOver([{ id: 's1', name: 'Sheet1', data: [[num(1)]] }]);
         const start = performance.now();
         expect(extractDependencies(g, `=${'A'.repeat(1_000_000)}`, 's1', [[num(1)]])).toEqual([]);
         expect(performance.now() - start).toBeLessThan(1_000);
@@ -592,7 +616,7 @@ describe('engine/recalc — extractDependencies', () => {
 
     test("a function's name reads as no cell, after an operator or a colon", () => {
         const data = [[num(1), num(2)]];
-        const g = { sheets: [{ id: 's1', name: 'Sheet1', data }], cellTextToIndexList: {} };
+        const g = walkOver([{ id: 's1', name: 'Sheet1', data }]);
         expect(extractDependencies(g, '=LOG10(A1)+ATAN2(B2,1)', 's1', data)).toEqual([
             { row: [0, 0], column: [0, 0], sheetId: 's1' },
             { row: [1, 1], column: [1, 1], sheetId: 's1' },
