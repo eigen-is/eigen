@@ -37,8 +37,8 @@ trap 'rm -rf "$FIX"' EXIT
 
 # The stub logs every call to $STUB_LOG. STUB_INFO (version, architecture, operating system) and STUB_COMPOSE answer
 # info and compose version, empty for a failure; STUB_FAIL names the compose subcommands and docker commands that
-# fail, and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not pulled; STUB_LATEST and STUB_REVISION
-# are the version and commit the registry's manifest of any api tag names;
+# fail, and the images whose pull fails; STUB_IMAGE=1 makes image inspect fail on an image the launch has not
+# pulled; STUB_LATEST and STUB_REVISION are the version and commit the registry's manifest of any api tag names;
 # STUB_LABEL_VERSION and STUB_LABEL_REVISION the labels of any local image, STUB_LABEL_REVISION_DOVECOT that of a dovecot
 # image, and STUB_MOVED that of any image once api was pulled twice, as a tag that moves; STUB_DIGEST the registry
 # digest of every local image; a docker run with STUB_RUN_FAIL among its arguments fails, and one with --staged also

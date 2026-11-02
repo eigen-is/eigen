@@ -1,7 +1,7 @@
 // Where backups live and what they are called. It builds the names of archives, home folders and safety copies,
 // and the places inside an archive where each part of a home goes. It makes the private staging folder every job
-// works in, and writes the record kept beside an archive through it. It also resolves a path inside a folder without ever leaving it, which every restore step needs before
-// it touches the disk.
+// works in, and writes the record kept beside an archive through it. It also resolves a path inside a folder without
+// ever leaving it, which every restore step needs before it touches the disk.
 
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
