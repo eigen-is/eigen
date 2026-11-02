@@ -101,7 +101,7 @@ A backup of the whole server: every user and team, and the server's own database
 
 With **Upload to a backup bucket** on, the same S3 fields appear as for the storage type, with **Test connection**. The test refuses a bucket or an access key that Eigen keeps files with, and a bucket anyone can read. It warns when no rule cleans up uploads that were cut off halfway. The **Secret access key** is never shown again: leave it empty to keep the saved one. Once you save a new bucket, a notice asks you to write its details down somewhere other than this server, with any warning from the test.
 
-Below the settings, **Back up now** makes a backup at the level you pick: **Full**, or **Full + S3** when a drive is in an S3 bucket. A Light backup, without files and mail, is made on the server only: see [Back up and restore the whole server](/support/self-hosting/back-up-and-restore#back-up-now). The section shows its progress while it runs. Each backup in the list shows:
+Below the settings, **Back up now** makes a backup at the level you pick: **Full**, or **Full + S3** when a drive is in an S3 bucket. The section shows its progress while it runs. Each backup in the list shows:
 
 - Its date, level, and why it was made: **Scheduled**, **Manual**, or **Before an update**.
 - Its size, and whether it verified and reached the bucket.

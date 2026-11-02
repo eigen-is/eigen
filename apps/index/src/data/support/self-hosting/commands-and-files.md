@@ -63,7 +63,7 @@ Everything is in the install folder, like `/opt/eigen`:
 | `docker-compose.yml` | Which services run. An update rewrites it. |
 | `docker-compose.override.yml` | Your own Compose settings, if you made one. An update leaves it alone. |
 | `data/home/`, `data/team/`, `data/org/` | Every user's, team's, and organization's files, mail, calendars, and contacts |
-| `data/guest/` | The workspaces of guests, people who sign in with a code. A backup leaves them out: after a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves them as they are. |
+| `data/guest/` | The workspaces of guests, people who sign in with a code. A backup leaves them out: after a restore, a guest keeps their account and starts with an empty workspace. |
 | `data/server/` | The accounts, the server settings, and the organization |
 | `data/dkim/` | The key that signs outgoing mail |
 | `data/certs/` | The certificate of the mail server |

@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/backup-contents]
 order: 91
-updated: 2026-10-12
+updated: 2026-11-02
 ---
 
 You can put a single user's or team's account back to the state held in a backup archive. Eigen checks the archive first, replaces the account from it, and keeps the current state beside it as a safety copy, so nothing is thrown away. Only an admin can do this.
@@ -30,7 +30,7 @@ Three kinds of archive have no **Restore** button:
 
 - One that failed its check. Make a fresh backup.
 - One copied into the backups folder by hand. Its row says **Verify first**: click **Verify**.
-- One that holds only part of the account, like an archive out of a Light backup of the whole server. Its row says what it leaves out.
+- One that holds only part of the account, like an archive out of a Full backup of the whole server, of someone with a drive in an S3 bucket. Its row says what it leaves out.
 
 Eigen unpacks and checks the archive first, while the account keeps working. The job stops there, and the account stays exactly as it was, when the check fails, when this server can't open one of its databases, or when the person's email address is no longer the one in the archive.
 

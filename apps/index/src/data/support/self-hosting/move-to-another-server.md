@@ -6,14 +6,14 @@ category: Maintenance
 tags: [self-hosting, backup, restore, migrate, move]
 related: [self-hosting/back-up-and-restore, self-hosting/install]
 order: 100
-updated: 2026-10-12
+updated: 2026-11-02
 ---
 
 A Full backup holds the whole server, so moving is a backup on the old machine and a restore on the new one. Everyone keeps their account, mail, files, and settings, and stays signed in. Plan for some downtime: anything people change on the old server after the backup does not come along. To test a restore without moving, see [Try a restore without moving](/support/self-hosting/back-up-and-restore#try-a-restore-without-moving).
 
 ## 1. Make a backup on the old server
 
-In the install folder, run `./eigen backup`, without `--light`: a Light backup leaves the files and the mail out. Then run `./eigen stop`, so nothing changes after the backup.
+In the install folder, run `./eigen backup`. Then run `./eigen stop`, so nothing changes after the backup.
 
 The backup is `backups/server-manual-full-<date>-<time>.tar`.
 

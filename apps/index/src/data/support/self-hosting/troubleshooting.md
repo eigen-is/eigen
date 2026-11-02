@@ -51,9 +51,7 @@ sudo chown 1000:1000 <backup>
 
 **"data/ is in use by Eigen or by another restore".** Something still has `data/` open while the restore wants to swap it: another restore, or an Eigen that `./eigen` did not start. Wait for it to end, or stop it, then run `./eigen restore` again.
 
-**"… cannot be swapped in: … is in the way here".** A restore of a Light backup moves the files of the backup into the users' and teams' folders, and something in your `data/` sits where one of them goes. Move what the message names out of the way, then run `./eigen restore` again.
-
-**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/`, `data/.restoring/`, and every user's and team's folder in `data/` must be on the disk of the install folder, not mounted from another one. Restore checks `data/` and `data/.restoring/` before it stops Eigen, so Eigen keeps running. Move them there, then run `./eigen restore` again.
+**"… is on another disk than …".** A restore moves folders by renaming them, which works only within one disk. `data/` and `data/.restoring/` must be on the disk of the install folder, not mounted from another one. Restore checks them before it stops Eigen, so Eigen keeps running. Move them there, then run `./eigen restore` again.
 
 ## Eigen does not start: pool overlaps
 

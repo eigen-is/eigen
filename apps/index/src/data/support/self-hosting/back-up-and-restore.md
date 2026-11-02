@@ -63,7 +63,6 @@ It prints each step, then the name and size of the backup. Pick what goes in:
 |---|---|---|
 | **Full** | `./eigen backup` | Everything, except the files of drives stored in an S3 bucket. This is the default and what the nightly backup makes. |
 | **Full + S3** | `./eigen backup --s3` | Everything, the files in S3 buckets too |
-| **Light** | `./eigen backup --light` | The accounts, settings, and databases: no files and no mail. Only on the server, since its restore leaves out the files changed since. |
 
 `--wait` waits for a backup that is running to end, instead of refusing. `./eigen backup` exits with 0 when the backup verified, 1 when it failed, 2 on a wrong argument, and 4 when it verified but did not reach the bucket, so a script can tell them apart. For a backup every night, use [Back up every night](#back-up-every-night) rather than cron: Eigen keeps the newest of those and deletes the rest, but keeps every backup `./eigen backup` makes.
 
@@ -79,7 +78,7 @@ With Eigen stopped there is nothing to run the backup, so `./eigen backup` refus
 - The `backups/` folder itself.
 - `docker-compose.override.yml`, if you made one.
 - A way into the backup bucket. Its keys are inside the backups, which are in that bucket, so keep a copy of them yourself.
-- Guests' workspaces. After a restore of a Full backup, a guest keeps their account and starts with an empty workspace. A restore of a Light backup leaves guests' workspaces as they are.
+- Guests' workspaces. After a restore, a guest keeps their account and starts with an empty workspace.
 - A user or team folder that no account owns. The backup's record in `backups/`, the file with its name and `.json` at the end, lists it under `orphans`. After a restore it is only in `data.pre-restore-<date>-<time>`.
 
 ## Drives in an S3 bucket
@@ -100,7 +99,7 @@ In the install folder, name a backup in `backups/`, or give the path of one:
 
 `./eigen restore` then does three things:
 
-1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. Then it unpacks it, still while Eigen runs. For a Light backup it then counts, for each user and team, the files made since, which will not show in Drive, the files renamed, moved, or put in the Trash since, which will not open, and the files deleted for good since, which come back without their content. A document counts once, whatever it holds. When there are any, or when it could not count them, it asks again.
+1. It checks the backup while Eigen keeps running. It shows what the backup holds, like its level, its date, and any user or team that is not in it or has warnings, and asks whether to go on. Then it unpacks it, still while Eigen runs.
 2. It stops Eigen, moves the current `data/` and `.env.production` aside as `data.pre-restore-<date>-<time>` and `.env.production.pre-restore-<date>-<time>`, and puts the backup in their place.
 3. It starts Eigen again, on the version that made the backup.
 
@@ -114,27 +113,13 @@ sudo rm -rf data.pre-restore-<date>-<time> .env.production.pre-restore-<date>-<t
 
 The question also says whether the backup holds `.env.production`, the key that signs your mail, and the mail server's certificate. A backup made in the ten minutes after that certificate was renewed can miss it, and one of a server without hosted mail has neither. What a backup does not hold, the restore keeps as the server has it.
 
-A user or team that failed during the backup is not in it, and the question names them. After a restore of a Full backup, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
+A user or team that failed during the backup is not in it, and the question names them. After a restore, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
 
-Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash retention (days)** period, counted from the restore. `--yes` skips the questions, for scripts.
+Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
 
-Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. Restore checks this before it stops Eigen. If a restore is cut off while it swaps the data in, Eigen stays stopped and `./eigen` says so. `./eigen restart` finishes the restore and starts Eigen. Any other `./eigen` command except `logs`, `reset-password`, and `help` finishes it too, before it does anything else.
+Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. It also refuses a Light backup, named `server-<why>-light-<date>-<time>.tar`, which Eigen 0.4.1 and before could make: it holds no files and no mail, and this version no longer restores one. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. Restore checks this before it stops Eigen. If a restore is cut off while it swaps the data in, Eigen stays stopped and `./eigen` says so. `./eigen restart` finishes the restore and starts Eigen. Any other `./eigen` command except `logs`, `reset-password`, and `help` finishes it too, before it does anything else.
 
 To restore on a new machine, see [Move Eigen to another server](/support/self-hosting/move-to-another-server).
-
-### A Light backup leaves the files where they are
-
-A Light backup holds no files and no mail. Its restore puts back the accounts, the settings, `.env.production`, and every database. The files and the mail stay on disk as they are now, but Drive lists only what it held at the time of the backup:
-
-- Files and documents made since the backup no longer show in Drive. Their content stays on disk.
-- On drives that store files by their names, the default **Local (full names)**, a file renamed, moved, or put in the Trash since shows at its old place and does not open. Its content is under the new name, or in the trash folder.
-- A file deleted for good since comes back without its content.
-- The files of a drive removed since come back in Drive, and may not open.
-- Calendars and contacts go back to the time of the backup.
-- Mail stays as it is now.
-- The folder of a user or team made since the backup, which has no account any more, moves to `data.pre-restore-<date>-<time>`. Before it stops Eigen, the restore names these folders and asks again whether to go on. A no leaves everything as it was.
-
-Nothing is deleted from disk, and what the restore replaced is in `data.pre-restore-<date>-<time>`. A rollback after a usual update does not do this: it keeps the data as it is. See [Update Eigen](/support/self-hosting/update#go-back-with-a-rollback).
 
 ## Try a restore without moving
 
@@ -173,7 +158,7 @@ sudo sh -c 'tar -xOf backups/server-scheduled-full-<date>-<time>.tar homes/home-
 sudo chown 1000:1000 backups/home-<id>-<date>-<time>.tar.zst
 ```
 
-It shows up under **Backup** on that user's or team's page, as **Not verified**, and offers **Restore** once an admin clicks **Verify**. See [Restore a user or team](/support/admin/restore-home). The one out of a Light backup holds no files, and the one out of a Full backup of someone with a drive in an S3 bucket holds no files of that drive, so neither restores on its own. The row says why.
+It shows up under **Backup** on that user's or team's page, as **Not verified**, and offers **Restore** once an admin clicks **Verify**. See [Restore a user or team](/support/admin/restore-home). The one out of a Full backup of someone with a drive in an S3 bucket holds no files of that drive, so it does not restore on its own. The row says why.
 
 ## Back up one user or team
 
