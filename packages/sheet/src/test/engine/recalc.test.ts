@@ -411,6 +411,21 @@ describe('engine/recalc — recalcSheets', () => {
         expect([out.data![0][0]?.v, out.data![0][1]?.v]).toEqual([3, 3]);
     });
 
+    // Excel ignores a space that isn't between two references. A zenodo workbook writes =IF((AN38+ AO38         )<>0,…)
+    // over a number and the empty text another formula gives, and caches #VALUE!, as 1 + "" is in Excel.
+    test('spaces around an operand change nothing, and a number plus empty text is #VALUE!', () => {
+        const spaced = '=IF((A1+ B1         )<>0,A1,    "")';
+        const sheets = [
+            sheet('s1', 'Sheet1', [
+                [num(1), num(2), formula(spaced), formula('= A1 +B1 '), formula('=SUM( A1 , B1 )')],
+                [num(1), formula('=""'), formula(spaced.replaceAll('1', '2'))],
+            ]),
+        ];
+        const [out] = recalcSheets(sheets);
+        expect(out.data![0].slice(2).map((cell) => cell?.v)).toEqual([1, 3, 3]);
+        expect(out.data![1][2]?.v).toBe('#VALUE!');
+    });
+
     test('one poisoned formula does not kill the pass', () => {
         // =NoSheet!A1 throws ERROR_REF (unresolvable sheet name); the sibling
         // formula must still compute.
