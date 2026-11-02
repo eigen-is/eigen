@@ -4,6 +4,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { readHexColor } from '@workspace/lib/constants/colors';
 import { CELL_BORDER_SIDES, columnFit, isWidth, MIN_TABLE_COLUMN_PX, readBorder } from '@workspace/lib/docs/eigendoc';
+import { readIntIn } from '@workspace/lib/guards';
 import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
     BORDER_EIGHTHS_PER_PX,
@@ -17,7 +18,7 @@ import {
 } from '../../../ooxml/wordml';
 import type { Context } from './package';
 import type { Block } from './paragraphs';
-import { blocksOf, blocksXml, bordersXml, clampInt, paragraphXml, textProps } from './paragraphs';
+import { blocksOf, blocksXml, bordersXml, paragraphXml, textProps } from './paragraphs';
 import type { StyleDef } from './styles';
 
 const CELL_TYPES = new Set(['tableCell', 'tableHeader']);
@@ -68,9 +69,9 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
                 cut = true;
                 continue;
             }
-            const colspan = clampInt(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS - column, 1);
-            cut ||= clampInt(node.attrs?.['colspan'], 1, Number.MAX_SAFE_INTEGER, 1) > colspan;
-            const rowspan = clampInt(node.attrs?.['rowspan'], 1, rows.length - rowIndex, 1);
+            const colspan = readIntIn(node.attrs?.['colspan'], 1, MAX_TABLE_COLUMNS - column) ?? 1;
+            cut ||= (readIntIn(node.attrs?.['colspan'], 1, Number.MAX_SAFE_INTEGER) ?? 1) > colspan;
+            const rowspan = readIntIn(node.attrs?.['rowspan'], 1, rows.length - rowIndex) ?? 1;
             const colwidth = node.attrs?.['colwidth'];
             const cell = { node, content: [...(node.content ?? [])], column, colspan, rowspan };
             for (let k = 0; k < colspan; k++) {

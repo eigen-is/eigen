@@ -14,6 +14,7 @@ import {
     MAX_TEXT_BOX_PADDING,
     newStoryId,
     readTextBoxSide,
+    TEXT_BOX_DEFAULT_WIDTH,
     TEXT_BOX_INSET,
 } from '@workspace/lib/docs/eigendoc';
 import type { XmlElement } from '../../core/xml';
@@ -101,11 +102,11 @@ export function readTextBox(
     return textBoxNode(reader, items, look, layout, simplified);
 }
 
-// The width a wps box is stored at: its extent's, capped at `room` and held between a box's least and largest side.
-// None where the extent gives none, and the box then draws at a new box's width.
-export function textBoxWidth(extent: XmlElement | undefined, room: number): number | null {
+// The width a wps box is stored at, and draws at: its extent's, capped at `room` and held between a box's least and
+// largest side. A new box's where the extent gives none.
+export function textBoxWidth(extent: XmlElement | undefined, room: number): number {
     const { cx } = extentOf(extent);
-    return readTextBoxSide(cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null);
+    return readTextBoxSide(cx > 0 ? Math.min(room, cx / EMU_PER_PX) : null) ?? TEXT_BOX_DEFAULT_WIDTH;
 }
 
 // A VML shape holding a v:textbox outside a Fallback: its CSS style places and sizes it, its w10:wrap says how the text

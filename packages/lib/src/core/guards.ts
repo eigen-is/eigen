@@ -12,3 +12,10 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 export function readNumberIn(value: unknown, min: number, max: number): number | null {
     return typeof value === 'number' && Number.isFinite(value) ? Math.min(max, Math.max(min, value)) : null;
 }
+
+// A stored whole number held to a range, such as a heading level or a cell's span: held to it, then rounded. The
+// bounds are whole numbers, so rounding after the range gives what rounding before it would.
+export function readIntIn(value: unknown, min: number, max: number): number | null {
+    const number = readNumberIn(value, min, max);
+    return number === null ? null : Math.round(number);
+}

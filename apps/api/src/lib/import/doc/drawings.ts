@@ -5,14 +5,7 @@
 import type { JSONContent } from '@tiptap/core';
 import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, newChartSpecParts } from '@workspace/lib/charts';
 import type { FigureAttrs, FigureFrameAttrs } from '@workspace/lib/docs/eigendoc';
-import {
-    heightAtWidth,
-    isFigureFrameNode,
-    mmToPx,
-    pageTwips,
-    readFrameSide,
-    TEXT_BOX_DEFAULT_WIDTH,
-} from '@workspace/lib/docs/eigendoc';
+import { heightAtWidth, isFigureFrameNode, mmToPx, pageTwips, readFrameSide } from '@workspace/lib/docs/eigendoc';
 import type { ChartSpecPartKey } from '@workspace/lib/types/chart';
 import type { XmlElement } from '../../core/xml';
 import { hasXmlName, xmlAttr, xmlChild, xmlChildren, xmlElements, xmlText } from '../../core/xml';
@@ -130,11 +123,24 @@ export function readDrawing(reader: Reader, drawing: XmlElement, context: RunCon
             !(shape && paintsBox(reader, shape))
         ) {
             // An unpainted box around a picture or a chart is that node: its place and width are the box's, and the
-            // node keeps its shape.
+            // node keeps its shape, its sides in whole px as pictureSize rounds them. A picture of no known size takes
+            // its own height once it loads.
             if (shape) reader.lost('text-simplified');
             const caption =
                 tail.map((para) => inlineText(para.inlines)).join('\n') || boxedFigure.attrs?.['caption'] || null;
-            const size = shape ? frameAtWidth(boxedFigure, boxWidth(extent, room)) : {};
+            const own = {
+                width: readFrameSide(boxedFigure.attrs?.['width']),
+                height: readFrameSide(boxedFigure.attrs?.['height']),
+            };
+            const width = textBoxWidth(extent, room);
+            const height =
+                own.width && own.height ? heightAtWidth({ width: own.width, height: own.height }, width) : null;
+            const size = shape
+                ? {
+                      width: readFrameSide(Math.round(width)),
+                      height: readFrameSide(height && Math.max(1, Math.round(height))),
+                  }
+                : {};
             figures.push({ ...boxedFigure, attrs: { ...boxedFigure.attrs, ...layout, ...size, caption } });
         } else if (shape) {
             const box = readTextBox(reader, shape, extent, layout, room, boxed);
@@ -201,16 +207,15 @@ export function readVml(reader: Reader, element: XmlElement, context: RunContext
     }
 }
 
-// A part the package gives no type takes its extension's, as Word reads one. Only a type of the allowlist is stored.
-function imageType(reader: Reader, path: string): string | undefined {
-    if (reader.pkg.contentTypeOf(path)) return declaredImageType(reader.pkg, path);
-    return IMAGE_MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
-}
-
 // One media file per image part, named in encounter order. A part that is missing or of no image type, whose bytes
-// don't read, or that is past the pictures' caps has none.
+// don't read, or that is past the pictures' caps has none. A part the package gives no type takes its extension's, as
+// Word reads one; only a type of the allowlist is stored.
 function pictureName(reader: Reader, path: string | undefined): string | undefined {
-    const part = path && mediaPart(reader.pkg.zip, path, imageType(reader, path), IMAGE_TYPES);
+    if (!path) return undefined;
+    const type = reader.pkg.contentTypeOf(path)
+        ? declaredImageType(reader.pkg, path)
+        : IMAGE_MIME_BY_EXTENSION.get(path.slice(path.lastIndexOf('.') + 1).toLowerCase());
+    const part = mediaPart(reader.pkg.zip, path, type, IMAGE_TYPES);
     return part && reader.files.name(part);
 }
 
@@ -248,18 +253,6 @@ function pictureSize(width: number, height: number | null, columnPx: number): Pi
 }
 
 const NO_SIZE: Pick<FigureAttrs, 'width' | 'height'> = { width: null, height: null };
-
-// A figure or a chart at `width`, its height scaled to keep its shape and rounded to a whole px, as pictureSize rounds
-// one. Its sides go through readFrameSide, as either node reads them. A figure of no known size takes its own height
-// once it loads.
-function frameAtWidth(node: JSONContent, width: number): Pick<FigureAttrs, 'width' | 'height'> {
-    const own = { width: readFrameSide(node.attrs?.['width']), height: readFrameSide(node.attrs?.['height']) };
-    const height = own.width && own.height ? heightAtWidth({ width: own.width, height: own.height }, width) : null;
-    return {
-        width: readFrameSide(Math.round(width)),
-        height: readFrameSide(height && Math.max(1, Math.round(height))),
-    };
-}
 
 const NOT_IMPORTED: DocxChart = { title: '', dropped: [CHART_NOT_IMPORTED] };
 
@@ -411,15 +404,10 @@ function drawnWidth(anchor: XmlElement, room: number): number | undefined {
     const extent = xmlChild(anchor, WP_NS, 'extent');
     const only = loneGraphic(anchor);
     if (only && hasXmlName(only, C_NS, 'chart')) return chartSize(extent, room).width * EMU_PER_PX;
-    if (loneTextBox(anchor)) return boxWidth(extent, room) * EMU_PER_PX;
+    if (loneTextBox(anchor)) return textBoxWidth(extent, room) * EMU_PER_PX;
     const { cx } = extentOf(extent);
     const width = cx ? pictureSize(cx / EMU_PER_PX, null, room).width : null;
     return width ? width * EMU_PER_PX : undefined;
-}
-
-// The width in px a wps box draws at, given `room` px: its stored width, else a new box's.
-function boxWidth(extent: XmlElement | undefined, room: number): number {
-    return textBoxWidth(extent, room) ?? TEXT_BOX_DEFAULT_WIDTH;
 }
 
 // The area relativeFrom names, in EMU from the text column's left edge: the page and the left or inside margin start at

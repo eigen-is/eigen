@@ -1,6 +1,6 @@
-// The editor's look in OOXML values, from eigen-prose.css: the writer draws it, and the reader recognizes it where a
-// re-save drops the writer's styles and keeps it as direct formatting. It also holds the rough measures of that look
-// the exports estimate with, such as a character's width.
+// The editor's look in OOXML values, from the editor's prose stylesheet: the writer draws it, and the reader
+// recognizes it where a re-save drops the writer's styles and keeps it as direct formatting. It also holds the rough
+// measures of that look the exports estimate with, such as a character's width.
 
 import type { JSONContent } from '@tiptap/core';
 import {
