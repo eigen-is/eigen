@@ -1,8 +1,8 @@
 // The box a Docs figure draws in inside the editor, such as an image's or a chart's: the node view's wrapper that the
 // page's figure rules lay out, its selection ring, its grips and its comment mark. It also holds the plugins for a
-// click beside the box, a drag out of its paragraph and the selected figure's Keep aspect ratio. A figure in front of
-// or behind the text is that wrapper placed at its offsets, with its grips in a sibling above every layer, where a
-// press drags it. Each node view draws inside.
+// click beside the box, a drag out of its paragraph and the selected figure's Keep aspect ratio, and the node view
+// options that redraw a view on a decoration. A figure in front of or behind the text is that wrapper placed at its
+// offsets, with its grips in a sibling above every layer, where a press drags it. Each node view draws inside.
 
 import type { Editor } from '@tiptap/core';
 import type { Node as PMNode } from '@tiptap/pm/model';
@@ -11,7 +11,7 @@ import { NodeSelection, Plugin, PluginKey, TextSelection } from '@tiptap/pm/stat
 import { Mapping } from '@tiptap/pm/transform';
 import type { Decoration as PMDecoration } from '@tiptap/pm/view';
 import { Decoration, DecorationSet } from '@tiptap/pm/view';
-import type { NodeViewProps } from '@tiptap/react';
+import type { NodeViewProps, ReactNodeViewRendererOptions } from '@tiptap/react';
 import { NodeViewWrapper } from '@tiptap/react';
 import { ySyncPluginKey } from '@tiptap/y-tiptap';
 import type { FigureFrameAttrs, FigureFrameNode, FigureLayout } from '@workspace/lib/docs/eigendoc';
@@ -133,6 +133,17 @@ const placeStyle = (top: number, left: number, width: number | undefined): Recor
 
 // A grip's readout, in cm as Docs' fields show a size.
 const figureSize = ({ width, height }: Box) => `${cmText(pxToMm(width), 1)} × ${cmText(pxToMm(height), 1)} cm`;
+
+// The node view options of a view that draws its decorations, such as a figure's or an equation's. TipTap re-renders a
+// React node view only when its node changes, not when only its decorations change. Some of what a view draws arrives
+// as a decoration, such as the comment mark's color and Keep aspect ratio, so this re-renders it on every update.
+// Returning true keeps the view, as TipTap's own update does. False would make ProseMirror draw a new one.
+export const RERENDER_ON_DECORATIONS: Partial<ReactNodeViewRendererOptions> = {
+    update: ({ updateProps }) => {
+        updateProps();
+        return true;
+    },
+};
 
 export type FigureFrameOptions = {
     // The host decides whether a menu opens, so a figure with no rows keeps the browser's own.

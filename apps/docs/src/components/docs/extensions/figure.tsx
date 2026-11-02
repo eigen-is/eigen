@@ -21,6 +21,7 @@ import {
     figureFramePlugins,
     figureMaxWidth,
     fitFigureBox,
+    RERENDER_ON_DECORATIONS,
     useFigureResize,
 } from './figure-frame';
 import { pageWidths } from './text-column';
@@ -215,13 +216,6 @@ export const Figure = FigureNode.extend<FigureFrameOptions>({
         return figureFramePlugins('figure');
     },
     addNodeView() {
-        // TipTap skips the re-render when only decorations change, and the comment mark's color
-        // arrives as one.
-        return ReactNodeViewRenderer(FigureView, {
-            update: ({ updateProps }) => {
-                updateProps();
-                return true;
-            },
-        });
+        return ReactNodeViewRenderer(FigureView, RERENDER_ON_DECORATIONS);
     },
 });

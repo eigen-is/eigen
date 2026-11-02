@@ -16,6 +16,7 @@ import {
     figureFramePlugins,
     figureMaxWidth,
     fitFigureBox,
+    RERENDER_ON_DECORATIONS,
     useFigureResize,
 } from './figure-frame';
 
@@ -78,12 +79,6 @@ export const Chart = ChartNode.extend<ChartOptions>({
         return figureFramePlugins('chart');
     },
     addNodeView() {
-        // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.
-        return ReactNodeViewRenderer(ChartView, {
-            update: ({ updateProps }) => {
-                updateProps();
-                return true;
-            },
-        });
+        return ReactNodeViewRenderer(ChartView, RERENDER_ON_DECORATIONS);
     },
 });

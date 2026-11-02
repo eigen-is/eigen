@@ -20,7 +20,14 @@ import type { Box } from '@workspace/lib/vector';
 import type React from 'react';
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { FigureFrameOptions, FigureSize } from './figure-frame';
-import { FigureFrame, figureFramePlugins, figureMaxWidth, setFigureLayout, useFigureResize } from './figure-frame';
+import {
+    FigureFrame,
+    figureFramePlugins,
+    figureMaxWidth,
+    RERENDER_ON_DECORATIONS,
+    setFigureLayout,
+    useFigureResize,
+} from './figure-frame';
 import { behindFigureAt } from './positioned-figure';
 import { StaticStory } from './static-story';
 import type { StoryAnchor } from './story';
@@ -256,17 +263,10 @@ export const TextBox = TextBoxNode.extend<TextBoxOptions>({
     },
 
     addNodeView() {
-        // TipTap skips the re-render when only decorations change, and the comment mark's color arrives as one.
-        const options = {
-            update: ({ updateProps }: { updateProps: () => void }) => {
-                updateProps();
-                return true;
-            },
-        };
         return (props: NodeViewRendererProps) => {
             if (!('contentComponent' in props.editor && props.editor.contentComponent))
-                return ReactNodeViewRenderer(TextBoxView, options)(props);
-            const view = new TextBoxNodeView(TextBoxView, props, options);
+                return ReactNodeViewRenderer(TextBoxView, RERENDER_ON_DECORATIONS)(props);
+            const view = new TextBoxNodeView(TextBoxView, props, RERENDER_ON_DECORATIONS);
             // ReactNodeView made a content element for a node with content and put it in the view's DOM, where the
             // frame's geometry, such as the box a figure is measured by, would take it for the box.
             view.contentDOMElement?.remove();
