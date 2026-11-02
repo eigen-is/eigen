@@ -88,9 +88,9 @@ function ownedLike(here: string): CopyOwner {
 // Root's copy of the folder `from` into `to`, which must not exist yet. Each entry gets the owner and mode `ownerOf`
 // gives it, without a setuid, setgid or sticky bit. A link, a hard link, a device, a FIFO or a socket, a setuid or
 // setgid file and a file bigger than a key are refused with the reason. So is any entry once `copied`, the count over
-// every folder root copies, passes MAX_COPIED_ENTRIES. A file is opened without following a link and must be the file the walk found, so a file swapped for a
-// link meanwhile is not read. A folder is not guarded that way: one swapped for a link between its check and its
-// listing leads the walk to wherever the link points.
+// every folder root copies, passes MAX_COPIED_ENTRIES. A file is opened without following a link and must be the file
+// the walk found, so a file swapped for a link meanwhile is not read. A folder is not guarded that way: one swapped
+// for a link between its check and its listing leads the walk to wherever the link points.
 function copyFolder(
     from: string,
     to: string,
