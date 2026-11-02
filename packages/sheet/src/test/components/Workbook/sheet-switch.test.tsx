@@ -216,3 +216,16 @@ test("a cell's right-click menu puts Delete row and Delete column last, alone an
         [...document.querySelectorAll('[data-variant="destructive"]')].map((row) => row.textContent?.trim()),
     ).toEqual(['Delete row', 'Delete column']);
 });
+
+// Enter ends a tab rename, and a refused name opens a notice whose OK button takes the focus at once. The browser then
+// sends the same Enter's keypress to that button, which clicks it, so the notice vanished before anyone saw it.
+test('Enter that ends a tab rename sends no keypress on to the notice', async () => {
+    const { container } = await mountWorkbook();
+    const name = tab(container, 'One').querySelector('span');
+    if (!name) throw new Error('tab One has no name');
+    const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true });
+    await act(async () => {
+        name.dispatchEvent(enter);
+    });
+    expect(enter.defaultPrevented).toBe(true);
+});
