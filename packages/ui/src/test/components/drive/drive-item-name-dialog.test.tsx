@@ -25,7 +25,7 @@ afterAll(() => fetchSpy.mockRestore());
 
 const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
-const { DriveCreateItemDialog } = await import('../../../components/drive/drive-create-folder-item');
+const { DriveItemNameDialog } = await import('../../../components/drive/drive-item-name-dialog');
 const { ABOVE_PREVIEW_Z } = await import('../../../components/dialog');
 const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
 
@@ -36,7 +36,7 @@ const toasted = (message: string) => {
     return failure;
 };
 
-const onCreateItem = mock(async (_name: string) => {});
+const onSave = mock(async (_name: string) => {});
 const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
 afterEach(async () => {
@@ -44,17 +44,17 @@ afterEach(async () => {
     requests.length = 0;
 });
 beforeEach(() => {
-    onCreateItem.mockReset();
-    onCreateItem.mockImplementation(async () => {});
+    onSave.mockReset();
+    onSave.mockImplementation(async () => {});
     onOpenChange.mockClear();
 });
 
 async function render(open: boolean) {
     ({ unmount } = await renderInDocument(
-        createElement(DriveCreateItemDialog, {
+        createElement(DriveItemNameDialog, {
             open,
             onOpenChange: () => {},
-            onCreateItem,
+            onSave,
             type: 'File',
             path: drivePath({ name: 'Notes.eigendoc', mimeType: DRIVE_MIME_DOC }),
         }),
@@ -64,13 +64,13 @@ async function render(open: boolean) {
 // The dialog under a parent that owns `open`, as DriveBrowser does for its New folder.
 function Harness() {
     const [open, setOpen] = useState(true);
-    return createElement(DriveCreateItemDialog, {
+    return createElement(DriveItemNameDialog, {
         open,
         onOpenChange: (next: boolean) => {
             onOpenChange(next);
             setOpen(next);
         },
-        onCreateItem,
+        onSave,
         type: 'Folder',
         path: drivePath({ name: 'Projects', type: 'folder', mimeType: DRIVE_MIME_FOLDER }),
     });
@@ -146,7 +146,7 @@ test('Create waits for a name with more than spaces', async () => {
     expect(button('Create')?.disabled).toBe(true);
     await act(async () => pressEnter(nameField()));
     await settle();
-    expect(onCreateItem).not.toHaveBeenCalled();
+    expect(onSave).not.toHaveBeenCalled();
     expect(onOpenChange).not.toHaveBeenCalled();
 });
 
@@ -155,7 +155,7 @@ test('Create hands the typed name on and closes once it is saved', async () => {
     await type('Invoices');
     await click(button('Create'));
     await settle();
-    expect(onCreateItem.mock.calls).toEqual([['Invoices']]);
+    expect(onSave.mock.calls).toEqual([['Invoices']]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
@@ -164,13 +164,13 @@ test('Enter in the name field submits like Create', async () => {
     await type('Invoices');
     await act(async () => pressEnter(nameField()));
     await settle();
-    expect(onCreateItem.mock.calls).toEqual([['Invoices']]);
+    expect(onSave.mock.calls).toEqual([['Invoices']]);
     expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('a slow save keeps the Create label and waits with both buttons', async () => {
     let finish = () => {};
-    onCreateItem.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
+    onSave.mockImplementation(() => new Promise<void>((resolve) => (finish = resolve)));
     await openNewFolder();
     await type('Invoices');
     await click(button('Create'));
@@ -182,14 +182,14 @@ test('a slow save keeps the Create label and waits with both buttons', async () 
 });
 
 test('a save that fails stays open with the typed name kept', async () => {
-    onCreateItem.mockImplementation(async () => {
+    onSave.mockImplementation(async () => {
         throw toasted('offline');
     });
     await openNewFolder();
     await type('Invoices');
     await click(button('Create'));
     await settle();
-    expect(onCreateItem).toHaveBeenCalledTimes(1);
+    expect(onSave).toHaveBeenCalledTimes(1);
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(nameField().value).toBe('Invoices');
     expect(button('Create')?.disabled).toBe(false);

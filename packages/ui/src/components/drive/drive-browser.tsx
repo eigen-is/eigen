@@ -19,7 +19,7 @@ import { FolderPlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
 import { DriveBreadcrumb } from './drive-breadcrumb';
-import { DriveCreateItemDialog } from './drive-create-folder-item';
+import { DriveItemNameDialog } from './drive-item-name-dialog';
 import { DriveMountList, useMountLabel } from './drive-mount-list';
 import { DriveTable } from './drive-table';
 
@@ -268,10 +268,10 @@ export function DriveBrowser({
                 </ContextMenuAnchor>
             )}
             {showNewFolder && currentPath && (
-                <DriveCreateItemDialog
+                <DriveItemNameDialog
                     open={createFolderOpen}
                     onOpenChange={setCreateFolderOpen}
-                    onCreateItem={handleCreateFolder}
+                    onSave={handleCreateFolder}
                     type="Folder"
                     path={currentPath}
                 />

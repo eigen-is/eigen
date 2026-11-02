@@ -1,6 +1,6 @@
 // The small dialog that asks for one name, such as a new folder's in a Drive picker or the new name Rename gives an
-// item. It shows the folder it works in under the field. Create waits for a name with more than spaces and hands the
-// name on as typed. The caller's promise decides the rest: a save closes the dialog, and a failure keeps it open with
+// item. It shows the folder it works in under the field. Its submit, Create unless the caller names it, waits for a name
+// with more than spaces and hands the name on as typed. The caller's promise decides the rest: a save closes the dialog, and a failure keeps it open with
 // the typed name, beside the mutation's toast.
 
 import { useBreadcrumb } from '@workspace/lib/drive';
@@ -14,28 +14,28 @@ import { useOptionalPreview } from '../preview-provider/preview-context';
 // The word the title, the label and the placeholder use for the item.
 type ItemType = 'Folder' | 'File';
 
-type DriveCreateItemDialogProps = {
+type DriveItemNameDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     // Rejects when the save fails, which keeps the dialog open.
-    onCreateItem: (itemName: string) => Promise<unknown>;
+    onSave: (itemName: string) => Promise<unknown>;
     type: ItemType;
     path: DrivePath;
     title?: string;
     defaultValue?: string;
-    confirmLabel?: string;
+    submitLabel?: string;
 };
 
-export function DriveCreateItemDialog({
+export function DriveItemNameDialog({
     open,
     onOpenChange,
-    onCreateItem,
+    onSave,
     type,
     path,
     title,
     defaultValue = '',
-    confirmLabel = 'Create',
-}: DriveCreateItemDialogProps) {
+    submitLabel = 'Create',
+}: DriveItemNameDialogProps) {
     const { data: breadcrumbPaths = [] } = useBreadcrumb(path.ownerId, path.mountId, open ? path.id : undefined);
     // Opened over a file preview, such as New folder in Save to Drive's picker, it has to sit above that preview.
     const preview = useOptionalPreview();
@@ -50,9 +50,9 @@ export function DriveCreateItemDialog({
             <ItemNameForm
                 type={type}
                 defaultValue={defaultValue}
-                submitLabel={confirmLabel}
+                submitLabel={submitLabel}
                 location={breadcrumbPaths.map((crumb) => crumb.name || 'Drive').join(' > ')}
-                onCreateItem={onCreateItem}
+                onSave={onSave}
             />
         </FormDialog>
     );
@@ -64,13 +64,13 @@ function ItemNameForm({
     defaultValue,
     submitLabel,
     location,
-    onCreateItem,
+    onSave,
 }: {
     type: ItemType;
     defaultValue: string;
     submitLabel: string;
     location: string;
-    onCreateItem: (itemName: string) => Promise<unknown>;
+    onSave: (itemName: string) => Promise<unknown>;
 }) {
     const [itemName, setItemName] = useState(defaultValue);
 
@@ -79,7 +79,7 @@ function ItemNameForm({
             canSubmit={itemName.trim() !== ''}
             submitLabel={submitLabel}
             onSubmit={async () => {
-                await onCreateItem(itemName);
+                await onSave(itemName);
             }}
         >
             <Field>
