@@ -25,4 +25,3 @@ Eigen is not 1.0 yet, and it is built by one person. The core works, but some th
 |---|---|
 | Single sign-on (OIDC or SAML, like Authentik, Keycloak, or Microsoft) | Eigen's own accounts, with two-factor sign-in and app passwords |
 | The Mail app for mail hosted somewhere else | Leave your mail with your current provider (Proton Mail, Google Workspace, Microsoft 365, Fastmail…) and use your own mail app. Eigen then has no Mail app. See [Keep your existing mail](/support/self-hosting/keep-your-mail). |
-| Mail filters, out-of-office replies, and sending later | Not yet |
