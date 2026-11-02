@@ -598,7 +598,8 @@ function toHexColor(color: string) {
 }
 
 // Applies the menu's choice for one column. The entry goes to both the client's ctx.filter and
-// the stored sheet, and the sheet's hidden rows become those every column's filter hides.
+// the stored sheet. The rows this column's filter hid before show again, unless another column's
+// filter hides them too, and the rows every column's filter hides now are hidden.
 export function saveFilter(
     ctx: Context,
     optionState: boolean,
@@ -610,7 +611,7 @@ export function saveFilter(
     startCol: number,
     endCol: number,
 ) {
-    const { otherHiddenRows } = getFilterHiddenRows(ctx, col, startCol);
+    const { otherHiddenRows, hiddenRows: hiddenBefore } = getFilterHiddenRows(ctx, col, startCol);
     const rowHiddenAll = Object.assign(otherHiddenRows, hiddenRows);
 
     const entry = {
@@ -640,9 +641,10 @@ export function saveFilter(
     }
 
     // Reconcile in place. A fresh object would replace the whole rowhidden map on the wire, and
-    // applying a filter would undo a peer's manual row hide.
+    // applying a filter would undo a peer's manual row hide. Only a row the filter hid can show
+    // again, so a row hidden by hand stays hidden.
     const rowhidden = ((ctx.sheets[sheetIndex].config ??= {}).rowhidden ??= {});
-    for (const r of Object.keys(rowhidden)) {
+    for (const r of Object.keys(hiddenBefore)) {
         if (!(r in rowHiddenAll)) delete rowhidden[r];
     }
     Object.assign(rowhidden, rowHiddenAll);

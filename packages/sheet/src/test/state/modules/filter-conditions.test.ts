@@ -289,3 +289,28 @@ describe('saveFilter with a condition', () => {
         expect(ctx.sheets[0].filter).toBeUndefined();
     });
 });
+
+// Row 5 is hidden by hand. The filter on the Name column hides Alice's row 2 only.
+describe('saveFilter and a row hidden by hand', () => {
+    function handHiddenContext() {
+        const ctx = filterContext();
+        ctx.sheets[0].config = { rowhidden: { 4: 0 } };
+        return ctx;
+    }
+
+    test('a filter keeps the row hidden, and so does clearing the filter', () => {
+        const ctx = handHiddenContext();
+        saveFilter(ctx, true, { 1: 0 }, undefined, 0, 4, 1, 0, 1);
+        expect(ctx.sheets[0].config?.rowhidden).toEqual({ 1: 0, 4: 0 });
+
+        clearFilter(ctx);
+        expect(ctx.sheets[0].config?.rowhidden).toEqual({ 4: 0 });
+    });
+
+    test('a filter that shows its own rows again leaves the row hidden', () => {
+        const ctx = handHiddenContext();
+        saveFilter(ctx, true, { 1: 0 }, undefined, 0, 4, 1, 0, 1);
+        saveFilter(ctx, false, {}, undefined, 0, 4, 1, 0, 1);
+        expect(ctx.sheets[0].config?.rowhidden).toEqual({ 4: 0 });
+    });
+});
