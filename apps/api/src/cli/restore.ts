@@ -12,7 +12,8 @@ import {
     checkRestoredDatabases,
     containerDatabasesIn,
     mountIdsIn,
-    openToCheck,
+    quickCheck,
+    UnopenableDatabaseError,
 } from '../lib/backup/materialize-mount';
 import { parseSafetyCopyName, SERVER_ARCHIVE_ENV_MEMBER } from '../lib/backup/paths';
 import { RESTORING_DIR } from '../lib/backup/restore-server';
@@ -29,7 +30,7 @@ import { API_IMAGE_KEY } from '../lib/config/release';
 import { SHARE_REGISTRY_DB_CONFIG } from '../lib/share/db-config';
 import { WAITLIST_DB_CONFIG } from '../lib/waitlist/db-config';
 import { readEnvFile } from './env-file';
-import { DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
+import { CANNOT_OPEN, DATA, DECLINED, ENV_PATH, installOwner, ownAs, VERSION } from './install';
 import { stage } from './restore-stage';
 import { printStaged, swap } from './restore-swap';
 import { createUi, glyphLine, refuseUsage } from './ui';
@@ -126,7 +127,9 @@ async function writeArchiveEnv(archive: string | undefined): Promise<void> {
 // A rollback keeps today's data when the build it goes back to opens it, and puts the update's backup back otherwise.
 // This checks, with that build and before the switch, that it opens that data. Every home of every kind gets the
 // verdict a restore ends on, and the server's versioned databases and users3.db are checked too. It skips the safety
-// copies, which no home opens, and the container databases of an s3 mount, which live in the bucket.
+// copies, which no home opens, and the container databases of an s3 mount, which live in the bucket. Only a database
+// that fails its check, or is newer than this build, exits CANNOT_OPEN: a check that could not run says nothing of the
+// data, so it must not send the rollback to the backup.
 async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const server = join(DATA, SERVER_DIR);
@@ -149,11 +152,13 @@ async function checkData(flags: RestoreFlags): Promise<void> {
         for (const [index, homeDir] of homeDirs.entries()) {
             console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
             const mountIds = mountIdsIn(homeDir);
-            await checkRestoredDatabases(homeDir, mountIds, containerDatabasesIn(homeDir, mountIds));
+            // Each mount's metadata.db first, because the container databases are found by reading it.
+            await checkRestoredDatabases(homeDir, mountIds, []);
+            await checkDatabases(containerDatabasesIn(homeDir, mountIds));
         }
     } catch (error) {
         console.error(glyphLine('bad', `${describeError(error)}.`));
-        process.exit(1);
+        process.exit(error instanceof UnopenableDatabaseError ? CANNOT_OPEN : 1);
     }
     console.log(glyphLine('ok', 'This build opens every database in data/'));
     if (flags.yes) return;
@@ -168,21 +173,10 @@ async function checkData(flags: RestoreFlags): Promise<void> {
     }
 }
 
-// users3.db has no schema version to compare, so only its pages are checked. A file that is no database at all makes
-// SQLite throw rather than answer, and the error names the file either way. The API runs beside this check, and its
+// users3.db has no schema version to compare, so only its pages are checked. The API runs beside this check, and its
 // journal locks out readers while a sign-in writes, so that writer is waited out as for every other database.
 function checkPages(filePath: string): void {
     if (!existsSync(filePath)) return;
-    let verdict: string;
-    try {
-        const db = openToCheck(filePath);
-        try {
-            verdict = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
-        } finally {
-            db.close();
-        }
-    } catch (error) {
-        verdict = describeError(error);
-    }
-    if (verdict !== 'ok') throw new Error(`${filePath} is damaged: ${verdict}`);
+    const verdict = quickCheck(filePath);
+    if (verdict !== 'ok') throw new UnopenableDatabaseError(500, `${filePath} is damaged: ${verdict}`);
 }

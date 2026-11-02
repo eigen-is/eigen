@@ -754,20 +754,6 @@ for SHELL_NAME in dash busybox host; do
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
-    # A Light backup of 0.4.1 and before, which no restore takes, is named with the command that deletes it.
-    mkdir -p "$FIX/release/backups"
-    light=server-pre-update-light-20260101-000000.tar
-    : >"$FIX/release/backups/$light"
-    : >"$FIX/release/backups/$light.json"
-    : >"$FIX/release/backups/server-manual-full-20260101-000000.tar"
-    launch release status
-    rm -r "$FIX/release/backups"
-    if [ "$CODE" = 0 ] &&
-        printf '%s\n' "$OUT" | grep -qxF "▲  backups/ holds Light backups, which this version of Eigen cannot restore: $light. To delete them and their records: rm backups/server-*-light-*"; then
-        ok "$SHELL_NAME: status names the Light backups in backups/ and how to delete them"
-    else
-        fail "$SHELL_NAME: status with a Light backup: exit $CODE, '$OUT'"
-    fi
     echo ghcr.io/eigen-is/eigen/api@sha256:aaa >"$FIX/channel/.eigen/bundle"
     launch channel status
     rm "$FIX/channel/.eigen/bundle"
@@ -1361,21 +1347,24 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: rollback without its archive: exit $CODE, steps '$(steps)', '$ERR'"
     fi
     # The backups earlier updates made, which retention keeps, are the way back further: ./eigen restore takes one. They
-    # list newest first by the stamp in the name, whatever their level. A Light one, which no restore takes, is left out.
+    # list newest first by the stamp in the name, whatever their level, a name with a space whole. A Light one, which no
+    # restore takes, is left out.
     older="$FIX/release/backups/server-pre-update-full-s3-20251201-000000.tar"
     newer="$FIX/release/backups/server-pre-update-full-20251202-000000.tar"
-    light="$FIX/release/backups/server-pre-update-light-20251203-000000.tar"
+    spaced="$FIX/release/backups/server-pre-update-full copy-20251203-000000.tar"
+    light="$FIX/release/backups/server-pre-update-light-20251204-000000.tar"
     : >"$older"
     : >"$newer"
+    : >"$spaced"
     : >"$light"
     STUB_CHECKED=$checked launch release rollback --yes
     refused=$(printf '%s\n' "$ERR" | sed -n 's/^[│└]  *//p' | tr '\n' '|')
     refused_code=$CODE
     launch release rollback --help
-    rm "$older" "$newer" "$light"
+    rm "$older" "$newer" "$spaced" "$light"
     if [ "$refused_code" = 1 ] &&
-        [ "$refused" = "The backups earlier updates made:|$(basename "$newer")|$(basename "$older")|./eigen restore <file> puts one of them back.|" ] &&
-        [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | sed -n '/Kept:$/,/^$/p' | tr '\n' '|')" = "To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:|  $(basename "$newer")|  $(basename "$older")||" ]; then
+        [ "$refused" = "The backups earlier updates made:|$(basename "$spaced")|$(basename "$newer")|$(basename "$older")|./eigen restore <file> puts one of them back.|" ] &&
+        [ "$CODE" = 0 ] && [ "$(printf '%s\n' "$OUT" | sed -n '/Kept:$/,/^$/p' | tr '\n' '|')" = "To go back further, ./eigen restore <file> puts back a backup an earlier update made. Kept:|  $(basename "$spaced")|  $(basename "$newer")|  $(basename "$older")||" ]; then
         ok "$SHELL_NAME: rollback whose archive is gone, and its --help, name the backups earlier updates made for ./eigen restore"
     else
         fail "$SHELL_NAME: rollback lists the backups earlier updates made: exit $refused_code, '$refused'; --help exit $CODE, '$OUT'"
@@ -1449,7 +1438,7 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
         fail "$SHELL_NAME: rollback with a failed pull of the build before: exit $CODE, steps '$(steps)', '$ERR'"
     fi
     failed=''
-    for code in 1 2; do
+    for code in 4 2; do
         STUB_RUN_FAIL=--check-data STUB_RUN_CODE=$code STUB_CHECKED=$checked launch release rollback --yes
         why='cannot open the data here.'
         if [ "$code" = 2 ]; then why='is too old to check the data here.'; fi
@@ -1468,18 +1457,28 @@ $(image_key "$name")=ghcr.io/eigen-is/eigen/$name@sha256:bbb"
     else
         fail "$SHELL_NAME: rollback after a failed check:$failed"
     fi
-    # A no to the check's question, and a check that stopped without a verdict, as when Docker cannot run the image or
-    # the OOM killer ends it, keep today's data and the way back.
-    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=3 launch release rollback --yes
-    declined_code=$CODE declined_steps=$(steps)
-    STUB_RUN_FAIL=--check-data STUB_RUN_CODE=137 launch release rollback --yes
-    if [ "$declined_code" = 0 ] && [ "$declined_steps" = "restore --check-data --yes ($old)|" ] && [ "$CODE" = 1 ] &&
-        [ "$(steps)" = "restore --check-data --yes ($old)|" ] && [ -e "$FIX/release/.eigen/last-update" ] &&
-        printf '%s
-' "$ERR" | grep -q '■  The check stopped (exit 137); Eigen 0.2.99 (abc1234) runs on as it was.$'; then
-        ok "$SHELL_NAME: rollback whose check is declined, or stops without a verdict, changes nothing"
+    # A no to the check's question, a Ctrl+C at it, and a check that stopped without a verdict, as when a database stays
+    # locked, Docker cannot run the image or the OOM killer ends it, keep today's data and the way back.
+    failed=''
+    for code in 3 130 1 137; do
+        STUB_RUN_FAIL=--check-data STUB_RUN_CODE=$code launch release rollback --yes
+        ended=1
+        case $code in 3) ended=0 ;; 130) ended=130 ;; esac
+        if [ "$CODE" != "$ended" ] || [ "$(steps)" != "restore --check-data --yes ($old)|" ] ||
+            [ ! -e "$FIX/release/.eigen/last-update" ]; then
+            failed="$failed check exit $code (exit $CODE, steps '$(steps)', '$ERR')"
+        fi
+        # Only a check that stopped says so; a no and a Ctrl+C end quietly.
+        said=$(printf '%s\n' "$ERR" | grep -c '■  ' || :)
+        stopped=$(printf '%s\n' "$ERR" | grep -c "■  The check stopped (exit $code); Eigen 0.2.99 (abc1234) runs on as it was.\$" || :)
+        want=0
+        if [ "$ended" = 1 ]; then want=1; fi
+        if [ "$said" != "$want" ] || [ "$stopped" != "$want" ]; then failed="$failed check exit $code says '$ERR'"; fi
+    done
+    if [ -z "$failed" ]; then
+        ok "$SHELL_NAME: rollback whose check is declined, cut off, or stops without a verdict, changes nothing"
     else
-        fail "$SHELL_NAME: rollback after a declined or stopped check: declined exit $declined_code, steps '$declined_steps'; stopped exit $CODE, steps '$(steps)', '$ERR'"
+        fail "$SHELL_NAME: rollback after a declined or stopped check:$failed"
     fi
     # Cut off after the stop, it starts Eigen again and keeps the way back, so the next rollback below finishes it.
     STUB_RUN_FAIL=bootstrap launch release rollback --yes

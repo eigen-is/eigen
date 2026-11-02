@@ -6,7 +6,7 @@ import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import { parseServerArchiveNames } from '@workspace/lib/validation';
+import { LIGHT_SERVER_ARCHIVE, parseServerArchiveNames, SERVER_ARCHIVE_EXTENSION } from '@workspace/lib/validation';
 import { getBuildCommit } from '../lib/config/env';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
@@ -26,7 +26,7 @@ const CERT_WARN_DAYS = 14;
 //   and left out on a local build.
 // - --files is the build the launcher and Compose files were last written from. The launcher passes it only when it
 //   differs from the build .env.production pins, which means an update stopped halfway.
-// - --backups lists the backups folder, for the Backup row while the API does not run.
+// - --backups lists the backups folder, for the Backup row while the API does not run, and the Light backups row.
 export const STATUS_OPTIONS = {
     install: { type: 'string' },
     services: { type: 'string' },
@@ -118,7 +118,8 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
         }),
     );
 
-    const data: Row[] = api ? [] : [listedBackupRow(flags.backups ?? '')];
+    const listing = (flags.backups ?? '').split('\n');
+    const data: Row[] = api ? [] : [listedBackupRow(listing), ...lightBackupRows(listing)];
     if (api) {
         data.push(
             {
@@ -127,6 +128,7 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
                 value: `${formatFileSize(api.diskFree, 1)} free of ${formatFileSize(api.diskTotal, 1)}`,
             },
             backupRow(api.backup),
+            ...lightBackupRows(listing),
             ...api.setupCopies.map(
                 ({ name, createdAt }): Row => ({
                     level: 'warn',
@@ -196,11 +198,20 @@ function printReport(flags: StatusFlags, services: Service[], api: ControlStatus
 }
 
 // Without the API, the newest archive in backups/ by the time in its name; whether it verified is in its record.
-function listedBackupRow(listing: string): Row {
-    const [newest] = parseServerArchiveNames(listing.split('\n'));
+function listedBackupRow(listing: string[]): Row {
+    const [newest] = parseServerArchiveNames(listing);
     if (!newest) return { level: 'warn', label: 'Backup', value: NO_BACKUP_YET };
     const value = `${newest.name}, ${BACKUP_LEVEL_NAMES[newest.level]}, ${formatTimeAgo(newest.at)}`;
     return { level: 'ok', label: 'Backup', value };
+}
+
+// The Light backups of Eigen 0.4.1 and before, which this version cannot restore, with the command that deletes them
+// and their records. backups/ belongs to the API's user, so the command takes sudo, as the setup copy's does.
+function lightBackupRows(listing: string[]): Row[] {
+    const light = listing.filter((name) => LIGHT_SERVER_ARCHIVE.test(name) && name.endsWith(SERVER_ARCHIVE_EXTENSION));
+    if (!light.length) return [];
+    const value = `${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/server-*-light-* deletes them and their records`;
+    return [{ level: 'warn', label: 'Light backups', value }];
 }
 
 // Red while the newest scheduled attempt failed, whatever came after it, because the schedule is what the owner

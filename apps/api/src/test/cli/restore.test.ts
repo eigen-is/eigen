@@ -20,7 +20,7 @@ import { teamOwnerId } from '@workspace/lib/types';
 import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/backup';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
-import { DECLINED } from '../../cli/install';
+import { CANNOT_OPEN, DECLINED } from '../../cli/install';
 import { STAGE_LOCK } from '../../cli/restore-stage';
 import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
 import { copyArchiveMember, createServerArchiveWriter, extractArtifact, packFolder } from '../../lib/backup/archive';
@@ -1126,7 +1126,7 @@ describe('restore --check-data, which a rollback runs first with the build it go
     }
 
     test(
-        'passes on data this build opens, and refuses a database of a newer schema in any kind of home or the server, and a damaged users3.db',
+        'passes on data this build opens, refuses a database of a newer schema in any kind of home or the server, or a damaged users3.db, as one it cannot open, and a database it may not read as no verdict',
         async () => {
             const dir = install();
             await stageAndSwap(dir, basename(fullArchive));
@@ -1152,7 +1152,7 @@ describe('restore --check-data, which a rollback runs first with the build it go
             ]) {
                 bumpSchema(file, 1);
                 const refused = await restoreCli(dir, ['--check-data', '--yes']);
-                expect(refused.code).toBe(1);
+                expect(refused.code).toBe(CANNOT_OPEN);
                 expect(refused.stderr).toContain(`${relative(dir, file)} is at`);
                 expect(refused.stderr).toContain('newer than this server');
                 bumpSchema(file, -1);
@@ -1163,7 +1163,7 @@ describe('restore --check-data, which a rollback runs first with the build it go
                 cpSync(homeDirOf(dir, realShape.user.id), home, { recursive: true });
                 bumpSchema(join(home, 'mounts/default/metadata.db'), 1);
                 const refused = await restoreCli(dir, ['--check-data', '--yes']);
-                expect(refused.code).toBe(1);
+                expect(refused.code).toBe(CANNOT_OPEN);
                 expect(refused.stderr).toContain(`data/${kind}/copy/mounts/default/metadata.db is at`);
                 rmSync(home, { recursive: true });
             }
@@ -1172,11 +1172,20 @@ describe('restore --check-data, which a rollback runs first with the build it go
             const intact = readFileSync(users);
             writeFileSync(users, Buffer.alloc(intact.length, 'x'));
             const damaged = await restoreCli(dir, ['--check-data', '--yes']);
-            expect(damaged.code).toBe(1);
+            expect(damaged.code).toBe(CANNOT_OPEN);
             expect(damaged.stderr).toContain(`${relative(dir, users)} is damaged`);
             // The launcher says what to do next, so the CLI does not.
             expect(damaged.stderr).not.toContain('└');
             writeFileSync(users, intact);
+            // A database it may not read says nothing of the data, so the rollback must not take it for one this
+            // build cannot open and put the backup back.
+            for (const file of [users, join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db')]) {
+                chmodSync(file, 0);
+                const unread = await restoreCli(dir, ['--check-data', '--yes']);
+                chmodSync(file, 0o644);
+                expect(unread.code).toBe(1);
+                expect(unread.stderr).not.toContain('damaged');
+            }
             // Nothing it reads is staged or moved.
             expect(existsSync(join(dir, 'data/.restoring'))).toBe(false);
             expect(asideDirs(dir)).toEqual(aside);

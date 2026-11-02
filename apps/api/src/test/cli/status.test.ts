@@ -141,6 +141,29 @@ describe('the Backup row', () => {
         }
     });
 
+    test('is followed by a row naming the Light backups in backups/, running or not, and how to delete them', async () => {
+        backup = {
+            scheduleEnabled: false,
+            newest: null,
+            scheduledFailure: null,
+            scheduledNotUploaded: null,
+            warned: null,
+            newestGoodAt: null,
+        };
+        const light = ['server-pre-update-light-20260101-000000.tar', 'server-manual-light-20260102-000000.tar'];
+        const listing = [...light, `${light[0]}.json`, buildServerArchiveName('manual', 'full', hoursAgo(1))];
+        const row = `▲  Light backups  ${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/server-*-light-* deletes them and their records`;
+        const running = await runCli(
+            ['status', '--services=eigen-api\trunning\thealthy', `--backups=${listing.join('\n')}`],
+            {
+                env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET },
+            },
+        );
+        expect(running.stdout).toContain(`\n${row}\n`);
+        expect((await status(`--backups=${listing.join('\n')}`)).stdout).toContain(`\n${row}\n`);
+        expect((await status(`--backups=${listing.slice(2).join('\n')}`)).stdout).not.toContain('Light');
+    });
+
     test('names the newest archive, its age and size', async () => {
         const newest = archive('scheduled', hoursAgo(3));
         const row = await backupRow({

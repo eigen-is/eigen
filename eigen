@@ -16,6 +16,8 @@ REGISTRY=ghcr.io/eigen-is/eigen
 IMAGES='api frontend postfix dovecot unbound'
 # The CLI's exit code for a question answered no, its DECLINED.
 DECLINED=3
+# The exit code of restore --check-data for a database the build cannot open, its CANNOT_OPEN.
+CANNOT_OPEN=4
 # The CLI's SWAP_MARKER, and its RESTORING_DIR inside data/.
 SWAP_MARKER=.eigen/restore-swap
 UNSTAGE='cli_as 0 rm -rf data/.restoring'
@@ -1018,18 +1020,7 @@ status() {
         files=$(describe "$bundle")
         set -- "$@" --files="$files"
     fi
-    light_backups
     "$runner" status "$@"
-}
-
-# light_backups: a yellow line naming the Light backups of 0.4.1 and before in backups/, which no restore takes, and the
-# command that deletes them with their records. backups/ is uid 1000's, so an operator who may not write it needs sudo.
-light_backups() {
-    light=$(ls backups 2>/dev/null | awk '/^server-.*-light-.*\.tar$/ { printf "%s%s", sep, $0; sep = ", " }')
-    if [ -z "$light" ]; then return 0; fi
-    rm=rm
-    if [ ! -w backups ]; then rm='sudo rm'; fi
-    say "$YELLOW" '▲' "backups/ holds Light backups, which this version of Eigen cannot restore: $light. To delete them and their records: $rm backups/server-*-light-*"
 }
 
 # The running API makes the backup: its job map keeps a backup off a home a restore writes and waits for it at shutdown.
@@ -1497,7 +1488,7 @@ pre_update_archives() {
     for archive in backups/server-pre-update-*.tar; do
         case $archive in backups/server-pre-update-light-*) continue ;; esac
         if [ -f "$archive" ]; then printf '%s\n' "${archive#backups/}"; fi
-    done | awk -F- '{ print $(NF - 1) $NF, $0 }' | sort -r | cut -d' ' -f2
+    done | awk -F- '{ print $(NF - 1) $NF, $0 }' | sort -r | cut -d' ' -f2-
 }
 
 # switch_back <archive>: the first way back, which keeps data/. The build before the update, as the API's user while
@@ -1505,7 +1496,7 @@ pre_update_archives() {
 # recorded and warns the open tabs as put_back does. The archive stays for ./eigen restore. Sets switched once Eigen
 # runs on that build. Leaves it empty, and says why, when that build cannot open the data, is too old to check it, or
 # the launcher that made the update recorded no pins: the rollback then puts the archive back. A check that stopped
-# without saying either ends the rollback, which keeps today's data.
+# without a verdict on the data ends the rollback, which keeps today's data.
 switch_back() {
     switched=''
     PINS=$(sed -n '2,$p' .eigen/last-update)
@@ -1523,10 +1514,11 @@ switch_back() {
     say "$ACCENT" '◆' "Back from Eigen $current to Eigen $old, on the data as it is"
     checked=0
     with_image "$old_image" cli_as 1000:1000 restore --check-data $yes || checked=$?
-    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2.
+    # A build older than restore --check-data refuses it as an unknown argument, with exit code 2. 130 is a Ctrl+C at
+    # its question, which the operator saw.
     case $checked in
         0) ;;
-        1)
+        "$CANNOT_OPEN")
             say "$YELLOW" '▲' "Eigen $old cannot open the data here."
             return
             ;;
@@ -1535,7 +1527,9 @@ switch_back() {
             return
             ;;
         "$DECLINED") exit 0 ;;
-        # Docker could not run the image, or the check was killed, as by the OOM killer: it said nothing of the data.
+        130) exit 130 ;;
+        # The check could not run to the end, as when a database stays locked, Docker cannot run the image or the OOM
+        # killer ends it: it said nothing of the data.
         *)
             die "The check stopped (exit $checked); Eigen $current runs on as it was." \
                 "Fix what it says, then run ./eigen rollback again."

@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MAX_RESTART_MESSAGE_LENGTH, MAX_RESTART_WAIT_SECONDS } from '@workspace/lib/validation';
-import { DECLINED, ROOT } from '../../cli/install';
+import { CANNOT_OPEN, DECLINED, ROOT } from '../../cli/install';
 import { SWAP_MARKER } from '../../cli/restore-swap';
 import { RESTORING_DIR } from '../../lib/backup/restore-server';
 import { PIN_KEYS } from '../../lib/config/release';
@@ -41,6 +41,10 @@ describe('the constants the launcher shares with the CLI', () => {
 
     test('DECLINED is the exit code of a question answered no', () => {
         expect(launcherValue('DECLINED')).toBe(String(DECLINED));
+    });
+
+    test('CANNOT_OPEN is the exit code of a check that found a database this build cannot open', () => {
+        expect(launcherValue('CANNOT_OPEN')).toBe(String(CANNOT_OPEN));
     });
 
     test("SWAP_MARKER is the marker the restore's swap writes", () => {

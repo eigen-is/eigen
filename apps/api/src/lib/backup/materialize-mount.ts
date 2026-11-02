@@ -23,10 +23,16 @@ import {
     rowArchivePath,
     storageKeyOf,
 } from './archive-layout';
+import { describeError } from './errors';
 import { requireMountDir, resolveInside } from './paths';
 
 // A restored database and the schema this build expects of it.
 export type VersionedDatabase = { filePath: string; config: DatabaseConfig<SchemaType> };
+
+// The verdict on a database this build cannot open as it is: damaged, or written by a newer Eigen. A rollback's check
+// tells it apart from a check that could not run, such as one that met a lock longer than it waits or a file it may
+// not read, which says nothing of the data.
+export class UnopenableDatabaseError extends ApiError {}
 
 // How many databases checkDatabases opens before it gives the event loop back.
 const DATABASES_PER_YIELD = 50;
@@ -182,24 +188,33 @@ export async function checkDatabases(targets: readonly VersionedDatabase[]): Pro
         if (!fs.existsSync(target.filePath)) continue;
         const version = schemaVersionOf(target.filePath);
         if (version > target.config.currentVersion) {
-            throw new ApiError(
+            throw new UnopenableDatabaseError(
                 400,
                 `${target.filePath} is at ${target.config.name} schema v${version}, newer than this server ` +
                     `supports (v${target.config.currentVersion}) — restore it on a server at least as new`,
             );
         }
-        const db = openToCheck(target.filePath);
-        try {
-            const row = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get();
-            if (row?.quick_check !== 'ok') {
-                throw new ApiError(
-                    500,
-                    `${target.filePath} did not survive the restore: ${row?.quick_check ?? 'no answer'}`,
-                );
-            }
-        } finally {
-            db.close();
+        const verdict = quickCheck(target.filePath);
+        if (verdict !== 'ok') {
+            throw new UnopenableDatabaseError(500, `${target.filePath} did not survive the restore: ${verdict}`);
         }
+    }
+}
+
+// SQLite's verdict on the pages of a database that is there. A file that is no database, or one too damaged to answer,
+// makes SQLite throw rather than answer, and that is a verdict too. Any other error, such as a lock held longer than
+// openToCheck waits, is not one, and goes on to the caller.
+export function quickCheck(filePath: string): string {
+    let db: Database | undefined;
+    try {
+        db = openToCheck(filePath);
+        return db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
+    } catch (error) {
+        const code = errnoOf(error) ?? '';
+        if (code === 'SQLITE_NOTADB' || code.startsWith('SQLITE_CORRUPT')) return describeError(error);
+        throw error;
+    } finally {
+        db?.close();
     }
 }
 
