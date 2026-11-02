@@ -85,12 +85,6 @@ export function isRestoreStagingName(name: string): boolean {
     return name.startsWith(RESTORE_STAGING_PREFIX);
 }
 
-// Everything a per-home restore staged beside the home: the unpacked archive and the notes the next boot reads. The
-// job removes it however it ends. A boot removes the one a killed job left, once it has read the notes.
-export async function wipeRestoreStagingDir(homeDir: string, jobId: string): Promise<void> {
-    await fsp.rm(buildRestoreStagingDir(homeDir, jobId), { recursive: true, force: true });
-}
-
 // Scratch space for packing: the half-written artifact, the half-written sidecar. Under
 // the staging root so a crash leaves nothing behind that the boot-time wipe does not clear, and on
 // the same filesystem as the artifacts, so the last rename of a pack is atomic.
@@ -255,8 +249,7 @@ export function buildSafetyCopyName(homeDir: string, kind: BackupSafetyCopy['kin
 
 // The stamp the two safety copies of one restore share, under the same collision rule: a second
 // restore of a home inside one second must not rename onto the first's copy (ENOTEMPTY, with the
-// home already moved aside). It also must not hand a flat-key mount the fresh storage keys the first
-// restore just wrote, which materializeMount derives from the stamp.
+// home already moved aside).
 export function freeSafetyCopyStamp(homeDir: string, at: Date): string {
     return buildBackupStamp(
         nextFreeTime(at, (candidate) => {

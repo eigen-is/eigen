@@ -21,7 +21,11 @@ import {
     sidecarPath,
     wipeBackupStaging,
 } from '../../lib/backup/paths';
-import { recoverBackupsAfterRestart, recoverInterruptedRestores } from '../../lib/backup/recovery';
+import {
+    recoverBackupsAfterRestart,
+    recoverInterruptedRestores,
+    wipeRestoreStagingDir,
+} from '../../lib/backup/recovery';
 import { TEST_DATA_DIR } from '../setup';
 
 // What the server does before it serves its first request: clear the staging folder a killed job
@@ -252,6 +256,36 @@ describe('Backup boot', () => {
         expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
         expect(readdirSync(homeRoot).filter((name) => name.startsWith(`${id}${FAILED_RESTORE_SUFFIX}`))).toEqual([]);
     });
+
+    // The job removes its folder once the home serves. A kill partway through that removal must not leave the marker
+    // without its completion note, or the next boot would undo a restore the user has worked in since. An unremovable
+    // folder inside stands in for the kill: the removal fails there, after it has started. Root removes it anyway.
+    test.skipIf(process.getuid?.() === 0)(
+        'a removal of a finished restore cut off partway leaves no marker for a later boot',
+        async () => {
+            const id = 'bootrecoverNNNNNNNNNNNNNNNNNNNNN';
+            const aside = `${id}${PRE_RESTORE_SUFFIX}20260606-000000`;
+            const homeDir = seedFolder(id, 'the restored home');
+            seedFolder(aside, 'the home as it was');
+            const staged = seedRestoringMarker('boot-job-n', id, aside, true);
+            const locked = join(staged, `home-${id}`, 'home');
+            mkdirSync(locked, { recursive: true });
+            writeFileSync(join(locked, 'kept'), '');
+            chmodSync(locked, 0o500);
+            try {
+                await expect(wipeRestoreStagingDir(homeDir, 'boot-job-n')).rejects.toThrow();
+            } finally {
+                chmodSync(locked, 0o700);
+            }
+            // What the removal got through before the kill could include the completion note.
+            rmSync(join(staged, 'restore-complete.json'), { force: true });
+
+            expect(existsSync(join(staged, 'restoring.json'))).toBe(false);
+            recoverInterruptedRestores();
+            expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the restored home');
+            expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+        },
+    );
 
     test('a marker naming a folder of another home is refused', () => {
         const id = 'bootrecoverCCCCCCCCCCCCCCCCCCCCC';

@@ -718,7 +718,7 @@ describe('Backup restoreHome', () => {
     // Every restore removes that folder on its way out, so the wipe is held off here to look at what was written.
     test('a finished restore leaves its completion note beside the marker, beside the home', async () => {
         const jobId = `restore-sentinel-${Date.now()}`;
-        const spy = spyOn(pathsModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
+        const spy = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
         try {
             await restoreHome(artifact, target.id, jobId);
         } finally {
@@ -1778,11 +1778,11 @@ describe('Backup restore of one home judges, then takes the home', () => {
             extractSpy.mockRestore();
         }
 
-        // A tenth more than the archive counts, and a fixed 64 MB reserve.
-        expect(checked).toEqual({
-            needed: Math.ceil(manifest.counts.bytes * 1.1) + 64 * 1024 * 1024,
-            dir: getDataRoot(),
-        });
+        // The bound the unpack stops at, which counts the manifest and an allowance for every entry beside the bytes.
+        expect(checked).toEqual({ needed: archiveModule.unpackBound(manifest), dir: getDataRoot() });
+        const manifestBytes = Buffer.byteLength(archiveModule.serializeManifest(manifest));
+        const perEntry = archiveModule.ENTRY_ALLOWANCE_BYTES * manifest.entries.length;
+        expect(checked?.needed).toBeGreaterThan(manifest.counts.bytes + manifestBytes + perEntry);
         expect(extracted).toBe(0);
         await expectNotTaken(user.id, before);
         rmSync(join(getBackupsDir(), artifact), { force: true });
@@ -1791,14 +1791,15 @@ describe('Backup restore of one home judges, then takes the home', () => {
     test('an archive whose files pass the bytes it declares is refused mid-unpack, and leaves nothing behind', async () => {
         const artifact = await backup(user.id, new Date(Date.now() + 98_000), (manifest, folder) => {
             manifest.counts.bytes = 0;
-            // Past the 64 MB reserve the unpack allows beyond the declared bytes. Sparse zeros pack to almost nothing.
+            // Past the 64 MB reserve and the slack the unpack allows beyond what the manifest declares. Sparse zeros
+            // pack to almost nothing.
             const padding = join(folder, 'home', 'padding.bin');
             writeFileSync(padding, '');
-            truncateSync(padding, 65 * 1024 * 1024);
+            truncateSync(padding, 80 * 1024 * 1024);
         });
         const before = await untakenState(user.id);
         // The job removes its folder however it ends, so this is held off to see what the unpack itself left.
-        const spy = spyOn(pathsModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
+        const spy = spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {});
         try {
             await expect(restoreHome(artifact, user.id, `restore-oversized-${Date.now()}`)).rejects.toThrow(
                 /more than its manifest declares/,
@@ -1950,7 +1951,7 @@ describe('Backup restore killed at any point', () => {
         const writeComplete = recoveryModule.writeRestoreCompleteMarker;
         const rename = nodeFs.renameSync;
         const spies = [
-            spyOn(pathsModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
+            spyOn(recoveryModule, 'wipeRestoreStagingDir').mockImplementation(async () => {}),
             spyOn(archiveModule, 'extractArtifact').mockImplementation(async (source, target, maxBytes) => {
                 await extract(source, target, maxBytes);
                 if (point === 'in the unpack') kill();

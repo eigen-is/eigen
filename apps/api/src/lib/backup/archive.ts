@@ -1,7 +1,8 @@
 // Packs, lists and unpacks Eigen's backup archives. A home archive is one home folder as a tar through zstd,
 // so `tar --zstd -xf` unpacks it anywhere. A whole-server archive is a plain tar of members that are compressed
-// already, and its manifest is always the last member. The backup, verify and restore code calls it, ./eigen restore
-// included. The tar bytes themselves come from headerChunks and tarEntries.
+// already, and its manifest is always the last member. An unpack stops at the bound its manifest declares, so an
+// archive that holds more cannot write more. The backup, verify and restore code calls it, ./eigen restore included.
+// The tar bytes themselves come from headerChunks and tarEntries.
 
 /// <reference path="./node-zstd.d.ts" />
 import * as fs from 'node:fs';
@@ -189,14 +190,54 @@ export async function copyArchiveMember(member: ArchiveMemberLocation, destPath:
     }
 }
 
+// What the disk spends on one entry beyond its bytes, such as a block a small file rounds up to, or a folder's own
+// block. A million empty files or folders declare no bytes and still take gigabytes, so every entry is charged it.
+export const ENTRY_ALLOWANCE_BYTES = 4096;
+// What a restore's room check and its unpack allow beyond what the manifest declares: a tenth more for the empty
+// folders a manifest cannot list, such as a Maildir's `new/`, and a fixed reserve, so a small home is not unpacked
+// onto the disk's last free bytes.
+const UNPACK_SLACK = 1.1;
+const UNPACK_RESERVE_BYTES = 64 * 1024 * 1024;
+
+// The text of an archive's manifest.json. The snapshots write it, and declaredUnpackBytes measures it.
+export function serializeManifest(manifest: BackupManifest): string {
+    return JSON.stringify(manifest, null, 2);
+}
+
+// What extractArtifact counts for an archive that holds exactly what its manifest lists: the bytes of every entry and
+// of the manifest itself, and an allowance for each of them, for every folder above them and for the root folder.
+export function declaredUnpackBytes(manifest: BackupManifest): number {
+    const manifestBytes = Buffer.byteLength(serializeManifest(manifest));
+    const entries = manifest.entries.length + 1 + countFolders(manifest.entries) + 1;
+    return manifest.counts.bytes + manifestBytes + entries * ENTRY_ALLOWANCE_BYTES;
+}
+
+// The most an unpack of the archive may write. A restore checks the disk for it first, and every unpack stops there.
+export function unpackBound(manifest: BackupManifest): number {
+    return Math.ceil(declaredUnpackBytes(manifest) * UNPACK_SLACK) + UNPACK_RESERVE_BYTES;
+}
+
+// The folders above the listed files, each once. The archive holds each as an entry of its own.
+function countFolders(entries: readonly BackupEntry[]): number {
+    const folders = new Set<string>();
+    for (const entry of entries) {
+        let folder = path.posix.dirname(entry.path);
+        while (folder !== '.' && !folders.has(folder)) {
+            folders.add(folder);
+            folder = path.posix.dirname(folder);
+        }
+    }
+    return folders.size;
+}
+
 // An artifact's compressed bytes are a file of their own, or a member read in place from a whole-server archive.
 type ArtifactSource = string | ArchiveMemberLocation;
 
 // Unpacks an artifact into `targetDir`. Every folder it makes is 0700 and every file 0600, whatever the header
 // says. Only the API's user reads a restored home, so an older archive with 0644 files restores as private as a
 // new one. A crafted archive cannot ask for a setuid bit, which root would then move into data/. It cannot ask
-// for a folder that its own extract cannot enter either. With `maxBytes`, it refuses an archive whose files add up
-// to more, before it writes the file that would pass it.
+// for a folder that its own extract cannot enter either. With `maxBytes`, it refuses an archive whose entries add
+// up to more, each with its ENTRY_ALLOWANCE_BYTES, before it writes the entry that would pass it.
 export async function extractArtifact(
     source: ArtifactSource,
     targetDir: string,
@@ -209,16 +250,16 @@ export async function extractArtifact(
     try {
         for await (const entry of tarEntries(artifactBytes(source))) {
             const target = path.join(targetDir, entry.path);
-            if (entry.typeflag === DIRECTORY_TYPEFLAG) {
-                makeFolder(target);
-                continue;
-            }
-            bytes += entry.size;
+            bytes += entry.size + ENTRY_ALLOWANCE_BYTES;
             if (bytes > maxBytes) {
                 throw new ApiError(
                     400,
-                    `The archive's files pass ${formatFileSize(maxBytes)}, more than its manifest declares`,
+                    `The archive unpacks past ${formatFileSize(maxBytes)}, more than its manifest declares`,
                 );
+            }
+            if (entry.typeflag === DIRECTORY_TYPEFLAG) {
+                makeFolder(target);
+                continue;
             }
             // A foreign archive may name a file before the directory entry it sits in.
             makeFolder(path.dirname(target));
@@ -234,16 +275,19 @@ export async function extractArtifact(
     }
 }
 
-// The manifest of the archive's single home folder, without unpacking its files.
-export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
+// The manifest of the archive's single folder, without unpacking its files.
+export async function readArtifactManifest(source: ArtifactSource): Promise<BackupManifest> {
     const manifestGlob = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
     let manifest: BackupManifest | null = null;
-    for await (const entry of tarEntries(artifactBytes(artifactPath))) {
+    for await (const entry of tarEntries(artifactBytes(source))) {
         if (!manifestGlob.match(entry.path)) continue;
         manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
-    if (!manifest) throw new ApiError(400, `${path.basename(artifactPath)} is not an Eigen backup archive`);
+    if (!manifest) {
+        const name = typeof source === 'string' ? path.basename(source) : source.name;
+        throw new ApiError(400, `${name} is not an Eigen backup archive`);
+    }
     return manifest;
 }
 

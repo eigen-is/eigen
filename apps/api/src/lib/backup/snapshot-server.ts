@@ -15,6 +15,7 @@ import { isEnoent } from '../core';
 import { stageEigenDbCopy } from '../share/db';
 import { stageWaitlistDbCopy } from '../waitlist/waitlist';
 import type { ServerArchiveWriter } from './archive';
+import { serializeManifest } from './archive';
 import { captureUnlessGone, captureWrittenFile, countEntries } from './capture';
 import { listFileTree } from './file-tree';
 import {
@@ -100,7 +101,7 @@ export async function snapshotServer(
         mounts: [],
         entries,
     };
-    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
+    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
     return manifest;
 }
 

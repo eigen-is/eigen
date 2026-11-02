@@ -8,8 +8,8 @@ import { ApiError } from '../core';
 import { pullHomeSnapshot, sendToHome } from '../home/home-relay';
 import { getOrgAdmins, getOrgOwner } from '../user';
 import { alertUser } from '../user/alert-owner';
-import { extractArtifact, packFolder, readUnpackedHome } from './archive';
-import { writeSidecar } from './artifacts';
+import { extractArtifact, packFolder, readUnpackedHome, unpackBound } from './archive';
+import { readDeclaredManifest, writeSidecar } from './artifacts';
 import { describeError } from './errors';
 import {
     buildHomeFolderName,
@@ -207,7 +207,7 @@ export async function runArtifactVerify(
     try {
         const unpackDir = path.join(staging, 'verify');
         onProgress('extract', 0, 1);
-        await extractArtifact(artifactPath, unpackDir);
+        await extractArtifact(artifactPath, unpackDir, unpackBound(await readDeclaredManifest(artifactPath)));
         onProgress('extract', 1, 1);
 
         // The job's owner is the one in the artifact's name, which the route parsed.

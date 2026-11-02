@@ -8,7 +8,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
-import { incompleteReason, parseBackupShares } from '@workspace/lib/validation';
+import { buildBackupStamp, incompleteReason, parseBackupShares } from '@workspace/lib/validation';
 import { closeCollabConnectionsForHome } from '../collab/connections';
 import { getAvatarsDir, getDataRoot } from '../config/paths';
 import { ApiError } from '../core';
@@ -17,8 +17,8 @@ import { clearHomeRestoring, evictHome, markHomeRestoring } from '../home/get-ho
 import { addRegistryEntry } from '../share/registry';
 import { getTeam } from '../team/team';
 import { getUserById } from '../user/user';
-import { extractArtifact, readArtifactManifest, readUnpackedHome } from './archive';
-import { readSidecar, requireArtifact } from './artifacts';
+import { extractArtifact, readUnpackedHome, unpackBound } from './archive';
+import { readDeclaredManifest, requireArtifact } from './artifacts';
 import { authRowsToRestore, restoreAuthRows } from './auth-rows';
 import { describeError } from './errors';
 import { resolveHomeDir } from './home-dir';
@@ -38,17 +38,10 @@ import {
     buildSafetyCopyName,
     freeSafetyCopyStamp,
     roomShortfall,
-    wipeRestoreStagingDir,
 } from './paths';
-import { writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
+import { wipeRestoreStagingDir, writeRestoreCompleteMarker, writeRestoringMarker } from './recovery';
 import { forgetSafetyCopySize, resolveSafetyCopy } from './safety-copy';
 import { requireVerified, verifyFolder } from './verify';
-
-// What a restore from an archive asks of data/ beyond the bytes its manifest counts, and the most its unpack writes: a
-// tenth more for what the count leaves out, such as the manifest itself and the rows beside the home, and a fixed
-// reserve, so a small home is not unpacked onto the disk's last free bytes.
-const UNPACK_SLACK = 1.1;
-const UNPACK_RESERVE_BYTES = 64 * 1024 * 1024;
 
 // Replaces one home with the copy inside an artifact: the home as it stands goes aside as `{id}.pre-restore-{ts}`,
 // and a failed install as `{id}.failed-restore-{ts}`. The first load after the restore runs migrations and reseeds
@@ -69,12 +62,9 @@ export async function restoreHome(
         async () => {
             // Beside the home, so the swap is a rename on one disk.
             const unpackDir = buildRestoreStagingDir(homeDir, jobId);
-            // Refused before a byte is written. The manifest counts every file, and the sidecar keeps a copy of it,
-            // so only an archive without one is read for it. The unpack stops at the same bound, so an archive that
-            // holds more than it declares cannot fill the disk the homes share.
-            const { counts } =
-                (await readSidecar(artifactPath))?.manifest ?? (await readArtifactManifest(artifactPath));
-            const unpackBytes = Math.ceil(counts.bytes * UNPACK_SLACK) + UNPACK_RESERVE_BYTES;
+            // Refused before a byte is written. The unpack stops at the same bound, so an archive that holds more than
+            // it declares takes no more of the disk the homes share than the room check found free.
+            const unpackBytes = unpackBound(await readDeclaredManifest(artifactPath));
             const shortfall = roomShortfall(`Restoring ${artifactName}`, unpackBytes, getDataRoot(), 'data/');
             if (shortfall) throw new ApiError(507, shortfall);
             onProgress?.('extract', 0, 1);
@@ -104,9 +94,9 @@ export async function restoreHome(
                 shares: readShares(folder),
                 avatars: await readAvatars(ownerId, folder),
             };
-            // An s3 mount's restored files take fresh keys from this stamp. It is picked the way the safety copies'
-            // stamp is, so a later restore of this home cannot pick it again.
-            const keyStamp = freeSafetyCopyStamp(homeDir, new Date());
+            // An s3 mount's restored files take fresh keys from this stamp. The job id makes it this restore's alone,
+            // even when the clock steps back to a second another restore of this home used.
+            const keyStamp = `${buildBackupStamp(new Date())}-${jobId}`;
             for (const [index, summary] of carried.entries()) {
                 await materializeMount(unpackedHome, summary, keyStamp);
                 onProgress?.('mounts', index + 1, carried.length);

@@ -21,6 +21,7 @@ import { MOUNT_DB_CONFIG } from '../mount/db-config';
 import { readMountTotalSize } from '../mount/helpers';
 import { getEigenDb } from '../share/db';
 import { shareRegistry } from '../share/schema';
+import { serializeManifest } from './archive';
 import { HOME_DATABASE_PATHS, HOME_DATABASES, isLightSkipped, MAILDIR_ROOT } from './archive-layout';
 import { readAuthRows } from './auth-rows';
 import { captureFile, captureUnlessGone, captureWrittenFile, countEntries } from './capture';
@@ -265,7 +266,7 @@ export async function snapshotHome(
         entries,
         ...(warnings.length > 0 && { warnings }),
     };
-    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), JSON.stringify(manifest, null, 2));
+    await Bun.write(path.join(folder, ARCHIVE_MANIFEST_FILE), serializeManifest(manifest));
     onProgress?.('done', 1, 1);
     return manifest;
 }

@@ -1,10 +1,11 @@
 // What a restart does about the backup work the last process left behind, before the API listens. A per-home restore
 // killed before its job ended leaves the folder it staged beside the home, whose notes say whether to finish or undo
 // it, and then the folder goes. The staging folders in backups/ are wiped, the home archives closed to other users,
-// and a server backup left running is marked failed. The restore writes its notes through here. This module loads the
-// API's jobs and settings, so the stage of ./eigen restore must not import it.
+// and a server backup left running is marked failed. The restore writes and removes its notes through here. This
+// module loads the API's jobs and settings, so the stage of ./eigen restore must not import it.
 
 import * as fs from 'node:fs';
+import * as fsp from 'node:fs/promises';
 import * as path from 'node:path';
 import { parseBackupArtifactName } from '@workspace/lib/validation';
 import { getDataRoot, TEAM_HOMES_DIR, USER_HOMES_DIR } from '../config/paths';
@@ -12,6 +13,7 @@ import { ARCHIVE_MODE } from './archive';
 import { describeError } from './errors';
 import {
     backupsDirPath,
+    buildRestoreStagingDir,
     getStagingRoot,
     isRestoreStagingName,
     parseSafetyCopyName,
@@ -61,6 +63,14 @@ export function writeRestoreCompleteMarker(restoreDir: string): void {
     );
 }
 
+// Everything a per-home restore staged beside the home: the unpacked archive and the notes the next boot reads. The
+// job removes it however it ends.
+export async function wipeRestoreStagingDir(homeDir: string, jobId: string): Promise<void> {
+    const restoreDir = buildRestoreStagingDir(homeDir, jobId);
+    dropRestoringMarker(restoreDir);
+    await fsp.rm(restoreDir, { recursive: true, force: true });
+}
+
 // Every folder a per-home restore staged beside the homes is one whose job never ended, since a job removes its own.
 // Its notes are acted on first, and then it goes, because nothing resumes the job.
 export function recoverInterruptedRestores(): void {
@@ -71,9 +81,16 @@ export function recoverInterruptedRestores(): void {
             if (!isRestoreStagingName(name)) continue;
             const restoreDir = path.join(homesDir, name);
             recoverRestore(restoreDir);
+            dropRestoringMarker(restoreDir);
             fs.rmSync(restoreDir, { recursive: true, force: true });
         }
     }
+}
+
+// The marker goes before the rest of its folder. A kill partway through removing the folder could otherwise leave it
+// without the completion note beside it, and a later boot would undo a restore whose home has served since.
+function dropRestoringMarker(restoreDir: string): void {
+    fs.rmSync(path.join(restoreDir, RESTORING_MARKER), { force: true });
 }
 
 // Builds up to 0.4.1 kept the notes in backups/.staging. That is another mount than the homes on Docker, so a boot
@@ -84,7 +101,10 @@ function recoverOlderBuildRestores(): void {
     const stagingRoot = getStagingRoot();
     if (!fs.existsSync(stagingRoot)) return;
     for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
-        if (entry.isDirectory()) recoverRestore(path.join(stagingRoot, entry.name));
+        if (!entry.isDirectory()) continue;
+        const notesDir = path.join(stagingRoot, entry.name);
+        recoverRestore(notesDir);
+        dropRestoringMarker(notesDir);
     }
 }
 

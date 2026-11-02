@@ -14,7 +14,7 @@ import { getDataRoot, homeDirUnder, ORG_HOMES_DIR, PATHS, SERVER_DIR, SERVER_RUN
 import { ApiError } from '../core/errors';
 import { isUsableName } from '../mount/names';
 import type { HashedArchiveMember } from './archive';
-import { copyArchiveMember, extractArtifact, readUnpackedHome } from './archive';
+import { copyArchiveMember, extractArtifact, readArtifactManifest, readUnpackedHome, unpackBound } from './archive';
 import type { MountPathRow } from './archive-layout';
 import { flatStorageKey, insideDocument, readMountPathRows, rowArchivePath, storageKeyOf } from './archive-layout';
 import { describeError } from './errors';
@@ -136,7 +136,7 @@ export async function stageServerArchive(
 async function stageServerMember(archive: ServerArchiveFile, dataDir: string, unpackDir: string): Promise<void> {
     const member = archive.members.get(SERVER_ARCHIVE_SERVER_MEMBER);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${SERVER_ARCHIVE_SERVER_MEMBER}`);
-    await extractArtifact(member, unpackDir);
+    await extractArtifact(member, unpackDir, unpackBound(await readArtifactManifest(member)));
     const folder = path.join(unpackDir, buildServerFolderName(new Date(archive.manifest.createdAt)));
     const manifestPath = path.join(folder, ARCHIVE_MANIFEST_FILE);
     const manifest = fs.existsSync(manifestPath) ? parseBackupManifest(fs.readFileSync(manifestPath, 'utf8')) : null;
@@ -166,7 +166,7 @@ async function stageHome(
     const member = archive.members.get(home.member);
     if (!member) throw new ApiError(400, `${archive.name} holds no ${home.member}`);
     const unpacked = path.join(unpackDir, home.ownerId);
-    await extractArtifact(member, unpacked);
+    await extractArtifact(member, unpacked, unpackBound(await readArtifactManifest(member)));
     const { folder, manifest } = readUnpackedHome(unpacked, home.ownerId, home.member);
     requireVerified(await verifyFolder(folder), home.member);
     // The swap goes by the outer level: a light home under a full one would replace a home with no files.

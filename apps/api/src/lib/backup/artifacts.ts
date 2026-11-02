@@ -148,6 +148,12 @@ export async function writeSidecar(
     await writeRecord(sidecarPath(artifactPath), { manifest, verify }, ARCHIVE_MODE);
 }
 
+// What an artifact declares it holds, from the copy of its manifest in the sidecar. Only an artifact without one is
+// read for it, which decompresses the archive up to its manifest.
+export async function readDeclaredManifest(artifactPath: string): Promise<BackupManifest> {
+    return (await readSidecar(artifactPath))?.manifest ?? (await readArtifactManifest(artifactPath));
+}
+
 // Null when there is no sidecar or it does not read. An artifact copied in by hand has none, and the list shows
 // it as unverified until a verify job writes one.
 export async function readSidecar(
