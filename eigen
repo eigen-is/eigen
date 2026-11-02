@@ -531,9 +531,10 @@ backups_group() {
 }
 
 # shared_backups: a yellow line when share_env leaves backups/ open. The start runs share_env under step, whose output
-# only the log gets, so restart says it before.
+# only the log gets, so restart says it before. A command that runs restart twice says it once.
 shared_backups() {
-    if [ "$docker_os" = 'Docker Desktop' ] || [ -n "$(backups_group)" ]; then return 0; fi
+    if [ "$docker_os" = 'Docker Desktop' ] || [ -n "$(backups_group)" ] || [ -n "${SHARED_SAID:-}" ]; then return 0; fi
+    SHARED_SAID=1
     say "$YELLOW" '▲' "Other users of this host share this folder's group, ${EIGEN_OWNER#*:}, so backups/ stays open to them. Give the folder a group only you are in, then run ./eigen restart."
 }
 

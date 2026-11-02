@@ -192,9 +192,11 @@ done
 docker pull -q debian:bookworm-slim >/dev/null
 HOST_OS=$(docker info --format '{{.OperatingSystem}}')
 docker pull -q busybox >/dev/null
-FIX_GID=$(ls -ldn "$FIX/release" | awk '{ print $4 }')
 # regroup <folder> <gid>: the fixture folder in that group, which only root may give it.
 regroup() { docker run --rm -v "$FIX:$FIX" busybox chgrp "$2" "$FIX/$1"; }
+# The fixture folders get a group only their owner is in, so no case depends on the host's gid, which may be a shared one.
+FIX_GID=5151
+for dir in local release channel bare; do regroup "$dir" "$FIX_GID"; done
 PATH_IN=/stub:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # launch <folder> <args…>: the launcher under $SHELL_NAME in $FIX/<folder>; sets CODE, OUT (stdout), ERR (stderr) and
@@ -502,6 +504,17 @@ for SHELL_NAME in dash busybox host; do
                 fail "$SHELL_NAME: restart in group 4242 with a primary user: exit $CODE, '$OUT', calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
             fi
         fi
+        # Two restarts in one command, the swap's and the command's own, say it once.
+        regroup release 100
+        mkdir "$FIX/release/.eigen" 2>/dev/null || :
+        : >"$FIX/release/.eigen/restore-swap"
+        launch release restart
+        if [ "$(printf '%s\n' "$OUT" | grep -cF "so backups/ stays open to them")" = 1 ]; then
+            ok "$SHELL_NAME: the shared-group warning prints once when restart runs twice"
+        else
+            fail "$SHELL_NAME: the shared-group warning twice: exit $CODE, '$OUT'"
+        fi
+        rm -f "$FIX/release/.eigen/restore-swap"
         regroup release "$FIX_GID"
     fi
     if [ "$(id -u)" = 0 ]; then
