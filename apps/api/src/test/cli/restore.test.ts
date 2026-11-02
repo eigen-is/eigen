@@ -40,6 +40,7 @@ import type { Mount } from '../../lib/mount/mount';
 import type { RealShapeHome } from '../backup/backup-test-helpers';
 import {
     expectRealShape,
+    holdLock,
     readServerManifest,
     realShapeHome,
     removeServerRecords,
@@ -1465,6 +1466,20 @@ describe('restore --check-data, which a rollback after a Light backup runs with 
         },
         JOB_TIMEOUT_MS,
     );
+
+    test('waits out a sign-in that holds users3.db, rather than calling it damaged', async () => {
+        const dir = install();
+        const users = join(dir, 'data/server', SERVER_DATABASES.users);
+        const db = new Database(users);
+        db.run('CREATE TABLE user (id TEXT PRIMARY KEY)');
+        db.close();
+        // Long enough to outlast the start of the subprocess, short of the five seconds a writer is waited out.
+        const lock = await holdLock(users, 2000);
+        const checked = await restoreCli(dir, ['--check-data', '--yes']);
+        expect(checked.stderr).toBe('');
+        expect(checked.code).toBe(0);
+        expect(await lock.exited).toBe(0);
+    });
 });
 
 describe('restore --env, the first step on a fresh machine', () => {

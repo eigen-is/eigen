@@ -4,7 +4,7 @@
 // the archive's .env.production. Every refusal comes before anything in the data folder moves. A rollback after a
 // Light backup restores nothing: the build it goes back to only checks here that it opens the data as it is.
 
-import { Database } from 'bun:sqlite';
+import type { Database } from 'bun:sqlite';
 import {
     chmodSync,
     closeSync,
@@ -38,6 +38,7 @@ import {
     checkRestoredDatabases,
     containerDatabasesIn,
     mountIdsIn,
+    openToCheck,
 } from '../lib/backup/materialize-mount';
 import {
     backupsDirPath,
@@ -523,12 +524,13 @@ async function checkData(flags: Flags): Promise<void> {
 }
 
 // users3.db has no schema version to compare, so only its pages are checked. A file that is no database at all makes
-// SQLite throw rather than answer, and the error names the file either way.
+// SQLite throw rather than answer, and the error names the file either way. The API runs beside this check, and its
+// journal locks out readers while a sign-in writes, so that writer is waited out as for every other database.
 function checkPages(filePath: string): void {
     if (!existsSync(filePath)) return;
     let verdict: string;
     try {
-        const db = new Database(filePath, { readwrite: true, create: false });
+        const db = openToCheck(filePath);
         try {
             verdict = db.query<{ quick_check: string }, []>('PRAGMA quick_check').get()?.quick_check ?? 'no answer';
         } finally {

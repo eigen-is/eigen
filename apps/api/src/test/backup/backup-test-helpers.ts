@@ -94,6 +94,25 @@ export function holdCaptures(): { release(): void; restore(): void } {
     };
 }
 
+// Another process holds the database's exclusive lock for `ms`, from the moment this resolves. In the rollback-journal
+// mode of a new database that locks out readers too, as a writer of users3.db does.
+export async function holdLock(filePath: string, ms: number): Promise<{ exited: Promise<number> }> {
+    const script = [
+        `import { Database } from 'bun:sqlite';`,
+        `const db = new Database(${JSON.stringify(filePath)});`,
+        `db.run('BEGIN EXCLUSIVE');`,
+        `console.log('locked');`,
+        `await Bun.sleep(${ms});`,
+        `db.run('COMMIT');`,
+        'db.close();',
+    ].join('\n');
+    const proc = Bun.spawn([process.execPath, '-e', script], { stdout: 'pipe', stderr: 'inherit' });
+    const reader = proc.stdout.getReader();
+    const { value } = await reader.read();
+    expect(new TextDecoder().decode(value)).toContain('locked');
+    return { exited: proc.exited };
+}
+
 // A container database of one table, a row per marker, so which copy a capture took reads back by its markers. No
 // snapshot config: a close-time version would be noise.
 export const MARKER_SCHEMA = { items: sqliteTable('items', { id: integer('id').primaryKey(), data: text('data') }) };

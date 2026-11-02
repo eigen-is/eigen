@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { checkDatabases } from '../../lib/backup/materialize-mount';
 import { SHARE_REGISTRY_DB_CONFIG } from '../../lib/share/db-config';
 import { TEST_DATA_DIR } from '../setup';
+import { holdLock } from './backup-test-helpers';
 
 // The database check a restore and a rollback end on reads files another process may be writing, such as the live
 // API's. A writer that holds its lock for a moment must be waited out, not read as a database at version 0 or one
@@ -23,25 +24,6 @@ function stampedDatabase(name: string, version: number): string {
         db.close();
     }
     return filePath;
-}
-
-// Another process holds the database's write lock for `ms`, from the moment this resolves.
-async function holdLock(filePath: string, ms: number): Promise<{ exited: Promise<number> }> {
-    const script = [
-        `import { Database } from 'bun:sqlite';`,
-        `const db = new Database(${JSON.stringify(filePath)});`,
-        `db.run('BEGIN EXCLUSIVE');`,
-        `db.run('UPDATE __schema_version SET version = version WHERE id = 1');`,
-        `console.log('locked');`,
-        `await Bun.sleep(${ms});`,
-        `db.run('COMMIT');`,
-        'db.close();',
-    ].join('\n');
-    const proc = Bun.spawn([process.execPath, '-e', script], { stdout: 'pipe', stderr: 'inherit' });
-    const reader = proc.stdout.getReader();
-    const { value } = await reader.read();
-    expect(new TextDecoder().decode(value)).toContain('locked');
-    return { exited: proc.exited };
 }
 
 describe('checkDatabases', () => {
