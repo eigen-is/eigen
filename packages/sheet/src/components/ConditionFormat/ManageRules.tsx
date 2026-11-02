@@ -1,6 +1,6 @@
 // The Manage rules dialog, opened from the Format menu: the current sheet's conditional-format rules, each with its
 // range, a plain-English description and a swatch of its style. Its delete button per rule removes the rule at once,
-// so the dialog is a list with only Close in its footer.
+// unless the sheet is protected, so the dialog is a list with only Close in its footer.
 
 import type { ConditionalFormatRule, DefaultConditionalFormatRule, SingleRange } from '@workspace/lib/sheets';
 import { columnIndexToLabel } from '@workspace/lib/sheets';
@@ -11,7 +11,7 @@ import { X } from 'lucide-react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialogProps } from '../../hooks/useDialog';
-import { findSheet } from '../../state';
+import { deleteSheetRule, findSheet } from '../../state';
 import { RULE_COPY } from './ConditionRules';
 
 function formatRange(range: SingleRange): string {
@@ -121,13 +121,6 @@ export function ManageRules() {
     const dialogProps = useDialogProps();
     const rules = findSheet(context, context.currentSheetId)?.conditionalFormatRules ?? [];
 
-    const deleteRule = (ruleIndex: number) => {
-        setContext((ctx) => {
-            const arr = findSheet(ctx, ctx.currentSheetId)?.conditionalFormatRules;
-            if (arr) arr.splice(ruleIndex, 1);
-        });
-    };
-
     return (
         <FormDialog {...dialogProps} title="Conditional formatting rules" size="md">
             {rules.length === 0 ? (
@@ -149,7 +142,7 @@ export function ManageRules() {
                                 size="icon"
                                 aria-label="Delete rule"
                                 className="h-7 w-7 shrink-0"
-                                onClick={() => deleteRule(i)}
+                                onClick={() => setContext((ctx) => deleteSheetRule(ctx, i))}
                             >
                                 <X className="h-3.5 w-3.5" />
                             </Button>

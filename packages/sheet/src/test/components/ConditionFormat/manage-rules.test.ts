@@ -1,5 +1,6 @@
 // The Manage rules dialog lists the sheet's conditional formats, each with its description and range, and a named
-// delete button that removes that rule at once. It is a list with no submit, so its footer has only Close.
+// delete button that removes that rule at once. A protected sheet refuses the delete with its hint. It is a list with
+// no submit, so its footer has only Close.
 
 import { expect, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -11,6 +12,7 @@ const { renderSheetDialog } = await import('../sheet-dialog');
 const { ManageRules } = await import('../../../components/ConditionFormat/ManageRules');
 
 type Rule = import('@workspace/lib/sheets').ConditionalFormatRule;
+type SheetConfig = import('../../../state').SheetConfig;
 
 const GREATER_THAN: Rule = {
     type: 'default',
@@ -26,9 +28,9 @@ const COLOR_SCALE: Rule = {
     format: ['#f8696b', '#ffffff'],
 };
 
-const openManageRules = (rules: Rule[]) =>
+const openManageRules = (rules: Rule[], config: SheetConfig = {}) =>
     renderSheetDialog((d) => d.showDialog(createElement(ManageRules)), {
-        sheets: [{ name: 'sheet', id: 'id_1', order: 0, config: {}, data: [[null]], conditionalFormatRules: rules }],
+        sheets: [{ name: 'sheet', id: 'id_1', order: 0, config, data: [[null]], conditionalFormatRules: rules }],
     });
 
 const deleteButtons = () => [
@@ -62,4 +64,12 @@ test('each rule has a named delete button that removes it at once', async () => 
     await act(async () => deleteButtons()[0]?.click());
     expect(dialog.context().sheets[0]?.conditionalFormatRules).toEqual([COLOR_SCALE]);
     expect(dialog.dialogs()).toHaveLength(1);
+});
+
+test('a protected sheet keeps its rule and shows its hint', async () => {
+    const hintText = 'This sheet is protected.';
+    const dialog = await openManageRules([GREATER_THAN], { authority: { sheet: 1, hintText } });
+    await act(async () => deleteButtons()[0]?.click());
+    expect(dialog.context().sheets[0]?.conditionalFormatRules).toEqual([GREATER_THAN]);
+    expect(dialog.context().warnDialog).toBe(hintText);
 });

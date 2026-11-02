@@ -258,6 +258,11 @@ export function clearSheetRules(ctx: Context) {
     getSheet(ctx).conditionalFormatRules = [];
 }
 
+export function deleteSheetRule(ctx: Context, ruleIndex: number) {
+    if (!checkProtectionFormatCells(ctx)) return;
+    getSheet(ctx).conditionalFormatRules?.splice(ruleIndex, 1);
+}
+
 export function applyColorScalePreset(ctx: Context, presetKey: string) {
     if (!checkProtectionFormatCells(ctx)) return;
     const format = CF_PRESETS[presetKey];
