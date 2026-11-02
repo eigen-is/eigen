@@ -1,13 +1,13 @@
 import { describe, expect, mock, test } from 'bun:test';
-import { selectionCommands } from '../../../../core/command-palette/commands/drive';
 import { navCommands } from '../../../../core/command-palette/commands/nav';
-import { DRIVE_ACTIONS } from '../../../../core/drive/drive-actions';
+import { selectionCommands } from '../../../../core/command-palette/commands/selection';
+import { driveActionsFor } from '../../../../core/drive/drive-actions';
 import type {
     CommandContext,
     PaletteSelectionAction,
     PaletteSelectionActions,
 } from '../../../../types/command-palette';
-import type { DrivePath, DrivePathType } from '../../../../types/drive';
+import type { DriveCapabilities, DrivePath, DrivePathType } from '../../../../types/drive';
 import type { DriveActionId } from '../../../../types/drive-actions';
 
 function path(p: Partial<DrivePath> & { name: string; type: DrivePathType }): DrivePath {
@@ -48,9 +48,23 @@ function context(items: DrivePath[], selectionActions: PaletteSelectionActions, 
     };
 }
 
+// A view that allows everything, so a document is offered every row the tests publish.
+const browse: DriveCapabilities = {
+    canCreateFolder: true,
+    canUpload: true,
+    canWrite: true,
+    canDelete: true,
+    canRename: true,
+    canMove: true,
+    canShare: true,
+    showBreadcrumb: true,
+};
+
 // A published row for a Drive catalog row, as a page binds it to its selection.
 function row(id: DriveActionId, run: PaletteSelectionAction['run'] = () => {}): PaletteSelectionAction {
-    const action = DRIVE_ACTIONS.find((a) => a.id === id);
+    const action = driveActionsFor({ items: [doc], capabilities: browse, sharedWithMe: false }).find(
+        (a) => a.id === id,
+    );
     if (!action) throw new Error(`No Drive action ${id}`);
     return { action, run };
 }

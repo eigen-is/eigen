@@ -2,7 +2,8 @@
 // menu that acts on a file draws them through this component, for example a Drive item's menu or a mail
 // attachment's, so a new file action shows up in all of them.
 
-import type { FileActionGroup, FileActionId } from '@workspace/lib/types/file-subject';
+import { formatForDisplay } from '@tanstack/react-hotkeys';
+import type { FileActionGroup } from '@workspace/lib/types/file-subject';
 import { MenuSections } from '../context-menu/menu-sections';
 import { DropdownMenuItem, DropdownMenuShortcut } from '../dropdown-menu';
 import type { FileActionRunner } from './use-file-action-runner';
@@ -13,9 +14,8 @@ type FileActionMenuItemsProps = {
     runner: FileActionRunner;
     // A host with rows of its own in a group (Drive's Open, Rename, Download ▸) draws each group where it goes.
     group?: FileActionGroup;
-    // The keys a host's own list binds to a row, such as Space for Quick preview in Drive. A pointer menu
-    // shows them; a touch menu has no keyboard to name.
-    shortcuts?: Partial<Record<FileActionId, string>>;
+    // The host binds the rows' hotkeys, as a Drive listing binds Space to Quick preview, so the menu names them.
+    shortcuts?: boolean;
 };
 
 // Without a group, every group in its place; with one, that group's rows in the registry's order.
@@ -33,10 +33,8 @@ export function FileActionMenuItems({ runner, group, shortcuts }: FileActionMenu
             <DropdownMenuItem key={action.id} disabled={runner.isPending} onClick={() => runner.run(action)}>
                 <action.icon className="h-4 w-4" />
                 {action.label}
-                {shortcuts?.[action.id] && (
-                    <DropdownMenuShortcut className="pointer-coarse:hidden">
-                        {shortcuts[action.id]}
-                    </DropdownMenuShortcut>
+                {shortcuts && action.shortcut && (
+                    <DropdownMenuShortcut>{formatForDisplay(action.shortcut)}</DropdownMenuShortcut>
                 )}
             </DropdownMenuItem>
         ));

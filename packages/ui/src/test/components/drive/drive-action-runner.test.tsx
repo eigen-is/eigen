@@ -19,7 +19,7 @@ const { CommandPaletteProvider } = await import(
     '../../../components/layout/app/command-palette/command-palette-provider'
 );
 const { DRIVE_CAPABILITIES } = await import('../../../components/drive/drive-capabilities');
-const { useDriveActionRunner } = await import('../../../components/drive/drive-layout-dialogs');
+const { useDriveActionRunner } = await import('../../../components/drive/drive-action-runner');
 
 let unmount = async () => {};
 afterEach(() => unmount());

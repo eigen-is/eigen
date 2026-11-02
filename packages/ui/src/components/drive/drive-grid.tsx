@@ -2,7 +2,7 @@
 // selection, keys and context menu as the table. DriveList draws it in grid mode.
 
 import { useVirtualizer } from '@tanstack/react-virtual';
-import type { DrivePath } from '@workspace/lib/types';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import { useRef } from 'react';
 import { useElementSize } from '../../hooks/use-element-size';
 import { useLongPress } from '../../hooks/use-long-press';
@@ -12,10 +12,8 @@ import { DriveTile } from './drive-tile';
 import { useDriveItemController } from './use-drive-item-controller';
 
 const TILE_MIN_WIDTH = 160;
-// Estimate only — tile rows are measured; real height tracks column width (aspect-[4/3] thumbs).
+// A first guess only: each row of tiles is measured, as its height follows the column width.
 const TILE_ROW_HEIGHT = 168;
-
-export type DriveGridProps = DriveViewProps;
 
 export function DriveGrid({
     items = [],
@@ -27,9 +25,9 @@ export function DriveGrid({
     actions,
     selection,
     onSelectionChange,
-    contextMenuItems,
+    ownActions,
     unreadPathIds,
-}: DriveGridProps) {
+}: DriveViewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [setContainer, { width }] = useElementSize(containerRef);
     // 0 = not yet measured; the initial scroll and scrollToIndex wait for a real column count.
@@ -58,7 +56,7 @@ export function DriveGrid({
         actions,
     });
 
-    // One long-press instance for the whole grid — tiles spread bind(item); disabled tiles skip it.
+    // One long-press for the whole grid: each tile binds it to its item, and a disabled tile doesn't.
     const longPress = useLongPress<DrivePath>((item, x, y) => controller.openContextMenuAt(item, x, y));
 
     return (
@@ -108,12 +106,7 @@ export function DriveGrid({
                 })}
             </div>
 
-            <DriveItemContextMenu
-                controller={controller}
-                items={items}
-                actions={actions}
-                renderItems={contextMenuItems}
-            />
+            <DriveItemContextMenu controller={controller} items={items} actions={actions} ownActions={ownActions} />
         </div>
     );
 }

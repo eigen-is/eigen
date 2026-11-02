@@ -5,8 +5,12 @@
 
 import type { Command, CommandContext } from '@workspace/lib/types/command-palette';
 import { EXPORT_FORMAT_LABELS, exportFormatsFor, stripEigenExtension } from '@workspace/lib/types/drive';
+import type { DriveActionId } from '@workspace/lib/types/drive-actions';
+import type { FileActionId } from '@workspace/lib/types/file-subject';
+import { labelFor } from '../../drive/drive-actions';
 
-// The words a row is found by besides its label, such as "delete" for Move to trash.
+// The words a row is found by besides its label, such as "delete" for Move to trash. A page may publish
+// rows of its own, such as Trash's, so the lookup takes any id.
 const KEYWORDS: Partial<Record<string, string[]>> = {
     'open-new-tab': ['tab'],
     'quick-look': ['preview', 'look'],
@@ -19,14 +23,14 @@ const KEYWORDS: Partial<Record<string, string[]>> = {
     'mail-to': ['send', 'attach', 'compose'],
     trash: ['delete', 'remove'],
     'remove-shared': ['delete', 'leave'],
-};
+} satisfies Partial<Record<DriveActionId | FileActionId, string[]>>;
 
 export function selectionCommands(ctx: CommandContext): Command[] {
     const items = ctx.selection?.items ?? [];
     if (items.length === 0 || !ctx.selectionActions) return [];
     const [first] = items;
-    const name = items.length === 1 ? stripEigenExtension(first.name) : undefined;
-    const keywordsFor = (id: string) => [...(KEYWORDS[id] ?? []), ...(name ? [first.name] : [])];
+    const single = items.length === 1;
+    const keywordsFor = (id: string) => [...(KEYWORDS[id] ?? []), ...(single ? [first.name] : [])];
 
     const commands = ctx.selectionActions.flatMap(({ action, run }) =>
         action.id === 'download-as'
@@ -34,10 +38,7 @@ export function selectionCommands(ctx: CommandContext): Command[] {
             : [
                   {
                       id: `selection.${action.id}`,
-                      title:
-                          items.length > 1 && action.pluralLabel
-                              ? action.pluralLabel.replace('{n}', String(items.length))
-                              : action.label,
+                      title: labelFor(action, items.length),
                       keywords: keywordsFor(action.id),
                       icon: action.icon,
                       run: () => run(),
@@ -60,7 +61,7 @@ export function selectionCommands(ctx: CommandContext): Command[] {
     // The page publishes its rows in its menu's order, and the section keeps it.
     return [...commands, ...formats].map<Command>((command, index, all) => ({
         ...command,
-        subtitle: name,
+        subtitle: single ? stripEigenExtension(first.name) : undefined,
         baseRank: all.length - index,
         group: 'selection',
     }));

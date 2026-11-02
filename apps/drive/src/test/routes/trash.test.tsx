@@ -1,11 +1,12 @@
 // The trash lists what was deleted, and "Modified" sorts it by when each item was trashed, not by its last
 // edit. Empty trash shows only when there is something to empty, and asks before it deletes everything.
-// The command palette offers a trashed item what its menu does: Restore and Delete permanently.
+// A trashed row's menu and the command palette offer the same two rows: Restore and Delete permanently.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 const window = installHappyDom();
@@ -157,4 +158,17 @@ test('the palette offers a trashed item only Restore and Delete permanently', as
     const container = await open();
     await click(container.querySelector('[role="grid"] [data-index] > *'));
     expect(palette.actions?.map(({ action }) => action.label)).toEqual(['Restore', 'Delete permanently']);
+});
+
+test('a trashed row’s menu draws the same rows, Delete permanently last and red', async () => {
+    trash.data = [trashed('a.txt', 1, 2)];
+    const container = await open();
+    await act(async () => {
+        container
+            .querySelector('[role="grid"] [data-index] > *')
+            ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 10, clientY: 10 }));
+    });
+    expect(menuRows()).toEqual(['Restore', '—', 'Delete permanently']);
+    const rows = [...document.querySelectorAll('[role="menu"] [role="menuitem"]')];
+    expect(rows.map((row) => row.getAttribute('data-variant'))).toEqual(['default', 'destructive']);
 });

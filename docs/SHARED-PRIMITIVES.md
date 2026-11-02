@@ -239,7 +239,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (300)
+## Hooks (298)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -399,7 +399,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useImportFromDrive` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-import-document.ts |
 | `useIsEffectiveOwner` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useIsEffectiveOwnerOf` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
-| `useIsPathWatched` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useIsSharedWithMe` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
 | `useListTrash` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/trash.ts |
 | `useMediaResolver` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
@@ -418,11 +417,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useRootFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `useSharedPaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useTextPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
-| `useUnwatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useUpdateACL` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useUploadFile` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useVCardPreview` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
-| `useWatchPath` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
+| `useWatchToggle` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-watch.ts |
 | `useZombieMediaSweep` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-zombie-media-sweep.ts |
 | `useFileContent` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-content.ts |
 | `useFileSave` | `@workspace/lib/editor` | packages/lib/src/core/editor/hooks/use-file-save.ts |
@@ -544,7 +542,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (440)
+## Types (439)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -956,7 +954,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContactAutosuggestProps` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/types.ts |
 | `MenuSectionsProps` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DriveAccessListProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-access-list.tsx |
-| `DriveGridProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-grid.tsx |
 | `DriveLocationValue` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-location-field.tsx |
 | `DriveTableProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
 | `DriveViewProps` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/drive-table.tsx |
@@ -989,7 +986,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1115)
+## Utilities & constants (1118)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -1250,6 +1247,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `DEFAULT_CALENDAR_COLOR` | `@workspace/lib/constants` | packages/lib/src/constants/calendar.ts |
 | `DEFAULT_RELAY_PORT` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
 | `defaultSenderAddress` | `@workspace/lib/constants` | packages/lib/src/constants/mail.ts |
+| `DELETE_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `DOCUMENT_FONT` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCUMENT_FONT_SIZE` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `DOCUMENT_LINE_RATIO` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
@@ -1310,6 +1308,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `nextFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `parseRgb` | `@workspace/lib/constants` | packages/lib/src/constants/colors.ts |
 | `PPTX_MIME` | `@workspace/lib/constants` | packages/lib/src/constants/mime.ts |
+| `QUICK_LOOK_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
 | `readCssFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `readFontSize` | `@workspace/lib/constants` | packages/lib/src/constants/fonts.ts |
 | `REDO_ALT_HOTKEY` | `@workspace/lib/constants` | packages/lib/src/constants/hotkeys.ts |
@@ -1490,14 +1489,15 @@ rather than inlining `queryClient.invalidateQueries`.
 | `filenameFromDisposition` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `triggerDownload` | `@workspace/lib/download` | packages/lib/src/core/download.ts |
 | `checkPathAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
+| `copyDriveLink` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `createWithReconcile` | `@workspace/lib/drive` | packages/lib/src/core/drive/reconcile-create.ts |
 | `DEFAULT_MOUNT_ID` | `@workspace/lib/drive` | packages/lib/src/types/mount.ts |
-| `DRIVE_ACTIONS` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `driveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `folderContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `getDriveComparator` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-sort.ts |
 | `handleDriveSSEvent` | `@workspace/lib/drive` | packages/lib/src/core/drive/sse-handlers.ts |
 | `isPendingMediaName` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
+| `labelFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/drive-actions.ts |
 | `mountMimeContentQueryConfig` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/reads.ts |
 | `PENDING_PREFIX` | `@workspace/lib/drive` | packages/lib/src/core/drive/media-resolver.tsx |
 | `toastExportSummary` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-export-document.ts |
@@ -2052,7 +2052,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
 | `EXPORTING_CONTACTS_TITLE` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/transfer-titles.ts |
 | `IMPORTING_CONTACTS_TITLE` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/transfer-titles.ts |
-| `MENU_SECTIONS` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
+| `inMenuOrder` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DOCS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `EIGEN_DOC_APP_CONFIGS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |

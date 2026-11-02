@@ -2,7 +2,6 @@
 // selection. Open runs the view's own open, a writable view offers the copy and move rows and Watch with
 // its live state, and a private item has no collaborators to mail.
 import { afterAll, afterEach, expect, mock, test } from 'bun:test';
-import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DriveCapabilities, DrivePath } from '@workspace/lib/types/drive';
 import type { DriveActionId } from '@workspace/lib/types/drive-actions';
 import { drivePath } from '../../drive-path';
@@ -15,21 +14,24 @@ installHappyDom();
 const session = { user: { id: 'owner-1', email: 'me@example.com' } };
 const realAuth = { ...(await import('@workspace/lib/auth')) };
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session }));
-// The Watch row reads the item's watch state from the server: here the item is watched directly.
+// The Watch row reads the item's watch state from the server: here the item is watched directly. Each
+// read records the path it asked about, an empty one when it reads nothing.
+const watchReads: string[] = [];
 const realDrive = { ...(await import('@workspace/lib/drive')) };
-const idle = { isPending: false, mutate: () => {} };
 mock.module('@workspace/lib/drive', () => ({
     ...realDrive,
-    useIsPathWatched: () => ({ data: { direct: true, viaAncestor: null } }),
-    useWatchPath: () => idle,
-    useUnwatchPath: () => idle,
+    useWatchToggle: (_ownerId: string, _mountId: string, pathId: string) => {
+        watchReads.push(pathId);
+        return { direct: true, label: 'Stop watching', isPending: false, toggle: () => {} };
+    },
 }));
 afterAll(() => {
     mock.module('@workspace/lib/auth', () => realAuth);
     mock.module('@workspace/lib/drive', () => realDrive);
 });
 
-const { createElement } = await import('react');
+const { act, createElement, useState } = await import('react');
+const { BellRing } = await import('lucide-react');
 const { driveActionsFor } = await import('@workspace/lib/drive');
 const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { CommandPaletteProvider } = await import(
@@ -71,37 +73,45 @@ const shared = drivePath({
 });
 
 // Publishes the selection through a runner drawn by hand, as DriveLayout's would gate it, and returns what
-// the palette received and the Drive actions it ran.
+// the palette received, the Drive actions it ran, and ways to rename the first item and open the palette.
 async function publish(items: DrivePath[], capabilities: DriveCapabilities = DRIVE_CAPABILITIES.browse) {
     await unmountLast();
-    const ran: [DriveActionId, DrivePath[]][] = [];
+    const ran: [DriveActionId, readonly DrivePath[]][] = [];
     const actions = {
         capabilities,
         actionsFor: (targets: readonly DrivePath[]) =>
             driveActionsFor({ items: targets, capabilities, sharedWithMe: false }),
-        run: (id: DriveActionId, targets: DrivePath[]) => ran.push([id, targets]),
+        run: (id: DriveActionId, targets: readonly DrivePath[]) => ran.push([id, targets]),
         onCreateEigenDoc: {},
         dialogs: null,
     };
-    const received: { actions: PaletteSelectionActions } = { actions: null };
+    const received: { palette: ReturnType<typeof useCommandPalette> | null } = { palette: null };
+    let setItems = (_items: DrivePath[]) => {};
+    function Listing() {
+        const [selected, setSelected] = useState(items);
+        setItems = setSelected;
+        return createElement(DrivePaletteSelection, { items: selected, listing: selected, actions });
+    }
     function Reader() {
-        received.actions = useCommandPalette().selectionActions;
+        received.palette = useCommandPalette();
         return null;
     }
     ({ unmount } = await renderInDocument(
         createElement(
             PreviewProvider,
             null,
-            createElement(
-                CommandPaletteProvider,
-                null,
-                createElement(DrivePaletteSelection, { items, listing: items, actions }),
-                createElement(Reader),
-            ),
+            createElement(CommandPaletteProvider, null, createElement(Listing), createElement(Reader)),
         ),
     ));
-    const rows = received.actions ?? [];
-    return { ids: rows.map(({ action }) => action.id), rows, ran };
+    const rows = received.palette?.selectionActions ?? [];
+    return {
+        ids: rows.map(({ action }) => action.id),
+        rows,
+        ran,
+        palette: () => received.palette,
+        rename: (name: string) => act(async () => setItems([{ ...items[0], name }])),
+        openPalette: () => act(async () => received.palette?.setOpen(true)),
+    };
 }
 
 test('Open on a folder or a text file runs the view’s own open', async () => {
@@ -112,10 +122,25 @@ test('Open on a folder or a text file runs the view’s own open', async () => {
     }
 });
 
-test('a writable selection offers Duplicate, Move to…, Copy to… and Watch with its live label', async () => {
+test('a writable selection offers Duplicate, Move to…, Copy to… and Watch with its live label and bell', async () => {
     const { ids, rows } = await publish([text]);
     expect(ids).toEqual(expect.arrayContaining(['duplicate', 'move-to', 'copy-to', 'watch']));
-    expect(rows.find(({ action }) => action.id === 'watch')?.action.label).toBe('Stop watching');
+    const watch = rows.find(({ action }) => action.id === 'watch')?.action;
+    expect(watch?.label).toBe('Stop watching');
+    expect(watch?.icon).toBe(BellRing);
+});
+
+test('the Watch row reads the watch state only while the palette is open', async () => {
+    const { openPalette } = await publish([text]);
+    expect(watchReads.at(-1)).toBe('');
+    await openPalette();
+    expect(watchReads.at(-1)).toBe(text.id);
+});
+
+test('a renamed item reaches the palette under its new name', async () => {
+    const { rename, palette } = await publish([text]);
+    await rename('renamed.txt');
+    expect(palette()?.selection?.items.map((item) => item.name)).toEqual(['renamed.txt']);
 });
 
 test('a multi-selection offers the rows that act on a set, and no file actions', async () => {

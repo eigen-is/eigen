@@ -21,7 +21,7 @@ import {
 import { KebabTrigger, ToolbarTitle } from '@workspace/ui/components/layout/toolbar';
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
-import type React from 'react';
+import type { ReactNode } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
@@ -32,16 +32,16 @@ import { useLayout } from '../layout/app/layout-context';
 import { LoadingState } from '../layout/app/loading-state';
 import type { CreateCallbacks } from './create-menu';
 import { getCreateMenuItems } from './create-menu';
+import type { DriveActionRunner } from './drive-action-runner';
 import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveGrid } from './drive-grid';
-import type { DriveActionRunner } from './drive-layout-dialogs';
 import { useMountLabel } from './drive-mount-list';
 import { DrivePaletteSelection } from './drive-palette-selection';
 import { DriveTable, nextDriveSort } from './drive-table';
 
 const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
 
-const VIEW_MODES: { value: DriveViewMode; label: React.ReactNode }[] = [
+const VIEW_MODES: { value: DriveViewMode; label: ReactNode }[] = [
     {
         value: 'list',
         label: (
@@ -60,9 +60,9 @@ const VIEW_MODES: { value: DriveViewMode; label: React.ReactNode }[] = [
     },
 ];
 
-// The three sort options, shared by the grid-mode sort dropdown and the mobile kebab. List mode
-// sorts via the table's column headers instead. Re-selecting the active field flips direction;
-// switching field uses that field's default (see nextDriveSort in drive-table).
+// The sort options of the grid's sort menu and of the phone's ⋮. The list sorts by its column headers
+// instead. Picking the active field again flips its direction, and another field starts in its own
+// default direction, as nextDriveSort decides.
 function SortMenuItems() {
     const { sortKey, sortDir, setSort } = useDriveViewPreferences();
     const chooseSort = (key: DriveSortKey) => setSort(key, nextDriveSort(key, sortKey, sortDir));
@@ -89,9 +89,8 @@ function SortMenuItems() {
     );
 }
 
-// Sort dropdown + list/grid toggle bound to the shared view preference.
-// Lives in every drive listing toolbar (browser, filter views, trash).
-// Mobile collapses both controls into a single kebab.
+// The sort menu and the list or grid switch, both bound to the shared view preference. Every Drive
+// listing's toolbar draws them, such as the folder view's or Trash's. A phone folds both into one ⋮.
 export function DriveViewControls() {
     const isMobile = useIsMobile();
     const { mode, setMode, sortKey } = useDriveViewPreferences();
@@ -112,7 +111,7 @@ export function DriveViewControls() {
 
     return (
         <>
-            {/* List mode sorts via column headers; only grid mode (no headers) keeps a sort dropdown. */}
+            {/* The grid has no column headers to sort by, so only it gets a sort menu. */}
             {mode === 'grid' && (
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -131,7 +130,10 @@ export function DriveViewControls() {
                 variant="outline"
                 size="sm"
                 value={mode}
-                onValueChange={(v) => v && setMode(v as DriveViewMode)}
+                onValueChange={(value) => {
+                    const picked = VIEW_MODES.find((option) => option.value === value);
+                    if (picked) setMode(picked.value);
+                }}
             >
                 <ToggleGroupItem value="list" aria-label="List view">
                     <List className="h-4 w-4" />
@@ -171,14 +173,10 @@ export function DriveListToolbar({
     const mountLabel = useMountLabel(ownerId, mountId);
     const { isMobile } = useLayout();
 
-    const handleBreadcrumbClick = (path: DrivePath) => {
-        onRowActivate?.(path);
-    };
-
     const createItems = getCreateMenuItems({ onCreateFolder, onUploadFile, onCreateEigenDoc });
 
-    // Icon-only: this button renders on mobile only, and the row must fit a 390px
-    // viewport beside the back arrow.
+    // Icon only: the button shows on a phone only, where the row has to fit a 390px screen beside the
+    // back arrow.
     const newItemButton =
         createItems.length === 0 ? null : createItems.length === 1 ? (
             <Button size="icon" aria-label={createItems[0].buttonLabel} onClick={createItems[0].onSelect}>
@@ -208,7 +206,7 @@ export function DriveListToolbar({
                 <DriveBreadcrumb
                     paths={breadcrumbPaths}
                     mountLabel={mountLabel}
-                    onNavigate={handleBreadcrumbClick}
+                    onNavigate={(path) => onRowActivate?.(path)}
                     onOpenSharedWithMe={onOpenSharedWithMe}
                     itemClassName="flex items-center"
                 />
@@ -226,7 +224,7 @@ export function DriveListToolbar({
 }
 
 type DriveListProps = CreateCallbacks & {
-    // Already sorted by the caller — rendered and range-selected in this order.
+    // Already sorted by the caller: the list draws them and selects ranges in this order.
     items: DrivePath[];
     isLoading?: boolean;
     error?: Error | null;
@@ -239,7 +237,7 @@ type DriveListProps = CreateCallbacks & {
     mountId: string;
     pathId?: string;
     allowUpload?: boolean;
-    // What the rows' menus, keys and drops do; Trash draws its own menu instead.
+    // What the rows' menus, keys and drops do. Absent in a listing with actions of its own.
     actions?: DriveActionRunner;
     onQuickLook?: (path: DrivePath) => void;
     unreadPathIds?: ReadonlySet<string>;
@@ -247,10 +245,10 @@ type DriveListProps = CreateCallbacks & {
     hideShared?: boolean;
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
-    contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
-    // The command palette's rows for the selected items, beside contextMenuItems.
-    paletteActions?: (items: DrivePath[]) => PaletteSelectionAction[];
-    emptyState?: React.ReactNode;
+    // The rows of a listing with actions of its own, such as Trash, for the items they act on: the
+    // rows' menu draws them and the command palette offers them.
+    ownActions?: (items: readonly DrivePath[]) => PaletteSelectionAction[];
+    emptyState?: ReactNode;
 };
 
 export function DriveList({
@@ -276,18 +274,17 @@ export function DriveList({
     hideShared,
     dateLabel,
     getItemDate,
-    contextMenuItems,
-    paletteActions,
+    ownActions,
     emptyState,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
     const { mode } = useDriveViewPreferences();
 
-    // Selection lives here (not per view) so it survives list/grid toggles.
+    // The selection lives here rather than in each view, so it survives a switch between list and grid.
     const selection = useListSelection({ items, getId: (item: DrivePath) => item.id });
 
-    // Background create menu, opened by right-clicking the empty listing area (rows
-    // stop propagation, so their right-clicks surface the per-item menu instead).
+    // The create menu a right-click on the listing area opens. A right-click on a row opens the row's menu
+    // instead, since the rows stop it from reaching the listing.
     const createMenu = useContextMenu<true>();
 
     // A click on the row that is already active opens it; a click on any other row selects it.
@@ -314,7 +311,7 @@ export function DriveList({
         return <ErrorState message="Error loading files" detail={error.message} />;
     }
 
-    // Shared inputs for both views; the table additionally gets the column config.
+    // What both views take. The table also takes its column flags.
     const sharedProps = {
         items,
         activeItemId: activeRowId,
@@ -322,13 +319,13 @@ export function DriveList({
         getItemHref,
         actions,
         selection,
-        contextMenuItems,
+        ownActions,
         onQuickLook,
         unreadPathIds,
     };
 
-    // Context-aware default empty-state hint: only mention drag-drop where it works,
-    // and point at the "New" button only when there's something to create.
+    // The empty listing's hint names a drop only where a drop uploads, and the New button only where
+    // there is something to create.
     const dropWorks = allowUpload && !!onUploadFiles;
     const defaultEmptyHint = dropWorks
         ? createItems.length > 0
@@ -364,7 +361,7 @@ export function DriveList({
                 items={selection.selectedItems}
                 listing={items}
                 actions={actions}
-                ownActions={paletteActions}
+                ownActions={ownActions}
             />
         </div>
     );

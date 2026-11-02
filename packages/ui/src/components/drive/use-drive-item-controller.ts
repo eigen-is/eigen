@@ -2,7 +2,8 @@
 // selection, keyboard navigation, drag and drop onto folders and the row menu's open state. Keyboard
 // keys and drops reach the same Drive action runner the menu does.
 
-import type { DrivePath } from '@workspace/lib/types';
+import { DELETE_HOTKEY } from '@workspace/lib/constants/hotkeys';
+import type { DrivePath } from '@workspace/lib/types/drive';
 import type { DragEvent, RefObject } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useKeyboardListNavigation } from '../../hooks/use-keyboard-list-navigation';
@@ -10,7 +11,7 @@ import { useListDrag } from '../../hooks/use-list-drag';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { useSelectableContextMenu } from '../../hooks/use-selectable-context-menu';
-import type { DriveActionRunner } from './drive-layout-dialogs';
+import type { DriveActionRunner } from './drive-action-runner';
 
 export type UseDriveItemControllerOptions = {
     // Already sorted by the caller: the controller selects and navigates over them as they are.
@@ -20,7 +21,7 @@ export type UseDriveItemControllerOptions = {
     columns?: number;
     scrollToIndex?: (index: number, opts?: { align?: 'center' }) => void;
     containerRef: RefObject<HTMLElement | null>;
-    // Selection lifted by the caller (DriveList) so it survives list/grid toggles.
+    // Held by the caller, such as DriveList, so the selection survives a switch between list and grid.
     selection?: UseListSelectionReturn<DrivePath>;
     onItemClick?: (item: DrivePath) => void;
     onQuickLook?: (item: DrivePath) => void;
@@ -79,12 +80,12 @@ export function useDriveItemController({
         onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef,
         shouldNotify: () => !!activeItemId,
-        // Delete runs the row the menu marks with the Delete key. Like the menu, it acts on the whole
-        // selection when more than one row is selected.
+        // Delete and Backspace run the row the menu marks with DELETE_HOTKEY. Like the menu, it acts on the
+        // whole selection when more than one row is selected.
         onDelete: actions
             ? (item) => {
                   const items = selection.selectedCount > 1 ? selection.selectedItems : [item];
-                  const remove = actions.actionsFor(items).find(({ shortcut }) => shortcut === 'Delete');
+                  const remove = actions.actionsFor(items).find(({ shortcut }) => shortcut === DELETE_HOTKEY);
                   if (remove) actions.run(remove.id, items);
               }
             : undefined,

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
-import { DRIVE_ACTIONS, driveActionsFor } from '../../../core/drive/drive-actions';
+import { DELETE_HOTKEY } from '../../../constants/hotkeys';
+import { driveActionsFor } from '../../../core/drive/drive-actions';
 import type { DriveCapabilities, DrivePath } from '../../../types/drive';
 import type { DriveActionId, DriveActionSubject } from '../../../types/drive-actions';
 
@@ -115,6 +116,10 @@ describe('driveActionsFor on one item', () => {
         expect(ids).not.toContain('trash');
     });
 
+    test('an item shared with the viewer is not duplicated, as its copy would land in the owner’s folder', () => {
+        expect(idsFor({ items: [sharedDoc], sharedWithMe: true })).not.toContain('duplicate');
+    });
+
     test('no delete without canDelete', () => {
         const caps = { ...browse, canDelete: false };
         expect(idsFor({ items: [doc], capabilities: caps })).not.toContain('trash');
@@ -137,13 +142,7 @@ describe('driveActionsFor on a multi-selection', () => {
     });
 
     test('a set shared with the viewer is removed', () => {
-        expect(idsFor({ items, sharedWithMe: true })).toEqual([
-            'duplicate',
-            'move-to',
-            'copy-to',
-            'mail-to',
-            'remove-shared',
-        ]);
+        expect(idsFor({ items, sharedWithMe: true })).toEqual(['move-to', 'copy-to', 'mail-to', 'remove-shared']);
     });
 
     test('a set with a root in it is not duplicated', () => {
@@ -165,16 +164,22 @@ test('no items offer no rows', () => {
     expect(idsFor({ items: [] })).toEqual([]);
 });
 
+// A shared document in a browse view offers every row, the delete row aside, which turns on the share.
+const everyRow = (sharedWithMe: boolean) => driveActionsFor({ items: [sharedDoc], capabilities: browse, sharedWithMe });
+
 test('the guest and mail flags sit on the rows whose routes need them', () => {
-    const flagged = (flag: 'guestDenied' | 'mailOnly') => DRIVE_ACTIONS.filter((a) => a[flag]).map((a) => a.id);
+    const flagged = (flag: 'guestDenied' | 'mailOnly') =>
+        everyRow(false)
+            .filter((a) => a[flag])
+            .map((a) => a.id);
     expect(flagged('guestDenied')).toEqual(['email-collaborators']);
     expect(flagged('mailOnly')).toEqual(['mail-to']);
 });
 
-test('the deleting rows show the Delete key', () => {
-    const shortcuts = DRIVE_ACTIONS.filter((a) => a.shortcut).map((a) => [a.id, a.shortcut]);
+test('the deleting rows show the delete key, and no other row shows one', () => {
+    const shortcuts = [...everyRow(false), ...everyRow(true)].filter((a) => a.shortcut).map((a) => [a.id, a.shortcut]);
     expect(shortcuts).toEqual([
-        ['trash', 'Delete'],
-        ['remove-shared', 'Delete'],
+        ['trash', DELETE_HOTKEY],
+        ['remove-shared', DELETE_HOTKEY],
     ]);
 });

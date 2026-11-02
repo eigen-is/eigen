@@ -27,7 +27,7 @@ export function useDriveDialogs() {
     const create = useEigenDocDialogs();
 
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
+    const [deleteItems, setDeleteItems] = useState<readonly DrivePath[]>([]);
 
     const [renameOpen, setRenameOpen] = useState(false);
     const [renameItem, setRenameItem] = useState<DrivePath | null>(null);
@@ -42,7 +42,7 @@ export function useDriveDialogs() {
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
 
     const [copyMoveOpen, setCopyMoveOpen] = useState(false);
-    const [copyMoveItems, setCopyMoveItems] = useState<DrivePath[]>([]);
+    const [copyMoveItems, setCopyMoveItems] = useState<readonly DrivePath[]>([]);
     const [copyMoveMode, setCopyMoveMode] = useState<'move' | 'copy'>('copy');
 
     return {
@@ -52,7 +52,7 @@ export function useDriveDialogs() {
             open: deleteOpen,
             items: deleteItems,
             setOpen: setDeleteOpen,
-            openDialog: (items: DrivePath[]) => {
+            openDialog: (items: readonly DrivePath[]) => {
                 setDeleteItems(items);
                 setDeleteOpen(true);
             },
@@ -110,7 +110,7 @@ export function useDriveDialogs() {
             items: copyMoveItems,
             mode: copyMoveMode,
             setOpen: setCopyMoveOpen,
-            openDialog: (items: DrivePath[], mode: 'move' | 'copy') => {
+            openDialog: (items: readonly DrivePath[], mode: 'move' | 'copy') => {
                 setCopyMoveItems(items);
                 setCopyMoveMode(mode);
                 setCopyMoveOpen(true);

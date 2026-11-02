@@ -3,9 +3,9 @@
 // column and the toolbar. Which rows apply comes from driveActionsFor, read through the view's
 // capabilities: the item menu and the command palette draw those rows, and run refuses any other.
 
-import { getDriveItemUrl, getDriveShareUrl, openMailComposeWith } from '@workspace/lib/api';
-import { copyToClipboard } from '@workspace/lib/clipboard';
+import { getDriveItemUrl, openMailComposeWith } from '@workspace/lib/api';
 import {
+    copyDriveLink,
     PartialCopyError,
     useCopyPaths,
     useCopyToFolder,
@@ -46,7 +46,7 @@ export type DriveActionRunner = {
     // The rows these items offer in this view, to this viewer, on this server.
     actionsFor: (items: readonly DrivePath[]) => DriveAction[];
     // Does nothing for a row the items don't offer. Download as… names its format.
-    run: (id: DriveActionId, items: DrivePath[], format?: ExportFormat) => void;
+    run: (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => void;
     // A drag onto a folder row, absent where the view can't move.
     onMove?: (path: DrivePath, targetItemId: string) => Promise<void>;
     onCreateFolder?: () => void;
@@ -75,45 +75,44 @@ export function useDriveActionRunner({
     const actionsFor = useDriveActionsFor(capabilities);
     const { exportPath, isExporting } = useDocumentExport();
 
-    const deletePaths = (paths: DrivePath[]) => {
-        if (paths.length === 0) return;
-        // Confirm on touch (no hover cue, easy mis-taps) and for paths in someone else's drive, where
-        // "delete" either leaves a direct share or trashes the owner's copy. Fine-pointer own-drive
-        // deletes stay instant.
+    // A delete asks first on touch, where a tap can land on the wrong row and nothing hovers to warn of it.
+    // It asks too for an item in someone else's drive, where it leaves a direct share or trashes the owner's
+    // copy. With a mouse in the viewer's own drive, it deletes at once.
+    const deletePaths = (paths: readonly DrivePath[]) => {
         if (isCoarsePointer || paths.some((path) => !isEffectiveOwnerOf(path.ownerId))) {
             dialogs.delete.openDialog(paths);
             return;
         }
-        deletePathsMutation.mutate(paths, {
+        deletePathsMutation.mutate([...paths], {
             onSuccess: () => {
                 for (const path of paths) onAfterAction?.('delete', path);
             },
         });
     };
 
-    const handleDuplicate = (items: DrivePath[]) => {
-        // A root has no folder to hold its copy.
-        const copies = items.flatMap((source) =>
-            source.parentId
-                ? [
-                      {
-                          source,
-                          targetOwnerId: source.ownerId,
-                          targetMountId: source.mountId,
-                          targetParentId: source.parentId,
-                          name: `Copy of ${source.name}`,
-                      },
-                  ]
-                : [],
+    const handleDuplicate = (items: readonly DrivePath[]) => {
+        copyPaths(
+            items.flatMap((source) =>
+                source.parentId
+                    ? [
+                          {
+                              source,
+                              targetOwnerId: source.ownerId,
+                              targetMountId: source.mountId,
+                              targetParentId: source.parentId,
+                              name: `Copy of ${source.name}`,
+                          },
+                      ]
+                    : [],
+            ),
         );
-        if (copies.length) copyPaths(copies);
     };
 
     const handlePickDestination = async (location: { ownerId: string; mountId: string; folderId: string }) => {
         const items = dialogs.copyMove.items;
         if (dialogs.copyMove.mode === 'move') {
             if (location.ownerId !== ownerId || location.mountId !== mountId) {
-                toast.error('Moving across drives isn’t supported yet — use Copy to…');
+                toast.error('Moving across drives isn’t supported yet. Use Copy to… instead.');
                 return;
             }
             await Promise.all(
@@ -133,7 +132,7 @@ export function useDriveActionRunner({
         }
     };
 
-    const run = (id: DriveActionId, items: DrivePath[], format?: ExportFormat) => {
+    const run = (id: DriveActionId, items: readonly DrivePath[], format?: ExportFormat) => {
         if (!actionsFor(items).some((action) => action.id === id)) return;
         const [item] = items;
         switch (id) {
@@ -167,7 +166,7 @@ export function useDriveActionRunner({
                 dialogs.email.openDialog(item);
                 return;
             case 'copy-link':
-                copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
+                copyDriveLink(item);
                 return;
             case 'mail-to':
                 openMailComposeWith({ attachments: items });
@@ -279,9 +278,9 @@ export function useDriveActionRunner({
                     confirmLabel={dialogs.copyMove.mode === 'move' ? 'Move here' : 'Copy here'}
                     defaultOwnerId={ownerId}
                     defaultMountId={mountId}
-                    // currentPath can belong to another drive (eigendoc views pass the user's own root while a
-                    // team drive item is selected). It seeds the start folder only when it lives on the layout's
-                    // drive; otherwise the picker starts at that drive's root.
+                    // currentPath can sit on another drive: a document app's index passes the viewer's own root
+                    // while a team drive item is selected. So it seeds the start folder only when it is on the
+                    // layout's drive, and the picker starts at that drive's root otherwise.
                     defaultFolderId={
                         currentPath?.ownerId === ownerId && currentPath?.mountId === mountId
                             ? currentPath?.id
