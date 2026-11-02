@@ -2,7 +2,7 @@ import { Database } from 'bun:sqlite';
 import { describe, expect, test } from 'bun:test';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { DATA_LEASE_FILE, LEASE_WAIT_MS, leaseKernel, writeLease } from '../lib/config/data-lock';
+import { DATA_LEASE_FILE, LEASE_WAIT_MS, lockScope, writeLease } from '../lib/config/data-lock';
 import { TEST_DATA_DIR } from './setup';
 
 const DATA_ROOT = join(TEST_DATA_DIR, 'instance-lock');
@@ -26,14 +26,14 @@ function spawnHolder(hold: boolean, dataRoot = DATA_ROOT) {
 // Every wait below is the real one: a foreign lease costs a boot LEASE_WAIT_MS, and a heartbeat comes every half of it.
 const LEASE_TEST_TIMEOUT_MS = 2 * LEASE_WAIT_MS;
 
-// Two holders on one machine share the kernel, so another machine is a lease written here with a kernel of its own.
-function writeForeignLease(dataRoot: string, kernel = 'other-kernel') {
+// Two holders on one machine share the lock scope, so another machine is a lease written here with a scope of its own.
+function writeForeignLease(dataRoot: string, scope = { kernel: 'other-kernel', dev: 0 }) {
     mkdirSync(join(dataRoot, 'server'), { recursive: true });
     const now = new Date().toISOString();
-    writeLease(join(dataRoot, 'server', DATA_LEASE_FILE), {
+    writeLease(leaseFileOf(dataRoot), {
         id: 'remote-id',
         host: 'other-machine',
-        kernel,
+        ...scope,
         pid: 4242,
         platform: 'linux',
         startedAt: now,
@@ -41,8 +41,18 @@ function writeForeignLease(dataRoot: string, kernel = 'other-kernel') {
     });
 }
 
+function leaseFileOf(dataRoot: string) {
+    return join(dataRoot, 'server', DATA_LEASE_FILE);
+}
+
 function readLeaseJson(dataRoot: string) {
-    return JSON.parse(readFileSync(join(dataRoot, 'server', DATA_LEASE_FILE), 'utf8'));
+    return JSON.parse(readFileSync(leaseFileOf(dataRoot), 'utf8'));
+}
+
+// The scope a holder on this machine writes, once the folder exists to stat.
+function localScope(dataRoot: string) {
+    mkdirSync(join(dataRoot, 'server'), { recursive: true });
+    return lockScope(leaseFileOf(dataRoot));
 }
 
 describe('instance lock', () => {
@@ -135,15 +145,32 @@ describe('instance lock', () => {
             expect(await holder.exited).toBe(0);
             expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
             const lease = readLeaseJson(dataRoot);
-            expect(lease.kernel).toBe(leaseKernel());
+            expect(lease).toMatchObject(localScope(dataRoot));
             expect(lease.id).not.toBe('remote-id');
+        },
+        LEASE_TEST_TIMEOUT_MS,
+    );
+
+    // WSL2 runs every distro on one kernel, and one distro's view of another's folder goes over 9p, which has its own
+    // device number and need not carry the file lock.
+    test(
+        'a lease from this kernel on another file system waits before it is taken over',
+        async () => {
+            const dataRoot = join(DATA_ROOT, 'lease-other-dev');
+            const local = localScope(dataRoot);
+            writeForeignLease(dataRoot, { kernel: local.kernel, dev: local.dev + 1 });
+            const started = Date.now();
+            const holder = spawnHolder(false, dataRoot);
+            expect(await holder.exited).toBe(0);
+            expect(Date.now() - started).toBeGreaterThanOrEqual(LEASE_WAIT_MS);
+            expect(readLeaseJson(dataRoot)).toMatchObject(local);
         },
         LEASE_TEST_TIMEOUT_MS,
     );
 
     test('a lease a crashed process on this kernel left is taken over at once', async () => {
         const dataRoot = join(DATA_ROOT, 'lease-crashed');
-        writeForeignLease(dataRoot, leaseKernel());
+        writeForeignLease(dataRoot, localScope(dataRoot));
         const started = Date.now();
         const holder = spawnHolder(false, dataRoot);
         expect(await holder.exited).toBe(0);

@@ -45,7 +45,7 @@ import type { ServerArchiveFile } from '../lib/backup/restore-server';
 import { RESTORING_DATA_DIR, RESTORING_DIR, stageBytesNeeded, stageServerArchive } from '../lib/backup/restore-server';
 import { describeFailures } from '../lib/backup/verify';
 import { readServerArchive, readServerArchiveMember } from '../lib/backup/verify-server-archive';
-import { DATA_LEASE_FILE, DATA_LOCK_FILE, leaseKernel, liveLeaseAfterWait, lockDataDir } from '../lib/config/data-lock';
+import { DATA_LEASE_FILE, DATA_LOCK_FILE, liveLeaseAfterWait, lockDataDir } from '../lib/config/data-lock';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import {
     getDataRoot,
@@ -150,8 +150,8 @@ function holdLock(file: string): boolean {
     return lock !== null;
 }
 
-// Neither Eigen nor another swap reads or replaces data/ while this one does. The lock only refuses an API on this
-// kernel; one on another, such as the host beside the container, shows by its lease, which this only reads.
+// Neither Eigen nor another swap reads or replaces data/ while this one does. The lock only refuses an API it reaches.
+// One it does not reach, such as on the host beside the container, shows by its lease, which this only reads.
 function lockData(ui: Ui): void {
     const file = join(DATA, SERVER_DIR, DATA_LOCK_FILE);
     // Root must not make one the API could not open; without one, no API ever ran on this data/.
@@ -161,7 +161,7 @@ function lockData(ui: Ui): void {
             'Wait for it to finish, then run ./eigen restore again.',
         );
     }
-    const live = liveLeaseAfterWait(join(DATA, SERVER_DIR, DATA_LEASE_FILE), leaseKernel());
+    const live = liveLeaseAfterWait(join(DATA, SERVER_DIR, DATA_LEASE_FILE));
     if (live)
         ui.fail(
             `data/ is in use by an Eigen API on ${live.host} (pid ${live.pid}).`,

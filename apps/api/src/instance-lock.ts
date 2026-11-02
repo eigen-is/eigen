@@ -1,7 +1,7 @@
 // Makes this API process the only one on its data folder, because two of them corrupt its databases. The entry
 // point imports it before anything opens a database. It takes the file lock, which refuses a second process on this
-// kernel, and then the lease, which refuses one on another kernel and is kept alive by a heartbeat until the graceful
-// shutdown releases it. Last, it warns when the data folder is shared from another machine or VM.
+// kernel, and then the lease, which refuses one the lock does not reach and is kept alive by a heartbeat until the
+// graceful shutdown releases it. Last, it warns when the data folder is shared from another machine or VM.
 
 import { readFileSync, realpathSync, rmSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -11,9 +11,9 @@ import {
     DATA_LEASE_FILE,
     DATA_LOCK_FILE,
     LEASE_HEARTBEAT_MS,
-    leaseKernel,
     liveLeaseAfterWait,
     lockDataDir,
+    lockScope,
     readLease,
     sharedMountType,
     writeLease,
@@ -46,8 +46,7 @@ function holdInstanceLock() {
 }
 
 function holdInstanceLease(): DataLease {
-    const kernel = leaseKernel();
-    const live = liveLeaseAfterWait(leaseFile, kernel);
+    const live = liveLeaseAfterWait(leaseFile);
     if (live) {
         console.error(
             `Another Eigen API is using the data dir ${dataRoot}: ${live.host}, pid ${live.pid} (${live.platform}), still heartbeating. Two APIs on one data dir corrupt its databases; exiting. If this folder is shared between a container and the host, give each its own data folder.`,
@@ -58,7 +57,7 @@ function holdInstanceLease(): DataLease {
     const ours = {
         id: crypto.randomUUID(),
         host: hostname(),
-        kernel,
+        ...lockScope(leaseFile),
         pid: process.pid,
         platform: process.platform,
         startedAt: now,

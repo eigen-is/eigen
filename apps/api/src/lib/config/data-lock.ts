@@ -1,10 +1,9 @@
 // What keeps two writers off one data folder. A file lock refuses a second process on the same kernel, and a lease
-// file with a heartbeat refuses one on another kernel, such as the Mac host beside a Docker Desktop container, where
-// file locks do not reach. The API holds both while it runs, and the swap of ./eigen restore checks them before it
+// file with a heartbeat refuses one the lock does not reach, such as the Mac host beside a Docker Desktop container. The API holds both while it runs, and the swap of ./eigen restore checks them before it
 // replaces data/. Everything here is synchronous, so both can run it before anything else opens a database.
 
 import { Database, SQLiteError } from 'bun:sqlite';
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
@@ -20,11 +19,13 @@ export const LEASE_WAIT_MS = 2 * LEASE_HEARTBEAT_MS;
 // grpcfuse and osxfs in older releases, 9p for Windows drives under WSL2 and for qemu VMs.
 const SHARED_MOUNT_TYPES: ReadonlySet<string> = new Set(['virtiofs', 'fuse.grpcfuse', 'fuse.osxfs', '9p']);
 
-// `host` and `pid` are only for the messages: a container's hostname changes when Compose recreates it.
+// `kernel` and `dev` say whose file lock the holder shares. `host` and `pid` are only for the messages: a container's
+// hostname changes when Compose recreates it.
 export type DataLease = {
     id: string;
     host: string;
     kernel: string;
+    dev: number;
     pid: number;
     platform: string;
     startedAt: string;
@@ -46,11 +47,17 @@ export function lockDataDir(file: string): Database | null {
     }
 }
 
-// The set of processes that share file locks. On Linux the boot id is the same in every container of one VM and in
-// the VM itself, and a restart of the VM changes it.
-export function leaseKernel(): string {
-    if (process.platform === 'linux') return readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
-    return `${process.platform}:${hostname()}`;
+// The processes that share the file lock on `file`: one kernel, seeing its folder through one file system. On Linux
+// the boot id is the same in every container of one VM and in the VM itself, and a restart of the VM changes it. One
+// kernel is not enough, because WSL2 runs every distro on one kernel and shares folders between them over 9p, where
+// file locks need not reach. A bind mount keeps the device number of the file system it shows; a 9p or virtiofs view
+// of the same folder has its own.
+export function lockScope(file: string): Pick<DataLease, 'kernel' | 'dev'> {
+    const kernel =
+        process.platform === 'linux'
+            ? readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim()
+            : `${process.platform}:${hostname()}`;
+    return { kernel, dev: statSync(dirname(file)).dev };
 }
 
 // A missing or half-readable lease is no lease.
@@ -78,12 +85,14 @@ export function writeLease(file: string, lease: DataLease): void {
     renameSync(temp, file);
 }
 
-// The lease of a process on another kernel that is still heartbeating, or null. A lease from this kernel has no live
-// holder, because the caller holds the file lock it would hold. No clock is compared across machines: a lease is live
-// only when it moved during the wait.
-export function liveLeaseAfterWait(file: string, kernel: string): DataLease | null {
+// The lease of a process outside the caller's lock scope that is still heartbeating, or null. A lease from inside it
+// has no live holder, because the caller holds the file lock it would hold. No clock is compared across machines: a
+// lease is live only when it moved during the wait.
+export function liveLeaseAfterWait(file: string): DataLease | null {
     const before = readLease(file);
-    if (!before || before.kernel === kernel) return null;
+    if (!before) return null;
+    const scope = lockScope(file);
+    if (before.kernel === scope.kernel && before.dev === scope.dev) return null;
     console.warn(
         `Data dir lease held by ${before.host} (pid ${before.pid}, ${before.platform}), last heartbeat ${before.heartbeatAt}; waiting ${LEASE_WAIT_MS / 1000} s to see whether it is alive.`,
     );
@@ -121,6 +130,8 @@ function isDataLease(value: unknown): value is DataLease {
         typeof value.host === 'string' &&
         'kernel' in value &&
         typeof value.kernel === 'string' &&
+        'dev' in value &&
+        typeof value.dev === 'number' &&
         'pid' in value &&
         typeof value.pid === 'number' &&
         'platform' in value &&

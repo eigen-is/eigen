@@ -1253,6 +1253,7 @@ describe('restore --stage and --swap', () => {
                     id: 'remote-id',
                     host: 'other-machine',
                     kernel: 'other-kernel',
+                    dev: 0,
                     pid: 4242,
                     platform: 'darwin',
                     startedAt,
