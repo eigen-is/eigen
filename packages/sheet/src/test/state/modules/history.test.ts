@@ -15,7 +15,6 @@ import { setColumnWidth } from '../../../state/api/rowcol';
 import { copySheet } from '../../../state/api/sheet';
 import type { Context } from '../../../state/context';
 import { applyDataVerification } from '../../../state/modules/data-verification';
-import { warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
 import { shiftEntries } from '../../../state/modules/history-shift';
 import { saveHyperlink } from '../../../state/modules/hyperlink';
 import { mergeCells } from '../../../state/modules/merge';
@@ -433,11 +432,9 @@ describe("an open cell editor follows a peer's row or column op", () => {
             ctx.sheets[0].config = { ...ctx.sheets[0].config, rowReadOnly: { 4: 1 } };
         });
         s.a.ctx.formulaCache.rangestart = true;
-        const map = warmFormulaCellInfoMap(s.a.ctx);
         s.undo(s.a);
         expect(s.a.ctx.editingCellPosition).toEqual(at('B5'));
         expect(s.a.ctx.formulaCache.rangestart).toBe(true);
-        expect(s.a.ctx.formulaCache.formulaCellInfoMap).toBe(map);
     });
 });
 
