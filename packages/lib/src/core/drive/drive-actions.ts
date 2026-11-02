@@ -18,11 +18,9 @@ import {
     UserRoundPlus,
 } from 'lucide-react';
 import { DELETE_HOTKEY } from '../../constants/hotkeys';
-import type { DrivePath } from '../../types/drive';
 import { exportFormatsFor, isOpenable } from '../../types/drive';
 import type { DriveAction, DriveActionSubject } from '../../types/drive-actions';
-import { getDriveItemUrl, getDriveShareUrl } from '../api';
-import { copyToClipboard } from '../clipboard/clipboard';
+import { getDriveItemUrl } from '../api';
 
 const one = ({ items }: DriveActionSubject) => items.length === 1;
 
@@ -52,7 +50,10 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         group: 'create',
         // A copy lands beside its source, so a root has no folder to land in. An item shared with the
         // viewer sits in its owner's folder, where the server refuses the copy.
-        applies: (s) => s.capabilities.canWrite && !s.sharedWithMe && s.items.every((item) => item.parentId !== null),
+        applies: (s) =>
+            s.capabilities.canWrite &&
+            s.items.every((item) => item.parentId !== null) &&
+            !s.items.some(s.isSharedWithMe),
     },
     {
         id: 'move-to',
@@ -112,7 +113,7 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         pluralLabel: 'Move {n} items to trash',
         icon: Trash2,
         group: 'destructive',
-        applies: (s) => s.capabilities.canDelete && !s.sharedWithMe,
+        applies: (s) => s.capabilities.canDelete && !s.items.every(s.isSharedWithMe),
         shortcut: DELETE_HOTKEY,
     },
     {
@@ -122,7 +123,7 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
         icon: Trash2,
         group: 'destructive',
         // The server leaves a direct share instead of trashing it, so the row says so.
-        applies: (s) => s.capabilities.canDelete && s.sharedWithMe,
+        applies: (s) => s.capabilities.canDelete && s.items.every(s.isSharedWithMe),
         shortcut: DELETE_HOTKEY,
     },
 ];
@@ -131,11 +132,6 @@ const DRIVE_ACTIONS: readonly DriveAction[] = [
 export function driveActionsFor(subject: DriveActionSubject): DriveAction[] {
     if (subject.items.length === 0) return [];
     return DRIVE_ACTIONS.filter((action) => action.applies(subject));
-}
-
-// Copy link needs no dialog, so every host that offers it runs this.
-export function copyDriveLink(item: DrivePath): Promise<void> {
-    return copyToClipboard(getDriveShareUrl(item), 'Link copied to clipboard');
 }
 
 // A row's label for the items it acts on: a multi-selection reads the plural label, its {n} the count.

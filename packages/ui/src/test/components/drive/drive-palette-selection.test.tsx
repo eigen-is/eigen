@@ -80,7 +80,7 @@ async function publish(items: DrivePath[], capabilities: DriveCapabilities = DRI
     const actions = {
         capabilities,
         actionsFor: (targets: readonly DrivePath[]) =>
-            driveActionsFor({ items: targets, capabilities, sharedWithMe: false }),
+            driveActionsFor({ items: targets, capabilities, isSharedWithMe: () => false }),
         run: (id: DriveActionId, targets: readonly DrivePath[]) => ran.push([id, targets]),
         onCreateEigenDoc: {},
         dialogs: null,

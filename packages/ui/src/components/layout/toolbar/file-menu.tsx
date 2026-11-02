@@ -4,9 +4,10 @@
 // gates. It also hands the document and those rows to the command palette, so both offer the same ones.
 
 import { useNavigate } from '@tanstack/react-router';
-import { openDocument, openMailComposeWith } from '@workspace/lib/api';
+import { getDriveShareUrl, openDocument, openMailComposeWith } from '@workspace/lib/api';
+import { copyToClipboard } from '@workspace/lib/clipboard';
 import { usePaletteSelection } from '@workspace/lib/command-palette';
-import { copyDriveLink, useDriveActionsFor } from '@workspace/lib/drive';
+import { useDriveActionsFor } from '@workspace/lib/drive';
 import type { DrivePath, EigenDocType, ExportFormat } from '@workspace/lib/types/drive';
 import {
     DRIVE_MIME_CHAT,
@@ -107,7 +108,7 @@ export function FileMenu({
             }),
         share: onAccessDialogOpen,
         'email-collaborators': () => setEmailOpen(true),
-        'copy-link': () => copyDriveLink(path),
+        'copy-link': () => copyToClipboard(getDriveShareUrl(path), 'Link copied to clipboard'),
         'mail-to': () => openMailComposeWith({ attachments: [path] }),
         trash: () => setDeleteOpen(true),
         'remove-shared': () => setDeleteOpen(true),
@@ -202,7 +203,7 @@ export function FileMenu({
                 open={deleteOpen}
                 onOpenChange={setDeleteOpen}
                 onAfterAction={(actionType) => {
-                    if (actionType === 'delete') navigate({ to: `/` });
+                    if (actionType === 'delete') navigate({ to: '/' });
                 }}
             />
             <RestoreVersionDialog path={path} snapshot={pendingSnapshot} onClose={() => setPendingSnapshot(null)} />

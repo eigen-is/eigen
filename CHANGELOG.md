@@ -40,12 +40,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Frozen rows and columns in Sheets** — their text and merged cells stop at the freeze line instead of drawing over the cells that scroll past
 - **Retrying a copy in Drive** — after **Copy to…** or **Save to Drive…** fails for some items, the retry copies only those items, so nothing lands twice
 - **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
-- **Copying items with the same name** — copying up to five items with the same name into one folder at once no longer fails, and each gets its own name
+- **Copying items with the same name** — copying several items with the same name into one folder lands every one of them, each under its own name
 - **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target. A copy to another drive moves the unfinished folder to that drive's Trash. When only some items copy, the message says why the others failed
 - **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**
 - **Quick preview of folders** — **Space** and the preview in the details column no longer open on a folder, and **Space** works in **Shared with me** and **Shared by me** in Docs, Sheets, Slides, Stickies and Vector
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
-- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, which then failed
+- **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
 - **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
 
 ## [0.4.1] - 2026-10-28
