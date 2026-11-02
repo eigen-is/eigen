@@ -170,45 +170,46 @@ export class FormulaCache {
     public resetEngine() {
         this.engine = new FormulaEngine();
         this.cellTextToIndexList = {};
+        this.sheetNames = undefined;
     }
 
     public updateFormulaCache(ctx: Context, history: History, type: 'undo' | 'redo') {
+        const patches = type === 'undo' ? history.inversePatches : history.patches;
+        // A renamed sheet changes which sheet a sheet name reads. Without names kept, no formula has resolved a
+        // reference since the last reset, so only the references other callers resolved go, even with no map built.
+        // This runs before the cell patches, so a formula the same batch writes reads the new names.
+        const renamed = patches.some(({ path }) => path[0] === 'sheets' && path[2] === 'name');
+        if (renamed && sheetNamesOf(ctx) !== this.sheetNames) {
+            if (this.sheetNames != null) {
+                this.formulaCellInfoMap = null;
+                return;
+            }
+            this.cellTextToIndexList = {};
+        }
         // An unbuilt map reads the patched cells when it builds.
         const map = this.formulaCellInfoMap;
         if (map == null) return;
 
-        // Every formula change carries a `data` patch, so the map follows those, and a sheet's rename.
-        for (const patch of type === 'undo' ? history.inversePatches : history.patches) {
+        // Every formula change carries a `data` patch, so the map follows those.
+        for (const patch of patches) {
             const [root, sheetIndex, field, r, c, cellField] = patch.path;
-            if (root !== 'sheets') continue;
-            // A renamed sheet changes which sheet a sheet name reads. Without names kept, no formula has resolved a
-            // reference since the last reset, so only the references other callers resolved go.
-            if (field === 'name' && sheetNamesOf(ctx) !== this.sheetNames) {
-                if (this.sheetNames == null) {
-                    this.cellTextToIndexList = {};
-                } else {
-                    this.formulaCellInfoMap = null;
-                    return;
-                }
-            }
-            if (field != null && field !== 'data') continue;
+            if (root !== 'sheets' || (field != null && field !== 'data')) continue;
             const id = typeof sheetIndex === 'number' ? ctx.sheets[sheetIndex]?.id : undefined;
-            if (typeof r === 'number' && typeof c === 'number') {
-                if (id != null && (cellField == null || cellField === 'f')) setFormulaCellInfo(ctx, { r, c, id });
-                continue;
-            }
-            // A sheet added or dropped, a whole matrix, or a shrunk row or matrix: rebuild on next use.
-            if (id == null || typeof r !== 'number' || c != null || patch.op === 'remove') {
+            // A sheet added or dropped, a whole matrix, or a row or cell added or dropped: rebuild on next use. A row or
+            // cell added or dropped resizes the grid, which moves where a whole column or row ends.
+            const resized = cellField == null && patch.op !== 'replace';
+            if (id == null || typeof r !== 'number' || (c != null && typeof c !== 'number') || resized) {
                 this.formulaCellInfoMap = null;
                 return;
             }
+            if (typeof c === 'number') {
+                if (cellField == null || cellField === 'f') setFormulaCellInfo(ctx, { r, c, id });
+                continue;
+            }
             const row: (Cell | null)[] = patch.value;
-            // An appended row has no map entries: every shrink above resets the map.
-            const added = patch.op === 'add';
             for (let col = 0; col < row.length; col += 1) {
-                if (row[col]?.f != null || (!added && map[`r${r}c${col}i${id}`] != null)) {
+                if (row[col]?.f != null || map[`r${r}c${col}i${id}`] != null)
                     setFormulaCellInfo(ctx, { r, c: col, id });
-                }
             }
         }
     }

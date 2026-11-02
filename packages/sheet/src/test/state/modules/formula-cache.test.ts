@@ -95,6 +95,36 @@ describe('updateFormulaCache — a paste that grows the grid', () => {
 
         expect(cell(ctx, 6, 1)?.v).toBe(8);
     });
+
+    // D1 = SUM(A:A) and F2 = SUM(1:1), on the 6 × 6 grid. Pasting C1 into H8 grows it to 8 × 8.
+    const withWholeSums = (ctx: Context) => {
+        const data = ctx.sheets[0].data ?? [];
+        data[0][3] = { f: '=SUM(A:A)', v: 5, m: '5' };
+        data[1][5] = { f: '=SUM(1:1)', v: 23, m: '23' };
+        ctx.sheets[0].calcChain?.push({ r: 0, c: 3, id: 'id_1' }, { r: 1, c: 5, id: 'id_1' });
+        warmFormulaCellInfoMap(ctx);
+        return ctx;
+    };
+
+    it('a whole column reads the rows it added, and a whole row the columns', () => {
+        let [ctx] = edit(withWholeSums(makeCtx()), pasteInternal([0, 2], [7, 7]));
+        [ctx] = edit(ctx, typed(7, 0, '100'));
+        [ctx] = edit(ctx, typed(0, 7, '1000'));
+
+        expect(cell(ctx, 0, 3)?.v).toBe(105);
+        expect(cell(ctx, 1, 5)?.v).toBe(5 + 10 + 3 + 105 + 1000);
+    });
+
+    it('redoing it, as a peer applies it, extends a whole column', () => {
+        const [pasted, history] = edit(withWholeSums(makeCtx()), pasteInternal([0, 2], [7, 7]));
+        let ctx = undo(pasted, history);
+        warmFormulaCellInfoMap(ctx);
+
+        ctx = redo(ctx, history);
+        [ctx] = edit(ctx, typed(7, 0, '100'));
+
+        expect(cell(ctx, 0, 3)?.v).toBe(105);
+    });
 });
 
 // The editor hands the dependency index each sheet's size, so a whole column of a tall sheet costs one entry, not one
@@ -128,8 +158,9 @@ describe('setFormulaCellInfo — lookups into whole columns', () => {
 
 // The editor's formula map and the server's recalc must find the same cells a formula reads, or an edit recalculates
 // what an export would not. Sheet1 is 6 × 4, so a whole column ends at row 6 and a whole row at column D. Data is
-// 3 × 3, Empty has no rows, and Holey's first row is missing, as a matrix from a stored file's rows can be. A
-// function's arguments are read like any other part of the formula, INDEX, OFFSET and INDIRECT included.
+// 3 × 3, and Empty has no rows. Holey's first row is missing, as a matrix from a stored file's rows can be, so its
+// width is its second row's. A function's arguments are read like any other part of the formula, INDEX, OFFSET and
+// INDIRECT included.
 describe('setFormulaCellInfo — the cells a formula reads', () => {
     const grid = (rows: number, cols: number): (Cell | null)[][] =>
         Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
@@ -148,6 +179,8 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ['=SUM(Data!A1:B2)', [on('s2', [0, 1], [0, 1])]],
         ['=SUM(Data!A1:Data!B2)', [on('s2', [0, 1], [0, 1])]],
         ["=SUM('Data'!A1:'Data'!B2)", [on('s2', [0, 1], [0, 1])]],
+        ["=SUM(Data!A1:'Data'!B2)", [on('s2', [0, 1], [0, 1])]],
+        ["=SUM('Data'!A1:Data!B2)", [on('s2', [0, 1], [0, 1])]],
         ["=SUM('my sheet-1'!A1:'my sheet-1'!B2)", [on('s3', [0, 1], [0, 1])]],
         ['=SUM(Data!A1:Empty!B2)', []],
         ["=SUM('Data'!A1:'my sheet-1'!B2)", []],
@@ -176,7 +209,8 @@ describe('setFormulaCellInfo — the cells a formula reads', () => {
         ["=SUM('my sheet-1'!A:A)", [on('s3', [0, 1], [0, 0])]],
         ['=SUM(Empty!1:1)+SUM(Empty!A:A)', []],
         ['=SUM(Empty!A1:B2)', [on('s5', [0, 1], [0, 1])]],
-        ['=SUM(Holey!1:1)+A1', [on('s1', [0, 0], [0, 0])]],
+        ['=SUM(Holey!1:1)+A1', [on('s6', [0, 0], [0, 1]), on('s1', [0, 0], [0, 0])]],
+        ['=SUM(Holey!2:2)', [on('s6', [1, 1], [0, 1])]],
         ['=SUM(Holey!A:A)', [on('s6', [0, 1], [0, 0])]],
         ['=$A$1+B$2+$C3', [on('s1', [0, 0], [0, 0]), on('s1', [1, 1], [1, 1]), on('s1', [2, 2], [2, 2])]],
         ['=IF(A1>=1,C1,D1)', [on('s1', [0, 0], [0, 0]), on('s1', [0, 0], [2, 2]), on('s1', [0, 0], [3, 3])]],

@@ -4,12 +4,18 @@
 // updates when formulas change, and rebuild-after-reset.
 
 import { describe, expect, it, spyOn } from 'bun:test';
+import type { Patch } from 'immer';
 import { enablePatches, isDraft, produceWithPatches } from 'immer';
 import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import * as cellModule from '../../../state/modules/cell';
 import { setFormulaCellInfo } from '../../../state/modules/formula-cache';
-import { execFunctionGroup, groupValuesRefresh, warmFormulaCellInfoMap } from '../../../state/modules/formula-exec';
+import {
+    execFunctionGroup,
+    getcellrange,
+    groupValuesRefresh,
+    warmFormulaCellInfoMap,
+} from '../../../state/modules/formula-exec';
 import { insertRowCol } from '../../../state/modules/rowcol';
 import { addSheet, deleteSheet } from '../../../state/modules/sheet';
 import { contextFactory } from '../factories/context';
@@ -334,20 +340,26 @@ describe('updateCell — the formulas that read an edited cell through a functio
 // drop them: a whole column ends where its sheet ended when it was resolved, and a sheet name names the sheet that had
 // it then.
 describe('execFunctionGroup — references resolved before the sheets changed', () => {
-    // One!A1 = 1, and B1 of One or Two holds the formula.
-    function workbook(formula: string, id = 'id_2'): Context {
+    // One!A1 = 1, and B1 of One or Two holds the formula, if there is one.
+    function workbook(formula?: string, id = 'id_2'): Context {
         const one = grid(4, 4);
         one[0][0] = { v: 1, m: '1' };
         const two = grid(4, 4);
-        (id === 'id_1' ? one : two)[0][1] = { f: formula, v: 1, m: '1' };
+        if (formula != null) (id === 'id_1' ? one : two)[0][1] = { f: formula, v: 1, m: '1' };
         return contextFactory({
             currentSheetId: 'id_1',
             sheets: [
                 { name: 'One', id: 'id_1', order: 0, data: one },
                 { name: 'Two', id: 'id_2', order: 1, data: two },
-            ].map((sheet) => ({ ...sheet, calcChain: sheet.id === id ? [{ r: 0, c: 1, id }] : [] })),
+            ].map((sheet) => ({
+                ...sheet,
+                calcChain: formula != null && sheet.id === id ? [{ r: 0, c: 1, id }] : [],
+            })),
         }) as Context;
     }
+    const peerBatch = (ctx: Context, patches: Patch[]) =>
+        ctx.formulaCache.updateFormulaCache(ctx, { patches, inversePatches: [] }, 'redo');
+    const renameOne: Patch = { op: 'replace', path: ['sheets', 0, 'name'], value: 'Gone' };
     const growOne = (ctx: Context) =>
         insertRowCol(ctx, { type: 'row', index: 3, count: 4, direction: 'rightbottom', id: 'id_1' });
 
@@ -388,5 +400,44 @@ describe('execFunctionGroup — references resolved before the sheets changed', 
         );
         editCell(ctx, 0, 0, 7, 'id_1');
         expect(ctx.sheets[1].data?.[0][1]?.v).toBe(7);
+    });
+
+    // Before the batch the map holds no formula, while a hyperlink or a validation rule already resolved One!A1.
+    it('a formula a peer writes as it renames the sheet the formula names reads no sheet', () => {
+        const ctx = workbook();
+        warmFormulaCellInfoMap(ctx);
+        getcellrange(ctx, 'One!A1');
+        ctx.sheets[0].name = 'Gone';
+        ctx.sheets[1].data?.[0].splice(1, 1, { f: '=One!A1' });
+        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 1, 'data', 0, 1], value: { f: '=One!A1' } }, renameOne]);
+        expect(ctx.formulaCache.formulaCellInfoMap?.r0c1iid_2?.formulaDependency).toEqual([]);
+    });
+
+    it('a sheet name another caller resolved reads no sheet once a peer renames it, before the map is built', () => {
+        const ctx = workbook();
+        expect(getcellrange(ctx, 'One!A1')?.sheetId).toBe('id_1');
+        ctx.sheets[0].name = 'Gone';
+        peerBatch(ctx, [renameOne]);
+        expect(getcellrange(ctx, 'One!A1')).toBeNull();
+    });
+
+    // A replay of the op log hands the engine sheets whose names may differ from the ones it knew.
+    it('a sheet name another caller resolved reads no sheet once a peer renames it, after a replay', () => {
+        const ctx = workbook('=One!A1');
+        warmFormulaCellInfoMap(ctx);
+        ctx.formulaCache.resetEngine();
+        ctx.sheets[0].name = 'Old';
+        getcellrange(ctx, 'Old!A1');
+        ctx.sheets[0].name = 'One';
+        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'One' }]);
+        expect(getcellrange(ctx, 'Old!A1')).toBeNull();
+    });
+
+    // A row or column op sends the sheet's other fields with it, its name as it was among them.
+    it('a batch that writes a sheet name as it was keeps the map', () => {
+        const ctx = workbook('=One!A1');
+        const map = warmFormulaCellInfoMap(ctx);
+        peerBatch(ctx, [{ op: 'replace', path: ['sheets', 0, 'name'], value: 'One' }]);
+        expect(ctx.formulaCache.formulaCellInfoMap).toBe(map);
     });
 });
