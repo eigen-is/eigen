@@ -100,7 +100,7 @@ Setup writes it, readable by its owner and by group 1000 ([The API reads three s
 | `EIGEN_SUBNET`, `EIGEN_UNBOUND_IP` | setup | Eigen's Docker network and the resolver's address in it, on a /24 no other network uses |
 | `API_URL`, `VITE_*` | setup | Derived from `DOMAIN` |
 | `EIGEN_REGISTRY`, `EIGEN_VERSION`, `EIGEN_*_IMAGE` | setup and update | The release or channel the install follows, and every image pinned by digest |
-| `COMPOSE_PROJECT_NAME`, `QUEUE_CHECK_INTERVAL`, `QUEUE_ALERT_THRESHOLD`, `QUEUE_ALERT_COOLDOWN`, `EIGEN_DEMO`, `EIGEN_DEMO_ADMIN_PASSWORD` | you | Advanced: the Compose project, the mail queue alert, [demo mode](DEMO_MODE.md). Add the key, then run `./eigen setup` again |
+| `COMPOSE_PROJECT_NAME`, `QUEUE_CHECK_INTERVAL`, `QUEUE_ALERT_THRESHOLD`, `QUEUE_ALERT_COOLDOWN`, `EIGEN_DEMO`, `EIGEN_DEMO_ADMIN_PASSWORD`, `EIGEN_DATA_MOUNT_WARNING` | you | Advanced: the Compose project, the mail queue alert, [demo mode](DEMO_MODE.md), and `0` to silence the boot's warning that `data/` is a folder shared from another machine or VM ([DATABASE.md § A lease refuses the second API the lock cannot see](DATABASE.md#a-lease-refuses-the-second-api-the-lock-cannot-see)). Add the key, then run `./eigen setup` again |
 
 ## The API reads three secrets as group 1000
 

@@ -80,7 +80,21 @@ The lock is a POSIX file lock, so the OS drops it however the holder ends, SIGKI
 
 The swap of `./eigen restore` takes the same lock (`lockData` in `apps/api/src/cli/restore.ts`) and refuses while an API holds it, so it only runs with Eigen stopped. `./eigen backup` runs inside the API and needs none ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)). Seeding and migration scripts don't take it. Tests that boot `app` in-process never take it, while `test/backup/process-lifecycle.test.ts` spawns `src/index.ts`, so each child takes it on its own data root.
 
-The lock reaches only as far as the file system carries POSIX locks. A Docker Desktop bind mount does not pass them between a container and the host, so an API in the container and one on the host over the same folder both start.
+## A lease refuses the second API the lock cannot see
+
+A POSIX lock only reaches the processes of one kernel that see the folder through one file system. Two containers in one Docker Desktop VM share the VM's kernel and lock each other out. The Mac host and a container over the same bind mount do not, so without more an API on each side would both start and both write.
+
+So after the lock, the API writes `data/server/instance.lease`, a small JSON file with its host, pid and lock scope, and rewrites it every 5 s (`instance-lock.ts`, with the shared parts in `data-lock.ts`). The lock scope is the Linux boot id, which every container of one VM and the VM itself read the same, plus the device number of the folder. The boot id alone is not enough: WSL2 runs every distro and Docker Desktop's VM on one kernel, and one distro sees another's folder over 9p, which has its own device number and need not carry the lock.
+
+A boot that finds a lease from another scope waits 10 s, two heartbeats. If the lease moved, its holder is alive, and the boot exits with code 1, naming that host and pid. If it did not move, it is stale and the boot takes it over. No clock is compared across machines, only whether the lease moved. A lease from our own scope is taken over at once: its holder would hold our lock, so it is dead.
+
+A heartbeat that finds another holder's lease exits with code 1 at once, with no graceful shutdown, because another API took over and a shutdown would write more. The graceful shutdown in `server.ts` removes the lease after the homes close, so the heartbeat runs through the whole drain and a clean stop costs the next boot nothing. A crash leaves the lease behind, which costs a boot in the same scope nothing and one elsewhere a 10 s wait. The lease is in `SERVER_RUNTIME_FILES`, so no backup takes it and a staged restore drops it.
+
+The restore swap reads the lease the same way and refuses while one from another scope is alive. It writes none: it runs as root, and a Full restore moves `data/` aside, lease and all.
+
+Two APIs in different scopes that start in the same moment both find no lease and both write one. The loser's next heartbeat finds the winner's lease and exits, so for up to 5 s both may write. Closing that gap would cost every cold boot another wait, so it stays open.
+
+On Linux the boot also warns once when the data folder is on a file system a VM shares from its host: virtiofs, grpcfuse, osxfs or 9p (`sharedMountType`, over `/proc/mounts`). It is a warning, not a refusal, because the dev stack in Docker Desktop runs on such a folder and is safe while nothing on the host opens it. `EIGEN_DATA_MOUNT_WARNING=0` silences it. Network file systems are left out, or a server whose data sits on NFS would warn on every boot.
 
 ## See also
 
