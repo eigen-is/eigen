@@ -1,29 +1,30 @@
-// The data-validation dialog: it edits the rule draft in ctx.validationDraft for the
-// selected range, such as a drop-down list, a tick box or a number condition. On open it seeds the
-// draft from the focus cell's rule, and on confirm it checks the draft with confirmMessage and applies
-// it with applyDataVerification. A range field opens the cell-range picker and reopens this dialog.
+// The data-validation dialog, opened from the Data menu: it edits a rule for a range, such as a drop-down list, a tick
+// box or a number condition. It opens on the focus cell's rule, and OK checks the draft and puts the rule on the
+// range. A refused range or value keeps it open with the reason under the field. A grid button hands its place to the
+// cell-range picker, which opens this dialog again with the draft and the picked range or list source.
 
 import { Button } from '@workspace/ui/components/button';
 import { Checkbox } from '@workspace/ui/components/checkbox';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
+import { FormDialog, FormDialogForm } from '@workspace/ui/components/form-dialog';
 import { Input } from '@workspace/ui/components/input';
 import { Label } from '@workspace/ui/components/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@workspace/ui/components/select';
 import { Table } from 'lucide-react';
-import { useCallback, useContext, useEffect, useState } from 'react';
+import type React from 'react';
+import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
-import { useDialog } from '../../hooks/useDialog';
+import { useDialog, useDialogProps } from '../../hooks/useDialog';
+import type { Context, DataRegulationProps } from '../../state';
 import {
     applyDataVerification,
     CHECKBOX_CHECKED_VALUE,
     CHECKBOX_UNCHECKED_VALUE,
     clearValidations,
-    confirmMessage,
     getDropdownList,
     getRangetxt,
-    NO_RANGE_MESSAGE,
     validationAt,
     validationRange,
+    validationValueProblem,
 } from '../../state';
 import { getSheet } from '../../state/api/common';
 import type { RangeOrWholeAxis } from '../../state/types';
@@ -73,506 +74,360 @@ const HINT_TOGGLES = [
     { value: 'hintShow', label: 'Show prompt when the cell is selected' },
 ] as const;
 
-export function DataVerification() {
+// What OK and Delete verification say when the range names no cells.
+const NO_RANGE_MESSAGE = 'The selection operation has not been performed yet';
+
+// The draft's text fields, each typed into an input.
+type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
+
+// Why OK or Delete verification refused the draft: its range, or the values its condition compares against.
+type Problem = { field: 'range' | 'value'; message: string };
+
+// `draft` is the rule as the user left it when the range picker took this dialog's place.
+export function DataVerification({ draft: reopenedDraft }: { draft?: DataRegulationProps }) {
     const { context, setContext } = useContext(WorkbookContext);
-    const { showDialog, showNonModalDialog, hideDialog } = useDialog();
-    const [rangeProblem, setRangeProblem] = useState('');
+    const dialogProps = useDialogProps();
+    const { showFormDialog, showNonModalDialog, hideDialog } = useDialog();
+    const [draft, setDraft] = useState(() => reopenedDraft ?? draftAtSelection(context));
+    const [problem, setProblem] = useState<Problem>();
+    const problemId = useId();
 
-    // Re-show this dialog when the picker closes; its mount effect reads rangeDialog back.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: DataVerification is this module's own component — a stable binding, not reactive state
-    const closeRangePicker = useCallback(
-        (rangeTxt?: string) => {
+    // A change to the draft takes back the message about it.
+    const update = (change: Partial<DataRegulationProps>) => {
+        setDraft((prev) => ({ ...prev, ...change }));
+        setProblem(undefined);
+    };
+
+    const textField = (field: TextField, label: string) => ({
+        'aria-label': label,
+        'aria-describedby': problem?.field === (field === 'rangeTxt' ? 'range' : 'value') ? problemId : undefined,
+        value: draft[field],
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) => update({ [field]: e.target.value }),
+    });
+
+    const problemMessage = (field: Problem['field']) =>
+        problem?.field === field && (
+            <p id={problemId} className="mt-1.5 text-sm text-destructive">
+                {problem.message}
+            </p>
+        );
+
+    // The picker leaves the grid usable to pick on, so rangeDialog.show keeps the cell editor out of the way. Every
+    // way it closes, Escape included, opens this dialog again and clears the flag: left set, it would park the cell
+    // editor off-screen for good. Its OK opens this dialog in its place, which drops the picker's onClose unrun.
+    const pickRange = (field: 'rangeTxt' | 'value1') => {
+        const reopen = (picked?: string) => {
             setContext((ctx) => {
-                if (rangeTxt != null) ctx.rangeDialog.rangeTxt = rangeTxt;
                 ctx.rangeDialog.show = false;
-                ctx.rangeDialog.singleSelect = false;
             });
-            showDialog(<DataVerification />);
-        },
-        [setContext, showDialog],
-    );
+            showFormDialog(<DataVerification draft={picked == null ? draft : { ...draft, [field]: picked }} />);
+        };
+        setContext((ctx) => {
+            ctx.rangeDialog.show = true;
+        });
+        showNonModalDialog(
+            <CellRangeDialog value={draft[field]} variant="validation" onConfirm={reopen} onCancel={hideDialog} />,
+            { onClose: () => reopen() },
+        );
+    };
 
-    // Enable mouse selection
-    const dataSelectRange = useCallback(
-        (type: string, value: string) => {
-            setContext((ctx) => {
-                ctx.rangeDialog.show = true;
-                ctx.rangeDialog.type = type;
-                ctx.rangeDialog.rangeTxt = value;
-            });
-            showNonModalDialog(
-                <CellRangeDialog
-                    value={value}
-                    variant="validation"
-                    onConfirm={(rangeTxt) => closeRangePicker(rangeTxt)}
-                    onCancel={hideDialog}
-                />,
-                // Every close route, Escape included: leaving `show` set parks the cell
-                // editor off-screen for good, so typing in any cell shows nothing.
-                { onClose: () => closeRangePicker() },
-            );
-        },
-        [closeRangePicker, hideDialog, setContext, showNonModalDialog],
-    );
+    const rangeOrRefuse = () => {
+        const target = validationRange(context, draft.rangeTxt);
+        if (!target) setProblem({ field: 'range', message: NO_RANGE_MESSAGE });
+        return target;
+    };
 
-    // Confirm and cancel buttons
-    const btn = useCallback(
-        (type: string) => {
-            if (type === 'confirm') {
-                setContext((ctx) => {
-                    if (!confirmMessage(ctx)) return;
-                    const regulation = ctx.validationDraft;
-                    const target = validationRange(ctx, regulation.rangeTxt);
-                    if (!target) return;
-                    const item = { ...regulation };
-                    if (regulation.type === 'dropdown') {
-                        item.value1 = getDropdownList(ctx, regulation.value1).join(',');
-                    }
-                    applyDataVerification(ctx, target, item);
-                });
-            }
-            hideDialog();
-        },
-        [hideDialog, setContext],
-    );
-
-    // A range that names no cells has no rule to take out, so the dialog stays open and says so under the range.
-    const deleteVerification = () => {
-        const target = validationRange(context, context.validationDraft.rangeTxt);
-        if (!target) {
-            setRangeProblem(NO_RANGE_MESSAGE);
-            return;
+    const apply = () => {
+        const target = rangeOrRefuse();
+        if (!target) return false;
+        const message = validationValueProblem(draft);
+        if (message) {
+            setProblem({ field: 'value', message });
+            return false;
         }
+        setContext((ctx) => {
+            const value1 = draft.type === 'dropdown' ? getDropdownList(ctx, draft.value1).join(',') : draft.value1;
+            applyDataVerification(ctx, target, { ...draft, value1 });
+        });
+    };
+
+    const deleteVerification = () => {
+        const target = rangeOrRefuse();
+        if (!target) return;
         setContext((ctx) => {
             clearValidations(getSheet(ctx), target);
         });
-        hideDialog();
+        dialogProps.onOpenChange(false);
     };
 
-    // On open, the draft takes the focus cell's rule, or a new list, over the selection. A column or row header's
-    // selection is named B:B or 2:2, so the rule covers the whole column or row. Back from the range picker, the draft
-    // keeps all the user had and takes only the range or the list source they picked.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only — initializes the data-verification dialog from current selection + rangeDialog
-    useEffect(() => {
-        setContext((ctx) => {
-            const picked = ctx.rangeDialog.type;
-            ctx.rangeDialog.type = '';
-            if (picked === 'rangeTxt') {
-                ctx.validationDraft.rangeTxt = ctx.rangeDialog.rangeTxt;
-                return;
-            }
-            if (picked === 'dropDown') {
-                ctx.validationDraft.value1 = ctx.rangeDialog.rangeTxt;
-                return;
-            }
-            const last = ctx.selections?.at(-1);
-            if (!last || last.row_focus == null || last.column_focus == null) return;
-            const named: RangeOrWholeAxis =
-                last.column_select && !last.row_select
-                    ? { row: [null, null], column: last.column }
-                    : last.row_select && !last.column_select
-                      ? { row: last.row, column: [null, null] }
-                      : last;
-            const rangeTxt = getRangetxt(context, context.currentSheetId, named, context.currentSheetId);
-            const item = validationAt(getSheet(ctx).dataValidations, last.row_focus, last.column_focus);
-            const value1 = item?.value1 ?? '';
-
-            if (item) {
-                ctx.validationDraft = {
-                    ...item,
-                    value1,
-                    rangeTxt,
-                    validity: item.validity ?? '',
-                    remote: item.remote ?? false,
-                    prohibitInput: item.prohibitInput ?? false,
-                    hintShow: item.hintShow ?? false,
-                    hintValue: item.hintValue ?? '',
-                };
-            } else {
-                ctx.validationDraft = {
-                    type: 'dropdown',
-                    type2: '',
-                    rangeTxt,
-                    value1,
-                    value2: '',
-                    validity: '',
-                    remote: false,
-                    prohibitInput: false,
-                    hintShow: false,
-                    hintValue: '',
-                };
-            }
-        });
-    }, []);
-
-    const regulation = context.validationDraft;
-
     return (
-        <div className="flex flex-col gap-4 select-none">
-            <DialogHeader>
-                <DialogTitle>Data verification</DialogTitle>
-            </DialogHeader>
+        <FormDialog {...dialogProps} title="Data verification" size="md">
+            <FormDialogForm
+                submitLabel="OK"
+                onSubmit={apply}
+                footerStart={
+                    <Button variant="outline" onClick={deleteVerification}>
+                        Delete verification
+                    </Button>
+                }
+            >
+                <div className="text-sm space-y-4 select-none">
+                    <div>
+                        <div className="text-sm font-medium mb-2">Cell range</div>
+                        <div className="flex h-8 rounded-md border border-input overflow-hidden">
+                            <Input
+                                className="flex-1 border-none rounded-none h-full"
+                                spellCheck={false}
+                                {...textField('rangeTxt', 'Cell range')}
+                            />
+                            <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="rounded-none"
+                                aria-label="Select cell range"
+                                onClick={() => pickRange('rangeTxt')}
+                            >
+                                <Table />
+                            </Button>
+                        </div>
+                        {problemMessage('range')}
+                    </div>
 
-            <div className="text-sm space-y-4">
-                <div>
-                    <div className="text-sm font-medium mb-2">Cell range</div>
-                    <div className="flex h-8 rounded-md border border-input overflow-hidden">
-                        <Input
-                            className="flex-1 border-none rounded-none h-full"
-                            spellCheck={false}
-                            value={regulation.rangeTxt}
-                            onChange={(e) => {
-                                const { value } = e.target;
-                                setRangeProblem('');
-                                setContext((ctx) => {
-                                    ctx.validationDraft.rangeTxt = value;
+                    <div className="space-y-2">
+                        <div className="text-sm font-medium">Verification condition</div>
+                        <Select
+                            value={draft.type}
+                            onValueChange={(type) => {
+                                // A tick box arrives usable: the same TRUE/FALSE pair Insert → Tick box writes, so the
+                                // two routes to a checkbox rule agree.
+                                const isCheckbox = type === 'checkbox';
+                                update({
+                                    type,
+                                    type2: CONDITION_DEFAULTS[type] ?? '',
+                                    value1: isCheckbox ? CHECKBOX_CHECKED_VALUE : '',
+                                    value2: isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '',
                                 });
-                            }}
-                        />
-                        <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="rounded-none"
-                            onClick={() => {
-                                hideDialog();
-                                dataSelectRange('rangeTxt', regulation.rangeTxt);
                             }}
                         >
-                            <Table />
-                        </Button>
-                    </div>
-                    {rangeProblem && <p className="mt-1 text-xs text-destructive">{rangeProblem}</p>}
-                </div>
+                            <SelectTrigger size="sm" className="w-full">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {VERIFICATION_TYPES.map((v) => (
+                                    <SelectItem value={v.value} key={v.value}>
+                                        {v.label}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
 
-                <div className="space-y-2">
-                    <div className="text-sm font-medium">Verification condition</div>
-                    <Select
-                        value={regulation.type}
-                        onValueChange={(value) => {
-                            setContext((ctx) => {
-                                ctx.validationDraft.type = value;
-                                if (value === 'dropdown' || value === 'checkbox') {
-                                    ctx.validationDraft.type2 = '';
-                                } else if (
-                                    value === 'number' ||
-                                    value === 'number_integer' ||
-                                    value === 'number_decimal' ||
-                                    value === 'text_length' ||
-                                    value === 'date'
-                                ) {
-                                    ctx.validationDraft.type2 = 'between';
-                                } else if (value === 'text_content') {
-                                    ctx.validationDraft.type2 = 'include';
-                                }
-                                // A tick box arrives usable: the same TRUE/FALSE
-                                // pair Insert → Tick box writes, so the two
-                                // routes to a checkbox rule agree.
-                                const isCheckbox = value === 'checkbox';
-                                ctx.validationDraft.value1 = isCheckbox ? CHECKBOX_CHECKED_VALUE : '';
-                                ctx.validationDraft.value2 = isCheckbox ? CHECKBOX_UNCHECKED_VALUE : '';
-                            });
-                        }}
-                    >
-                        <SelectTrigger size="sm" className="w-full">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {VERIFICATION_TYPES.map((v) => (
-                                <SelectItem value={v.value} key={v.value}>
-                                    {v.label}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-
-                    {regulation.type === 'dropdown' && (
-                        <div className="space-y-2">
-                            <div className="flex h-8 rounded-md border border-input overflow-hidden">
-                                <Input
-                                    className="flex-1 border-none rounded-none h-full"
-                                    spellCheck={false}
-                                    value={regulation.value1}
-                                    placeholder="Please enter the options, separated by commas, such as 1,2,3,4,5"
-                                    onChange={(e) => {
-                                        const { value } = e.target;
-                                        setContext((ctx) => {
-                                            ctx.validationDraft.value1 = value;
-                                        });
-                                    }}
-                                />
-                                <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="rounded-none"
-                                    onClick={() => dataSelectRange('dropDown', regulation.value1)}
-                                >
-                                    <Table />
-                                </Button>
-                            </div>
-                            <Label className="flex items-center gap-1.5">
-                                <Checkbox
-                                    checked={regulation.type2 === 'true'}
-                                    onCheckedChange={(checked) => {
-                                        setContext((ctx) => {
-                                            ctx.validationDraft.type2 = `${checked}`;
-                                        });
-                                    }}
-                                />
-                                Allow multiple selection
-                            </Label>
-                        </div>
-                    )}
-
-                    {regulation.type === 'checkbox' && (
-                        <div className="space-y-2">
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm shrink-0">Selected</span>
-                                <Input
-                                    className="h-8"
-                                    placeholder="Please enter content"
-                                    value={regulation.value1}
-                                    onChange={(e) => {
-                                        const { value } = e.target;
-                                        setContext((ctx) => {
-                                            ctx.validationDraft.value1 = value;
-                                        });
-                                    }}
-                                />
-                            </div>
-                            <div className="flex items-center gap-2">
-                                <span className="text-sm shrink-0">Not selected</span>
-                                <Input
-                                    className="h-8"
-                                    placeholder="Please enter content"
-                                    value={regulation.value2}
-                                    onChange={(e) => {
-                                        const { value } = e.target;
-                                        setContext((ctx) => {
-                                            ctx.validationDraft.value2 = value;
-                                        });
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    )}
-
-                    {(regulation.type === 'number' ||
-                        regulation.type === 'number_integer' ||
-                        regulation.type === 'number_decimal' ||
-                        regulation.type === 'text_length') && (
-                        <div className="space-y-2">
-                            <Select
-                                value={regulation.type2}
-                                onValueChange={(value) => {
-                                    setContext((ctx) => {
-                                        ctx.validationDraft.type2 = value;
-                                        ctx.validationDraft.value1 = '';
-                                        ctx.validationDraft.value2 = '';
-                                    });
-                                }}
-                            >
-                                <SelectTrigger size="sm" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {NUMBER_CONDITIONS.map((v) => (
-                                        <SelectItem value={v.value} key={v.value}>
-                                            {v.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {regulation.type2 === 'between' || regulation.type2 === 'notBetween' ? (
-                                <div className="flex items-center gap-2">
+                        {draft.type === 'dropdown' && (
+                            <div className="space-y-2">
+                                <div className="flex h-8 rounded-md border border-input overflow-hidden">
                                     <Input
-                                        type="number"
-                                        className="h-8"
-                                        placeholder="1"
-                                        value={regulation.value1}
-                                        onChange={(e) => {
-                                            const { value } = e.target;
-                                            setContext((ctx) => {
-                                                ctx.validationDraft.value1 = value;
-                                            });
-                                        }}
+                                        className="flex-1 border-none rounded-none h-full"
+                                        spellCheck={false}
+                                        placeholder="Please enter the options, separated by commas, such as 1,2,3,4,5"
+                                        {...textField('value1', 'Options')}
                                     />
-                                    <span className="text-sm">-</span>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon-sm"
+                                        className="rounded-none"
+                                        aria-label="Select options from a range"
+                                        onClick={() => pickRange('value1')}
+                                    >
+                                        <Table />
+                                    </Button>
+                                </div>
+                                <Label className="flex items-center gap-1.5">
+                                    <Checkbox
+                                        checked={draft.type2 === 'true'}
+                                        onCheckedChange={(checked) => update({ type2: `${checked}` })}
+                                    />
+                                    Allow multiple selection
+                                </Label>
+                            </div>
+                        )}
+
+                        {draft.type === 'checkbox' && (
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm shrink-0">Selected</span>
                                     <Input
-                                        type="number"
                                         className="h-8"
-                                        placeholder="100"
-                                        value={regulation.value2}
-                                        onChange={(e) => {
-                                            const { value } = e.target;
-                                            setContext((ctx) => {
-                                                ctx.validationDraft.value2 = value;
-                                            });
-                                        }}
+                                        placeholder="Please enter content"
+                                        {...textField('value1', 'Selected')}
                                     />
                                 </div>
-                            ) : (
-                                <Input
-                                    type="number"
-                                    className="h-8"
-                                    placeholder="Numeric value, such as 10"
-                                    value={regulation.value1}
-                                    onChange={(e) => {
-                                        const { value } = e.target;
-                                        setContext((ctx) => {
-                                            ctx.validationDraft.value1 = value;
-                                        });
-                                    }}
-                                />
-                            )}
-                        </div>
-                    )}
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm shrink-0">Not selected</span>
+                                    <Input
+                                        className="h-8"
+                                        placeholder="Please enter content"
+                                        {...textField('value2', 'Not selected')}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
-                    {regulation.type === 'text_content' && (
-                        <div className="space-y-2">
-                            <Select
-                                value={regulation.type2}
-                                onValueChange={(value) => {
-                                    setContext((ctx) => {
-                                        ctx.validationDraft.type2 = value;
-                                        ctx.validationDraft.value1 = '';
-                                        ctx.validationDraft.value2 = '';
-                                    });
-                                }}
-                            >
-                                <SelectTrigger size="sm" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {TEXT_CONTENT_CONDITIONS.map((v) => (
-                                        <SelectItem value={v.value} key={v.value}>
-                                            {v.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                        {(draft.type === 'number' ||
+                            draft.type === 'number_integer' ||
+                            draft.type === 'number_decimal' ||
+                            draft.type === 'text_length') && (
+                            <div className="space-y-2">
+                                <ConditionSelect
+                                    value={draft.type2}
+                                    conditions={NUMBER_CONDITIONS}
+                                    onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                                />
+                                {draft.type2 === 'between' || draft.type2 === 'notBetween' ? (
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            type="number"
+                                            className="h-8"
+                                            placeholder="1"
+                                            {...textField('value1', 'Value 1')}
+                                        />
+                                        <span className="text-sm">-</span>
+                                        <Input
+                                            type="number"
+                                            className="h-8"
+                                            placeholder="100"
+                                            {...textField('value2', 'Value 2')}
+                                        />
+                                    </div>
+                                ) : (
+                                    <Input
+                                        type="number"
+                                        className="h-8"
+                                        placeholder="Numeric value, such as 10"
+                                        {...textField('value1', 'Value')}
+                                    />
+                                )}
+                            </div>
+                        )}
+
+                        {draft.type === 'text_content' && (
+                            <div className="space-y-2">
+                                <ConditionSelect
+                                    value={draft.type2}
+                                    conditions={TEXT_CONTENT_CONDITIONS}
+                                    onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                                />
+                                <Input
+                                    className="h-8"
+                                    placeholder="Please enter the specified text"
+                                    {...textField('value1', 'Text')}
+                                />
+                            </div>
+                        )}
+
+                        {draft.type === 'date' && (
+                            <div className="space-y-2">
+                                <ConditionSelect
+                                    value={draft.type2}
+                                    conditions={DATE_CONDITIONS}
+                                    onChange={(type2) => update({ type2, value1: '', value2: '' })}
+                                />
+                                {draft.type2 === 'between' || draft.type2 === 'notBetween' ? (
+                                    <div className="flex items-center gap-2">
+                                        <Input type="date" className="h-8" {...textField('value1', 'Date 1')} />
+                                        <span className="text-sm">-</span>
+                                        <Input type="date" className="h-8" {...textField('value2', 'Date 2')} />
+                                    </div>
+                                ) : (
+                                    <Input type="date" className="h-8" {...textField('value1', 'Date')} />
+                                )}
+                            </div>
+                        )}
+                        {problemMessage('value')}
+                    </div>
+
+                    <div className="space-y-2">
+                        {HINT_TOGGLES.map(({ value, label }) => (
+                            <Label className="flex items-center gap-1.5" key={value}>
+                                <Checkbox
+                                    checked={draft[value]}
+                                    onCheckedChange={() => update({ [value]: !draft[value] })}
+                                />
+                                {label}
+                            </Label>
+                        ))}
+                        {draft.hintShow && (
                             <Input
                                 className="h-8"
-                                placeholder="Please enter the specified text"
-                                value={regulation.value1}
-                                onChange={(e) => {
-                                    const { value } = e.target;
-                                    setContext((ctx) => {
-                                        ctx.validationDraft.value1 = value;
-                                    });
-                                }}
+                                placeholder="Please enter the prompt displayed when the cell is selected"
+                                {...textField('hintValue', 'Prompt')}
                             />
-                        </div>
-                    )}
-
-                    {regulation.type === 'date' && (
-                        <div className="space-y-2">
-                            <Select
-                                value={regulation.type2}
-                                onValueChange={(value) => {
-                                    setContext((ctx) => {
-                                        ctx.validationDraft.type2 = value;
-                                        ctx.validationDraft.value1 = '';
-                                        ctx.validationDraft.value2 = '';
-                                    });
-                                }}
-                            >
-                                <SelectTrigger size="sm" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {DATE_CONDITIONS.map((v) => (
-                                        <SelectItem value={v.value} key={v.value}>
-                                            {v.label}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                            {regulation.type2 === 'between' || regulation.type2 === 'notBetween' ? (
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        type="date"
-                                        className="h-8"
-                                        value={regulation.value1}
-                                        onChange={(e) => {
-                                            const { value } = e.target;
-                                            setContext((ctx) => {
-                                                ctx.validationDraft.value1 = value;
-                                            });
-                                        }}
-                                    />
-                                    <span className="text-sm">-</span>
-                                    <Input
-                                        type="date"
-                                        className="h-8"
-                                        value={regulation.value2}
-                                        onChange={(e) => {
-                                            const { value } = e.target;
-                                            setContext((ctx) => {
-                                                ctx.validationDraft.value2 = value;
-                                            });
-                                        }}
-                                    />
-                                </div>
-                            ) : (
-                                <Input
-                                    type="date"
-                                    className="h-8"
-                                    placeholder="Numeric value, such as 10"
-                                    value={regulation.value1}
-                                    onChange={(e) => {
-                                        const { value } = e.target;
-                                        setContext((ctx) => {
-                                            ctx.validationDraft.value1 = value;
-                                        });
-                                    }}
-                                />
-                            )}
-                        </div>
-                    )}
+                        )}
+                    </div>
                 </div>
-
-                <div className="space-y-2">
-                    {HINT_TOGGLES.map(({ value, label }) => (
-                        <Label className="flex items-center gap-1.5" key={value}>
-                            <Checkbox
-                                id={value}
-                                checked={regulation[value]}
-                                onCheckedChange={() => {
-                                    setContext((ctx) => {
-                                        ctx.validationDraft[value] = !ctx.validationDraft[value];
-                                    });
-                                }}
-                            />
-                            {label}
-                        </Label>
-                    ))}
-                    {regulation.hintShow && (
-                        <Input
-                            className="h-8"
-                            placeholder="Please enter the prompt displayed when the cell is selected"
-                            value={regulation.hintValue}
-                            onChange={(e) => {
-                                const { value } = e.target;
-                                setContext((ctx) => {
-                                    ctx.validationDraft.hintValue = value;
-                                });
-                            }}
-                        />
-                    )}
-                </div>
-            </div>
-
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    Cancel
-                </Button>
-                <Button variant="outline" size="sm" onClick={deleteVerification}>
-                    Delete verification
-                </Button>
-                <Button size="sm" onClick={() => btn('confirm')}>
-                    OK
-                </Button>
-            </DialogFooter>
-        </div>
+            </FormDialogForm>
+        </FormDialog>
     );
+}
+
+// The condition a new rule of each type starts on. A list and a tick box have none.
+const CONDITION_DEFAULTS: Record<string, string> = {
+    number: 'between',
+    number_integer: 'between',
+    number_decimal: 'between',
+    text_length: 'between',
+    date: 'between',
+    text_content: 'include',
+};
+
+function ConditionSelect({
+    value,
+    conditions,
+    onChange,
+}: {
+    value: string;
+    conditions: readonly { value: string; label: string }[];
+    onChange: (value: string) => void;
+}) {
+    return (
+        <Select value={value} onValueChange={onChange}>
+            <SelectTrigger size="sm" className="w-full">
+                <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+                {conditions.map((v) => (
+                    <SelectItem value={v.value} key={v.value}>
+                        {v.label}
+                    </SelectItem>
+                ))}
+            </SelectContent>
+        </Select>
+    );
+}
+
+// The draft the dialog opens on: the focus cell's rule, or a new list, over the selection. A column or row header's
+// selection is named B:B or 2:2, so the rule covers the whole column or row.
+function draftAtSelection(context: Context): DataRegulationProps {
+    const last = context.selections?.at(-1);
+    const named: RangeOrWholeAxis | undefined =
+        last?.column_select && !last.row_select
+            ? { row: [null, null], column: last.column }
+            : last?.row_select && !last.column_select
+              ? { row: last.row, column: [null, null] }
+              : last;
+    const rangeTxt = named ? getRangetxt(context, context.currentSheetId, named, context.currentSheetId) : '';
+    const item =
+        last?.row_focus != null && last.column_focus != null
+            ? validationAt(getSheet(context).dataValidations, last.row_focus, last.column_focus)
+            : undefined;
+    return {
+        type: item?.type ?? 'dropdown',
+        type2: item?.type2 ?? '',
+        rangeTxt,
+        value1: item?.value1 ?? '',
+        value2: item?.value2 ?? '',
+        validity: item?.validity ?? '',
+        remote: item?.remote ?? false,
+        prohibitInput: item?.prohibitInput ?? false,
+        hintShow: item?.hintShow ?? false,
+        hintValue: item?.hintValue ?? '',
+    };
 }
