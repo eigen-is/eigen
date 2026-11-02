@@ -286,10 +286,10 @@ export async function extractArtifact(source: ArtifactSource, targetDir: string)
 
 // The manifest of the archive's single home folder, without unpacking its files.
 export async function readArtifactManifest(artifactPath: string): Promise<BackupManifest> {
-    const filter = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
+    const manifestGlob = new Bun.Glob(`*/${ARCHIVE_MANIFEST_FILE}`);
     let manifest: BackupManifest | null = null;
     for await (const entry of tarEntries(artifactBytes(artifactPath))) {
-        if (!filter.match(entry.path)) continue;
+        if (!manifestGlob.match(entry.path)) continue;
         manifest = parseBackupManifest(new TextDecoder().decode(await collect(entry.body)));
         break;
     }
