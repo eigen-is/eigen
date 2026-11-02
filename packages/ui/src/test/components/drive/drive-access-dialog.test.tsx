@@ -20,6 +20,7 @@ const fetchSpy = spyOn(globalThis, 'fetch').mockImplementation(
 const OWNER: DirectAccessItem = { id: 'owner@example.com', read: true, write: true, owner: true };
 const ADA: DirectAccessItem = { id: 'ada@example.com', read: true, write: true, owner: false };
 const BOB: DirectAccessItem = { id: 'bob@example.com', read: true, write: false, owner: false };
+const ERIN: DirectAccessItem = { id: 'erin@example.com', read: true, write: false, owner: false };
 const CAROL: InheritedAccessItem = { id: 'carol@example.com', read: true, write: false, sourceFolderName: 'Projects' };
 
 // What the Drive hooks answer, which a test changes before it opens the dialog.
@@ -39,12 +40,16 @@ mock.module('@workspace/lib/drive', () => ({
     useUpdateACL: () => ({ mutateAsync: updateACL }),
     useIsEffectiveOwner: () => true,
     useCheckPermissions: () => ({ data: { canWrite: true } }),
-    useDriveAccess: (_path: DrivePath, override?: DirectAccessItem[]) => ({
-        baseDirectList,
-        directList: override ?? baseDirectList,
-        inheritedList: [CAROL],
-        allEntries: [...baseDirectList, { ...CAROL, inherited: true }],
-    }),
+    useDriveAccess: (path: DrivePath, override?: DirectAccessItem[]) => {
+        // A second item, which Erin can see and nobody else.
+        const base = path.id === plans.id ? [OWNER, ERIN] : baseDirectList;
+        return {
+            baseDirectList: base,
+            directList: override ?? base,
+            inheritedList: [CAROL],
+            allEntries: [...base, { ...CAROL, inherited: true }],
+        };
+    },
 }));
 mock.module('@workspace/lib/auth', () => ({
     ...realAuth,
@@ -80,6 +85,7 @@ const { onMutationError } = await import('@workspace/lib/api-error');
 const { DriveAccessDialog } = await import('../../../components/drive/drive-access-dialog');
 
 const notes = drivePath({ id: 'notes', name: 'Notes.eigendoc', mimeType: DRIVE_MIME_DOC });
+const plans = drivePath({ id: 'plans', name: 'Plans.eigendoc', mimeType: DRIVE_MIME_DOC });
 const onOpenChange = mock((_open: boolean) => {});
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -119,6 +125,22 @@ function PageHarness() {
         onOpenChange: (next: boolean) => {
             onOpenChange(next);
             if (!next) setPath(null);
+        },
+    });
+}
+
+// The dialog as an editor route hosts it: Back or Forward swaps the item while Share stays open.
+let showPath = (_path: DrivePath) => {};
+function RouteHarness() {
+    const [path, setPath] = useState(notes);
+    const [open, setOpen] = useState(true);
+    showPath = setPath;
+    return createElement(DriveAccessDialog, {
+        path,
+        open,
+        onOpenChange: (next: boolean) => {
+            onOpenChange(next);
+            setOpen(next);
         },
     });
 }
@@ -277,6 +299,30 @@ test('the envelope closes Share and opens Email collaborators, also where the ho
         await unmount();
         onOpenChange.mockClear();
     }
+});
+
+test('another item opens with its own list, and a refetch of the same item keeps the edits', async () => {
+    ({ unmount } = await renderInDocument(createElement(RouteHarness)));
+    await addByEnter('dan@example.com');
+    await act(async () => showPath({ ...notes, updatedAt: new Date('2026-09-21T09:00:00Z') }));
+    expect(people()).toContain('dan@example.com: Editor');
+    expect(button('Save')?.disabled).toBe(false);
+
+    await act(async () => showPath(plans));
+    expect(dialog()?.querySelector('h2')?.textContent).toBe("Share 'Plans'");
+    expect(people()).toEqual(['owner@example.com: Owner', 'erin@example.com: Viewer', 'carol@example.com: Viewer']);
+    expect(button('Save')?.disabled).toBe(true);
+});
+
+test('Email collaborators for one item closes when the host moves to another', async () => {
+    ({ unmount } = await renderInDocument(createElement(RouteHarness)));
+    await click(dialog()?.querySelector('button[aria-label="Email collaborators"]'));
+    await settle();
+    const titles = () => [...document.querySelectorAll('[role="dialog"] h2')].map((h) => h.textContent);
+    expect(titles()).toEqual(['Email collaborators']);
+    await act(async () => showPath(plans));
+    await settle();
+    expect(titles()).toEqual([]);
 });
 
 test('the owner shares with a team from the footer menu', async () => {

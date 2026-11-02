@@ -31,7 +31,7 @@ function selectionOf(ids: string[]): UseListSelectionReturn<Row> {
     };
 }
 
-// A list with one row, and a field portaled out of it to the body, the way a dialog opened from a row's menu sits in
+// A list with one row that holds a ⋮ button, and a field portaled out of it to the body, the way a dialog opened from a row's menu sits in
 // the list's React tree but not in its DOM. The cursor is lifted (mail's mode) to put the list on a known row; -1 is
 // the no-selection state every list starts in. Each callback is recorded as `kind:id`.
 async function mountList(cursorIndex: number, selection?: UseListSelectionReturn<Row>) {
@@ -51,7 +51,7 @@ async function mountList(cursorIndex: number, selection?: UseListSelectionReturn
         return createElement(
             'div',
             { tabIndex: 0, onKeyDown: handleKeyDown },
-            createElement('div', { 'data-row': '' }),
+            createElement('div', { 'data-row': '' }, createElement('button', { type: 'button', 'data-menu': '' })),
             createPortal(createElement('input', { 'data-dialog-field': '' }), document.body),
         );
     }
@@ -70,7 +70,9 @@ async function mountList(cursorIndex: number, selection?: UseListSelectionReturn
     };
     return {
         calls,
+        list: find(container, '[tabindex]'),
         row: find(container, '[data-row]'),
+        menuButton: find(container, '[data-menu]'),
         field: find(document.body, '[data-dialog-field]'),
         keydown,
         unmount,
@@ -124,6 +126,23 @@ describe('useKeyboardListNavigation Space and Enter', () => {
 
     test('the cursor still wins over the selection', async () => {
         expect(await press('Enter', 2, selectionOf(['a', 'b', 'c']))).toEqual(['open:c']);
+    });
+
+    test('on the focused list itself, Enter opens and Space quick-looks', async () => {
+        const { calls, list, keydown, unmount } = await mountList(1);
+        expect((await keydown(list, 'Enter')).defaultPrevented).toBe(true);
+        expect((await keydown(list, ' ')).defaultPrevented).toBe(true);
+        expect(calls).toEqual(['open:b', 'look:b']);
+        await unmount();
+    });
+
+    test('on a button inside a row, Enter and Space press the button and leave the row alone', async () => {
+        const { calls, menuButton, keydown, unmount } = await mountList(1);
+        for (const key of ['Enter', ' ']) {
+            expect((await keydown(menuButton, key)).defaultPrevented).toBe(false);
+        }
+        expect(calls).toEqual([]);
+        await unmount();
     });
 });
 

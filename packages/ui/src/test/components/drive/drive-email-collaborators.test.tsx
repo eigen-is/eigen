@@ -1,8 +1,8 @@
 // Email collaborators: a subject seeded with the file's name, a message seeded with the user's signature, and a copy to
-// self. The signature is there even when the settings arrive after the dialog opened. Send waits until the message
-// says more than the signature, and while the subject or the message is too long. Only a click on Send sends: Enter in
-// the subject does nothing, and Enter in the message starts a new paragraph. A send closes the dialog, and a failed one
-// stays open with what was typed.
+// self. While the settings load, a loader shows above Cancel and a disabled Send, and the signature is there once they
+// arrive. Send waits until the message says more than the signature, and while the subject or the message is too long.
+// Only a click on Send sends: Enter in the subject does nothing, and Enter in the message starts a new paragraph. A send
+// closes the dialog, and a failed one stays open with what was typed.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import type { Editor } from '@tiptap/react';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
@@ -148,9 +148,12 @@ test('an emptied subject sends as the file name', async () => {
     expect(sendEmail.mock.calls[0]?.[0].subject).toBe('Notes');
 });
 
-test('a first open before the settings arrive still starts the message with the signature', async () => {
+test('a first open before the settings arrive shows the loader, Cancel and Send, then the signature', async () => {
     settingsLoaded = false;
     await open();
+    expect(dialog()?.querySelector('[aria-label="Loading"]')).not.toBeNull();
+    expect(button('Cancel')).toBeDefined();
+    expect(button('Send')?.disabled).toBe(true);
     await act(async () => settingsArrive());
     await settle();
     expect(messageEditor().getText()).toBe('Reinder');

@@ -9,7 +9,7 @@ import { parseOwnerId } from '@workspace/lib/types';
 import { ICS_MIME } from '@workspace/lib/types/drive';
 import type { FileImportSource } from '@workspace/lib/types/file-subject';
 import type { ImportCountsResult } from '@workspace/lib/types/transfer';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { AppError, onMutationError } from '../../api-error';
 import { useFileDownload } from '../../download';
 import { fetchImportBlob, postImportBytes, reportImportCounts } from '../../transfer';
@@ -95,13 +95,15 @@ type ImportCalendarTarget =
     | { kind: 'new'; name: string; color: string };
 
 // A new calendar is made in the viewer's own home and the file imported into it. When the import fails or takes no
-// events, the calendar is deleted again at once, so a retry with another name or target starts clean.
+// events, the calendar is deleted again at once, so a retry with another name or target starts clean. A calendar
+// whose delete failed too is remembered, and the next new-calendar try fills it instead of making a second one.
 export function useImportToCalendar(ownerId: string): {
     importToCalendar: (source: FileImportSource, target: ImportCalendarTarget) => Promise<void>;
 } {
     const createCalendar = useCreateCalendar(ownerId);
     const deleteCalendar = useDeleteCalendar(ownerId);
     const importCalendar = useImportCalendar();
+    const leftoverCalendarId = useRef<string | null>(null);
 
     const importToCalendar = useCallback(
         async (source: FileImportSource, target: ImportCalendarTarget) => {
@@ -109,13 +111,21 @@ export function useImportToCalendar(ownerId: string): {
                 await importCalendar.mutateAsync({ ...source, ownerId: target.ownerId, calendarId: target.calendarId });
                 return;
             }
-            const { id: calendarId } = await createCalendar.mutateAsync({ name: target.name, color: target.color });
+            const calendarId =
+                leftoverCalendarId.current ??
+                (await createCalendar.mutateAsync({ name: target.name, color: target.color })).id;
+            const discard = async () => {
+                leftoverCalendarId.current = calendarId;
+                await deleteCalendar.mutateAsync(calendarId);
+                leftoverCalendarId.current = null;
+            };
             const result = await importCalendar.mutateAsync({ ...source, ownerId, calendarId }).catch(async (error) => {
                 // The delete's hook toasts its own failure, and the caller must still see why the import failed.
-                await deleteCalendar.mutateAsync(calendarId).catch(() => {});
+                await discard().catch(() => {});
                 throw error;
             });
-            if (result.imported === 0) await deleteCalendar.mutateAsync(calendarId);
+            if (result.imported === 0) await discard();
+            else leftoverCalendarId.current = null;
         },
         [createCalendar, deleteCalendar, importCalendar, ownerId],
     );

@@ -1,7 +1,8 @@
 // The Share dialog for one Drive item: who has access, the link's general access, and whether editors may share. An
 // owner or editor edits the list and saves it; a guest, or an editor when the owner restricted sharing, only sees it.
 // Drive's item menu and an editor's Share button open it, for example. Its envelope button closes Share and opens
-// Email collaborators for the same item, which stays open even when the host drops the path as Share closes.
+// Email collaborators for the same item, which stays open even when the host drops the path as Share closes. A host
+// that moves to another item, as Back does in an editor, gets a fresh dialog for that item.
 
 import { useIsGuest } from '@workspace/lib/auth';
 import { useCheckPermissions, useIsEffectiveOwner } from '@workspace/lib/drive';
@@ -22,12 +23,17 @@ export type DriveAccessDialogProps = {
 
 export function DriveAccessDialog({ open, onOpenChange, path, prefillEmail }: DriveAccessDialogProps) {
     // Its own state, not the path prop: a host such as Drive's folder page drops the path once Share closes.
+    // A host that moves on to another item closes it.
     const [emailPath, setEmailPath] = useState<DrivePath | null>(null);
+    if (emailPath && path && path.id !== emailPath.id) setEmailPath(null);
 
     return (
         <>
             {path && (
+                // Keyed by the item, so another item starts from its own list while a refetch of this one keeps
+                // the edits.
                 <ShareDialog
+                    key={path.id}
                     path={path}
                     open={open}
                     onOpenChange={onOpenChange}
