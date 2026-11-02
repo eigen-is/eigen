@@ -1088,7 +1088,7 @@ backup() {
 # in_argument <command> <argument>: takes --in, its time and the message that may follow it, as shutdown takes
 # `+10 "message"`, into IN_SECONDS and IN_MESSAGE. Returns 1 for any other argument, which the command parses itself.
 # A time is digits and s, m or h, or 0 alone, so a bare 10 never waits ten seconds for someone who meant minutes.
-# Checked before anything runs; dash counts the message in bytes, so one with accents may hold fewer characters.
+# Checked before anything runs. dash counts the message in bytes, so one with accents may hold fewer characters.
 IN_TIME='' IN_SECONDS=0 IN_MESSAGE='' IN_NEXT=''
 in_argument() {
     case $IN_NEXT in

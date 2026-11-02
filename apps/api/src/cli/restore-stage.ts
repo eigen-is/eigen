@@ -15,7 +15,6 @@ import { describeFailures } from '../lib/backup/verify';
 import { readServerArchive } from '../lib/backup/verify-server-archive';
 import { getEnvFile, isMailEnabled } from '../lib/config/env';
 import { getDataRoot } from '../lib/config/paths';
-import { isNewerBuild } from '../lib/config/release';
 import { readEnvFile } from './env-file';
 import { DECLINED, ENV_PATH, VERSION } from './install';
 import type { RestoreFlags } from './restore';
@@ -24,7 +23,7 @@ import { holdLock, STAGE_RECORD } from './restore-swap';
 import { createUi, glyphLine } from './ui';
 
 // In data/.restoring, held by the stage that fills it: a second one would wipe its tree.
-export const STAGE_LOCK = 'stage.lock';
+const STAGE_LOCK = 'stage.lock';
 
 export async function stage(archive: string | undefined, flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
@@ -171,5 +170,17 @@ export async function stage(archive: string | undefined, flags: RestoreFlags): P
                 `${staged.missing} pending upload(s) are not replayed: the archive does not hold their bytes`,
             ),
         );
+    }
+}
+
+// Whether Eigen `appVersion`, such as the build an archive was made by, is newer than `version`. Its databases may then
+// carry a schema that `version` cannot open. The stage does not check every one of them, as the documents of an s3
+// mount that stays on its bucket are never read, so it refuses such an archive. What is not a version counts as newer:
+// Bun.semver.order throws on it.
+function isNewerBuild(appVersion: string, version: string): boolean {
+    try {
+        return Bun.semver.order(appVersion, version) > 0;
+    } catch {
+        return true;
     }
 }

@@ -7,7 +7,12 @@ import type { parseArgs } from 'node:util';
 import { BACKUP_LEVEL_NAMES } from '@workspace/lib/constants/backup';
 import { formatDate, formatTimeAgo } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
-import { LIGHT_SERVER_ARCHIVE, parseServerArchiveNames, SERVER_ARCHIVE_EXTENSION } from '@workspace/lib/validation';
+import {
+    LIGHT_SERVER_ARCHIVE,
+    parseServerArchiveNames,
+    SERVER_ARCHIVE_EXTENSION,
+    SERVER_ARCHIVE_PREFIX,
+} from '@workspace/lib/validation';
 import { getBuildCommit } from '../lib/config/env';
 import type { ControlStatus } from '../lib/config/server-status';
 import { callControl } from './control-socket';
@@ -232,7 +237,7 @@ function listedBackupRow(listing: string[]): Row {
 function lightBackupRows(listing: string[]): Row[] {
     const light = listing.filter((name) => LIGHT_SERVER_ARCHIVE.test(name) && name.endsWith(SERVER_ARCHIVE_EXTENSION));
     if (!light.length) return [];
-    const value = `${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/server-*-light-* deletes them and their records`;
+    const value = `${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/${SERVER_ARCHIVE_PREFIX}*-light-* deletes them and their records`;
     return [{ level: 'warn', label: 'Light backups', value }];
 }
 

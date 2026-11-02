@@ -22,7 +22,6 @@ import type { BackupLevel, ServerArchiveManifest } from '@workspace/lib/types/ba
 import type { DrivePath } from '@workspace/lib/types/drive';
 import pkg from '../../../../../package.json' with { type: 'json' };
 import { CANNOT_OPEN, DECLINED } from '../../cli/install';
-import { STAGE_LOCK } from '../../cli/restore-stage';
 import { SWAP_LOCK, SWAP_MARKER } from '../../cli/restore-swap';
 import {
     copyArchiveMember,
@@ -1088,7 +1087,7 @@ describe('restore --stage and --swap', () => {
             const dir = install();
             mkdirSync(join(dir, 'data/.restoring/data'), { recursive: true });
             writeFileSync(join(dir, 'data/.restoring/data/half.txt'), 'the other stage');
-            const other = lockDataDir(join(dir, 'data/.restoring', STAGE_LOCK))!;
+            const other = lockDataDir(join(dir, 'data/.restoring/stage.lock'))!;
             try {
                 const result = await stage(dir, basename(fullArchive));
                 expect(result.code).toBe(1);
