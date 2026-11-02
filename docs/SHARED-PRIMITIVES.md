@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2068 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2069 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -239,7 +239,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PropertyHistoryContext` | `@workspace/ui/components/properties-panel` | packages/ui/src/components/properties-panel/property-gesture.ts |
 | `SearchHighlight` | `@workspace/ui/components/search/prosemirror-search-highlight` | packages/ui/src/components/search/prosemirror-search-highlight.ts |
 
-## Hooks (300)
+## Hooks (299)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -343,9 +343,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCommandResults` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-results.ts |
 | `useOptionalCommandPalette` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-command-palette.ts |
 | `usePaletteDocSearch` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-doc-search.ts |
-| `usePaletteDocSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
 | `usePaletteSelection` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection.ts |
-| `usePaletteSelectionActions` | `@workspace/lib/command-palette` | packages/lib/src/core/command-palette/hooks/use-palette-selection-actions.ts |
 | `useAssignedCommentCount` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-assigned-comment-count.ts |
 | `useCardIdFromChatName` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-card-id-from-chat-name.ts |
 | `useCommentCards` | `@workspace/lib/comments` | packages/lib/src/core/comments/hooks/use-comment-cards.ts |
@@ -385,6 +383,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useCreateFolder` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useDeletePaths` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/writes.ts |
 | `useDriveAccess` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-access.ts |
+| `useDriveActionsFor` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-actions.ts |
 | `useDriveViewPreferences` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/use-drive-view-preferences.ts |
 | `useEffectiveMembers` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
 | `useEmailCollaborators` | `@workspace/lib/drive` | packages/lib/src/core/drive/hooks/sharing.ts |
@@ -544,7 +543,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (440)
+## Types (441)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -835,6 +834,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `PaletteResult` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteScope` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteSelection` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
+| `PaletteSelectionAction` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `PaletteSelectionActions` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `ResultGroup` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
 | `Sections` | `@workspace/lib/types/command-palette` | packages/lib/src/types/command-palette.ts |
@@ -989,7 +989,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1115)
+## Utilities & constants (1116)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2053,6 +2053,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `renderPresenceCaret` | `@workspace/ui/components/collab` | packages/ui/src/components/collab/presence-label.tsx |
 | `EXPORTING_CONTACTS_TITLE` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/transfer-titles.ts |
 | `IMPORTING_CONTACTS_TITLE` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/transfer-titles.ts |
+| `MENU_SECTIONS` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
 | `DOCS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `EIGEN_DOC_APP_CONFIGS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |

@@ -1,10 +1,11 @@
 // The list column of a Drive view: DriveList draws the rows as a table or a grid with selection, drop
-// and context menus, and DriveListToolbar draws the crumb row or title above it with the view controls.
-// DriveLayout mounts both, for example in Drive's folder view and in the document apps' lists.
+// and context menus, and hands the selection to the command palette. DriveListToolbar draws the crumb
+// row or title above it with the view controls. DriveLayout mounts both, for example in Drive's folder
+// view and in the document apps' lists.
 
-import { usePaletteSelection } from '@workspace/lib/command-palette';
 import { useBreadcrumb, useDriveViewPreferences } from '@workspace/lib/drive';
 import { useIsMobile } from '@workspace/lib/media';
+import type { PaletteSelectionAction } from '@workspace/lib/types/command-palette';
 import type { DrivePath, DriveSortKey, DriveViewMode } from '@workspace/lib/types/drive';
 import { DRIVE_SORT_KEYS } from '@workspace/lib/types/drive';
 import { Button } from '@workspace/ui/components/button';
@@ -21,7 +22,6 @@ import { KebabTrigger, ToolbarTitle } from '@workspace/ui/components/layout/tool
 import { ToggleGroup, ToggleGroupItem } from '@workspace/ui/components/toggle-group';
 import { ArrowDown, ArrowUp, ChevronDown, LayoutGrid, List, Plus, UploadIcon } from 'lucide-react';
 import type React from 'react';
-import { useMemo } from 'react';
 import { useFileDropTarget } from '../../hooks/use-file-drop-target';
 import { useListSelection } from '../../hooks/use-list-selection';
 import { ContextMenuAnchor, useContextMenu } from '../context-menu';
@@ -36,6 +36,7 @@ import { DriveBreadcrumb } from './drive-breadcrumb';
 import { DriveGrid } from './drive-grid';
 import type { DriveActionRunner } from './drive-layout-dialogs';
 import { useMountLabel } from './drive-mount-list';
+import { DrivePaletteSelection } from './drive-palette-selection';
 import { DriveTable, nextDriveSort } from './drive-table';
 
 const SORT_LABELS: Record<DriveSortKey, string> = { name: 'Name', modified: 'Modified', size: 'Size' };
@@ -247,6 +248,8 @@ type DriveListProps = CreateCallbacks & {
     dateLabel?: string;
     getItemDate?: (item: DrivePath) => Date | null;
     contextMenuItems?: (items: DrivePath[], close: () => void) => React.ReactNode;
+    // The command palette's rows for the selected items, beside contextMenuItems.
+    paletteActions?: (items: DrivePath[]) => PaletteSelectionAction[];
     emptyState?: React.ReactNode;
 };
 
@@ -274,6 +277,7 @@ export function DriveList({
     dateLabel,
     getItemDate,
     contextMenuItems,
+    paletteActions,
     emptyState,
 }: DriveListProps) {
     const { data: breadcrumbPaths } = useBreadcrumb(ownerId, mountId, pathId);
@@ -281,14 +285,6 @@ export function DriveList({
 
     // Selection lives here (not per view) so it survives list/grid toggles.
     const selection = useListSelection({ items, getId: (item: DrivePath) => item.id });
-
-    // Publish the multi-selection to the command palette. Memoized so the wrapper's
-    // identity stays stable across re-renders that don't change the selection.
-    const paletteSelection = useMemo(
-        () => (selection.selectedItems.length > 0 ? { items: selection.selectedItems } : null),
-        [selection.selectedItems],
-    );
-    usePaletteSelection(paletteSelection);
 
     // Background create menu, opened by right-clicking the empty listing area (rows
     // stop propagation, so their right-clicks surface the per-item menu instead).
@@ -364,6 +360,12 @@ export function DriveList({
             )}
 
             {items.length === 0 && (emptyState ?? <EmptyState hint={defaultEmptyHint} />)}
+            <DrivePaletteSelection
+                items={selection.selectedItems}
+                listing={items}
+                actions={actions}
+                ownActions={paletteActions}
+            />
         </div>
     );
 

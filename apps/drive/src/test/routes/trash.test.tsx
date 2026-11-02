@@ -1,6 +1,8 @@
 // The trash lists what was deleted, and "Modified" sorts it by when each item was trashed, not by its last
 // edit. Empty trash shows only when there is something to empty, and asks before it deletes everything.
+// The command palette offers a trashed item what its menu does: Restore and Delete permanently.
 import { afterAll, afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import type { PaletteSelectionActions } from '@workspace/lib/types/command-palette';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '@workspace/ui/test/drive-path';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
@@ -48,6 +50,7 @@ afterAll(() => {
 });
 
 const { act } = await import('react');
+const { useCommandPalette } = await import('@workspace/lib/command-palette');
 const { createMemoryHistory, createRouter, RouterProvider } = await import('@tanstack/react-router');
 const { CommandPaletteProvider } = await import('@workspace/ui/components/layout/app');
 const { PreviewProvider } = await import('@workspace/ui/components/preview-provider');
@@ -61,6 +64,13 @@ const auth = {
     login: async () => ({ success: true }),
     logout: async () => {},
 };
+
+// What the page hands the command palette, read beside it.
+const palette: { actions: PaletteSelectionActions } = { actions: null };
+function PaletteReader() {
+    palette.actions = useCommandPalette().selectionActions;
+    return null;
+}
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -83,6 +93,7 @@ async function open() {
             <PreviewProvider>
                 <CommandPaletteProvider>
                     <RouterProvider router={router} />
+                    <PaletteReader />
                 </CommandPaletteProvider>
             </PreviewProvider>
         </UploadProvider>,
@@ -139,4 +150,11 @@ test('while the trash loads it claims nothing', async () => {
     const container = await open();
     expect(container.textContent).not.toContain('Trash is empty');
     expect(buttonLabels(container)).not.toContain('Empty trash');
+});
+
+test('the palette offers a trashed item only Restore and Delete permanently', async () => {
+    trash.data = [trashed('a.txt', 1, 2)];
+    const container = await open();
+    await click(container.querySelector('[role="grid"] [data-index] > *'));
+    expect(palette.actions?.map(({ action }) => action.label)).toEqual(['Restore', 'Delete permanently']);
 });
