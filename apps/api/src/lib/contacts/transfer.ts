@@ -19,13 +19,11 @@ import type { ParsedCard, VCardLine } from '../vcard/types';
 import type { Contacts } from './contacts';
 import * as schema from './schema';
 
-// Whole-file vCard transfer; import replays each card through putCard, as a CardDAV PUT does. See docs/CONTACTS.md § Import replays each card through the CardDAV PUT.
-
 // X-EIGEN-ID carries the account's uuid, which no export may hand out.
 const isEigenName = (name: string) => name.startsWith('X-EIGEN-');
 
-// Groups are excluded, as import skips them; every line but Eigen's own re-emits from its own source bytes.
-export async function exportCards(contacts: Contacts, ids?: string[]): Promise<string> {
+// A whole-book export leaves out groups, as import does. Every line but Eigen's own is written from its source bytes.
+export async function exportCards(contacts: Contacts, ids?: readonly string[]): Promise<string> {
     const targets =
         ids ??
         contacts.db
@@ -57,14 +55,8 @@ export async function exportCards(contacts: Contacts, ids?: string[]): Promise<s
     return cards.join('');
 }
 
-function withMintedUid(parsed: ParsedCard): string {
-    const version = parsed.lines.findIndex((line) => line.name === 'VERSION');
-    const lines = [...parsed.lines];
-    lines.splice(version === -1 ? 1 : version + 1, 0, makeLine('UID', crypto.randomUUID()));
-    return serializeVCardLines(lines);
-}
-
-// Strict UTF-8 (RFC 6350 §3.1): decoded leniently, a Windows-1252 export stores U+FFFD in every accented name and re-serves it to DAV clients.
+// Strict UTF-8, as RFC 6350 §3.1 asks. Decoded leniently, a Windows-1252 export would store U+FFFD in every accented
+// name and serve it again to DAV clients.
 export async function importCards(contacts: Contacts, bytes: Uint8Array): Promise<ImportCountsResult> {
     const text = decodeUtf8Strict(bytes);
     if (text === null) throw new ApiError(400, NOT_UTF8_FILE);
@@ -87,7 +79,7 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
     }
 
     const result: ImportCountsResult = { imported: 0, skipped: 0, failed: 0 };
-    // One list-level event for the whole file instead of one per card (a thousand cards were a thousand broadcasts).
+    // One list-level event for the whole file rather than one per card, so a thousand cards make one broadcast.
     await contacts.withBatchedEvents(async () => {
         for (const card of cards) {
             let parsed: ParsedCard;
@@ -100,10 +92,8 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
                 continue;
             }
 
-            if (parsed.isGroup) {
-                result.skipped++;
-                continue;
-            }
+            // A group is no contact and no duplicate, so it counts as neither: the client calls a skip a duplicate.
+            if (parsed.isGroup) continue;
             if (parsed.uid) {
                 // Queried per card, so the loop's own writes count: a repeated UID skips like a re-import.
                 const stored = contacts.db
@@ -151,4 +141,11 @@ export async function importCards(contacts: Contacts, bytes: Uint8Array): Promis
         }
     });
     return result;
+}
+
+function withMintedUid(parsed: ParsedCard): string {
+    const version = parsed.lines.findIndex((line) => line.name === 'VERSION');
+    const lines = [...parsed.lines];
+    lines.splice(version === -1 ? 1 : version + 1, 0, makeLine('UID', crypto.randomUUID()));
+    return serializeVCardLines(lines);
 }

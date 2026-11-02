@@ -1,6 +1,6 @@
 // When Copy to… copies only part of a selection, the picker stays open, and confirming again copies only
 // the items that failed, so the ones that copied don't land twice.
-import { afterEach, expect, mock, test } from 'bun:test';
+import { afterAll, afterEach, expect, mock, test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
@@ -11,7 +11,11 @@ installHappyDom();
 const session = { user: { id: 'user-1', email: 'editor@example.com' } };
 const realAuth = await import('@workspace/lib/auth');
 mock.module('@workspace/lib/auth', () => ({ ...realAuth, useAuth: () => session, useIsGuest: () => false }));
+// A copy, because mock.module rewrites the loaded module in place, and afterAll puts the original back for the
+// field's own test.
+const realLocationField = { ...(await import('../../../components/drive/drive-location-field')) };
 mock.module('../../../components/drive/drive-location-field', () => ({ DriveLocationField: () => null }));
+afterAll(() => mock.module('../../../components/drive/drive-location-field', () => realLocationField));
 
 // biome-ignore lint/suspicious/noExplicitAny: test-only globalThis injection
 const g = globalThis as any;

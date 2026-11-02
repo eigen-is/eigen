@@ -124,6 +124,8 @@ describe('handleCellAreaMouseDown — a Ctrl-click while composing a formula', (
         container.getBoundingClientRect = () => ({ left: 0, top: 0, width: 800, height: 600 }) as DOMRect;
         const cellInput = win.document.createElement('div') as unknown as HTMLDivElement;
         cellInput.innerText = text;
+        // The caret an earlier test left in its own editor would take this reference.
+        win.getSelection()?.removeAllRanges();
         const event = {
             button: 0,
             pageX: 30,

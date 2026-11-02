@@ -9,7 +9,7 @@
   },
   "scripts": {
     "typecheck": "bun check --no-script && bun check --no-script -p tsconfig.test.json",
-    "test": "bun test"
+    "test": "bun test --isolate"
   },
   "devDependencies": {
     "@types/bun": "^1.4.4",

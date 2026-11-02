@@ -1,8 +1,6 @@
 // The Custom date and time formats dialog: the format is a row of segments, such as a day, a month or a
 // literal, each with its variant, previewed on a fixed sample date and applied to the selection.
 
-import { Button } from '@workspace/ui/components/button';
-import { DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
 import {
     ChoiceMenuItems,
     DropdownMenu,
@@ -12,18 +10,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
-import { useContext, useState } from 'react';
-import { WorkbookContext } from '../../context';
+import { useState } from 'react';
 import { is_date } from '../../engine/format';
-import { useDialog } from '../../hooks/useDialog';
-import { DATE_FORMAT_PRESETS, handleNumberFormat } from '../../state';
+import { DATE_FORMAT_PRESETS } from '../../state';
+import { FormatDialog, PatternPreview, PresetList, PresetRow } from './format-dialog';
 import type { FormatSegment } from './format-pattern';
 import {
+    DATE_TOKEN_IDS,
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
-    getDateToken,
     previewPattern,
     serializeSegments,
     tokenizePattern,
@@ -45,7 +41,7 @@ function TokenChip({
     onVariantChange: (pattern: string) => void;
     onDelete: () => void;
 }) {
-    const token = getDateToken(segment.token);
+    const token = DATE_TOKENS[segment.token];
     const variant = token.variants.find((v) => v.pattern === segment.pattern);
 
     return (
@@ -76,9 +72,6 @@ function TokenChip({
 }
 
 export function CustomDateTimeFormats() {
-    const { setContext, refs } = useContext(WorkbookContext);
-    const { hideDialog } = useDialog();
-
     const anchor = useAnchorCell();
     const anchorFa = anchor?.ct?.fa;
     const [segments, setSegments] = useState<FormatSegment[]>(() =>
@@ -92,21 +85,9 @@ export function CustomDateTimeFormats() {
         setSegments((prev) => prev.map((s, i) => (i === index ? segment : s)));
     };
 
-    const apply = () => {
-        setContext((ctx) => {
-            const cellInput = refs.cellInput.current;
-            if (!cellInput) return;
-            handleNumberFormat(ctx, cellInput, pattern);
-        });
-        hideDialog();
-    };
-
     return (
-        <div className="flex flex-col min-h-0 flex-1 gap-4">
-            <DialogHeader>
-                <DialogTitle>Custom date and time formats</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-1.5 shrink-0">
+        <FormatDialog title="Custom date and time formats" pattern={pattern} canSubmit={!!pattern && preview.ok}>
+            <div className="flex flex-col gap-1.5">
                 <div className="flex flex-wrap items-center gap-1 rounded-md border border-input px-2 py-1.5 min-h-9">
                     {segments.map((segment, index) =>
                         segment.kind === 'token' ? (
@@ -121,6 +102,7 @@ export function CustomDateTimeFormats() {
                             <input
                                 // biome-ignore lint/suspicious/noArrayIndexKey: segments are positional and have no identity
                                 key={`literal-${index}`}
+                                aria-label="Separator text"
                                 className="h-5 bg-transparent text-sm outline-none"
                                 style={{ width: `${Math.max(segment.text.length, 1)}ch` }}
                                 value={segment.text}
@@ -144,17 +126,21 @@ export function CustomDateTimeFormats() {
                                     <DropdownMenuLabel className="text-xs text-muted-foreground">
                                         {label}
                                     </DropdownMenuLabel>
-                                    {DATE_TOKENS.filter((t) => t.group === group).map((token) => (
+                                    {DATE_TOKEN_IDS.filter((id) => DATE_TOKENS[id].group === group).map((id) => (
                                         <DropdownMenuItem
-                                            key={token.id}
+                                            key={id}
                                             onClick={() =>
                                                 setSegments((prev) => [
                                                     ...prev,
-                                                    { kind: 'token', token: token.id, pattern: token.insertPattern },
+                                                    {
+                                                        kind: 'token',
+                                                        token: id,
+                                                        pattern: DATE_TOKENS[id].insertPattern,
+                                                    },
                                                 ])
                                             }
                                         >
-                                            {token.label}
+                                            {DATE_TOKENS[id].label}
                                         </DropdownMenuItem>
                                     ))}
                                 </div>
@@ -168,38 +154,20 @@ export function CustomDateTimeFormats() {
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
-                {preview.ok ? (
-                    <div className="text-sm text-muted-foreground">
-                        Preview: <span className="text-foreground">{preview.text}</span>
-                    </div>
-                ) : (
-                    <div className="text-sm text-destructive">{preview.error}</div>
-                )}
+                <PatternPreview preview={preview} />
             </div>
-            <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
+            <PresetList>
                 {DATE_FORMAT_PRESETS.map(({ name, value }) => (
-                    <div
-                        className={cn(
-                            'flex items-center justify-between gap-4 px-3 py-1.5 text-sm border-b border-border eigen-list-item',
-                            value === pattern && 'eigen-list-item-active',
-                        )}
+                    <PresetRow
                         key={value}
-                        onClick={() => setSegments(tokenizePattern(value))}
-                        tabIndex={0}
+                        active={value === pattern}
+                        onPick={() => setSegments(tokenizePattern(value))}
                     >
                         <span>{name}</span>
                         <span className="text-muted-foreground font-mono">{value}</span>
-                    </div>
+                    </PresetRow>
                 ))}
-            </div>
-            <DialogFooter>
-                <Button variant="outline" size="sm" onClick={() => hideDialog()}>
-                    Cancel
-                </Button>
-                <Button size="sm" disabled={!pattern || !preview.ok} onClick={apply}>
-                    Apply
-                </Button>
-            </DialogFooter>
-        </div>
+            </PresetList>
+        </FormatDialog>
     );
 }

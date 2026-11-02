@@ -47,7 +47,8 @@ describe('.toNumber()', () => {
                 expect(dateToSerial(new Date(2026, 0, 5, 12))).toBe(46027.5);
             }
         } finally {
-            process.env.TZ = tz;
+            // bun test runs in UTC with TZ unset, and neither deleting TZ nor assigning undefined brings UTC back.
+            process.env.TZ = tz ?? 'UTC';
         }
     });
 });

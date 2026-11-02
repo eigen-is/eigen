@@ -1400,12 +1400,9 @@ describe('CalDAV round-trip fidelity', () => {
             process.env.TZ = 'Asia/Tokyo';
         });
 
+        // bun test runs in UTC with TZ unset, and neither deleting TZ nor assigning undefined brings UTC back.
         afterAll(() => {
-            if (originalTz === undefined) {
-                delete process.env.TZ;
-            } else {
-                process.env.TZ = originalTz;
-            }
+            process.env.TZ = originalTz ?? 'UTC';
         });
 
         const floatingVcal = (dtstart: string, extra: string[] = []) =>

@@ -1,7 +1,8 @@
 // Quick look: the full-screen overlay that previews one file of a list, such as a Drive item or a mail attachment,
-// with the keys to step through its siblings and close it. It picks a body by the file's preview mode: an image, a
-// video, a PDF, or a text preview the server rendered, such as a doc drawn on its paper. Its actions come from the
-// shared file action registry.
+// with the keys to step through its siblings and close it. It is a Radix dialog, so it stacks with a dialog it opens
+// over, such as a Stickies card, and one opened over it. It picks a body by the file's preview mode: an image, a video,
+// a PDF, or a text preview the server rendered, such as a doc drawn on its paper. Its actions come from the shared
+// file action registry.
 
 import { useHotkey } from '@tanstack/react-hotkeys';
 import { getDriveItemUrl, getDrivePreviewUrl } from '@workspace/lib/api';
@@ -12,10 +13,9 @@ import { useMailTextPreview } from '@workspace/lib/mail';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { FileSubject, MailPartRef } from '@workspace/lib/types/file-subject';
 import type { TextPreviewResult } from '@workspace/lib/types/preview';
-import { isLayerAbove, useDialogOpen } from '@workspace/ui/hooks/use-dialog-open';
-import { useFocusTrap } from '@workspace/ui/hooks/use-focus-trap';
 import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, X } from 'lucide-react';
+import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useRef, useState } from 'react';
 import { EigenLoader } from '../braket/eigen-loader';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
@@ -24,10 +24,6 @@ import { getFileIcon } from './file-presentation';
 import { IcsPreviewContent, MailIcsPreviewContent } from './ics-preview-content';
 import { PREVIEW_PANE_CLASS } from './preview-pane';
 import { MailVCardPreviewContent, VCardPreviewContent } from './vcard-preview-content';
-
-// The roles a layer above the overlay carries — Radix dialogs and alert dialogs, popovers, menus and a
-// select's listbox all render one, and all of them take focus when they open.
-const LAYER_ROLES = '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
 
 type FilePreviewProps = {
     subject: FileSubject;
@@ -53,188 +49,192 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     const hasPrev = index > 0;
     const hasNext = index >= 0 && index < siblings.length - 1;
 
-    // Focus stays in the overlay except while a dialog, portaled to body, holds it.
-    const overlayRef = useRef<HTMLDivElement>(null);
-    // Every layer the content can open above the overlay — a picker, the reader header's details
-    // popover, a menu, a select's listbox — handles these keys itself, and each takes focus. Where the
-    // key was pressed is what says whose it was: a layer dismisses on the capture phase of the very
-    // keydown these document-level hotkeys hear on the bubble, and React has flushed it closed by then,
-    // so "is a layer open" answers for the layer that just went. Presence still gates the steady state.
-    const keysEnabled = !useDialogOpen(overlayRef);
-    const fromLayerAbove = (event: KeyboardEvent) => {
-        const layer = event.target instanceof Element ? event.target.closest(LAYER_ROLES) : null;
-        return !!layer && !!overlayRef.current && isLayerAbove(overlayRef.current, layer);
-    };
-    useHotkey(
-        'Escape',
-        (event) => {
-            if (fromLayerAbove(event)) return;
-            onClose();
-        },
-        { enabled: keysEnabled },
-    );
-    // Space closes it again, the way it opened it (Finder's Quick Look) — unless a control inside has
-    // focus, where Space is that control's own activation, which is why the lib prevents no default of
-    // its own: it does that before the callback runs, and a pressed button would never press.
+    const contentRef = useRef<HTMLDivElement>(null);
+    // A layer above the preview, such as Save to Drive, a menu or the reader header's details popover, holds the focus
+    // while it is open, so a key pressed outside the preview is that layer's. Escape is Radix's: it closes the top layer.
+    const fromPreview = (event: KeyboardEvent) =>
+        event.target instanceof Node && contentRef.current?.contains(event.target) === true;
+    // Space closes it again, the way it opened it (Finder's Quick Look), unless a control inside has focus, where
+    // Space is that control's own activation. That is why the lib prevents no default of its own: it does that
+    // before the callback runs, and a pressed button would never press.
     useHotkey(
         'Space',
         (event) => {
-            if (fromLayerAbove(event)) return;
+            if (!fromPreview(event)) return;
             if (event.target instanceof HTMLElement && event.target.closest('button, a[href]')) return;
             event.preventDefault();
             onClose();
         },
-        { enabled: keysEnabled, preventDefault: false },
+        { preventDefault: false },
     );
     const goPrev = (event: KeyboardEvent) => {
-        if (hasPrev && !fromLayerAbove(event)) onPrev();
+        if (hasPrev && fromPreview(event)) onPrev();
     };
     const goNext = (event: KeyboardEvent) => {
-        if (hasNext && !fromLayerAbove(event)) onNext();
+        if (hasNext && fromPreview(event)) onNext();
     };
-    useHotkey('ArrowLeft', goPrev, { enabled: keysEnabled });
-    useHotkey('ArrowUp', goPrev, { enabled: keysEnabled });
-    useHotkey('ArrowRight', goNext, { enabled: keysEnabled });
-    useHotkey('ArrowDown', goNext, { enabled: keysEnabled });
+    useHotkey('ArrowLeft', goPrev);
+    useHotkey('ArrowUp', goPrev);
+    useHotkey('ArrowRight', goNext);
+    useHotkey('ArrowDown', goNext);
 
-    // The trap stands down only for a dialog that takes focus away; a popover portaled to body keeps
-    // its own Tab cycle, and the trap never sees those keys.
-    useFocusTrap(overlayRef, !runner.isDialogOpen);
+    // The preview has no Radix trigger to give the focus back to, so it returns it to whatever opened it, such as an
+    // attachment chip in a Stickies card.
+    const [opener] = useState(() => document.activeElement);
 
     const openUrl = drive ? getDriveItemUrl(drive) : undefined;
     const downloadableSiblings = siblings.filter((sibling) => !!subjectInfo(sibling).downloadUrl);
 
     return (
-        <div
-            ref={overlayRef}
-            data-preview-overlay
-            role="dialog"
-            aria-modal="true"
-            aria-label={info.name}
-            tabIndex={-1}
-            className="fixed inset-0 z-[100] bg-black/80 flex flex-col animate-in fade-in outline-none"
-            style={{ pointerEvents: 'auto' }}
-            // Synthetic events bubble across portals, so a click inside the picker would land here too.
-            onClick={(e) => {
-                if (e.target === e.currentTarget) onClose();
-            }}
-        >
-            {/* Header */}
-            <div
-                className="flex items-center justify-between px-4 py-2 bg-black/40 text-white shrink-0"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex items-center gap-2 min-w-0">
-                    <span className="truncate text-sm font-medium">{info.name}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                    <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
-                        <ChevronLeft className="size-4" />
-                    </NavButton>
-                    <NavButton onClick={onNext} disabled={!hasNext} title="Next (→)">
-                        <ChevronRight className="size-4" />
-                    </NavButton>
-                    <NavButton onClick={onClose} title="Close (Esc)">
-                        <X className="size-4" />
-                    </NavButton>
-                </div>
-            </div>
-
-            {/* Content */}
-            <div
-                className="flex-1 flex items-center justify-center overflow-hidden min-h-0"
-                onClick={onClose}
-                style={{ cursor: 'zoom-out' }}
-            >
-                <div
-                    className="max-w-[90vw] max-h-[calc(100vh-7rem)] flex items-center justify-center"
-                    onClick={(e) => e.stopPropagation()}
-                    style={{ cursor: 'default' }}
+        <DialogPrimitive.Root open onOpenChange={(open) => !open && onClose()}>
+            <DialogPrimitive.Portal>
+                <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/80 animate-in fade-in" />
+                <DialogPrimitive.Content
+                    ref={contentRef}
+                    data-slot="file-preview"
+                    aria-describedby={undefined}
+                    className="fixed inset-0 z-50 flex flex-col animate-in fade-in outline-none"
+                    // Space closes the preview, so the focus goes to the preview itself rather than to its first button.
+                    onOpenAutoFocus={(e) => {
+                        e.preventDefault();
+                        contentRef.current?.focus();
+                    }}
+                    onCloseAutoFocus={(e) => {
+                        e.preventDefault();
+                        if (opener instanceof HTMLElement) opener.focus();
+                    }}
+                    // React passes a click in a dialog the preview opened, such as Save to Drive, up to here too.
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget) onClose();
+                    }}
                 >
-                    {previewMode === 'image' && (
-                        // Keyed so a sibling never inherits the previous image's loaded flag or measured ratio.
-                        <ProgressiveImage
-                            key={previewUrl}
-                            thumbnailUrl={info.thumbnailUrl}
-                            previewUrl={previewUrl}
-                            alt={info.name}
-                            aspectRatio={aspectRatio}
-                        />
-                    )}
-                    {previewMode === 'video' && (
-                        <video
-                            src={info.embedUrl}
-                            controls
-                            autoPlay
-                            className="max-w-full max-h-[calc(100vh-7rem)] rounded"
-                            style={aspectRatio ? { aspectRatio: `${aspectRatio}` } : undefined}
-                        />
-                    )}
-                    {previewMode === 'audio' && (
-                        <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
-                            <span className="text-sm text-muted-foreground">{info.name}</span>
-                            <audio src={info.embedUrl} controls autoPlay className="w-80" />
-                        </div>
-                    )}
-                    {previewMode === 'pdf' && (
-                        <iframe src={info.embedUrl} className={cn(PREVIEW_PANE_CLASS, 'rounded bg-background')} />
-                    )}
-                    {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
-                    {previewMode === 'text' && drive && <TextPreviewContent path={drive} />}
-                    {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
-                    {previewMode === 'vcard' && drive && <VCardPreviewContent path={drive} />}
-                    {previewMode === 'vcard' && subject.mail && (
-                        <MailVCardPreviewContent part={subject.mail} size={info.size} />
-                    )}
-                    {previewMode === 'eml' && drive && <EmlPreviewContent path={drive} />}
-                    {previewMode === 'eml' && subject.mail && (
-                        <MailEmlPreviewContent part={subject.mail} size={info.size} />
-                    )}
-                    {previewMode === 'ics' && drive && <IcsPreviewContent path={drive} />}
-                    {previewMode === 'ics' && subject.mail && (
-                        <MailIcsPreviewContent part={subject.mail} size={info.size} />
-                    )}
-                    {previewMode === 'fallback' && (
-                        <div className="flex flex-col items-center gap-4 text-white">
-                            {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
-                                className: 'size-16 text-muted-foreground',
-                            })}
-                            <span className="text-lg font-medium">{info.name}</span>
-                            <span className="text-sm text-muted-foreground">No preview available</span>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Footer */}
-            <div
-                className="flex items-center justify-center gap-2 px-4 py-2 bg-black/40 shrink-0"
-                onClick={(e) => e.stopPropagation()}
-            >
-                {openUrl && (
-                    <FooterButton href={openUrl}>
-                        <ArrowRight className="size-3.5" />
-                        Open
-                    </FooterButton>
-                )}
-                {runner.actions.map((action) => (
-                    <FooterActionButton key={action.id} onClick={() => runner.run(action)} disabled={runner.isPending}>
-                        <action.icon className="size-3.5" />
-                        {action.label}
-                    </FooterActionButton>
-                ))}
-                {subject.attachment && downloadableSiblings.length >= 2 && (
-                    <FooterActionButton
-                        onClick={() => runner.openPicker(downloadableSiblings)}
-                        disabled={runner.isPending}
+                    {/* Header */}
+                    <div
+                        className="flex items-center justify-between px-4 py-2 bg-black/40 text-white shrink-0"
+                        onClick={(e) => e.stopPropagation()}
                     >
-                        <FolderDown className="size-3.5" />
-                        Save all ({downloadableSiblings.length})
-                    </FooterActionButton>
-                )}
-            </div>
-            {runner.dialogs}
-        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                            <DialogPrimitive.Title className="truncate text-sm font-medium">
+                                {info.name}
+                            </DialogPrimitive.Title>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <NavButton onClick={onPrev} disabled={!hasPrev} title="Previous (←)">
+                                <ChevronLeft className="size-4" />
+                            </NavButton>
+                            <NavButton onClick={onNext} disabled={!hasNext} title="Next (→)">
+                                <ChevronRight className="size-4" />
+                            </NavButton>
+                            <NavButton onClick={onClose} title="Close (Esc)">
+                                <X className="size-4" />
+                            </NavButton>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div
+                        className="flex-1 flex items-center justify-center overflow-hidden min-h-0"
+                        onClick={onClose}
+                        style={{ cursor: 'zoom-out' }}
+                    >
+                        <div
+                            className="max-w-[90vw] max-h-[calc(100vh-7rem)] flex items-center justify-center"
+                            onClick={(e) => e.stopPropagation()}
+                            style={{ cursor: 'default' }}
+                        >
+                            {previewMode === 'image' && (
+                                // Keyed so a sibling never inherits the previous image's loaded flag or measured ratio.
+                                <ProgressiveImage
+                                    key={previewUrl}
+                                    thumbnailUrl={info.thumbnailUrl}
+                                    previewUrl={previewUrl}
+                                    alt={info.name}
+                                    aspectRatio={aspectRatio}
+                                />
+                            )}
+                            {previewMode === 'video' && (
+                                <video
+                                    src={info.embedUrl}
+                                    controls
+                                    autoPlay
+                                    className="max-w-full max-h-[calc(100vh-7rem)] rounded"
+                                    style={aspectRatio ? { aspectRatio: `${aspectRatio}` } : undefined}
+                                />
+                            )}
+                            {previewMode === 'audio' && (
+                                <div className="bg-background rounded-lg p-8 flex flex-col items-center gap-4">
+                                    <span className="text-sm text-muted-foreground">{info.name}</span>
+                                    <audio src={info.embedUrl} controls autoPlay className="w-80" />
+                                </div>
+                            )}
+                            {previewMode === 'pdf' && (
+                                <iframe
+                                    src={info.embedUrl}
+                                    className={cn(PREVIEW_PANE_CLASS, 'rounded bg-background')}
+                                />
+                            )}
+                            {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
+                            {previewMode === 'text' && drive && <TextPreviewContent path={drive} />}
+                            {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
+                            {previewMode === 'vcard' && drive && <VCardPreviewContent path={drive} />}
+                            {previewMode === 'vcard' && subject.mail && (
+                                <MailVCardPreviewContent part={subject.mail} size={info.size} />
+                            )}
+                            {previewMode === 'eml' && drive && <EmlPreviewContent path={drive} />}
+                            {previewMode === 'eml' && subject.mail && (
+                                <MailEmlPreviewContent part={subject.mail} size={info.size} />
+                            )}
+                            {previewMode === 'ics' && drive && <IcsPreviewContent path={drive} />}
+                            {previewMode === 'ics' && subject.mail && (
+                                <MailIcsPreviewContent part={subject.mail} size={info.size} />
+                            )}
+                            {previewMode === 'fallback' && (
+                                <div className="flex flex-col items-center gap-4 text-white">
+                                    {getFileIcon(info.mimeType, drive?.type ?? 'file', info.name, {
+                                        className: 'size-16 text-muted-foreground',
+                                    })}
+                                    <span className="text-lg font-medium">{info.name}</span>
+                                    <span className="text-sm text-muted-foreground">No preview available</span>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Footer */}
+                    <div
+                        className="flex items-center justify-center gap-2 px-4 py-2 bg-black/40 shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {openUrl && (
+                            <FooterButton href={openUrl}>
+                                <ArrowRight className="size-3.5" />
+                                Open
+                            </FooterButton>
+                        )}
+                        {runner.actions.map((action) => (
+                            <FooterActionButton
+                                key={action.id}
+                                onClick={() => runner.run(action)}
+                                disabled={runner.isPending}
+                            >
+                                <action.icon className="size-3.5" />
+                                {action.label}
+                            </FooterActionButton>
+                        ))}
+                        {subject.attachment && downloadableSiblings.length >= 2 && (
+                            <FooterActionButton
+                                onClick={() => runner.openPicker(downloadableSiblings)}
+                                disabled={runner.isPending}
+                            >
+                                <FolderDown className="size-3.5" />
+                                Save all ({downloadableSiblings.length})
+                            </FooterActionButton>
+                        )}
+                    </div>
+                    {runner.dialogs}
+                </DialogPrimitive.Content>
+            </DialogPrimitive.Portal>
+        </DialogPrimitive.Root>
     );
 }
 

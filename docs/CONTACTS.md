@@ -62,7 +62,7 @@ Metering switches on at the very end of init. The quota lookup opens the Home, a
 
 The file is decoded as strict UTF-8, because a lenient decode would store replacement characters in every accented name and serve them to devices. Both import routes lift the server idle timeout, since a whole book answers nothing until its last card lands.
 
-Duplicates are skipped, never merged. A card is skipped when its `UID` is already in the book, or its first email is one any contact already has, including earlier cards in the same file. Group cards are skipped too. A card that won't parse or that `putCard` refuses counts as failed, and the file continues. Only a quota refusal stops the run, with a 507 naming how many cards went in, because every later card would fail the same way. The cases are pinned in `contacts/contacts-transfer.test.ts`.
+Duplicates are skipped, never merged. A card is skipped when its `UID` is already in the book, or its first email is one any contact already has, including earlier cards in the same file. A group card is left out and counted nowhere, since the client reports every skip as a duplicate and a group is not one. A card that won't parse or that `putCard` refuses counts as failed, and the file continues. Only a quota refusal stops the run, with a 507 naming how many cards went in, because every later card would fail the same way. The cases are pinned in `contacts/contacts-transfer.test.ts`.
 
 Export reads one row at a time, since the whole book's bytes in one query would not scale. It drops every `X-EIGEN-*` line, because the self-link carries the account's id. A whole-book export leaves out group cards, to match import.
 

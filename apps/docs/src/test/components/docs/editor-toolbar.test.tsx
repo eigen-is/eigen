@@ -36,6 +36,12 @@ const editor = new Editor({
     element: document.body.appendChild(document.createElement('div')),
     extensions: [...getDocExtensions(), PositionedFigures],
 });
+// The tests share it, so each starts from an empty doc and a caret, not what the last one left selected or styled. A
+// select-all survives new content, so the caret is set as well.
+beforeEach(() => {
+    editor.commands.clearContent();
+    editor.commands.setTextSelection(1);
+});
 
 // A band's editor and a note's, which draw every figure in line.
 const rootExtensions = (root: { band?: boolean; note?: boolean }) => [

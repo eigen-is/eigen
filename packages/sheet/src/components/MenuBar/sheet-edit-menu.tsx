@@ -18,7 +18,7 @@ import {
 import type { RefObject } from 'react';
 import { useContext } from 'react';
 import { WorkbookContext } from '../../context';
-import { useAlert } from '../../hooks/useAlert';
+import { useDialog } from '../../hooks/useDialog';
 import {
     clearSelectedContents,
     copyActiveObject,
@@ -36,7 +36,7 @@ import {
 // skips Radix's focus-restore to the trigger, which would otherwise steal the focus back from the find bar.
 export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<boolean> }) {
     const { context, getContext, setContext, refs, handleUndo, handleRedo } = useContext(WorkbookContext);
-    const { showAlert } = useAlert();
+    const { showNotice } = useDialog();
     const docSearchBar = useOptionalDocSearchBar();
 
     const canUndo = refs.globalCache.undoList.length > 0;
@@ -51,7 +51,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
         setContext(
             (draftCtx) => {
                 const error = tryDeleteRowCol(draftCtx, deleteRowColOp);
-                if (error) showAlert(error, 'ok');
+                if (error) showNotice(error);
             },
             { deleteRowColOp },
         );
@@ -130,7 +130,7 @@ export function SheetEditMenu({ focusFindBarRef }: { focusFindBarRef: RefObject<
                                 onClick={() => {
                                     setContext((draftCtx) => {
                                         const error = clearSelectedContents(draftCtx);
-                                        if (error) showAlert(error, 'ok');
+                                        if (error) showNotice(error);
                                     });
                                 }}
                             >

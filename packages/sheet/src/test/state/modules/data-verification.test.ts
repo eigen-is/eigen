@@ -18,7 +18,6 @@ import {
     checkboxAlign,
     checkboxChange,
     checkboxRect,
-    confirmMessage,
     DROPDOWN_CHEVRON_HIT_WIDTH,
     dropdownChevronRect,
     getCellDataVerification,
@@ -31,6 +30,7 @@ import {
     showsCheckboxLabel,
     validateCellData,
     validationRange,
+    validationValueProblem,
 } from '../../../state/modules/data-verification';
 import {
     addValidation,
@@ -579,48 +579,48 @@ describe('isDropdownChevronClick', () => {
     });
 });
 
-// confirmMessage validates the dialog's rule before it is written. Every branch
-// must return false when it warns — the dropdown and checkbox branches used to
-// set warnDialog and fall through, so an empty rule was applied anyway and the
-// range rendered as `☐ FALS`: an empty-valued rule is not a default TRUE/FALSE
-// rule, so the painter drew the label too.
-function regulationContext(regulation: Partial<DataRegulationProps>) {
-    const ctx = contextFactory() as Context;
-    ctx.validationDraft = {
-        type: 'dropdown',
-        type2: '',
-        rangeTxt: 'A1:A3',
-        value1: '',
-        value2: '',
-        validity: '',
-        remote: false,
-        prohibitInput: false,
-        hintShow: false,
-        hintValue: '',
-        ...regulation,
-    };
-    return ctx;
-}
+// validationValueProblem checks the dialog's rule before it is written. Every branch must refuse what it complains
+// about: the dropdown and checkbox branches used to warn and fall through, so an empty rule was applied anyway and the
+// range rendered as `☐ FALS`. An empty-valued rule is not a default TRUE/FALSE rule, so the painter drew the label too.
+const draft = (rule: Partial<DataRegulationProps>): DataRegulationProps => ({
+    type: 'dropdown',
+    type2: '',
+    rangeTxt: 'A1:A3',
+    value1: '',
+    value2: '',
+    validity: '',
+    remote: false,
+    prohibitInput: false,
+    hintShow: false,
+    hintValue: '',
+    ...rule,
+});
 
-describe('confirmMessage', () => {
-    test('rejects a drop-down rule with no options', () => {
-        const ctx = regulationContext({ type: 'dropdown', value1: '' });
-        expect(confirmMessage(ctx)).toBe(false);
-        expect(ctx.warnDialog).toBe('The drop-down list option cannot be empty');
+describe('validationValueProblem', () => {
+    test('refuses a drop-down rule with no options', () => {
+        expect(validationValueProblem(draft({ type: 'dropdown', value1: '' }))).toBe(
+            'The drop-down list option cannot be empty',
+        );
     });
 
-    test('rejects a checkbox rule with an empty selected or not-selected value', () => {
-        const empty = regulationContext({ type: 'checkbox', value1: '', value2: '' });
-        expect(confirmMessage(empty)).toBe(false);
-        expect(empty.warnDialog).toBe('Checkbox content cannot be empty');
+    test('refuses a checkbox rule with an empty selected or not-selected value', () => {
+        expect(validationValueProblem(draft({ type: 'checkbox', value1: '', value2: '' }))).toBe(
+            'Checkbox content cannot be empty',
+        );
+        expect(validationValueProblem(draft({ type: 'checkbox', value1: 'Yes', value2: '' }))).toBe(
+            'Checkbox content cannot be empty',
+        );
+    });
 
-        const halfEmpty = regulationContext({ type: 'checkbox', value1: 'Yes', value2: '' });
-        expect(confirmMessage(halfEmpty)).toBe(false);
+    test('refuses a range that ends below its start', () => {
+        expect(validationValueProblem(draft({ type: 'number', type2: 'between', value1: '5', value2: '1' }))).toBe(
+            'The value 2 cannot be less than the value 1',
+        );
     });
 
     test('accepts the rules it has no complaint about', () => {
-        expect(confirmMessage(regulationContext({ type: 'dropdown', value1: 'Red,Green' }))).toBe(true);
-        expect(confirmMessage(regulationContext({ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }))).toBe(true);
+        expect(validationValueProblem(draft({ type: 'dropdown', value1: 'Red,Green' }))).toBeUndefined();
+        expect(validationValueProblem(draft({ type: 'checkbox', value1: 'TRUE', value2: 'FALSE' }))).toBeUndefined();
     });
 });
 

@@ -1,3 +1,6 @@
+// The spreadsheet functions a user is offered, each with its name, category, description and parameters. The formula
+// editor reads it for its suggestions and the hint under a typed function, and Insert function lists it by category.
+
 type FormulaFunctionParam = {
     name: string;
     detail: string;
@@ -9,13 +12,32 @@ type FormulaFunctionParam = {
 
 export type FormulaFunctionEntry = {
     n: string;
-    // Category id, matching FUNCTION_CATEGORIES in components/InsertFunctionDialog.
+    // Category id, one of FUNCTION_CATEGORIES' ids, or one that has no category of its own.
     t: number;
     d: string;
     a: string;
     m: number[];
     p: FormulaFunctionParam[];
 };
+
+// The categories Insert function offers. Their ids are FUNCTION_LIST's `t`.
+export const FUNCTION_CATEGORIES: readonly { id: number; name: string }[] = [
+    { id: 0, name: 'Math' },
+    { id: 1, name: 'Statistical' },
+    { id: 2, name: 'Lookup' },
+    { id: 4, name: 'Data mining' },
+    { id: 5, name: 'Database' },
+    { id: 6, name: 'Date' },
+    { id: 7, name: 'Filter' },
+    { id: 8, name: 'Financial' },
+    { id: 9, name: 'Engineering' },
+    { id: 10, name: 'Logical' },
+    { id: 11, name: 'Operator' },
+    { id: 12, name: 'Text' },
+    { id: 13, name: 'Parser' },
+    { id: 14, name: 'Array' },
+    { id: -1, name: 'Other' },
+];
 
 export const FUNCTION_LIST: FormulaFunctionEntry[] = [
     {

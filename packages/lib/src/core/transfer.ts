@@ -46,8 +46,10 @@ export async function fetchImportBlob(url: string): Promise<Blob> {
 
 // One phrasing for every counted import: a file from the disk and a file from Drive report the same three
 // counts. Nothing imported and nothing skipped means the file held nothing this book or calendar could
-// take — unreadable members say so, because the file did hold members and none of them landed.
-export function reportImportCounts(result: ImportCountsResult, noun: string): void {
+// take. Unreadable members say so, because the file did hold members and none of them landed.
+// `alreadyIn` names where a skipped member already is, such as "your calendars". Without it, a skip is a
+// duplicate.
+export function reportImportCounts(result: ImportCountsResult, noun: string, alreadyIn?: string): void {
     const { imported, skipped, failed } = result;
     if (!imported && !skipped) {
         if (failed) toast.error(unreadableLine(failed, noun));
@@ -55,7 +57,10 @@ export function reportImportCounts(result: ImportCountsResult, noun: string): vo
         return;
     }
     const parts = [`Imported ${imported} ${noun}${imported === 1 ? '' : 's'}`];
-    if (skipped) parts.push(`skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`);
+    if (skipped && !alreadyIn) parts.push(`skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}`);
     if (failed) parts.push(`${failed} unreadable`);
-    toast.success(parts.join(', '));
+    const counts = parts.join(', ');
+    if (skipped && alreadyIn)
+        toast.success(`${counts}. ${skipped} ${skipped === 1 ? 'was' : 'were'} already in ${alreadyIn}.`);
+    else toast.success(counts);
 }

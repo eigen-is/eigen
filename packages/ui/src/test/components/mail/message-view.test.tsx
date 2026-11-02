@@ -1,5 +1,6 @@
 // The reader shows a message without what it would fetch from elsewhere until Load images is clicked. The
-// shadow root is closed, so the test borrows `attachShadow` to read the body MessageView hands ShadowContent.
+// shadow root is closed, so the test borrows `attachShadow` to read the body MessageView hands ShadowContent. The
+// header's details name each field in sentence case.
 import { afterEach, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
 import { renderInDocument } from '../../render-in-document';
@@ -97,4 +98,28 @@ test('a body the .eml preview served, stripped on the server, shows no line', as
 
     expect(shownBody()).toContain('read more');
     expect(document.body.textContent).not.toContain('Remote images are hidden.');
+});
+
+const address = (name: string, email: string) => ({ value: [{ name, address: email }], text: `${name} <${email}>` });
+
+test('the header details name each field in sentence case', async () => {
+    ({ unmount } = await renderInDocument(
+        createElement(MessageView, {
+            subject: 'Newsletter',
+            from: address('Ada', 'ada@example.com'),
+            replyTo: address('Desk', 'desk@example.com'),
+            to: address('Grace', 'grace@example.com'),
+            cc: address('Alan', 'alan@example.com'),
+            bcc: address('Edsger', 'edsger@example.com'),
+            date: new Date('2026-01-05T14:30:00Z'),
+            text: 'Hello',
+        }),
+    ));
+    const trigger = [...document.querySelectorAll('button')].find((b) => b.textContent?.startsWith('To: '));
+    if (!trigger) throw new Error('the header has no To: line');
+    await act(async () => trigger.click());
+    const labels = [...document.querySelectorAll('[data-slot="popover-content"] .grid > span:first-child')].map(
+        (label) => label.textContent,
+    );
+    expect(labels).toEqual(['From:', 'Reply-to:', 'To:', 'Cc:', 'Bcc:', 'Date:', 'Subject:']);
 });

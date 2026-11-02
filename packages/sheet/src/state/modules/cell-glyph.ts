@@ -1,3 +1,8 @@
+// The marks a cell paints in its own box: the two data-validation affordances, a list chevron and a tick box, and
+// the corner triangles. A press on any of them belongs to the cell: it opens the list, toggles the box, or just
+// selects the marked cell, and never reaches the selection's drag handles, whose hit targets straddle the same
+// corners. cellGlyphAt is the one question the grid's mousedown and hover paths ask before a handle gets its say.
+
 import { CELL_INDICATOR_SIZE } from '@workspace/lib/constants/comment-indicator';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
@@ -12,12 +17,6 @@ import {
 } from './data-verification';
 import { colLocation, rowLocation } from './location';
 
-// The marks a cell paints in its own box: the two data-verification affordances
-// and the corner triangles. A press on any of them belongs to the cell — it
-// opens the list, toggles the box, or just selects the marked cell — and never
-// to the selection's drag handles, whose DOM hit targets straddle the same
-// corners. cellGlyphAt is the one predicate the mousedown path (OverlayVisuals)
-// and the hover path (events/mouse-drag.ts) consult before a handle gets its say.
 export type CellGlyph = 'dropdown' | 'checkbox' | 'comment' | 'invalid' | 'forced-string';
 
 // Corner indicators: a comment top-right, an invalid value or a forced string

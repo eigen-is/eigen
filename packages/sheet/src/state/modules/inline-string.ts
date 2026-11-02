@@ -115,6 +115,15 @@ export function restoreEditorSelection(input: HTMLElement) {
     else input.focus({ preventScroll: true });
 }
 
+// Puts the caret `offset` characters into the editor's text and keeps it for restoreEditorSelection. A dialog that
+// writes into the editor, such as Insert function, needs the kept one. Placing the caret moves the focus to the
+// editor, the dialog's focus trap takes it back, and in a text field that takes the selection along.
+export function placeEditorCaret(input: HTMLElement, offset: number) {
+    savedSelections.set(input, [offset, offset]);
+    pendingStyles.delete(input);
+    setSelectionOffsets(input, offset, offset);
+}
+
 // A closed editor's selection and caret format don't carry into the next cell it opens on.
 export function forgetEditorSelection(input: HTMLElement) {
     savedSelections.delete(input);

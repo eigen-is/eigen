@@ -18,9 +18,6 @@ type FormDialogProps = {
     description?: string;
     size?: ComponentProps<typeof DialogContent>['size'];
     onCloseAutoFocus?: (event: Event) => void;
-    // Lifts the dialog above an open file preview, as a file action's picker needs. Escape and a click outside it then
-    // close only the dialog, and the preview stays open.
-    abovePreview?: boolean;
     children: ReactNode;
 };
 
@@ -53,7 +50,6 @@ export function FormDialog({
     description,
     size,
     onCloseAutoFocus,
-    abovePreview,
     children,
 }: FormDialogProps) {
     const { pending, run, handleOpenChange } = useDialogPending(onOpenChange);
@@ -65,7 +61,7 @@ export function FormDialog({
 
     return (
         <Dialog open={open} onOpenChange={handleOpenChange}>
-            <DialogContent size={size} onCloseAutoFocus={onCloseAutoFocus} abovePreview={abovePreview}>
+            <DialogContent size={size} onCloseAutoFocus={onCloseAutoFocus}>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     {description && <DialogDescription>{description}</DialogDescription>}

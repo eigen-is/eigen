@@ -1,70 +1,59 @@
+// How the sheet opens a dialog in the one slot ModalProvider holds. Each dialog, such as Custom sort, draws its own
+// FormDialog and takes its open and close from useDialogProps. A notice or a yes or no, such as a refused edit or a
+// delete confirm, is a message that showNotice draws. The range picker opens non-modal, so the grid stays usable to
+// pick on.
+
 import { Button } from '@workspace/ui/components/button';
-import { DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@workspace/ui/components/dialog';
-import type React from 'react';
+import { DialogDescription, DialogFooter } from '@workspace/ui/components/dialog';
+import { FormDialog } from '@workspace/ui/components/form-dialog';
 import { useCallback, useContext } from 'react';
-import type { ModalOptions } from '../context/modal';
-import { ModalContext } from '../context/modal';
+import type { DialogProps } from '../context/modal';
+import { DialogPropsContext, ModalContext } from '../context/modal';
 
 export function useDialog() {
-    const { showModal, hideModal } = useContext(ModalContext);
+    const { showModal, showNonModal, hideModal } = useContext(ModalContext);
 
-    const showDialog = useCallback(
-        (
-            content: string | React.ReactNode,
-            type?: 'ok' | 'yesno',
-            onOk: () => void = hideModal,
-            onCancel: () => void = hideModal,
-        ) => {
-            if (type) {
-                showModal(
-                    <DialogWrapper type={type} onOk={onOk} onCancel={onCancel}>
-                        {content}
-                    </DialogWrapper>,
-                );
-            } else {
-                showModal(content);
-            }
-        },
-        [hideModal, showModal],
-    );
-
-    const showNonModalDialog = useCallback(
-        (content: React.ReactNode, options: Omit<ModalOptions, 'modal'> = {}) => {
-            showModal(content, { ...options, modal: false });
-        },
+    // A message with OK, or a yes or no whose onOk runs on OK. The notice closes itself, so onOk only does the work.
+    const showNotice = useCallback(
+        (message: string, type: 'ok' | 'yesno' = 'ok', onOk?: () => void) =>
+            showModal(
+                <NoticeDialog type={type} onOk={onOk}>
+                    {message}
+                </NoticeDialog>,
+            ),
         [showModal],
     );
 
-    return { showDialog, showNonModalDialog, hideDialog: hideModal };
+    return { showDialog: showModal, showNotice, showNonModalDialog: showNonModal, hideDialog: hideModal };
 }
 
-function DialogWrapper({
-    type,
-    onOk,
-    onCancel,
-    children,
-}: {
-    type: 'ok' | 'yesno';
-    onOk?: () => void;
-    onCancel?: () => void;
-    children?: React.ReactNode;
-}) {
+// The open and close of the dialog in the slot, for its FormDialog to spread.
+export function useDialogProps(): DialogProps {
+    return useContext(DialogPropsContext);
+}
+
+function NoticeDialog({ type, onOk, children }: { type: 'ok' | 'yesno'; onOk?: () => void; children: string }) {
+    const dialogProps = useDialogProps();
+    const close = () => dialogProps.onOpenChange(false);
+
     return (
-        <>
-            <DialogHeader>
-                <DialogTitle className="text-base">Notice</DialogTitle>
-            </DialogHeader>
+        <FormDialog {...dialogProps} title="Notice" size="md">
             <DialogDescription className="text-foreground">{children}</DialogDescription>
             <DialogFooter>
                 {type === 'yesno' && (
-                    <Button variant="outline" size="sm" onClick={onCancel}>
+                    <Button variant="outline" onClick={close}>
                         Cancel
                     </Button>
                 )}
-                <Button size="sm" onClick={onOk}>
+                <Button
+                    onClick={() => {
+                        onOk?.();
+                        close();
+                    }}
+                >
                     OK
                 </Button>
             </DialogFooter>
-        </>
+        </FormDialog>
     );
 }

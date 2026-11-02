@@ -109,8 +109,6 @@ mock.module('@workspace/lib/public', () => ({
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { act, createElement } = await import('react');
 const { createRoot } = await import('react-dom/client');
-const { PreviewContext } = await import('../../../components/preview-provider/preview-context');
-const { ABOVE_PREVIEW_Z } = await import('../../../components/dialog');
 const { ImportToCalendarPicker } = await import('../../../components/calendar/import-to-calendar-picker');
 
 const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
@@ -119,14 +117,7 @@ const subject = subjectFromMailAttachment('owner-1', 'message-1', 0, {
     size: 2048,
 });
 
-const openPreviewContext = {
-    openPreview: () => {},
-    updatePreview: () => {},
-    closePreview: () => {},
-    isPreviewOpen: true,
-};
-
-async function open(previewOpen = false) {
+async function open() {
     handed = [];
     sources = [];
     refetch.mockClear();
@@ -137,17 +128,13 @@ async function open(previewOpen = false) {
     const draw = async () => {
         await act(async () => {
             root.render(
-                createElement(
-                    PreviewContext.Provider,
-                    { value: previewOpen ? openPreviewContext : undefined },
-                    createElement(ImportToCalendarPicker, {
-                        subject,
-                        open: true,
-                        onClose: () => {
-                            closed.count += 1;
-                        },
-                    }),
-                ),
+                createElement(ImportToCalendarPicker, {
+                    subject,
+                    open: true,
+                    onClose: () => {
+                        closed.count += 1;
+                    },
+                }),
             );
         });
     };
@@ -319,19 +306,6 @@ test('an import that fails keeps the dialog open with the calendar and name stil
 
     failure = null;
     await cleanup();
-});
-
-test('over an open preview the calendar list is lifted above the dialog, and otherwise it is not', async () => {
-    const plain = await open();
-    await plain.openList();
-    const list = () => [...document.querySelectorAll('[data-slot="select-content"]')].at(-1);
-    expect(list()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(false);
-    await plain.cleanup();
-
-    const over = await open(true);
-    await over.openList();
-    expect(list()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
-    await over.cleanup();
 });
 
 test('a calendar that went away after it was chosen greys Import out until another is picked', async () => {

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import {
     EIGEN_ACCENT_COLORS,
     EIGEN_ACCENT_COLORS_SHUFFLED,
+    eigenColor,
     hexChannels,
     isHexColor,
     isLightColor,
@@ -253,5 +254,13 @@ describe('parseRgb on hostile input', () => {
         expect(parseRgb(color)).toBeUndefined();
         const { user, system } = process.cpuUsage(started);
         expect((user + system) / 1000).toBeLessThan(100);
+    });
+});
+
+describe('eigenColor', () => {
+    test('names one palette color by its name and step', () => {
+        expect(eigenColor('red', 50)).toBe('#fef2f2');
+        expect(eigenColor('emerald', 600)).toBe('#009966');
+        expect(eigenColor('rose', 950)).toBe('#4d0218');
     });
 });

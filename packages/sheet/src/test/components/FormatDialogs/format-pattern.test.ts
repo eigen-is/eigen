@@ -8,7 +8,8 @@ import { describe, expect, test } from 'bun:test';
 import type { DateTokenId, FormatSegment } from '../../../components/FormatDialogs/format-pattern';
 import {
     buildCurrencyPattern,
-    CURRENCY_VARIANTS,
+    CURRENCY_VARIANT_IDS,
+    DATE_TOKEN_IDS,
     DATE_TOKENS,
     DATETIME_SAMPLE_SERIAL,
     NUMBER_FORMAT_PRESETS,
@@ -63,8 +64,8 @@ describe('tokenizePattern / serializeSegments round-trip', () => {
     });
 
     test('every token variant tokenizes to a single chip and round-trips', () => {
-        for (const { id, variants } of DATE_TOKENS) {
-            for (const { pattern } of variants) {
+        for (const id of DATE_TOKEN_IDS) {
+            for (const { pattern } of DATE_TOKENS[id].variants) {
                 // A lone 000 is just a digit mask — the millisecond token only exists after s/ss + '.'
                 const probe = id === 'millisecond' ? `ss.${pattern}` : pattern;
                 const segments = tokenizePattern(probe);
@@ -196,12 +197,7 @@ describe('buildCurrencyPattern', () => {
     });
 
     test('the variant list covers exactly the four spec variants in order', () => {
-        expect(CURRENCY_VARIANTS.map((v) => v.id)).toEqual([
-            'symbolFirst',
-            'symbolFirstRounded',
-            'symbolLast',
-            'symbolLastRounded',
-        ]);
+        expect(CURRENCY_VARIANT_IDS).toEqual(['symbolFirst', 'symbolFirstRounded', 'symbolLast', 'symbolLastRounded']);
     });
 
     test('double quotes cannot be represented and are stripped', () => {

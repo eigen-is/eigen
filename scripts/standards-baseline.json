@@ -43,8 +43,6 @@
     "packages/lib/src/types/chart.ts": 1,
     "packages/lib/src/types/file-history.ts": 1,
     "packages/sheet/src/components/ContextMenu/FilterMenu.tsx": 3,
-    "packages/sheet/src/components/FormatDialogs/CustomCurrencies.tsx": 1,
-    "packages/sheet/src/components/InsertFunctionDialog/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/FormulaHint/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/index.tsx": 1,
     "packages/sheet/src/components/SheetOverlay/OverlayVisuals.tsx": 1,
@@ -53,7 +51,6 @@
     "packages/sheet/src/state/api/cell.ts": 5,
     "packages/sheet/src/state/api/range.ts": 2,
     "packages/sheet/src/state/modules/cell.ts": 2,
-    "packages/sheet/src/state/modules/condition-format.ts": 1,
     "packages/sheet/src/state/modules/cursor.ts": 2,
     "packages/sheet/src/state/modules/drop-cell.ts": 1,
     "packages/sheet/src/state/modules/formula-editor.ts": 2,
@@ -82,7 +79,6 @@
     "packages/ui/src/components/sonner.tsx": 1,
     "packages/ui/src/components/toggle-group.tsx": 1,
     "packages/ui/src/hooks/is-typing-target.ts": 1,
-    "packages/ui/src/hooks/use-focus-trap.ts": 1,
     "packages/ui/src/hooks/use-scroll-to-index.ts": 1
   },
   "non-null-assertions": {
@@ -116,8 +112,6 @@
     "packages/lib/src/core/public/hooks/use-public.ts": 1,
     "packages/lib/src/core/team/hooks/use-team-members.ts": 1,
     "packages/sheet/src/components/ContextMenu/useSheetContextMenu.tsx": 2,
-    "packages/sheet/src/components/CustomSort/index.tsx": 4,
-    "packages/sheet/src/components/FormatDialogs/format-pattern.ts": 2,
     "packages/sheet/src/engine/formula-engine.ts": 2,
     "packages/sheet/src/state/events/mouse-cell.ts": 3,
     "packages/sheet/src/state/events/mouse-header.ts": 6,
@@ -129,7 +123,7 @@
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
   "interface-decls": 3,
-  "biome-ignore": 65,
+  "biome-ignore": 60,
   "jsdoc-blocks": 0,
   "raw-colors": 0,
   "unused-primitive-types": 0

@@ -17,12 +17,10 @@ import type { CalendarOption } from '@workspace/lib/types/calendar';
 import type { FileImportSource, FileSubject } from '@workspace/lib/types/file-subject';
 import { useState } from 'react';
 import { Button } from '../button';
-import { ABOVE_PREVIEW_Z } from '../dialog';
 import { FormDialog, FormDialogForm } from '../form-dialog';
 import { Input } from '../input';
 import { Label } from '../label';
 import { ErrorState } from '../layout/app/error-state';
-import { useOptionalPreview } from '../preview-provider/preview-context';
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '../select';
 
 // The leading colon keeps this out of the target space: every real value is a home and a calendar id joined by one.
@@ -35,7 +33,6 @@ type ImportToCalendarPickerProps = {
 };
 
 export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalendarPickerProps) {
-    const preview = useOptionalPreview();
     const fileName = subject ? subjectInfo(subject).name : '';
     // Null only for a subject with no bytes, such as a folder, which no import row is offered for.
     const source = subject && importSourceOf(subject);
@@ -49,26 +46,14 @@ export function ImportToCalendarPicker({ subject, open, onClose }: ImportToCalen
             title="Import to Calendar"
             description={`Pick the calendar ${fileName ? `“${fileName}”` : 'this file'} lands in.`}
             size="sm"
-            abovePreview={preview?.isPreviewOpen}
         >
-            {source && (
-                <ImportToCalendarForm source={source} fileName={fileName} abovePreview={!!preview?.isPreviewOpen} />
-            )}
+            {source && <ImportToCalendarForm source={source} fileName={fileName} />}
         </FormDialog>
     );
 }
 
 // Mounted with the dialog, so each opening asks for the calendars and starts from the defaults.
-// The list opens in a portal at z-50, so over a preview it is lifted with the dialog or it would open behind it.
-function ImportToCalendarForm({
-    source,
-    fileName,
-    abovePreview,
-}: {
-    source: FileImportSource;
-    fileName: string;
-    abovePreview: boolean;
-}) {
+function ImportToCalendarForm({ source, fileName }: { source: FileImportSource; fileName: string }) {
     const { user } = useAuth();
     const ownerId = user?.id ?? '';
     const { data: calendars, isError, refetch } = useCalendars(ownerId);
@@ -129,7 +114,7 @@ function ImportToCalendarForm({
                         <SelectTrigger className="w-full">
                             <SelectValue placeholder={calendars ? 'Select calendar' : 'Loading calendars…'} />
                         </SelectTrigger>
-                        <SelectContent className={abovePreview ? ABOVE_PREVIEW_Z : undefined}>
+                        <SelectContent>
                             <SelectGroup>
                                 <SelectLabel>My calendars</SelectLabel>
                                 {ownTargets.map(renderTarget)}

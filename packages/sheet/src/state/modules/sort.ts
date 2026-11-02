@@ -1,20 +1,87 @@
-// Sorting the selected range by one of its columns, ascending or descending, from the Data menu and the Custom
-// sort dialog. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
+// Sorting a range of the sheet by one of its columns, ascending or descending: the selected range from a menu such
+// as the Data menu, or the range a dialog such as Custom sort names. A header row, when the caller says the range has
+// one, stays in place. Formulas in the sorted rows are shifted to the rows they land on and evaluated again.
 
-import { clone, findIndex } from 'es-toolkit/compat';
 import numeral from 'numeral';
 import { cellValue } from '../../engine/format';
 import type { Cell, CellMatrix } from '../../engine/types';
-import type { Context } from '..';
+import type { Context, Selection } from '..';
 import { diff, getFlowdata, isdatetime, isRealNull, isRealNum } from '..';
 import { createContextResolver, execfunction, functionCopy, numberDisplay } from '.';
 import { jfrefreshgrid } from './refresh';
 
-export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[][]) {
-    if (isAsc == null) {
-        isAsc = true;
+// The menus' Ascending and Descending: the one selected range, by its first column.
+export function sortSelection(ctx: Context, isAsc: boolean) {
+    if (ctx.selections?.length !== 1) return;
+    sortRange(ctx, ctx.selections[0], isAsc);
+}
+
+export function sortRange(ctx: Context, range: Selection, isAsc: boolean, columnOffset = 0, hasHeaderRow = false) {
+    if (ctx.allowEdit === false) return;
+    const d = getFlowdata(ctx);
+    if (d == null) return;
+
+    const {
+        row: [rangeStart, rangeEnd],
+        column: [startColumn, endColumn],
+    } = range;
+
+    // The sort runs from the first to the last row with a value in the range's first column.
+    let startRow: number | undefined;
+    let endRow: number | undefined;
+    for (let r = rangeStart + (hasHeaderRow ? 1 : 0); r <= rangeEnd; r += 1) {
+        const cell = d[r]?.[startColumn];
+        if (cell == null || cell.mc != null || isRealNull(cellValue(cell))) continue;
+        startRow ??= r;
+        endRow = r;
     }
-    const a = (x: (Cell | null)[], y: (Cell | null)[]) => {
+    if (startRow == null || endRow == null) return;
+
+    const data = d.slice(startRow, endRow + 1).map((row) => row.slice(startColumn, endColumn + 1));
+    // A merged cell can't move with its row, so a range that holds one stays as it is.
+    if (data.some((row) => row.some((cell) => cell?.mc != null))) return;
+
+    sortDataRange(ctx, d, data, columnOffset, isAsc, startRow, endRow, startColumn, endColumn);
+}
+
+export function sortDataRange(
+    ctx: Context,
+    sheetData: CellMatrix,
+    dataRange: CellMatrix,
+    index: number,
+    isAsc: boolean,
+    startRow: number,
+    endRow: number,
+    startColumn: number,
+    endColumn: number,
+) {
+    const { sortedData, rowOffsets } = sortRows(isAsc, index, dataRange);
+
+    // One live resolver serves every formula in the sort, so no formula takes its own snapshot of the workbook.
+    const resolver = createContextResolver(ctx);
+    for (let r = startRow; r <= endRow; r += 1) {
+        for (let c = startColumn; c <= endColumn; c += 1) {
+            const cell = sortedData[r - startRow][c - startColumn];
+            if (cell?.f) {
+                const moveOffset = rowOffsets[r - startRow];
+                let func = cell.f;
+                if (moveOffset !== 0) {
+                    func = `=${functionCopy(func, moveOffset, 0)}`;
+                }
+                const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
+                [, cell.v, cell.f] = funcV;
+                cell.m = numberDisplay(cell.v, cell.ct?.fa);
+            }
+            sheetData[r][c] = cell;
+        }
+    }
+
+    jfrefreshgrid(ctx, sheetData, [{ row: [startRow, endRow], column: [startColumn, endColumn] }]);
+}
+
+// The rows in their sorted order by the column at `index`, empty cells last, and how far each one moved.
+export function sortRows(isAsc: boolean, index: number, data: readonly (Cell | null)[][]) {
+    const ascending = (x: (Cell | null)[], y: (Cell | null)[]) => {
         const x1 = cellValue(x[index]);
         const y1 = cellValue(y[index]);
         if (isRealNull(x1)) {
@@ -44,116 +111,9 @@ export function orderbydata(isAsc: boolean, index: number, data: (Cell | null)[]
         }
         return 0;
     };
-    const d = (x: (Cell | null)[], y: (Cell | null)[]) => a(y, x);
-    const sortedData = clone(data);
-    sortedData.sort(isAsc ? a : d);
-
-    // calc row offsets
-    const rowOffsets = sortedData.map((r, i) => {
-        const origIndex = findIndex(data, (origR) => origR === r);
-        return i - origIndex;
-    });
-
-    return { sortedData, rowOffsets };
-}
-
-export function sortDataRange(
-    ctx: Context,
-    sheetData: CellMatrix,
-    dataRange: CellMatrix,
-    index: number,
-    isAsc: boolean,
-    str: number,
-    edr: number,
-    stc: number,
-    edc: number,
-) {
-    const { sortedData, rowOffsets } = orderbydata(isAsc, index, dataRange);
-
-    // Live resolver, hoisted: one per sort instead of one snapshot per formula.
-    const resolver = createContextResolver(ctx);
-    for (let r = str; r <= edr; r += 1) {
-        for (let c = stc; c <= edc; c += 1) {
-            const cell = sortedData[r - str][c - stc];
-            if (cell?.f) {
-                const moveOffset = rowOffsets[r - str];
-                let func = cell.f;
-                if (moveOffset !== 0) {
-                    func = `=${functionCopy(func, moveOffset, 0)}`;
-                }
-                const funcV = execfunction(ctx, func, r, c, undefined, undefined, true, undefined, resolver);
-                [, cell.v, cell.f] = funcV;
-                cell.m = numberDisplay(cell.v, cell.ct?.fa);
-            }
-            sheetData[r][c] = cell;
-        }
-    }
-
-    jfrefreshgrid(ctx, sheetData, [{ row: [str, edr], column: [stc, edc] }]);
-}
-
-export function sortSelection(ctx: Context, isAsc: boolean, colIndex: number = 0) {
-    if (ctx.allowEdit === false) return;
-    if (ctx.selections == null) return;
-    if (ctx.selections.length > 1) {
-        return;
-    }
-
-    if (isAsc == null) {
-        isAsc = true;
-    }
-    const flowdata = getFlowdata(ctx);
-    const d = flowdata;
-    if (d == null) return;
-
-    const r1 = ctx.selections[0].row[0];
-    const r2 = ctx.selections[0].row[1];
-    const c1 = ctx.selections[0].column[0];
-    const c2 = ctx.selections[0].column[1];
-
-    let str: number | null = null;
-    let edr: number | undefined;
-
-    for (let r = r1; r <= r2; r += 1) {
-        if (d[r] != null && d[r][c1] != null) {
-            const cell = d[r][c1];
-            if (cell == null) return; //
-            if (cell.mc != null || isRealNull(cellValue(cell))) {
-                continue;
-            }
-
-            if (str == null) {
-                str = r;
-            }
-
-            edr = r;
-        }
-    }
-
-    if (str == null || str > r2) {
-        return;
-    }
-
-    let hasMc = false; // Whether the sort selection has merged cells
-    const data: CellMatrix = [];
-    if (edr == null) return;
-    for (let r = str; r <= edr; r += 1) {
-        const data_row = [];
-        for (let c = c1; c <= c2; c += 1) {
-            if (d[r][c] != null && d[r][c]?.mc != null) {
-                hasMc = true;
-                break;
-            }
-
-            data_row.push(d[r][c]);
-        }
-
-        data.push(data_row);
-    }
-
-    if (hasMc) {
-        return;
-    }
-
-    sortDataRange(ctx, d, data, colIndex, isAsc, str, edr, c1, c2);
+    const descending = (x: (Cell | null)[], y: (Cell | null)[]) => ascending(y, x);
+    const compare = isAsc ? ascending : descending;
+    // The old place of each row in its new order, so a formula knows how far its row moved.
+    const order = data.map((_, i) => i).sort((a, b) => compare(data[a], data[b]));
+    return { sortedData: order.map((i) => data[i]), rowOffsets: order.map((from, to) => to - from) };
 }

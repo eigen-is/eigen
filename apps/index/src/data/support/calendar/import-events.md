@@ -22,7 +22,7 @@ Start from the calendar the events should go into, the same way you import conta
    - Click **Upload from device**, then choose an `.ics` file from your computer.
    - Or browse your Drive, click an `.ics` file, and click **Select**.
 
-An **Importing events** dialog shows while the file imports. When it closes, the events are in your calendar, and a message tells you what happened, for example "Imported 12 events, skipped 3 duplicates".
+An **Importing events** dialog shows while the file imports. When it closes, the events are in your calendar, and a message tells you what happened, for example "Imported 12 events. 3 were already in your calendars."
 
 Your own calendars under **My calendars** offer the entry, and so does a team calendar under **Team calendars** that you can edit. A calendar someone shared with you from their own account does not, and neither does a team calendar you can only read.
 
@@ -39,7 +39,7 @@ To read the file before you import it, select it and press **Space**, or choose 
 
 ## Choose the calendar
 
-When you start from a file, the dialog lists your own calendars under **My calendars**, with your default one already selected. Any team calendar you can edit is listed below it under **Team calendars**, so a schedule the whole team needs can go straight where everyone sees it. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. A new calendar is always one of your own. If nothing ends up going in, because every event in the file was already in your calendar or the import fails, the new calendar is removed again.
+When you start from a file, the dialog lists your own calendars under **My calendars**, with your default one already selected. Any team calendar you can edit is listed below it under **Team calendars**, so a schedule the whole team needs can go straight where everyone sees it. Choose **New calendar** instead to make a fresh one for the file. Eigen names it after the file, and you can change the name before you import. A new calendar is always one of your own. If nothing ends up going in, because every event in the file was already in your calendars or the import fails, the new calendar is removed again.
 
 A calendar someone shared with you from their own account is not in the list, and neither is a team calendar you can only read.
 
@@ -55,7 +55,7 @@ Two things are deliberately left behind, so an imported file never sends mail on
 - **The organizer and the guest list.** An imported event is your own event, not an invitation from someone else. You can open it and invite people yourself.
 - **The file's purpose.** An invitation file and a cancellation file both import as plain events. To accept a real invitation, open the email it came with instead. See [Respond to an invitation](/support/calendar/respond-to-invitation).
 
-An event you already have is skipped rather than imported twice. Eigen matches on the identifier the event carries, across every calendar in the same account, so re-importing the same file adds nothing. Importing it into a second calendar of yours adds nothing either, because an event lives in one place per account. An invitation you already accepted never gets a twin. A team is its own account, so a file you have already imported for yourself still lands in a team calendar.
+An event you already have is skipped rather than imported twice, and the message says how many were already in your calendars. Eigen matches on the identifier the event carries, across every calendar in the same account, so re-importing the same file adds nothing. Importing it into a second calendar of yours adds nothing either, because an event lives in one place per account. An invitation you already accepted never gets a twin. A team is its own account, so a file you have already imported for yourself still lands in a team calendar, and the message for a team calendar says "already in this team’s calendars".
 
 ## Limits
 

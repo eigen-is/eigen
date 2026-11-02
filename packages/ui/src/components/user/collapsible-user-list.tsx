@@ -1,9 +1,13 @@
+// A list of people under a header bar with a title, a summary and optional actions, such as an event's guests or who
+// can open a Drive item. A list longer than its threshold starts collapsed, and the title is a button that opens and
+// closes it. That button's hit area stretches over the whole bar, while the actions stay buttons of their own above it.
+
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@workspace/ui/components/collapsible';
 import { cn } from '@workspace/ui/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { InfoBlock } from '../info-block';
+import { InfoBlock, STRETCHED_TRIGGER_CLASS } from '../info-block';
 
 type CollapsibleUserListProps = {
     title: string;
@@ -14,24 +18,6 @@ type CollapsibleUserListProps = {
     children: ReactNode;
     className?: string;
 };
-
-function Header({ title, summaryLines, actions }: { title: string; summaryLines?: string[]; actions?: ReactNode }) {
-    return (
-        <>
-            <div>
-                <h4 className="text-sm font-medium">{title}</h4>
-                {summaryLines && summaryLines.length > 0 && (
-                    <div className="text-xs text-muted-foreground">
-                        {summaryLines.map((line) => (
-                            <div key={line}>{line}</div>
-                        ))}
-                    </div>
-                )}
-            </div>
-            {actions && <div className="flex items-center gap-0.5">{actions}</div>}
-        </>
-    );
-}
 
 export function CollapsibleUserList({
     title,
@@ -45,7 +31,7 @@ export function CollapsibleUserList({
     const collapsible = count > collapseThreshold;
     const [open, setOpen] = useState(!collapsible);
 
-    // Collapse when count crosses the threshold (e.g. after async data loads)
+    // A list can cross the threshold after it rendered, such as when its people load, and then it starts collapsed.
     useEffect(() => {
         if (collapsible) setOpen(false);
     }, [collapsible]);
@@ -54,32 +40,54 @@ export function CollapsibleUserList({
         return (
             <div className={cn('space-y-2', className)}>
                 <InfoBlock className="px-2 py-1.5">
-                    <Header title={title} summaryLines={summaryLines} actions={actions} />
+                    <Header title={title} summaryLines={summaryLines} />
+                    {actions && <div className="flex items-center gap-0.5">{actions}</div>}
                 </InfoBlock>
                 <div className="space-y-1">{children}</div>
             </div>
         );
     }
 
+    // The actions come after the trigger and are positioned too, so they paint above its stretched hit area.
     return (
         <Collapsible open={open} onOpenChange={setOpen} className={className}>
-            <CollapsibleTrigger asChild>
-                <InfoBlock className="w-full cursor-pointer text-left px-2 py-1.5">
-                    <Header title={title} summaryLines={summaryLines} />
-                    <div className="flex items-center gap-0.5">
-                        {actions && <div onClick={(e) => e.stopPropagation()}>{actions}</div>}
-                        <ChevronDown
-                            className={cn(
-                                'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
-                                open && 'rotate-180',
-                            )}
-                        />
-                    </div>
-                </InfoBlock>
-            </CollapsibleTrigger>
+            <InfoBlock className="relative px-2 py-1.5">
+                <Header
+                    title={
+                        <CollapsibleTrigger className={cn(STRETCHED_TRIGGER_CLASS, 'text-left')}>
+                            {title}
+                        </CollapsibleTrigger>
+                    }
+                    summaryLines={summaryLines}
+                />
+                <div className="flex items-center gap-0.5">
+                    {actions && <div className="relative flex items-center gap-0.5">{actions}</div>}
+                    <ChevronDown
+                        className={cn(
+                            'h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200',
+                            open && 'rotate-180',
+                        )}
+                    />
+                </div>
+            </InfoBlock>
             <CollapsibleContent>
                 <div className="space-y-1 pt-2">{children}</div>
             </CollapsibleContent>
         </Collapsible>
+    );
+}
+
+function Header({ title, summaryLines }: { title: ReactNode; summaryLines?: string[] }) {
+    return (
+        <div>
+            <h4 className="text-sm font-medium">{title}</h4>
+            {summaryLines && summaryLines.length > 0 && (
+                <div className="text-xs text-muted-foreground">
+                    {summaryLines.map((line) => (
+                        <div key={line}>{line}</div>
+                    ))}
+                </div>
+            )}
+        </div>
     );
 }

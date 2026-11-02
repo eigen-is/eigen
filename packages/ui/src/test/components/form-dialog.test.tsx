@@ -15,8 +15,6 @@ const { act, createElement, useState } = await import('react');
 const { onMutationError } = await import('@workspace/lib/api-error');
 const { FormDialog, FormDialogForm } = await import('../../components/form-dialog');
 const { Input } = await import('../../components/input');
-const { ABOVE_PREVIEW_Z } = await import('../../components/dialog');
-const { PreviewContext } = await import('../../components/preview-provider/preview-context');
 
 let unmount = async () => {};
 const realGetComputedStyle = globalThis.getComputedStyle;
@@ -80,7 +78,7 @@ const click = (label: string) =>
         target.click();
     });
 
-// Cancelable, as a browser's is, so a dialog that leaves the Escape to an open preview can refuse it.
+// Cancelable, as a browser's is, so a dialog that waits for a running submit can refuse it.
 const pressEscape = () =>
     act(async () => {
         document.activeElement?.dispatchEvent(
@@ -248,41 +246,6 @@ test('a description shows under the title and a screen reader reads it, and with
     await unmount();
     await render();
     expect(dialog()?.hasAttribute('aria-describedby')).toBe(false);
-});
-
-test('abovePreview lifts the dialog over an open preview, and Escape there closes the dialog', async () => {
-    onOpenChange.mockClear();
-    const preview = { openPreview: () => {}, updatePreview: () => {}, closePreview: () => {}, isPreviewOpen: true };
-    const renderOverPreview = async (abovePreview: boolean) => {
-        ({ unmount } = await renderInDocument(
-            createElement(
-                PreviewContext.Provider,
-                { value: preview },
-                createElement(FormDialog, {
-                    open: true,
-                    onOpenChange,
-                    title: 'Import',
-                    abovePreview,
-                    children: createElement(FormDialogForm, {
-                        onSubmit: () => {},
-                        submitLabel: 'Import',
-                        children: null,
-                    }),
-                }),
-            ),
-        ));
-    };
-    // Under a preview the Escape is the preview's, so a dialog that is not flagged stays open.
-    await renderOverPreview(false);
-    expect(dialog()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(false);
-    await pressEscape();
-    expect(onOpenChange).not.toHaveBeenCalled();
-    await unmount();
-
-    await renderOverPreview(true);
-    expect(dialog()?.classList.contains(ABOVE_PREVIEW_Z)).toBe(true);
-    await pressEscape();
-    expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
 test('a dialog opened from inside another form submits only itself', async () => {

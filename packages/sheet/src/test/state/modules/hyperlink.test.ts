@@ -5,7 +5,7 @@
 // (javascript:, data:, file:, …) must neither navigate nor validate —
 // scripting schemes must be unreachable.
 
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { goToLink, isLinkValid } from '../../../state/modules/hyperlink';
 import { contextFactory } from '../factories/context';
@@ -146,6 +146,18 @@ describe('isLinkValid scheme allowlist', () => {
     test('rejects structurally unparseable addresses', () => {
         expect(isLinkValid('webpage', 'https://exa mple.com').isValid).toBe(false);
         expect(isLinkValid('webpage', 'https://').isValid).toBe(false);
+    });
+
+    // Chrome's parser escapes a space in a host name as %20 instead of refusing it, so there the address parses.
+    test("rejects a host name with a space even where the browser's parser accepts it", () => {
+        const canParse = spyOn(URL, 'canParse').mockReturnValue(true);
+        try {
+            expect(isLinkValid('webpage', 'not a url').isValid).toBe(false);
+            expect(isLinkValid('webpage', 'https://exa mple.com/path').isValid).toBe(false);
+            expect(isLinkValid('webpage', 'https://example.com/a b').isValid).toBe(true);
+        } finally {
+            canParse.mockRestore();
+        }
     });
 
     test('rejects non-allowlisted schemes', () => {

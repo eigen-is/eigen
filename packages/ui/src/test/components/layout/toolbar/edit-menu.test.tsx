@@ -16,12 +16,13 @@ const { Menubar } = await import('../../../../components/menubar');
 let unmount = async () => {};
 afterEach(() => unmount());
 
-const onUndo = mock(() => {});
-const onCloseAutoFocus = mock((_event: Event) => {});
+let onUndo = mock(() => {});
+let onCloseAutoFocus = mock((_event: Event) => {});
 
 async function render({ canEdit = true, selectionItems }: { canEdit?: boolean; selectionItems?: string[] } = {}) {
-    onUndo.mockClear();
-    onCloseAutoFocus.mockClear();
+    // Fresh handlers per render: a menu the last test left open calls its own one a tick after it unmounts.
+    onUndo = mock(() => {});
+    onCloseAutoFocus = mock((_event: Event) => {});
     const menu = createElement(EditMenu, {
         canEdit,
         canUndo: true,
