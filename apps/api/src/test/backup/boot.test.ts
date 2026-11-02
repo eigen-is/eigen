@@ -1,4 +1,5 @@
 import { afterAll, describe, expect, spyOn, test } from 'bun:test';
+import * as nodeFs from 'node:fs';
 import {
     chmodSync,
     createWriteStream,
@@ -246,6 +247,46 @@ describe('Backup boot', () => {
         expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
         expect(readFileSync(join(homeRoot, parkName, 'marker'), 'utf8')).toBe('parked by the rollback');
         expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
+    });
+
+    // A home whose folders cannot be moved, such as a rename that fails with EACCES or EBUSY, must not stop the
+    // server from starting, again on every boot. It is logged, its notes stay for the next boot, and the boot goes
+    // on to the next home.
+    test('a home whose rename throws keeps its notes and the boot goes on', () => {
+        const id = 'bootrecoverOOOOOOOOOOOOOOOOOOOOO';
+        const aside = `${id}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(aside, 'the home as it was');
+        const notes = seedRestoringMarker('boot-job-l', id, aside);
+        made.push(join(homeRoot, id));
+        const other = 'bootrecoverPPPPPPPPPPPPPPPPPPPPP';
+        const otherAside = `${other}${PRE_RESTORE_SUFFIX}20260101-000000`;
+        seedFolder(otherAside, 'the other home');
+        seedRestoringMarker('boot-job-m', other, otherAside);
+        made.push(join(homeRoot, other));
+        const rename = nodeFs.renameSync;
+        const renameSpy = spyOn(nodeFs, 'renameSync').mockImplementation((from, to) => {
+            if (to === join(homeRoot, id)) throw Object.assign(new Error('permission denied'), { code: 'EACCES' });
+            rename(from, to);
+        });
+        const logged = spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            expect(() => recoverInterruptedRestores()).not.toThrow();
+            const said = logged.mock.calls.flat().join('\n');
+            expect(said).toContain(join(homeRoot, id));
+            expect(said).toContain(notes);
+        } finally {
+            renameSpy.mockRestore();
+            logged.mockRestore();
+        }
+
+        expect(existsSync(join(notes, 'restoring.json'))).toBe(true);
+        expect(readFileSync(join(homeRoot, aside, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(readFileSync(join(homeRoot, other, 'marker'), 'utf8')).toBe('the other home');
+        // The next boot, whose rename works, puts the home back.
+        recoverInterruptedRestores();
+        expect(readFileSync(join(homeRoot, id, 'marker'), 'utf8')).toBe('the home as it was');
+        expect(existsSync(notes)).toBe(false);
     });
 
     // A safety-copy restore renames the copy into place before its checks, so a kill there leaves a pristine home at

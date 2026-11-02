@@ -82,7 +82,7 @@ export function recoverInterruptedRestores(): void {
         for (const name of fs.readdirSync(homesDir)) {
             if (!isRestoreStagingName(name)) continue;
             const restoreDir = path.join(homesDir, name);
-            recoverRestore(restoreDir, (marker) => homeBesideNotes(homesDir, marker));
+            if (!recoverRestore(restoreDir, (marker) => homeBesideNotes(homesDir, marker))) continue;
             dropRestoringMarker(restoreDir);
             fs.rmSync(restoreDir, { recursive: true, force: true });
         }
@@ -116,8 +116,7 @@ function recoverOlderBuildRestores(): void {
     for (const entry of fs.readdirSync(stagingRoot, { withFileTypes: true })) {
         if (!entry.isDirectory()) continue;
         const notesDir = path.join(stagingRoot, entry.name);
-        recoverRestore(notesDir, homeInDataRoot);
-        dropRestoringMarker(notesDir);
+        if (recoverRestore(notesDir, homeInDataRoot)) dropRestoringMarker(notesDir);
     }
 }
 
@@ -157,13 +156,28 @@ function closeArchives(): void {
 // will ever put it back. This does, and logs it as an error. A completion note beside the marker
 // tells a restore that finished from one that did not. A safety copy with no marker is not evidence
 // of anything: nothing deletes them automatically, so a deleted user leaves one behind. `homeOf` says which home
-// folder the marker may act on, or refuses it.
-function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): void {
+// folder the marker may act on, or refuses it. Returns false when a move failed, such as a rename with EACCES or
+// EBUSY: that is logged and the notes stay for the next boot, because a throw here would stop the server from
+// starting, again on every boot.
+function recoverRestore(notesDir: string, homeOf: (marker: RestoringMarker) => string | null): boolean {
     const marker = readRestoringMarker(path.join(notesDir, RESTORING_MARKER));
     const homeDir = marker && homeOf(marker);
-    if (!marker || !homeDir || !namesCopiesOf(marker, path.basename(homeDir))) return;
+    if (!marker || !homeDir || !namesCopiesOf(marker, path.basename(homeDir))) return true;
     // The install finished. Whatever the job did after that cannot leave the home folder out of place.
-    if (isRestoreComplete(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return;
+    if (isRestoreComplete(path.join(notesDir, RESTORE_COMPLETE_MARKER))) return true;
+    try {
+        putHomeBack(marker, homeDir);
+        return true;
+    } catch (error) {
+        console.error(
+            `[backup] could not finish the interrupted restore of ${marker.ownerId}'s home ${homeDir}: ${describeError(error)}. Its notes stay in ${notesDir} for the next boot`,
+        );
+        return false;
+    }
+}
+
+// The moves that undo an interrupted install of the home at `homeDir`, as its marker describes it.
+function putHomeBack(marker: RestoringMarker, homeDir: string): void {
     const aside = marker.preRestoreName && path.join(path.dirname(homeDir), marker.preRestoreName);
     // The home never went aside, or the restore's own rollback already put it back. Either way the folder in place
     // is the home, and this must not move it.
