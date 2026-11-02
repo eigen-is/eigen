@@ -84,8 +84,10 @@ async function printRunning(): Promise<void> {
     const ui = await createUi(true);
     const res = await callControl('/status', ui.fail, { signal: AbortSignal.timeout(RUNNING_TIMEOUT_MS) });
     if (!res.ok) ui.fail(await res.text(), 'Run ./eigen logs eigen-api to see what went wrong.');
-    const { backup }: ControlStatus = await res.json();
-    const running = backup.running.map(({ kind, archive }) =>
+    // The timeout also covers reading the answer, which an API that stalls mid-answer never finishes.
+    const status: ControlStatus | null = await res.json().catch(() => null);
+    if (!status) return ui.fail('Eigen is not answering.', 'Run ./eigen logs eigen-api to see what it is doing.');
+    const running = status.backup.running.map(({ kind, archive }) =>
         kind === 'upload' ? `the upload of ${archive}` : `the server backup ${archive}`,
     );
     if (running.length > 0) console.log(running.join(' and '));

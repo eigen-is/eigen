@@ -701,7 +701,7 @@ before_stop() {
     done
     STEP_GOES_ON=''
     if [ "$answered" = 0 ]; then
-        say "$YELLOW" '▲' "Eigen did not say whether a server backup runs, so the stop does not wait for one."
+        say "$YELLOW" '▲' "Eigen did not say whether a server backup runs, so the stop goes on."
     fi
 }
 

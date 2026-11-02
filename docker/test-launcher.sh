@@ -55,8 +55,9 @@ trap 'rm -rf "$FIX"' EXIT
 # exits STUB_NOTICE, one of status --running prints the file STUB_JOBS names while it is there, or with STUB_ASK=old
 # refuses the flag as the CLI of 0.4.1 does (exit 2) and with STUB_ASK=fail fails as one that is not answering. With
 # STUB_ASKS=<file> each ask takes that file's first line instead: fail fails, - names nothing and any other is printed,
-# and once the file is empty it names nothing. One of exec that checksums $EIGEN_ENV_FILE that of STUB_MOUNTED, the file eigen-api mounts, else .env.production. With a -t among a run's arguments,
-# update-check --level ends its line in \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
+# and once the file is empty it names nothing. An exec that checksums $EIGEN_ENV_FILE checksums STUB_MOUNTED, the file
+# eigen-api mounts, or else .env.production. With a -t among a run's arguments, update-check --level ends its line in
+# \r\n, as Docker's pty does. A run of restore --env refuses a folder with a
 # .env.production.
 mkdir "$FIX/bin"
 cat >"$FIX/bin/docker" <<'EOF'
