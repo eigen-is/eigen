@@ -107,7 +107,7 @@
     "apps/api/src/lib/ical/wall-clock.ts": 1,
     "apps/api/src/lib/mail/maildb.ts": 4,
     "apps/api/src/lib/mail/maildir-store.ts": 2,
-    "apps/api/src/lib/mount/mount.ts": 3,
+    "apps/api/src/lib/mount/mount.ts": 2,
     "apps/api/src/lib/notification-center/notification-center.ts": 2,
     "apps/api/src/lib/setup/setup.ts": 1,
     "apps/api/src/lib/versioning/retention.ts": 1,
