@@ -1,11 +1,12 @@
 // The sheet's one dialog slot, which useDialog opens and closes. A dialog in it draws its own FormDialog and takes its
-// open and close from the slot's DialogPropsContext. The range picker is the one exception: it leaves the grid usable
-// to pick on and can open at a point on screen, so the slot draws a shell around it. Either way the slot keeps a
-// dialog's mouse events from the React handlers above it.
+// open and close from the slot's DialogPropsContext, and the focus goes back to the grid when it closes. The range
+// picker is the one exception: it leaves the grid usable to pick on and can open at a point on screen, so the slot
+// draws a shell around it. Either way the slot keeps a dialog's mouse events from the React handlers above it.
 
 import { Dialog, DialogContent } from '@workspace/ui/components/dialog';
 import { cn } from '@workspace/ui/lib/utils';
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCellEditorRefocus } from '../hooks/useCellEditorRefocus';
 import type { ViewportPoint } from '../state';
 
 // The range picker's shell. It draws no backdrop, and a click on the grid picks a range instead of closing it.
@@ -53,9 +54,14 @@ type ModalState = {
 export type DialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    onCloseAutoFocus: (event: Event) => void;
 };
 
-export const DialogPropsContext = React.createContext<DialogProps>({ open: false, onOpenChange: () => {} });
+export const DialogPropsContext = React.createContext<DialogProps>({
+    open: false,
+    onOpenChange: () => {},
+    onCloseAutoFocus: () => {},
+});
 
 // React passes a portaled dialog's mouse events up the component tree, past the slot to the handlers of the
 // workbook's ancestors, so the slot stops them. Native listeners on the document still hear them.
@@ -99,6 +105,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
         opening?.onClose?.();
     }, []);
 
+    const refocusGrid = useCellEditorRefocus();
     const openId = state?.id;
     const dialogProps = useMemo<DialogProps>(
         () => ({
@@ -106,8 +113,11 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
             onOpenChange: (o) => {
                 if (!o && openingRef.current?.id === openId) hideModal();
             },
+            // Radix runs this a moment after the dialog is gone, so a dialog opened in its place, such as a confirm,
+            // already has the focus and keeps it.
+            onCloseAutoFocus: refocusGrid,
         }),
-        [hideModal, openId],
+        [hideModal, openId, refocusGrid],
     );
 
     // useLayoutEffect, not useEffect: the clamp needs the picker's rendered height, so it
