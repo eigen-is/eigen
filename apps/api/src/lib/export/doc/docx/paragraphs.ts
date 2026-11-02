@@ -7,9 +7,11 @@ import type { TitleType } from '@workspace/lib/docs/eigendoc';
 import {
     isFigureFrameNode,
     isPositioned,
+    MAX_HEADING_LEVEL,
     readFigureFrameAttrs,
     readParagraphFormat,
 } from '@workspace/lib/docs/eigendoc';
+import { readNumberIn } from '@workspace/lib/guards';
 import type { RunFace, WordBorder } from '../../../document/looks';
 import {
     BLOCK_MARGINS,
@@ -161,7 +163,7 @@ const BLOCKS = new Map<string, (node: JSONContent, context: Context) => Block[]>
     [
         'heading',
         (node, context) => {
-            const level = clampInt(node.attrs?.['level'], 1, 6, 1);
+            const level = clampInt(node.attrs?.['level'], 1, MAX_HEADING_LEVEL, 1);
             const { sizePt } = textMetrics(`.eigen-prose h${level}`, context.pkg.normal.size);
             const firstMargin = context.firstInFlow
                 ? proseValueIfSet(`.eigen-prose h${level}:first-child`, 'margin-top')
@@ -606,8 +608,8 @@ function justification(node: JSONContent): string | undefined {
     return typeof textAlign === 'string' ? JUSTIFICATION.get(textAlign) : undefined;
 }
 
+// A stored whole number, such as a heading level or a cell's span: held to its range, then rounded. The bounds and the
+// fallback are whole numbers, so rounding after the range gives what rounding before it would.
 export function clampInt(value: unknown, min: number, max: number, fallback: number): number {
-    return typeof value === 'number' && Number.isFinite(value)
-        ? Math.min(max, Math.max(min, Math.round(value)))
-        : fallback;
+    return Math.round(readNumberIn(value, min, max) ?? fallback);
 }

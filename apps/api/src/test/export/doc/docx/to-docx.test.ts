@@ -17,6 +17,7 @@ import { proseValue, proseValueIfSet } from '../../../../lib/document/prose-css'
 import type { ExportMedia, TransformWarning } from '../../../../lib/document/transform/protocol';
 import { lossCounter, toTransferableText } from '../../../../lib/document/transform/protocol';
 import { DOCX_FONT_FILES, sfntTables } from '../../../../lib/export/doc/docx/fonts';
+import { clampInt } from '../../../../lib/export/doc/docx/paragraphs';
 import { writeDocx } from '../../../../lib/export/doc/docx/to-docx';
 import type { DrawingTheme } from '../../../../lib/ooxml/drawingml';
 import { IDENTITY_COLOR_MAP } from '../../../../lib/ooxml/drawingml';
@@ -886,6 +887,29 @@ describe('docx writer — a doc no editor writes', () => {
         expect(w(child(child(odd, 'pPr'), 'pStyle'), 'val')).toBe('Heading1');
         expect(child(aligned, 'pPr')).toBeUndefined();
         expect(child(child(marked, 'r'), 'rPr')).toBeUndefined();
+    });
+
+    test('a heading level is held to the heading levels and rounded', async () => {
+        const levels = [2.6, 0.4, 0.5, 6.4, 6.5, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY];
+        const body = await bodyOf(
+            doc(...levels.map((level) => ({ type: 'heading', attrs: { level }, content: [text('h')] }))),
+        );
+        const styles = xmlChildren(body, W, 'p').map((paragraph) => w(child(child(paragraph, 'pPr'), 'pStyle'), 'val'));
+        expect(styles).toEqual([
+            'Heading3',
+            'Heading1',
+            'Heading1',
+            'Heading6',
+            'Heading6',
+            'Heading1',
+            'Heading1',
+            'Heading1',
+        ]);
+    });
+
+    // A cell in the last column has no columns left to span, so its range's min is above its max.
+    test('a whole number with its min above its max reads as the max', () => {
+        expect([clampInt(3, 1, 0, 1), clampInt(0.4, 1, 0, 1), clampInt(Number.NaN, 1, 0, 1)]).toEqual([0, 0, 1]);
     });
 });
 
@@ -1951,6 +1975,17 @@ describe('docx writer — tables', () => {
             ['9630', 'dxa'],
             ['0', 'nil'],
         ]);
+    });
+
+    test('a colwidth that is no positive finite number reads as unset', async () => {
+        const forged = [Number.NaN, Number.POSITIVE_INFINITY, -5, '300'];
+        const [read, unset] = await tablesIn(
+            doc(
+                table(tr(td({ colwidth: [100] }, p()), ...forged.map((width) => td({ colwidth: [width] }, p())))),
+                table(tr(td({ colwidth: [100] }, p()), ...forged.map(() => td({}, p())))),
+            ),
+        );
+        expect(gridOf(read)).toEqual(gridOf(unset));
     });
 
     test('known colwidths past the column keep their ratio, scaled to the column', async () => {

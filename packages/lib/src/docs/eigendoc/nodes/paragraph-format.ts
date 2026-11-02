@@ -1,3 +1,7 @@
+// The editor extension of a paragraph's format: the line spacing, the space before and after and the indents as
+// attributes of each prose textblock, and the commands and shortcuts that set them, step an indent and clear the
+// formatting. The values, bounds and readers it uses live apart in the paragraph format module, which loads no editor.
+
 import { Extension } from '@tiptap/core';
 import type { ResolvedPos } from '@tiptap/pm/model';
 import { pxToPt } from '../page';

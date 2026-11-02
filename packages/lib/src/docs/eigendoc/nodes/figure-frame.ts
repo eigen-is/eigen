@@ -6,6 +6,7 @@
 import type { CommandProps } from '@tiptap/core';
 import type { DOMOutputSpec } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
+import { readNumberIn } from '../../../core/guards';
 import { MAX_PAPER_PX } from '../page';
 import { STORY_NODES } from './stories';
 
@@ -55,8 +56,7 @@ export const readFrameSide = (value: unknown): number | null =>
 export const heightAtWidth = (box: { width: number; height: number }, width: number) =>
     (box.height * width) / box.width;
 
-const readOffset = (value: unknown) =>
-    typeof value === 'number' && Number.isFinite(value) ? Math.min(MAX_PAPER_PX, Math.max(-MAX_PAPER_PX, value)) : null;
+const readOffset = (value: unknown) => readNumberIn(value, -MAX_PAPER_PX, MAX_PAPER_PX);
 
 // Only Eigen's own span places a figure: another app's <figure> or absolute <img> has no paragraph to count from.
 export const isOwnSpan = (element: HTMLElement) => element.tagName === 'SPAN';

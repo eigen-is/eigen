@@ -8,6 +8,7 @@ import type { Schema } from '@tiptap/pm/model';
 import { DOMSerializer, Fragment, DOMParser as PMDOMParser } from '@tiptap/pm/model';
 import type { Transaction } from '@tiptap/pm/state';
 import { readHexColor } from '../../../constants/colors';
+import { readNumberIn } from '../../../core/guards';
 import { MAX_PAPER_PX, mmToPx } from '../page';
 import type { Border } from './border';
 import { borderValue, readBorder } from './border';
@@ -74,15 +75,9 @@ declare module '@tiptap/core' {
     }
 }
 
-const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+export const readTextBoxSide = (value: unknown) => readNumberIn(value, TEXT_BOX_MIN_SIDE, MAX_PAPER_PX);
 
-const isFiniteNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-
-export const readTextBoxSide = (value: unknown): number | null =>
-    isFiniteNumber(value) ? clamp(value, TEXT_BOX_MIN_SIDE, MAX_PAPER_PX) : null;
-
-const readPadding = (value: unknown): number | null =>
-    isFiniteNumber(value) ? clamp(value, 0, MAX_TEXT_BOX_PADDING) : null;
+const readPadding = (value: unknown) => readNumberIn(value, 0, MAX_TEXT_BOX_PADDING);
 
 export function readTextBoxAttrs(attrs: Record<string, unknown>): TextBoxAttrs {
     return {

@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 import type { JSONContent } from '@tiptap/core';
-import { CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
+import { CHART_DEFAULT_SIZE, CHART_MAX_SIDE, DEFAULT_CHART_SERIES_STYLE, readChartSpec } from '@workspace/lib/charts';
+import { MAX_PAPER_MM, MAX_TEXT_BOX_PADDING, mmToPx, TEXT_BOX_DEFAULT_WIDTH } from '@workspace/lib/docs/eigendoc';
 import { CAPTION_LOOK, LIST_LEVEL } from '../../../lib/document/looks';
 import { docxToPmJson, readDocx } from '../../../lib/import/doc/from-docx';
 import { MAX_MEDIA_PARTS, PICTURE_NOT_IMPORTED } from '../../../lib/import/image-types';
@@ -21,6 +22,9 @@ import {
 
 // Pictures: one media file per image part, named from its content type, placed as Word places it.
 
+// The largest paper's side in px, which a figure reads a larger side as.
+const LARGEST_PAPER = mmToPx(MAX_PAPER_MM);
+
 const IMAGE_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/image';
 const HYPERLINK = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink';
 const paragraph = (inner: string) => `<w:p>${inner}</w:p>`;
@@ -33,6 +37,15 @@ const lines = (json: JSONContent) =>
             (node.content ?? []).map((child) => child.text ?? (child.type === 'hardBreak' ? '\n' : '')).join(''),
         )
         .filter(Boolean);
+// Where each node in front of the text lands on the golden paper: its start and its end in px from the paper's left
+// edge. The paper is 11906 twips wide, 793.7 px, and its column runs from 96 px to 697.7 px. An offset is a whole px,
+// and a node is kept on the paper's whole 793 px, as it is sized to them.
+const onPaper = (nodes: JSONContent[]) =>
+    nodes.map((node) => {
+        const start = Number(node.attrs?.['offsetX']) + 96;
+        return [start, start + Number(node.attrs?.['width'])];
+    });
+const ALIGNS = ['left', 'center', 'right'];
 
 describe('media', () => {
     // Decision 1: kept under its real name, though no browser draws it; the import logs it.
@@ -297,6 +310,15 @@ describe('placement', () => {
             ]);
         });
 
+        // An offset longer than any real length is not read, as an extent's side isn't. The cap is on its length, so a
+        // 100 px offset padded with zeros past 64 characters reads as none.
+        test('an offset past 64 characters reads as no offset', async () => {
+            const padded = `${'0'.repeat(59)}${100 * EMU}`;
+            const forged = `<wp:positionH relativeFrom="column"><wp:posOffset>${padded}</wp:posOffset></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>${padded}</wp:posOffset></wp:positionV><wp:wrapNone/>`;
+            const { json } = await importDocxBody(paragraph(`${placed(forged)}${text('x')}`));
+            expect(placesOf(json)).toEqual([['front', 0, 0]]);
+        });
+
         // A page-relative offset counts from the paper's edge, 96 px left of the column; an aligned one sits where the
         // alignment puts it in its area, the 40 px picture centred in the 601.7 px column.
         test('a horizontal offset from another area or an alignment is an offset from the text column', async () => {
@@ -312,7 +334,7 @@ describe('placement', () => {
             expect(placesOf(json)).toEqual([
                 ['front', -96, 0],
                 ['front', 281, 0],
-                ['front', 658, 0],
+                ['front', 657, 0],
             ]);
         });
 
@@ -332,10 +354,53 @@ describe('placement', () => {
             expect(placesOf(json).map(([, , y]) => y)).toEqual([0, 0, 0, 0]);
         });
 
+        // A picture with no extent takes its own size once it loads, so no width is known to align it by.
+        test('a picture aligned right with no width it can read is placed as one aligned left', async () => {
+            const right =
+                '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>';
+            const unsized = (cx: string) => placed(right).replaceAll('cx="381000"', `cx="${cx}"`);
+            const { json } = await importDocxBody(
+                ['0', '-381000', 'x'].map((cx) => paragraph(`${unsized(cx)}${text('x')}`)).join(''),
+            );
+            expect(placesOf(json)).toEqual([
+                ['front', 0, 0],
+                ['front', 0, 0],
+                ['front', 0, 0],
+            ]);
+            expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['width'])).toEqual([null, null, null]);
+        });
+
         test('its width caps at the paper, a block one at the column', async () => {
             const wide = (run: string) => run.replaceAll('cx="381000"', `cx="${1000 * EMU}"`);
             const { json } = await importDocxBody(paragraph(wide(front())) + paragraph(wide(GOLDEN_DOCX_IMAGE_RUN)));
             expect(nodesOfType(json, 'figure').map((node) => node.attrs?.['width'])).toEqual([793, 601]);
+        });
+
+        const toPage = (align: string) =>
+            `<wp:positionH relativeFrom="page"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>`;
+        const alignedWide = (cx: string) =>
+            ALIGNS.map((align) =>
+                paragraph(`${placed(toPage(align)).replaceAll('cx="381000"', `cx="${cx}"`)}${text('x')}`),
+            );
+
+        // Word allows a picture up to 22 in wide. It is stored at the paper's width, so it is aligned by that width.
+        test('a picture wider than the paper lands on it, aligned left, centred or right to the page', async () => {
+            const { json } = await importDocxBody([...alignedWide('9144000'), ...alignedWide('20116800')].join(''));
+            const paper = [
+                [0, 793],
+                [0, 793],
+                [0, 793],
+            ];
+            expect(onPaper(nodesOfType(json, 'figure'))).toEqual([...paper, ...paper]);
+        });
+
+        test('a picture of a crafted width of 1e308 EMU lands on the paper as one the paper wide does', async () => {
+            const { json } = await importDocxBody(alignedWide('1e308').join(''));
+            expect(onPaper(nodesOfType(json, 'figure'))).toEqual([
+                [0, 793],
+                [0, 793],
+                [0, 793],
+            ]);
         });
 
         test('in a table cell or a note it is a block, where a wrapped one stays wrapped', async () => {
@@ -488,6 +553,56 @@ describe('size', () => {
             [601, 150],
         ]);
     });
+
+    test('an extent that is no number gives no size on that side', async () => {
+        const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);
+        const { json } = await importDocxBody(
+            [forged('cx="wide" cy="381000"'), forged('cx="1e400" cy="1e400"'), forged('cx="381000" cy="tall"')]
+                .map(paragraph)
+                .join(''),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+            [null, null],
+            [40, null],
+        ]);
+    });
+
+    // A side longer than any real length is not read, as emu() refuses one. The cap is on its length, not its size, so
+    // a 40 px side padded with zeros past 64 characters is refused too.
+    test('an extent side past 64 characters gives no size on that side', async () => {
+        const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);
+        const { json } = await importDocxBody(
+            [forged(`cx="${'9'.repeat(65)}" cy="381000"`), forged(`cx="381000" cy="${'0'.repeat(64)}381000"`)]
+                .map(paragraph)
+                .join(''),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+            [40, null],
+        ]);
+    });
+
+    // The figure would read a side past the largest paper as that paper, so the import stores no larger one.
+    test('a side past the largest paper is that paper', async () => {
+        const forged = (extent: string) => GOLDEN_DOCX_IMAGE_RUN.replaceAll('cx="381000" cy="381000"', extent);
+        const { json } = await importDocxBody(
+            [forged('cx="9525" cy="9.525e303"'), forged('cx="1" cy="95250000000"')].map(paragraph).join(''),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [1, LARGEST_PAPER],
+            [1, LARGEST_PAPER],
+        ]);
+    });
+
+    test('an extent that is not positive gives no size on that side', async () => {
+        const { json } = await importDocxBody([sized(-40, 40), sized(40, -40), sized(0, 40)].map(paragraph).join(''));
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+            [40, null],
+            [null, null],
+        ]);
+    });
 });
 
 // VML's office attributes are read by their namespace, whatever prefix binds it.
@@ -509,6 +624,24 @@ describe('VML', () => {
         );
         expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
             [133, 67],
+        ]);
+    });
+
+    test("a picture's width past 64 characters is no size", async () => {
+        const { json } = await importDocxBody(
+            paragraph(vml(`style="width:${'9'.repeat(300)}px;height:50pt"`, '<v:imagedata r:id="rId4"/>')),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [null, null],
+        ]);
+    });
+
+    test("a picture's side past the largest paper is that paper", async () => {
+        const { json } = await importDocxBody(
+            paragraph(vml(`style="width:10px;height:${'9'.repeat(60)}px"`, '<v:imagedata r:id="rId4"/>')),
+        );
+        expect(nodesOfType(json, 'figure').map((node) => [node.attrs?.['width'], node.attrs?.['height']])).toEqual([
+            [10, LARGEST_PAPER],
         ]);
     });
 
@@ -675,6 +808,59 @@ describe('text boxes as boxes', () => {
         ]);
     });
 
+    test('an extent that is no number or not positive gives no size, and a fraction of an EMU rounds', async () => {
+        const { boxes } = await boxesOf(
+            [
+                anchored({ cx: Number.NaN, cy: Number.NaN }),
+                anchored({ cx: -1905000, cy: 0 }),
+                anchored({ cx: 2857499.6, cy: 1428750.4 }),
+            ].join(''),
+        );
+        expect(boxes.map((box) => [box.attrs?.['width'], box.attrs?.['height']])).toEqual([
+            [TEXT_BOX_DEFAULT_WIDTH, null],
+            [TEXT_BOX_DEFAULT_WIDTH, null],
+            [300, 150],
+        ]);
+    });
+
+    // It draws at the default width, so it is aligned by that width, as a sized box is by its own.
+    test('a box aligned right with no width it can read ends at the right edge of the column', async () => {
+        const right =
+            '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV>';
+        const { boxes } = await boxesOf(
+            [1905000, Number.NaN, -1905000, 0].map((cx) => anchored({ position: right, cx })).join(''),
+        );
+        const ends = boxes.map((box) => Number(box.attrs?.['offsetX']) + Number(box.attrs?.['width']));
+        const [sized, ...unsized] = ends;
+        expect(boxes.map((box) => box.attrs?.['width'])).toEqual([200, ...unsized.map(() => TEXT_BOX_DEFAULT_WIDTH)]);
+        expect(unsized).toEqual(unsized.map(() => sized));
+        expect(sized).toBe(Math.round(9026 / 15));
+    });
+
+    const toPage = (align: string) =>
+        `<wp:positionH relativeFrom="page"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="line"><wp:posOffset>0</wp:posOffset></wp:positionV>`;
+
+    test('a box wider than the paper is stored at its width and lands on it, aligned left, centred or right', async () => {
+        const { boxes } = await boxesOf(
+            ALIGNS.map((align) => anchored({ position: toPage(align), cx: 9144000 })).join(''),
+        );
+        expect(onPaper(boxes)).toEqual([
+            [0, 793],
+            [0, 793],
+            [0, 793],
+        ]);
+    });
+
+    // A box is never narrower than TEXT_BOX_MIN_SIDE, 24 px, so it is aligned by that side, not by its extent.
+    test('a box narrower than the least side is aligned by that side and lands on the paper', async () => {
+        const { boxes } = await boxesOf(ALIGNS.map((align) => anchored({ position: toPage(align), cx: 1 })).join(''));
+        expect(onPaper(boxes)).toEqual([
+            [0, 24],
+            [385, 409],
+            [769, 793],
+        ]);
+    });
+
     test('its fill, outline, insets, vertical alignment and rounded corners are its look', async () => {
         const spPr =
             '<a:prstGeom prst="roundRect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="FFF2CC"/></a:solidFill><a:ln w="19050"><a:solidFill><a:srgbClr val="C00000"/></a:solidFill><a:prstDash val="dash"/></a:ln>';
@@ -691,6 +877,17 @@ describe('text boxes as boxes', () => {
         });
     });
 
+    // Two insets of a side are one padding, their mean held between 0 and the largest padding.
+    test('two insets near the largest number are the largest padding, two near the most negative a padding of 0', async () => {
+        const { boxes } = await boxesOf(
+            [
+                anchored({ bodyPr: 'lIns="1.7e308" tIns="45720" rIns="1.7e308" bIns="45720"' }),
+                anchored({ bodyPr: 'lIns="-1.7e308" tIns="45720" rIns="-1.7e308" bIns="45720"' }),
+            ].join(''),
+        );
+        expect(boxes.map((box) => box.attrs?.['paddingX'])).toEqual([MAX_TEXT_BOX_PADDING, 0]);
+    });
+
     test('a double line, a dotted one, no line and no fill read as the cell border forms', async () => {
         const ln = (inner: string, attrs = '') => `<a:noFill/><a:ln w="9525"${attrs}>${inner}</a:ln>`;
         const solid = '<a:solidFill><a:srgbClr val="000000"/></a:solidFill>';
@@ -705,6 +902,26 @@ describe('text boxes as boxes', () => {
             [null, '1px double #000000'],
             [null, '1px dotted #000000'],
             [null, null],
+        ]);
+    });
+
+    test("a gradient's first stop, a see-through color and the style's refs read as opaque colors", async () => {
+        const rect = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+        const halfClear = (hex: string) => `<a:srgbClr val="${hex}"><a:alpha val="50000"/></a:srgbClr>`;
+        const gradient = `<a:gradFill><a:gsLst><a:gs pos="0">${halfClear('FFF2CC')}</a:gs><a:gs pos="100000"><a:srgbClr val="000000"/></a:gs></a:gsLst></a:gradFill>`;
+        const solid = `<a:solidFill>${halfClear('C00000')}</a:solidFill><a:ln><a:solidFill>${halfClear('0070C0')}</a:solidFill></a:ln>`;
+        const style = `<wps:style><a:lnRef idx="1"><a:srgbClr val="00B050"/></a:lnRef><a:fillRef idx="1"><a:srgbClr val="7030A0"/></a:fillRef><a:effectRef idx="0"><a:srgbClr val="000000"/></a:effectRef><a:fontRef idx="minor"><a:srgbClr val="000000"/></a:fontRef></wps:style>`;
+        const { boxes } = await boxesOf(
+            [
+                anchored({ spPr: `${rect}${gradient}` }),
+                anchored({ spPr: `${rect}${solid}` }),
+                anchored({ spPr: rect, style }),
+            ].join(''),
+        );
+        expect(boxes.map((box) => [box.attrs?.['fill'], box.attrs?.['outline']])).toEqual([
+            ['#fff2cc', null],
+            ['#c00000', '1px solid #0070c0'],
+            ['#7030a0', '1px solid #00b050'],
         ]);
     });
 
@@ -832,6 +1049,28 @@ describe('text boxes as boxes', () => {
         expect(px[0]?.attrs).toMatchObject({ offsetX: -1 });
     });
 
+    // A length past 64 characters reads as none, though 300 digits are still a finite number.
+    test('a VML inset past 64 characters gives no padding, alone or against its opposite', async () => {
+        const huge = `${'9'.repeat(300)}px`;
+        const inset = (value: string) => vmlBox(PLACED).replace('inset="7.2pt,3.6pt,7.2pt,3.6pt"', `inset="${value}"`);
+        const boxes = await vmlBoxesOf(inset(`${huge},0,-${huge},0`), inset(huge));
+        expect(boxes.map((box) => box.attrs?.['paddingX'])).toEqual([null, null]);
+    });
+
+    // The cap bounds what reading a length costs and keeps a sum of lengths finite. It doesn't bound a box's size, as a
+    // length of 60 digits is under it.
+    test('a VML margin or width past 64 characters reads as none', async () => {
+        const huge = `${'9'.repeat(300)}px`;
+        const wrapped = (style: string) => vmlBox(style, '<w10:wrap type="square"/>');
+        const unplaced = PLACED.replace('margin-left:30pt;margin-top:15pt;width:150pt;', '');
+        const [crafted, plain] = await vmlBoxesOf(
+            wrapped(`margin-left:${huge};margin-top:-${huge};width:${huge};${unplaced}`),
+            wrapped(unplaced),
+        );
+        expect(crafted?.attrs).toEqual({ ...plain?.attrs, id: crafted?.attrs?.['id'] });
+        expect(crafted?.attrs).toMatchObject({ layout: 'wrap-left', offsetX: null, offsetY: null });
+    });
+
     // mso-wrap-style is how the text wraps inside the shape; w10:wrap is how the body's text wraps around it.
     test('a VML box wraps by its w10:wrap, never by the wrap of its own text', async () => {
         const boxes = await vmlBoxesOf(
@@ -922,6 +1161,54 @@ describe('text boxes as boxes', () => {
         const bare = await boxesOf(anchored({ content, spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>' }), parts);
         expect([bare.boxes, nodesOfType(bare.json, 'figure').length]).toEqual([[], 1]);
         expect(bare.warnings).toEqual([{ code: 'text-simplified', count: 1 }]);
+    });
+
+    // The box is aligned by its width, so the picture takes that width and keeps its shape. A 400 by 40 px picture in a
+    // 96 px box is 96 by 9.6, and in a box wider than the paper it is the paper's 793 px wide.
+    test('a picture in an unpainted box is stored at the box’s width and lands on the paper', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const wide = paragraph(picture('rId9').replaceAll('cx="381000" cy="381000"', 'cx="3810000" cy="381000"'));
+        const bare = (cx: number) =>
+            anchored({ content: wide, cx, spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>', position: toPage('right') });
+        const { json } = await importDocxBody([bare(914400), bare(7620000)].join(''), parts);
+        const figures = nodesOfType(json, 'figure');
+        expect(figures.map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']])).toEqual([
+            [96, 9.6],
+            [793, 79.3],
+        ]);
+        expect(onPaper(figures)).toEqual([
+            [697, 793],
+            [0, 793],
+        ]);
+    });
+
+    // A box the picture's own size, as Word draws one around a picture, places the picture where it would stand alone.
+    test('a picture in an unpainted box of its own size keeps its size and place', async () => {
+        const parts = {
+            rels: `<Relationship Id="rId9" Type="${IMAGE_REL}" Target="media/image1.png"/>`,
+            media: { 'word/media/image1.png': BYTES },
+        };
+        const bare = (position?: string) =>
+            anchored({
+                content: paragraph(picture('rId9')),
+                cx: 381000,
+                cy: 381000,
+                spPr: '<a:noFill/><a:ln><a:noFill/></a:ln>',
+                position,
+            });
+        const { json } = await importDocxBody([bare(), bare(toPage('right'))].join(''), parts);
+        const figures = nodesOfType(json, 'figure');
+        expect(figures.map((figure) => [figure.attrs?.['width'], figure.attrs?.['height']])).toEqual([
+            [40, 40],
+            [40, 40],
+        ]);
+        expect(onPaper(figures)).toEqual([
+            [196, 236],
+            [753, 793],
+        ]);
     });
 
     test('in a header a box keeps its paragraphs after the anchor’s', async () => {
@@ -1152,6 +1439,51 @@ describe('charts', () => {
         expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual([
             [601, 301],
             [70, CHART_MAX_SIDE],
+        ]);
+    });
+
+    test('a chart whose extent is no number or not positive takes the default size', async () => {
+        const runs = ['cx="wide" cy="2743200"', 'cx="4572000" cy="1e400"', 'cx="-4572000" cy="2743200"'].map((extent) =>
+            chartRun('rId20', { extent }),
+        );
+        const { json } = await imported(paragraph(runs.join('')), [chartSpace(COLUMNS)]);
+        expect(charts(json).map((chart) => [chart.attrs?.['width'], chart.attrs?.['height']])).toEqual(
+            runs.map(() => [CHART_DEFAULT_SIZE.width, CHART_DEFAULT_SIZE.height]),
+        );
+    });
+
+    // It draws at the default size unless both its sides are readable, so it is aligned by the default width, as a sized
+    // chart is by its own. The golden page's column is 9026 twips wide, and an offset is a whole px.
+    test('a chart aligned right with no height or no extent it can read ends at the right edge of the column', async () => {
+        const anchor =
+            '<wp:positionH relativeFrom="column"><wp:align>right</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>';
+        const sized = chartRun('rId20', { anchor });
+        const flat = chartRun('rId20', { extent: 'cx="4572000" cy="0"', anchor });
+        const unsized = sized.replace(/<wp:extent [^>]*\/>/, '');
+        const { json } = await imported([sized, flat, unsized].map(paragraph).join(''), [chartSpace(COLUMNS)]);
+        const ends = charts(json).map((chart) => Number(chart.attrs?.['offsetX']) + Number(chart.attrs?.['width']));
+        expect(charts(json).map((chart) => chart.attrs?.['width'])).toEqual([
+            480,
+            CHART_DEFAULT_SIZE.width,
+            CHART_DEFAULT_SIZE.width,
+        ]);
+        expect(ends).toEqual(ends.map(() => Math.round(9026 / 15)));
+    });
+
+    // A chart taller than the largest side is drawn narrower to keep its shape, 203 px for 480 by 5000, so it is aligned
+    // by that width.
+    test('a chart drawn narrower than its extent lands in the column, aligned left, centred or right', async () => {
+        const runs = ALIGNS.map((align) =>
+            chartRun('rId20', {
+                extent: 'cx="4572000" cy="47625000"',
+                anchor: `<wp:positionH relativeFrom="column"><wp:align>${align}</wp:align></wp:positionH><wp:positionV relativeFrom="paragraph"><wp:posOffset>0</wp:posOffset></wp:positionV><wp:wrapNone/>`,
+            }),
+        );
+        const { json } = await imported(runs.map(paragraph).join(''), [chartSpace(COLUMNS)]);
+        expect(onPaper(charts(json))).toEqual([
+            [96, 299],
+            [295, 498],
+            [495, 698],
         ]);
     });
 

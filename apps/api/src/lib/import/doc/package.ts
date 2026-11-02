@@ -11,11 +11,13 @@ import type { Lost } from '../../document/transform/protocol';
 import type { Budget } from '../../ooxml/budget';
 import { budget, CHARS_PER_UNIT } from '../../ooxml/budget';
 import {
+    A_NS,
     alternativeFor,
     EMU_PER_PX,
     emu,
     isAlternateContent,
     isOnElement,
+    MAX_MEASURE_CHARS,
     measure,
     R_NS,
     W_NS,
@@ -178,11 +180,28 @@ export function onOff(element: XmlElement | undefined): boolean | undefined {
     return isOnElement(element, W_NS);
 }
 
-// A number attribute rounded to a whole one. Word writes integers, but a generator may write a fraction.
+// A number attribute rounded to a whole one. Word writes integers, but a generator may write a fraction. A value longer
+// than any real number is none, unread, as emu() refuses one, so a drawing's offset or size has the bound every other
+// length has.
 export function roundedInt(value: string | undefined): number | undefined {
-    if (value === undefined) return undefined;
+    if (value === undefined || value.length > MAX_MEASURE_CHARS) return undefined;
     const number = Number.parseFloat(value);
     return Number.isFinite(number) ? Math.round(number) : undefined;
+}
+
+// A drawing's size, a wp:extent's or an a:ext's, in whole EMU. A side that is missing, no number or not positive is 0,
+// which every caller reads as no size.
+export function extentOf(ext: XmlElement | undefined): { cx: number; cy: number } {
+    const side = (name: string) => Math.max(0, roundedInt(ext && xmlAttr(ext, '', name)) ?? 0);
+    return { cx: side('cx'), cy: side('cy') };
+}
+
+// What a drawing's graphic holds, when it holds one thing alone, such as a picture, a chart or a wps shape.
+export function loneGraphic(frame: XmlElement): XmlElement | undefined {
+    const graphic = xmlChild(frame, A_NS, 'graphic');
+    const data = graphic && xmlChild(graphic, A_NS, 'graphicData');
+    const [first, ...others] = data ? xmlElements(data) : [];
+    return others.length === 0 ? first : undefined;
 }
 
 export function twipsOf(value: string | undefined): number | undefined {
@@ -230,9 +249,11 @@ export function vmlStyle(element: XmlElement): Map<string, string> {
 }
 
 // A VML length in px. A number with no unit is px in the CSS style, as a browser reads it, and EMU in an attribute such
-// as an inset or a stroke weight, as LibreOffice reads them.
+// as an inset or a stroke weight, as LibreOffice reads them. A value longer than any real length is none, unread, as
+// emu() and measure() refuse one.
 export function vmlPx(value: string | undefined, unitless: 'px' | 'emu'): number | null {
-    const text = value?.trim().toLowerCase() ?? '';
+    if (value === undefined || value.length > MAX_MEASURE_CHARS) return null;
+    const text = value.trim().toLowerCase();
     const [, number, px] = /^(-?(?:\d+(?:\.\d+)?|\.\d+))(px)?$/.exec(text) ?? [];
     if (number !== undefined && (px || unitless === 'px')) return Number(number);
     const length = emu(text);

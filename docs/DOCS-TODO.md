@@ -64,6 +64,8 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **A text box's rotation and vertical text** (S–M): The docx reader counts a rotated or vertical-text box as `text-simplified` and draws it upright and horizontal. Needs `rotation` and `textDirection` attributes, the CSS `transform` and `writing-mode`, and the writer's `a:xfrm rot` and `bodyPr vert`.
 
+- **A VML text box is never kept on the paper or aligned, and a VML picture is never placed** (S–M): `readVmlTextBox` (`apps/api/src/lib/import/doc/text-boxes.ts`) takes a box's `margin-left` as it is and ignores `mso-position-horizontal`. A box in front of the text at `margin-left:700px; width:300px` ends at 1096 px on A4's 793.7 px paper, and a 780 px one is stored at the column's 601 px where a DrawingML box may take the paper's width. A VML picture (`readVml` in `drawings.ts`) gets no layout at all and stays in its line. Fix: place both through the DrawingML clamp in `anchorPlacement`, with the width the node stores.
+
 - **An IME composition across a text box's remount types twice** (S): A peer's re-anchor of the box being typed in remounts its editor mid-composition; in Chrome the pre-edit text stays and the IME's commit adds it again. Rare. Hold the remount's forward until `compositionend`.
 
 - **An open text box keeps the body's selection ring** (XS): A press on a selected box's text opens it while the body's node selection stays, so `FigureFrame` draws its `eigen-selection-ring` around the open box. Move the body's selection to a caret beside the box as it opens, or hide the ring while it is open.

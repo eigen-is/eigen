@@ -3,7 +3,7 @@
 
 import type { JSONContent } from '@tiptap/core';
 import { readHexColor } from '@workspace/lib/constants/colors';
-import { CELL_BORDER_SIDES, columnFit, MIN_TABLE_COLUMN_PX, readBorder } from '@workspace/lib/docs/eigendoc';
+import { CELL_BORDER_SIDES, columnFit, isWidth, MIN_TABLE_COLUMN_PX, readBorder } from '@workspace/lib/docs/eigendoc';
 import { CELL_BORDER, HEADER_CELL_LOOK, TABLE_CELL_PADDING, TABLE_MARGIN } from '../../../document/looks';
 import {
     BORDER_EIGHTHS_PER_PX,
@@ -76,10 +76,7 @@ export function tableOf(rowNodes: JSONContent[], context: Context): Block[] {
             for (let k = 0; k < colspan; k++) {
                 const width: unknown = Array.isArray(colwidth) ? colwidth[k] : undefined;
                 // At most MAX_COLWIDTH_PX, so 63 of them sum to a number and the ratios between them stay.
-                widths[column + k] ??=
-                    typeof width === 'number' && Number.isFinite(width) && width > 0
-                        ? Math.min(width, MAX_COLWIDTH_PX)
-                        : undefined;
+                widths[column + k] ??= isWidth(width) ? Math.min(width, MAX_COLWIDTH_PX) : undefined;
                 carry[column + k] = rowspan;
                 holders[column + k] = cell;
             }
