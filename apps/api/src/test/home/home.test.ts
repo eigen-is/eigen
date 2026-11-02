@@ -1,12 +1,22 @@
 import { beforeAll, describe, expect, test } from 'bun:test';
 import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { orgOwnerId, teamOwnerId } from '@workspace/lib/types/owner';
 import { getUserHomePath } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
+import { ApiError } from '../../lib/core';
 import { evictHome, getHome } from '../../lib/home/get-home';
 import type { HomeSettings } from '../../lib/home/home';
 import type { TestContext } from '../setup';
-import { assertJson, authedRequest, createTestUser, findOrFail, getTestContext } from '../setup';
+import {
+    assertJson,
+    authedRequest,
+    createTeam,
+    createTestGuest,
+    createTestUser,
+    findOrFail,
+    getTestContext,
+} from '../setup';
 
 type MyTeam = {
     id: string;
@@ -162,5 +172,46 @@ describe('Home init', () => {
 
         const reopened = await getHome(user.id);
         expect(reopened.drive.getMounts().map((mount) => mount.config.id)).not.toContain('default');
+    });
+});
+
+function thrownBy(read: () => unknown): unknown {
+    try {
+        read();
+    } catch (err) {
+        return err;
+    }
+    return undefined;
+}
+
+describe('Home parts', () => {
+    let ctx: TestContext;
+    let orgId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const config = getServerConfig();
+        if (!config) throw new Error('No server config');
+        orgId = config.orgId;
+    });
+
+    test('a part the home lacks answers 404', async () => {
+        const team = await getHome(teamOwnerId(await createTeam(ctx, orgId, 'Parts Team')));
+        const org = await getHome(orgOwnerId(orgId));
+
+        for (const err of [thrownBy(() => team.notifications), thrownBy(() => org.drive)]) {
+            expect(err).toBeInstanceOf(ApiError);
+            expect(err).toMatchObject({ status: 404 });
+        }
+    });
+
+    test('hasNotifications is true for user and guest homes, false for team homes', async () => {
+        const user = await getHome(ctx.alice.user.id);
+        const guest = await getHome((await createTestGuest('Parts Guest')).id);
+        const team = await getHome(teamOwnerId(await createTeam(ctx, orgId, 'Parts Team Two')));
+
+        expect(user.hasNotifications).toBe(true);
+        expect(guest.hasNotifications).toBe(true);
+        expect(team.hasNotifications).toBe(false);
     });
 });
