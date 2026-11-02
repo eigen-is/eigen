@@ -4,7 +4,7 @@
 // here is synchronous, so both can run it before anything else opens a database.
 
 import { Database, SQLiteError } from 'bun:sqlite';
-import { lstatSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, openSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 import { isRecord } from '@workspace/lib/guards';
@@ -101,15 +101,21 @@ export function liveLeaseHolder(file: string, warn: (message: string) => void): 
     return moved ? describeHolder(moved) : UNREADABLE_HOLDER;
 }
 
-// Only a regular file is read, so a FIFO or a device planted in its place cannot hang or fill the swap, which runs as
-// root. Null when there is no lease.
+// Only a regular file is read, never through a symlink, so a FIFO or a device planted in its place cannot hang or fill
+// the swap, which runs as root. O_NONBLOCK makes the open of a FIFO return at once. The check is on the opened file, so
+// nothing can replace the path between the check and the read. Null when there is no lease.
 function readLeaseText(file: string): string | null {
-    if (!lstatSync(file, { throwIfNoEntry: false })?.isFile()) return null;
+    let fd: number;
     try {
-        return readFileSync(file, 'utf8');
+        fd = openSync(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     } catch (err) {
-        if (err instanceof Error && 'code' in err && err.code === 'ENOENT') return null;
+        if (err instanceof Error && 'code' in err && (err.code === 'ENOENT' || err.code === 'ELOOP')) return null;
         throw err;
+    }
+    try {
+        return fstatSync(fd).isFile() ? readFileSync(fd, 'utf8') : null;
+    } finally {
+        closeSync(fd);
     }
 }
 
