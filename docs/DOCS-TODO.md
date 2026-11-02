@@ -64,7 +64,15 @@ Verified, bounded, cheap to fix on the next touch.
 
 - **A text box's rotation and vertical text** (S–M): The docx reader counts a rotated or vertical-text box as `text-simplified` and draws it upright and horizontal. Needs `rotation` and `textDirection` attributes, the CSS `transform` and `writing-mode`, and the writer's `a:xfrm rot` and `bodyPr vert`.
 
-- **A VML text box is never kept on the paper or aligned, and a VML picture is never placed** (S–M): `readVmlTextBox` (`apps/api/src/lib/import/doc/text-boxes.ts`) takes a box's `margin-left` as it is and ignores `mso-position-horizontal`. A box in front of the text at `margin-left:700px; width:300px` ends at 1096 px on A4's 793.7 px paper, and a 780 px one is stored at the column's 601 px where a DrawingML box may take the paper's width. A VML picture (`readVml` in `drawings.ts`) gets no layout at all and stays in its line. Fix: place both through the DrawingML clamp in `anchorPlacement`, with the width the node stores.
+- **A VML text box is never kept on the paper or aligned** (S–M): `readVmlTextBox` (`apps/api/src/lib/import/doc/text-boxes.ts`) takes a box's `margin-left` as it is. A box in front of the text at `margin-left:700px; width:300px` ends at 1096 px on A4's 793.7 px paper, and a 780 px one is stored at the column's 601 px where a DrawingML box may take the paper's width. In front of or behind the text its alignment is ignored too, and it can sit off the paper: `mso-position-horizontal:right` gives `offsetX: 0`, `margin-left:5000pt` gives 2112 and `margin-left:-200pt` gives -267. Fix: place it through the DrawingML clamp in `anchorPlacement`, with the width the node stores.
+
+- **A floating VML picture imports as a block** (S): `readVml` (`apps/api/src/lib/import/doc/drawings.ts`) writes only a `v:imagedata`'s size, so a picture whose shape is absolute, wrapped square at `margin-left:300pt` or in front of the text, stays in its line. Fix: place it from its shape's style as `readVmlTextBox` places a box, through the same clamp.
+
+- **Every picture in a VML group gets the whole group's size** (S): `readVml` reads the style of the `v:group` for each `v:imagedata` below it, so two pictures that each take half of a 300 by 150 pt group both import at 400 by 200 px. Fix: size each from its own shape's style, scaled by the group's `coordsize`.
+
+- **A picture in a table cell is capped at the text column, not the cell** (S): `readDrawing` and `readVml` cap a picture at `reader.columnPx`, so a 600 px picture in a 133 px cell is stored 600 px wide. Fix: cap it at the cell's width, which the table reader knows.
+
+- **A VML box's named color reads as none** (XS): `vmlColor` (`apps/api/src/lib/import/doc/text-boxes.ts`) reads only a hex, after Word's theme slot such as ` [3213]`. Word writes `strokecolor="black [3213]"`, so that box loses its outline, and `fillcolor="white"` its fill. No reader of CSS color names exists in the repo. Fix: a table of the 16 HTML names, or of all CSS names, shared with whatever else reads a named color.
 
 - **An IME composition across a text box's remount types twice** (S): A peer's re-anchor of the box being typed in remounts its editor mid-composition; in Chrome the pre-edit text stays and the IME's commit adds it again. Rare. Hold the remount's forward until `compositionend`.
 
@@ -108,4 +116,4 @@ Large builds that wait for a trigger or for the editor to draw pages.
 
 - **A text box in a header or a footer** (M): A band's schema has no `textBox` and holds no float, so a Word box in a header or footer imports as paragraphs after its anchor (49 of the corpus's 241 `wps` boxes) ([DOCS.md](DOCS.md#a-text-box-is-a-story-in-the-figures-frame)). Needs a box that draws in a band's editor and on every page of the PDF.
 
-- **A text box in a group or a canvas** (M): A `wpg` group or `wpc` canvas imports its boxes' text as paragraphs after its anchor, or as its picture's caption (59 corpus boxes). Read the group's `a:chOff`/`a:chExt` and place each box and picture at its own offset.
+- **A text box in a group or a canvas** (M): A `wpg` group or `wpc` canvas imports its boxes' text as paragraphs after its anchor, or as its picture's caption (59 corpus boxes). Its pictures and charts take their own `a:ext`, which is in the group's child coordinates: in a resized group their sizes are never scaled by the group's `ext` over its `chExt`. Read the group's `a:chOff`/`a:chExt`, as `readXfrm` in `import/slides/inherit.ts` does for pptx, and place and size each box, picture and chart at its own offset.
