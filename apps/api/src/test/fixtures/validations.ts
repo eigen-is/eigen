@@ -1,5 +1,5 @@
 import type { DataVerificationRule, SheetValidation } from '@workspace/lib/sheets';
-import { parseCellKey } from '@workspace/lib/sheets';
+import { compareValidationIds, parseCellKey } from '@workspace/lib/sheets';
 
 // A sheet's validation rules given per cell: each cell its own rule, under the cell's key as its id.
 export function validationsByCell(rules: Record<string, DataVerificationRule>): Record<string, SheetValidation> {
@@ -17,7 +17,7 @@ export function ruleAt(
     r: number,
     c: number,
 ): DataVerificationRule | undefined {
-    const ids = Object.keys(validations ?? {}).sort((a, b) => b.length - a.length || (a < b ? 1 : -1));
+    const ids = Object.keys(validations ?? {}).sort((a, b) => compareValidationIds(b, a));
     const covers = ({ row, column }: { row: number[]; column: number[] }) =>
         r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1];
     const id = ids.find((key) => validations?.[key].ranges.some(covers));

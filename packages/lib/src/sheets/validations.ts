@@ -83,6 +83,15 @@ export function coalescedRanges(ranges: readonly SingleRange[]): SingleRange[] {
     return mergedAlong(mergedAlong(ranges, 'row'), 'column');
 }
 
+function isSpan(span: unknown, count: number): boolean {
+    return (
+        Array.isArray(span) &&
+        span.length === 2 &&
+        span.every((end) => Number.isInteger(end) && end >= 0 && end < count) &&
+        span[0] <= span[1]
+    );
+}
+
 // Ranges sorted by their span across the axis, then joined along it where one span repeats and the runs touch.
 function mergedAlong(ranges: readonly SingleRange[], axis: 'row' | 'column'): SingleRange[] {
     const across = axis === 'row' ? 'column' : 'row';
@@ -93,7 +102,7 @@ function mergedAlong(ranges: readonly SingleRange[], axis: 'row' | 'column'): Si
     for (const range of sorted) {
         const last = merged.at(-1);
         const sameSpan = last && last[across][0] === range[across][0] && last[across][1] === range[across][1];
-        if (!last || !sameSpan || range[axis][0] > last[axis][1] + 1) {
+        if (!sameSpan || range[axis][0] > last[axis][1] + 1) {
             merged.push(range);
             continue;
         }
@@ -102,13 +111,4 @@ function mergedAlong(ranges: readonly SingleRange[], axis: 'row' | 'column'): Si
         merged[merged.length - 1] = axis === 'row' ? { row: run, column: last.column } : { row: last.row, column: run };
     }
     return merged;
-}
-
-function isSpan(span: unknown, count: number): boolean {
-    return (
-        Array.isArray(span) &&
-        span.length === 2 &&
-        span.every((end) => Number.isInteger(end) && end >= 0 && end < count) &&
-        span[0] <= span[1]
-    );
 }
