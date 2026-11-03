@@ -12,6 +12,8 @@ import {
     createFaultMount,
     provisionDoc,
     restorePutTimeout,
+    SETTLE_BOUND_MS,
+    settlesWithin,
     shrinkPutTimeout,
     waitFor,
 } from '../fault-storage-helpers';
@@ -104,7 +106,7 @@ describe('process death mid-drain', () => {
         // idempotent by design (invariant 6), so the object must not change. Close m1's queue
         // first: a dead process never runs its post-PUT bookkeeping, and letting the live m1
         // resume would misread m2's ack (row gone) as a cancel and delete the object.
-        m1.mount.uploadQueue?.close();
+        void m1.mount.uploadQueue?.close();
         await m1.fault.releaseOldestParked();
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
     });
@@ -131,7 +133,7 @@ describe('process death mid-drain', () => {
 
         // The process dies: stop m1's queue, or its armed backoff retry (a random 0-2s) fires into
         // the replay below, acks first, and m2 misreads the vanished row as a cancel.
-        m1.mount.uploadQueue?.close();
+        void m1.mount.uploadQueue?.close();
 
         // Restart: the leftover row replays; the duplicate PUT is idempotent and the row clears.
         const m2 = createS3Mount('death-pre-ack');
@@ -140,6 +142,76 @@ describe('process death mid-drain', () => {
         expect(m2.mount.pendingUploadCount).toBe(0);
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
         expect(readdirSync(m2.mount.stagingDir)).toHaveLength(0);
+    });
+});
+
+describe('a Home that closes and reopens in one process', () => {
+    // An idle close or an eviction closes the mount's queue while a PUT is on the wire, and the next
+    // request reopens the Home at once. The old PUT must not land over what the new queue acked.
+    test('a PUT of the closed queue cannot land over newer bytes the reopened mount acked', async () => {
+        const m1 = createS3Mount('reopen-old-put');
+        await m1.mount.init();
+        const { dataDbId } = await provisionDoc(m1.mount);
+        const managed = await m1.mount.createDatabase(docConfig, dataDbId);
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
+
+        // {1} stages on the close and its PUT parks on the wire.
+        m1.fault.parkWrites = true;
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await m1.mount.closeDatabase(dataDbId);
+        const oldPut = await m1.fault.waitForParked(() => true);
+
+        // The Home reopens as soon as the old one has closed, and writes {1,2}, which acks.
+        const m2 = createS3Mount('reopen-old-put');
+        const reopened = m1.mount.closeAllDatabases().then(async () => {
+            await m2.mount.init();
+            await m2.mount.withDatabase(docConfig, dataDbId, async (db) => {
+                db.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
+            });
+            await m2.mount.closeDatabase(dataDbId);
+            await m2.mount.uploadQueue?.drain({ flushNow: true });
+        });
+        // Long enough for the reopen to finish when the close does not wait for the PUT.
+        await settlesWithin([reopened], SETTLE_BOUND_MS);
+
+        await oldPut.land();
+        await reopened;
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
+    });
+
+    // A timed-out PUT that lands while the queue closes rolls the object back to its older bytes.
+    // The queue still has its metadata.db then, so it stages the acked bytes again for the reopen.
+    test('an orphan that lands while the queue closes is repaired by the reopened mount', async () => {
+        const m1 = createS3Mount('reopen-orphan');
+        await m1.mount.init();
+        const { dataDbId } = await provisionDoc(m1.mount);
+        const managed = await m1.mount.createDatabase(docConfig, dataDbId);
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
+
+        // {1} parks and times out into an orphan, then {1,2} acks over it.
+        shrinkPutTimeout(m1.mount, 50);
+        m1.fault.parkWrites = true;
+        managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+        await managed.flush();
+        const orphan = await m1.fault.waitForParked(() => true);
+        restorePutTimeout(m1.mount);
+        await m1.mount.uploadQueue?.drain();
+        m1.fault.parkWrites = false;
+        managed.db.insert(docSchema.items).values({ id: 2, data: 'b' }).run();
+        await m1.mount.closeDatabase(dataDbId);
+        await m1.mount.uploadQueue?.drain({ flushNow: true });
+        expect(await countBackingRows(m1.mount, dataDbId, TEST_DIR)).toBe(2);
+
+        const m2 = createS3Mount('reopen-orphan');
+        const reopened = m1.mount.closeAllDatabases().then(async () => {
+            await m2.mount.init();
+            await m2.mount.uploadQueue?.drain({ flushNow: true });
+        });
+        await settlesWithin([reopened], SETTLE_BOUND_MS);
+
+        await orphan.land();
+        await reopened;
+        expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(2);
     });
 });
 
@@ -174,7 +246,7 @@ describe('corrupted staged copy', () => {
         // backend: reconcile keeps the row (file exists), but the drain refuses to PUT a copy that
         // fails the SQLite magic check (isSqliteFile) — the poison row and staged copy are dropped
         // loudly instead of acking 0 bytes over the good object.
-        m1.mount.uploadQueue?.close();
+        void m1.mount.uploadQueue?.close();
         const m2 = createS3Mount('staging-truncated');
         await m2.mount.init();
         await m2.mount.uploadQueue?.drain({ flushNow: true });

@@ -6,6 +6,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { and, asc, count, eq, lte } from 'drizzle-orm';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
+import { settlesWithin } from '../../utils/timing';
 import type { StorageBackend } from '../storage';
 import { isSqliteFile } from './helpers';
 import type * as schema from './schema';
@@ -53,15 +54,18 @@ export class UploadQueue {
     private readonly destinationKey: string;
     private readonly label: string;
 
-    // inFlight: staged copies mid-PUT, so enqueueStaged won't delete one from under the worker.
-    // draining: one drain loop at a time (concurrent calls coalesce). closing: one-way teardown gate.
-    // orphans: timed-out PUTs that may still land server-side later (see trackOrphan) — in-process
-    // only, which is sound because an orphan's request (barring a fully-transmitted body the server
-    // commits late) dies with the process.
+    // Staged copies mid-PUT, so enqueueStaged won't delete one from under the worker.
     private readonly inFlight = new Set<string>();
+    // Timed-out PUTs that may still land in the bucket later (see trackOrphan). Memory is enough: a
+    // request dies with its process, and close() waits for those still live before a mount reopens.
     private readonly orphans = new Map<string, OrphanState>();
+    // Every PUT still on the wire, timed-out ones included, so close() can wait for them.
+    private readonly liveWrites = new Set<Promise<number>>();
     private draining: Promise<void> | null = null;
+    // closing stops every new drain and PUT. closed follows once close() stopped waiting, and then
+    // metadata.db may close at any moment.
     private closing = false;
+    private closed = false;
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     // Per-PUT client-side deadline (see UPLOAD_PUT_TIMEOUT_MS). A field so tests can shrink it.
     private putTimeoutMs = UPLOAD_PUT_TIMEOUT_MS;
@@ -179,14 +183,20 @@ export class UploadQueue {
         }
     }
 
-    // Stop the queue (mount teardown): no more drains, cancel the pending retry. Leftover rows replay
-    // on the next mount open. For a graceful shutdown, call drain({flushNow}) first.
-    public close(): void {
+    // Stops the queue when its mount closes: no drain or retry starts after this. Then it waits up to
+    // waitMs for the PUTs still on the wire. A Home that closes may reopen at once, and an old PUT that
+    // landed after the new queue acked would overwrite the newer bytes. Leftover rows replay on the next
+    // mount open. For a graceful shutdown, call drain({flushNow}) first.
+    public async close(waitMs = this.putTimeoutMs): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
             clearTimeout(this.retryTimer);
             this.retryTimer = null;
         }
+        if (this.liveWrites.size > 0 && !(await settlesWithin(Promise.allSettled(this.liveWrites), waitMs))) {
+            console.error(`[sync] ${this.label} closed with ${this.liveWrites.size} PUT(s) still on the wire`);
+        }
+        this.closed = true;
     }
 
     // Drain due pending uploads through the destination's concurrency limiter. One loop at a time;
@@ -298,6 +308,9 @@ export class UploadQueue {
             // unsettled is re-asserted once it settles (see trackOrphan), instead of being silently
             // regressed or resurrected.
             const write = this.storage.write(storageKey, file);
+            this.liveWrites.add(write);
+            const forget = () => this.liveWrites.delete(write);
+            write.then(forget, forget);
             const timeoutMs = this.putTimeoutMs;
             await Promise.race([
                 write,
@@ -446,7 +459,8 @@ export class UploadQueue {
                 `[sync] orphaned PUT for ${storageKey} landed after a newer upload acked — re-uploading the acked bytes`,
             );
         }
-        if (this.closing) {
+        // While close() waits, metadata.db is still open: the re-staged row replays on the next mount open.
+        if (this.closed) {
             console.error(`[sync] cannot re-upload ${storageKey}: queue closed — check the object against versioning`);
             return;
         }

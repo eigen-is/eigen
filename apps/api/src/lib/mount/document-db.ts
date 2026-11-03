@@ -420,10 +420,9 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
     }
 
     if (mount.uploadQueue) {
-        // Process shutdown only: flush the queue AFTER the final close-time enqueues, so healthy
-        // uploads finish before metadata.db closes. The wait ends at the global deadline even with a
-        // PUT or a semaphore slot stalled; close() then stops the loop and a late PUT skips its ack,
-        // so leftover rows replay on boot. Idle teardown leaves the deadline null and skips the flush.
+        // At shutdown the queue flushes after the final close-time enqueues, so healthy uploads finish
+        // before metadata.db closes. The flush and the wait in close() both end at the shutdown deadline,
+        // even with a PUT or a semaphore slot stalled. An idle close has no deadline and skips the flush.
         const deadline = getShutdownDrainDeadline();
         if (deadline !== null) {
             await settlesWithin(
@@ -433,7 +432,7 @@ export async function closeAllDatabases(mount: Mount): Promise<void> {
                 Math.max(0, deadline - Date.now()),
             );
         }
-        mount.uploadQueue.close();
+        await mount.uploadQueue.close(deadline === null ? undefined : Math.max(0, deadline - Date.now()));
     }
 }
 
