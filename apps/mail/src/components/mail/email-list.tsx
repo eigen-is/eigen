@@ -163,7 +163,7 @@ export function EmailList({
     // A right-click, a touch long-press and the menu key select the row, then open the one menu. The rows are drawn
     // inline, with no row component to call a hook in, so one useLongPress for the list carries the pressed row
     // through bind(email).
-    const { contextMenu, handleContextMenu, openAt, openFromButton } = useSelectableContextMenu({
+    const { contextMenu, handleContextMenu, openAt, openBelow } = useSelectableContextMenu({
         selection,
         getId: (e) => e.id,
     });
@@ -174,7 +174,7 @@ export function EmailList({
     // takes it back from <body>, which keeps the shortcuts alive after a click on something that takes no focus. It
     // stands down while composing, so a reply keeps its keystrokes. There is no onDelete: Delete and Backspace live in
     // useMailShortcuts, which also covers an open conversation, and the list only swallows the key.
-    const { handleKeyDown, handleContextMenu: handleListContextMenu } = useKeyboardListNavigation({
+    const { handleKeyDown } = useKeyboardListNavigation({
         items: orderedEmails,
         getId: (e) => e.id,
         onSelect: onRowClick,
@@ -184,13 +184,13 @@ export function EmailList({
         reclaimFocus: !isComposing,
         cursorIndex,
         onCursorChange: setCursorIndex,
-        // The menu key opens the menu at the row, which carries the virtualizer's data-index. A row scrolled out of the
-        // window is not drawn, and its menu opens at the list instead.
+        // The menu key opens the menu at the row, which carries the virtualizer's data-index. The hook scrolls a row
+        // out of the window in and calls this a frame later, once the row is drawn. The list is only a fallback.
         onMenu: (email, index) => {
             const list = tableRef.current;
             const row = list?.querySelector(`[data-index="${index}"]`);
             const anchor = row instanceof HTMLElement ? row : list;
-            if (anchor) openFromButton(anchor, email);
+            if (anchor) openBelow(anchor, email);
         },
     });
 
@@ -211,13 +211,7 @@ export function EmailList({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-background">
-            <div
-                className="flex-1 overflow-y-auto outline-none"
-                tabIndex={0}
-                onKeyDown={handleKeyDown}
-                onContextMenu={handleListContextMenu}
-                ref={tableRef}
-            >
+            <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} onKeyDown={handleKeyDown} ref={tableRef}>
                 {orderedEmails.length > 0 ? (
                     <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                         {virtualItems.map((vi) => {

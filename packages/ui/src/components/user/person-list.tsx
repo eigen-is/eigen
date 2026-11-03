@@ -70,17 +70,13 @@ export function PersonList<T>({
     });
     const drag = useListDrag({ selection, getId: getSelectionId, dragType: dragType ?? 'person' });
 
-    const { contextMenu, handleContextMenu, openAt, openFromButton } = useSelectableContextMenu({
+    const { contextMenu, handleContextMenu, openAt, openBelow } = useSelectableContextMenu({
         selection,
         getId: getSelectionId,
     });
     const longPress = useLongPress(openAt);
 
-    const {
-        selectedIndex,
-        handleKeyDown,
-        handleContextMenu: handleListContextMenu,
-    } = useKeyboardListNavigation({
+    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation({
         items: visible,
         activeId,
         getId,
@@ -92,12 +88,10 @@ export function PersonList<T>({
         onDelete: onDelete
             ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
             : undefined,
-        // The menu key opens the menu at the row, as its ⋮ does. The list is not virtualized, so every row is drawn,
-        // and the cursor's index is the row's place among them.
+        // The menu key opens the menu at the row, as its ⋮ does. The list draws every row, so the hook hands it over.
         onMenu: renderMenuItems
-            ? (item, index) => {
-                  const row = listRef.current?.querySelectorAll('.eigen-list-item')[index];
-                  if (row instanceof HTMLElement) openFromButton(row, item);
+            ? (item, _index, row) => {
+                  if (row) openBelow(row, item);
               }
             : undefined,
     });
@@ -109,13 +103,7 @@ export function PersonList<T>({
         : [];
 
     return (
-        <div
-            className="flex-1 overflow-y-auto outline-none"
-            tabIndex={0}
-            ref={listRef}
-            onKeyDown={handleKeyDown}
-            onContextMenu={handleListContextMenu}
-        >
+        <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} ref={listRef} onKeyDown={handleKeyDown}>
             {visible.length === 0 ? (
                 emptyState
             ) : (
@@ -145,7 +133,7 @@ export function PersonList<T>({
                             {renderPerson(item)}
                             {renderMenuItems && (
                                 <ContextMenuButton
-                                    onOpen={(button) => openFromButton(button, item)}
+                                    onOpen={(button) => openBelow(button, item)}
                                     className={cn(HOVER_REVEAL_CLASS, 'h-7 w-7 shrink-0')}
                                 />
                             )}

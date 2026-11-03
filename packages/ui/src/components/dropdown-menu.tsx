@@ -1,13 +1,15 @@
 // shadcn's DropdownMenu on Radix, and the rows every menu in the app is built from, such as a kebab, a context menu or
 // a bar menu. A row takes the Radix parts of the menu it sits in: a DropdownMenu's by default, the Menubar's inside a
 // bar menu, which MenuRows provides. On a phone a submenu opens as a page of its menu, with a back row, instead of a
-// panel beside it. ChoiceMenuSub and ChoiceMenuItems draw a choice as a submenu with a check on the current option.
+// panel beside it. ChoiceMenuSub and ChoiceMenuItems draw a choice as a submenu with a check on the current option. A
+// menu a pointer opened gives its trigger the focus back without a focus ring.
 
 import { useIsMobile } from '@workspace/lib/media';
 import { cn } from '@workspace/ui/lib/utils';
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, MinusIcon } from 'lucide-react';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import type * as React from 'react';
+import type { RefObject } from 'react';
 import {
     Children,
     createContext,
@@ -63,6 +65,14 @@ type MenuParts = Pick<
 >;
 const MenuPartsContext = createContext<MenuParts>(DropdownMenuPrimitive);
 
+// How a menu with its own trigger gives the focus back as it closes. Radix focuses the trigger, and a browser draws a
+// focus ring on it after Escape even when a mouse opened the menu, so a hover-revealed ⋮, such as a calendar's, would
+// stay shown after the pointer left. A menu a pointer opened focuses the trigger itself, without a ring. A menu the
+// keyboard opened leaves it to Radix. Radix focuses no trigger after a right-click outside, or after any press or
+// focus outside a menu that isn't modal, and neither does this.
+type TriggerFocus = { trigger: HTMLElement | null; byPointer: boolean; keepsFocusOutside: boolean; modal: boolean };
+const TriggerFocusContext = createContext<RefObject<TriggerFocus> | null>(null);
+
 const subTriggerClassName =
     "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-4 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
 
@@ -114,6 +124,13 @@ function useMobileMenu(): { value: MobileMenuState; reset: () => void } {
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
     const isMobile = useIsMobile();
     const { value, reset } = useMobileMenu();
+    const triggerFocus = useRef<TriggerFocus>({
+        trigger: null,
+        byPointer: false,
+        keepsFocusOutside: false,
+        modal: true,
+    });
+    triggerFocus.current.modal = props.modal ?? true;
 
     // A controlled menu can close when its owner sets open to false, which fires no onOpenChange. A context
     // menu whose plain button rows call close() does that. Reset, so the next open starts at the root page.
@@ -122,21 +139,27 @@ function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrim
     }, [props.open]);
 
     if (!isMobile) {
-        return <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />;
+        return (
+            <TriggerFocusContext.Provider value={triggerFocus}>
+                <DropdownMenuPrimitive.Root data-slot="dropdown-menu" {...props} />
+            </TriggerFocusContext.Provider>
+        );
     }
 
     return (
-        <MobileMenuContext.Provider value={value}>
-            <DropdownMenuPrimitive.Root
-                data-slot="dropdown-menu"
-                {...props}
-                onOpenChange={(open) => {
-                    props.onOpenChange?.(open);
-                    // Reset on close so reopening lands on root (forceMount keeps Content mounted, so unmount can't).
-                    if (!open) reset();
-                }}
-            />
-        </MobileMenuContext.Provider>
+        <TriggerFocusContext.Provider value={triggerFocus}>
+            <MobileMenuContext.Provider value={value}>
+                <DropdownMenuPrimitive.Root
+                    data-slot="dropdown-menu"
+                    {...props}
+                    onOpenChange={(open) => {
+                        props.onOpenChange?.(open);
+                        // Reset on close so reopening lands on root (forceMount keeps Content mounted, so unmount can't).
+                        if (!open) reset();
+                    }}
+                />
+            </MobileMenuContext.Provider>
+        </TriggerFocusContext.Provider>
     );
 }
 
@@ -156,8 +179,30 @@ function DropdownMenuPortal({ ...props }: React.ComponentProps<typeof DropdownMe
     return <DropdownMenuPrimitive.Portal data-slot="dropdown-menu-portal" {...props} />;
 }
 
-function DropdownMenuTrigger({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
-    return <DropdownMenuPrimitive.Trigger data-slot="dropdown-menu-trigger" {...props} />;
+// Radix opens the menu on the trigger's pointerdown or keydown, so these tell which opened it.
+function DropdownMenuTrigger({
+    onPointerDown,
+    onKeyDown,
+    ...props
+}: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
+    const triggerFocus = useContext(TriggerFocusContext);
+    const noteOpener = (trigger: HTMLElement, byPointer: boolean) => {
+        if (triggerFocus) Object.assign(triggerFocus.current, { trigger, byPointer });
+    };
+    return (
+        <DropdownMenuPrimitive.Trigger
+            data-slot="dropdown-menu-trigger"
+            onPointerDown={(event) => {
+                noteOpener(event.currentTarget, true);
+                onPointerDown?.(event);
+            }}
+            onKeyDown={(event) => {
+                noteOpener(event.currentTarget, false);
+                onKeyDown?.(event);
+            }}
+            {...props}
+        />
+    );
 }
 
 // Its rows take the DropdownMenu's parts and start on its root page, also where the menu sits inside another menu's rows,
@@ -166,13 +211,34 @@ function DropdownMenuContent({
     className,
     sideOffset = 4,
     children,
+    onInteractOutside,
+    onCloseAutoFocus,
     ...props
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Content>) {
+    const triggerFocus = useContext(TriggerFocusContext);
     return (
         <DropdownMenuPrimitive.Portal>
             <DropdownMenuPrimitive.Content
                 data-slot="dropdown-menu-content"
                 sideOffset={sideOffset}
+                // The same outside presses after which Radix focuses no trigger.
+                onInteractOutside={(event) => {
+                    onInteractOutside?.(event);
+                    if (!triggerFocus) return;
+                    const press = event.detail.originalEvent;
+                    const rightClick =
+                        press instanceof MouseEvent && (press.button === 2 || (press.button === 0 && press.ctrlKey));
+                    if (!triggerFocus.current.modal || rightClick) triggerFocus.current.keepsFocusOutside = true;
+                }}
+                onCloseAutoFocus={(event) => {
+                    onCloseAutoFocus?.(event);
+                    if (!triggerFocus) return;
+                    const { trigger, byPointer, keepsFocusOutside } = triggerFocus.current;
+                    triggerFocus.current.keepsFocusOutside = false;
+                    if (event.defaultPrevented || !trigger || !byPointer || keepsFocusOutside) return;
+                    event.preventDefault();
+                    trigger.focus({ focusVisible: false });
+                }}
                 className={cn(
                     'bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 z-50 max-h-(--radix-dropdown-menu-content-available-height) min-w-[8rem] overflow-x-hidden overflow-y-auto rounded-md border p-1 shadow-md',
                     className,

@@ -3,6 +3,7 @@
 // after it opens nothing more.
 import { afterAll, afterEach, expect, test } from 'bun:test';
 import type { EmailSummary } from '@workspace/lib/types/mail';
+import { contextMenuEvent } from '@workspace/ui/test/context-menu-event';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
 import { menuRows } from '@workspace/ui/test/menu-rows';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
@@ -99,7 +100,7 @@ test('the menu opens at the message’s row', async () => {
 test('the browser’s contextmenu after the key opens no second menu', async () => {
     const list = await renderList(0);
     await press(list, 'ContextMenu');
-    const follow = new PointerEvent('contextmenu', { bubbles: true, cancelable: true, pointerType: '' });
+    const follow = contextMenuEvent('chrome-key');
     await act(async () => {
         (document.activeElement ?? list).dispatchEvent(follow);
     });

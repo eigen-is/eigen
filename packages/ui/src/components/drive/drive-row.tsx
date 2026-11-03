@@ -65,7 +65,7 @@ export function DriveRow({
         selection,
         drag,
         handleContextMenu,
-        openContextMenuFromButton,
+        openContextMenuBelow,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
@@ -132,7 +132,8 @@ export function DriveRow({
                         onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
                         showIconOnHover={!hideShareClick}
                         ancestorBreadcrumb={ancestorBreadcrumb}
-                        inKeyboardList
+                        // The row's menu key reaches Share, so Tab doesn't stop on every row.
+                        tabIndex={-1}
                     />
                 </div>
             )}
@@ -152,10 +153,7 @@ export function DriveRow({
                             : 'hidden @[800px]:flex items-center justify-center py-1.5'
                     }
                 >
-                    <ContextMenuButton
-                        onOpen={(button) => openContextMenuFromButton(button, item)}
-                        className="h-7 w-7"
-                    />
+                    <ContextMenuButton onOpen={(button) => openContextMenuBelow(button, item)} className="h-7 w-7" />
                 </div>
             )}
         </div>

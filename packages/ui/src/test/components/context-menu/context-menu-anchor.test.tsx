@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { contextMenuEvent, KEY_SOURCES, POINTER_SOURCES } from '../../context-menu-event';
+import { recordFocus } from '../../focus-calls';
 import { installHappyDom } from '../../happy-dom';
 
 installHappyDom();
@@ -47,6 +49,28 @@ test('the menu draws the rows the host passed', async () => {
     await cleanup();
 });
 
+// On Windows the menu key's contextmenu comes as the key comes up, when the menu it opened holds the focus. A
+// right-click inside the menu keeps the browser's own menu, as before.
+test('a key’s contextmenu inside the menu opens no browser menu over it, and a pointer’s stays the browser’s', async () => {
+    const { cleanup } = await mountInTransformedHost();
+    const row = document.querySelector('[role="menuitem"]');
+    if (!row) throw new Error('no menu row');
+    const sent = [...KEY_SOURCES, ...POINTER_SOURCES].map((source) => {
+        const event = contextMenuEvent(source);
+        row.dispatchEvent(event);
+        return [source, event.defaultPrevented];
+    });
+    await cleanup();
+    expect(sent).toEqual([
+        ['chrome-key', true],
+        ['firefox-key', true],
+        ['old-firefox-key', true],
+        ['right-click', false],
+        ['ctrl-click', false],
+        ['long-press', false],
+    ]);
+});
+
 test('Escape from the menu gives the focus back to the list it opened from', async () => {
     const { useContextMenu } = await import('../../../components/context-menu/use-context-menu');
     let openMenu = () => {};
@@ -82,4 +106,52 @@ test('Escape from the menu gives the focus back to the list it opened from', asy
     expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
     await act(async () => root.unmount());
     container.remove();
+});
+
+// A row's ⋮ that a mouse clicked has the focus without a ring. Its menu gives the focus back the same way, so the ⋮,
+// which shows while it has a ring, doesn't stay shown after the pointer left. A ⋮ the keyboard reached gets its ring
+// back.
+test('a menu gives the focus back to its opener with a ring only if the opener had one', async () => {
+    const { useContextMenu } = await import('../../../components/context-menu/use-context-menu');
+    const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    const restored = [];
+    for (const withoutRing of [true, false]) {
+        let openMenu = () => {};
+        function Row() {
+            const menu = useContextMenu<string>();
+            openMenu = () => menu.openAt('notes.txt', 0, 0);
+            return createElement(
+                'div',
+                null,
+                createElement('button', { type: 'button', 'data-more': '' }, '⋮'),
+                createElement(ContextMenuAnchor, {
+                    contextMenu: menu,
+                    children: createElement(DropdownMenuItem, { children: 'Rename' }),
+                }),
+            );
+        }
+        const container = document.createElement('div');
+        document.body.append(container);
+        const root = createRoot(container);
+        await act(async () => root.render(createElement(Row)));
+        const more = document.querySelector<HTMLElement>('[data-more]');
+        if (!more) throw new Error('no ⋮');
+        const calls = recordFocus(more, { withoutRing });
+        more.focus();
+        await act(async () => openMenu());
+        await settle();
+        await act(async () => {
+            document.activeElement?.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+            );
+        });
+        await settle();
+        restored.push([document.activeElement === more, calls.at(-1)?.focusVisible]);
+        await act(async () => root.unmount());
+        container.remove();
+    }
+    expect(restored).toEqual([
+        [true, false],
+        [true, undefined],
+    ]);
 });

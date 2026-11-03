@@ -143,3 +143,36 @@ test('the menu key opens the menu at the row under the cursor, in the table and 
     expect(await renderListing(2, 'd')).toEqual({ item: 'd', position: { x: 350, y: 35 } });
     expect(await renderListing(2, 'c')).toEqual({ item: 'c', position: { x: 250, y: 25 } });
 });
+
+// A picker's table, such as DriveBrowser's, mounts no row menu. The key must neither open one nor select the cursor's
+// row, which in a multi-select picker would replace the rows the user picked.
+test('the menu key does nothing in a view without a row menu', async () => {
+    const selected: string[] = [];
+    const picked: UseListSelectionReturn<DrivePath> = {
+        ...selection,
+        isSelected: (id) => id === 'a' || id === 'b',
+        select: (id) => selected.push(id),
+    };
+    const seen: { controller: ReturnType<typeof useDriveItemController> | null } = { controller: null };
+    function Picker() {
+        const containerRef = useRef<HTMLDivElement>(null);
+        seen.controller = useDriveItemController({
+            items: FILES,
+            activeItemId: 'c',
+            containerRef,
+            selection: picked,
+            hasMenu: false,
+        });
+        return createElement('div', { ref: containerRef, tabIndex: 0, onKeyDown: seen.controller.handleKeyDown });
+    }
+    const { container, unmount } = await renderInDocument(createElement(Picker));
+    selected.length = 0;
+    const list = container.querySelector('[tabindex]');
+    if (!list) throw new Error('no listing');
+    const event = new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true });
+    await act(async () => {
+        list.dispatchEvent(event);
+    });
+    expect([event.defaultPrevented, selected, seen.controller?.contextMenu.item]).toEqual([false, [], null]);
+    await unmount();
+});

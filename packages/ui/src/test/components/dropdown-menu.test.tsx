@@ -1,13 +1,23 @@
 // A choice is a submenu whose rows check the current option, and a toggle a row checked when on: both draw the same
 // check, a choice's rows read as menuitemradio and a toggle's as menuitemcheckbox.
 import { afterEach, expect, mock, test } from 'bun:test';
+import { recordFocus } from '../focus-calls';
 import { installHappyDom } from '../happy-dom';
 import { checkRows, clickRow, menuRows, openSubmenu, renderOpenMenu } from '../menu-rows';
+import { renderInDocument } from '../render-in-document';
 
 installHappyDom();
 
-const { createElement } = await import('react');
-const { ChoiceMenuItems, ChoiceMenuSub, DropdownMenuCheckboxItem } = await import('../../components/dropdown-menu');
+const { act, createElement } = await import('react');
+const {
+    ChoiceMenuItems,
+    ChoiceMenuSub,
+    DropdownMenu,
+    DropdownMenuCheckboxItem,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} = await import('../../components/dropdown-menu');
 
 let unmount = async () => {};
 afterEach(() => unmount());
@@ -71,5 +81,64 @@ test('a toggle is checked when on, and a set some of a selection has draws a das
         expect.stringContaining('lucide-check'),
         undefined,
         expect.stringContaining('lucide-minus'),
+    ]);
+});
+
+// Radix focuses a menu's trigger as the menu closes, and a browser then draws a ring after Escape, even when a mouse
+// opened the menu. A hover-revealed ⋮, such as a calendar's, would stay shown after the pointer left. A menu the
+// pointer opened gives the focus back without a ring, and one the keyboard opened as Radix does. A right-click
+// outside leaves the focus where it lands, as Radix does.
+test('a menu a pointer opened gives its trigger the focus back without a ring', async () => {
+    const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    const pressEscape = () =>
+        act(async () => {
+            document.activeElement?.dispatchEvent(
+                new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+            );
+        });
+    const pressOutside = (button: number) =>
+        act(async () => {
+            document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button }));
+        });
+    const restored = [];
+    for (const [opener, closer] of [
+        ['pointer', 'Escape'],
+        ['pointer', 'click outside'],
+        ['pointer', 'right-click outside'],
+        ['Enter', 'Escape'],
+    ] as const) {
+        ({ unmount } = await renderInDocument(
+            createElement(
+                DropdownMenu,
+                null,
+                createElement(DropdownMenuTrigger, null, '⋮'),
+                createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, null, 'Edit calendar')),
+            ),
+        ));
+        const trigger = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
+        if (!trigger) throw new Error('no trigger');
+        const calls = recordFocus(trigger);
+        await act(async () => {
+            if (opener === 'pointer') {
+                trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+            } else {
+                trigger.focus();
+                calls.length = 0;
+                trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+            }
+        });
+        await settle();
+        expect(document.querySelector('[role="menu"]')).not.toBeNull();
+        if (closer === 'Escape') await pressEscape();
+        else await pressOutside(closer === 'click outside' ? 0 : 2);
+        await settle();
+        restored.push([opener, closer, calls.map((options) => options?.focusVisible ?? 'default')]);
+        await unmount();
+    }
+    expect(restored).toEqual([
+        ['pointer', 'Escape', [false]],
+        ['pointer', 'click outside', [false]],
+        ['pointer', 'right-click outside', []],
+        ['Enter', 'Escape', ['default']],
     ]);
 });

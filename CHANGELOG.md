@@ -71,6 +71,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
 - **Filters in the sidebar** — **All docs**, **All stickies**, **All slides**, **All sheets** and **All vectors** stay selected in their own app when you click an item in the list
 - **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
+- **The name in Rename** — **Rename** opens with the name selected, so typing replaces it, also from the command palette and a document's **File** menu
 - **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
 - **Email collaborators from Share in Drive** — the envelope in **Share** opens **Email collaborators** again, and the message starts with your signature even when the dialog opens before your settings have loaded
 - **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email. Escape closes only the link field, and opening it no longer shifts the dialog sideways

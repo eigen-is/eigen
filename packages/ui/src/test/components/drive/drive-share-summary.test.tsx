@@ -59,7 +59,7 @@ async function renderSummary(props: {
     onClick?: () => void;
     showIconOnHover?: boolean;
     visibility?: 'private' | 'public-read';
-    inKeyboardList?: boolean;
+    tabIndex?: number;
 }) {
     const onRowClick = mock(() => {});
     const path = { ...notes, visibility: props.visibility ?? 'private' };
@@ -71,7 +71,7 @@ async function renderSummary(props: {
                 path,
                 onClick: props.onClick,
                 showIconOnHover: props.showIconOnHover,
-                inKeyboardList: props.inKeyboardList,
+                tabIndex: props.tabIndex,
             }),
         ),
     );
@@ -93,9 +93,9 @@ test('a summary that opens Share is a button the keyboard reaches, and its click
     expect(onRowClick).not.toHaveBeenCalled();
 });
 
-test('in a row of a list with keyboard navigation, Tab skips the button, and a click still opens Share', async () => {
+test('taken out of the Tab order, as in a Drive row, the button still opens Share on a click', async () => {
     const onClick = mock(() => {});
-    const { container, onRowClick } = await renderSummary({ onClick, inKeyboardList: true });
+    const { container, onRowClick } = await renderSummary({ onClick, tabIndex: -1 });
     const button = container.querySelector('button');
     expect(button?.tabIndex).toBe(-1);
     await act(async () => button?.click());

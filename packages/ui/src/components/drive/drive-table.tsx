@@ -155,6 +155,7 @@ export function DriveTable({
         onQuickLook,
         onSelectionChange,
         actions,
+        hasMenu: !hideActions,
     });
 
     // One long-press for the whole list: each row binds it to its item, and a disabled row doesn't.
@@ -183,7 +184,6 @@ export function DriveTable({
             ref={containerRef}
             tabIndex={0}
             onKeyDown={controller.handleKeyDown}
-            onContextMenu={controller.handleListContextMenu}
             role="grid"
             aria-rowcount={items.length}
             className="@container flex-1 overflow-auto relative w-full text-sm focus:outline-none"
