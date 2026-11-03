@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { UseListSelectionReturn } from '../../hooks/use-list-selection';
 import { installHappyDom } from '../happy-dom';
 import { renderInDocument } from '../render-in-document';
@@ -64,7 +65,7 @@ async function mountList(startIndex: number, selection?: UseListSelectionReturn<
                     'div',
                     {
                         'data-row': '',
-                        onContextMenu: (e: MouseEvent) => {
+                        onContextMenu: (e: ReactMouseEvent) => {
                             e.preventDefault();
                             e.stopPropagation();
                             calls.push('row');
