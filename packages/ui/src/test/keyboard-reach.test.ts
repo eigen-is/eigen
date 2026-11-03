@@ -84,3 +84,29 @@ test('pointer-events-none keeps the click off the button until a matching varian
     expect(takesPointer(gated, { on: gated, by: 'keyboard' })).toBe(true);
     expect(takesPointer(button('<div class="opacity-0"><button>x</button></div>'))).toBe(true);
 });
+
+test('a group variant matches any group above the button, not only the nearest', () => {
+    button(
+        '<div class="group"><div class="group"><div class="opacity-0 group-has-focus-visible:opacity-100"><button>x</button></div></div></div>',
+    );
+    const outer = document.querySelector('.group');
+    const reveal = document.querySelector('.opacity-0');
+    if (!outer || !reveal) throw new Error('no groups');
+    // Focus sits beside the revealed control: in the outer group, outside the inner one.
+    outer.insertAdjacentHTML('beforeend', '<input class="other">');
+    const other = document.querySelector('.other');
+    if (!other) throw new Error('no input');
+    expect(isShown(reveal, { on: other, by: 'keyboard' })).toBe(true);
+    expect(isShown(reveal, { on: other, by: 'mouse' })).toBe(false);
+});
+
+test('group-has-focus-visible leaves the group itself out, and group-focus-within counts it', () => {
+    document.body.innerHTML =
+        '<div class="group"><div id="a" class="opacity-0 group-has-focus-visible:opacity-100"></div></div><div class="group"><div id="b" class="opacity-0 group-focus-within:opacity-100"></div></div>';
+    const [groupA, groupB] = document.querySelectorAll('.group');
+    const a = document.getElementById('a');
+    const b = document.getElementById('b');
+    if (!groupA || !groupB || !a || !b) throw new Error('no group');
+    expect(isShown(a, { on: groupA, by: 'keyboard' })).toBe(false);
+    expect(isShown(b, { on: groupB, by: 'keyboard' })).toBe(true);
+});
