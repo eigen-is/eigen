@@ -7,7 +7,7 @@ import type { DirectAccessItem } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
-import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
+import { expectKeyboardReveal } from '../../hover-reveal';
 import { pressKey } from '../../press-key';
 import { renderInDocument } from '../../render-in-document';
 
@@ -101,10 +101,9 @@ test('a summary that shows nothing is no button, so Tab does not stop on an empt
 test('on an item nobody else has, the add-person icon shows on hover only, and when Tab reaches the button', async () => {
     entries = [OWNER];
     const { container } = await renderSummary({ onClick: () => {} });
-    const button = container.querySelector('button');
-    const icon = button?.querySelector('svg');
-    if (!button || !icon) throw new Error('the summary drew no add-person button');
-    expect(revealStates(icon, button)).toEqual(HOVER_REVEALED);
+    const icon = container.querySelector('button svg');
+    if (!icon) throw new Error('the summary drew no add-person button');
+    expectKeyboardReveal(icon);
 });
 
 test('the lock on a shared link says who the link lets in, as the Share dialog does', async () => {

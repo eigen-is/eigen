@@ -10,7 +10,7 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { HOVER_REVEALED, revealStates } from '@workspace/ui/test/keyboard-reach';
+import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 // A desktop window, so the toolbar shows its buttons rather than a kebab.
@@ -303,7 +303,6 @@ test('turning all day off late in the evening gives a half hour that ends on the
 test("a calendar's options button shows on the row's hover only, and Tab reaches and shows it", async () => {
     await open();
     const kebab = document.querySelector('button[aria-label="Calendar options"]');
-    const wrapper = kebab?.parentElement;
-    if (!kebab || !wrapper) throw new Error('the calendar row has no options button');
-    expect(revealStates(wrapper, kebab)).toEqual(HOVER_REVEALED);
+    if (!kebab) throw new Error('the calendar row has no options button');
+    expectKeyboardReveal(kebab);
 });

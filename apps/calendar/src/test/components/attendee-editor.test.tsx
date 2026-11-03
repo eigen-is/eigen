@@ -1,7 +1,7 @@
 // A guest's Remove button shows to a mouse user on the row's hover only, and Tab reaches it and shows it.
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, mock, test } from 'bun:test';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
-import { HOVER_REVEALED, revealStates } from '@workspace/ui/test/keyboard-reach';
+import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 installHappyDom();
@@ -36,5 +36,5 @@ test("a guest's Remove button shows on the row's hover only, and Tab reaches and
     await renderInDocument(createElement(AttendeeEditor, { attendees, onChange: () => {} }));
     const remove = document.querySelector('button[aria-label="Remove ada@example.org"]');
     if (!remove) throw new Error('the guest has no Remove button');
-    expect(revealStates(remove)).toEqual(HOVER_REVEALED);
+    expectKeyboardReveal(remove);
 });

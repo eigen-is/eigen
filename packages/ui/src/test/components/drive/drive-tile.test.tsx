@@ -1,10 +1,10 @@
 // A grid tile has a ⋮ button that opens the item's menu. A mouse user sees it on hover only, and Tab reaches and
 // shows it.
-import { expect, test } from 'bun:test';
+import { test } from 'bun:test';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
-import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
+import { expectKeyboardReveal } from '../../hover-reveal';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -33,5 +33,5 @@ test('the ⋮ button shows on hover only, and Tab reaches and shows it', async (
     await renderInDocument(createElement(Tile));
     const button = document.querySelector('button[aria-label="More actions"]');
     if (!button) throw new Error('the tile has no ⋮ button');
-    expect(revealStates(button)).toEqual(HOVER_REVEALED);
+    expectKeyboardReveal(button);
 });
