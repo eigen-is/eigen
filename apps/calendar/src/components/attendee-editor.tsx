@@ -10,7 +10,6 @@ import { ContactAddRow, useContactInput } from '@workspace/ui/components/contact
 import { UserItem } from '@workspace/ui/components/user';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { X as XIcon } from 'lucide-react';
-import { useCallback } from 'react';
 import { toast } from 'sonner';
 
 type AttendeeEditorProps = {
@@ -32,13 +31,6 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
         }
         return true;
     });
-
-    const removeAttendee = useCallback(
-        (email: string) => {
-            onChange(attendees.filter((a) => a.email !== email));
-        },
-        [attendees, onChange],
-    );
 
     return (
         <div className="space-y-2">
@@ -65,9 +57,8 @@ export function AttendeeEditor({ attendees, onChange, currentUserEmail }: Attend
                                     <TooltipButton
                                         icon={XIcon}
                                         tooltipText={`Remove ${attendee.email}`}
-                                        type="button"
-                                        className={cn('h-6 w-6', HOVER_REVEAL_CLASS)}
-                                        onClick={() => removeAttendee(attendee.email)}
+                                        className={cn(HOVER_REVEAL_CLASS, 'h-6 w-6')}
+                                        onClick={() => onChange(attendees.filter((a) => a.email !== attendee.email))}
                                     />
                                 </div>
                             </div>
