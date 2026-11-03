@@ -41,6 +41,7 @@ import {
     sheetsHtmlDocument,
 } from '../../lib/export/sheets/render';
 import { renderEigensheetsExport } from '../../lib/export/sheets/transform';
+import { MAX_PDF_PAGE_PX } from '../../lib/export/weasyprint';
 import { xlsxToSheets } from '../../lib/import/sheets/from-xlsx';
 import { cpuClock } from '../cpu-time';
 import { embeddedSliceFiles } from '../fixtures/font-slices';
@@ -1924,6 +1925,24 @@ describe('Sheets HTML export — the cell cap', () => {
     const tds = (html: string) => html.match(/<td/g)?.length ?? 0;
     const cols = (html: string) => html.match(/<col /g)?.length ?? 0;
     const trs = (html: string) => html.match(/<tr /g)?.length ?? 0;
+    // A row taller than half the largest page prints a page of its own.
+    const halfPageRow = MAX_PDF_PAGE_PX / 2 + 1;
+    // The pages MAX_EXPORT_CELLS holds in a PDF, read off a sheet whose every row prints a page: it keeps that many
+    // rows. A test that spends the cap in pages builds its sheet on this, so it still spends the cap when the cap or a
+    // page's charge changes.
+    const pdfCapPages = () => {
+        const sheet: Sheet = {
+            id: 'pages',
+            name: 'Pages',
+            order: 0,
+            defaultRowHeight: MAX_PDF_PAGE_PX,
+            celldata: [
+                { r: 0, c: 0, v: { v: 'first' } },
+                { r: REFERENCE_ROW_COUNT - 1, c: 0, v: { v: 'last' } },
+            ],
+        };
+        return trs(renderSheetsHtml([sheet], NO_MEDIA, 'pdf', NO_PIXELS).html);
+    };
 
     test('a wide sheet keeps every row and the columns from the left that fit with them', () => {
         const sheet = makeSheet([
@@ -2087,12 +2106,13 @@ describe('Sheets HTML export — the cell cap', () => {
         expect(out.html).toBe('');
     }, 30_000);
 
-    // Rows taller than half a page spend the cap in its 2,000 pages, as in the test below, so the walk renders 2,000 rows
-    // where rows of the default height would take 250,000.
+    // Rows taller than half a page spend the cap in pages, as in the test below, so the walk renders one row a page
+    // where rows of the default height would take MAX_EXPORT_CELLS.
     test("a border key past Excel's grid sizes the PDF page from the kept window, quickly", () => {
+        const pages = pdfCapPages();
         const sheet: Sheet = {
             ...makeSheet([{ r: 0, c: 0, v: { v: 'top left' } }]),
-            defaultRowHeight: 10_000,
+            defaultRowHeight: halfPageRow,
             config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } },
         };
         const cpuMs = cpuClock();
@@ -2108,7 +2128,7 @@ describe('Sheets HTML export — the cell cap', () => {
         // The span walk it guards took 119 s.
         expect(cpuMs()).toBeLessThan(10_000);
         expect(lost).toEqual(['sheets-cut']);
-        expect(trs(html)).toBe(2000);
+        expect(trs(html)).toBe(pages);
         const lone = { ...sheet, config: { borderInfo: { '10000000000_0': { b: { style: 1, color: '#000' } } } } };
         expect(renderSheetsHtml([{ ...lone, celldata: [], data: [] }], NO_MEDIA, 'screen', NO_PIXELS)).toMatchObject({
             cut: [],
@@ -2147,17 +2167,17 @@ describe('Sheets HTML export — the cell cap', () => {
         ]);
     }, 30_000);
 
-    // A row taller than half a page prints a page of its own, so 2,000 of them spend the cap, the 2,000 pages it holds,
-    // where rows of the default height would take 250,000 to spend it in cells.
+    // A row taller than half a page prints a page of its own, so as many of them as the cap holds pages spend it, where
+    // rows of the default height would take MAX_EXPORT_CELLS to spend it in cells.
     test('the PDF page fits the sheets the export keeps, not one it left out', () => {
         const tall: Sheet = {
             id: 'tall',
             name: 'Tall',
             order: 0,
-            defaultRowHeight: 10_000,
+            defaultRowHeight: halfPageRow,
             celldata: [
                 { r: 0, c: 0, v: { v: 'top' } },
-                { r: 1999, c: 0, v: { v: 'bottom' } },
+                { r: pdfCapPages() - 1, c: 0, v: { v: 'bottom' } },
             ],
         };
         const wide: Sheet = {
@@ -2177,7 +2197,8 @@ describe('Sheets HTML export — the cell cap', () => {
             lost: (code) => lost.push(code),
         });
         expect(lost).toEqual(['sheets-left-out']);
-        expect(html).toContain('@page { size: 200px 19200px; margin: 40px; }');
+        expect(html).toContain(`@page { size: 200px ${MAX_PDF_PAGE_PX}px; margin: 40px; }`);
+        expect(html).toContain('>bottom<');
         expect(html).not.toContain('>wide<');
     }, 30_000);
 
