@@ -123,8 +123,7 @@ export function useDeleteEmail() {
                 'remove',
                 email.mailbox === MAILBOX_TRASH ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
             ),
-        onSuccess: (email, _email, context) => {
-            refetchUnloadedLists(queryClient, context);
+        onSuccess: (email) => {
             if (email.mailbox === MAILBOX_TRASH) {
                 queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
@@ -167,8 +166,7 @@ export function useToggleReadEmail() {
                 SSEventType.MAIL_READ_CHANGED,
             );
         },
-        onSuccess: (email, _vars, context) => {
-            refetchUnloadedLists(queryClient, context);
+        onSuccess: (email) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             invalidateMailboxes(queryClient, ownerId);
         },
@@ -205,10 +203,7 @@ export function useToggleFlaggedEmail() {
                 SSEventType.MAIL_FLAGS_CHANGED,
             );
         },
-        onSuccess: (email, _vars, context) => {
-            refetchUnloadedLists(queryClient, context);
-            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
-        },
+        onSuccess: (email) => queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) }),
         onError: (error, _vars, context) => {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
@@ -232,8 +227,7 @@ export function useMoveEmail() {
         },
         onMutate: ({ email }) =>
             beginOptimisticMailMutation(queryClient, ownerId, email.id, 'remove', SSEventType.MAIL_MOVED),
-        onSuccess: (email, variables, context) => {
-            refetchUnloadedLists(queryClient, context);
+        onSuccess: (email, variables) => {
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             // The target list wasn't optimistically patched (only the source row was removed) — refresh it
             // so the moved message appears there. Usually unmounted → marked stale, refetches on next visit.
@@ -257,10 +251,7 @@ export function useOpenWriteEmailTo() {
 }
 
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
-type MailMutationContext = {
-    snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][];
-    unloaded: (readonly unknown[])[];
-};
+type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
 
 // Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
 // in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
@@ -278,18 +269,12 @@ export async function beginOptimisticMailMutation(
     // stuck pending forever — TanStack doesn't auto-restart a canceled query with no fallback data.
     // Kick those back off so a cold-open deep-link (e.g. auto-mark-as-read racing the initial inbox
     // load) can't strand the list on "No emails found" with no self-heal.
-    const unloaded = snapshot.filter(([, data]) => data === undefined).map(([key]) => key);
-    for (const key of unloaded) queryClient.refetchQueries({ queryKey: key });
+    for (const [key, data] of snapshot) {
+        if (data === undefined) queryClient.refetchQueries({ queryKey: key });
+    }
     patchEmailInLists(queryClient, ownerId, messageId, patch);
     markRecentMailMutation(event, messageId);
-    return { snapshot, unloaded };
-}
-
-// A list restarted above had no row to patch, and its fetch can read the message before the server
-// changes it. The echo would refetch it, but this tab skips that echo and its stream may not be open
-// yet on a cold boot, so each mutation's onSuccess refetches those lists here instead.
-function refetchUnloadedLists(queryClient: QueryClient, context: MailMutationContext | undefined): void {
-    for (const key of context?.unloaded ?? []) queryClient.invalidateQueries({ queryKey: key, exact: true });
+    return { snapshot };
 }
 
 function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {

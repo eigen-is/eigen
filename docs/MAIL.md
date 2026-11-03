@@ -56,7 +56,6 @@ At 50k messages a mailbox, the whole list is 34 MB and one 200-row page is 130 K
 - `MailDB.listMessages` pages on a `(date, id)` cursor over the `(mailbox, date DESC, id DESC)` index.
 - Move, read, flag and delete patch the cached pages by message id (`patchEmailInLists`) and roll back on error, instead of invalidating.
 - The server echoes each mutation over SSE. The mutation records the echo it expects (`markRecentMailMutation`), and the SSE handler skips that one refetch.
-- The one exception is a list that had not loaded yet, as on a cold open from a notification. It has no row to patch, and its first fetch can read the message before the server changes it. `beginOptimisticMailMutation` returns those lists, and the mutation refetches them once the server answers.
 - `listMessages` answers from the DB and reconciles in the background, except on the first open of an empty mailbox ([IMAP.md § A read answers from the index](IMAP.md#a-read-answers-from-the-index)).
 
 A notification goes out only for mail that arrives, coalesced on the `mail:new` tag. What counts as an arrival: [IMAP.md § Only a delivered message is new mail](IMAP.md#only-a-delivered-message-is-new-mail). The row goes read once the inbox holds no unread mail, whether the app or an IMAP client read the last message.
