@@ -142,8 +142,8 @@ export type SSEventHomeDataEpochs = {
 };
 
 // Why ./eigen restarts Eigen, which the tabs say. A per-home restore never announces one, and a whole-server restore
-// announces itself as a rollback.
-export const RESTART_REASONS = ['update', 'rollback'] as const;
+// announces itself as a rollback. A demo box's hourly reset announces itself as `demo-reset`.
+export const RESTART_REASONS = ['update', 'rollback', 'demo-reset'] as const;
 export type RestartReason = (typeof RESTART_REASONS)[number];
 
 // Sent when a stream opens and whenever ./eigen announces or takes back a restart, such as the one an update makes,
