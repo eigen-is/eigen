@@ -1,8 +1,7 @@
-// A block of code, a shell command or a log: shadcn's Code Block, without its Shiki highlighter. A header can carry a
-// title and actions; CodeBlockActions as a direct child floats in the top corner on hover instead. Content scrolls or
-// wraps, with optional line numbers, and a line can mark itself added, removed or highlighted. The copy button goes
-// through copyToClipboard, so it toasts like CopyInput. It shows commands such as Admin's restore steps and the S3
-// bucket settings.
+// A block of code, a shell command or a log, such as Admin's restore steps: shadcn's Code Block, without its Shiki
+// highlighter. A header can carry a title and actions. CodeBlockActions as a direct child floats in the top corner
+// instead, shown on hover and taking no clicks while hidden. Content scrolls or wraps, with optional line numbers. A
+// line can mark itself added, removed or highlighted. The copy button goes through copyToClipboard, as CopyInput does.
 
 import { copyToClipboard } from '@workspace/lib/clipboard';
 import { cn } from '@workspace/ui/lib/utils';
@@ -76,7 +75,7 @@ function CodeBlockActions({ className, ...props }: React.ComponentProps<'div'>) 
         <div
             data-slot="code-block-actions"
             className={cn(
-                '-my-1 ms-auto -me-1.5 flex shrink-0 items-center gap-1 [[data-slot=code-block]>&]:absolute [[data-slot=code-block]>&]:end-2 [[data-slot=code-block]>&]:top-2 [[data-slot=code-block]>&]:z-10 [[data-slot=code-block]>&]:m-0 [[data-slot=code-block]>&]:opacity-0 [[data-slot=code-block]>&]:transition-opacity [[data-slot=code-block]>&]:group-has-focus-visible/code-block:opacity-100 [[data-slot=code-block]>&]:group-hover/code-block:opacity-100 group-data-[size=sm]/code-block:[[data-slot=code-block]>&]:end-1.5 group-data-[size=sm]/code-block:[[data-slot=code-block]>&]:top-1.5 [[data-slot=code-block]>&]:pointer-coarse:opacity-100 [[data-slot=code-block]>&]:*:[button]:bg-background [[data-slot=code-block]>&]:*:[button]:ring-1 [[data-slot=code-block]>&]:*:[button]:ring-foreground/10',
+                '-my-1 ms-auto -me-1.5 flex shrink-0 items-center gap-1 [[data-slot=code-block]>&]:absolute [[data-slot=code-block]>&]:end-2 [[data-slot=code-block]>&]:top-2 [[data-slot=code-block]>&]:z-10 [[data-slot=code-block]>&]:m-0 [[data-slot=code-block]>&]:pointer-events-none [[data-slot=code-block]>&]:opacity-0 [[data-slot=code-block]>&]:transition-opacity [[data-slot=code-block]>&]:group-has-focus-visible/code-block:pointer-events-auto [[data-slot=code-block]>&]:group-has-focus-visible/code-block:opacity-100 [[data-slot=code-block]>&]:group-hover/code-block:pointer-events-auto [[data-slot=code-block]>&]:group-hover/code-block:opacity-100 group-data-[size=sm]/code-block:[[data-slot=code-block]>&]:end-1.5 group-data-[size=sm]/code-block:[[data-slot=code-block]>&]:top-1.5 [[data-slot=code-block]>&]:pointer-coarse:pointer-events-auto [[data-slot=code-block]>&]:pointer-coarse:opacity-100 [[data-slot=code-block]>&]:*:[button]:bg-background [[data-slot=code-block]>&]:*:[button]:ring-1 [[data-slot=code-block]>&]:*:[button]:ring-foreground/10',
                 className,
             )}
             {...props}
