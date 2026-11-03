@@ -31,9 +31,9 @@ import type { DataValidationDraft, Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
 import { addValidation, validationAt } from './validation-rules';
 
-// Lowercase phrase fragments the hint sentences slot into `${type}`/`${condition}`, keyed
-// loosely because `type`/`type2` are free-form strings. Text rules get their own frames —
-// "Text must equal to ACME" is not a sentence.
+// The words a hint sentence puts in for its rule type and its condition. The keys are loose strings because a rule's
+// type and condition are free-form. Text rules have sentences of their own, because "Text must equal to ACME" reads
+// wrong.
 const OPTION_LABEL: Record<string, string> = {
     number: 'a number',
     number_integer: 'a whole number',
@@ -52,49 +52,27 @@ const OPTION_LABEL: Record<string, string> = {
     noLaterThan: 'not later than',
 };
 
-// Cell value handed to validateCellData by callers. Canvas passes the
-// formatted/raw cell value (`Cell['v']` flavor) and `updateCell` in cell.ts
-// passes the user-typed innerText.
+// A value checked against a rule: a cell's stored value, or the text the user typed into the cell editor.
 type CellValueForValidation = string | number | boolean | null | undefined;
 
 export function getDropdownList(ctx: Context, txt: string) {
     const list: (string | number | boolean)[] = [];
     if (iscelldata(txt)) {
         const range = getcellrange(ctx, txt);
-        const d = getSheet(ctx, { id: range?.sheetId }).data;
-        if (!d || !range) return [];
+        const data = getSheet(ctx, { id: range?.sheetId }).data;
+        if (!data || !range) return [];
         for (let r = range.row[0]; r <= range.row[1]; r += 1) {
             for (let c = range.column[0]; c <= range.column[1]; c += 1) {
-                if (!d[r]) {
-                    continue;
-                }
-
-                const cell = d[r][c];
+                const cell = data[r]?.[c];
                 const value = cellValue(cell);
-                if (!cell || !value) {
-                    continue;
-                }
-
-                const v = cellDisplay(cell) || value;
-
-                if (!list.includes(v)) {
-                    list.push(v);
-                }
+                if (!cell || !value) continue;
+                const item = cellDisplay(cell) || value;
+                if (!list.includes(item)) list.push(item);
             }
         }
     } else {
-        const arr = txt.split(',');
-
-        for (let i = 0; i < arr.length; i += 1) {
-            const v = arr[i];
-
-            if (v.length === 0) {
-                continue;
-            }
-
-            if (!list.includes(v)) {
-                list.push(v);
-            }
+        for (const item of txt.split(',')) {
+            if (item.length > 0 && !list.includes(item)) list.push(item);
         }
     }
     return list;
@@ -105,7 +83,7 @@ export function validateCellData(ctx: Context, item: DataValidationRule, cellVal
     if (type === 'dropdown') {
         const list = getDropdownList(ctx, value1);
 
-        // for multi-select, check that each value is in the dropdown list
+        // A rule that allows several values stores them comma-separated, and each one must be on the list.
         if (type2 && cellValue != null && cellValue !== '') {
             return String(cellValue)
                 .split(',')
@@ -222,8 +200,7 @@ export function validateCellData(ctx: Context, item: DataValidationRule, cellVal
         if (!isdatetime(cellValue)) {
             return false;
         }
-        // dayjs.ConfigType accepts string|number|Date|Dayjs|null|undefined — coerce
-        // the (narrower) cell value to string so the union stays single-shaped.
+        // diff takes no boolean, so the value goes in as text.
         const dv = String(cellValue ?? '');
 
         if (type2 === 'between' && (diff(dv, value1) < 0 || diff(dv, value2) > 0)) {
@@ -261,43 +238,34 @@ export function validateCellData(ctx: Context, item: DataValidationRule, cellVal
     return true;
 }
 
-// --- Tick boxes -------------------------------------------------------------
-// The rule names the value that counts as checked; the CELL says whether it is.
-// Nothing stores a second flag, so an imported, pasted, typed or
-// formula-produced TRUE renders ticked like any other.
-
-// The engine's canonical boolean display, so a formula-produced TRUE reads as
-// ticked: recalc writes `cell.m` through the same function.
+// A tick box rule names the value that counts as checked, and the cell's value says whether it is. No second flag is
+// stored, so a TRUE that was imported, pasted, typed or computed by a formula shows ticked like any other. These are
+// the engine's own boolean texts, the ones a recalculated formula writes, so a computed TRUE matches.
 export const CHECKBOX_CHECKED_VALUE = booleanDisplay(true);
 export const CHECKBOX_UNCHECKED_VALUE = booleanDisplay(false);
 
 // The tick box's side in px. The painter and the hit test both place it through checkboxRect, so they agree.
 export const CHECKBOX_SIZE = 10;
-// Gap between the box and the label a custom-value rule keeps.
+// The gap between the box and the label beside it.
 export const CHECKBOX_LABEL_GAP = 4;
-// The painter's space_width/space_height cell padding.
+// The same padding the painter keeps inside a cell.
 const CHECKBOX_PADDING = 2;
 
-// The cell's own text area is a plain pixel Rect: origin plus the width/height the
-// painter lays text out in. Callers work in canvas space (painter) or freeze-corrected
-// sheet space (hit test) — the box sits at the same offset either way.
-// A square glyph placed inside that box: the tick box, the list chevron.
+// A square glyph inside a cell's text box, such as the tick box or the list chevron. The painter works in canvas
+// pixels and the hit test in sheet pixels, and the glyph sits at the same offset from the box in both.
 export type CellGlyphRect = { x: number; y: number; size: number };
 
-// The one construction of that box, from the cell's own bounds. The 1px top
-// inset and the 2px the width and height give up are the grid lines the cell
-// must not paint over — what the painter has always clipped and laid text out
-// to. The hit test reads the same box, so the top row a tick box paints answers a click.
+// The box a cell lays its text out in, from the cell's bounds. It leaves out the grid lines: one pixel at the top, and
+// two off the width and the height. The painter and the hit test both use it, so a click lands where the glyph is
+// painted, in the top row too.
 export function cellTextBox(left: number, top: number, right: number, bottom: number): Rect {
     return { left, top: top + 1, width: right - left - 2, height: bottom - top - 2 };
 }
 
-// Whether a tick-box cell draws its value beside the box. A default TRUE/FALSE
-// rule draws the box alone, the way Google does, and an empty cell in the range
-// draws it alone too so the column reads as one. Anything else keeps its label:
-// a custom rule, where it is the only way to tell "Yes" from "No", and any value
-// the rule does not name — applying a tick box over a column of prose must not
-// paint the prose out of existence.
+// Whether a tick-box cell shows its value beside the box. A default TRUE/FALSE rule shows the box alone, as Google
+// Sheets does, and so does an empty cell, so the column looks the same all the way down. A custom rule keeps its label,
+// because the label is the only way to tell "Yes" from "No". A value the rule does not name keeps it too, so a tick box
+// put over a column of text does not hide the text.
 export function showsCheckboxLabel(item: DataValidationRule, cellValue: CellValueForValidation) {
     if (item.value1 !== CHECKBOX_CHECKED_VALUE || item.value2 !== CHECKBOX_UNCHECKED_VALUE) return true;
     if (isRealNull(cellValue)) return false;
@@ -310,9 +278,9 @@ export function isCheckboxChecked(item: DataValidationRule, cellValue: CellValue
     return String(cellValue).toUpperCase() === item.value1.toUpperCase();
 }
 
-// A tick box sits where the cell's own alignment puts it. Else one drawn alone is centred, as in Google Sheets, so a
-// ticked, an unticked and an empty box sit in one place, and one with a label beside it sits left, so the label keeps
-// the cell's width.
+// A tick box sits where the cell's own alignment puts it. Without one, a box shown alone is centered, as in Google
+// Sheets, so ticked, unticked and empty boxes line up. A box with a label sits left, so the label keeps the cell's
+// width.
 export function checkboxAlign(
     cell: Cell | null | undefined,
     rule: DataValidationRule,
@@ -322,9 +290,9 @@ export function checkboxAlign(
     return showsCheckboxLabel(rule, value) ? 1 : 0;
 }
 
-// `horizonAlign` is checkboxAlign's and `verticalAlign` the normalized vt attr
-// (ht 0 center / 1 left / 2 right, vt 0 middle / 1 top / 2 bottom); an empty
-// cell's vt is NaN, which lands on the same middle default the painter uses.
+// The alignments use the cell's codes. For horizonAlign 0 is center, 1 is left and 2 is right. For verticalAlign 0 is
+// middle, 1 is top and 2 is bottom. An empty cell's vertical alignment is NaN, which falls to the middle, as in the
+// painter.
 export function checkboxRect(box: Rect, horizonAlign: number, verticalAlign: number): CellGlyphRect {
     let x = box.left + CHECKBOX_PADDING;
     if (horizonAlign === 0) {
@@ -350,9 +318,8 @@ export function getCellDataValidation(ctx: Context, r: number, c: number) {
     return validationAt(ctx.sheets[index].dataValidations, r, c);
 }
 
-// Only a click on the box toggles — anywhere else in the cell selects it like
-// any other, so a tick box can be copied, extended through and read in the fx
-// bar without flipping.
+// Only a click on the box toggles it. A click anywhere else in the cell just selects the cell, so a tick box can be
+// copied, filled and read in the formula bar without flipping.
 export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
     const rule = getCellDataValidation(ctx, r, c);
     if (rule?.type !== 'checkbox') return false;
@@ -363,45 +330,36 @@ export function isCheckboxClick(ctx: Context, r: number, c: number, box: Rect, x
     return x >= rect.x && x <= rect.x + rect.size && y >= rect.y && y <= rect.y + rect.size;
 }
 
-// Returns whether the cell actually toggled, so the mouse and keyboard callers
-// can fall through to their normal handling when it did not.
+// Returns whether the cell toggled. When it did not, the mouse and keyboard callers go on with their normal handling.
 export function checkboxChange(ctx: Context, r: number, c: number) {
     if (!isAllowEdit(ctx)) return false;
     const item = getCellDataValidation(ctx, r, c);
     if (item?.type !== 'checkbox') return false;
     const d = getFlowdata(ctx);
     if (!d) return false;
-    // A computed check is read-only: writing the literal would eat the formula.
+    // A tick box computed by a formula can't be clicked, because writing a value would replace the formula.
     if (d[r]?.[c]?.f != null) return false;
     const checked = isCheckboxChecked(item, getRealCellValue(r, c, d));
     setCellValue(ctx, r, c, d, checked ? item.value2 : item.value1);
-    // Same tail as the dropdown's setDropdownValue: the write has to
-    // kick dependent formulas, and the mousedown path has not moved the
-    // selection here yet, so name the toggled cell explicitly.
+    // The write must recalculate the formulas that depend on this cell. The mousedown has not moved the selection here
+    // yet, so the toggled cell is named.
     jfrefreshgrid(ctx, d, [{ row: [r, r], column: [c, c] }]);
     return true;
 }
 
-// --- List chevrons ---------------------------------------------------------
-// A list rule paints its chevron on every cell it covers, always — the same
-// deal every other affordance in this engine offers (comment triangle, tick
-// box, filter button). Selection-gating it, as the DOM overlay it replaced did,
-// left keyboard users and read-only viewers with no indicator at all.
-
-// Glyph side in px, and its gap from the cell's right edge.
+// A list rule paints its chevron on every cell it covers, selected or not, as the comment triangle and the filter
+// button are painted. Keyboard users and viewers who can't edit then see the list too. These are the glyph's side in
+// pixels and its gap from the cell's right edge.
 export const DROPDOWN_CHEVRON_SIZE = 8;
 const DROPDOWN_CHEVRON_PADDING = 2;
-// Click target around the 8px glyph, finger-sized the way the filter button's
-// 20×15 rect is around a 12px strainer.
+// The click target around the glyph is wide enough for a finger, as the filter button's is.
 export const DROPDOWN_CHEVRON_HIT_WIDTH = 20;
-// The narrowest text box that still gets a chevron: the glyph, its padding, and
-// as much again clear to its left. Any narrower and the glyph reads as the
-// cell's content rather than a hint about it, so it is dropped — Google's rule.
+// The narrowest text box that still gets a chevron: the glyph, its padding, and as much again clear to its left. In a
+// narrower cell the glyph would look like the cell's content, so it is left out, as Google Sheets does.
 const DROPDOWN_CHEVRON_MIN_WIDTH = DROPDOWN_CHEVRON_SIZE * 2 + DROPDOWN_CHEVRON_PADDING;
 
-// The one geometry the painter (render/cells.ts) and the mousedown hit-test
-// share. Right-aligned and vertically centered whatever the cell's alignment —
-// the chevron marks the cell, it is not part of its content.
+// Where the chevron sits, for the painter and the mousedown hit test alike. It is right-aligned and centered vertically
+// whatever the cell's alignment, because it marks the cell and is not part of its content.
 export function dropdownChevronRect(box: Rect): CellGlyphRect | undefined {
     if (box.width < DROPDOWN_CHEVRON_MIN_WIDTH) return undefined;
     return {
@@ -411,8 +369,8 @@ export function dropdownChevronRect(box: Rect): CellGlyphRect | undefined {
     };
 }
 
-// Clicking the chevron opens the list, like the canvas filter button opens its
-// menu; a click anywhere else in the cell just selects it.
+// A click on the chevron opens the list, as a click on the filter button opens its menu. A click anywhere else in the
+// cell just selects it.
 export function isDropdownChevronClick(ctx: Context, r: number, c: number, box: Rect, x: number, y: number) {
     if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return false;
     const rect = dropdownChevronRect(box);
@@ -459,11 +417,9 @@ export function validationRange(ctx: Context, txt: string): SingleRange | undefi
     return { row: range.row, column: range.column };
 }
 
-// Insert -> Tick box: Google's one-click entry, no dialog. There is nowhere to
-// reconsider the selection, so a header click is bounded to the used extent
-// (clipToUsedExtent) — past it a tick box marks nothing — while a range the user
-// dragged out can still lay a checklist over empty cells. Data -> Data
-// validation keeps the dialog.
+// Insert > Tick box adds a tick box in one click, with no dialog, as in Google Sheets. With no dialog there is no
+// chance to check the range. So a whole column or row selected from its header stops where the sheet's cells stop,
+// because a tick box past them marks nothing. A range the user dragged out can still lay a checklist over empty cells.
 export function insertCheckbox(ctx: Context) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (!selection) return;
@@ -475,16 +431,11 @@ export function insertCheckbox(ctx: Context) {
     });
 }
 
-// --- The in-grid validation card -------------------------------------------
-// What a validated cell has to say: why the value in it was rejected, or what
-// to type. Copy is the HINT_FRAMES table below; the sentence frames slot in a
-// rule-type word and a condition phrase.
-
+// The card a validated cell shows: why its value was rejected, or what to type.
 export type ValidationHint = {
     kind: 'invalid' | 'prompt';
     text: string;
-    // Content coordinates of the cell's bottom-left corner — the card hangs
-    // under the cell, merge extent included.
+    // The card hangs under the cell, a merged cell included. This is the cell's bottom-left corner in content pixels.
     left: number;
     top: number;
 };
@@ -498,39 +449,28 @@ function conditionPhrase(item: DataValidationRule) {
     return `${label} ${value1}`;
 }
 
-// Every rule type gets two sentences: why the value in the cell was rejected, and what to
-// type instead.
+// Each rule type has two sentences: why the value in the cell was rejected, and what to type instead.
+// biome-ignore-start lint/suspicious/noTemplateCurlyInString: replaceHtml fills these ${name} slots, not JavaScript
 const HINT_FRAMES = {
     listInvalid: 'Input must be an item on the specified list.',
     listPrompt: 'Pick an item from the list.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     numberInvalid: 'Input must be ${type} ${condition}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     numberPrompt: 'Enter ${type} ${condition}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     textIncludeInvalid: 'Text must include ${value}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     textIncludePrompt: 'Enter text that includes ${value}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     textExcludeInvalid: 'Text must not include ${value}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     textExcludePrompt: 'Enter text that does not include ${value}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     textEqualInvalid: 'Text must be ${value}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     textEqualPrompt: 'Enter ${value}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     lengthInvalid: 'Text length must be ${condition}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     lengthPrompt: 'Enter text of length ${condition}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     dateInvalid: 'Date must be ${condition}.',
-    // biome-ignore lint/suspicious/noTemplateCurlyInString: ${name} placeholders consumed by replaceHtml() at runtime, not JS template syntax
     datePrompt: 'Enter a date ${condition}.',
 };
+// biome-ignore-end lint/suspicious/noTemplateCurlyInString: replaceHtml fills these ${name} slots, not JavaScript
 
-// Also the copy for the `prohibitInput` warn dialog (modules/cell.ts), so the
-// two ways a rejected value is reported say the same thing.
+// The warning shown when a rule refuses a typed value uses this text too, so both ways of reporting a rejected value
+// say the same thing.
 export function describeValidationRule(item: DataValidationRule, kind: ValidationHint['kind']) {
     const invalid = kind === 'invalid';
     const { type, type2 } = item;
@@ -549,13 +489,11 @@ export function describeValidationRule(item: DataValidationRule, kind: Validatio
     } else if (type === 'date') {
         frame = invalid ? HINT_FRAMES.dateInvalid : HINT_FRAMES.datePrompt;
     }
-    // A tick box can never hold an invalid value and needs no prompt: no frame,
-    // no card.
+    // A tick box can't hold an invalid value and needs no prompt, so it shows no card.
     if (!frame) return '';
 
-    // replaceHtml, not chained String.replace: a rule's value is authored by a
-    // collaborator or carried in from an xlsx, and `$&`/`$1` in a replacement string
-    // are substitution patterns rather than literal text.
+    // A rule's value comes from a collaborator or an imported file, and String.replace would read a `$&` or `$1` in it
+    // as a pattern. replaceHtml puts the value in as plain text.
     return replaceHtml(frame, {
         type: OPTION_LABEL[type] ?? '',
         condition: conditionPhrase(item),
@@ -563,8 +501,8 @@ export function describeValidationRule(item: DataValidationRule, kind: Validatio
     });
 }
 
-// The cell's content-space rectangle, merge extent included — the card hangs off
-// its bottom-left corner and the hidden dropdown anchor sits in it.
+// The cell's rectangle in content pixels, the whole of a merged cell included. The card hangs off its bottom-left
+// corner, and the hidden list anchor sits in it.
 function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number) {
     const rect = {
         top: r === 0 ? 0 : ctx.visibledatarow[r - 1],
@@ -572,19 +510,15 @@ function cellRectAt(ctx: Context, d: CellMatrix, r: number, c: number) {
         left: c === 0 ? 0 : ctx.visibledatacolumn[c - 1],
         right: ctx.visibledatacolumn[c],
     };
-    const margeSet = mergeBorder(ctx, d, r, c);
-    if (margeSet) {
-        [rect.top, rect.bottom] = margeSet.row;
-        [rect.left, rect.right] = margeSet.column;
+    const merge = mergeBorder(ctx, d, r, c);
+    if (merge) {
+        [rect.top, rect.bottom] = merge.row;
+        [rect.left, rect.right] = merge.column;
     }
     return rect;
 }
 
-// The card's whole model — what to say and where — derived from the cell on
-// every render. It replaces a singleton div that a mousedown handler wrote with
-// innerHTML and positioned in raw pixels: that one stranded over the previous
-// cell when you arrowed away, never appeared for a keyboard user, and put any
-// collaborator's rule text into markup.
+// What the card says and where, worked out from the focus cell on every render.
 export function getValidationHint(ctx: Context, r: number, c: number): ValidationHint | undefined {
     const item = getCellDataValidation(ctx, r, c);
     if (!item) return undefined;
@@ -594,8 +528,7 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     const cellValue = getCellValue(r, c, d);
     let kind: ValidationHint['kind'] | undefined;
     let text = '';
-    // A rejection outranks the prompt — it is the more urgent of the two, and
-    // one card serves both.
+    // One card serves both, and a rejection wins because it is more urgent than the prompt.
     if (!isRealNull(cellValue) && !validateCellData(ctx, item, cellValue)) {
         kind = 'invalid';
         text = describeValidationRule(item, 'invalid');
@@ -609,30 +542,28 @@ export function getValidationHint(ctx: Context, r: number, c: number): Validatio
     return { kind, text, left, top: bottom };
 }
 
-// handle cell focus
+// Moves the hidden list anchor onto the focus cell when its rule is a list, and hides it otherwise.
 export function cellFocus(ctx: Context, r: number, c: number) {
-    // Reset first, whoever is looking: a viewer who arrives after a permission
-    // change would otherwise be stuck with whatever the last edit session left.
+    // The list closes for everyone, viewers included. Otherwise a user who lost edit rights would keep a list the last
+    // edit session left open.
     ctx.validationListOpen = false;
     if (!isAllowEdit(ctx)) return;
-    const dropDownBtn = document.getElementById('sheet-validation-list-anchor');
-    if (!dropDownBtn) return;
-    dropDownBtn.style.display = 'none';
+    const anchor = document.getElementById('sheet-validation-list-anchor');
+    if (!anchor) return;
+    anchor.style.display = 'none';
     if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return;
     const d = getFlowdata(ctx);
     if (!d) return;
 
     const { top, bottom, left, right } = cellRectAt(ctx, d, r, c);
 
-    // The Radix anchor, not an indicator: the chevron is canvas paint.
-    dropDownBtn.style.display = 'block';
-    dropDownBtn.style.maxWidth = `${right - left}px`;
-    dropDownBtn.style.maxHeight = `${bottom - top}px`;
-    dropDownBtn.style.left = `${right - 20}px`;
-    dropDownBtn.style.top = `${top + (bottom - top - 20) / 2 - 2}px`;
+    anchor.style.display = 'block';
+    anchor.style.maxWidth = `${right - left}px`;
+    anchor.style.maxHeight = `${bottom - top}px`;
+    anchor.style.left = `${right - 20}px`;
+    anchor.style.top = `${top + (bottom - top - 20) / 2 - 2}px`;
 }
 
-// set the dropdown value
 export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
     if (!ctx.selections) return;
     const d = getFlowdata(ctx);
