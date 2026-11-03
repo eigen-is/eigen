@@ -1,8 +1,8 @@
 // A small summary of who can open a Drive item, for a place such as a Drive row's Shared column or a chat's toolbar.
 // It shows a lock when anyone signed in with the link may open the item, then the first few people's avatars and a
 // count of the rest. An item nobody else has shows an add-person icon on hover, where the caller asks for one. When
-// the caller passes onClick, the summary is a button that opens Share, so the keyboard reaches it. In a row of a list
-// with keyboard navigation, the row's menu key reaches Share instead, and Tab skips the button.
+// the caller passes onClick, the summary is a button that opens Share, so the keyboard reaches it. A caller whose
+// keyboard reaches Share another way, such as a list row's menu key, takes the button out of the Tab order.
 
 import { useDriveAccess } from '@workspace/lib/drive';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -16,9 +16,8 @@ export type DriveShareSummaryProps = {
     onClick?: () => void;
     showIconOnHover?: boolean;
     ancestorBreadcrumb?: DrivePath[];
-    // The summary sits in a row of a list with keyboard navigation, such as Drive's listing, where the row's menu key
-    // reaches Share. Tab then skips the button.
-    inKeyboardList?: boolean;
+    // The button's tabIndex, such as -1 to take it out of the Tab order.
+    tabIndex?: number;
 };
 
 export function DriveShareSummary({
@@ -26,7 +25,7 @@ export function DriveShareSummary({
     onClick,
     showIconOnHover = true,
     ancestorBreadcrumb,
-    inKeyboardList = false,
+    tabIndex,
 }: DriveShareSummaryProps) {
     const { allEntries } = useDriveAccess(path, undefined, ancestorBreadcrumb);
 
@@ -76,7 +75,7 @@ export function DriveShareSummary({
         <button
             type="button"
             aria-label="Share"
-            tabIndex={inKeyboardList ? -1 : undefined}
+            tabIndex={tabIndex}
             className="flex items-center gap-1 cursor-pointer rounded-md outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
             onClick={(e) => {
                 e.stopPropagation();

@@ -132,7 +132,8 @@ export function DriveRow({
                         onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
                         showIconOnHover={!hideShareClick}
                         ancestorBreadcrumb={ancestorBreadcrumb}
-                        inKeyboardList
+                        // The row's menu key reaches Share, so Tab doesn't stop on every row.
+                        tabIndex={-1}
                     />
                 </div>
             )}
