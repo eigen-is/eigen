@@ -1,3 +1,7 @@
+// The mail app's queries and mutations for messages: the paged mailbox list, one message, and the
+// read, flag, move and delete changes. Those four patch the cached lists before the server answers,
+// and the SSE handler skips the echo of a change this tab already patched in.
+
 import type { InfiniteData, QueryClient } from '@tanstack/react-query';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getMailComposeUrl, mailApi } from '@workspace/lib/api';
@@ -119,7 +123,8 @@ export function useDeleteEmail() {
                 'remove',
                 email.mailbox === MAILBOX_TRASH ? SSEventType.MAIL_DELETED : SSEventType.MAIL_MOVED,
             ),
-        onSuccess: (email) => {
+        onSuccess: (email, _email, context) => {
+            refetchUnloadedLists(queryClient, context);
             if (email.mailbox === MAILBOX_TRASH) {
                 queryClient.removeQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             } else {
@@ -162,7 +167,8 @@ export function useToggleReadEmail() {
                 SSEventType.MAIL_READ_CHANGED,
             );
         },
-        onSuccess: (email) => {
+        onSuccess: (email, _vars, context) => {
+            refetchUnloadedLists(queryClient, context);
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             invalidateMailboxes(queryClient, ownerId);
         },
@@ -199,7 +205,10 @@ export function useToggleFlaggedEmail() {
                 SSEventType.MAIL_FLAGS_CHANGED,
             );
         },
-        onSuccess: (email) => queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) }),
+        onSuccess: (email, _vars, context) => {
+            refetchUnloadedLists(queryClient, context);
+            queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
+        },
         onError: (error, _vars, context) => {
             rollbackMailMutation(queryClient, context);
             onMutationError(error);
@@ -223,7 +232,8 @@ export function useMoveEmail() {
         },
         onMutate: ({ email }) =>
             beginOptimisticMailMutation(queryClient, ownerId, email.id, 'remove', SSEventType.MAIL_MOVED),
-        onSuccess: (email, variables) => {
+        onSuccess: (email, variables, context) => {
+            refetchUnloadedLists(queryClient, context);
             queryClient.invalidateQueries({ queryKey: emailKeys.detail(ownerId, email.id) });
             // The target list wasn't optimistically patched (only the source row was removed) — refresh it
             // so the moved message appears there. Usually unmounted → marked stale, refetches on next visit.
@@ -247,7 +257,10 @@ export function useOpenWriteEmailTo() {
 }
 
 type EmailListPatch = ((email: EmailSummary) => EmailSummary) | 'remove';
-type MailMutationContext = { snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][] };
+type MailMutationContext = {
+    snapshot: [readonly unknown[], InfiniteData<EmailSummary[]> | undefined][];
+    unloaded: (readonly unknown[])[];
+};
 
 // Shared optimistic-mutation plumbing for the four mail mutations (move/delete/read/flag): cancel
 // in-flight list fetches, snapshot every cached list for rollback, patch the row by id, and record
@@ -265,12 +278,18 @@ export async function beginOptimisticMailMutation(
     // stuck pending forever — TanStack doesn't auto-restart a canceled query with no fallback data.
     // Kick those back off so a cold-open deep-link (e.g. auto-mark-as-read racing the initial inbox
     // load) can't strand the list on "No emails found" with no self-heal.
-    for (const [key, data] of snapshot) {
-        if (data === undefined) queryClient.refetchQueries({ queryKey: key });
-    }
+    const unloaded = snapshot.filter(([, data]) => data === undefined).map(([key]) => key);
+    for (const key of unloaded) queryClient.refetchQueries({ queryKey: key });
     patchEmailInLists(queryClient, ownerId, messageId, patch);
     markRecentMailMutation(event, messageId);
-    return { snapshot };
+    return { snapshot, unloaded };
+}
+
+// A list restarted above had no row to patch, and its fetch can read the message before the server
+// changes it. The echo would refetch it, but this tab skips that echo and its stream may not be open
+// yet on a cold boot, so each mutation's onSuccess refetches those lists here instead.
+function refetchUnloadedLists(queryClient: QueryClient, context: MailMutationContext | undefined): void {
+    for (const key of context?.unloaded ?? []) queryClient.invalidateQueries({ queryKey: key, exact: true });
 }
 
 function rollbackMailMutation(queryClient: QueryClient, context: MailMutationContext | undefined): void {

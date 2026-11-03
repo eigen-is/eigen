@@ -20,7 +20,7 @@ function trackingClient(): { queryClient: QueryClient; refetched: readonly unkno
     return { queryClient, refetched };
 }
 
-function hasKey(keys: readonly unknown[][], expected: readonly unknown[]): boolean {
+function hasKey(keys: readonly (readonly unknown[])[], expected: readonly unknown[]): boolean {
     return keys.some((key) => JSON.stringify(key) === JSON.stringify(expected));
 }
 
@@ -40,9 +40,17 @@ describe('beginOptimisticMailMutation', () => {
         });
         await Promise.resolve();
 
-        await beginOptimisticMailMutation(queryClient, OWNER, 'msg-1', 'remove', SSEventType.MAIL_DELETED);
+        const context = await beginOptimisticMailMutation(
+            queryClient,
+            OWNER,
+            'msg-1',
+            'remove',
+            SSEventType.MAIL_DELETED,
+        );
 
         expect(hasKey(refetched, key)).toBe(true);
+        // That fetch can read the message before the server changes it, so onSuccess refetches the list again.
+        expect(hasKey(context.unloaded, key)).toBe(true);
     });
 
     test('does not refetch a list that already has cached data', async () => {
@@ -50,8 +58,15 @@ describe('beginOptimisticMailMutation', () => {
         const key = emailKeys.list(OWNER, 'inbox');
         queryClient.setQueryData(key, { pages: [[]], pageParams: [undefined] });
 
-        await beginOptimisticMailMutation(queryClient, OWNER, 'msg-1', 'remove', SSEventType.MAIL_DELETED);
+        const context = await beginOptimisticMailMutation(
+            queryClient,
+            OWNER,
+            'msg-1',
+            'remove',
+            SSEventType.MAIL_DELETED,
+        );
 
         expect(hasKey(refetched, key)).toBe(false);
+        expect(context.unloaded).toEqual([]);
     });
 });
