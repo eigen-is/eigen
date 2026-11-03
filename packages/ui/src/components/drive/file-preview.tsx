@@ -52,7 +52,8 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
 
     const contentRef = useRef<HTMLDivElement>(null);
     // A layer above the preview, such as Save to Drive, a menu or the reader header's details popover, holds the focus
-    // while it is open, so a key pressed outside the preview is that layer's. Escape is Radix's: it closes the top layer.
+    // while it is open. A key pressed outside the preview belongs to that layer. Escape is left to Radix, which closes
+    // the top layer.
     const fromPreview = (event: KeyboardEvent) =>
         event.target instanceof Node && contentRef.current?.contains(event.target) === true;
     // Space closes it again, the way it opened it (Finder's Quick Look), unless a control inside has focus, where
@@ -167,7 +168,8 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                                     className={cn(PREVIEW_PANE_CLASS, 'rounded bg-background')}
                                 />
                             )}
-                            {/* One shape from Drive and mail; the identity picks the query, one hook per component. */}
+                            {/* A Drive item and a mail part preview alike. Each loads through its own hook, so each
+                                has its own component. */}
                             {previewMode === 'text' && drive && <TextPreviewContent path={drive} />}
                             {previewMode === 'text' && subject.mail && <MailTextPreviewContent part={subject.mail} />}
                             {previewMode === 'vcard' && drive && <VCardPreviewContent path={drive} />}
@@ -261,8 +263,9 @@ function TextPreviewBody({ data, isLoading }: { data: TextPreviewResult | undefi
     return (
         <div className={cn(PREVIEW_PANE_CLASS, 'overflow-auto rounded bg-background')}>
             {data.mode === 'eigendoc' ? (
-                // eigen-paper: the page renders light like the editor's; the prose inside escapes the dark rules. It
-                // stacks the figures behind the text on the paper, and cuts one placed past the paper's edge.
+                // eigen-paper draws the page light, as the editor does, and keeps the dark theme's rules off the prose.
+                // `isolate` keeps a figure set behind the text on the paper, and `overflow-hidden` cuts one placed past
+                // the paper's edge.
                 <div
                     className="eigen-paper mx-auto bg-background isolate overflow-hidden"
                     style={{
@@ -339,8 +342,8 @@ function ProgressiveImage({
     const [loadedRatio, setLoadedRatio] = useState<number>();
 
     const ratio = aspectRatio ?? loadedRatio;
-    // Once the ratio is known the box is exactly the image area, so the checkerboard sits only
-    // behind the image: transparent line art stays readable on the dark backdrop.
+    // Once the ratio is known, the box is exactly the image area, so the checkerboard sits only behind the image.
+    // That keeps transparent line art readable on the dark backdrop.
     const style: React.CSSProperties = ratio
         ? {
               width: `min(90vw, calc((100vh - 7rem) * ${ratio}))`,
@@ -351,9 +354,9 @@ function ProgressiveImage({
 
     return (
         <div className="relative rounded" style={style}>
-            {/* Thumbnail: fades out once the preview has faded in over it, since fading both at once
-                lets the checkerboard flash through. It must not stay underneath, or its upscaled
-                edges show through the transparent parts of an SVG or PNG. */}
+            {/* The thumbnail fades out only after the preview has faded in over it, because fading both at once lets
+                the checkerboard flash through. It can't stay underneath either: its upscaled edges would show through
+                the transparent parts of an SVG or PNG. */}
             {thumbnailUrl && (
                 <img
                     src={thumbnailUrl}
@@ -362,7 +365,6 @@ function ProgressiveImage({
                     style={{ opacity: previewReady ? 0 : 1 }}
                 />
             )}
-            {/* Full preview: loads in background, fades in on top when ready */}
             <img
                 src={previewUrl}
                 alt={alt}
@@ -377,7 +379,7 @@ function ProgressiveImage({
     );
 }
 
-// Anchor, not a button: a real href keeps cmd/middle-click opening a new tab when the user asks.
+// An anchor rather than a button, so a Cmd-click or a middle click opens the file in a new tab.
 function FooterButton({ href, children }: { href: string; children: React.ReactNode }) {
     return (
         <a

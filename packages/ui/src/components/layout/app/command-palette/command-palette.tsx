@@ -44,8 +44,8 @@ const NEXT_SCOPE: Record<PaletteScope | 'none', PaletteScope | undefined> = {
 // highlight when the rows change, so the palette sets it itself.
 function firstResultId(sections: Sections): string | undefined {
     if (sections.topHit) return sections.topHit.id;
-    for (const g of sections.groups) {
-        if (g.items.length > 0) return g.items[0].id;
+    for (const group of sections.groups) {
+        if (group.items.length > 0) return group.items[0].id;
     }
     return undefined;
 }
@@ -94,31 +94,31 @@ export function CommandPalette({ ctx }: Props) {
         wasOpenRef.current = open;
     }, [open, setInput, setScope]);
 
-    const renderResult = (r: PaletteResult) => {
+    const renderResult = (result: PaletteResult) => {
         const onSelect = () => {
-            r.run(ctx);
+            result.run(ctx);
             setOpen(false);
         };
-        switch (r.kind) {
+        switch (result.kind) {
             case 'action':
-                return <CommandRowAction key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowAction key={result.id} result={result} onSelect={onSelect} />;
             case 'smart':
-                return <CommandRowSmart key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowSmart key={result.id} result={result} onSelect={onSelect} />;
             case 'contact':
-                return <CommandRowContact key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowContact key={result.id} result={result} onSelect={onSelect} />;
             case 'mail':
-                return <CommandRowMail key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowMail key={result.id} result={result} onSelect={onSelect} />;
             case 'file':
-                return <CommandRowFile key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowFile key={result.id} result={result} onSelect={onSelect} />;
             case 'doc-hit':
-                return <CommandRowDocHit key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowDocHit key={result.id} result={result} onSelect={onSelect} />;
             case 'doc-comment-hit':
-                return <CommandRowDocCommentHit key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowDocCommentHit key={result.id} result={result} onSelect={onSelect} />;
             case 'help':
-                return <CommandRowHelp key={r.id} result={r} onSelect={onSelect} />;
+                return <CommandRowHelp key={result.id} result={result} onSelect={onSelect} />;
             default: {
                 // A new kind of result without a row fails to compile here, and fails loudly if it gets through.
-                const unhandled: never = r;
+                const unhandled: never = result;
                 throw new Error(`Unhandled palette result: ${JSON.stringify(unhandled)}`);
             }
         }
@@ -134,8 +134,8 @@ export function CommandPalette({ ctx }: Props) {
                     shouldFilter={false}
                     value={selectedValue}
                     onValueChange={setSelectedValue}
-                    // The gutter sits inside the list's scroller so results clear the overlay scrollbar; each
-                    // group reaches back out by its items' px-2, so item text lines up with the search icon.
+                    // The gutter sits inside the list's scroller, so the results clear the overlay scrollbar. Each
+                    // group reaches back out by its items' padding, so an item's text lines up with the search icon.
                     className="[&_[data-slot=command-group]]:-mx-2 [&_[data-slot=command-group]]:px-0 [&_[data-slot=command-input-wrapper]]:px-(--app-gutter-x)"
                 >
                     {scope && (
@@ -149,7 +149,7 @@ export function CommandPalette({ ctx }: Props) {
                         onKeyDown={handleKeyDown}
                         placeholder="Search and jump anywhere…"
                     />
-                    {/* Fixed height keeps the dialog from jumping as the result set shrinks/grows. */}
+                    {/* A fixed height keeps the dialog still while the number of results changes. */}
                     <CommandList ref={listRef} className="h-[420px] max-h-[420px] app-gutter-x">
                         <CommandEmpty>
                             {docScopeNoDoc ? 'Open a document to search inside it' : 'No results.'}
@@ -157,9 +157,9 @@ export function CommandPalette({ ctx }: Props) {
                         {sections.topHit && (
                             <CommandGroup heading="Top hit">{renderResult(sections.topHit)}</CommandGroup>
                         )}
-                        {sections.groups.map((g) => (
-                            <CommandGroup key={g.id} heading={g.heading}>
-                                {g.items.map(renderResult)}
+                        {sections.groups.map((group) => (
+                            <CommandGroup key={group.id} heading={group.heading}>
+                                {group.items.map(renderResult)}
                             </CommandGroup>
                         ))}
                     </CommandList>
