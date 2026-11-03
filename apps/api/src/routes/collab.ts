@@ -16,7 +16,7 @@ import type { EffectiveMember } from '@workspace/lib/types/drive';
 import { stripEigenExtension } from '@workspace/lib/types/drive';
 import { Elysia, t } from 'elysia';
 import type { ServerWebSocket } from 'elysia/ws/bun';
-import { withCommentIndex } from '../lib/chat/comment-index';
+import { withCommentIndex } from '../lib/chat';
 import { broadcastCommentIndexUpdated } from '../lib/chat/sse-events';
 import type { CollabDocument } from '../lib/collab/collab-document';
 import { collabEpochMessage } from '../lib/collab/epoch';
