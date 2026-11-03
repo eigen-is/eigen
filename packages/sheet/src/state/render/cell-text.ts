@@ -1,8 +1,7 @@
-// Paints the laid-out text of one cell (modules/text.ts computes the layout;
-// nothing here measures or wraps), plus the overflow-span variant that draws a
-// source cell's text clipped to its full spill range.
+// Paints the text of one cell on the grid canvas, with its strikethrough and underlines, from a layout getCellTextInfo
+// worked out before: nothing here measures or wraps. The cell painter calls it for each cell. cellOverflowRender paints
+// the text of a cell that spills into its empty neighbors, clipped to the cells it spills over.
 
-import { isPlainObject } from 'es-toolkit/compat';
 import { normalizedAttr } from '../modules/cell';
 import { checkCF } from '../modules/condition-format';
 import { cellTextBox } from '../modules/data-validation';
@@ -10,10 +9,6 @@ import type { CellTextInfo } from '../modules/text';
 import { getCellTextInfo, getFontSet } from '../modules/text';
 import { colEndX, colStartX, rowEndY, rowStartY } from './geometry';
 import type { RenderPass } from './types';
-
-function isInlineStyle(value: unknown): value is { fontset: string; fc: string } {
-    return typeof value === 'object' && value !== null && 'fontset' in value && 'fc' in value;
-}
 
 // `origin` is where the sheet's top-left corner falls on the canvas. The strikethrough and underline snap to
 // the sheet's pixel grid, not the canvas's, so they move with the text when a scroll moves by half a pixel.
@@ -42,44 +37,25 @@ export function cellTextRender(
         ctx.translate(-(textLeftAll + pos_x), -(pos_y + textTopAll));
     }
 
-    for (let i = 0; i < values.length; i += 1) {
-        const word = values[i];
-        const style = word.style;
-        if (word.inline === true && isInlineStyle(style)) {
+    for (const word of values) {
+        const { style } = word;
+        if (typeof style === 'string') {
+            ctx.font = style;
+        } else if (word.inline === true) {
             ctx.font = style.fontset;
             ctx.fillStyle = style.fc;
-        } else if (typeof style === 'string') {
-            ctx.font = style;
         }
 
-        const txt = isPlainObject(word.content)
-            ? String((word.content as { m?: unknown }).m ?? '')
-            : String(word.content);
-        ctx.fillText(txt, pos_x + word.left, pos_y + word.top);
+        ctx.fillText(word.content, pos_x + word.left, pos_y + word.top);
 
-        if (word.cancelLine) {
-            const c = word.cancelLine;
+        for (const line of [word.cancelLine ?? [], word.underLine ?? []].flat()) {
             ctx.beginPath();
-            ctx.moveTo(snapX(pos_x + c.startX) + 0.5, snapY(pos_y + c.startY) + 0.5);
-            ctx.lineTo(snapX(pos_x + c.endX) + 0.5, snapY(pos_y + c.endY) + 0.5);
-            ctx.lineWidth = Math.floor(c.fs / 9);
+            ctx.moveTo(snapX(pos_x + line.startX) + 0.5, snapY(pos_y + line.startY) + 0.5);
+            ctx.lineTo(snapX(pos_x + line.endX) + 0.5, snapY(pos_y + line.endY) + 0.5);
+            ctx.lineWidth = Math.floor(line.fs / 9);
             ctx.strokeStyle = ctx.fillStyle;
             ctx.stroke();
             ctx.closePath();
-        }
-
-        if (word.underLine) {
-            const underLines = word.underLine;
-            for (let a = 0; a < underLines.length; a += 1) {
-                const item = underLines[a];
-                ctx.beginPath();
-                ctx.moveTo(snapX(pos_x + item.startX) + 0.5, snapY(pos_y + item.startY) + 0.5);
-                ctx.lineTo(snapX(pos_x + item.endX) + 0.5, snapY(pos_y + item.endY) + 0.5);
-                ctx.lineWidth = Math.floor(item.fs / 9);
-                ctx.strokeStyle = ctx.fillStyle;
-                ctx.stroke();
-                ctx.closePath();
-            }
         }
     }
     if (rotated) {
@@ -87,19 +63,16 @@ export function cellTextRender(
     }
 }
 
-// Overflow cell rendering
-export function cellOverflowRender(pass: RenderPass, r: number, c: number, stc: number, edc: number) {
+// `startColumn` and `endColumn` are the first and last columns the text spills over.
+export function cellOverflowRender(pass: RenderPass, r: number, c: number, startColumn: number, endColumn: number) {
     const { sheetCtx, renderCtx, scrollHeight, scrollWidth, offsetLeft, offsetTop, cfCompute, flowdata } = pass;
-    // Overflow cell start/end row/column coordinates
     const startY = rowStartY(sheetCtx.visibledatarow, r, scrollHeight);
     const endY = rowEndY(sheetCtx.visibledatarow, r, scrollHeight);
-    const startX = colStartX(sheetCtx.visibledatacolumn, stc, scrollWidth);
-    const endX = colEndX(sheetCtx.visibledatacolumn, edc, scrollWidth);
+    const startX = colStartX(sheetCtx.visibledatacolumn, startColumn, scrollWidth);
+    const endX = colEndX(sheetCtx.visibledatacolumn, endColumn, scrollWidth);
 
     const cell = flowdata[r][c];
-    // The same box the painter and the hit test build for a single cell, over the
-    // full spill range: the 1px top inset and the 2px the width and height give up
-    // are the grid lines the text must not run over.
+    // The text box of a single cell, stretched over the whole spill, so the text stays off the grid lines.
     const {
         left: pos_x,
         top: pos_y,
@@ -129,7 +102,6 @@ export function cellOverflowRender(pass: RenderPass, r: number, c: number, stc: 
 
     const checksCF = checkCF(r, c, cfCompute);
 
-    // Cell text color
     renderCtx.fillStyle = normalizedAttr(flowdata, r, c, 'fc');
 
     if (checksCF?.textColor) {

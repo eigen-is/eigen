@@ -39,7 +39,7 @@ import {
     validationAt,
     validationLookup,
 } from '../../../state/modules/validation-rules';
-import type { Cell, DataRegulationProps, DataValidationRule } from '../../../state/types';
+import type { Cell, DataValidationDraft, DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { cellsWithRules, validationsByCell } from '../factories/validations';
 
@@ -582,7 +582,7 @@ describe('isDropdownChevronClick', () => {
 // validationValueProblem checks the dialog's rule before it is written. Every branch must refuse what it complains
 // about: the dropdown and checkbox branches used to warn and fall through, so an empty rule was applied anyway and the
 // range rendered as `☐ FALS`. An empty-valued rule is not a default TRUE/FALSE rule, so the painter drew the label too.
-const draft = (rule: Partial<DataRegulationProps>): DataRegulationProps => ({
+const draft = (rule: Partial<DataValidationDraft>): DataValidationDraft => ({
     type: 'dropdown',
     type2: '',
     rangeTxt: 'A1:A3',

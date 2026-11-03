@@ -39,7 +39,7 @@ import {
     ValidationLimitError,
 } from '../../state';
 import { useSheetContextMenu } from '../ContextMenu/useSheetContextMenu';
-import { DropDownList } from '../DataValidation/DropdownList';
+import { DropdownList } from '../DataValidation/DropdownList';
 import { ValidationHintCard } from '../DataValidation/HintCard';
 import { FloatingObjects } from '../FloatingObjects';
 import { LinkEditCard } from '../LinkEditCard';
@@ -475,7 +475,7 @@ export const SheetOverlay: React.FC = () => {
                             passive regions, so it keeps painting under the selection
                             tints (old z-10 vs z-14/15). */}
                         <OverlayRegion {...dvRegion}>
-                            <DropDownList />
+                            <DropdownList />
                         </OverlayRegion>
                         {regions.map(({ pane, ...rect }) => (
                             <OverlayRegion key={pane} {...rect}>

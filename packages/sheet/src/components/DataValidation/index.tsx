@@ -15,7 +15,7 @@ import type React from 'react';
 import { useContext, useId, useState } from 'react';
 import { WorkbookContext } from '../../context';
 import { useDialog, useDialogProps } from '../../hooks/useDialog';
-import type { Context, DataRegulationProps, RangeOrWholeAxis } from '../../state';
+import type { Context, DataValidationDraft, RangeOrWholeAxis } from '../../state';
 import {
     api,
     applyDataValidation,
@@ -85,7 +85,7 @@ type TextField = 'rangeTxt' | 'value1' | 'value2' | 'hintValue';
 type Problem = { field: 'range' | 'value'; message: string };
 
 // `draft` is the rule as the user left it when the range picker took this dialog's place.
-export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulationProps }) {
+export function DataValidation({ draft: reopenedDraft }: { draft?: DataValidationDraft }) {
     const { context, setContext } = useContext(WorkbookContext);
     const dialogProps = useDialogProps();
     const { showDialog, showNonModalDialog, hideDialog } = useDialog();
@@ -94,7 +94,7 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
     const problemId = useId();
 
     // A change to the draft takes back the message about it.
-    const update = (change: Partial<DataRegulationProps>) => {
+    const update = (change: Partial<DataValidationDraft>) => {
         setDraft((prev) => ({ ...prev, ...change }));
         setProblem(undefined);
     };
@@ -219,9 +219,9 @@ export function DataValidation({ draft: reopenedDraft }: { draft?: DataRegulatio
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                {VALIDATION_TYPES.map((v) => (
-                                    <SelectItem value={v.value} key={v.value}>
-                                        {v.label}
+                                {VALIDATION_TYPES.map((type) => (
+                                    <SelectItem value={type.value} key={type.value}>
+                                        {type.label}
                                     </SelectItem>
                                 ))}
                             </SelectContent>
@@ -385,9 +385,9 @@ function ConditionSelect({
                 <SelectValue />
             </SelectTrigger>
             <SelectContent>
-                {conditions.map((v) => (
-                    <SelectItem value={v.value} key={v.value}>
-                        {v.label}
+                {conditions.map((condition) => (
+                    <SelectItem value={condition.value} key={condition.value}>
+                        {condition.label}
                     </SelectItem>
                 ))}
             </SelectContent>
@@ -397,7 +397,7 @@ function ConditionSelect({
 
 // The draft the dialog opens on: the focus cell's rule, or a new list, over the selection. A column or row header's
 // selection is named B:B or 2:2, so the rule covers the whole column or row.
-function draftAtSelection(context: Context): DataRegulationProps {
+function draftAtSelection(context: Context): DataValidationDraft {
     const last = context.selections?.at(-1);
     const named: RangeOrWholeAxis | undefined =
         last?.column_select && !last.row_select

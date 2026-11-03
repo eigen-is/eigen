@@ -100,20 +100,22 @@ const HOVER_REVEAL =
     /(?<!pointer-fine:)\bgroup-hover(?:\/[\w-]+)?:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
 
 // The same section keeps these controls in reach of the keyboard. Tab skips a control under `invisible` or `hidden`,
-// so a hover reveal hides with `opacity-0`. A reveal on `focus-within:` keeps a control shown after a mouse click,
-// once the pointer has left. So a class string is a hit when a `group-hover:` makes a bare `invisible` visible or
-// displays a bare `hidden`, or when it reveals on `focus-within:` or `group-focus-within:`. A `hidden md:flex` beside
-// an unrelated `group-hover:` reveals nothing. A hint the pointer always passes through, `pointer-events-none` with no
+// so a hover reveal hides with `opacity-0`. A reveal on `focus:` or `focus-within:` keeps a control shown after a mouse
+// click, once the pointer has left. So a class string is a hit when a `group-hover:` makes a bare `invisible` visible or
+// displays a bare `hidden`, or when it reveals on `focus:`, `focus-within:` or their `group-` forms. `focus-visible:`
+// and `group-has-focus-visible:` show only for the keyboard and pass. A `hidden md:flex` beside an unrelated
+// `group-hover:` reveals nothing. A hint the pointer always passes through, `pointer-events-none` with no
 // `pointer-events-auto`, holds no control.
 const TAB_SKIPPED_REVEALS = [
     [/(?<![\w:[-])invisible(?![\w-])/, /\bgroup-hover(?:\/[\w-]+)?:visible(?![\w-])/],
     [/(?<![\w:[-])hidden(?![\w-])/, /\bgroup-hover(?:\/[\w-]+)?:(?:flex|grid|block|inline-flex|inline-block)(?![\w-])/],
 ];
-const FOCUS_WITHIN_REVEAL = /(?<![\w-])(?:group-)?focus-within(?:\/[\w-]+)?:(?:opacity-\d+|visible)(?![\w-])/;
+const FOCUS_REVEAL =
+    /(?<![\w-])(?:group-)?focus(?:-within)?(?:\/[\w-]+)?:(?:opacity-\d+|visible|flex|grid|block|inline-flex|inline-block)(?![\w-])/;
 const POINTER_PASSES = /(?<![\w:-])pointer-events-none(?![\w-])/;
 
 function keyboardHostileReveal(literal: string): boolean {
-    if (FOCUS_WITHIN_REVEAL.test(literal)) return true;
+    if (FOCUS_REVEAL.test(literal)) return true;
     if (POINTER_PASSES.test(literal) && !literal.includes('pointer-events-auto')) return false;
     return TAB_SKIPPED_REVEALS.some(([hide, reveal]) => hide.test(literal) && reveal.test(literal));
 }

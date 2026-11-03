@@ -16,26 +16,32 @@ import { applyColorScalePreset, applyDataBarPreset, CF_PRESETS, clearSheetRules 
 import { ConditionRules, RULE_COPY } from '../ConditionFormat/ConditionRules';
 import { ManageRules } from '../ConditionFormat/ManageRules';
 
-// The label is RULE_COPY's, so the menu row and the dialog it opens can't drift.
-type ConditionRuleItem = { text: ConditionRuleType; value: string };
+// The label is RULE_COPY's, so the menu row and the dialog it opens can't drift. The hint is the short text the row
+// shows after the label.
+type ConditionRuleItem = { type: ConditionRuleType; hint: string };
 
 const HIGHLIGHT_CELL_RULES: ConditionRuleItem[] = [
-    { text: 'greaterThan', value: '>' },
-    { text: 'lessThan', value: '<' },
-    { text: 'between', value: '[]' },
-    { text: 'equal', value: '=' },
-    { text: 'textContains', value: '()' },
-    { text: 'occurrenceDate', value: 'YTD' },
-    { text: 'duplicateValue', value: '##' },
+    { type: 'greaterThan', hint: '>' },
+    { type: 'lessThan', hint: '<' },
+    { type: 'between', hint: '[]' },
+    { type: 'equal', hint: '=' },
+    { type: 'textContains', hint: '()' },
+    { type: 'occurrenceDate', hint: 'YTD' },
+    { type: 'duplicateValue', hint: '##' },
 ];
 
 const ITEM_SELECTION_RULES: ConditionRuleItem[] = [
-    { text: 'top10', value: 'Top 10' },
-    { text: 'top10_percent', value: 'Top 10%' },
-    { text: 'last10', value: 'Last 10' },
-    { text: 'last10_percent', value: 'Last 10%' },
-    { text: 'aboveAverage', value: 'Above' },
-    { text: 'belowAverage', value: 'Below' },
+    { type: 'top10', hint: 'Top 10' },
+    { type: 'top10_percent', hint: 'Top 10%' },
+    { type: 'last10', hint: 'Last 10' },
+    { type: 'last10_percent', hint: 'Last 10%' },
+    { type: 'aboveAverage', hint: 'Above' },
+    { type: 'belowAverage', hint: 'Below' },
+];
+
+const RULE_SUBMENUS = [
+    { title: 'Highlight cell rules', rules: HIGHLIGHT_CELL_RULES },
+    { title: 'Item selection rules', rules: ITEM_SELECTION_RULES },
 ];
 
 // Each label names the stops in the order the swatch draws them: the color of the highest value first.
@@ -63,13 +69,18 @@ const DATA_BAR_PRESETS = [
     { key: 'solidColorDataBar_6', label: 'Purple data bar' },
 ];
 
-function ColorScaleSwatch({ presetKey }: { presetKey: string }) {
+const PRESET_SUBMENUS = [
+    { title: 'Color scale', presets: COLOR_SCALE_PRESETS, apply: applyColorScalePreset },
+    { title: 'Data bar', presets: DATA_BAR_PRESETS, apply: applyDataBarPreset },
+];
+
+// The colors of a color scale from the highest value's down, or a data bar's one color. A preset never repeats a color.
+function PresetSwatch({ presetKey }: { presetKey: string }) {
     const colors = CF_PRESETS[presetKey] ?? [];
     return (
         <div className="flex w-12 h-4 rounded-sm overflow-hidden border border-border">
-            {colors.map((c, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: static palette — order is meaningful, no stable id
-                <div key={`${presetKey}-${i}`} className="flex-1" style={{ backgroundColor: c }} />
+            {colors.map((color) => (
+                <div key={color} className="flex-1" style={{ backgroundColor: color }} />
             ))}
         </div>
     );
@@ -83,73 +94,35 @@ export function ConditionalFormattingSubmenu() {
         <DropdownMenuSub>
             <DropdownMenuSubTrigger>Conditional formatting</DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Highlight cell rules</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {HIGHLIGHT_CELL_RULES.map((v) => (
-                            <DropdownMenuItem
-                                key={v.text}
-                                onClick={() => {
-                                    showDialog(<ConditionRules type={v.text} />);
-                                }}
-                            >
-                                <div className="flex items-center justify-between w-full">
-                                    <span>{RULE_COPY[v.text].label}</span>
-                                    <span className="text-xs opacity-50 ml-4">{v.value}</span>
-                                </div>
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {RULE_SUBMENUS.map(({ title, rules }) => (
+                    <DropdownMenuSub key={title}>
+                        <DropdownMenuSubTrigger>{title}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="sheet-mousedown-cancel">
+                            {rules.map(({ type, hint }) => (
+                                <DropdownMenuItem key={type} onClick={() => showDialog(<ConditionRules type={type} />)}>
+                                    <div className="flex items-center justify-between w-full">
+                                        <span>{RULE_COPY[type].label}</span>
+                                        <span className="text-xs opacity-50 ml-4">{hint}</span>
+                                    </div>
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                ))}
 
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Item selection rules</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {ITEM_SELECTION_RULES.map((v) => (
-                            <DropdownMenuItem
-                                key={v.text}
-                                onClick={() => {
-                                    showDialog(<ConditionRules type={v.text} />);
-                                }}
-                            >
-                                <div className="flex items-center justify-between w-full">
-                                    <span>{RULE_COPY[v.text].label}</span>
-                                    <span className="text-xs opacity-50 ml-4">{v.value}</span>
-                                </div>
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
-
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Color scale</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {COLOR_SCALE_PRESETS.map(({ key, label }) => (
-                            <DropdownMenuItem
-                                key={key}
-                                onClick={() => setContext((draftCtx) => applyColorScalePreset(draftCtx, key))}
-                            >
-                                <ColorScaleSwatch presetKey={key} />
-                                <span>{label}</span>
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
-
-                <DropdownMenuSub>
-                    <DropdownMenuSubTrigger>Data bar</DropdownMenuSubTrigger>
-                    <DropdownMenuSubContent className="sheet-mousedown-cancel">
-                        {DATA_BAR_PRESETS.map(({ key, label }) => (
-                            <DropdownMenuItem
-                                key={key}
-                                onClick={() => setContext((draftCtx) => applyDataBarPreset(draftCtx, key))}
-                            >
-                                <ColorScaleSwatch presetKey={key} />
-                                <span>{label}</span>
-                            </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuSubContent>
-                </DropdownMenuSub>
+                {PRESET_SUBMENUS.map(({ title, presets, apply }) => (
+                    <DropdownMenuSub key={title}>
+                        <DropdownMenuSubTrigger>{title}</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="sheet-mousedown-cancel">
+                            {presets.map(({ key, label }) => (
+                                <DropdownMenuItem key={key} onClick={() => setContext((ctx) => apply(ctx, key))}>
+                                    <PresetSwatch presetKey={key} />
+                                    <span>{label}</span>
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                ))}
 
                 <DropdownMenuSeparator />
 

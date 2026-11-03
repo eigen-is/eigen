@@ -92,6 +92,72 @@ test('Format › Conditional formatting › Manage rules opens the rules list as
     expect(dialogTitles()).toEqual(['Manage rules']);
 });
 
+// How many color stripes each row's swatch in the open submenu has.
+const presetSwatches = () =>
+    [...([...document.querySelectorAll('[role="menu"]')].at(-1)?.querySelectorAll('[role="menuitem"]') ?? [])].map(
+        (row) => row.querySelector('div')?.childElementCount,
+    );
+
+test('Format › Conditional formatting offers its rule and preset rows', async () => {
+    const container = await mountWorkbook();
+    await openConditionalFormatting(container);
+    expect(actionRows()).toEqual([
+        'Highlight cell rules',
+        'Item selection rules',
+        'Color scale',
+        'Data bar',
+        'Manage rules',
+        'Delete rule',
+    ]);
+    const rowsOf = async (submenu: string) => {
+        await cleanup?.();
+        await openConditionalFormatting(await mountWorkbook());
+        await openSubmenu(submenu);
+        return actionRows();
+    };
+    expect(await rowsOf('Highlight cell rules')).toEqual([
+        'Greater than>',
+        'Less than<',
+        'Between[]',
+        'Equal to=',
+        'Text contains()',
+        'Date isYTD',
+        'Duplicate value##',
+    ]);
+    expect(await rowsOf('Item selection rules')).toEqual([
+        'Top 10Top 10',
+        'Top 10%Top 10%',
+        'Last 10Last 10',
+        'Last 10%Last 10%',
+        'Above averageAbove',
+        'Below averageBelow',
+    ]);
+    expect(await rowsOf('Color scale')).toEqual([
+        'Red-yellow-green color gradation',
+        'Green-yellow-red color gradation',
+        'Red-white-green color gradation',
+        'Green-white-red color gradation',
+        'Red-white-blue color gradation',
+        'Blue-white-red color gradation',
+        'Red-white color gradation',
+        'White-red color gradation',
+        'White-green color gradation',
+        'Green-white color gradation',
+        'Yellow-green color gradation',
+        'Green-yellow color gradation',
+    ]);
+    expect(presetSwatches()).toEqual([3, 3, 3, 3, 3, 3, 2, 2, 2, 2, 2, 2]);
+    expect(await rowsOf('Data bar')).toEqual([
+        'Blue data bar',
+        'Green data bar',
+        'Red data bar',
+        'Orange data bar',
+        'Light blue data bar',
+        'Purple data bar',
+    ]);
+    expect(presetSwatches()).toEqual([1, 1, 1, 1, 1, 1]);
+});
+
 test('Format › Conditional formatting › Delete rule holds only Delete sheet rules', async () => {
     const container = await mountWorkbook();
     await openConditionalFormatting(container);

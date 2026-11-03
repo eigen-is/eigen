@@ -26,7 +26,7 @@ The fork's class and id prefix is `sheet-`. One engine-private class keeps a bar
           <InputBox>                            SheetOverlay/InputBox.tsx   (ContentEditable over canvas)
           <FloatingObjects>                     FloatingObjects/index.tsx
           <LinkEditCard>                        LinkEditCard/index.tsx
-          <DropDownList>                        DataValidation/DropdownList.tsx
+          <DropdownList>                        DataValidation/DropdownList.tsx
           cell right-click menu anchor          ContextMenu/useSheetContextMenu.tsx (shared ContextMenuAnchor; column/row anchors live in the headers)
       <SheetTab>                                SheetTab/index.tsx         (React)
         <SheetItem> per sheet                   SheetTab/SheetItem.tsx     (shadcn ContextMenu + DropdownMenu)
