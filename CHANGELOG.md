@@ -110,6 +110,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Conditional format values in Sheets** — a rule refuses text where it needs a number and a Between rule with one value
 - **Hiding the last sheet** — Sheets says a workbook always shows at least one sheet, instead of talking about deleting it
 - **Message details in Mail** — the details under a sender read From, Reply-to, To, Cc, Bcc, Date and Subject, in the reader and the .eml preview
+- **Opening an email from a notification** — an email you open from the bell shows as read in the Mail list after you move on to another one, without a reload
 - **Custom sort in Sheets** — with **Data has a header row** ticked, the header row stays where it is
 - **Picking a range in Sheets** — choosing cells on the grid in Data validation or the link editor keeps the rest of what you typed, and opening another dialog meanwhile no longer leaves the cell editor hidden. **Delete validation** with no range says why
 - **Formats from the keyboard in Sheets** — in the custom number, date and currency formats, Tab moves to a preset or a currency and Enter picks it
