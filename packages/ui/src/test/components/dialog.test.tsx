@@ -195,7 +195,8 @@ test('a closing menu hands the list to the dialog it opened without taking the f
     expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
 });
 
-// A menu with its own trigger, such as an app's File menu, focuses that trigger as it closes, while the dialog is open.
+// A dropdown menu with its own trigger, such as a toolbar's ⋮ menu, focuses that trigger as it closes, while the dialog
+// is open. A bar menu doesn't, and hands its trigger to the dialog instead, which the app bar menu's own test covers.
 test('a dialog opened from a menu with its own trigger gives the focus back to the trigger', async () => {
     const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } = await import(
         '../../components/dropdown-menu'

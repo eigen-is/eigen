@@ -276,3 +276,76 @@ test("the caret keys in the Filter menu's person search stay in the box", async 
         expect(document.activeElement).toBe(search);
     }
 });
+
+// File › Rename opens a dialog the menu doesn't hold, as FileMenu does. The row is gone once the menu closes, and a bar
+// menu doesn't focus its trigger when the dialog took the focus, so the dialog has nowhere to give the focus back. An
+// editor's handler, such as Docs' or Sheets', keeps the focus where a dialog put it.
+async function renderFileMenu(onCloseAutoFocus?: (event: Event) => void) {
+    const { useState } = await import('react');
+    const { Dialog, DialogContent, DialogTitle } = await import('../../../../components/dialog');
+    function Bar() {
+        const [renameOpen, setRenameOpen] = useState(false);
+        return createElement(
+            'div',
+            null,
+            createElement(
+                Menubar,
+                null,
+                createElement(AppBarMenu, {
+                    label: 'File',
+                    onCloseAutoFocus,
+                    children: createElement(DropdownMenuItem, { onClick: () => setRenameOpen(true) }, 'Rename'),
+                }),
+            ),
+            createElement(
+                Dialog,
+                { open: renameOpen, onOpenChange: setRenameOpen },
+                createElement(
+                    DialogContent,
+                    { 'aria-describedby': undefined },
+                    createElement(DialogTitle, null, 'Rename'),
+                    createElement('input', { autoFocus: true }),
+                ),
+            ),
+        );
+    }
+    window.happyDOM.setViewport({ width: 1600, height: 900 });
+    ({ unmount } = await renderInDocument(createElement(Bar)));
+}
+
+const settle = () => act(() => new Promise((resolve) => setTimeout(resolve, 10)));
+
+test('Escape from a dialog that a bar menu’s row opened gives the focus back to the menu’s trigger', async () => {
+    const { focusLeftToEditor } = await import('../../../../components/menubar');
+    const editor = document.createElement('div');
+    const keepEditorFocus = (event: Event) => {
+        event.preventDefault();
+        if (focusLeftToEditor()) editor.focus();
+    };
+    for (const [onCloseAutoFocus, opener] of [
+        [undefined, 'press'],
+        [keepEditorFocus, 'press'],
+        [keepEditorFocus, 'Enter'],
+    ] as const) {
+        await renderFileMenu(onCloseAutoFocus);
+        if (opener === 'press') {
+            await press('File');
+        } else {
+            const file = trigger('File');
+            if (file instanceof HTMLElement) file.focus();
+            await key('Enter');
+        }
+        await settle();
+        await clickRow('Rename');
+        await settle();
+        expect(document.activeElement?.tagName).toBe('INPUT');
+        await key('Escape');
+        await settle();
+        expect([opener, document.activeElement?.tagName, document.activeElement === trigger('File')]).toEqual([
+            opener,
+            'BUTTON',
+            true,
+        ]);
+        await unmount();
+    }
+});

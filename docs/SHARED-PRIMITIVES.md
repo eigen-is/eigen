@@ -5,7 +5,7 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2121 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2122 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
@@ -1003,7 +1003,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1154)
+## Utilities & constants (1155)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2141,6 +2141,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `OPEN_MENU` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `handFocusReturnTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `returnFocusTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |

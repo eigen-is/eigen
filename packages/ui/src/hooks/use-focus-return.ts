@@ -1,8 +1,8 @@
 // Gives the focus back when a Radix dialog closes, such as a DialogContent or the file preview. Radix gives the focus
 // back only to a DialogTrigger. A dialog opened from a menu or by a key would leave it on the page body, and a list's
 // arrow keys would then do nothing until a click. The dialog calls this hook as it opens and passes what it returns as
-// its onCloseAutoFocus. A closing context menu calls returnFocusTo, which hands its list to a dialog one of its rows
-// opened.
+// its onCloseAutoFocus. A closing menu calls returnFocusTo or handFocusReturnTo, which hand its list or its trigger to
+// a dialog one of its rows opened.
 
 import type { RefObject } from 'react';
 import { useLayoutEffect, useState } from 'react';
@@ -29,7 +29,8 @@ export function useFocusReturn(
     const [entry] = useState<FocusReturn>(() => ({ content, target: focusedElement() }));
 
     // A menu row that opened the dialog is gone a moment later. A context menu hands its list over through
-    // returnFocusTo, but a menu with its own Radix trigger focuses that trigger as it closes. The first element outside
+    // returnFocusTo and a bar menu its trigger through handFocusReturnTo, but a dropdown menu with its own Radix trigger
+    // focuses that trigger as it closes. The first element outside
     // every open dialog that takes the focus then becomes the target. A target still on the page stays, and a field in
     // a dialog opened over this one never becomes it.
     useLayoutEffect(() => {
@@ -61,12 +62,15 @@ export function useFocusReturn(
 // opened would make its focus trap take it back and select its text. The row that opened that dialog is gone, so the
 // dialog gives the focus back to `target` when it closes.
 export function returnFocusTo(target: HTMLElement) {
-    const focused = focusedElement();
-    if (focused) {
-        const holder = [...openDialogs].find((open) => open.content.current?.contains(focused));
-        if (holder && !holder.target?.isConnected) holder.target = target;
-        return;
-    }
     // A list taller than the window keeps its scroll, as Radix's own focus does.
-    target.focus({ preventScroll: true });
+    if (focusedElement()) handFocusReturnTo(target);
+    else target.focus({ preventScroll: true });
+}
+
+// Makes `target` where the dialog that holds the focus gives it back, if what had the focus as that dialog opened is
+// gone, such as the menu row that opened it. The focus itself stays where it is.
+export function handFocusReturnTo(target: HTMLElement) {
+    const focused = focusedElement();
+    const holder = focused && [...openDialogs].find((open) => open.content.current?.contains(focused));
+    if (holder && !holder.target?.isConnected) holder.target = target;
 }
