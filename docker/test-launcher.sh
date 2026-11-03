@@ -868,19 +868,26 @@ for SHELL_NAME in dash busybox host; do
     # --services spans lines of the call log.
     if printf '%s\n' "$CALLS" | grep -q " status --install=$FIX/release --services=" &&
         printf '%s\n' "$CALLS" | grep -q ' --backups=server-manual-full-20260101-000000.tar ' &&
-        printf '%s\n' "$CALLS" | grep -q ' --kept-aside=data.pre-restore-20260101-000000 ' &&
+        ! printf '%s\n' "$CALLS" | grep -q -e '--kept-aside' &&
         printf '%s\n' "$CALLS" | grep -q ' --latest=0.2.99 --files=0.2.100 (abc1234)$'; then
-        ok "$SHELL_NAME: status passes the folder, what backups/ holds, what restores kept aside, and the build the files were written from"
+        ok "$SHELL_NAME: status passes the folder, what backups/ holds, and the build the files were written from, but not what restores kept aside while an update stopped halfway: that CLI may refuse the flag"
     else
         fail "$SHELL_NAME: status: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     echo ghcr.io/eigen-is/eigen/api@sha256:aaa >"$FIX/channel/.eigen/bundle"
     launch channel status
-    rm "$FIX/channel/.eigen/bundle"
     if [ "$CODE" = 0 ] && ! printf '%s\n' "$CALLS" | grep -q -e '--files' -e '--kept-aside'; then
         ok "$SHELL_NAME: status passes no files when they are of the api image .env.production pins, and nothing kept aside when there is none"
     else
         fail "$SHELL_NAME: status with the files of the pinned image: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
+    fi
+    mkdir "$FIX/channel/data.pre-restore-20260101-000000"
+    launch channel status
+    rm -r "$FIX/channel/.eigen/bundle" "$FIX/channel/data.pre-restore-20260101-000000"
+    if [ "$CODE" = 0 ] && printf '%s\n' "$CALLS" | grep -q ' --kept-aside=data.pre-restore-20260101-000000$'; then
+        ok "$SHELL_NAME: status passes what restores kept aside when the files are of the api image .env.production pins"
+    else
+        fail "$SHELL_NAME: status with a copy kept aside: calls: $(printf '%s' "$CALLS" | tr '\n' '|')"
     fi
     echo ghcr.io/eigen-is/eigen/api@sha256:bbb >"$FIX/release/.eigen/bundle"
     STUB_IMAGE=1 launch release status

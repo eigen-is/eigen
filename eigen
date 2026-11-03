@@ -1055,15 +1055,18 @@ status() {
 
     runner=cli
     case $services in *"eigen-api${tab}running$tab"*) runner=api_cli ;; esac
-    # Passed only when a restore kept something aside, so the CLI of an update that stopped halfway, which may not know
-    # the flag, still reports. Their size is left out: du would read all of a copy of data/, which is uid 1000's.
-    kept=$(kept_aside)
     set -- --install="$PWD" --services="$services" --mail-queue="$queue" --backups="$(ls backups 2>/dev/null || :)" \
-        ${kept:+"--kept-aside=$kept"} ${newer:+"$newer"}
+        ${newer:+"$newer"}
     bundle=$(stale_bundle)
     if [ -n "$bundle" ]; then
         files=$(describe "$bundle")
         set -- "$@" --files="$files"
+    else
+        # Passed only when the runner is this build's CLI: after an update that stopped halfway it is the build
+        # .env.production pins, which may not know the flag and would refuse. Their size is left out: du would read
+        # all of a copy of data/, which is uid 1000's.
+        kept=$(kept_aside)
+        set -- "$@" ${kept:+"--kept-aside=$kept"}
     fi
     "$runner" status "$@"
 }
