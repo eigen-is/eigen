@@ -4,16 +4,20 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-03
+
+Sheets scrolls and looks things up faster, copies and pastes validation rules and hidden rows as Excel does, and its dialogs read and behave like the rest of Eigen. Docs gets styled tables of contents, and emoji, Chinese and Korean text and equations draw the same in the apps and in downloads. Every update now makes a Full backup, `./eigen rollback` keeps today's data, and an update can warn open tabs before Eigen restarts. Three changes break old data: Vector and Slides text boxes saved by an earlier version disappear, Sheets validation rules need setting up again, and Light backups can no longer be restored. After you update, reload any tab you have open.
+
 ### Added
 
 - **Demo reset warning** — a demo now warns five minutes before its hourly reset, with a countdown at the bottom of the page
-- **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts
+- **Table of contents options in Docs** — on a computer or a tablet, select or right-click a table of contents to pick Plain text, Dotted or Links, how many heading levels it lists, and each level's font, size, bold and italic. PDFs and Word files show them, and a Word file's table of contents comes back with its page numbers, dots and fonts. A document without pages offers Links only
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
 - **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
 - **Row menus from the keyboard** — in the lists of Drive, Mail and Contacts, Shift+F10 (fn+Shift+F10 on most Mac keyboards) or the Menu key opens the menu of the row under the cursor. Tab no longer stops on each row's ⋮ and Share buttons
 - **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
-- **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour. Every open tab counts down in a banner, then says Eigen is updating while it is down. Ctrl+C or a lost SSH session cancels
+- **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour. Every open tab counts down in a banner, then says Eigen is updating, or going back to an earlier version, while it is down. Ctrl+C or a lost SSH session cancels
 
 ### Changed
 
@@ -22,7 +26,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **The sidebar and the top bar** — both sit on the page's own background, with no line between them and the page. The open sidebar item, and the one under the pointer, end in a point, as the eigen logo does
 - **Jumping from a table of contents in Docs** — a click selects it. ⌘-click a line (Ctrl-click on Windows and Linux) to jump to its heading, or on a touch screen tap once, then tap a line
 - **A shorter style list in Docs** — the style picker lists Normal text and the headings. **Title** and **Subtitle** move to **Format › Paragraph styles**, below **Heading 6**, and Word files keep them
-- **Scrolling in Sheets** — the grid keeps up with the scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets
+- **Scrolling in Sheets** — the grid keeps up with a wheel or trackpad scroll on a 120 Hz screen, frozen rows and columns included, also on large sheets. Dragging the scrollbar still redraws the whole grid
 - **Validation rules in Sheets (breaking)** — an existing spreadsheet opens without its dropdowns, tick boxes and other validation rules, and every cell keeps its value. Set the rules up again, or import the Excel file again
 - **Whole-column rules in Sheets** — a validation rule on a whole column, picked by its header or from an Excel file, covers every row, below the data too. Only rows inserted inside a rule get it
 - **Pasting over rules and links in Sheets** — cells you copy or cut in the same tab replace the validation rules and links where you paste them, as in Excel. A paste, fill or move that would break a rule into too many pieces is refused, with a notice
@@ -46,8 +50,10 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Light backups (breaking)** — every `./eigen update` makes a Full backup, and `./eigen backup --light`, `./eigen update --full` and Light in **Back up now** are gone. Eigen no longer recognises the Light backups of 0.4.1 and before: it can't restore one, `./eigen status` doesn't list them and a start leaves their files as they are. Delete them by hand with `sudo rm backups/server-*-light-*`
 - **Rolling back** — `./eigen rollback` keeps today's data when the version before opens it. It puts the update's backup back only when that version can't, or is too old to check, and a check that fails otherwise stops it with Eigen running as it was
 - **Restoring a user or team in Admin** — the account keeps working while its backup is unpacked and checked, so a refused restore costs nobody their open pages. It goes offline only for the swap at the end, and needs room on the data disk
-- **Private backups** — the files inside a backup, their records and a restored account are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
-- **Stopping during a backup** — before it stops Eigen, `./eigen` asks the server whether a backup or its upload runs, and waits for it. A server that doesn't answer within 10 seconds gets a warning, and the stop goes on
+- **Private backups** — the files inside a backup and their records are for Eigen's own user alone. `backups/` takes the install folder's group with mode 2750, or stays as it is, with a warning, when other users share that group
+- **Stopping during a backup** — before it stops Eigen, `./eigen` asks the server whether a backup or its upload runs, and waits for it. A server that doesn't answer gets a warning after a few tries, and the stop goes on
+- **Copies a restore kept aside** — `./eigen status` lists the `data.pre-restore-*` and `.env.production.pre-restore-*` copies a restore leaves in the install folder, with the command to delete them. Each can be a full copy of `data/`
+- **Uploading several files in Drive** — a file that fails no longer stops the files after it, and the files of one upload finish together
 - **Copying in Drive** — **Copy to…** and **Save to Drive…** say "1 item copied" (or "3 items copied") with an **Open folder** button. **Duplicate** stays quiet
 - **The command palette in Drive** — with items selected it offers what their right-click menu offers, in the same order and with the item's name beside each row. **Duplicate**, **Move to…**, **Copy to…**, **Watch**, convert and import are new there, and the Trash offers **Restore** and **Delete permanently**
 - **Text files in Drive** — the editor for text, code and Markdown files no longer shows the properties column
@@ -59,14 +65,14 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ### Fixed
 
-- **Odd font names in Sheets** — a font name with a semicolon, a bracket, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
+- **Odd font names in Sheets** — a font name with a semicolon, an opening parenthesis, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
 - **Function suggestions in Sheets** — the list of functions under a formula closes when you click another cell to finish the edit, instead of staying on screen
 - **Printing** — printing a document, an email or a contact waits for its fonts, and a few seconds at most for its pictures, so they show on the page
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
 - **Restoring a version in Docs** — charts, images and equations keep their data, size and display when you restore a version while the document is open
 - **Dialogs in Docs** — **Add link** stays off until you type a URL, and a URL you cancel is gone the next time it opens. Page setup, Headers and footers, Word count and the spacing, indent and numbering dialogs have a close button in the corner
-- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
+- **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word text boxes keep their theme-colored fills and outlines and their wrap side, but can still run past the paper
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
 - **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
 - **Filters in the sidebar** — **All docs**, **All stickies**, **All slides**, **All sheets** and **All vectors** stay selected in their own app when you click an item in the list
@@ -122,15 +128,15 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
 - **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
 - **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font
-- **Calendar notices** — an invitation or a shared calendar from someone without a name shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
+- **Calendar notices** — an invitation or a shared calendar from someone with no name or address shows a plain title, such as "New invitation" or "Calendar shared with you", instead of "undefined shared a calendar"
 - **One data folder, one server** — a second Eigen server on another machine or VM, such as one that reaches `data/` through a Docker Desktop folder or WSL2, refuses to start while the first one runs
 - **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
-- **Uploads after a restore** — a whole-server restore of an older backup keeps the files a restore of one account had not yet sent to an S3 bucket
+- **Uploads after a restore** — a whole-server restore of an older backup keeps the files it had not yet sent to an S3 bucket, also after a restore of one account in between
 - **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
 - **Slow transfers in Drive and WebDAV** — a slow WebDAV or Drive upload, copy, convert, export or import no longer fails when it runs past five idle minutes
-- **WebDAV locks** — a lock on a file survives while your home is idle, so a client that holds a lock does not lose it
+- **WebDAV locks** — a lock on a file no longer ends when your home goes idle. It lasts until it expires or the client releases it
 - **Chats during a restore** — an open chat no longer fails when its version is restored at the same moment
-- **Open files on the server** — a document, board or chat that was read for search or export no longer stays open until the next restart, so the server keeps fewer files open
+- **Open files on the server** — a document, board or chat that was read for search or export no longer stays open until its home closes, so the server keeps fewer files open
 - **Live updates and open editors** — a tab's live updates and an open editor stay connected while the tab is open, and reconnect after a restore
 - **S3 uploads when a home closes** — an upload to S3 that a closing home cuts short can no longer overwrite newer edits
 
