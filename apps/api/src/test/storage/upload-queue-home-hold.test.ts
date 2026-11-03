@@ -123,6 +123,8 @@ describe('an upload on its way holds its Home', () => {
         else process.env['TEAM_HOME_IDLE_MS'] = previousIdle;
         try {
             await home.init();
+            // A Home built here has had no request, so the release of the first PUT would close it at once.
+            home.touch();
             const { mount, fault } = await addS3Mount(home, 'uq-hold-failing');
             const { dataDbId } = await provisionDatabase(mount);
             const managed = await mount.createDatabase(docConfig, dataDbId);
