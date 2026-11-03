@@ -192,6 +192,32 @@ describe('getHome teardown race', () => {
         }
     });
 
+    // The idle countdown restarts on getHome and on a release, never on a read of a part.
+    test('reading a part does not restart the idle countdown, a getHome does', async () => {
+        const userId = await createHomeUser('idle-restart@test.eigen.is');
+        await getHome(userId);
+        jest.useFakeTimers();
+        try {
+            const read = await getHome(userId);
+            jest.advanceTimersByTime(USER_IDLE_MS - 1_000);
+            expect(read.drive).toBeDefined();
+            jest.advanceTimersByTime(2_000);
+            expect(read.closing).toBe(true);
+            await read.close();
+
+            const fresh = await getHome(userId);
+            jest.advanceTimersByTime(USER_IDLE_MS - 1_000);
+            await getHome(userId);
+            jest.advanceTimersByTime(2_000);
+            expect(fresh.closing).toBe(false);
+            jest.advanceTimersByTime(USER_IDLE_MS);
+            expect(fresh.closing).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+        await evictHome(userId);
+    });
+
     // A long request, such as an upload, holds its home while it runs and lets go however it ends.
     test('withHomeHeld keeps the home open past its idle, and lets go when the work throws', async () => {
         const userId = await createHomeUser('with-home-held@test.eigen.is');
