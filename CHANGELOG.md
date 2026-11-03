@@ -116,6 +116,12 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Crafted backups** — a backup someone uploaded can no longer make an interrupted restore of one account move another account aside
 - **Uploads after a restore** — a whole-server restore of an older backup keeps the files a restore of one account had not yet sent to an S3 bucket
 - **The trash after a restore in Admin** — a file trashed before the backup stays in the trash for the full retention period, instead of being deleted for good seconds after the restore
+- **Slow transfers in Drive and WebDAV** — a slow WebDAV or Drive upload, copy, convert, export or import no longer fails when it runs past five idle minutes
+- **WebDAV locks** — a lock on a file survives while your home is idle, so a client that holds a lock does not lose it
+- **Chats during a restore** — an open chat no longer fails when its version is restored at the same moment
+- **Open files on the server** — a document, board or chat that was read for search or export no longer stays open until the next restart, so the server keeps fewer files open
+- **Live updates and open editors** — a tab's live updates and an open editor stay connected while the tab is open, and reconnect after a restore
+- **S3 uploads when a home closes** — an upload to S3 that a closing home cuts short can no longer overwrite newer edits
 
 ## [0.4.1] - 2026-10-28
 
