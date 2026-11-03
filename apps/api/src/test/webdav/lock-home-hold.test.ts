@@ -58,7 +58,8 @@ describe('a WebDAV lock holds its Home', () => {
         await home.close();
     });
 
-    test('a lock left to expire lets the Home idle after its expiry and the idle time', async () => {
+    // The last request, the LOCK, is long ago when the lock expires, so its release closes the Home at once.
+    test('a lock left to expire holds the Home until its expiry, and no longer', async () => {
         const user = await createTestUser(`dav-lock-expire-${crypto.randomUUID()}@test.eigen.is`, DAV_PASSWORD, 'E');
         const home = await getHome(user.id);
         jest.useFakeTimers();
@@ -66,9 +67,8 @@ describe('a WebDAV lock holds its Home', () => {
 
         jest.advanceTimersByTime(3_600_000 - 1000);
         expect(home.closing).toBe(false);
-        jest.advanceTimersByTime(1000 + USER_IDLE_MS - 1000);
-        expect(home.closing).toBe(false);
         jest.advanceTimersByTime(2000);
+        jest.advanceTimersByTime(1);
         expect(home.closing).toBe(true);
         jest.useRealTimers();
         await home.close();
