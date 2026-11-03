@@ -19,6 +19,8 @@ The one idea is that WebDAV is a thin protocol layer over Drive. Files, folders,
 
 A trailing slash is stripped, so `/foo/` and `/foo` name one row. The path and the `Destination` header are percent-decoded per segment, and a malformed escape (`bad%E0`) is a 400.
 
+A `Destination` is the full URL the client was given, so in a standard install it starts `/eigen/webdav/`: Caddy strips `/eigen` from the request line but not from this header. `parseDestination` drops that one base path (`getApiBasePath`, read from `VITE_API_HOST`), so `/eigen/webdav/...` and `/webdav/...` both name a mount and any other path is a 400. The host is not checked.
+
 ## Basic auth needs TLS
 
 Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). The failure limiter keys on the `X-Real-IP` Caddy sets on the `/webdav` route. TLS is mandatory in practice: Windows' WebClient sends Basic only over HTTPS (`BasicAuthLevel = 1`), Windows 11 included.

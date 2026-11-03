@@ -31,6 +31,16 @@ export function isBundledCaddy(): boolean {
     return (process.env['COMPOSE_PROFILES'] ?? '').split(',').includes('edge');
 }
 
+// The path the public proxy serves the API under, such as `/eigen` in a standard install, with no trailing slash. Setup
+// writes it as VITE_API_HOST, and a dev API's absolute VITE_API_HOST has none. The proxy strips it before the API sees
+// a request, so only URLs inside a request, such as a WebDAV Destination, still carry it.
+export function getApiBasePath(): string {
+    const apiHost = process.env['VITE_API_HOST'] ?? '';
+    const path = /^https?:\/\//.test(apiHost) ? new URL(apiHost).pathname : apiHost;
+    const trimmed = path.replace(/^\/+|\/+$/g, '');
+    return trimmed ? `/${trimmed}` : '';
+}
+
 // The relay a mail-off install sends through; unset, it sends no email at all.
 export function getRelayHost(): string | undefined {
     return process.env['SMTP_RELAY_HOST'] || undefined;
