@@ -11,9 +11,9 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import { useContext, useMemo } from 'react';
 import { WorkbookContext } from '../../context';
-import { getCellDataVerification, getCellValue, getDropdownList, getFlowdata, setDropdownValue } from '../../state';
+import { getCellDataValidation, getCellValue, getDropdownList, getFlowdata, setDropdownValue } from '../../state';
 
-export function DropDownList() {
+export function DropdownList() {
     const { context, setContext } = useContext(WorkbookContext);
     const open = !!context.validationListOpen;
 
@@ -21,20 +21,19 @@ export function DropDownList() {
         if (!open) return null;
         const last = context.selections?.[context.selections.length - 1];
         if (!last) return null;
-        const { row_focus: r, column_focus: c } = last;
-        if (r == null || c == null) return null;
-        const dv = getCellDataVerification(context, r, c);
-        if (!dv) return null;
-        const list = getDropdownList(context, dv.value1);
-        const isMul = dv.type2 === 'true';
-        const d = getFlowdata(context);
-        const cellValue = d ? getCellValue(r, c, d) : null;
+        const { row_focus: row, column_focus: column } = last;
+        if (row == null || column == null) return null;
+        const rule = getCellDataValidation(context, row, column);
+        if (!rule) return null;
+        const list = getDropdownList(context, rule.value1);
+        const allowsSeveral = rule.type2 === 'true';
+        const flowdata = getFlowdata(context);
+        const cellValue = flowdata ? getCellValue(row, column, flowdata) : null;
         const selected = cellValue != null && cellValue !== '' ? String(cellValue).split(',') : [];
-        return { list, isMul, selected };
+        return { list, allowsSeveral, selected };
     }, [open, context]);
 
-    // The validation hint card reads the same flag and stands down while the list
-    // is open — it hangs over the same corner of the cell.
+    // The validation hint card hangs over the same corner of the cell. It reads this flag and hides while the list is open.
     const setOpen = (next: boolean) => {
         setContext((ctx) => {
             ctx.validationListOpen = next;
@@ -43,9 +42,9 @@ export function DropDownList() {
 
     const onSelect = (value: string) => {
         if (!cellInfo) return;
-        const next = cellInfo.isMul
+        const next = cellInfo.allowsSeveral
             ? cellInfo.selected.includes(value)
-                ? cellInfo.selected.filter((v) => v !== value)
+                ? cellInfo.selected.filter((item) => item !== value)
                 : [...cellInfo.selected, value]
             : [value];
         setContext((ctx) => {
@@ -55,40 +54,37 @@ export function DropDownList() {
 
     return (
         <DropdownMenu open={open} onOpenChange={setOpen}>
-            {/* Pure anchor, not an indicator: the chevron itself is canvas paint on
-                every list-validated cell (state/render/cells.ts), and the canvas
-                mousedown hit-test opens this menu. cellFocus still moves and shows
-                this box so Radix has a rect to portal against. */}
+            {/* This box is only an anchor. The grid paints the chevron on the canvas, and the mousedown hit test opens
+                the menu. cellFocus moves this box to the focus cell, so Radix has a rect to place the menu against. */}
             <DropdownMenuTrigger asChild>
                 <div id="sheet-validation-list-anchor" style={{ display: 'none' }} tabIndex={-1} aria-hidden="true" />
             </DropdownMenuTrigger>
-            {/* Radix portals out of cellArea's DOM, but React synthetic events still bubble up
-                the React tree across portals — without this class, cellAreaMouseDown's DOM-level
-                closest() guard at SheetOverlay/index.tsx misses the menu items and selection
-                jumps to the cell underneath the popup. */}
+            {/* Radix portals the menu out of the cell area, but React events still bubble up through the portal. The
+                cell area's mousedown handler skips targets inside this class. Without it, a click on an item would
+                also select the cell under the menu. */}
             <DropdownMenuContent align="start" className="sheet-mousedown-cancel text-xs">
-                {cellInfo?.list.map((v, i) => {
-                    const vStr = String(v);
-                    if (cellInfo.isMul) {
+                {cellInfo?.list.map((item, index) => {
+                    const label = String(item);
+                    if (cellInfo.allowsSeveral) {
                         return (
                             <DropdownMenuCheckboxItem
                                 // biome-ignore lint/suspicious/noArrayIndexKey: dropdown values can repeat, position is the stable identity
-                                key={i}
-                                checked={cellInfo.selected.includes(vStr)}
-                                onCheckedChange={() => onSelect(vStr)}
+                                key={index}
+                                checked={cellInfo.selected.includes(label)}
+                                onCheckedChange={() => onSelect(label)}
                                 onSelect={(e) => e.preventDefault()}
                             >
-                                {vStr}
+                                {label}
                             </DropdownMenuCheckboxItem>
                         );
                     }
                     return (
                         <DropdownMenuItem
                             // biome-ignore lint/suspicious/noArrayIndexKey: dropdown values can repeat, position is the stable identity
-                            key={i}
-                            onSelect={() => onSelect(vStr)}
+                            key={index}
+                            onSelect={() => onSelect(label)}
                         >
-                            {vStr}
+                            {label}
                         </DropdownMenuItem>
                     );
                 })}

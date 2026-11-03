@@ -2,7 +2,9 @@
 # embeds all it needs as data: URIs, so the fetcher opens those and refuses every other URL, where WeasyPrint's own
 # would fetch from the API host. It also teaches WeasyPrint to tell the slices of one font apart, and to print every
 # font's outlines, never its colour layers, on every host. Needs WeasyPrint 68, the first with the URLFetcher class.
+import os
 import sys
+import tempfile
 from hashlib import md5
 from itertools import count
 from xml.etree.ElementTree import SubElement
@@ -155,9 +157,20 @@ patch_font_embedding()
 break_font_ties()
 
 # A passed stylesheet is the user's, so the margins it grows are !important to win over the document's @page. The probe
-# and the render share one font configuration, so the doc's @font-face fonts load once.
-html = weasyprint.HTML(file_obj=sys.stdin.buffer, encoding='utf-8', url_fetcher=DataFetcher())
-font_config = weasyprint.text.fonts.FontConfiguration()
-margins = band_margins(html, font_config)
-document = html.render(stylesheets=[weasyprint.CSS(string=margins)] if margins else None, font_config=font_config)
-document.write_pdf(sys.stdout.buffer, zoom=float(sys.argv[1]) if len(sys.argv) > 1 else 1)
+# and the render share one font configuration, so the doc's @font-face fonts load once. WeasyPrint writes those fonts
+# into a temporary folder, so every temporary file goes into one folder of the render's own, removed when it ends.
+with tempfile.TemporaryDirectory(prefix='weasyprint-render-') as folder:
+    tempfile.tempdir = folder
+    html = weasyprint.HTML(file_obj=sys.stdin.buffer, encoding='utf-8', url_fetcher=DataFetcher())
+    font_config = weasyprint.text.fonts.FontConfiguration()
+    margins = band_margins(html, font_config)
+    document = html.render(stylesheets=[weasyprint.CSS(string=margins)] if margins else None, font_config=font_config)
+    document.write_pdf(sys.stdout.buffer, zoom=float(sys.argv[1]) if len(sys.argv) > 1 else 1)
+
+# Python's own exit unloads the C libraries while a glib thread of WeasyPrint's may still run, and that thread then dies
+# of a SIGSEGV now and then, after the whole PDF is out. So the script leaves at once, with nothing left to clean up.
+# Loaded as a module, as a test that reads the renders does, it leaves the exit to its caller.
+if __name__ == '__main__':
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)

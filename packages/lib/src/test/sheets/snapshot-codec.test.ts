@@ -352,17 +352,6 @@ describe('encodeSheetsSnapshot / decodeSheetsSnapshot', () => {
         expect(decoded.map((sheet) => Object.keys(sheet.dataValidations ?? {}))).toEqual([['kept'], []]);
     });
 
-    // Sheets keep no backward compatibility: the per-cell rules of a workbook saved before rules were kept per range
-    // are dropped, and the snapshot written next holds none of them.
-    test("an older snapshot's per-cell validation rules are dropped", () => {
-        const envelope = JSON.parse(encodeSheetsSnapshot(WORKBOOK, { computed: true })) as Envelope;
-        envelope.sheets[0]!['dataVerification'] = { '2_2': { type: 'dropdown', type2: '', value1: 'a,b', value2: '' } };
-        const [decoded] = decodeSheetsSnapshot(JSON.stringify(envelope));
-        expect('dataVerification' in decoded).toBe(false);
-        expect(decoded.celldata).toEqual(WORKBOOK[0].celldata);
-        expect(encodeSheetsSnapshot([decoded], { computed: true })).not.toContain('dataVerification');
-    });
-
     test("a sheet's default column width and row height round-trip", () => {
         const sheets: Sheet[] = [{ id: 's', name: 'S', defaultColWidth: 64, defaultRowHeight: 17 }];
         const [decoded] = decodeSheetsSnapshot(encodeSheetsSnapshot(sheets, { computed: true }));

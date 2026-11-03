@@ -5,13 +5,13 @@
 > `packages/ui` and `packages/math`. **Search here before building any shared hook, component, type, or util** — if it
 > already exists, import it; if it doesn't, add it here by exporting it from its package barrel.
 
-2118 primitives across 6 kinds. `packages/sheet` internals are excluded.
+2123 primitives across 6 kinds. `packages/sheet` internals are excluded.
 
 Not listed: each `@workspace/lib/<domain>` barrel also exports that domain's query-key factory
 (`<domain>Keys`) and its `invalidate*` helpers — they live beside the domain hooks above. Use those
 rather than inlining `queryClient.invalidateQueries`.
 
-## Components (191)
+## Components (192)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -119,6 +119,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ContactAutosuggest` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/contact-autosuggest.tsx |
 | `ClipboardMenuItems` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `ContextMenuAnchor` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-anchor.tsx |
+| `ContextMenuButton` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/context-menu-button.tsx |
 | `DownloadImageMenuItem` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `DownloadOriginalImageMenuItem` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/object-menu-items.tsx |
 | `MenuSections` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
@@ -549,7 +550,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `useSelectableContextMenu` | `@workspace/ui/hooks/use-selectable-context-menu` | packages/ui/src/hooks/use-selectable-context-menu.ts |
 | `useSuggestions` | `@workspace/ui/hooks/use-suggestions` | packages/ui/src/hooks/use-suggestions.ts |
 
-## Types (447)
+## Types (448)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -619,7 +620,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `ConditionalFormatConditionName` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `ConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DataBarRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
-| `DataVerificationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
+| `DataValidationRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `DefaultConditionalFormatRule` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `InlineStringSegment` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
 | `MergeCell` | `@workspace/lib/sheets` | packages/lib/src/sheets/types.ts |
@@ -999,9 +1000,10 @@ rather than inlining `queryClient.invalidateQueries`.
 | `VectorTool` | `@workspace/ui/components/vector` | packages/ui/src/components/vector/hooks/use-tool.ts |
 | `DialogAction` | `@workspace/ui/hooks/use-dialog-pending` | packages/ui/src/hooks/use-dialog-pending.ts |
 | `UseListSelectionReturn` | `@workspace/ui/hooks/use-list-selection` | packages/ui/src/hooks/use-list-selection.ts |
+| `ContextMenuSource` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `HappyDomOptions` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
 
-## Utilities & constants (1153)
+## Utilities & constants (1156)
 
 | Name | Import from | File |
 |------|-------------|------|
@@ -2096,6 +2098,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `EXPORTING_CONTACTS_TITLE` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/transfer-titles.ts |
 | `IMPORTING_CONTACTS_TITLE` | `@workspace/ui/components/contacts` | packages/ui/src/components/contacts/transfer-titles.ts |
 | `inMenuOrder` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/menu-sections.tsx |
+| `isKeyboardContextMenu` | `@workspace/ui/components/context-menu` | packages/ui/src/components/context-menu/use-context-menu.ts |
 | `DOCS_CONFIG` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `EIGEN_DOC_APP_CONFIGS` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
 | `eigenDocEditorValidateSearch` | `@workspace/ui/components/drive` | packages/ui/src/components/drive/eigendoc-config.ts |
@@ -2138,16 +2141,18 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `OPEN_MENU` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `handFocusReturnTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
+| `hasFocusRing` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
+| `returnFocusTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `stubCanvasImageFonts` | `@workspace/ui/test/canvas-image` | packages/ui/src/test/canvas-image.ts |
+| `contextMenuEvent` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
+| `KEY_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
+| `POINTER_SOURCES` | `@workspace/ui/test/context-menu-event` | packages/ui/src/test/context-menu-event.ts |
 | `drivePath` | `@workspace/ui/test/drive-path` | packages/ui/src/test/drive-path.ts |
 | `installHappyDom` | `@workspace/ui/test/happy-dom` | packages/ui/src/test/happy-dom.ts |
-| `HOVER_REVEALED` | `@workspace/ui/test/keyboard-reach` | packages/ui/src/test/keyboard-reach.ts |
-| `isShown` | `@workspace/ui/test/keyboard-reach` | packages/ui/src/test/keyboard-reach.ts |
-| `revealStates` | `@workspace/ui/test/keyboard-reach` | packages/ui/src/test/keyboard-reach.ts |
-| `tabStops` | `@workspace/ui/test/keyboard-reach` | packages/ui/src/test/keyboard-reach.ts |
-| `takesPointer` | `@workspace/ui/test/keyboard-reach` | packages/ui/src/test/keyboard-reach.ts |
+| `expectKeyboardReveal` | `@workspace/ui/test/hover-reveal` | packages/ui/src/test/hover-reveal.ts |
 | `checkRows` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `clickRow` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |
 | `collapseSeparators` | `@workspace/ui/test/menu-rows` | packages/ui/src/test/menu-rows.ts |

@@ -56,7 +56,6 @@
     "packages/sheet/src/state/modules/formula-editor.ts": 2,
     "packages/sheet/src/state/modules/formula-range.ts": 2,
     "packages/sheet/src/state/modules/toolbar.ts": 1,
-    "packages/sheet/src/state/render/cell-text.ts": 1,
     "packages/sheet/src/state/render/cells.ts": 1,
     "packages/ui/src/components/braket/ket-tile.tsx": 1,
     "packages/ui/src/components/collab/remote-selection-ring.tsx": 1,
@@ -122,7 +121,7 @@
     "packages/ui/src/lib/eigenAppRouter.tsx": 1
   },
   "interface-decls": 3,
-  "biome-ignore": 60,
+  "biome-ignore": 49,
   "jsdoc-blocks": 0,
   "raw-colors": 0,
   "unused-primitive-types": 0

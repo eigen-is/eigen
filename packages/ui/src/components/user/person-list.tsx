@@ -8,10 +8,9 @@ import { useListSelection } from '@workspace/ui/hooks/use-list-selection';
 import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
-import { MoreVertical } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo, useRef } from 'react';
-import { ContextMenuAnchor } from '../context-menu';
+import { ContextMenuAnchor, ContextMenuButton } from '../context-menu';
 import { AlphabeticalList, alphaGroupKey } from './alphabetical-list';
 
 type PersonListProps<T> = {
@@ -19,10 +18,10 @@ type PersonListProps<T> = {
     searchQuery: string;
     activeId?: string;
     getId: (item: T) => string;
-    // For lists where the selection/drag key differs from the routing key (admin members
-    // route by membership id but select/drag by userId). Defaults to getId.
+    // The key that selection and drag use, when it differs from the one a row routes by. Admin's member list, for
+    // example, routes by membership id but selects by user id.
     getSelectionId?: (item: T) => string;
-    // Sorting and the alphabetical group headers both key off this name.
+    // The list sorts by this name, and its letter headers come from it too.
     getName: (item: T) => string;
     getSearchFields: (item: T) => string[];
     onRowClick: (id: string) => void;
@@ -30,10 +29,10 @@ type PersonListProps<T> = {
     emptyState: ReactNode;
     selectable?: boolean;
     dragType?: string;
-    // Present → rows get right-click, touch long-press, and a hover ⋮ button, all opening the
-    // singleton menu on the selected batch (the pressed row is pulled into the selection first).
+    // With menu items, a right-click, a long press, a row's ⋮ button or the menu key opens one shared menu. The pressed
+    // row joins the selection first, and the menu acts on the whole selection.
     renderMenuItems?: (items: T[], close: () => void) => ReactNode;
-    // Same handler the menu's delete entry calls — bound to Delete/Backspace here.
+    // The Delete and Backspace keys call this, as the menu's delete entry does.
     onDelete?: (items: T[]) => void;
 };
 
@@ -58,8 +57,8 @@ export function PersonList<T>({
     const visible = useMemo(() => {
         const sorted = [...items].sort((a, b) => getName(a).localeCompare(getName(b)));
         if (!searchQuery) return sorted;
-        const q = searchQuery.toLowerCase();
-        return sorted.filter((item) => getSearchFields(item).some((field) => field.toLowerCase().includes(q)));
+        const query = searchQuery.toLowerCase();
+        return sorted.filter((item) => getSearchFields(item).some((field) => field.toLowerCase().includes(query)));
     }, [items, searchQuery, getName, getSearchFields]);
 
     // The open row is looked up in all items, so a search that hides it doesn't count as closing it.
@@ -71,8 +70,7 @@ export function PersonList<T>({
     });
     const drag = useListDrag({ selection, getId: getSelectionId, dragType: dragType ?? 'person' });
 
-    // Right-click, touch long-press, and the ⋮ button all select-then-open the same menu.
-    const { contextMenu, handleContextMenu, openAt, openFromButton } = useSelectableContextMenu({
+    const { contextMenu, handleContextMenu, openAt, openBelow } = useSelectableContextMenu({
         selection,
         getId: getSelectionId,
     });
@@ -86,9 +84,15 @@ export function PersonList<T>({
         onSelect: onRowClick,
         containerRef: listRef,
         selection: selectable ? selection : undefined,
-        // A multi-selection wins over the cursored row, exactly as the context menu resolves it.
+        // With several rows selected, the keys delete them all and not just the cursor's row, as the menu does.
         onDelete: onDelete
             ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
+            : undefined,
+        // The menu key opens the menu at the row, as its ⋮ does. The list draws every row, so the hook hands it over.
+        onMenu: renderMenuItems
+            ? (item, _index, row) => {
+                  if (row) openBelow(row, item);
+              }
             : undefined,
     });
 
@@ -112,7 +116,10 @@ export function PersonList<T>({
                             className={cn(
                                 'flex items-center gap-3 app-gutter-x py-3 eigen-list-item',
                                 renderMenuItems && 'group',
-                                (activeId === getId(item) || selectedIndex === flatIndex) && 'eigen-list-item-active',
+                                // As in Mail: the open row gets the stripe and the wash, the cursor on another row the
+                                // stripe only.
+                                activeId === getId(item) && 'eigen-list-item-active',
+                                activeId !== getId(item) && selectedIndex === flatIndex && 'eigen-list-item-cursor',
                                 selectable && selection.isSelected(getSelectionId(item)) && 'eigen-list-item-selected',
                             )}
                             onClick={(e) => {
@@ -128,20 +135,10 @@ export function PersonList<T>({
                         >
                             {renderPerson(item)}
                             {renderMenuItems && (
-                                <button
-                                    type="button"
-                                    aria-label="More actions"
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        openFromButton(e.currentTarget, item);
-                                    }}
-                                    className={cn(
-                                        HOVER_REVEAL_CLASS,
-                                        'flex h-7 w-7 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-accent',
-                                    )}
-                                >
-                                    <MoreVertical className="h-4 w-4" />
-                                </button>
+                                <ContextMenuButton
+                                    onOpen={(button) => openBelow(button, item)}
+                                    className={cn(HOVER_REVEAL_CLASS, 'h-7 w-7 shrink-0')}
+                                />
                             )}
                         </div>
                     )}

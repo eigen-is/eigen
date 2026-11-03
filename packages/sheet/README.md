@@ -28,7 +28,7 @@ was removed and the code became internal. The package is now treated as
   and the document-load replay layer in `apps/api`.
 - `Cell`, `Sheet`, `Op`, `CellMatrix`, `Range`, `SingleRange`,
   `ConditionalFormatRule`, `MergeCell`, `CellBorderSides`,
-  `DataVerificationRule`, `CalcChainEntry`, `AncestorFormulaCell` etc.
+  `DataValidationRule`, `CalcChainEntry`, `AncestorFormulaCell` etc.
   canonicalized into `@workspace/lib/sheets`; the sheet package
   re-exports the canonicals to keep the FE↔BE type chain honest.
 - Many `any`-typed APIs tightened to discriminated unions (conditional-format
@@ -60,7 +60,7 @@ In-progress work (see SHEETS-TODO.md for the canonical list):
 |-------------------|---------------------------------------------------------------------------------------------------------------------------------------------------|
 | `src/engine/`     | DOM-free formula evaluator, parser, dependency graph, ref shifter, conditional-format evaluator. **No imports from `state/`.** Server-importable. |
 | `src/state/`      | Workbook context + immer reducers + DOM-coupled orchestration (selection, paste, drag-fill, cut/copy, image, hyperlink). Imports from `engine/`.  |
-| `src/components/` | React UI — `Workbook`, `Sheet`, `WorkbookMenuBar`, `SheetOverlay`, `FxEditor`, `SheetTab`, `ContextMenu`, `DataVerification`, `LinkEditCard`, `FloatingObjects`.  |
+| `src/components/` | React UI — `Workbook`, `Sheet`, `WorkbookMenuBar`, `SheetOverlay`, `FxEditor`, `SheetTab`, `ContextMenu`, `DataValidation`, `LinkEditCard`, `FloatingObjects`.  |
 | `src/hooks/`      | Shared React hooks (`useFormulaAutocomplete`, …).                                                                                                 |
 | `src/index.ts`    | Package entry — re-exports `Workbook` and the public surface.                                                                                     |
 

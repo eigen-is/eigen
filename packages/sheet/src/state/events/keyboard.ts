@@ -13,7 +13,7 @@ import { moveCountPastHiddenRowCol } from '..';
 import type { Context } from '../context';
 import { getFlowdata } from '../context';
 import { cancelNormalSelected, updateCell } from '../modules/cell';
-import { cellFocus, checkboxChange, getCellDataVerification } from '../modules/data-verification';
+import { cellFocus, checkboxChange, getCellDataValidation } from '../modules/data-validation';
 import { fillFromEdge } from '../modules/drop-cell';
 import { handleFormulaInput } from '../modules/formula-editor';
 import { moveHighlightCell, moveHighlightRange, selectAll, selectionCache } from '../modules/selection';
@@ -330,7 +330,7 @@ function openFocusedDropdown(ctx: Context, e: KeyboardEvent) {
     const selection = ctx.selections?.[ctx.selections.length - 1];
     if (selection?.row_focus == null || selection.column_focus == null) return false;
     const { row_focus: r, column_focus: c } = selection;
-    if (getCellDataVerification(ctx, r, c)?.type !== 'dropdown') return false;
+    if (getCellDataValidation(ctx, r, c)?.type !== 'dropdown') return false;
     cellFocus(ctx, r, c);
     ctx.validationListOpen = true;
     return true;

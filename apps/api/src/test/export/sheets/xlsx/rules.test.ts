@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import type {
     ConditionalFormatRule,
-    DataVerificationRule,
+    DataValidationRule,
     DefaultConditionalFormatRule,
     Sheet,
     SingleRange,
@@ -211,7 +211,7 @@ describe('a conditional format', () => {
     });
 });
 
-const validation = (rule: Partial<DataVerificationRule>): DataVerificationRule => ({
+const validation = (rule: Partial<DataValidationRule>): DataValidationRule => ({
     type: 'number',
     type2: 'between',
     value1: '1',

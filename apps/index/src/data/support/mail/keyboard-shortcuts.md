@@ -6,7 +6,7 @@ category: Basics
 tags: [mail, keyboard, shortcuts, settings]
 related: [mail/archive-delete-spam, mail/work-with-several-emails, mail/get-started]
 order: 130
-updated: 2026-09-18
+updated: 2026-11-03
 ---
 
 Mail has a set of single-key shortcuts in the style of Gmail: **j** and **k** move through the list, **e** archives, **c** starts a new message. They are switched off until you ask for them. This page shows where to turn them on and lists every key.
@@ -86,6 +86,8 @@ Press **\***, then the second key. Each pair replaces the current selection with
 Archive, delete, report spam, star, and the two mark keys act on the messages you have selected, however many that is, and whether or not a message is open. With nothing selected they act on the message you have open, and failing that on the row under the cursor.
 
 The **Delete** and **Backspace** keys also send a message to the Trash, and they pick their target the same way. Those two are not part of the set above: they work whether or not the shortcuts are turned on.
+
+With the message list in focus, **Shift+F10** (**fn+Shift+F10** on most Mac keyboards) or the Menu key opens the menu of the row under the cursor, the same menu a right-click opens. These keys also work whether or not the shortcuts are turned on.
 
 ## Conversation
 

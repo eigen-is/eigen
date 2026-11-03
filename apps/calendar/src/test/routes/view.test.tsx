@@ -1,6 +1,7 @@
 // The month view draws the visible calendars' events and the shared ones, four to a day with a count of the
 // rest. A deep link opens its event, a free/busy block opens nothing, deleting one occurrence of a series
-// cancels that day alone, and a click on a day creates an event there.
+// cancels that day alone, and a click on a day creates an event there. A calendar's options button in the sidebar
+// shows on hover only.
 import { afterAll, afterEach, beforeEach, expect, mock, setSystemTime, test } from 'bun:test';
 import type {
     CalendarEventOccurrence,
@@ -9,6 +10,7 @@ import type {
     SharedCalendar,
 } from '@workspace/lib/types/calendar';
 import { installHappyDom } from '@workspace/ui/test/happy-dom';
+import { expectKeyboardReveal } from '@workspace/ui/test/hover-reveal';
 import { renderInDocument } from '@workspace/ui/test/render-in-document';
 
 // A desktop window, so the toolbar shows its buttons rather than a kebab.
@@ -296,4 +298,11 @@ test('turning all day off late in the evening gives a half hour that ends on the
     expect(input?.allDay).toBe(false);
     expect(input?.startTime).toEqual(new Date(2026, 9, 9, 23, 45));
     expect(input?.endTime).toEqual(new Date(2026, 9, 10, 0, 15));
+});
+
+test("a calendar's options button shows on the row's hover only, and Tab reaches and shows it", async () => {
+    await open();
+    const kebab = document.querySelector('button[aria-label="Calendar options"]');
+    if (!kebab) throw new Error('the calendar row has no options button');
+    expectKeyboardReveal(kebab);
 });

@@ -47,7 +47,7 @@ const MATCH_DEBOUNCE_MS = 300;
 
 type PickedPerson = { email: string; displayName: string };
 
-// Prefill for callers that already know who the chat is with (contacts' "Start chat").
+// The people a chat starts with, for a caller that already knows them, such as a contact's Start chat.
 type InitialPerson = { email: string; name?: string };
 
 type ChatCreateWizardProps = {
@@ -98,7 +98,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const createRoom = useCreateChatRoom(myOwnerId, createMountId);
     const createTeamRoom = useCreateChatRoom(teamChatOwnerId, teamMount?.id ?? '');
 
-    const pickedEmails = useMemo(() => picked.map((p) => p.email), [picked]);
+    const pickedEmails = useMemo(() => picked.map((person) => person.email), [picked]);
     const pickedKey = pickedEmails.join(',');
     const debouncedKey = useDebouncedValue(pickedKey, MATCH_DEBOUNCE_MS);
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
@@ -113,12 +113,12 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const personLookupPending = debouncedKey !== pickedKey || matchesPending;
     const matches = personLookupPending ? [] : fetchedMatches;
 
-    // Already-picked people and self are excluded from the ACL suggestion popover (mirrors the share dialog).
+    // The suggestions leave out the people already picked and the user, as the share dialog's do.
     const excludeEmails = useMemo(() => (myEmail ? [...pickedEmails, myEmail] : pickedEmails), [pickedEmails, myEmail]);
 
     // Every match has exactly the picked people and me as its members.
     const memberCount = picked.length + 1;
-    // When any existing chat matches, the primary opens the first; "Create new chat" leads to step 2.
+    // When an existing chat matches, the main button opens the first one. "Create new chat" leads to step 2 instead.
     const hasMatches = teamMode ? teamChats.length > 0 : matches.length > 0;
     const isBusy = createRoom.isPending || createTeamRoom.isPending;
     // Both modes need a name. An empty one would create a file called just '.eigenchat'.
@@ -132,7 +132,9 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         const email = person.email.toLowerCase();
         if (email === myEmail) return;
         setPicked((prev) =>
-            prev.some((p) => p.email === email) ? prev : [...prev, { email, displayName: person.displayName || email }],
+            prev.some((pickedPerson) => pickedPerson.email === email)
+                ? prev
+                : [...prev, { email, displayName: person.displayName || email }],
         );
     };
 
@@ -142,18 +144,22 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         return true;
     });
 
-    // Serialized so a caller's fresh array literal can't re-run the reset effect mid-edit.
+    // A caller may pass a new array on every render. Its JSON stays the same, so the reset below doesn't run again
+    // while the user edits.
     const initialPeopleKey = JSON.stringify(initialPeople ?? []);
 
-    // Reset to a clean form each time the dialog opens (or its prefill changes).
+    // The form starts clean each time the dialog opens, and again when its prefill changes.
     useEffect(() => {
         if (!open) return;
         const seed: InitialPerson[] = JSON.parse(initialPeopleKey);
-        // Drop self from the prefill — a chat is always with other people.
+        // A chat is always with other people, so the prefill drops the user.
         setPicked(
             seed
-                .map((p) => ({ email: p.email.toLowerCase(), displayName: p.name?.trim() || p.email }))
-                .filter((p) => p.email !== myEmail),
+                .map((person) => ({
+                    email: person.email.toLowerCase(),
+                    displayName: person.name?.trim() || person.email,
+                }))
+                .filter((person) => person.email !== myEmail),
         );
         setStep(1);
         contactInput.setValue('');
@@ -166,14 +172,15 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setCreateError(null);
     }, [open, initialPeopleKey, myOwnerId, myEmail, contactInput.setValue]);
 
-    // Live-default the name until the user edits it; team mode requires a typed topic instead.
+    // Until the user edits the name, it follows the picked people. A team chat starts with no name, because it needs a
+    // typed topic.
     useEffect(() => {
         if (!open || nameDirty) return;
         setName(
             teamMode
                 ? ''
                 : defaultChatName(
-                      picked.map((p) => p.displayName),
+                      picked.map((person) => person.displayName),
                       myName,
                   ),
         );
@@ -193,7 +200,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         setStep(2);
     };
 
-    // Step 1 primary: open the first existing match if there is one, otherwise advance to confirm.
+    // Step 1's main button opens the first existing match. Without one, it moves on to step 2.
     const advanceOrOpen = () => {
         if (hasMatches) {
             goToRoom(teamMode ? teamChats[0] : matches[0].path);
@@ -220,7 +227,8 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                       }),
             );
         } catch (e) {
-            if (!(e instanceof AppError) || e.status !== 409) return; // non-409 already toasted by the hook
+            // The hook has already toasted any other failure. A 409 means the typed name is taken.
+            if (!(e instanceof AppError) || e.status !== 409) return;
             setCreateError(`A chat named "${fileName}" already exists here. Rename it, or open the existing one.`);
         }
     };
@@ -275,20 +283,22 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                 </div>
                                 {picked.length > 0 && (
                                     <div className="shrink-0 px-6 pb-2 max-h-32 space-y-0.5 overflow-y-auto">
-                                        {picked.map((p) => (
+                                        {picked.map((person) => (
                                             <div
-                                                key={p.email}
+                                                key={person.email}
                                                 className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50"
                                             >
-                                                <UserItem email={p.email} />
+                                                <UserItem email={person.email} />
                                                 <div className={HOVER_REVEAL_CLASS}>
                                                     <TooltipButton
                                                         icon={X}
-                                                        tooltipText={`Remove ${p.email}`}
+                                                        tooltipText={`Remove ${person.email}`}
                                                         variant="ghost"
                                                         className="h-7 w-7"
                                                         onClick={() =>
-                                                            setPicked((prev) => prev.filter((x) => x.email !== p.email))
+                                                            setPicked((prev) =>
+                                                                prev.filter((other) => other.email !== person.email),
+                                                            )
                                                         }
                                                     />
                                                 </div>
@@ -299,7 +309,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                             </>
                         )}
 
-                        {/* Spacer pins the existing-chat panel just above the footer. */}
+                        {/* This spacer pushes the existing-chat panel down to just above the footer. */}
                         <div className="flex-1" />
 
                         {teamMode
@@ -507,7 +517,7 @@ function MatchPanel({ title, children }: { title: string; children: ReactNode })
 
 function MatchRow({ name, subtitle, onOpen }: { name: string; subtitle: string | null; onOpen: () => void }) {
     return (
-        // The whole row opens the chat; the button stops propagation so a press doesn't double-fire.
+        // The whole row opens the chat. The button stops the click there, so one press opens it once.
         <div
             className="flex cursor-pointer items-center justify-between gap-2 rounded-md px-2 py-1.5 eigen-list-item"
             onClick={onOpen}

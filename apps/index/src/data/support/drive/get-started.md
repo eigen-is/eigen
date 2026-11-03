@@ -7,7 +7,7 @@ tags: [drive, getting-started, files, folders]
 related: [drive/share-a-file, connect/mount-drive-on-your-computer]
 crossSections: [getting-started]
 order: 10
-updated: 2026-09-13
+updated: 2026-11-03
 ---
 
 Drive is where your files live in Eigen. You can upload files from your computer, create documents and spreadsheets without leaving the browser, organize everything into folders, and share any of it with other people. This page is a quick tour of what you can do.
@@ -26,7 +26,7 @@ You can also drag files from your desktop and drop them into Drive.
 
 Click a file to open it. Documents, spreadsheets, and presentations open in their own editor. Other files, like images and PDFs, open in a preview.
 
-To look at a file without leaving the list, open its menu (right-click, or the **⋮** button) and choose **Quick preview**. The same menu has **Open in new tab**, **Rename**, and **Download**.
+To look at a file without leaving the list, open its menu (right-click, or the **⋮** button) and choose **Quick preview**. The same menu has **Open in new tab**, **Rename**, and **Download**. From the keyboard, move to a file with the arrow keys and press **Shift+F10** (**fn+Shift+F10** on most Mac keyboards) or the Menu key to open its menu.
 
 ## Keep things organized
 

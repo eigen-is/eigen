@@ -11,7 +11,7 @@ import { Window } from 'happy-dom';
 import type { Context } from '../../../state/context';
 import { handleGlobalKeyDown } from '../../../state/events/keyboard';
 import { selectionCache } from '../../../state/modules/selection';
-import type { Cell, DataVerificationRule, GlobalCache, SingleRange } from '../../../state/types';
+import type { Cell, DataValidationRule, GlobalCache, SingleRange } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
@@ -26,9 +26,9 @@ const anchor = win.document.createElement('div');
 anchor.id = 'sheet-validation-list-anchor';
 win.document.body.appendChild(anchor);
 
-const LIST: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
+const LIST: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
 
-function listContext(rule: DataVerificationRule | null = LIST) {
+function listContext(rule: DataValidationRule | null = LIST) {
     const ctx = contextFactory() as Context;
     ctx.sheetFocused = true;
     ctx.editingCellPosition = [];

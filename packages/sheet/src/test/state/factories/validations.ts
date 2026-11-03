@@ -1,8 +1,8 @@
-import type { DataVerificationRule, SheetValidation } from '@workspace/lib/sheets';
+import type { DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
 import { parseCellKey } from '@workspace/lib/sheets';
 
 // A sheet's validation rules given per cell: each cell its own rule, under the cell's key as its id.
-export function validationsByCell(rules: Record<string, DataVerificationRule>): Record<string, SheetValidation> {
+export function validationsByCell(rules: Record<string, DataValidationRule>): Record<string, SheetValidation> {
     return Object.fromEntries(
         Object.entries(rules).map(([key, rule]) => {
             const [r, c] = parseCellKey(key);

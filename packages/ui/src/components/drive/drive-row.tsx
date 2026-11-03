@@ -6,8 +6,8 @@ import { formatDateTime } from '@workspace/lib/date';
 import { formatFileSize } from '@workspace/lib/format';
 import type { DrivePath } from '@workspace/lib/types';
 import { cn } from '@workspace/ui/lib/utils';
-import { MoreVertical } from 'lucide-react';
 import type { useLongPress } from '../../hooks/use-long-press';
+import { ContextMenuButton } from '../context-menu';
 import { UnreadDot } from '../unread-dot';
 import { UserAvatar } from '../user/user-avatar';
 import { DriveItemNameLink } from './drive-item-name-link';
@@ -18,13 +18,15 @@ import type { useDriveItemController } from './use-drive-item-controller';
 type DriveRowProps = {
     item: DrivePath;
     index: number;
+    // The open row, such as the one whose details show beside the list.
     isActive: boolean;
+    isCursor: boolean;
     isSelected: boolean;
     disabled: boolean;
     gridCols: string;
     coarse: boolean;
     controller: ReturnType<typeof useDriveItemController>;
-    // The table's one useLongPress: bind(item) gives this row its touch handlers.
+    // The table shares one useLongPress, and bind(item) gives this row its touch handlers.
     longPressBind: ReturnType<typeof useLongPress<DrivePath>>['bind'];
     getItemHref?: (item: DrivePath) => string | undefined;
     onItemClick?: (item: DrivePath) => void;
@@ -43,6 +45,7 @@ export function DriveRow({
     item,
     index,
     isActive,
+    isCursor,
     isSelected,
     disabled,
     gridCols,
@@ -65,7 +68,7 @@ export function DriveRow({
         selection,
         drag,
         handleContextMenu,
-        openContextMenuFromButton,
+        openContextMenuBelow,
         isValidFolderDrop,
         getDropProps,
         dragOverItemId,
@@ -80,11 +83,13 @@ export function DriveRow({
             className={cn(
                 'grid border-b transition-colors eigen-list-item app-gutter-x',
                 gridCols,
+                // As in Mail: the open row gets the stripe and the wash, the cursor on another row the stripe only.
                 isActive && 'eigen-list-item-active',
+                !isActive && isCursor && 'eigen-list-item-cursor',
                 isSelected && 'eigen-list-item-selected',
                 dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
-                // No pointer-events-none: a disabled row must still be the contextmenu hit target so the
-                // interceptor below can suppress the background menu (its handlers below stay inert).
+                // A disabled row keeps its pointer events, so a right-click on it lands here and never opens the
+                // background menu. Its other handlers below do nothing while it is disabled.
                 disabled && 'opacity-40',
             )}
             onClick={(e) => {
@@ -97,8 +102,8 @@ export function DriveRow({
             onContextMenu={
                 hideActions
                     ? (e) => {
-                          // Picker rows have no actions, but the event must not bubble to DriveBrowser's
-                          // background New-folder menu (which would offer to create a sibling of this row).
+                          // A picker row has no actions. The right-click still must not reach DriveBrowser's
+                          // background menu, which would offer a new folder beside this row.
                           e.preventDefault();
                           e.stopPropagation();
                       }
@@ -132,6 +137,8 @@ export function DriveRow({
                         onClick={hideShareClick ? undefined : () => onShareClick?.(item)}
                         showIconOnHover={!hideShareClick}
                         ancestorBreadcrumb={ancestorBreadcrumb}
+                        // The row's menu key reaches Share, so Tab doesn't stop on every row.
+                        tabIndex={-1}
                     />
                 </div>
             )}
@@ -151,17 +158,7 @@ export function DriveRow({
                             : 'hidden @[800px]:flex items-center justify-center py-1.5'
                     }
                 >
-                    <button
-                        type="button"
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            openContextMenuFromButton(e.currentTarget, item);
-                        }}
-                        className="h-7 w-7 rounded hover:bg-accent flex items-center justify-center text-muted-foreground"
-                        aria-label="More actions"
-                    >
-                        <MoreVertical className="h-4 w-4" />
-                    </button>
+                    <ContextMenuButton onOpen={(button) => openContextMenuBelow(button, item)} className="h-7 w-7" />
                 </div>
             )}
         </div>

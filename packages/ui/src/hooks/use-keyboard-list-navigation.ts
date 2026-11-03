@@ -1,10 +1,12 @@
 // The keyboard model of a list or grid of rows, such as Drive's listing, mail's message list or a contact list: the
-// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it and ⌘A selects every row. The
-// list spreads the returned handleKeyDown on its focusable container. The hook keeps the focus on that container while
-// nothing else holds it, and takes it back from a row's own button when a key moves the cursor.
+// arrows move a cursor, Enter opens the row, Space quick-looks it, Delete removes it, the menu key opens its menu and
+// ⌘A selects every row. The list spreads the returned handleKeyDown on its focusable container.
+// The hook keeps the focus on that container while nothing else holds it, and takes it back from a row's own button
+// when a key moves the cursor.
 
 import type { KeyboardEvent, RefObject } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { isKeyboardContextMenu } from '../components/context-menu/use-context-menu';
 import type { UseListSelectionReturn } from './use-list-selection';
 
 // A control inside a row with its own Enter and Space, such as the row's ⋮ button. A row's name link is not one: it
@@ -31,6 +33,10 @@ type UseKeyboardListNavigationOptions<T> = {
     containerRef: RefObject<HTMLElement | null>;
     itemSelector?: string;
     onDelete?: (item: T) => void;
+    // Shift+F10 and the ContextMenu key call this for the row Enter would open. The list opens that row's menu at the
+    // row, as its ⋮ button would. In a list that draws every row, row is that row's element. A virtual list finds its
+    // own, and its call comes a frame after the row scrolled in, once the row is drawn.
+    onMenu?: (item: T, index: number, row: HTMLElement | undefined) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
     columns?: number;
@@ -50,6 +56,7 @@ export function useKeyboardListNavigation<T>({
     containerRef,
     itemSelector = '.eigen-list-item',
     onDelete,
+    onMenu,
     shouldNotify,
     selection,
     onQuickLook,
@@ -109,15 +116,22 @@ export function useKeyboardListNavigation<T>({
         };
     }, [containerRef, reclaimFocus]);
 
+    // A list that draws every row holds the cursor's row at the cursor's place among its rows. A virtual list draws only
+    // the rows near the window.
+    const drawnRow = (index: number) => {
+        if (scrollToIndex) return undefined;
+        const row = containerRef.current?.querySelectorAll(itemSelector)[index];
+        return row instanceof HTMLElement ? row : undefined;
+    };
+
     const scrollToRow = (index: number) => {
         if (scrollToIndex) {
             scrollToIndex(index);
             return;
         }
         const container = containerRef.current;
-        if (!container) return;
-        const item = container.querySelectorAll(itemSelector)[index];
-        if (!(item instanceof HTMLElement)) return;
+        const item = drawnRow(index);
+        if (!container || !item) return;
         const itemTop = item.offsetTop;
         const itemBottom = itemTop + item.offsetHeight;
         if (itemTop < container.scrollTop) {
@@ -138,6 +152,27 @@ export function useKeyboardListNavigation<T>({
         const id = getSelectionId(item);
         if (e.shiftKey) selection.selectRange(id);
         else selection.select(id);
+    };
+
+    // ⌘A on a list nobody clicked yet selects every row while the cursor is still at -1. Space, Enter, Delete and the
+    // menu key then act on the topmost selected row, and a list's onDelete may widen that to the whole selection.
+    const targetIndex = () =>
+        selectedIndex >= 0 && selectedIndex < items.length
+            ? selectedIndex
+            : items.findIndex((item) => selection?.isSelected(getSelectionId(item)));
+
+    // With no row to act on, the key does nothing here, and the page behind the list may open its own menu.
+    const openMenu = (e: KeyboardEvent<HTMLElement> | MouseEvent) => {
+        const index = targetIndex();
+        if (!onMenu || index < 0) return false;
+        e.preventDefault();
+        scrollToRow(index);
+        // A virtual list draws a row scrolled out of view only once its scroll lands, which the browser handles before
+        // the next frame. The menu waits for that frame, so it opens at the row.
+        const item = items[index];
+        if (scrollToIndex) requestAnimationFrame(() => onMenu(item, index, undefined));
+        else onMenu(item, index, drawnRow(index));
+        return true;
     };
 
     const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
@@ -187,13 +222,6 @@ export function useKeyboardListNavigation<T>({
             scrollToRow(index);
         };
 
-        // ⌘A on a list nobody clicked yet selects every row while the cursor is still at -1. Space, Enter and Delete
-        // then act on the topmost selected row, and a list's onDelete may widen that to the whole selection.
-        const targetIndex = () =>
-            selectedIndex >= 0 && selectedIndex < items.length
-                ? selectedIndex
-                : items.findIndex((item) => selection?.isSelected(getSelectionId(item)));
-
         switch (e.key) {
             case 'ArrowDown':
                 // With no row under the cursor, Down starts at the first row, also in a grid.
@@ -214,9 +242,9 @@ export function useKeyboardListNavigation<T>({
 
             case ' ': {
                 e.preventDefault();
-                // React renders the quick-look overlay before this native event finishes bubbling,
-                // so without this the overlay's own Space-to-close hotkey (on document) would shut
-                // it again on the very press that opened it.
+                // React renders the quick-look overlay before this native event finishes bubbling. The overlay
+                // closes on Space through a hotkey on the document, so without this it would close again on the
+                // same press that opened it.
                 e.stopPropagation();
                 const index = targetIndex();
                 if (index >= 0) {
@@ -238,6 +266,12 @@ export function useKeyboardListNavigation<T>({
                 break;
             }
 
+            // The menu key is the ContextMenu key or Shift+F10. F10 alone belongs to the browser.
+            case 'ContextMenu':
+            case 'F10':
+                if (e.key === 'ContextMenu' || e.shiftKey) openMenu(e);
+                break;
+
             // Backspace deletes too, the way Finder, Apple Mail and Contacts do on macOS.
             case 'Delete':
             case 'Backspace': {
@@ -258,6 +292,24 @@ export function useKeyboardListNavigation<T>({
                 break;
         }
     };
+
+    // On Windows and Linux the menu key also makes the browser send a contextmenu event to the focused element, after
+    // the keydown, and on Windows only once the key comes up. A keydown's preventDefault doesn't stop it. When the
+    // row's menu holds the focus by then, ContextMenuAnchor cancels it. When the list or a row's button still does, it
+    // lands here and opens the same row's menu, so neither the browser's menu nor the menu of the page behind the list,
+    // such as Drive's New menu, opens. A screen reader's contextmenu with no key before it opens the row's menu here
+    // too. The listener sits on the list itself, so it stops the event before React's handlers on the rows and around
+    // the list see it, and a pointer's contextmenu passes on to them. It is bound again on every render, so it reads
+    // this render's cursor, and finds a list that mounts late, such as mail's after its loading state.
+    useEffect(() => {
+        const list = containerRef.current;
+        if (!list || !onMenu) return;
+        const onContextMenu = (e: MouseEvent) => {
+            if (isKeyboardContextMenu(e) && openMenu(e)) e.stopPropagation();
+        };
+        list.addEventListener('contextmenu', onContextMenu);
+        return () => list.removeEventListener('contextmenu', onContextMenu);
+    });
 
     return { selectedIndex, handleKeyDown };
 }
