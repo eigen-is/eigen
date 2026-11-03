@@ -182,3 +182,55 @@ test('an outside press the caller prevented leaves the focus to the menu’s own
         ['onPointerDownOutside', [false]],
     ]);
 });
+
+// What a press on the trigger noted lasts until the menu closes. A menu its owner opens, such as from a shortcut, had
+// no press, and gives the focus back as Radix does. A trigger drawn again while the menu was open, such as a list row
+// re-rendered, gets it from Radix too, where the trigger that was pressed is gone.
+test('a menu gives the focus back by what opened it this time, to the trigger on the page', async () => {
+    const { useState } = await import('react');
+    const owner = { setOpen: (_open: boolean) => {}, redraw: () => {} };
+    function Owned() {
+        const [open, setOpen] = useState(false);
+        const [version, setVersion] = useState(0);
+        owner.setOpen = setOpen;
+        owner.redraw = () => setVersion((v) => v + 1);
+        return createElement(
+            DropdownMenu,
+            { open, onOpenChange: setOpen },
+            createElement(DropdownMenuTrigger, { key: version }, '⋮'),
+            createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, null, 'Edit calendar')),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Owned)));
+    const trigger = () => document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
+    const first = trigger();
+    if (!first) throw new Error('no trigger');
+    const calls = recordFocus(first);
+    const rings = () => calls.map((options) => options?.focusVisible ?? 'default');
+
+    await act(async () => {
+        first.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await settle();
+    await pressEscape();
+    await settle();
+    expect(rings()).toEqual([false]);
+
+    await act(async () => owner.setOpen(true));
+    await settle();
+    expect(menuOpen()).toBe(true);
+    await pressEscape();
+    await settle();
+    expect(rings()).toEqual([false, 'default']);
+
+    await act(async () => {
+        first.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await settle();
+    await act(async () => owner.redraw());
+    const second = trigger();
+    expect(second === first || !second).toBe(false);
+    await pressEscape();
+    await settle();
+    expect(document.activeElement).toBe(second);
+});
