@@ -221,6 +221,8 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
 
             test('a copy in one drive fails and leaves no folder in the target', async () => {
                 const target = await emptyFolder();
+                const { drive } = await getHome(ctx.alice.user.id);
+                const trashBefore = await drive.listTrash(mountId);
                 const res = await copyFile(ctx.alice.user.sessionToken, folder.ownerId, folder.mountId, folder.id, {
                     targetOwnerId: ctx.alice.user.id,
                     targetMountId: mountId,
@@ -228,6 +230,8 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 });
                 expect(res.status).toBe(410);
                 expect(await contents(target)).toEqual([]);
+                // The half-built folder held only the copy's own files, so it went for good, not to the trash.
+                expect(await drive.listTrash(mountId)).toEqual(trashBefore);
             });
 
             test('a copy to another drive fails and leaves no folder in the target', async () => {

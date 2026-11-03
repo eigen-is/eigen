@@ -100,7 +100,7 @@ export async function copyPath(
         },
         copyFile: async (parentId, fileName, listed) => {
             // The row is read again, as the listing can be a while ago. A thumbnail made since then comes
-            // along, and a source trashed since then stops the copy.
+            // along, and a file trashed since then stops the copy.
             const src = await mount.getActivePath(listed.id);
             // readFile reads the freshest copy, such as the staged bytes of an upload the bucket has not
             // acknowledged yet. For a document's data.db, the flush of its container put the latest edits there.
