@@ -11,7 +11,7 @@
     "test": "bun test --isolate"
   },
   "devDependencies": {
-    "happy-dom": "^20.14.6"
+    "happy-dom": "^21.0.4"
   },
   "dependencies": {
     "@tanstack/react-hotkeys": "^0.1.3",

@@ -42,6 +42,6 @@
     "tiptap-markdown": "^0.9.0"
   },
   "devDependencies": {
-    "happy-dom": "^20.14.6"
+    "happy-dom": "^21.0.4"
   }
 }

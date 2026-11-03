@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@types/numeral": "^2.0.5",
-    "happy-dom": "^20.14.6"
+    "happy-dom": "^21.0.4"
   },
   "peerDependencies": {
     "react": "^19.2.8",
