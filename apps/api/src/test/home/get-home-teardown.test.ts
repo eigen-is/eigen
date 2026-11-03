@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
+import { readdirSync, rmSync } from 'node:fs';
+import * as path from 'node:path';
 import { auth } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
 import type { DatabaseConfig, SchemaType } from '../../lib/core';
@@ -189,6 +191,11 @@ describe('getHome teardown race', () => {
             expect(errors.mock.calls.some(([line]) => String(line).includes('broken-probe.db'))).toBe(false);
         } finally {
             errors.mockRestore();
+            // The failed opens leave a database file in the home, which a later server backup in the same run
+            // would refuse as one it does not know.
+            for (const name of readdirSync(home.homeDir)) {
+                if (name.startsWith('broken-probe.db')) rmSync(path.join(home.homeDir, name), { force: true });
+            }
         }
     });
 
