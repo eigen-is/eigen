@@ -18,7 +18,9 @@ import type { useDriveItemController } from './use-drive-item-controller';
 type DriveRowProps = {
     item: DrivePath;
     index: number;
+    // The open row, such as the one whose details show beside the list.
     isActive: boolean;
+    isCursor: boolean;
     isSelected: boolean;
     disabled: boolean;
     gridCols: string;
@@ -43,6 +45,7 @@ export function DriveRow({
     item,
     index,
     isActive,
+    isCursor,
     isSelected,
     disabled,
     gridCols,
@@ -80,7 +83,9 @@ export function DriveRow({
             className={cn(
                 'grid border-b transition-colors eigen-list-item app-gutter-x',
                 gridCols,
+                // As in Mail: the open row gets the stripe and the wash, the cursor on another row the stripe only.
                 isActive && 'eigen-list-item-active',
+                !isActive && isCursor && 'eigen-list-item-cursor',
                 isSelected && 'eigen-list-item-selected',
                 dragOverItemId === item.id && isValidFolderDrop(item) && 'bg-accent',
                 // A disabled row keeps its pointer events, so a right-click on it lands here and never opens the

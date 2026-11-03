@@ -247,7 +247,8 @@ export function DriveTable({
                                 coarse={coarse}
                                 controller={controller}
                                 longPressBind={longPress.bind}
-                                isActive={activeItemId === item.id || controller.selectedIndex === vi.index}
+                                isActive={activeItemId === item.id}
+                                isCursor={controller.selectedIndex === vi.index}
                                 isSelected={
                                     controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
                                 }
