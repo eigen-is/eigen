@@ -285,7 +285,7 @@ describe('SSE', () => {
             return getHome(user.id);
         }
 
-        test('an open stream keeps its Home past the idle, and a cancelled one lets it go', async () => {
+        test('an open stream keeps its Home past the idle, and a cancelled one closes it at once', async () => {
             const home = await newHome('held');
             const reader = createSSEStream(home).getReader();
             jest.useFakeTimers();
@@ -294,8 +294,9 @@ describe('SSE', () => {
             jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
             expect(home.closing).toBe(false);
 
+            // The last request is longer ago than the idle time, so the stream's release gives no fresh idle.
             await reader.cancel();
-            jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+            jest.advanceTimersByTime(1);
             expect(home.closing).toBe(true);
             jest.useRealTimers();
             await home.close();
@@ -307,9 +308,9 @@ describe('SSE', () => {
             let released = false;
             spyOn(home, 'hold').mockImplementation((onClosing) => {
                 const release = hold(onClosing);
-                return (idleMs) => {
+                return () => {
                     released = true;
-                    release(idleMs);
+                    release();
                 };
             });
             const intervals = spyOn(globalThis, 'setInterval');

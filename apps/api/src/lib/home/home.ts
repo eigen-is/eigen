@@ -1,8 +1,8 @@
 // A Home is everything one owner keeps on this server, such as a user's files, mail and calendar,
 // or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
-// builds the Home on first use. It stays loaded while it is used or held, such as by an open tab,
-// and closes itself, databases included, after a few idle minutes. This base class owns that
-// lifecycle. Each kind of home decides which parts it has.
+// builds the Home on first use. It closes itself, databases included, once nothing holds it, such as
+// an open tab, and its last request is a few idle minutes ago. This base class owns that lifecycle.
+// Each kind of home decides which parts it has.
 
 import * as path from 'node:path';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
@@ -41,6 +41,8 @@ export class Home {
     protected idleMs = 1000 * 60 * 5;
 
     private idleTimer: Timer | undefined;
+    // A Home that only background work opened, such as a backup, has had no request yet.
+    private lastRequestAt = 0;
     private holds = 0;
     private initPromise: Promise<this> | null = null;
     private closePromise: Promise<void> | null = null;
@@ -173,19 +175,19 @@ export class Home {
         this.onClosed?.();
     }
 
-    // Restarts the idle countdown. Only openHome calls it: a request reaches the Home through getHome, which
-    // restarts the idle, and work that outlasts it holds the Home instead.
+    // A request reaches the Home through getHome, which calls this. Reading a part is no request, so work
+    // that outlasts the idle time holds the Home instead.
     public touch(): this {
-        this.startIdleTimer(this.idleMs);
+        this.lastRequestAt = Date.now();
+        this.closeWhenIdle();
         return this;
     }
 
     // Keeps the home open, however long the work takes, until the returned release is called. A holder that
     // must stop when the home closes anyway, such as for a restore, passes onClosing. The home runs it when the
     // close starts, before the parts close, unlike the onClosed of the constructor, which runs when the close
-    // is done. A holder that opened the home only for itself may ask for a shorter idle when it lets go. A
-    // closing home refuses, because its holder would never hear the close.
-    public hold(onClosing?: () => void): (idleMs?: number) => void {
+    // is done. A closing home refuses, because its holder would never hear the close.
+    public hold(onClosing?: () => void): () => void {
         this.refuseIfClosing();
         this.holds++;
         clearTimeout(this.idleTimer);
@@ -194,12 +196,12 @@ export class Home {
         if (callback) this.holderCloseCallbacks.add(callback);
         // Releasing twice must not count as two releases.
         let released = false;
-        return (idleMs = this.idleMs) => {
+        return () => {
             if (released) return;
             released = true;
             this.holds--;
             if (callback) this.holderCloseCallbacks.delete(callback);
-            this.startIdleTimer(idleMs);
+            this.closeWhenIdle();
         };
     }
 
@@ -214,13 +216,20 @@ export class Home {
         }
     }
 
-    private startIdleTimer(idleMs: number): void {
+    // The one rule: a Home closes when nothing holds it and its last request is longer ago than its idle
+    // time. A release only checks the rule again, so a holder that comes and goes, such as an upload that
+    // retries on a failing bucket, never keeps the Home open past its idle time. openHome calls it too, so
+    // a Home nobody requested closes once its last holder lets go.
+    public closeWhenIdle(): void {
         if (this._closing || this.holds > 0) return;
         clearTimeout(this.idleTimer);
-        this.idleTimer = setTimeout(() => {
-            console.log(`[Home] Idle timeout for ${this.user.id}, closing`);
-            this.close().catch((e) => console.error(`[Home] Close failed for ${this.user.id}:`, e));
-        }, idleMs);
+        this.idleTimer = setTimeout(
+            () => {
+                console.log(`[Home] Idle timeout for ${this.user.id}, closing`);
+                this.close().catch((e) => console.error(`[Home] Close failed for ${this.user.id}:`, e));
+            },
+            Math.max(0, this.lastRequestAt + this.idleMs - Date.now()),
+        );
     }
 
     // One shared connection per database file under the home, closed when the home goes idle.

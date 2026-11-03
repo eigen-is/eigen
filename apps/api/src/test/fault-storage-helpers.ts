@@ -330,6 +330,11 @@ function holdRetries(mount: Mount): void {
     queueFields(mount).backoffMs = () => 60_000;
 }
 
+// Lets the queue retry on its own, every ms, for a test of a bucket that keeps failing.
+export function shrinkRetryBackoff(mount: Mount, ms: number): void {
+    queueFields(mount).backoffMs = () => ms;
+}
+
 // Shrinks the PUT deadline so a parked PUT orphans fast. Retries are already held (FaultMount): one
 // the queue fired on its own inside the orphan window would take the shrunk deadline, park, and time
 // out behind the test's back.

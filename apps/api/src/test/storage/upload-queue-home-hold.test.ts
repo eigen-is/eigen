@@ -1,11 +1,13 @@
 import { afterEach, beforeAll, describe, expect, jest, test } from 'bun:test';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
+import { teamOwnerId } from '@workspace/lib/types/owner';
 import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core';
 import type { DatabaseConfig } from '../../lib/core';
 import type { Home } from '../../lib/home';
 import { getHome } from '../../lib/home';
 import { evictHome } from '../../lib/home/get-home';
+import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
 import type { Mount } from '../../lib/mount/mount';
 import {
     countBackingRows,
@@ -16,13 +18,15 @@ import {
     STALL_BOUND_MS,
     settlesWithin,
     shrinkPutTimeout,
+    shrinkRetryBackoff,
 } from '../fault-storage-helpers';
 import { createTestUser, getTestContext, TEST_DATA_DIR } from '../setup';
 
 // An upload on its way is a user of its Home, so the upload queue holds the Home while a PUT is on the
 // wire. An idle close then never meets a PUT and never waits for one. An eviction, such as for a
 // restore, closes a held Home anyway, and it waits for the PUTs it meets, so none lands over what the
-// Home reopens to.
+// Home reopens to. The hold never stretches the Home's life past its last request, so a bucket that
+// keeps failing does not keep the Home open.
 
 const USER_IDLE_MS = 5 * 60_000;
 const BACKING = join(TEST_DATA_DIR, `upload-queue-home-hold-${Date.now()}`);
@@ -108,6 +112,39 @@ describe('an upload on its way holds its Home', () => {
         const reopened = await addS3Mount(await getHome(home.user.id), 'uq-hold-idle');
         await reopened.mount.uploadQueue?.drain({ flushNow: true });
         expect(await countBackingRows(reopened.mount, open.dataDbId, BACKING)).toBe(1);
+    });
+
+    test('an upload that retries on a failing bucket lets the Home close its idle time after the last request', async () => {
+        const idleMs = 600;
+        const previousIdle = process.env['TEAM_HOME_IDLE_MS'];
+        process.env['TEAM_HOME_IDLE_MS'] = String(idleMs);
+        const home = new TeamHome(getSyntheticTeamUser(teamOwnerId(crypto.randomUUID().replace(/-/g, ''))));
+        if (previousIdle === undefined) delete process.env['TEAM_HOME_IDLE_MS'];
+        else process.env['TEAM_HOME_IDLE_MS'] = previousIdle;
+        try {
+            await home.init();
+            const { mount, fault } = await addS3Mount(home, 'uq-hold-failing');
+            const { dataDbId } = await provisionDatabase(mount);
+            const managed = await mount.createDatabase(docConfig, dataDbId);
+            await mount.uploadQueue?.drain({ flushNow: true });
+
+            shrinkRetryBackoff(mount, 10);
+            fault.failNextWrites = 1_000_000;
+            managed.db.insert(docSchema.items).values({ id: 1, data: 'a' }).run();
+            await mount.closeDatabase(dataDbId);
+            home.touch();
+            const requestedAt = Date.now();
+            const writesAtRequest = fault.writeCount;
+
+            for (let waited = 0; waited < 5 * idleMs && !home.closing; waited += 10) await Bun.sleep(10);
+            expect(home.closing).toBe(true);
+            // It closed once its idle time after the request was up, with the queue retrying all along.
+            expect(Date.now() - requestedAt).toBeGreaterThanOrEqual(idleMs - 20);
+            expect(fault.writeCount - writesAtRequest).toBeGreaterThan(5);
+        } finally {
+            await home.close();
+            rmSync(home.homeDir, { recursive: true, force: true });
+        }
     });
 
     test('an eviction during a stalled PUT waits for it, so the late PUT cannot land over newer bytes', async () => {

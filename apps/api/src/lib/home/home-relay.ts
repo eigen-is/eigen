@@ -38,7 +38,7 @@ import type { EventPatch } from '../ical/ical-component';
 import { readMailTotalSize } from '../mail/maildir-store';
 import type { User } from '../user';
 import { getMemberships, getUserById, getUsersByEmails, isGuest, updateUser } from '../user';
-import { getHome, getTeamHome, loadedHome, openHome, requestedSince } from './get-home';
+import { getHome, getTeamHome, loadedHome, openHome } from './get-home';
 import { homeSize, userHomeSize } from './home';
 import { TeamHome } from './team-home';
 
@@ -413,30 +413,17 @@ export async function pullHomeSize(ownerUserId: string): Promise<HomeSizeRespons
     return userHomeSize(homeDir, settings, contacts + mail + calendars, teamIds);
 }
 
-// How long a home that the backup opened for itself stays open after its capture. A user who
-// opened it meanwhile keeps it anyway: their stream or socket holds it, and a request since the
-// capture began keeps the full idle. So the value only needs to be short, and 30 s is a guess.
-export const BACKUP_RELEASE_MS = 30_000;
-
-// A backup captures each home through here. A home that was closed is opened only for the capture,
-// so a nightly backup does not leave every home open. It is never closed by force, because a user
-// may have opened it during the capture.
+// A backup captures each home through here. It opens the home without counting as a request and holds
+// it while the capture runs, which can outlast the idle time, for example on one big file at night. So a
+// nightly backup leaves open only the homes somebody uses. A home is never closed by force, because a
+// user may have opened it during the capture.
 export async function pullHomeSnapshot(
     ownerId: string,
     targetDir: string,
     options: { level?: BackupLevel; onProgress?: BackupProgress },
 ): Promise<BackupManifest> {
-    const startedAt = Date.now();
-    const wasOpen = loadedHome(ownerId) !== undefined;
     const home = await openHome(ownerId);
-    // A capture can outlast the idle time while nobody is connected, for example on one big file at
-    // night. The hold keeps the databases it reads open.
-    const release = home.hold();
-    try {
-        return await snapshotHome(home, targetDir, options);
-    } finally {
-        release(!wasOpen && !requestedSince(home, startedAt) ? BACKUP_RELEASE_MS : undefined);
-    }
+    return home.withHomeHeld(() => snapshotHome(home, targetDir, options));
 }
 
 // The server backup sizes every home through here before it starts, to check that there is room.

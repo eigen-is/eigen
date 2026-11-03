@@ -192,7 +192,7 @@ describe('getHome teardown race', () => {
         }
     });
 
-    // The idle countdown restarts on getHome and on a release, never on a read of a part.
+    // The idle countdown runs from the last getHome, never from a read of a part.
     test('reading a part does not restart the idle countdown, a getHome does', async () => {
         const userId = await createHomeUser('idle-restart@test.eigen.is');
         await getHome(userId);
@@ -216,6 +216,42 @@ describe('getHome teardown race', () => {
             jest.useRealTimers();
         }
         await evictHome(userId);
+    });
+
+    // A release only checks the rule again: a holder never stretches the Home's life past its last request.
+    test('a release long after the last request closes the Home at once', async () => {
+        const home = await getHome(await createHomeUser('release-long-after@test.eigen.is'));
+        jest.useFakeTimers();
+        try {
+            home.touch();
+            const release = home.hold();
+            jest.advanceTimersByTime(2 * USER_IDLE_MS);
+            expect(home.closing).toBe(false);
+            release();
+            jest.advanceTimersByTime(1);
+            expect(home.closing).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+        await home.close();
+    });
+
+    test('a release two minutes after a request closes the Home three minutes later', async () => {
+        const home = await getHome(await createHomeUser('release-two-minutes@test.eigen.is'));
+        jest.useFakeTimers();
+        try {
+            home.touch();
+            const release = home.hold();
+            jest.advanceTimersByTime(2 * 60_000);
+            release();
+            jest.advanceTimersByTime(3 * 60_000 - 1);
+            expect(home.closing).toBe(false);
+            jest.advanceTimersByTime(2);
+            expect(home.closing).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+        await home.close();
     });
 
     // A long request, such as an upload, holds its home while it runs and lets go however it ends.

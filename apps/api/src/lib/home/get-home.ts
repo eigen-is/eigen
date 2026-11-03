@@ -1,8 +1,8 @@
 // getHome is the way in to every owner's data. It builds the owner's Home on first use, keeps it in a
-// cache, and hands every later caller that same Home until it closes. Because every request passes
-// through here, this file also remembers when a home was last asked for. It keeps a home shut while a
-// restore replaces its folder or a deletion removes it, and every home while the shutdown runs. It
-// also hands a server-wide event, such as a restart notice, to every loaded home.
+// cache, and hands every later caller that same Home until it closes. Every request passes through
+// here, so this is where a Home hears of its requests. It keeps a home shut while a restore replaces
+// its folder or a deletion removes it, and every home while the shutdown runs. It also hands a
+// server-wide event, such as a restart notice, to every loaded home.
 
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import type { SSEvent } from '@workspace/lib/types/sse';
@@ -19,9 +19,6 @@ import { getSyntheticTeamUser, TeamHome } from './team-home';
 import { UserHome } from './user-home';
 
 const homeFactories = new Map<string, AsyncSingleton<Home>>();
-
-// When a request last reached each home.
-const lastRequestAt = new WeakMap<Home, number>();
 
 // Homes whose folder a restore is replacing. openHome refuses them until the restore is done, so
 // nothing opens the folder while it is being moved aside.
@@ -46,11 +43,6 @@ export function atHome(ownerId: string): boolean {
 export function loadedHome(ownerId: string): Home | undefined {
     const home = homeFactories.get(ownerId)?.peek();
     return home && !home.closing ? home : undefined;
-}
-
-// Tells work that opened a home for itself whether anybody else has used it since.
-export function requestedSince(home: Home, time: number): boolean {
-    return (lastRequestAt.get(home) ?? 0) >= time;
 }
 
 // The mark is the lock: a second restore of one home would move a folder aside that the first one is
@@ -80,12 +72,11 @@ export function clearHomeDeleting(ownerId: string): void {
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
-    const home = await openHome(ownerId);
-    lastRequestAt.set(home, Date.now());
-    return home;
+    return (await openHome(ownerId)).touch();
 }
 
-// getHome without counting as a request, for background work such as a backup.
+// getHome without counting as a request, for background work such as a backup. The caller holds the Home
+// while it works: one that nobody requested closes once nothing holds it.
 export async function openHome(ownerId: string): Promise<Home> {
     // Settles in one or two rounds; the limit only stops a runaway loop.
     for (let attempt = 0; attempt < 100; attempt++) {
@@ -103,7 +94,10 @@ export async function openHome(ownerId: string): Promise<Home> {
         }
         // Checked again: a restore or a deletion may have started while the home was being built.
         refuseShutHome(ownerId);
-        if (!home.closing) return home.touch();
+        if (!home.closing) {
+            home.closeWhenIdle();
+            return home;
+        }
 
         // Wait until it has closed and dropped out of the cache, so the next round can't open the
         // same database files while they are still being closed.
