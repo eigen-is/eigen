@@ -19,11 +19,7 @@ export const RECENT_TEXT_CAP = 8192;
 const COMMENT_SEARCH_LIMIT = 8;
 
 export class CommentIndex {
-    private readonly db: BunSQLiteDatabase<typeof commentSchema>;
-
-    public constructor(db: BunSQLiteDatabase<typeof commentSchema>) {
-        this.db = db;
-    }
+    public constructor(private readonly db: BunSQLiteDatabase<typeof commentSchema>) {}
 
     public async ensureComment(chatName: string, seed?: { createdBy?: string | null }): Promise<void> {
         await this.db
@@ -146,16 +142,14 @@ export class CommentIndex {
 }
 
 // Runs fn on the index of the document at pathId, with its comments.db open for just that long.
-// Through a SharedDrive, getPath checks that the caller may read the document. A plain Drive belongs
-// to the caller, so nothing is checked.
+// Through a SharedDrive, the lookup of comments.db checks that the caller may read the document. A
+// plain Drive belongs to the caller, so nothing is checked.
 export async function withCommentIndex<T>(
     drive: DriveLike,
     mountId: string,
     pathId: string,
     fn: (index: CommentIndex) => Promise<T>,
 ): Promise<T> {
-    const path = await drive.getPath(mountId, pathId);
-    if (!path) throw new ApiError(404, 'Container not found');
     const dbPath = await drive.getChildByName(mountId, pathId, 'comments.db');
     if (!dbPath) throw new ApiError(404, 'comments.db not found');
     return drive.withDatabase(mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id, (managed) =>

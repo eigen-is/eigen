@@ -5,7 +5,8 @@ import { ApiError } from '../../lib/core/errors';
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { HOLDER_WAIT_MS } from '../../lib/mount/document-db';
-import { authedRequest, driveGet, drivePost, getTestContext } from '../setup';
+import type { TestUser } from '../setup';
+import { authedRequest, createTestUserOnStorage, driveGet, drivePost, getTestContext } from '../setup';
 
 // Trashing an open eigendoc tears the collab document down, so no live session keeps editing a
 // trashed document and no open database syncs its data.db to the pre-trash key.
@@ -141,6 +142,53 @@ describe('trash closes open collab documents', () => {
         await home.drive.closeCollabDocument(mountId, doc.id);
         const fresh = await home.drive.getCollabDocument(mountId, doc.id);
         expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', after: 'typed' });
+    });
+
+    // A create that checked the folder before its trash began can insert a subfolder after the trash
+    // marked what was there. The subfolder has no mark of its own, and a move into it is refused all the same.
+    const moveIntoLateSubfolder = async (user: TestUser, name: string) => {
+        const userHome = await getHome(user.id);
+        const root = await driveGet<DrivePath>(user.sessionToken, user.id, mountId, 'root');
+        const folder = await userHome.drive.createFolder(mountId, root.id, name);
+        const doc = await drivePost<DrivePath>(user.sessionToken, user.id, mountId, `folder/${root.id}/create/doc`, {
+            fileName: `${name}-doc`,
+        });
+        const collab = await userHome.drive.getCollabDocument(mountId, doc.id);
+        collab.doc.getMap('state').set('before', 'kept');
+        const { mount } = await userHome.drive.resolveFile(mountId, doc.id);
+        const trashPath = mount.trashPath.bind(mount);
+        let moved: unknown = null;
+        const trashSpy = spyOn(mount, 'trashPath').mockImplementationOnce(async (pathId) => {
+            const subfolderId = await mount.createFolder(folder.id, 'late');
+            moved = await userHome.drive.movePath(mountId, doc.id, subfolderId).catch((e: unknown) => e);
+            return trashPath(pathId);
+        });
+        try {
+            await userHome.drive.deletePath(mountId, folder.id);
+        } finally {
+            trashSpy.mockRestore();
+        }
+
+        expect(moved instanceof ApiError && moved.status).toBe(404);
+        expect((await mount.getPath(doc.id))?.parentId).toBe(root.id);
+        expect(userHome.drive.hasCollabDocument(mountId, doc.id)).toBe(true);
+        collab.doc.getMap('state').set('after', 'typed');
+        await userHome.drive.closeCollabDocument(mountId, doc.id);
+        const fresh = await userHome.drive.getCollabDocument(mountId, doc.id);
+        expect(fresh.doc.getMap('state').toJSON()).toEqual({ before: 'kept', after: 'typed' });
+        await userHome.drive.closeCollabDocument(mountId, doc.id);
+        return mount;
+    };
+
+    test('a move into a subfolder created while its folder is trashed is refused', async () => {
+        await moveIntoLateSubfolder(ctx.alice.user, 'trash-late-sub');
+    });
+
+    // On `local` a move renames the bytes before it writes the row, and a refusal must leave them with the row.
+    test('on local the same move is refused, and the document keeps its bytes', async () => {
+        const user = await createTestUserOnStorage('local-fullnames', 'Trash Local');
+        const mount = await moveIntoLateSubfolder(user, 'trash-late-sub-local');
+        expect(mount.isPathBased).toBe(true);
     });
 
     // A restore can still put a document in the folder after the trash began, and the document can then

@@ -11,9 +11,8 @@ import type { Mount } from '../mount';
 
 const CHAT_CONTENT_PAGE = 512;
 
-// Drive-wide view of a chat: the NEWEST searchable messages up to capBytes (most relevant for
-// "find the chat that mentioned X"). Reads the tail cheaply via idx_messages_createdAt;
-// no full scan, no Yjs (chat's data.db is a relational ManagedDatabase).
+// The newest searchable messages of a chat, up to capBytes, because they best answer a search for the chat
+// that mentioned something. It reads from the end through idx_messages_createdAt and never scans the chat.
 export async function readChatContent(mount: Mount, drivePath: DrivePath, capBytes: number): Promise<string> {
     const dataDbPath = await mount.getChildByName(drivePath.id, 'data.db');
     if (!dataDbPath) return '';
@@ -29,8 +28,8 @@ export async function readChatContent(mount: Mount, drivePath: DrivePath, capByt
         return person;
     };
 
-    // Walk the newest messages a page at a time, on getMessagesForUser's keyset, and stop the moment `out` reaches
-    // capBytes, so a long chat never materialises more than one page past the cap.
+    // It reads the newest messages a page at a time, on the same keyset as getMessagesForUser, and stops once
+    // `out` reaches capBytes. So a long chat never loads more than one page past the cap.
     return mount.withDatabase(CHAT_ROOM_DB_CONFIG, dataDbPath.id, async (managedDb) => {
         let out = '';
         let before: { createdAt: Date; rowid: number } | undefined;

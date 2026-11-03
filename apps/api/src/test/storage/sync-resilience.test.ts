@@ -20,6 +20,8 @@ import {
     FaultMount,
     FaultStorage,
     provisionDoc,
+    STALL_BOUND_MS,
+    settlesWithin,
 } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
@@ -408,11 +410,13 @@ describe('write-behind upload pipeline', () => {
         fault.parkWrites = true; // hold the PUT in flight
         const draining = mount.uploadQueue?.drain(); // background drain, no flush
         await fault.waitForParked(() => true);
-        // Idle teardown (no shutdown deadline): sets uploadClosing + unregisters, does NOT await the
-        // in-flight PUT. The drain must then bail via its uploadClosing guards without throwing.
-        await mount.closeAllDatabases();
+        // Idle teardown (no shutdown deadline) waits for the PUT on the wire, so it can't land after
+        // the close. Once it lands, the drain bails without its ack and without touching metadata.db.
+        const closing = mount.closeAllDatabases();
+        expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(false);
         await fault.landAllRemaining();
-        await draining; // resolves cleanly — no DB-after-close error
+        await closing;
+        await draining;
 
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // row preserved for replay on reopen
     });

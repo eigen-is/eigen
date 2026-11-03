@@ -108,7 +108,7 @@ export class ChatRoom {
         const now = new Date();
         const attachmentData = attachments && attachments.length > 0 ? attachments : null;
 
-        // The participants are read here too, so data.db is held only this long.
+        // The participants are read in the same call, so a post opens data.db once.
         const participantRows = await this.withDb(async (db) => {
             await db.insert(schema.messages).values({
                 id,

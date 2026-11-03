@@ -708,4 +708,28 @@ describe('holders', () => {
         hold.release();
         expect(slot?.idleTimer).toBeNull();
     });
+
+    test('a holder the forced close left behind does not count against the database opened after it', async () => {
+        const { mount } = await createGatedLocalMount('close-deadline-reopen');
+        const { dataDbId } = await provisionDoc(mount, docConfig);
+        const stale = await mount.holdDatabase(docConfig, dataDbId);
+        const slot = mount.documentDbs.get(dataDbId);
+        jest.useFakeTimers();
+
+        const closing = mount.closeDatabase(dataDbId);
+        const reopening = mount.holdDatabase(docConfig, dataDbId);
+        for (let turn = 0; turn < 100 && !slot?.lastHolderGone; turn++) await Promise.resolve();
+        jest.advanceTimersByTime(HOLDER_WAIT_MS);
+        await closing;
+        const fresh = await reopening;
+        expect(mount.documentDbs.get(dataDbId)).toBe(slot);
+        expect(slot?.holders).toBe(1);
+
+        fresh.release();
+        expect(slot?.holders).toBe(0);
+        expect(slot?.idleTimer).not.toBeNull();
+        // The stale holder lets go of the database the close took away, not of the new one.
+        stale.release();
+        expect(slot?.holders).toBe(0);
+    });
 });
