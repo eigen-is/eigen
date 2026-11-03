@@ -14,7 +14,6 @@ import {
     rmSync,
     statSync,
     symlinkSync,
-    utimesSync,
     writeFileSync,
 } from 'node:fs';
 import { basename, dirname, join, relative } from 'node:path';
@@ -48,6 +47,7 @@ import {
 } from '../../lib/config/paths';
 import { getServerConfig } from '../../lib/config/server-config';
 import { getHome } from '../../lib/home/get-home';
+import { MAIL_DB_CONFIG } from '../../lib/mail/db-config';
 import type { Mount } from '../../lib/mount/mount';
 import type { RealShapeHome } from '../backup/backup-test-helpers';
 import {
@@ -1374,12 +1374,10 @@ describe('restore --check-data, which a rollback runs first with the build it go
     );
 
     test(
-        'with --since, checks only the databases written since then, a -wal counting as a write',
+        'with --since, checks only the databases changed since then, a -wal counting as a change',
         async () => {
             const dir = install();
             await stageAndSwap(dir, basename(fullArchive));
-            const since = Date.now();
-            const past = new Date(since - 60_000);
             const metadata = join(homeDirOf(dir, realShape.user.id), 'mounts/default/metadata.db');
             const shares = join(dir, 'data/server', SERVER_DATABASES.shares);
             const users = join(dir, 'data/server', SERVER_DATABASES.users);
@@ -1387,7 +1385,8 @@ describe('restore --check-data, which a rollback runs first with the build it go
             bumpSchema(metadata, 1);
             bumpSchema(shares, 1);
             writeFileSync(users, Buffer.alloc(intact.length, 'x'));
-            for (const file of [metadata, shares, users]) utimesSync(file, past, past);
+            // A millisecond after every change above, and long before the ones below, which a run of the CLI precedes.
+            const since = Date.now() + 1;
             const sinceArgs = ['--check-data', '--yes', '--since', String(since)];
             // Written before the first check began, so that check passed them.
             const unchanged = await restoreCli(dir, sinceArgs);
@@ -1406,7 +1405,6 @@ describe('restore --check-data, which a rollback runs first with the build it go
                 rmSync(`${file}-wal`);
                 if (file === users) writeFileSync(users, intact);
                 else bumpSchema(file, -1);
-                utimesSync(file, past, past);
             }
             expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
             // A time that is not one, or one for another mode, is a usage error.
@@ -1418,6 +1416,56 @@ describe('restore --check-data, which a rollback runs first with the build it go
                 expect(refused.code).toBe(2);
                 expect(refused.stderr).toContain('--since');
             }
+        },
+        JOB_TIMEOUT_MS,
+    );
+
+    test(
+        'with --since, checks a home that a restore renamed or unpacked into place, whose files keep their old times',
+        async () => {
+            const dir = install();
+            const homes = join(dir, 'data/home');
+            // A database this build cannot open: one from a newer mail schema.
+            const newerMail = (file: string) => {
+                mkdirSync(dirname(file), { recursive: true });
+                const db = new Database(file);
+                db.run('CREATE TABLE __schema_version (id INTEGER PRIMARY KEY, version INTEGER)');
+                db.run('INSERT INTO __schema_version VALUES (1, ?)', [MAIL_DB_CONFIG.currentVersion + 1]);
+                db.close();
+            };
+            // u1 holds no database, and its safety copy holds the newer one. No check opens a safety copy.
+            mkdirSync(join(homes, 'u1'));
+            writeFileSync(join(homes, 'u1', PATHS.SETTINGS), '{}');
+            newerMail(join(homes, 'u1.pre-restore-20261103-100000', PATHS.MAIL.DB));
+            // An archive of a mail folder with the newer database, and u2's own empty mail folder to unpack it in.
+            const source = join(scratch('restore-since-source-'), PATHS.MAIL.ROOT);
+            newerMail(join(source, 'mail.db'));
+            const archive = join(scratch('restore-since-archive-'), 'mail.tar.zst');
+            await packFolder(source, archive);
+            mkdirSync(join(homes, 'u2', PATHS.MAIL.ROOT), { recursive: true });
+            // The launcher takes the time before its first check, which passes.
+            const since = Date.now() + 1;
+            const sinceArgs = ['--check-data', '--yes', '--since', String(since)];
+            expect((await restoreCli(dir, ['--check-data', '--yes'])).code).toBe(0);
+            expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
+
+            // Restore this copy: two renames. The database in the copy keeps both its times, only the folder changes.
+            renameSync(join(homes, 'u1'), join(homes, 'u1.pre-restore-20261103-110000'));
+            renameSync(join(homes, 'u1.pre-restore-20261103-100000'), join(homes, 'u1'));
+            expect(statSync(join(homes, 'u1', PATHS.MAIL.DB)).ctimeMs).toBeLessThan(since);
+            const renamed = await restoreCli(dir, sinceArgs);
+            expect(renamed.code).toBe(CANNOT_OPEN);
+            expect(renamed.stderr).toContain(`data/home/u1/${PATHS.MAIL.DB} is at`);
+            renameSync(join(homes, 'u1'), join(homes, 'u1.pre-restore-20261103-120000'));
+            renameSync(join(homes, 'u1.pre-restore-20261103-110000'), join(homes, 'u1'));
+            expect((await restoreCli(dir, sinceArgs)).code).toBe(0);
+
+            // An unpack writes each file's mtime back from the archive, so only the file's ctime is new.
+            await archiveModule.extractArtifact(archive, join(homes, 'u2'), { maxBytes: 1e9, chargeFolders: true });
+            expect(statSync(join(homes, 'u2', PATHS.MAIL.DB)).mtimeMs).toBeLessThan(since);
+            const unpacked = await restoreCli(dir, sinceArgs);
+            expect(unpacked.code).toBe(CANNOT_OPEN);
+            expect(unpacked.stderr).toContain(`data/home/u2/${PATHS.MAIL.DB} is at`);
         },
         JOB_TIMEOUT_MS,
     );
