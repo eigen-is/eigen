@@ -4,7 +4,7 @@
 // restoreFocus as the menu closes. isKeyboardContextMenu tells a contextmenu event that a key sent from a pointer's.
 
 import { useCallback, useRef, useState } from 'react';
-import { returnFocusTo } from '../../hooks/use-focus-return';
+import { hasFocusRing, returnFocusTo } from '../../hooks/use-focus-return';
 
 export function useContextMenu<T>() {
     const [item, setItem] = useState<T | null>(null);
@@ -12,9 +12,12 @@ export function useContextMenu<T>() {
     // Radix gives the focus back to the menu's trigger as it closes, but the anchor's trigger is an empty div that
     // can't take it. The focus would fall to the page body, and the host's keys would do nothing until a click.
     const openedFrom = useRef<HTMLElement | null>(null);
+    // A ⋮ a mouse clicked has the focus without a ring, and gets it back the same way.
+    const openedWithRing = useRef(true);
 
     const captureFocus = () => {
         openedFrom.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        openedWithRing.current = !openedFrom.current || hasFocusRing(openedFrom.current);
     };
 
     const handleContextMenu = useCallback((e: React.MouseEvent, item: T) => {
@@ -36,7 +39,7 @@ export function useContextMenu<T>() {
     // A row that focused something, such as a chat message's edit box or the field of the dialog it opened, keeps
     // the focus. That dialog gives the focus back to openedFrom when it closes.
     const restoreFocus = useCallback(() => {
-        if (openedFrom.current?.isConnected) returnFocusTo(openedFrom.current);
+        if (openedFrom.current?.isConnected) returnFocusTo(openedFrom.current, openedWithRing.current);
         openedFrom.current = null;
     }, []);
 
