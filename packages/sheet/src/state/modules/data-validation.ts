@@ -27,7 +27,7 @@ import {
     setCellValue,
 } from '..';
 import { getSheet } from '../api/common';
-import type { DataRegulationProps, Rect } from '../types';
+import type { DataValidationDraft, Rect } from '../types';
 import { clipToUsedExtent, replaceHtml } from '../utils';
 import { addValidation, validationAt } from './validation-rules';
 
@@ -658,7 +658,7 @@ export function setDropdownValue(ctx: Context, value: string, arr: string[]) {
 
 // What is wrong with the values a data-validation draft compares against, such as a list with no options or a
 // range that ends below its start, or undefined when the rule can be applied. The dialog shows it before OK applies.
-export function validationValueProblem({ type, type2, value1, value2 }: DataRegulationProps): string | undefined {
+export function validationValueProblem({ type, type2, value1, value2 }: DataValidationDraft): string | undefined {
     const v1 = parseFloat(value1).toString() !== 'NaN';
     const v2 = parseFloat(value2).toString() !== 'NaN';
     if (type === 'dropdown') {

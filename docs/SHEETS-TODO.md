@@ -185,7 +185,7 @@ Verified, user-visible, bounded.
 
 ### Verified working in a real browser
 
-Recorded so it isn't re-tested: freeze panes (line, handles, frozen scrolling), row and column resize, the fill handle, which extends along one axis at a time as in Excel and Google Sheets, the data-validation dropdown (`DropDownList` in `components/DataValidation/DropdownList.tsx`) and the link editor, a centered shadcn `Dialog` that is deliberately not draggable. On macOS, Ctrl+arrow does nothing because Mission Control takes all four before the browser sees them; Cmd+arrow is the Mac binding (`handleControlPlusArrowKey`), with `preventDefault` so the browser's back and forward don't fire.
+Recorded so it isn't re-tested: freeze panes (line, handles, frozen scrolling), row and column resize, the fill handle, which extends along one axis at a time as in Excel and Google Sheets, the data-validation dropdown (`DropdownList` in `components/DataValidation/DropdownList.tsx`) and the link editor, a centered shadcn `Dialog` that is deliberately not draggable. On macOS, Ctrl+arrow does nothing because Mission Control takes all four before the browser sees them; Cmd+arrow is the Mac binding (`handleControlPlusArrowKey`), with `preventDefault` so the browser's back and forward don't fire.
 
 ## Clipboard: put sheets on the shared system
 
