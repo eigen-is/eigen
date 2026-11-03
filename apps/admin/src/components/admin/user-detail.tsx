@@ -23,6 +23,11 @@ import { BackupSection } from './backup-section';
 import { ResetPasswordDialog } from './reset-password-dialog';
 import { UserTeamsSection } from './user-teams-section';
 
+// The owner's password and backups are the owner's alone, so no other admin reaches them.
+function canManagePasswordAndBackups(user: AdminUserRow, myId: string | undefined): boolean {
+    return user.role !== 'owner' || user.id === myId;
+}
+
 type UserDetailToolbarProps = {
     user: AdminUserRow;
     // A guest signs in with an emailed code, so there is no password to reset.
@@ -35,7 +40,7 @@ export function UserDetailToolbar({ user, guest }: UserDetailToolbarProps) {
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            {!guest && (user.role !== 'owner' || user.id === me?.id) && (
+            {!guest && canManagePasswordAndBackups(user, me?.id) && (
                 <>
                     <TooltipButton
                         icon={KeyRound}
@@ -157,7 +162,7 @@ export function UserDetail({ user, usage, organizationId, guest }: UserDetailPro
                         {usage ? <StorageUsageBars data={usage} /> : <p className="text-sm text-muted-foreground">—</p>}
                     </div>
 
-                    {(user.role !== 'owner' || user.id === me?.id) && (
+                    {canManagePasswordAndBackups(user, me?.id) && (
                         <>
                             <Separator />
                             <BackupSection ownerId={user.id} />
