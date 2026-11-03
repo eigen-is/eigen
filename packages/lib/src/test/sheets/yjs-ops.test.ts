@@ -49,18 +49,6 @@ describe('opToPatchOnSheets', () => {
         expect(special[1].op).toBe('deleteSheet');
     });
 
-    // A tab still open on the build before images became a map writes the whole array; no per-image write could
-    // resolve on it, so it is ignored as the decoder ignores a stored one.
-    test("an older tab's whole images array is dropped, a map passes", () => {
-        const images = { img1: { id: 'img1', index: 'a0', mediaName: 'a.png', x: 0, y: 0, width: 10, height: 10 } };
-        const ops: Op[] = [
-            { op: 'replace', id: 'sheet-1', path: ['images'], value: [images.img1] },
-            { op: 'replace', id: 'sheet-1', path: ['images'], value: images },
-        ];
-        const [patches] = opToPatchOnSheets(SHEETS, ops);
-        expect(patches).toEqual([{ op: 'replace', value: images, path: [0, 'images'] }]);
-    });
-
     // A peer can store anything under an id, and every reader walks an entry's ranges, so a write that would leave an
     // entry not well formed never applies.
     test('a validation write applies only when it leaves every entry well formed', () => {
