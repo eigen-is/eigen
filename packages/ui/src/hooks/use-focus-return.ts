@@ -8,7 +8,7 @@ import { useLayoutEffect, useState } from 'react';
 // Where one open dialog gives the focus back.
 type FocusReturn = { content: RefObject<HTMLElement | null>; target: HTMLElement | null };
 
-// The open dialogs, oldest first.
+// The open dialogs. Each portals its own content, so no two hold the same element.
 const openDialogs = new Set<FocusReturn>();
 
 // The page body is what has the focus when nothing does.
@@ -27,12 +27,13 @@ export function useFocusReturn(
     const [entry] = useState<FocusReturn>(() => ({ content, target: focusedElement() }));
 
     // A menu row that opened the dialog is gone a moment later, and the menu gives the focus back to the list it came
-    // from as it closes. The first element outside the dialog that takes the focus then becomes the target. A target
-    // still on the page stays, so the fields of a dialog opened over this one never replace it.
+    // from as it closes. The first element outside every open dialog that takes the focus then becomes the target. A
+    // target still on the page stays, and a field in a dialog opened over this one never becomes it.
     useLayoutEffect(() => {
         const replaceLostTarget = (event: FocusEvent) => {
-            if (entry.target?.isConnected || !(event.target instanceof HTMLElement)) return;
-            if (!entry.content.current?.contains(event.target)) entry.target = event.target;
+            const focused = event.target;
+            if (entry.target?.isConnected || !(focused instanceof HTMLElement)) return;
+            if (![...openDialogs].some((open) => open.content.current?.contains(focused))) entry.target = focused;
         };
         openDialogs.add(entry);
         document.addEventListener('focusin', replaceLostTarget);
@@ -55,13 +56,14 @@ export function useFocusReturn(
             return;
         }
         event.preventDefault();
-        target.focus();
+        // A list taller than the window keeps its scroll, as Radix's own focus does.
+        target.focus({ preventScroll: true });
     };
 }
 
 // The dialog that took the focus opened while this one closed, so its own target is gone, such as the palette row
 // that opened it. It gives the focus back where this one would have.
 function handOver(focused: HTMLElement, target: HTMLElement) {
-    const holder = [...openDialogs].findLast((open) => open.content.current?.contains(focused));
+    const holder = [...openDialogs].find((open) => open.content.current?.contains(focused));
     if (holder && !holder.target?.isConnected) holder.target = target;
 }

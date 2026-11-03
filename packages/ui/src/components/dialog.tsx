@@ -59,7 +59,8 @@ function DialogContent(props: DialogContentProps) {
     );
 }
 
-// The portal renders this only while the dialog is open, so useFocusReturn sees what had the focus as it opens.
+// The portal mounts this as the dialog opens and keeps it through the closing animation, so useFocusReturn sees
+// what had the focus as it opens.
 function OpenDialogContent({
     className,
     children,
