@@ -23,7 +23,7 @@ A `Destination` is the full URL the client was given, so in a standard install i
 
 ## Basic auth needs TLS
 
-Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). The failure limiter keys on the `X-Real-IP` Caddy sets on the `/webdav` route. TLS is mandatory in practice: Windows' WebClient sends Basic only over HTTPS (`BasicAuthLevel = 1`), Windows 11 included.
+Every request carries HTTP Basic, checked by `verifyProtocolAuth` ([IMAP.md § Dovecot asks the API whether a password is right](IMAP.md#dovecot-asks-the-api-whether-a-password-is-right)). The failure limiter keys on the `X-Real-IP` Caddy sets on the `/eigen/*` route. TLS is mandatory in practice: Windows' WebClient sends Basic only over HTTPS (`BasicAuthLevel = 1`), Windows 11 included.
 
 ## Every handler resolves through SharedDrive
 
