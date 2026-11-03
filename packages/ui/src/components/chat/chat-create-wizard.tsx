@@ -98,7 +98,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
     const createRoom = useCreateChatRoom(myOwnerId, createMountId);
     const createTeamRoom = useCreateChatRoom(teamChatOwnerId, teamMount?.id ?? '');
 
-    const pickedEmails = useMemo(() => picked.map((p) => p.email), [picked]);
+    const pickedEmails = useMemo(() => picked.map((person) => person.email), [picked]);
     const pickedKey = pickedEmails.join(',');
     const debouncedKey = useDebouncedValue(pickedKey, MATCH_DEBOUNCE_MS);
     const debouncedEmails = useMemo(() => (debouncedKey ? debouncedKey.split(',') : []), [debouncedKey]);
@@ -132,7 +132,9 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         const email = person.email.toLowerCase();
         if (email === myEmail) return;
         setPicked((prev) =>
-            prev.some((p) => p.email === email) ? prev : [...prev, { email, displayName: person.displayName || email }],
+            prev.some((pickedPerson) => pickedPerson.email === email)
+                ? prev
+                : [...prev, { email, displayName: person.displayName || email }],
         );
     };
 
@@ -153,8 +155,11 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
         // A chat is always with other people, so the prefill drops the user.
         setPicked(
             seed
-                .map((p) => ({ email: p.email.toLowerCase(), displayName: p.name?.trim() || p.email }))
-                .filter((p) => p.email !== myEmail),
+                .map((person) => ({
+                    email: person.email.toLowerCase(),
+                    displayName: person.name?.trim() || person.email,
+                }))
+                .filter((person) => person.email !== myEmail),
         );
         setStep(1);
         contactInput.setValue('');
@@ -175,7 +180,7 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
             teamMode
                 ? ''
                 : defaultChatName(
-                      picked.map((p) => p.displayName),
+                      picked.map((person) => person.displayName),
                       myName,
                   ),
         );
@@ -278,20 +283,22 @@ export function ChatCreateWizard({ open, onOpenChange, initialPeople, onNavigate
                                 </div>
                                 {picked.length > 0 && (
                                     <div className="shrink-0 px-6 pb-2 max-h-32 space-y-0.5 overflow-y-auto">
-                                        {picked.map((p) => (
+                                        {picked.map((person) => (
                                             <div
-                                                key={p.email}
+                                                key={person.email}
                                                 className="group flex items-center justify-between rounded-md pr-1 hover:bg-muted/50"
                                             >
-                                                <UserItem email={p.email} />
+                                                <UserItem email={person.email} />
                                                 <div className={HOVER_REVEAL_CLASS}>
                                                     <TooltipButton
                                                         icon={X}
-                                                        tooltipText={`Remove ${p.email}`}
+                                                        tooltipText={`Remove ${person.email}`}
                                                         variant="ghost"
                                                         className="h-7 w-7"
                                                         onClick={() =>
-                                                            setPicked((prev) => prev.filter((x) => x.email !== p.email))
+                                                            setPicked((prev) =>
+                                                                prev.filter((other) => other.email !== person.email),
+                                                            )
                                                         }
                                                     />
                                                 </div>
