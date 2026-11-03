@@ -6,7 +6,7 @@ category: Basics
 tags: [admin, setup, getting-started, configuration]
 related: [admin/manage-members, admin/server-settings]
 order: 10
-updated: 2026-10-28
+updated: 2026-11-03
 ---
 
 The setup wizard creates your admin account and gets the server ready for everyone else. It opens from the setup link that `./eigen setup` prints when it finishes. This page walks you through what to expect.
@@ -48,7 +48,7 @@ Once you are signed in with your admin account, Eigen opens the admin panel at [
 - **Users**: view and manage all user accounts, add new users, and change roles.
 - **Teams**: create groups of members to share content with whole teams at once.
 - **Guests**: see external guest accounts that have been granted access to specific files.
-- A user's or team's detail pane includes a **Backup** section. See [Back up a user or team](/support/admin/back-up-home).
+- A user's or team's detail pane includes a **Backup** section. On the owner's account, only the owner sees it. See [Back up a user or team](/support/admin/back-up-home).
 
 As the server owner, you also see:
 

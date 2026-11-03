@@ -6,7 +6,7 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/back-up-home, admin/restore-home]
 order: 92
-updated: 2026-11-02
+updated: 2026-11-03
 ---
 
 A backup made from the **Backup** section in Admin is a single archive of one user or one team. This page lists what goes into that archive, what stays out, how Eigen checks it, and where the panel's limits are. To make or restore a backup, see [Back up a user or team](/support/admin/back-up-home) and [Restore a user or team](/support/admin/restore-home).
@@ -48,7 +48,7 @@ Files stored in an S3 bucket are downloaded and written into the archive, so a r
 
 <div class="eigen-callout">
 
-An archive holds every file, every mail, saved passwords, and any S3 keys the account uses. Treat it like a password. Downloads are admin-only. Keep any copy you take off the server encrypted, and delete it when you are done.
+An archive holds every file, every mail, saved passwords, and any S3 keys the account uses. Treat it like a password. Downloads are admin-only, and only the owner can download a backup of the owner's account. Keep any copy you take off the server encrypted, and delete it when you are done.
 
 </div>
 

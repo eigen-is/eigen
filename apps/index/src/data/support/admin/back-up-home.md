@@ -6,12 +6,12 @@ category: Backups
 tags: [admin, backup, restore, server]
 related: [admin/restore-home, admin/backup-contents]
 order: 90
-updated: 2026-10-12
+updated: 2026-11-03
 ---
 
 You can make a backup of a single user or a single team in Admin. The backup is one archive file that holds everything in that account: files, mail, documents, and settings. It covers one user or one team at a time, not the whole server.
 
-Only admins can do this. The **Backup** section lives inside a user's or a team's detail panel, so you start by opening the account you want to back up.
+Only admins can do this, and only the owner can back up the owner's account: other admins see no **Backup** section on it. The **Backup** section lives inside a user's or a team's detail panel, so you start by opening the account you want to back up.
 
 ## Create a backup
 

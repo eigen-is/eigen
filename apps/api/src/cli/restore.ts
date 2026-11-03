@@ -62,8 +62,9 @@ Puts a whole-server archive back in two steps, run by ./eigen restore.
                      the build that restores it
   --check-data       While Eigen runs, as the API's user: check that this build opens every database in data/ as
                      it is, then ask to go back to it. ./eigen rollback runs it with the build it goes back to
-  --since <ms>       With --check-data: check only the databases written at or after this time, in ms since 1970.
-                     ./eigen rollback checks again with it once Eigen is stopped`;
+  --since <ms>       With --check-data: check only the databases changed at or after this time, in ms since 1970,
+                     and every database of a home whose folder changed since. ./eigen rollback checks again
+                     with it once Eigen is stopped`;
 
 export type RestoreFlags = ReturnType<typeof parseArgs<{ options: typeof RESTORE_OPTIONS }>>['values'];
 
@@ -133,16 +134,17 @@ async function writeArchiveEnv(archive: string | undefined): Promise<void> {
 async function checkData(flags: RestoreFlags): Promise<void> {
     const ui = await createUi(flags.yes === true);
     const changed = changedSince(flags.since);
+    const changedDatabase = ({ filePath }: { filePath: string }) => changed(filePath, `${filePath}-wal`);
     const server = join(DATA, SERVER_DIR);
     try {
         await checkDatabases(
             [
                 { filePath: join(server, SERVER_DATABASES.shares), config: SHARE_REGISTRY_DB_CONFIG },
                 { filePath: join(server, SERVER_DATABASES.waitlist), config: WAITLIST_DB_CONFIG },
-            ].filter(changed),
+            ].filter(changedDatabase),
         );
         const users = join(server, SERVER_DATABASES.users);
-        if (changed({ filePath: users })) checkPages(users);
+        if (changedDatabase({ filePath: users })) checkPages(users);
         const homeDirs = HOMES_DIRS.map((dir) => join(DATA, dir))
             .filter(existsSync)
             .flatMap((homes) =>
@@ -159,9 +161,12 @@ async function checkData(flags: RestoreFlags): Promise<void> {
         for (const [index, homeDir] of homeDirs.entries()) {
             console.log(glyphLine('bar', `home ${index + 1} of ${homeDirs.length}: ${homeDir}`));
             const mountIds = mountIdsIn(homeDir);
+            // A per-home restore puts the whole folder in place with one rename. That changes the folder's ctime
+            // but not the ctime of the files in it, so a home folder changed since has every database checked.
+            const inHome = changed(homeDir) ? () => true : changedDatabase;
             // Each mount's metadata.db first, because the container databases are found by reading it.
-            await checkDatabases(homeDatabasesIn(homeDir, mountIds).filter(changed));
-            await checkDatabases(containerDatabasesIn(homeDir, mountIds).filter(changed));
+            await checkDatabases(homeDatabasesIn(homeDir, mountIds).filter(inHome));
+            await checkDatabases(containerDatabasesIn(homeDir, mountIds).filter(inHome));
         }
     } catch (error) {
         console.error(glyphLine('bad', `${describeError(error)}.`));
@@ -180,17 +185,15 @@ async function checkData(flags: RestoreFlags): Promise<void> {
     }
 }
 
-// With --since, a time in ms, only the databases written at or after it are checked. The rollback checks again once
-// Eigen is stopped, and only what Eigen wrote after the first check began can have changed. A write may be in the
-// -wal alone.
-function changedSince(since: string | undefined): (database: { filePath: string }) => boolean {
+// With --since, a time in ms, only what changed at or after it is checked. The rollback checks again once Eigen is
+// stopped, and only what changed after the first check began can need it. A write may be in the -wal alone. The test
+// is the ctime, which every write, rename and utimes moves to now. The mtime is not enough: a restore unpacks each
+// file with the mtime it has in the archive, and Restore this copy only renames the folder.
+function changedSince(since: string | undefined): (...paths: string[]) => boolean {
     if (since === undefined) return () => true;
     if (!/^\d+$/.test(since)) return refuseUsage(`--since takes a time in ms, not "${since}".`, RESTORE_USAGE);
     const after = Number(since);
-    return ({ filePath }) =>
-        [filePath, `${filePath}-wal`].some(
-            (file) => (statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0) >= after,
-        );
+    return (...paths) => paths.some((path) => (statSync(path, { throwIfNoEntry: false })?.ctimeMs ?? 0) >= after);
 }
 
 // users3.db has no schema version to compare, so only its pages are checked. The API runs beside this check, and its
