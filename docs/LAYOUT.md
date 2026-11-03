@@ -170,9 +170,11 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 | Class | State | Paint |
 |---|---|---|
 | `eigen-list-item-active` | the open row | stripe and wash |
-| `eigen-list-item-cursor` | the keyboard cursor (Mail) | stripe only, so it reads apart from the open row |
+| `eigen-list-item-cursor` | the keyboard cursor on a row that isn't open | stripe only, so it reads apart from the open row |
 | `eigen-list-item-selected` | multi-selected | wash |
 | `eigen-tile` (`-active`, `-selected`) | grid tiles | a full border, because a stripe and wash on a tile's label strip read as stray chrome |
+
+A row takes every class that holds, the way `email-list.tsx`, `DriveRow` and `PersonList` set them: the open row `-active`, the cursor on any other row `-cursor`, and each selected row `-selected` on top. A plain click opens, selects and moves the cursor to one row, which then has the stripe and the wash. A right-click or ⋮ selects its row without opening it, so the open row keeps its look and the other row gets the wash. A grid tile has no cursor look of its own: `DriveGrid` draws the cursor's tile `-active`.
 
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
