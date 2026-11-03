@@ -1754,7 +1754,6 @@ rather than inlining `queryClient.invalidateQueries`.
 | `incompleteReason` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isCompleteArchive` | `@workspace/lib/validation` | packages/lib/src/validation/backup.ts |
 | `isStringList` | `@workspace/lib/validation` | packages/lib/src/validation/json.ts |
-| `LIGHT_SERVER_ARCHIVE` | `@workspace/lib/validation` | packages/lib/src/validation/backup-names.ts |
 | `MAX_EMAIL_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/email.ts |
 | `MAX_RESTART_MESSAGE_LENGTH` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
 | `MAX_RESTART_WAIT_SECONDS` | `@workspace/lib/validation` | packages/lib/src/validation/restart.ts |
@@ -2140,6 +2139,7 @@ rather than inlining `queryClient.invalidateQueries`.
 | `isTypingTarget` | `@workspace/ui/hooks/is-typing-target` | packages/ui/src/hooks/is-typing-target.ts |
 | `OPEN_MENU` | `@workspace/ui/hooks/use-dialog-open` | packages/ui/src/hooks/use-dialog-open.ts |
 | `isFilesOnlyClipboard` | `@workspace/ui/hooks/use-file-paste-target` | packages/ui/src/hooks/use-file-paste-target.ts |
+| `returnFocusTo` | `@workspace/ui/hooks/use-focus-return` | packages/ui/src/hooks/use-focus-return.ts |
 | `createEigenAppRouter` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `mountEigenApp` | `@workspace/ui/lib/eigenAppRouter` | packages/ui/src/lib/eigenAppRouter.tsx |
 | `stubCanvasImageFonts` | `@workspace/ui/test/canvas-image` | packages/ui/src/test/canvas-image.ts |

@@ -29,7 +29,7 @@ export async function restoreContainer(
 
     // The version is copied to a temp file before the current state is saved. Saving prunes old
     // versions, and it could prune the very version this restores. The copy reads the raw bytes,
-    // because Mount.openDatabase would migrate and cache a version that must never change. Each step
+    // because Mount.withDatabase would migrate and cache a version that must never change. Each step
     // takes the container lock on its own, and no lock is held from one step to the next. Every
     // restore gets its own temp file, so one restore's cleanup can't delete the file another still reads.
     const tempId = crypto.randomUUID();

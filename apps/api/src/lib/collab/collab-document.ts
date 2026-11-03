@@ -1,9 +1,9 @@
 // One open collab document, such as a doc, a sheet or a deck, held in memory as a Y.Doc. It loads the document from
 // its data.db, saves every edit back to it, and relays edits and cursors between the sockets that have it open.
-// Server-side writers, such as an import or a version restore, edit the same Y.Doc, so their changes reach every
-// editor too. The Drive opens each document once, however many sockets connect. It closes it a while after the last
-// socket leaves, or after an open that no socket joins. A workbook first saves a version, then folds its op log into
-// its snapshot.
+// Server-side writers, such as an import or a version restore, edit the same Y.Doc, so every editor sees them. Drive
+// opens each document once, however many sockets connect, and closes it a while after the last socket leaves or after
+// an open that no socket joins. It holds its Home while it waits. Before that close, a workbook saves a version and
+// folds its op log into its snapshot.
 
 import { restoreYjsDoc } from '@workspace/lib/collab/yjs-utils';
 import { isRecord } from '@workspace/lib/guards';
@@ -54,9 +54,9 @@ const EDIT_RECORD_THROTTLE_MS = 10 * 60_000;
 export class CollabDocument {
     public readonly doc = new Y.Doc();
     public dataDbPathId: string | null = null;
-    private readonly drive: Drive;
-    private readonly path: DrivePath;
     private provider!: DbProvider;
+    // The hold on data.db, so a reader's idle close can't close it under the provider.
+    private releaseDataDb: (() => void) | null = null;
     private awareness!: awarenessProtocol.Awareness;
     private readonly connections = new Map<ServerWebSocket<unknown>, User>();
     // The awareness client ids each connection declared, and the connection that owns each id. Only the
@@ -65,6 +65,9 @@ export class CollabDocument {
     private readonly clientIdOwners = new Map<number, ServerWebSocket<unknown>>();
     private closed = false;
     private closeTimer: ReturnType<typeof setTimeout> | undefined;
+    // The hold on the Home while the document lingers. Edits over a socket are no requests, so the Home's idle time
+    // may be long past when the last socket leaves, and without the hold the Home would close under the linger.
+    private releaseHome: (() => void) | null = null;
     private lastTouchedAt = 0;
     // The time of an update the touch throttle skipped. The close stamps it, so a document that was only
     // read keeps its Modified time, and the linger never shows as the time of the last edit.
@@ -77,10 +80,10 @@ export class CollabDocument {
     // The compaction in flight, which a destruct aborts.
     private compaction: AbortController | null = null;
 
-    public constructor(drive: Drive, path: DrivePath) {
-        this.drive = drive;
-        this.path = path;
-    }
+    public constructor(
+        private readonly drive: Drive,
+        private readonly path: DrivePath,
+    ) {}
 
     public get connectionCount(): number {
         return this.connections.size;
@@ -106,18 +109,27 @@ export class CollabDocument {
         // between gets a 503 and tries again, so it never makes a data.db the copy then can't write.
         if (!dataDbPath) throw new ApiError(503, `${this.path.name} has no data.db yet`);
 
-        // comments.db opens now, so the editor's first comments request finds it ready. Nothing waits for
-        // it, because that request reports any real problem itself.
+        // The editor asks for its comments right after the open, so comments.db opens now. The empty call only
+        // opens it and holds nothing, so it closes after a few idle minutes like a reader's. Nothing waits for
+        // it, because that comments request reports any real problem itself.
         if (commentsDbPath) {
-            this.drive.openDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id).catch(() => {});
+            this.drive
+                .withDatabase(this.path.mountId, COMMENT_INDEX_DB_CONFIG, commentsDbPath.id, async () => {})
+                .catch(() => {});
         }
 
-        const managedDb = await this.drive.openDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        const dataDb = await this.drive.holdDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        try {
+            this.provider = new DbProvider(this.doc, this.path.name, dataDb.db);
+            // Before the document listens for updates, so the stamp is saved but moves no Modified time.
+            stampMissingSheetsBase(this.path.type, this.doc);
+        } catch (error) {
+            // A document that fails to open is never destructed, so it lets go here.
+            dataDb.release();
+            throw error;
+        }
         this.dataDbPathId = dataDbPath.id;
-
-        this.provider = new DbProvider(this.doc, this.path.name, managedDb);
-        // Before the document listens for updates, so the stamp is saved but moves no Modified time.
-        stampMissingSheetsBase(this.path.type, this.doc);
+        this.releaseDataDb = dataDb.release;
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         this.doc.on('update', (update: Uint8Array, origin: unknown) => {
@@ -150,11 +162,13 @@ export class CollabDocument {
         return this;
     }
 
-    // The provider writes a last snapshot as it stops, so the caller closes data.db only after this.
+    // The provider writes a last snapshot as it stops, and then this lets go of data.db. So the caller
+    // closes data.db only after this.
     public destruct(): void {
         if (this.closed) return;
         this.closed = true;
         clearTimeout(this.closeTimer);
+        this.releaseLingerHold();
         this.compaction?.abort();
         if (this.untouchedUpdateAt !== null) {
             this.drive
@@ -166,6 +180,7 @@ export class CollabDocument {
         }
         this.connections.clear();
         this.provider.destroy();
+        this.releaseDataDb?.();
         this.awareness.destroy();
         this.doc.destroy();
     }
@@ -175,6 +190,7 @@ export class CollabDocument {
         // gets a 503 and connects again, to a new document.
         if (this.closed) throw new ApiError(503, 'Document is closing');
         clearTimeout(this.closeTimer);
+        this.releaseLingerHold();
         this.connections.set(conn, user);
         this.sendSyncStep1(conn);
     }
@@ -297,13 +313,26 @@ export class CollabDocument {
 
     private scheduleClose(): void {
         clearTimeout(this.closeTimer);
+        if (!this.releaseHome) {
+            try {
+                this.releaseHome = this.drive.holdHome();
+            } catch {
+                // A closing Home refuses the hold. Its close destructs this document anyway.
+            }
+        }
         this.closeTimer = setTimeout(() => {
             // A compaction in flight closes the document itself when it ends, or lingers it again.
             if (this.closed || this.connections.size > 0 || this.compaction) return;
-            this.closeAfterLinger().catch(() => {});
+            // A close that failed leaves the document open, and then the Home's own close ends it.
+            this.closeAfterLinger().catch(() => this.releaseLingerHold());
         }, CLOSE_LINGER_MS);
         // A lingering document must never keep the process alive at shutdown.
         this.closeTimer.unref();
+    }
+
+    private releaseLingerHold(): void {
+        this.releaseHome?.();
+        this.releaseHome = null;
     }
 
     // A workbook folds its op log into its snapshot first. The registry still holds the document meanwhile, so a
@@ -315,7 +344,8 @@ export class CollabDocument {
             // It resolves whatever the run's outcome, with null when there is no snapshot to swap in.
             const snapshot = await compactSheets(this.path, this.doc, this.compaction.signal);
             // The swap deletes the log, so a result that is still current first gets a version that keeps the log.
-            // Nothing here holds the container lock or the data.db slot, so the version may wait for both.
+            // The version waits for the container lock while this document holds data.db. That is safe: the
+            // hold takes no place in the slot chain, and every closer of a live document destructs it first.
             let saved = false;
             if (snapshot !== null && !this.closed && this.connections.size === 0 && this.generation === generation) {
                 try {

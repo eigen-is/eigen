@@ -180,7 +180,7 @@ describe('parseServerArchiveManifest', () => {
         expect(parseServerArchiveManifest(JSON.stringify(without))).toBeNull();
     });
 
-    test('refuses a per-home manifest, a wrong version, a Light archive and a broken field', () => {
+    test('refuses a per-home manifest, a wrong version, an unknown level and a broken field', () => {
         for (const broken of [
             'not json',
             JSON.stringify({ ...valid, formatVersion: 2 }),

@@ -92,7 +92,7 @@ describe('Server backup routes', () => {
         JOB_TIMEOUT_MS,
     );
 
-    test('a Light backup is refused: Eigen makes none any more', async () => {
+    test('a level Eigen does not know is refused', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken, '/admin/server-backup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

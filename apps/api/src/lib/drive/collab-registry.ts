@@ -10,7 +10,7 @@ import type { Mount } from '../mount';
 import type { Drive } from './drive';
 
 export class CollabRegistry {
-    private documents = new Map<string, () => Promise<CollabDocument>>();
+    private readonly documents = new Map<string, () => Promise<CollabDocument>>();
     // Set by destructAll. A document opened after it would never be destructed, and closing the mount
     // next would close its database under it.
     private destructed = false;
@@ -22,11 +22,7 @@ export class CollabRegistry {
     // key counts the trashes that guard it, because two trashes of nested paths can overlap.
     private readonly trashing = new Map<string, number>();
 
-    public constructor(private ownerId: string) {}
-
-    private key(mountId: string, pathId: string): string {
-        return `${this.ownerId}.${mountId}.${pathId}`;
-    }
+    public constructor(private readonly ownerId: string) {}
 
     public has(mountId: string, pathId: string): boolean {
         return this.documents.has(this.key(mountId, pathId));
@@ -74,14 +70,19 @@ export class CollabRegistry {
         }
     }
 
-    // Whether the path is on its way to the trash, on its own or with a folder above it.
+    // Whether the path is on its way to the trash, on its own or with a folder above it. The folders above
+    // count too, because a subfolder created after the trash began has no mark of its own. A move asks
+    // this inside the transaction of its row write, so the folders it reads are those the move sees.
     public isTrashing(mount: Mount, pathId: string): boolean {
-        return this.trashing.has(this.key(mount.id, pathId));
+        // Most moves run while nothing is trashed, and then the walk up the folders is not needed.
+        if (this.trashing.size === 0) return false;
+        return [pathId, ...mount.collectAncestorIds(pathId)].some((id) => this.trashing.has(this.key(mount.id, id)));
     }
 
     // Runs a trash of the path and refuses every open at or below it until the trash is done. The
-    // refused socket tries again, and by then the path is in the trash, so it gets a 404. A document
-    // that moves in after the keys are read isn't refused, so the trash closes it itself.
+    // refused socket tries again, and by then the path is in the trash, so it gets a 404. A move into
+    // any folder below the path is refused too (isTrashing). A document that a restore or a create puts
+    // in after the keys are read isn't refused, so the trash closes it itself.
     public async whileTrashing(mount: Mount, pathId: string, trash: () => Promise<void>): Promise<void> {
         const keys = [pathId, ...mount.collectDescendantIds(pathId)].map((id) => this.key(mount.id, id));
         for (const key of keys) this.trashing.set(key, (this.trashing.get(key) ?? 0) + 1);
@@ -149,5 +150,9 @@ export class CollabRegistry {
                 console.error(`Failed to close document ${key}:`, error);
             }
         }
+    }
+
+    private key(mountId: string, pathId: string): string {
+        return `${this.ownerId}.${mountId}.${pathId}`;
     }
 }

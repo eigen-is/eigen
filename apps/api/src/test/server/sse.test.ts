@@ -1,4 +1,4 @@
-import { afterEach, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterEach, beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import type { SSEvent, SSEventDrive } from '@workspace/lib/types/sse';
 import { SSEventType } from '@workspace/lib/types/sse';
 import { announceRestart, clearRestartNotice } from '../../lib/config/restart-notice';
@@ -271,31 +271,88 @@ describe('SSE', () => {
             await alice.close();
             await bob.close();
         });
+    });
 
-        // A notice given while the stream's Home was closed reached no listener of it, so the keepalive that moves the
-        // stream to the rebuilt Home sends what there is.
-        test('a stream that follows its Home to a rebuilt one sends the notice it missed', async () => {
-            const user = await createTestUser(`sse-notice-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'N');
-            const intervals = spyOn(globalThis, 'setInterval');
-            const stream = await openStream(user.id);
-            const keepalive = intervals.mock.calls.find(([, ms]) => ms === 15_000)?.[0];
-            intervals.mockRestore();
-            if (typeof keepalive !== 'function') throw new Error('no keepalive');
-            expect(await stream.notice()).toBeNull();
+    // The stream holds its Home, so an open tab keeps it loaded however long nobody sends a request. When the Home
+    // closes anyway, such as for a restore or the shutdown, the stream ends and the browser reconnects to the next one.
+    describe('A stream holds its Home', () => {
+        const USER_IDLE_MS = 5 * 60_000;
 
-            await evictHome(user.id);
-            announceRestart(600, 'update', null);
-            await keepalive();
-            // Heard by the rebuilt Home's listeners, so it comes first only when the keepalive sent the missed one.
-            announceRestart(0, 'rollback', null);
-            const notice = await stream.notice();
-            await stream.close();
-            expect(notice).toEqual({
-                reason: 'update',
-                message: null,
-                msLeft: expect.any(Number),
-                msSinceAnnounced: expect.any(Number),
+        afterEach(() => jest.useRealTimers());
+
+        async function newHome(name: string) {
+            const user = await createTestUser(`sse-${name}-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'S');
+            return getHome(user.id);
+        }
+
+        test('an open stream keeps its Home past the idle, and a cancelled one closes it at once', async () => {
+            const home = await newHome('held');
+            const reader = createSSEStream(home).getReader();
+            jest.useFakeTimers();
+            // A request re-arms the idle on the fake clock, so only the stream can keep the Home past it.
+            home.touch();
+            jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+            expect(home.closing).toBe(false);
+
+            // The last request is longer ago than the idle time, so the stream's release gives no fresh idle.
+            await reader.cancel();
+            jest.advanceTimersByTime(1);
+            expect(home.closing).toBe(true);
+            jest.useRealTimers();
+            await home.close();
+        });
+
+        test('a stream ends when its Home closes, with its keepalive stopped and its hold released', async () => {
+            const home = await newHome('ends');
+            const hold = home.hold.bind(home);
+            let released = false;
+            spyOn(home, 'hold').mockImplementation((onClosing) => {
+                const release = hold(onClosing);
+                return () => {
+                    released = true;
+                    release();
+                };
             });
+            const intervals = spyOn(globalThis, 'setInterval');
+            const reader = createSSEStream(home).getReader();
+            const keepalive = intervals.mock.results[intervals.mock.calls.findIndex(([, ms]) => ms === 15_000)]?.value;
+            intervals.mockRestore();
+            const cleared = spyOn(globalThis, 'clearInterval');
+            try {
+                await evictHome(home.user.id);
+                // Bounded, so a stream that never ends fails the test instead of hanging it.
+                const ended = Promise.race([
+                    (async () => {
+                        while (!(await reader.read()).done) {}
+                        return true;
+                    })(),
+                    Bun.sleep(2000).then(() => false),
+                ]);
+                expect(await ended).toBe(true);
+                expect(cleared).toHaveBeenCalledWith(keepalive);
+            } finally {
+                cleared.mockRestore();
+            }
+            expect(released).toBe(true);
+        });
+
+        test('a stream opened on a closing Home fails with a 503 and leaves nothing running', async () => {
+            const home = await newHome('closing');
+            const closing = home.close();
+            const intervals = spyOn(globalThis, 'setInterval');
+            const subscribe = spyOn(home, 'subscribeSSE');
+            let refusal: unknown;
+            try {
+                createSSEStream(home);
+            } catch (err) {
+                refusal = err;
+            }
+            const keepalives = intervals.mock.calls.filter(([, ms]) => ms === 15_000);
+            intervals.mockRestore();
+            expect(refusal).toMatchObject({ status: 503 });
+            expect(keepalives).toEqual([]);
+            expect(subscribe).not.toHaveBeenCalled();
+            await closing;
         });
     });
 });

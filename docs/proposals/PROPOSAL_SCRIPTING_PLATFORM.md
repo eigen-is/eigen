@@ -28,7 +28,7 @@ This proposal lets a user automate their own work across Eigen's apps with scrip
 
 | Piece | Where | State |
 |---|---|---|
-| Home lifecycle | `apps/api/src/lib/home/home.ts`, `get-home.ts` | Homes idle out; `touchHomeIfLoaded()` keeps one alive while work runs against it |
+| Home lifecycle | `apps/api/src/lib/home/home.ts`, `get-home.ts` | Homes idle out; `Home.hold()` keeps one alive while work runs against it |
 | Per-home databases | `Home.getLocalDatabase()`, `ManagedDatabase` | The pattern `scripts.db` follows: `schema.ts` + versioned `db-config.ts` |
 | Drive access | `getSharedDrive(ownerId, user)`, `lib/drive/get-drive.ts` | The ACL-checked wrapper every Drive operation goes through |
 | Calendar access | `resolveCalendar`, `checkCalendarAccess`, `lib/calendar/get-calendar.ts` | Collection and event access, write checks for mutations |
@@ -131,7 +131,7 @@ Indexes cover `(scriptId, createdAt, id)` pagination, active-status lookup and r
 
 **Recovery.** A Home reopening is not an API restart. On init, nonterminal rows from a different `runtimeId` become `failed` with `EXECUTION_INTERRUPTED`, stating that earlier mutations may have committed; rows owned by the current runtime are left alone. Nothing replays.
 
-**Home lifetime.** `Scripts` joins `UserHome`'s init, failure-cleanup and destruct lists; Home variants without scripting get an explicit capability guard. The runner keeps an admitted Home alive with `touchHomeIfLoaded()` until its run is finalized.
+**Home lifetime.** `Scripts` joins `UserHome`'s init, failure-cleanup and destruct lists; Home variants without scripting get an explicit capability guard. The runner keeps an admitted Home alive with `Home.hold()` until its run is finalized.
 
 ### Execution lifecycle
 

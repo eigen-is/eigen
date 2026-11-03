@@ -3,7 +3,7 @@
 // goes through getSharedDrive, so the Drive ACL decides access. They answer the HTTP preconditions
 // (If-Match, If-None-Match) and the WebDAV locks as the RFCs ask.
 
-import { isContainerType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE, isContainerType } from '@workspace/lib/types/drive';
 import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
@@ -27,7 +27,7 @@ export async function handleGet(args: {
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
-    if (path.type !== 'file') throw new ApiError(405, 'Not a file');
+    if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(405, 'Not a file');
 
     const etag = computeEtag(path);
 
@@ -65,7 +65,7 @@ export async function handleGet(args: {
         full: async () => {
             const file = await drive.downloadFile(mountId, path.id);
             if (!file) throw new ApiError(404, 'Not found');
-            // S3File can't be used as a Response body directly — stream it. BunFile works either way.
+            // An S3File can't be a Response body as it is, so it goes in as a stream. A BunFile works either way.
             return 'bucket' in file ? file.stream() : file;
         },
     });
@@ -116,38 +116,41 @@ export async function handlePut(args: {
     }
     if (existing && ifNoneMatch === '*') return new Response(null, { status: 412 });
 
-    // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
-    const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
-    const withinLimits = (bytes: number) => {
-        enforceMaxUploadSize(bytes);
-        if (bytes > room) throw new ApiError(507, 'Insufficient Storage');
-    };
-    // Content-Length refuses before a byte moves; a chunked body (Finder's) has none, so the stream is counted too.
-    if (contentLength !== null) withinLimits(contentLength);
-    let received = 0;
-    // Finder (WebDAVFS/3.0.0) reserves a name with a 0-byte PUT before the content, so no body is an empty file.
-    const data =
-        body?.pipeThrough(
-            new TransformStream<Uint8Array, Uint8Array>({
-                transform(chunk, controller) {
-                    received += chunk.byteLength;
-                    withinLimits(received);
-                    controller.enqueue(chunk);
-                },
-            }),
-        ) ?? Buffer.alloc(0);
+    return await drive.withHomeHeld(async () => {
+        // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
+        const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
+        const withinLimits = (bytes: number) => {
+            enforceMaxUploadSize(bytes);
+            if (bytes > room) throw new ApiError(507, 'Insufficient Storage');
+        };
+        // A Content-Length refuses before a byte moves. A chunked body, such as Finder's, has none, so the
+        // stream is counted too.
+        if (contentLength !== null) withinLimits(contentLength);
+        let received = 0;
+        // Finder (WebDAVFS/3.0.0) reserves a name with a 0-byte PUT before the content, so no body is an empty file.
+        const data =
+            body?.pipeThrough(
+                new TransformStream<Uint8Array, Uint8Array>({
+                    transform(chunk, controller) {
+                        received += chunk.byteLength;
+                        withinLimits(received);
+                        controller.enqueue(chunk);
+                    },
+                }),
+            ) ?? Buffer.alloc(0);
 
-    const mimeType = Bun.file(name).type || 'application/octet-stream';
-    // An overwrite answers the row it committed, not a fresh read, which a later PUT can have changed already.
-    const { path, etag } = existing
-        ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
-        : await drive
-              .createFileFromData(mountId, parent.id, name, mimeType, data, user)
-              .then((created) => ({ path: created, etag: computeEtag(created) }));
+        const mimeType = Bun.file(name).type || 'application/octet-stream';
+        // An overwrite answers the row it committed, not a fresh read, which a later PUT can have changed already.
+        const { path, etag } = existing
+            ? await drive.writeFileContent(mountId, existing.id, data, { user, ifMatch: ifMatch || undefined })
+            : await drive
+                  .createFileFromData(mountId, parent.id, name, mimeType, data, user)
+                  .then((created) => ({ path: created, etag: computeEtag(created) }));
 
-    return new Response(null, {
-        status: existing ? 204 : 201,
-        headers: { ETag: etag, 'Last-Modified': path.updatedAt.toUTCString() },
+        return new Response(null, {
+            status: existing ? 204 : 201,
+            headers: { ETag: etag, 'Last-Modified': path.updatedAt.toUTCString() },
+        });
     });
 }
 
@@ -204,6 +207,5 @@ export async function handleDelete(args: {
     }
     assertWritable(drive.lockManager, breadcrumb, ifHeader, user.id);
     await drive.deletePath(mountId, path.id, user);
-    drive.lockManager.releaseAllForPath(path.id);
     return new Response(null, { status: 204 });
 }

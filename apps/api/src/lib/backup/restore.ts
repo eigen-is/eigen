@@ -10,7 +10,6 @@ import * as path from 'node:path';
 import type { BackupProgress, BackupShare } from '@workspace/lib/types/backup';
 import { parseOwnerId } from '@workspace/lib/types/owner';
 import { buildBackupStamp, incompleteReason, parseBackupShares } from '@workspace/lib/validation';
-import { closeCollabConnectionsForHome } from '../collab/connections';
 import { getAvatarsDir, getDataRoot } from '../config/paths';
 import { ApiError } from '../core';
 import { rotateHomeDataEpoch } from '../home/data-epoch';
@@ -248,8 +247,8 @@ async function replaceHomeFolder<Judged>(
         markHomeRestoring(ownerId);
         try {
             // Every request to the home meets the 503 from here until the mark clears. Sessions are untouched, so
-            // the user stays signed in.
-            closeCollabConnectionsForHome(ownerId);
+            // the user stays signed in. The evict ends the home's event streams and closes its collab sockets with
+            // the retry close, so each tab comes back once the home serves again.
             await evictHome(ownerId);
 
             // Picked now, so the safety copies are dated by the swap, however long the unpack took.

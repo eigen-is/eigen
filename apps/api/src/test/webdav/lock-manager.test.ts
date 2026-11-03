@@ -9,15 +9,18 @@ const exclusive = (overrides: Partial<Parameters<LockManager['acquire']>[0]> = {
     ...overrides,
 });
 
+// These tests pin the lock rules. The hold of the Home is pinned in lock-home-hold.test.ts.
+const noHold = () => () => {};
+
 describe('LockManager', () => {
     test('acquire returns a urn:uuid token', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const lock = m.acquire(exclusive());
         expect(lock.token).toMatch(/^urn:uuid:/);
     });
 
     test('second acquire without an authorizing If token throws 423', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive());
         expect(() => m.acquire(exclusive({ userId: 'u2' }))).toThrow(/Locked/);
     });
@@ -25,13 +28,13 @@ describe('LockManager', () => {
     test('second acquire by same user without If token still throws 423', () => {
         // RFC 4918 §7.5: principal identity doesn't matter; the requester must
         // present the existing token.
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive());
         expect(() => m.acquire(exclusive())).toThrow(/Locked/);
     });
 
     test('shared locks may coexist', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive({ scope: 'shared' }));
         const second = m.acquire(exclusive({ scope: 'shared', userId: 'u2' }));
         expect(second.token).toMatch(/^urn:uuid:/);
@@ -39,13 +42,13 @@ describe('LockManager', () => {
     });
 
     test('exclusive blocks new shared lock', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive());
         expect(() => m.acquire(exclusive({ scope: 'shared', userId: 'u2' }))).toThrow(/Locked/);
     });
 
     test('refresh extends expiration', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const lock = m.acquire(exclusive({ ttlMs: 1_000 }));
         const before = lock.expiresAt;
         const refreshed = m.refresh(lock.token, 60_000);
@@ -54,14 +57,14 @@ describe('LockManager', () => {
     });
 
     test('refresh returns null for expired lock', async () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const lock = m.acquire(exclusive({ ttlMs: 1 }));
         await new Promise((r) => setTimeout(r, 5));
         expect(m.refresh(lock.token)).toBeNull();
     });
 
     test('release removes the lock', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const lock = m.acquire(exclusive());
         expect(m.release(lock.token)).toBe(true);
         expect(m.listForPath('p1')).toHaveLength(0);
@@ -69,31 +72,31 @@ describe('LockManager', () => {
     });
 
     test('expired locks gc out of listForPath', async () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive({ ttlMs: 1 }));
         await new Promise((r) => setTimeout(r, 5));
         expect(m.listForPath('p1')).toHaveLength(0);
     });
 
     test('isWriteAllowed: no locks → true', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         expect(m.isWriteAllowed('p1', null, 'u1')).toBe(true);
     });
 
     test('isWriteAllowed: holder with matching token → true', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const lock = m.acquire(exclusive());
         expect(m.isWriteAllowed('p1', `<${lock.token}>`, 'u1')).toBe(true);
     });
 
     test('isWriteAllowed: holder without token → false', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive());
         expect(m.isWriteAllowed('p1', null, 'u1')).toBe(false);
     });
 
     test('isWriteAllowed: different user even with token → false', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const lock = m.acquire(exclusive());
         expect(m.isWriteAllowed('p1', `<${lock.token}>`, 'u2')).toBe(false);
     });
@@ -107,7 +110,7 @@ describe('LockManager', () => {
     test('acquire blocks descendant lock when ancestor holds depth-infinity exclusive', () => {
         // RFC 4918 §6.2: a depth-infinity lock on a collection covers every member.
         // Acquiring a new lock on a descendant must be rejected without an authorizing token.
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive({ pathId: 'parent', depth: 'infinity' }));
         expect(() => m.acquire(exclusive({ pathId: 'child', userId: 'u2', ancestorPathIds: ['parent'] }))).toThrow(
             /Locked/,
@@ -115,7 +118,7 @@ describe('LockManager', () => {
     });
 
     test('acquire allows descendant lock when ancestor token is presented', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         const parent = m.acquire(exclusive({ pathId: 'parent', depth: 'infinity' }));
         const child = m.acquire(
             exclusive({ pathId: 'child', ancestorPathIds: ['parent'], ifHeader: `<${parent.token}>` }),
@@ -125,14 +128,14 @@ describe('LockManager', () => {
 
     test('acquire ignores depth=0 ancestor lock', () => {
         // A depth-0 lock covers only its own resource, not descendants.
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive({ pathId: 'parent', depth: 0 }));
         const child = m.acquire(exclusive({ pathId: 'child', userId: 'u2', ancestorPathIds: ['parent'] }));
         expect(child.token).toMatch(/^urn:uuid:/);
     });
 
     test('acquire allows shared descendant under shared depth-infinity ancestor', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive({ pathId: 'parent', depth: 'infinity', scope: 'shared' }));
         const child = m.acquire(
             exclusive({ pathId: 'child', userId: 'u2', scope: 'shared', ancestorPathIds: ['parent'] }),
@@ -141,7 +144,7 @@ describe('LockManager', () => {
     });
 
     test('acquire blocks exclusive descendant under shared depth-infinity ancestor', () => {
-        const m = new LockManager();
+        const m = new LockManager(noHold);
         m.acquire(exclusive({ pathId: 'parent', depth: 'infinity', scope: 'shared' }));
         expect(() => m.acquire(exclusive({ pathId: 'child', userId: 'u2', ancestorPathIds: ['parent'] }))).toThrow(
             /Locked/,

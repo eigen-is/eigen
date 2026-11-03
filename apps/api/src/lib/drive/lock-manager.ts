@@ -1,14 +1,10 @@
 // WebDAV locks for one Drive. A client such as an office app locks a file while it edits, and the
 // manager decides which later requests may write: shared locks can coexist, an exclusive lock
 // excludes the rest. It also covers a folder lock that reaches the items inside. Locks live in
-// memory and expire on their own. The WebDAV handlers call it for LOCK, UNLOCK and every write.
+// memory and expire on their own, and while one lives the manager holds its Home open. The WebDAV
+// handlers call it for LOCK, UNLOCK and every write.
 
 import { ApiError } from '../core/errors';
-
-// In-memory WebDAV lock state for a single Drive (one per Home). Locks are scoped to the
-// Drive that owns the path being locked, so they evict naturally when the Home unloads.
-// Single-node only: a sharded deployment would need to back this with the per-mount DB
-// or a central store keyed by (mountId, pathId).
 
 export type LockScope = 'exclusive' | 'shared';
 
@@ -28,17 +24,17 @@ export const LOCK_DEFAULT_TTL_MS = 600_000;
 const MAX_LOCKS_PER_PATH = 32;
 
 export class LockManager {
-    private locks = new Map<string, Lock>();
-    private byPath = new Map<string, Set<string>>();
+    private readonly locks = new Map<string, Lock>();
+    private readonly byPath = new Map<string, Set<string>>();
+    private readonly hold: () => () => void;
+    private releaseHold: (() => void) | undefined;
+    private expiryTimer: Timer | undefined;
 
-    private gc(): void {
-        const now = Date.now();
-        for (const [token, lock] of this.locks) {
-            if (lock.expiresAt <= now) {
-                this.locks.delete(token);
-                this.byPath.get(lock.pathId)?.delete(token);
-            }
-        }
+    // A WebDAV-only client, such as Word, sends nothing between its lock refreshes, longer than the
+    // Home's idle time. So the manager holds the Home while it has a live lock, or the idle close
+    // would drop the lock and anyone could overwrite the file.
+    public constructor(hold: () => () => void) {
+        this.hold = hold;
     }
 
     public acquire(args: {
@@ -52,12 +48,9 @@ export class LockManager {
         ancestorPathIds?: string[];
     }): Lock {
         this.gc();
-        // RFC 4918 §6.2 / §7.5: shared locks may coexist; an exclusive lock excludes
-        // every other lock; any lock excludes a subsequent exclusive lock. New
-        // requests that don't supply a current token in the If header must be
-        // rejected if the existing locks would conflict. coveringLocks also surfaces
-        // ancestor depth-infinity locks, so a child of a locked collection can't be
-        // acquired without the ancestor's token.
+        // RFC 4918 §6.2 and §7.5: shared locks may coexist, and an exclusive lock excludes every other
+        // lock. A request that conflicts must name a current token in its If header. The covering locks
+        // include a depth-infinity lock on an ancestor, so a child of a locked folder needs that token too.
         const heldLocks = this.coveringLocks(args.pathId, args.ancestorPathIds ?? []);
         if (heldLocks.length > 0) {
             const ifTokens = parseIfHeaderTokens(args.ifHeader ?? null);
@@ -70,6 +63,10 @@ export class LockManager {
         if ((this.byPath.get(args.pathId)?.size ?? 0) >= MAX_LOCKS_PER_PATH) {
             throw new ApiError(423, 'Too many locks');
         }
+        // Every new lock asks for a hold, so a closing Home refuses it with its 503. One hold is enough.
+        const release = this.hold();
+        if (this.releaseHold) release();
+        else this.releaseHold = release;
         const token = `urn:uuid:${crypto.randomUUID()}`;
         const lock: Lock = {
             token,
@@ -81,12 +78,10 @@ export class LockManager {
             expiresAt: Date.now() + (args.ttlMs ?? LOCK_DEFAULT_TTL_MS),
         };
         this.locks.set(token, lock);
-        let pathTokens = this.byPath.get(args.pathId);
-        if (!pathTokens) {
-            pathTokens = new Set();
-            this.byPath.set(args.pathId, pathTokens);
-        }
+        const pathTokens = this.byPath.get(args.pathId) ?? new Set<string>();
         pathTokens.add(token);
+        this.byPath.set(args.pathId, pathTokens);
+        this.settle();
         return lock;
     }
 
@@ -94,24 +89,26 @@ export class LockManager {
         const lock = this.locks.get(token);
         if (!lock || lock.expiresAt <= Date.now()) return null;
         lock.expiresAt = Date.now() + ttlMs;
+        this.settle();
         return lock;
     }
 
     public release(token: string): boolean {
         const lock = this.locks.get(token);
         if (!lock) return false;
-        this.locks.delete(token);
-        this.byPath.get(lock.pathId)?.delete(token);
+        this.drop(lock);
+        this.settle();
         return true;
     }
 
-    // Drop every lock on a path (used when DELETE/MOVE/COPY remove or replace the
-    // resource). Without this, lock state lingers until TTL — bounded but wasteful.
-    public releaseAllForPath(pathId: string): void {
-        const tokens = this.byPath.get(pathId);
-        if (!tokens) return;
-        for (const token of tokens) this.locks.delete(token);
-        this.byPath.delete(pathId);
+    // The Drive calls this when paths leave their place, such as by a trash or a WebDAV MOVE, with every
+    // path under them. Their locks would otherwise keep the Home held until they expire.
+    public releaseAllForPaths(pathIds: readonly string[]): void {
+        for (const pathId of pathIds) {
+            for (const token of this.byPath.get(pathId) ?? []) this.locks.delete(token);
+            this.byPath.delete(pathId);
+        }
+        this.settle();
     }
 
     public listForPath(pathId: string): Lock[] {
@@ -126,10 +123,8 @@ export class LockManager {
         return out;
     }
 
-    // Locks that cover a path: the path's own locks plus any depth=infinity lock on
-    // an ancestor. Caller supplies the ancestor list (root-first) — usually from
-    // Drive.breadCrumb minus the path itself. RFC 4918 §6.2 says depth-infinity locks
-    // on a collection apply to every member.
+    // The path's own locks, and the depth-infinity locks on its ancestors, which RFC 4918 §6.2 applies
+    // to every member. The caller passes the ancestors root first, usually a breadcrumb without the path.
     private coveringLocks(pathId: string, ancestorPathIds: string[] = []): Lock[] {
         const own = this.listForPath(pathId);
         const ancestor = ancestorPathIds.flatMap((id) => this.listForPath(id).filter((l) => l.depth === 'infinity'));
@@ -148,15 +143,56 @@ export class LockManager {
         return active.every((lock) => lock.userId === userId && tokens.includes(lock.token));
     }
 
+    // The Home calls this when it closes for another reason, such as a restore or the shutdown.
     public clear(): void {
         this.locks.clear();
         this.byPath.clear();
+        this.settle();
+    }
+
+    // Runs on every read, so it moves the timer only when a lock went.
+    private gc(): void {
+        const now = Date.now();
+        let dropped = false;
+        for (const lock of this.locks.values()) {
+            if (lock.expiresAt > now) continue;
+            this.drop(lock);
+            dropped = true;
+        }
+        if (dropped) this.settle();
+    }
+
+    private drop(lock: Lock): void {
+        this.locks.delete(lock.token);
+        const pathTokens = this.byPath.get(lock.pathId);
+        pathTokens?.delete(lock.token);
+        if (pathTokens?.size === 0) this.byPath.delete(lock.pathId);
+    }
+
+    // One timer, at the latest expiry: until then some lock lives, so the hold stays. With no lock
+    // left, the hold goes.
+    private settle(): void {
+        clearTimeout(this.expiryTimer);
+        this.expiryTimer = undefined;
+        if (this.locks.size === 0) {
+            this.releaseHold?.();
+            this.releaseHold = undefined;
+            return;
+        }
+        let latest = 0;
+        for (const lock of this.locks.values()) latest = Math.max(latest, lock.expiresAt);
+        // Settles even when the timer fired a moment early and gc dropped nothing, so the hold never stays
+        // without a timer. Unref'd, so a lock never keeps the process alive at shutdown.
+        const expire = () => {
+            this.gc();
+            this.settle();
+        };
+        this.expiryTimer = setTimeout(expire, Math.max(0, latest - Date.now())).unref();
     }
 }
 
-// RFC 4918 §10.4 If-header tokens are wrapped in `<...>`. We extract every angle-bracketed
-// token; `(<token>)` and bare `<token>` both work. State-tokens vs etags are distinguished
-// by the `urn:` scheme; callers (PUT/DELETE) only care about lock tokens here.
+// RFC 4918 §10.4 wraps each token of an If header in angle brackets, as in `(<token>)` or a bare
+// `<token>`. The callers compare the result with lock tokens only.
 export function parseIfHeaderTokens(header: string | null): string[] {
     if (!header) return [];
     return [...header.matchAll(/<([^>]+)>/g)].map((m) => m[1]);

@@ -29,6 +29,11 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
+// The rows of a document database, read inside one withDatabase call.
+async function readItems(mount: Mount, config: DatabaseConfig<typeof docSchema>, dataDbId: string) {
+    return mount.withDatabase(config, dataDbId, async (managed) => managed.db.select().from(docSchema.items).all());
+}
+
 const createdMounts: Mount[] = [];
 
 async function createMount(id: string, storageType: MountConfig['storageType']): Promise<Mount> {
@@ -92,8 +97,7 @@ describe('local: open document DB must not sync to a stale path after a mutation
         await mount.closeDatabase(dataDbId);
 
         // Reopen resolves the NEW path (dst/doc1/data.db); the post-move edit must be there.
-        const reopened = await mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);
+        expect(await readItems(mount, docConfig, dataDbId)).toHaveLength(2);
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
     });
 
@@ -114,8 +118,7 @@ describe('local: open document DB must not sync to a stale path after a mutation
         await managed.flush(); // stale capture would write this to A/doc1/data.db
         await mount.closeDatabase(dataDbId);
 
-        const reopened = await mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);
+        expect(await readItems(mount, docConfig, dataDbId)).toHaveLength(2);
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
     });
 
@@ -188,8 +191,7 @@ describe('id-stable backends are unaffected by the fix', () => {
         await mount.closeDatabase(dataDbId);
         await mount.uploadQueue?.drain({ flushNow: true });
 
-        const reopened = await mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(2);
+        expect(await readItems(mount, docConfig, dataDbId)).toHaveLength(2);
         // The bytes live under the id-stable key, proving the move never stranded it.
         expect(await countStoredRows(mount, dataDbId)).toBe(2);
         expect(idStableKey).toBe(`${dataDbId}.db`);

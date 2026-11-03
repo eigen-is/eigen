@@ -8,7 +8,7 @@ A reader turns a stored document into plain data: a doc into ProseMirror JSON (t
 
 A collab document is stored as compressed Yjs blobs in the `data.db` of its container, the Drive folder that holds the document. Materializing it means applying those blobs to a fresh `Y.Doc` in memory, and that costs CPU in proportion to the document's size. So the heavy work runs in a transform process, a separate Bun process that keeps it off the event loop every other request shares ([DOCUMENT-TRANSFORMS.md](DOCUMENT-TRANSFORMS.md)). The main thread copies the blobs out, and the transform builds the `Y.Doc` and runs the reader. A transform has no Mount, the object through which Drive reaches a mount's files and databases ([STORAGE.md](STORAGE.md#a-mount-is-a-paths-table-over-one-of-three-backends)). That is why a reader takes a `Y.Doc` and never a Mount. A stickies board is small and a chat is not Yjs at all, so those two readers run on the main thread, and only search uses them.
 
-Three details surprise people: capture leaves the database open, because a live session may share it ([§ Capture leaves the database open](#capture-leaves-the-database-open)), only the export read recalculates a sheet ([§ The sheets reader](#the-sheets-reader-replays-ops-and-recalcs-only-for-export)), and a replace into an open document drops what its editors had pending ([§ A replace doesn't merge](#a-replace-doesnt-merge-an-insert-arrives-as-a-peers-edit)).
+Two details surprise people: only the export read recalculates a sheet ([§ The sheets reader](#the-sheets-reader-replays-ops-and-recalcs-only-for-export)), and a replace into an open document drops what its editors had pending ([§ A replace doesn't merge](#a-replace-doesnt-merge-an-insert-arrives-as-a-peers-edit)).
 
 ## A reader takes a Y.Doc, never a Mount
 
@@ -27,9 +27,9 @@ The caller captures the blobs with `captureCollabSource`, and the transform hand
 
 `readVectorFromDoc` serves both canvas types and reaches the API over the React-free `./vector` subpath. The editor and the server share it because it is the scene's trust boundary ([CANVAS.md](CANVAS.md#the-reader-is-the-trust-boundary)). The deck writer reads its update back through it before writing, and writes through the same package's `write-vector.ts` ([SLIDES.md](SLIDES.md#the-deck-writer-inserts-under-fresh-ids-and-only-a-replace-clears-the-deck)). A drawing has no writer.
 
-## Capture leaves the database open
+## Capture holds the database only while it reads
 
-Capture opens the container's `data.db` through `mount.openDatabase` and does not close it, because a live collab session may share that instance. `Mount.closeAllDatabases` closes it at teardown. The stickies and chat readers open theirs the same way.
+Capture reads the container's `data.db` inside `mount.withDatabase`, and so do the stickies and chat readers. A live collab session may share that instance, so a reader never closes it itself: it lets go, and the database closes after its idle time once no holder is left ([DATABASE.md](DATABASE.md#a-reader-holds-a-container-database-only-while-it-runs)).
 
 ## The caller checks access
 

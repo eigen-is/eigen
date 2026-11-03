@@ -31,7 +31,7 @@ import type { ContentExtractor } from './content-reindex-queue';
 import { ContentReindexQueue } from './content-reindex-queue';
 import * as copy from './copy';
 import { MOUNT_DB_CONFIG } from './db-config';
-import type { DocumentDbSlot } from './document-db';
+import type { DatabaseHold, DocumentDbSlot } from './document-db';
 import * as documentDb from './document-db';
 import {
     ancestorIds,
@@ -113,6 +113,9 @@ export class Mount {
     private readonly baseDir: string;
     private readonly getLocalDatabase: LocalDatabaseGetter;
     private readonly extractContent?: ContentExtractor;
+    // Holds the Home open while the upload queue has a PUT on the wire. A mount that no Home serves,
+    // such as a backup's read of a disabled mount, has none.
+    private readonly holdHome?: () => () => void;
     // One map holds three kinds of lock key: a path id, a folder id with a folded name for a create, and
     // the one key that permanent deletes share. Ids are UUIDs, so the kinds never collide.
     private readonly pathLocks: Map<string, Promise<void>>;
@@ -124,6 +127,7 @@ export class Mount {
         config: MountConfig,
         getLocalDatabase: LocalDatabaseGetter,
         extractContent?: ContentExtractor,
+        holdHome?: () => () => void,
     ) {
         this.ownerId = ownerId;
         this.id = config.id;
@@ -132,6 +136,7 @@ export class Mount {
         ({ paths: this.pathLocks, tree: this.treeLock } = locksFor(this.baseDir));
         this.getLocalDatabase = getLocalDatabase;
         this.extractContent = extractContent;
+        this.holdHome = holdHome;
 
         this.storage = createMountStorage(config, this.baseDir);
     }
@@ -214,6 +219,7 @@ export class Mount {
                 stagingDir: this.stagingDir,
                 destinationKey,
                 label: this.id,
+                hold: this.holdHome,
             });
         }
 
@@ -405,6 +411,20 @@ export class Mount {
             current = await this.getPath(current.parentId);
         }
         return false;
+    }
+
+    // The folders above pathId, nearest first. It reads synchronously, so a caller inside a transaction
+    // sees the tree as that transaction does.
+    public collectAncestorIds(pathId: string): string[] {
+        const ids: string[] = [];
+        let current = pathId;
+        for (;;) {
+            const row = this.db.select({ parentId: paths.parentId }).from(paths).where(eq(paths.id, current)).get();
+            if (!row?.parentId) return ids;
+            if (ids.includes(row.parentId)) throw treeCycleError(row.parentId);
+            ids.push(row.parentId);
+            current = row.parentId;
+        }
     }
 
     public collectDescendantIds(parentId: string): string[] {
@@ -714,9 +734,13 @@ export class Mount {
 
     // ---- Renaming, moving and deleting ----
 
+    // A move asks isTargetTrashing whether its target folder is on its way to the trash, which only the
+    // caller knows. It asks in the transaction that writes the row, so no trash begins in between. On
+    // `local` it also asks before the disk rename, so a refused move leaves the bytes where they are.
     public async updatePath(
         pathId: string,
         updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>,
+        opts?: { isTargetTrashing?: () => boolean },
     ): Promise<DrivePath> {
         // Validated first, so the row and the `local` storage key both get the name's NFC form.
         if (updates.name !== undefined) {
@@ -756,7 +780,7 @@ export class Mount {
                     // One synchronous transaction, so no trash or opposite move lands between the checks
                     // and the UPDATE.
                     this.db.transaction((tx) => {
-                        this.assertMovableInTx(tx, pathId, targetParentId);
+                        this.assertMovableInTx(tx, pathId, targetParentId, opts?.isTargetTrashing);
                         const old = tx
                             .select({ parentId: paths.parentId })
                             .from(paths)
@@ -808,7 +832,9 @@ export class Mount {
                             }
                             // Checked before the bytes move. A disk rename would replace a sibling that raced
                             // in at the target, and a rename into its own subtree throws a bare EINVAL.
-                            this.db.transaction((tx) => this.assertMovableInTx(tx, pathId, updates.parentId));
+                            this.db.transaction((tx) =>
+                                this.assertMovableInTx(tx, pathId, updates.parentId, opts?.isTargetTrashing),
+                            );
                             const parentId = updates.parentId ?? (await this.getPath(pathId))?.parentId;
                             const newName = path.posix.basename(newPath);
                             const rename = renameFn.bind(this.storage);
@@ -889,11 +915,19 @@ export class Mount {
     }
 
     // Refuses to move a row that is in trash. A trash may have landed while the move waited, and on
-    // `local` the move would carry its bytes out of .trash/.
-    private assertMovableInTx(tx: Tx, pathId: string, targetParentId: string | null | undefined): void {
+    // `local` the move would carry its bytes out of .trash/. It also refuses a target folder that a trash
+    // began on while the move waited. That trash has closed the open documents in the folder already, and
+    // would close the database of one that moved in now under its editor.
+    private assertMovableInTx(
+        tx: Tx,
+        pathId: string,
+        targetParentId: string | null | undefined,
+        isTargetTrashing?: () => boolean,
+    ): void {
         const row = tx.select({ trashedAt: paths.trashedAt }).from(paths).where(eq(paths.id, pathId)).get();
         if (row?.trashedAt) throw new ApiError(404, 'File is in trash');
         if (targetParentId === undefined) return;
+        if (isTargetTrashing?.()) throw new ApiError(404, 'Folder not found');
         const error = this.targetFolderErrorInTx(tx, pathId, targetParentId);
         if (error) throw error;
     }
@@ -1305,23 +1339,33 @@ export class Mount {
 
     // ---- Document databases and versions ----
 
-    // Opens an existing document database. A missing storage object is a 410, never a fresh empty
-    // database. createDatabase makes a new one.
-    public async openDatabase<S extends SchemaType>(
-        config: DatabaseConfig<S>,
-        pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return documentDb.openDatabase(this, config, pathId);
-    }
-
     // Makes a new document database at a row touchFile created. It refuses when the storage object
-    // exists already. It writes the empty schema to storage before it returns, so a later openDatabase
-    // finds it, even after a restart.
+    // exists already. It writes the empty schema to storage before it returns, so a later open finds
+    // it, even after a restart. Nobody holds it, so it closes after a few idle minutes.
     public async createDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         pathId: string,
     ): Promise<ManagedDatabase<S>> {
         return documentDb.createDatabase(this, config, pathId);
+    }
+
+    // Runs fn with the database open, which then closes after a few idle minutes. A close that comes
+    // meanwhile waits for fn. A missing storage object is a 410, never a fresh empty database.
+    public async withDatabase<S extends SchemaType, T>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
+        return documentDb.withDatabase(this, config, pathId, fn);
+    }
+
+    // Opens the database and holds it until the caller lets go, such as an open collab document for
+    // its whole life. It then closes after a few idle minutes, as after withDatabase.
+    public async holdDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<DatabaseHold<S>> {
+        return documentDb.holdDatabase(this, config, pathId);
     }
 
     public async closeDatabase(pathId: string, opts?: { skipFinalSnapshot?: boolean }): Promise<void> {

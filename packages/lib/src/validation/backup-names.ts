@@ -61,10 +61,6 @@ const SERVER_ARCHIVE_NAME = new RegExp(
     `^${SERVER_ARCHIVE_PREFIX}(?<reason>${BACKUP_REASONS.join('|')})-(?<level>${BACKUP_LEVELS.join('|')})-${BACKUP_STAMP_PATTERN}${SERVER_ARCHIVE_EXTENSION_PATTERN}$`,
 );
 
-// How the name of a Light archive starts. Eigen 0.4.1 and before made them, and this version parses none: a Light
-// archive held no files and no mail, and Eigen keeps no backward compatibility before 1.0.
-export const LIGHT_SERVER_ARCHIVE = new RegExp(`^${SERVER_ARCHIVE_PREFIX}[a-z-]+-light-`);
-
 export function parseServerArchiveName(name: string): { reason: BackupReason; level: BackupLevel; at: Date } | null {
     const groups = SERVER_ARCHIVE_NAME.exec(name)?.groups;
     const reason = BACKUP_REASONS.find((candidate) => candidate === groups?.['reason']);

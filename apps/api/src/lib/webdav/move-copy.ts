@@ -1,4 +1,10 @@
+// The WebDAV MOVE and COPY methods. Both stay inside one mount of one owner, so a Destination anywhere
+// else is a 502 and the client downloads and uploads again. The WebDAV router calls them with the
+// signed-in user, and each goes through getSharedDrive, so the Drive ACL decides access. They apply the
+// overwrite rules and the WebDAV locks as RFC 4918 asks.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
@@ -7,20 +13,62 @@ import { enclosingDocumentContainer } from './container-guard';
 import { assertWritable } from './locks';
 import { decodeHref, splitParentAndName } from './path';
 
-type DestParts = { ownerId: string; mountId: string; pathStr: string };
+export async function handleMove(args: {
+    user: User;
+    ownerId: string;
+    mountId: string;
+    pathStr: string;
+    requestUrl: string;
+    destinationHeader: string | null;
+    overwrite: boolean;
+    ifHeader: string | null;
+}): Promise<Response> {
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
+        ...args,
+        verb: 'MOVE',
+    });
 
-function parseDestination(destHeader: string, requestUrl: string): DestParts {
-    let url: URL;
-    try {
-        url = new URL(destHeader, requestUrl);
-    } catch {
-        throw new ApiError(400, 'Invalid Destination header');
+    if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
+
+    if (src.parentId !== destParent.id) {
+        await drive.movePath(args.mountId, src.id, destParent.id, args.user);
     }
-    const segments = decodeHref(url.pathname.replace(/^\/+webdav\/+/, '')).split('/');
-    const [ownerId, mountId, ...rest] = segments;
-    if (!ownerId || !mountId) throw new ApiError(400, 'Destination not under /webdav');
-    const pathStr = `/${rest.join('/').replace(/\/+$/, '')}`;
-    return { ownerId, mountId, pathStr };
+    if (src.name !== newName) {
+        await drive.renamePath(args.mountId, src.id, newName, args.user);
+    }
+    // RFC 4918 §7.7: a lock does not move with its resource. Left in place, it would hold the Home
+    // until it expires, because the client can't refresh it at the old URL.
+    await drive.releaseLocksUnder(args.mountId, src.id);
+    return new Response(null, { status: destExisting ? 204 : 201 });
+}
+
+export async function handleCopy(args: {
+    user: User;
+    ownerId: string;
+    mountId: string;
+    pathStr: string;
+    requestUrl: string;
+    destinationHeader: string | null;
+    overwrite: boolean;
+    ifHeader: string | null;
+    depth: '0' | '1' | 'infinity';
+}): Promise<Response> {
+    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
+        ...args,
+        verb: 'COPY',
+    });
+
+    return await drive.withHomeHeld(async () => {
+        if (destExisting) await drive.deletePath(args.mountId, destExisting.id, args.user);
+
+        // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
+        if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
+            await drive.createFolder(args.mountId, destParent.id, newName, args.user);
+        } else {
+            await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
+        }
+        return new Response(null, { status: destExisting ? 204 : 201 });
+    });
 }
 
 type Resolved = {
@@ -53,9 +101,8 @@ async function resolveMoveCopy(args: {
     const src = await drive.resolvePath(mountId, pathStr);
     if (!src) throw new ApiError(404, 'Source not found');
 
-    // Source side. MOVE removes from src so the container guard and lock
-    // check both apply; COPY leaves src untouched and only needs the
-    // (already done) resolve.
+    // MOVE takes the source out of its folder, so the container guard and the lock check apply to it. COPY
+    // leaves the source as it is and needs only the resolve above.
     if (verb === 'MOVE') {
         const srcBreadcrumb = await drive.breadCrumb(mountId, src.id);
         if (enclosingDocumentContainer(srcBreadcrumb, { includeSelf: false })) {
@@ -65,8 +112,8 @@ async function resolveMoveCopy(args: {
     }
 
     const destExisting = await drive.resolvePath(mountId, dest.pathStr);
-    // RFC 4918 §9.8.5 / §9.9.4: same source and destination is 403 — the overwrite path below would
-    // trash the source before moving it.
+    // RFC 4918 §9.8.5 and §9.9.4: the same source and destination is a 403. Otherwise the overwrite below
+    // would trash the source before it moves it.
     if (destExisting?.id === src.id) throw new ApiError(403, 'Source and destination are the same');
     if (destExisting && !overwrite) throw new ApiError(412, 'Destination exists, no overwrite');
 
@@ -90,62 +137,18 @@ async function resolveMoveCopy(args: {
     return { drive, src, destParent, destExisting, newName };
 }
 
-export async function handleMove(args: {
-    user: User;
-    ownerId: string;
-    mountId: string;
-    pathStr: string;
-    requestUrl: string;
-    destinationHeader: string | null;
-    overwrite: boolean;
-    ifHeader: string | null;
-}): Promise<Response> {
-    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
-        ...args,
-        verb: 'MOVE',
-    });
+type DestParts = { ownerId: string; mountId: string; pathStr: string };
 
-    if (destExisting) {
-        await drive.deletePath(args.mountId, destExisting.id, args.user);
-        drive.lockManager.releaseAllForPath(destExisting.id);
+function parseDestination(destHeader: string, requestUrl: string): DestParts {
+    let url: URL;
+    try {
+        url = new URL(destHeader, requestUrl);
+    } catch {
+        throw new ApiError(400, 'Invalid Destination header');
     }
-
-    if (src.parentId !== destParent.id) {
-        await drive.movePath(args.mountId, src.id, destParent.id, args.user);
-    }
-    if (src.name !== newName) {
-        await drive.renamePath(args.mountId, src.id, newName, args.user);
-    }
-    return new Response(null, { status: destExisting ? 204 : 201 });
-}
-
-export async function handleCopy(args: {
-    user: User;
-    ownerId: string;
-    mountId: string;
-    pathStr: string;
-    requestUrl: string;
-    destinationHeader: string | null;
-    overwrite: boolean;
-    ifHeader: string | null;
-    depth: '0' | '1' | 'infinity';
-}): Promise<Response> {
-    const { drive, src, destParent, destExisting, newName } = await resolveMoveCopy({
-        ...args,
-        verb: 'COPY',
-    });
-
-    if (destExisting) {
-        await drive.deletePath(args.mountId, destExisting.id, args.user);
-        drive.lockManager.releaseAllForPath(destExisting.id);
-    }
-
-    // RFC 4918 §9.8.3: Depth: 0 on a collection COPY means copy the collection
-    // itself but NOT its members. Files are unaffected (they have no children).
-    if (args.depth === '0' && src.type !== 'file') {
-        await drive.createFolder(args.mountId, destParent.id, newName, args.user);
-    } else {
-        await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
-    }
-    return new Response(null, { status: destExisting ? 204 : 201 });
+    const segments = decodeHref(url.pathname.replace(/^\/+webdav\/+/, '')).split('/');
+    const [ownerId, mountId, ...rest] = segments;
+    if (!ownerId || !mountId) throw new ApiError(400, 'Destination not under /webdav');
+    const pathStr = `/${rest.join('/').replace(/\/+$/, '')}`;
+    return { ownerId, mountId, pathStr };
 }

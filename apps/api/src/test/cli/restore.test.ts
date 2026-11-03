@@ -3,7 +3,6 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import {
     chmodSync,
     chownSync,
-    copyFileSync,
     cpSync,
     existsSync,
     linkSync,
@@ -612,15 +611,15 @@ describe('restore --stage and --swap', () => {
     );
 
     test(
-        'a Light archive is refused by its name before anything is read',
+        'a Light archive of 0.4.1, which this version cannot read, is refused like any other unreadable archive',
         async () => {
             const dir = install();
             const light = join(scratch('restore-light-'), 'server-pre-update-light-20260930-020304.tar');
-            copyFileSync(fullArchive, light);
+            writeFileSync(light, 'not a server archive of this version');
             const result = await stage(dir, light);
             expect(result.code).toBe(1);
             expect(result.stderr).toContain(
-                'server-pre-update-light-20260930-020304.tar is a Light backup, which this version of Eigen no longer restores.',
+                'server-pre-update-light-20260930-020304.tar is not an Eigen server archive',
             );
             expectUntouched(dir);
         },

@@ -40,8 +40,7 @@ import { SSEventType } from '@workspace/lib/types/sse';
 import type { Snapshot } from '@workspace/lib/types/versioning';
 import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validation';
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
-import { ChatRoom } from '../chat';
-import { assertCommentChatExists, getCommentIndex, openCommentIndex } from '../chat/comment-index';
+import { assertCommentChatExists, ChatRoom, withCommentIndex } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
@@ -50,6 +49,7 @@ import type { Home } from '../home';
 import { broadcastToOwnerAndMembers } from '../home/home-relay';
 import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
+import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
@@ -104,12 +104,14 @@ export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uplo
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
 export class Drive {
-    // WebDAV locks live as long as this Drive, so they go away when the home closes.
-    public readonly lockManager = new LockManager();
+    // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
+    public readonly lockManager = new LockManager(() => this.home.hold());
 
     private readonly home: Home;
     private readonly owner: User;
     private readonly mounts = new Map<string, Mount>();
+    // Every addMount still running, including the close of a mount it built for a closing home.
+    private readonly addingMounts = new Set<Promise<void>>();
     private defaultMountId: string = DEFAULT_MOUNT_ID;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
     private readonly documents: CollabRegistry;
@@ -137,6 +139,11 @@ export class Drive {
     }
 
     public async destruct(): Promise<void> {
+        // A mount that is still starting is not in this.mounts yet. Its addMount sees the home closing
+        // and closes the mount itself. The home closes the mount's metadata.db after destruct returns,
+        // so destruct waits for that addMount first.
+        await Promise.allSettled(this.addingMounts);
+
         // An open collab document may still write to its database while it closes, so the documents
         // close before the mount databases do. A document that is still loading would keep
         // destructAll waiting on its download, so every mount stops its downloads first.
@@ -154,22 +161,45 @@ export class Drive {
         this.lockManager.clear();
     }
 
+    // Keeps the home open, such as for a collab socket, until the returned release is called. onClosing runs
+    // when the home starts to close. The home refuses with a 503 once it is closing.
+    public holdHome(onClosing?: () => void): () => void {
+        return this.home.hold(onClosing);
+    }
+
+    public withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        return this.home.withHomeHeld(fn);
+    }
+
     // ---- Mounts ----
 
-    public async addMount(config: MountConfig): Promise<void> {
+    // The home's close only closes the mounts this Drive holds. So a closing home gets no new mount,
+    // and a mount that finishes starting after the close began is closed by startMount instead of added.
+    public addMount(config: MountConfig): Promise<void> {
+        const adding = this.startMount(config).finally(() => this.addingMounts.delete(adding));
+        this.addingMounts.add(adding);
+        return adding;
+    }
+
+    private async startMount(config: MountConfig): Promise<void> {
+        this.home.refuseIfClosing();
         // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
+        // Its upload queue holds the home while a PUT is on the wire.
         const mount = new Mount(
             this.owner.id,
             this.home.homeDir,
             config,
             this.home.getLocalDatabase.bind(this.home),
             extractText,
+            () => this.home.hold(),
         );
         await mount.init();
-        this.mounts.set(config.id, mount);
-        if (config.isDefault) {
-            this.defaultMountId = config.id;
+        if (this.home.closing) {
+            await mount.closeAllDatabases();
+            this.home.refuseIfClosing();
         }
+        this.mounts.set(config.id, mount);
+        if (config.isDefault) this.defaultMountId = config.id;
     }
 
     // Applies saved mount settings to the live mount, so a change takes effect without reloading the home.
@@ -406,8 +436,9 @@ export class Drive {
         if (!container) return;
         const chatPath = await this.getPath(mountId, chatPathId);
         if (!chatPath) return;
-        const index = await openCommentIndex(this, container);
-        await index.ensureComment(chatPath.name, { createdBy });
+        await withCommentIndex(this, mountId, container.id, (index) =>
+            index.ensureComment(chatPath.name, { createdBy }),
+        );
     }
 
     public async uploadFiles(
@@ -586,7 +617,12 @@ export class Drive {
         // Read before the move for the same reason: whoever saw the path in its old folder hears it left.
         const oldMembers = await this.getEffectiveMembers(mountId, pathId);
 
-        const movedPath = await mount.updatePath(pathId, { parentId: targetParentId });
+        // The check above can come before a trash of the folder begins, so the move asks again as it writes.
+        const movedPath = await mount.updatePath(
+            pathId,
+            { parentId: targetParentId },
+            { isTargetTrashing: () => this.documents.isTrashing(mount, targetParentId) },
+        );
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {
             oldParentId,
             members: this.getEffectiveMembers(mountId, pathId).then((members) => [...oldMembers, ...members]),
@@ -710,7 +746,16 @@ export class Drive {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
             await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+            await this.releaseLocksUnder(mountId, item.id);
         });
+    }
+
+    // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks with it,
+    // and those of everything under it. The client can't refresh or unlock them at the old URL, so each
+    // would hold the home until it expires.
+    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        this.lockManager.releaseAllForPaths([pathId, ...mount.collectDescendantIds(pathId)]);
     }
 
     public async restorePath(mountId: string, pathId: string, user?: User): Promise<void> {
@@ -1045,7 +1090,7 @@ export class Drive {
         if (path.type !== DRIVE_TYPE_CHAT) {
             throw new ApiError(404, 'Chat not found');
         }
-        return new ChatRoom(this, this.home, path).init();
+        return ChatRoom.open(this, this.home, path);
     }
 
     // The comment index on the server holds who is assigned, so the history row is written here and
@@ -1061,17 +1106,19 @@ export class Drive {
         title?: string,
     ): Promise<boolean> {
         await assertCommentChatExists(this, mountId, pathId, chatName);
-        const index = await getCommentIndex(this, mountId, pathId);
-        // Cards from before the comment index have a chat but no row yet.
-        await index.ensureComment(chatName);
-        const current = await index.get(chatName);
-        const changed = (current?.assignee ?? null) !== assignee;
-        // The client sends the card title, which may have changed in the same edit. So the title is
-        // saved even when the assignee stays the same.
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        if (card) await index.setTitle(chatName, card);
+        const changed = await withCommentIndex(this, mountId, pathId, async (index) => {
+            // Cards from before the comment index have a chat but no row yet.
+            await index.ensureComment(chatName);
+            const current = await index.get(chatName);
+            // The client sends the card title, which may have changed in the same edit. So the title is
+            // saved even when the assignee stays the same.
+            if (card) await index.setTitle(chatName, card);
+            const assigneeChanged = (current?.assignee ?? null) !== assignee;
+            if (assigneeChanged) await index.assign(chatName, assignee);
+            return assigneeChanged;
+        });
         if (!changed) return false;
-        await index.assign(chatName, assignee);
         if (assignee) {
             await this.recordFileEvent(
                 mountId,
@@ -1094,17 +1141,15 @@ export class Drive {
     ): Promise<void> {
         // An unknown chat is a 404, so no history row is written for a comment that doesn't exist.
         await assertCommentChatExists(this, mountId, pathId, chatName);
-        const index = await getCommentIndex(this, mountId, pathId);
-        await index.ensureComment(chatName);
         const card = title?.slice(0, CARD_TITLE_MAX_LENGTH);
-        if (card) await index.setTitle(chatName, card);
-        if (status === 'resolved') {
-            await index.resolve(chatName, user.email);
-            await this.recordFileEvent(mountId, pathId, user, { eventType: 'resolved', details: { card, chatName } });
-        } else {
-            await index.reopen(chatName);
-            await this.recordFileEvent(mountId, pathId, user, { eventType: 'reopened', details: { card, chatName } });
-        }
+        await withCommentIndex(this, mountId, pathId, async (index) => {
+            await index.ensureComment(chatName);
+            if (card) await index.setTitle(chatName, card);
+            if (status === 'resolved') await index.resolve(chatName, user.email);
+            else await index.reopen(chatName);
+        });
+        const eventType = status === 'resolved' ? 'resolved' : 'reopened';
+        await this.recordFileEvent(mountId, pathId, user, { eventType, details: { card, chatName } });
     }
 
     // ---- Collab documents and versions ----
@@ -1234,12 +1279,24 @@ export class Drive {
 
     // ---- Document databases ----
 
-    public async openDatabase<S extends SchemaType>(
+    // Runs fn with the database open, such as a chat room's data.db for one request. It closes after
+    // a few idle minutes.
+    public async withDatabase<S extends SchemaType, T>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
-    ): Promise<ManagedDatabase<S>> {
-        return this.getMount(mountId).openDatabase(config, pathId);
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
+        return this.getMount(mountId).withDatabase(config, pathId, fn);
+    }
+
+    // An open collab document holds its data.db for as long as it is open.
+    public async holdDatabase<S extends SchemaType>(
+        mountId: string,
+        config: DatabaseConfig<S>,
+        pathId: string,
+    ): Promise<DatabaseHold<S>> {
+        return this.getMount(mountId).holdDatabase(config, pathId);
     }
 
     // Creates the database files of a new document, such as its data.db and comments.db. When one

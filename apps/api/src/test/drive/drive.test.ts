@@ -8,6 +8,7 @@ import {
     teamOwnerId,
 } from '@workspace/lib/types';
 import { COMMENT_INDEX_DB_CONFIG } from '../../lib/chat/comment-db-config';
+import { comments } from '../../lib/chat/comment-schema';
 import { getServerConfig } from '../../lib/config/server-config';
 import { copyPathAcross } from '../../lib/drive/copy-across';
 import { getSharedDrive } from '../../lib/drive/get-drive';
@@ -448,6 +449,25 @@ describe('Drive', () => {
                 `folder/${sharedFolderId}`,
             );
             expect(contents.find((item: DrivePath) => item.name === 'read-only-blocked.txt')).toBeUndefined();
+        });
+
+        // A user who may not write never holds the owner's home, not even for the length of the refusal.
+        test("a refused upload never holds the owner's home", async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const hold = spyOn(home, 'hold');
+            try {
+                const formData = new FormData();
+                formData.append('file', new File(['no write'], 'refused-no-hold.txt', { type: 'text/plain' }));
+                const res = await authedRequest(
+                    ctx.bob.user.sessionToken,
+                    `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${sharedFolderId}`,
+                    { method: 'POST', body: formData },
+                );
+                expect(res.status).toBe(403);
+                expect(hold).not.toHaveBeenCalled();
+            } finally {
+                hold.mockRestore();
+            }
         });
 
         test('Bob cannot change ACL while read-only', async () => {
@@ -3792,7 +3812,7 @@ describe('Drive', () => {
         });
     });
 
-    describe('Regression: SharedDrive.openDatabase enforces read permission (audit 17)', () => {
+    describe('Regression: SharedDrive.withDatabase enforces read permission (audit 17)', () => {
         test('a non-owner without read is rejected opening a container managed DB; a shared reader succeeds', async () => {
             // A doc container provisions data.db + comments.db synchronously on create.
             const doc = await drivePost(
@@ -3812,16 +3832,17 @@ describe('Drive', () => {
 
             // Bob holds no share on the doc. Opening its managed DB by pathId must be refused —
             // pre-fix the wrapper delegated with no ACL check, an arbitrary-DB-open hole on the seam.
-            await expect(bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id)).rejects.toThrow(
-                'No read permission',
-            );
+            const open = () =>
+                bobShared.withDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id, async (managed) =>
+                    managed.db.select().from(comments).all(),
+                );
+            await expect(open()).rejects.toThrow('No read permission');
 
             // Granting read on the container (comments.db inherits it) lets the same open through.
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, `path/${doc.id}/acl`, {
                 add: [{ id: BOB_EMAIL, read: true, write: false }],
             });
-            const managed = await bobShared.openDatabase(aliceMountId, COMMENT_INDEX_DB_CONFIG, commentsDb!.id);
-            expect(managed.db).toBeDefined();
+            expect(await open()).toEqual([]);
         });
     });
 

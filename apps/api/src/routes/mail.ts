@@ -96,8 +96,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
     .use(betterAuth)
     // A server without hosted mail has no Maildir open behind any of these routes.
     .onBeforeHandle(() => requireMailEnabled())
-    // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
-    // No auth: Postfix connects from localhost and is trusted.
+    // Postfix, or another local mail server, delivers incoming mail here. It has no auth, because Postfix
+    // connects from localhost and is trusted.
     .post(
         '/mail/deliver/:to',
         async ({ params, body, request, server }): Promise<string> => {
@@ -335,9 +335,9 @@ export const mailRouter = new Elysia({ name: 'mail' })
         },
         { auth: true, params: AttachmentParamsSchema },
     )
-    // Previews run the renderers Drive's preview routes end in, on the part's bytes; same shapes, same
-    // components. Two segments after the index, like /embed/:fileName: a sender names the part, and a
-    // one-segment preview route would be shadowed by a part called after it.
+    // A preview runs the same renderers as Drive's preview routes on the part's bytes, so it answers the same
+    // shapes. It takes two segments after the index, like /embed/:fileName, because the sender names the part,
+    // and a part named like a one-segment preview route would shadow it.
     .get(
         '/mail/:ownerId/message/:id/attachment/:index/preview/text',
         async ({ params, request, user, set }): Promise<TextPreviewResult | ElysiaCustomStatusResponse<304>> => {
@@ -375,7 +375,8 @@ export const mailRouter = new Elysia({ name: 'mail' })
                 set,
                 (att) => {
                     assertVCardPreviewable(mailAttachmentName(att, params.index), att.contentType, att.size);
-                    // A copy: content is a view over the whole parsed message, which would all cross to the transform process.
+                    // A copy, because content is a view over the whole parsed message, and all of it would cross
+                    // to the transform process.
                     return getBytesVCardPreview(new Uint8Array(att.content).buffer);
                 },
                 VCARD_FORMAT,
@@ -432,11 +433,14 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            // The whole message uploads, parses and indexes before this answers — at EML_MAX_BYTES
-            // that outlasts any server-wide idleTimeout, so exempt this request.
+            // The whole message uploads, parses and indexes before this answers. At EML_MAX_BYTES that
+            // outlasts any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            const bytes = await readBoundedBodyBytes(request, EML_MAX_BYTES);
-            return await (await getMailClient(user)).messageImport(Buffer.from(bytes));
+            const mail = await getMailClient(user);
+            return await mail.home.withHomeHeld(async () => {
+                const bytes = await readBoundedBodyBytes(request, EML_MAX_BYTES);
+                return await mail.messageImport(Buffer.from(bytes));
+            });
         },
         { auth: true, parse: 'none' },
     )
@@ -445,14 +449,17 @@ export const mailRouter = new Elysia({ name: 'mail' })
         async ({ params, body, request, user, server }): Promise<ImportMailResult> => {
             requireNonGuest(user);
             requireSelf(params.ownerId, user.id);
-            // Same idle-timeout exemption as the raw import route: silent until the message is indexed.
+            // The same idle-timeout exemption as the raw import route: silent until the message is indexed.
             server?.timeout(request, 0);
-            const bytes = await readImportSourceBytes(user, body, {
-                accepts: isEmlFile,
-                rejection: NOT_AN_EMAIL_FILE,
-                maxBytes: EML_MAX_BYTES,
+            const mail = await getMailClient(user);
+            return await mail.home.withHomeHeld(async () => {
+                const bytes = await readImportSourceBytes(user, body, {
+                    accepts: isEmlFile,
+                    rejection: NOT_AN_EMAIL_FILE,
+                    maxBytes: EML_MAX_BYTES,
+                });
+                return await mail.messageImport(Buffer.from(bytes));
             });
-            return await (await getMailClient(user)).messageImport(Buffer.from(bytes));
         },
         {
             body: importFromDriveSchema,

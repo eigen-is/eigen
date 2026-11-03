@@ -19,11 +19,12 @@ import { parseVCardLines, unescapeText } from '../lib/vcard';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the card ceiling. TEXT is for the ids and keys Eigen mints; everything a CardDAV
-// PUT may store caps at the resource ceiling itself, or the card a device wrote would be uneditable here.
+// Field bounds in front of the card ceiling. TEXT is for the ids and keys Eigen mints. Anything a CardDAV PUT
+// may store is capped at the ceiling itself, or a card a device wrote could not be edited here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: CARD_MAX_BYTES };
-// An address, an email, a phone or a category is one line of the file, and a file holds no more lines than it holds bytes.
+// An address, an email, a phone or a category is one line of the file. A file holds no more lines than it holds
+// bytes.
 const LINES = { maxItems: CARD_MAX_BYTES };
 
 // Every ADR component is free text the card spells.
@@ -35,9 +36,9 @@ const AddressSchema = t.Object({
     country: t.Optional(t.String(FREE_TEXT)),
 });
 
-// The client-writable fields — the create body. The id and the etag are the server's to assign. A BDAY is
-// normalized to YYYY-MM-DD on both write paths and an avatar is the server's own cache name, so both stay
-// on TEXT; an EMAIL is stored as the card spells it, never against an address grammar.
+// The fields a client may write, which make the create body. The id and the etag are the server's to assign.
+// A BDAY is normalized to YYYY-MM-DD on both write paths, and an avatar is the server's own cache name, so both
+// stay on TEXT. An EMAIL is stored as the card spells it, never checked against an address grammar.
 const CreateContactSchema = t.Object({
     firstName: t.String(FREE_TEXT),
     lastName: t.String(FREE_TEXT),
@@ -60,15 +61,14 @@ const UpdateContactSchema = t.Object({
     etag: t.String({ ...TEXT, minLength: 1 }),
 });
 
-// A label is minted from a card's CATEGORIES, which the file spells however long, so only a typed name is capped
-// (labels.ts); the color is Eigen's own.
+// A label is made from a card's CATEGORIES, which a file may spell at any length, so only a name typed in
+// Eigen is capped. The color is Eigen's own.
 const LabelSchema = t.Object({
     id: t.Optional(t.String(TEXT)),
     name: t.String(FREE_TEXT),
     color: t.String(TEXT),
 });
 
-// All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({ name: 'contacts' })
     .use(betterAuth)
     .get(
@@ -211,9 +211,9 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireNonGuest(user);
             const contacts = await resolveContacts(user, params.ownerId);
             const text = await contacts.exportCards(body.ids);
-            // A one-card export is named after the card itself — its FN, the display name every client
-            // writes — a multi-card one generically. contentDisposition sanitizes whatever comes back
-            // before it reaches the header; the clamp keeps one absurd FN from filling it.
+            // A one-card export is named after the card's FN, the display name every client writes. A larger
+            // export gets a generic name. contentDisposition sanitizes the name before it reaches the header,
+            // and the clamp keeps one absurd FN from filling it.
             let fileName = 'contacts.vcf';
             if (body.ids?.length === 1) {
                 const fn = parseVCardLines(text).find((line) => line.name === 'FN');
@@ -236,10 +236,12 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireNonGuest(user);
             const contacts = await resolveContacts(user, params.ownerId);
             // A whole book replays card by card through the CardDAV write seam, answering nothing until the
-            // last one lands — longer than any server-wide idleTimeout, so exempt this request.
+            // last one lands. That is longer than any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            const bytes = await readBoundedBodyBytes(request, VCARD_MAX_BYTES);
-            return await contacts.importCards(bytes);
+            return await contacts.home.withHomeHeld(async () => {
+                const bytes = await readBoundedBodyBytes(request, VCARD_MAX_BYTES);
+                return await contacts.importCards(bytes);
+            });
         },
         { auth: true, parse: 'none' },
     )
@@ -248,14 +250,16 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             const contacts = await resolveContacts(user, params.ownerId);
-            // Same idle-timeout exemption as the raw import route: silent until the last card lands.
+            // The same idle-timeout exemption as the raw import route: silent until the last card lands.
             server?.timeout(request, 0);
-            const bytes = await readImportSourceBytes(user, body, {
-                accepts: isVCardFile,
-                rejection: NOT_A_VCARD_FILE,
-                maxBytes: VCARD_MAX_BYTES,
+            return await contacts.home.withHomeHeld(async () => {
+                const bytes = await readImportSourceBytes(user, body, {
+                    accepts: isVCardFile,
+                    rejection: NOT_A_VCARD_FILE,
+                    maxBytes: VCARD_MAX_BYTES,
+                });
+                return await contacts.importCards(bytes);
             });
-            return await contacts.importCards(bytes);
         },
         {
             body: importFromDriveSchema,
