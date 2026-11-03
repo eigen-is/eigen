@@ -168,6 +168,10 @@ export class Drive {
         return this.home.hold(onClosing);
     }
 
+    public withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        return this.home.withHomeHeld(fn);
+    }
+
     // ---- Mounts ----
 
     // The home's close only closes the mounts this Drive holds. So a closing home gets no new mount,

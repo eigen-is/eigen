@@ -209,6 +209,17 @@ export class Home {
         };
     }
 
+    // A long request, such as an upload, an export or an import, can outlast the idle timeout, so it holds
+    // its Home until it ends.
+    public async withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        const release = this.hold();
+        try {
+            return await fn();
+        } finally {
+            release();
+        }
+    }
+
     private startIdleTimer(idleMs: number): void {
         if (this._closing || this.holds > 0) return;
         clearTimeout(this.idleTimer);

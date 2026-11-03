@@ -24,13 +24,9 @@ export async function readImportSourceBytes(
     }
     if (path.size > opts.maxBytes) throw payloadTooLarge();
 
-    // The hold covers the database work in downloadFile, which fails if the source's home closes meanwhile.
-    const release = drive.holdHome();
-    try {
+    return await drive.withHomeHeld(async () => {
         const file = await drive.downloadFile(source.sourceMountId, source.sourcePathId);
         if (!file) throw new ApiError(404, 'Source file not found');
         return new Uint8Array(await readStorageFile(file, { maxBytes: opts.maxBytes }));
-    } finally {
-        release();
-    }
+    });
 }

@@ -236,16 +236,12 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
             requireNonGuest(user);
             const contacts = await resolveContacts(user, params.ownerId);
             // A whole book replays card by card through the CardDAV write seam, answering nothing until the
-            // last one lands. That is longer than any server-wide idleTimeout, so exempt this request. It can
-            // outlast the home's idle timeout too, so the import holds the home until it ends.
+            // last one lands. That is longer than any server-wide idleTimeout, so exempt this request.
             server?.timeout(request, 0);
-            const release = contacts.home.hold();
-            try {
+            return await contacts.home.withHomeHeld(async () => {
                 const bytes = await readBoundedBodyBytes(request, VCARD_MAX_BYTES);
                 return await contacts.importCards(bytes);
-            } finally {
-                release();
-            }
+            });
         },
         { auth: true, parse: 'none' },
     )
@@ -254,19 +250,16 @@ export const contactsRouter = new Elysia({ name: 'contacts' })
         async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             const contacts = await resolveContacts(user, params.ownerId);
-            // Same idle-timeout exemption and home hold as the raw import route: silent until the last card lands.
+            // The same idle-timeout exemption as the raw import route: silent until the last card lands.
             server?.timeout(request, 0);
-            const release = contacts.home.hold();
-            try {
+            return await contacts.home.withHomeHeld(async () => {
                 const bytes = await readImportSourceBytes(user, body, {
                     accepts: isVCardFile,
                     rejection: NOT_A_VCARD_FILE,
                     maxBytes: VCARD_MAX_BYTES,
                 });
                 return await contacts.importCards(bytes);
-            } finally {
-                release();
-            }
+            });
         },
         {
             body: importFromDriveSchema,

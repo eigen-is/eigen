@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
 import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
@@ -9,6 +9,8 @@ import { getTestContext } from '../setup';
 // getHome must not open a replacement Home on the same database files while the outgoing home is
 // still closing them. It awaits close() before installing the replacement, and close() runs once, so
 // the idle timer and an explicit close() can't close the databases twice.
+const USER_IDLE_MS = 5 * 60_000;
+
 describe('getHome teardown race', () => {
     beforeAll(async () => {
         await getTestContext();
@@ -154,6 +156,29 @@ describe('getHome teardown race', () => {
         errors.mockRestore();
         expect(heard).toEqual(['held, parts closed: 0', 'after the failure']);
         expect(atHome(userId)).toBe(false);
+    });
+
+    // A long request, such as an upload, holds its home while it runs and lets go however it ends.
+    test('withHomeHeld keeps the home open past its idle, and lets go when the work throws', async () => {
+        const userId = await createHomeUser('with-home-held@test.eigen.is');
+        const home = await getHome(userId);
+        let closingMidWork: boolean | undefined;
+        jest.useFakeTimers();
+        try {
+            home.touch();
+            const work = home.withHomeHeld(async () => {
+                jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                closingMidWork = home.closing;
+                throw new Error('work failed');
+            });
+            await expect(work).rejects.toThrow('work failed');
+            expect(closingMidWork).toBe(false);
+            jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+            expect(home.closing).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+        await home.close();
     });
 
     // The process ends once the shutdown is done, so a Home built during it would be killed half-open.

@@ -57,9 +57,7 @@ export async function handleCopy(args: {
         verb: 'COPY',
     });
 
-    // A deep copy can outlast the home's idle timeout, so it holds the home until it lands.
-    const release = drive.holdHome();
-    try {
+    return await drive.withHomeHeld(async () => {
         if (destExisting) {
             await drive.deletePath(args.mountId, destExisting.id, args.user);
             drive.lockManager.releaseAllForPath(destExisting.id);
@@ -72,9 +70,7 @@ export async function handleCopy(args: {
             await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
         }
         return new Response(null, { status: destExisting ? 204 : 201 });
-    } finally {
-        release();
-    }
+    });
 }
 
 type Resolved = {

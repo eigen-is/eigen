@@ -116,10 +116,7 @@ export async function handlePut(args: {
     }
     if (existing && ifNoneMatch === '*') return new Response(null, { status: 412 });
 
-    // The write reads the body, which over a slow link can take longer than the home's idle timeout. So the
-    // PUT holds the home until it is done, or the home would close its databases under the write.
-    const release = drive.holdHome();
-    try {
+    return await drive.withHomeHeld(async () => {
         // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
         const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
         const withinLimits = (bytes: number) => {
@@ -154,9 +151,7 @@ export async function handlePut(args: {
             status: existing ? 204 : 201,
             headers: { ETag: etag, 'Last-Modified': path.updatedAt.toUTCString() },
         });
-    } finally {
-        release();
-    }
+    });
 }
 
 export async function handleMkcol(args: {
