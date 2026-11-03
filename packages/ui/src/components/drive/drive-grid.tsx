@@ -64,6 +64,7 @@ export function DriveGrid({
             ref={setContainer}
             tabIndex={0}
             onKeyDown={controller.handleKeyDown}
+            onContextMenu={controller.handleListContextMenu}
             role="grid"
             aria-rowcount={rowCount}
             className="@container flex-1 overflow-auto relative w-full focus:outline-none app-gutter-x py-2"

@@ -1,5 +1,5 @@
-// The Delete key runs the listing's delete row and no other destructive row. A folder is a drop target
-// only where the view can move items.
+// The Delete key runs the listing's delete row and no other destructive row, and the menu key opens the menu at the
+// row or tile under the cursor. A folder is a drop target only where the view can move items.
 import { expect, test } from 'bun:test';
 import { DELETE_HOTKEY } from '@workspace/lib/constants/hotkeys';
 import type { DrivePath } from '@workspace/lib/types/drive';
@@ -10,10 +10,11 @@ import type { DriveActionRunner } from '../../../components/drive/drive-action-r
 import type { UseListSelectionReturn } from '../../../hooks/use-list-selection';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
+import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
 
-const { createElement, createRef } = await import('react');
+const { act, createElement, createRef, useRef } = await import('react');
 const { renderToStaticMarkup } = await import('react-dom/server');
 const { DRIVE_CAPABILITIES } = await import('../../../components/drive/drive-capabilities');
 const { useDriveItemController } = await import('../../../components/drive/use-drive-item-controller');
@@ -93,4 +94,52 @@ test('Delete and Backspace run the row that shows the delete key, even after ano
 test('a folder is a drop target only where the view can move', () => {
     expect(render(runner([]).actions).isValidFolderDrop(folder)).toBe(false);
     expect(render(runner([], async () => {}).actions).isValidFolderDrop(folder)).toBe(true);
+});
+
+const FILES = ['a', 'b', 'c', 'd'].map((id) =>
+    drivePath({ id, name: `${id}.txt`, type: 'file', mimeType: 'text/plain' }),
+);
+
+// The listing as the table and the grid draw it: one element per virtual row, carrying data-index, holding its row or
+// its tiles. Each item reports a rect of its own, as the browser would lay it out.
+async function renderListing(columns: number, cursorId: string) {
+    const seen: { controller: ReturnType<typeof useDriveItemController> | null } = { controller: null };
+    function Listing() {
+        const containerRef = useRef<HTMLDivElement>(null);
+        const controller = useDriveItemController({ items: FILES, activeItemId: cursorId, columns, containerRef });
+        seen.controller = controller;
+        const rows = Array.from({ length: Math.ceil(FILES.length / columns) }, (_, r) =>
+            FILES.slice(r * columns, (r + 1) * columns),
+        );
+        return createElement(
+            'div',
+            { ref: containerRef, tabIndex: 0, onKeyDown: controller.handleKeyDown },
+            rows.map((row, r) =>
+                createElement(
+                    'div',
+                    { key: r, 'data-index': r },
+                    row.map((item) => createElement('div', { key: item.id, 'data-item': item.id })),
+                ),
+            ),
+        );
+    }
+    const { container, unmount } = await renderInDocument(createElement(Listing));
+    for (const [i, item] of [...container.querySelectorAll('[data-item]')].entries()) {
+        if (item instanceof HTMLElement) item.getBoundingClientRect = () => new DOMRect(i * 100, i * 10, 50, 5);
+    }
+    const list = container.querySelector('[tabindex]');
+    if (!list) throw new Error('no listing');
+    await act(async () => {
+        list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true, cancelable: true }));
+    });
+    const menu = seen.controller?.contextMenu;
+    await unmount();
+    return { item: menu?.item?.id, position: menu?.position };
+}
+
+test('the menu key opens the menu at the row under the cursor, in the table and in the grid', async () => {
+    // The fourth item: the table's fourth row, the grid's second tile on its second row.
+    expect(await renderListing(1, 'd')).toEqual({ item: 'd', position: { x: 350, y: 35 } });
+    expect(await renderListing(2, 'd')).toEqual({ item: 'd', position: { x: 350, y: 35 } });
+    expect(await renderListing(2, 'c')).toEqual({ item: 'c', position: { x: 250, y: 25 } });
 });

@@ -5,7 +5,7 @@ type: how-to
 tags: [contacts, select, delete, labels, organize]
 related: [contacts/labels-and-groups, contacts/edit-or-delete, contacts/email-or-chat-a-contact]
 order: 80
-updated: 2026-10-28
+updated: 2026-11-03
 ---
 
 You can act on more than one contact at a time. Pick a group in the list, then delete them or change their labels in a single step.
@@ -23,7 +23,7 @@ The list also works from the keyboard. Press Cmd+A (Ctrl+A on Windows) to select
 
 ## Open the menu on your selection
 
-Right-click any of the selected rows, or hover over one and click the **⋮** button. The menu then acts on every contact you selected.
+Right-click any of the selected rows, or hover over one and click the **⋮** button. From the keyboard, press Shift+F10 (fn+Shift+F10 on most Mac keyboards) or the Menu key to open it on the row under the cursor. The menu then acts on every contact you selected.
 
 If you right-click a row that is not selected, that row becomes the selection and the menu acts on it alone.
 

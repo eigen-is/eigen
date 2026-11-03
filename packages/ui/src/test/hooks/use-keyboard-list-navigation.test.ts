@@ -34,18 +34,20 @@ function selectionOf(ids: string[]): UseListSelectionReturn<Row> {
 // A list with one row that holds a ⋮ button, and a field portaled out of it to the body, the way a dialog opened from a row's menu sits in
 // the list's React tree but not in its DOM. The cursor is lifted (mail's mode) and starts on a known row; -1 is
 // the no-selection state every list starts in. A move opens nothing, as in Drive with no row open. Each callback is
-// recorded as `kind:id`.
+// recorded as `kind:id`. The list sits on a background with a menu of its own, as Drive's does, and its row opens its
+// own menu on a right-click.
 async function mountList(startIndex: number, selection?: UseListSelectionReturn<Row>) {
     const calls: string[] = [];
     function Harness() {
         const containerRef = useRef<HTMLDivElement>(null);
         const [cursorIndex, setCursorIndex] = useState(startIndex);
-        const { handleKeyDown } = useKeyboardListNavigation<Row>({
+        const { handleKeyDown, handleContextMenu } = useKeyboardListNavigation<Row>({
             items: ROWS,
             getId: (item) => item.id,
             onSelect: (id) => calls.push(`open:${id}`),
             onQuickLook: (id) => calls.push(`look:${id}`),
             onDelete: (item) => calls.push(`delete:${item.id}`),
+            onMenu: (item, index) => calls.push(`menu:${item.id}@${index}`),
             shouldNotify: () => false,
             containerRef,
             selection,
@@ -54,9 +56,24 @@ async function mountList(startIndex: number, selection?: UseListSelectionReturn<
         });
         return createElement(
             'div',
-            { ref: containerRef, tabIndex: 0, onKeyDown: handleKeyDown },
-            createElement('div', { 'data-row': '' }, createElement('button', { type: 'button', 'data-menu': '' })),
-            createPortal(createElement('input', { 'data-dialog-field': '' }), document.body),
+            { onContextMenu: () => calls.push('background') },
+            createElement(
+                'div',
+                { ref: containerRef, tabIndex: 0, onKeyDown: handleKeyDown, onContextMenu: handleContextMenu },
+                createElement(
+                    'div',
+                    {
+                        'data-row': '',
+                        onContextMenu: (e: MouseEvent) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            calls.push('row');
+                        },
+                    },
+                    createElement('button', { type: 'button', 'data-menu': '' }),
+                ),
+                createPortal(createElement('input', { 'data-dialog-field': '' }), document.body),
+            ),
         );
     }
     const { container, unmount } = await renderInDocument(createElement(Harness));
@@ -65,9 +82,24 @@ async function mountList(startIndex: number, selection?: UseListSelectionReturn<
         if (!element) throw new Error(`no ${selector}`);
         return element;
     };
-    const keydown = async (target: Element, key: string) => {
-        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+    const keydown = async (target: Element, key: string, init: KeyboardEventInit = {}) => {
+        const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
         await act(async () => {
+            target.dispatchEvent(event);
+        });
+        return event;
+    };
+    // A contextmenu event as a browser sends it: a pointer's carries its pointerType, a key's an empty one.
+    const contextmenu = async (target: Element, pointerType: 'mouse' | '') => {
+        const event = new PointerEvent('contextmenu', {
+            bubbles: true,
+            cancelable: true,
+            pointerType,
+            button: pointerType === 'mouse' ? 2 : 0,
+        });
+        await act(async () => {
+            if (pointerType === 'mouse')
+                target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType }));
             target.dispatchEvent(event);
         });
         return event;
@@ -79,6 +111,7 @@ async function mountList(startIndex: number, selection?: UseListSelectionReturn<
         menuButton: find(container, '[data-menu]'),
         field: find(document.body, '[data-dialog-field]'),
         keydown,
+        contextmenu,
         unmount,
     };
 }
@@ -172,6 +205,63 @@ describe('useKeyboardListNavigation and a dialog opened from the list', () => {
             expect(event.defaultPrevented).toBe(false);
         }
         expect(calls).toEqual([]);
+        await unmount();
+    });
+});
+
+// The menu key is Shift+F10 or the ContextMenu key. On Windows and Linux the browser then also sends a contextmenu
+// event to whatever has the focus, which may be the list or, once it opened, the row's menu.
+describe('useKeyboardListNavigation menu key', () => {
+    test('Shift+F10 and the ContextMenu key open the menu of the row under the cursor', async () => {
+        for (const [key, init] of [
+            ['F10', { shiftKey: true }],
+            ['ContextMenu', {}],
+        ] as const) {
+            const { calls, list, keydown, unmount } = await mountList(1);
+            expect((await keydown(list, key, init)).defaultPrevented).toBe(true);
+            expect(calls).toEqual(['menu:b@1']);
+            await unmount();
+        }
+    });
+
+    test('it opens the topmost selected row with no cursor, and nothing with no row, as Enter does', async () => {
+        expect(await press('ContextMenu', -1, selectionOf(['b', 'c']))).toEqual(['menu:b@1']);
+        const { calls, list, keydown, unmount } = await mountList(-1);
+        expect((await keydown(list, 'ContextMenu')).defaultPrevented).toBe(false);
+        expect(calls).toEqual([]);
+        await unmount();
+    });
+
+    test('F10 without Shift is not the menu key', async () => {
+        const { calls, list, keydown, unmount } = await mountList(1);
+        expect((await keydown(list, 'F10')).defaultPrevented).toBe(false);
+        expect(calls).toEqual([]);
+        await unmount();
+    });
+
+    test('a key’s contextmenu on the list opens the row’s menu once and never reaches the background', async () => {
+        const { calls, list, contextmenu, unmount } = await mountList(1);
+        expect((await contextmenu(list, '')).defaultPrevented).toBe(true);
+        expect(calls).toEqual(['menu:b@1']);
+        await unmount();
+    });
+
+    test('the contextmenu that follows the key opens nothing more, on the list or on the menu that took the focus', async () => {
+        const { calls, list, field, keydown, contextmenu, unmount } = await mountList(1);
+        await keydown(list, 'ContextMenu');
+        expect((await contextmenu(list, '')).defaultPrevented).toBe(true);
+        await keydown(list, 'F10', { shiftKey: true });
+        expect((await contextmenu(field, '')).defaultPrevented).toBe(true);
+        expect(calls).toEqual(['menu:b@1', 'menu:b@1']);
+        await unmount();
+    });
+
+    test('a right-click stays the pointer’s, on a row and below the rows, even right after the key', async () => {
+        const { calls, list, row, keydown, contextmenu, unmount } = await mountList(1);
+        await contextmenu(row, 'mouse');
+        await keydown(list, 'ContextMenu');
+        expect((await contextmenu(list, 'mouse')).defaultPrevented).toBe(false);
+        expect(calls).toEqual(['row', 'menu:b@1', 'background']);
         await unmount();
     });
 });

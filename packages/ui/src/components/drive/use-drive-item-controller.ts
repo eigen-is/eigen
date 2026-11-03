@@ -72,7 +72,19 @@ export function useDriveItemController({
         onSelectionChange?.(selection.selectedItems);
     }, [selection.selectedItems, onSelectionChange]);
 
-    const { selectedIndex, handleKeyDown } = useKeyboardListNavigation<DrivePath>({
+    // Right-click, the long-press (touch) opener, the ⋮ button and the menu key all select-then-open.
+    const {
+        contextMenu,
+        handleContextMenu,
+        openAt: openContextMenuAt,
+        openFromButton: openContextMenuFromButton,
+    } = useSelectableContextMenu({ selection, getId: (item) => item.id });
+
+    const {
+        selectedIndex,
+        handleKeyDown,
+        handleContextMenu: handleListContextMenu,
+    } = useKeyboardListNavigation<DrivePath>({
         items,
         activeId: activeItemId,
         getId: (item) => item.id,
@@ -89,6 +101,15 @@ export function useDriveItemController({
                   if (remove) actions.run(remove.id, items);
               }
             : undefined,
+        // The menu key opens the menu at the row or tile, as its ⋮ does. Each virtual row of the table and the grid
+        // carries the virtualizer's data-index and holds its rows or tiles as children, so a grid's tile is found by
+        // its row and column. A row scrolled out of the window is not drawn, and its menu opens at the list instead.
+        onMenu: (item, index) => {
+            const list = containerRef.current;
+            const row = list?.querySelector(`[data-index="${Math.floor(index / columns)}"]`)?.children[index % columns];
+            const anchor = row instanceof HTMLElement ? row : list;
+            if (anchor) openContextMenuFromButton(anchor, item);
+        },
         selection,
         columns,
         scrollToIndex,
@@ -108,14 +129,6 @@ export function useDriveItemController({
 
     const drag = useListDrag({ selection, getId: (item) => item.id, dragType: 'drive-item' });
     const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
-
-    // Right-click, the long-press (touch) opener, and the kebab button all select-then-open.
-    const {
-        contextMenu,
-        handleContextMenu,
-        openAt: openContextMenuAt,
-        openFromButton: openContextMenuFromButton,
-    } = useSelectableContextMenu({ selection, getId: (item) => item.id });
 
     // A view that can't move items, such as a read-only share or a picker, has no onMove and so no drop targets.
     const isValidFolderDrop = (targetItem: DrivePath) =>
@@ -143,6 +156,7 @@ export function useDriveItemController({
         selection,
         selectedIndex,
         handleKeyDown,
+        handleListContextMenu,
         drag,
         contextMenu,
         handleContextMenu,

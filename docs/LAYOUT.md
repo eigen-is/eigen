@@ -156,7 +156,7 @@ Only `apps/drive` mounts `DriveLayout` directly. Docs, Stickies, Slides and Shee
 Each list owns its rendering and composes the hooks in `packages/ui/src/hooks/`:
 
 - `useListSelection`: click, modifier click, select all
-- `useKeyboardListNavigation`: Space, Enter and Delete act on the cursor row, or on the topmost selected row when a select-all left no cursor
+- `useKeyboardListNavigation`: Space, Enter, Delete and the menu key (Shift+F10 or the ContextMenu key) act on the cursor row, or on the topmost selected row when a select-all left no cursor
 - `useListDrag`: the multi-drag badge
 - `useListDropTarget`: a drop on a sidebar item, through `DroppableSidebarItem`
 - `useContextMenu`, from `components/context-menu/`
@@ -175,6 +175,8 @@ A row's state is a class in `packages/ui/src/styles/globals.css`, painted in the
 `ContextMenuAnchor` portals its zero-size trigger into `document.body`. The trigger sits at viewport coordinates, and a transformed ancestor (a dialog's centering translate) would otherwise become its containing block and open the menu somewhere else.
 
 One context menu serves the whole list, so a list never draws a `DropdownMenu` per row. A row's button opens it with `openAt(item, rect.right, rect.bottom)` from the button's own bounding rect, because a click made with the keyboard's Enter has clientX and clientY 0,0.
+
+The menu key opens the same menu from the row's own rect: the list passes `onMenu` and finds the row element itself, a virtualized list by the `data-index` its virtualizer already puts on each virtual row (a grid tile by that row and its column). The list also spreads the hook's `handleContextMenu` next to `handleKeyDown`. On Windows and Linux the browser follows the key with a native `contextmenu` event at whatever has the focus, on Windows at keyup, when the row's menu already holds the focus. A keydown `preventDefault` doesn't stop it, and left alone it opens the browser's menu over ours, or Drive's New menu behind the list. So once its key opened a menu, the hook swallows the next `contextmenu` in a window capture listener, and a `pointerdown` or the next key ends that, so a right-click is never swallowed. A keyboard `contextmenu` no keydown came before, which targets the focused container and has an empty `pointerType`, opens the row's menu through `handleContextMenu`; a right-click below the rows targets the container too but has the mouse's `pointerType`, and still reaches the background menu. macOS sends no `contextmenu` for either key.
 
 A menu row's 16 px between icon and label lives in the item primitives in `dropdown-menu.tsx` (`gap-4`), which the Sheets right-click menu uses too. Put the bare icon in the row; never add `mr-*` or a `gap-*` override to a menu icon.
 

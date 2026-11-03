@@ -156,13 +156,22 @@ export function EmailList({
 
     const drag = useListDrag({ selection, getId: (e) => e.id, dragType: 'email' });
 
+    // Right-click, touch long-press and the menu key select-then-open the same singleton menu. Rows are mapped
+    // inline (no per-row component to hang a hook on), so one list-level useLongPress carries the
+    // pressed row via bind(email).
+    const { contextMenu, handleContextMenu, openAt, openFromButton } = useSelectableContextMenu({
+        selection,
+        getId: (e) => e.id,
+    });
+    const longPress = useLongPress(openAt);
+
     // Shared keyboard model in lifted-cursor mode: MailRoute owns the cursor (id-tracked, shared
     // with the shortcuts layer) and the virtualizer scrolls. The hook also owns list focus — the
     // mount grab plus the body-focus reclaim that keeps the shortcuts alive after a click on
     // non-focusable chrome — gated off while composing so a reply keeps its keystrokes.
     // No onDelete: the Delete/Backspace bindings live in useMailShortcuts, which also covers an
     // open conversation; the list just swallows the keypress.
-    const { handleKeyDown } = useKeyboardListNavigation({
+    const { handleKeyDown, handleContextMenu: handleListContextMenu } = useKeyboardListNavigation({
         items: orderedEmails,
         getId: (e) => e.id,
         onSelect: onRowClick,
@@ -172,16 +181,15 @@ export function EmailList({
         reclaimFocus: !isComposing,
         cursorIndex,
         onCursorChange: setCursorIndex,
+        // The menu key opens the menu at the row, which carries the virtualizer's data-index. A row scrolled out of the
+        // window is not drawn, and its menu opens at the list instead.
+        onMenu: (email, index) => {
+            const list = tableRef.current;
+            const row = list?.querySelector(`[data-index="${index}"]`);
+            const anchor = row instanceof HTMLElement ? row : list;
+            if (anchor) openFromButton(anchor, email);
+        },
     });
-
-    // Right-click and touch long-press select-then-open the same singleton menu. Rows are mapped
-    // inline (no per-row component to hang a hook on), so one list-level useLongPress carries the
-    // pressed row via bind(email).
-    const { contextMenu, handleContextMenu, openAt } = useSelectableContextMenu({
-        selection,
-        getId: (e) => e.id,
-    });
-    const longPress = useLongPress(openAt);
 
     const contextIds = contextMenu.item
         ? selection.selectedItems.length > 1
@@ -200,7 +208,13 @@ export function EmailList({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-background">
-            <div className="flex-1 overflow-y-auto outline-none" tabIndex={0} onKeyDown={handleKeyDown} ref={tableRef}>
+            <div
+                className="flex-1 overflow-y-auto outline-none"
+                tabIndex={0}
+                onKeyDown={handleKeyDown}
+                onContextMenu={handleListContextMenu}
+                ref={tableRef}
+            >
                 {orderedEmails.length > 0 ? (
                     <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
                         {virtualItems.map((vi) => {
