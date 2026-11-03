@@ -55,6 +55,10 @@ export class SharedDrive {
         return this.drive.holdHome(onClosing);
     }
 
+    public withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        return this.drive.withHomeHeld(fn);
+    }
+
     // ---- Access checks ----
 
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {

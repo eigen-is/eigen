@@ -117,6 +117,16 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'lock state is per-user; path ACL already checked in the WebDAV route',
             call: async (sd) => expect(sd.lockManager).toBeDefined(),
         },
+        holdHome: {
+            gate: 'ungated-by-design',
+            reason: 'lifecycle only, no data; getSharedDrive has already opened that Home',
+            call: async (sd) => sd.holdHome()(),
+        },
+        withHomeHeld: {
+            gate: 'ungated-by-design',
+            reason: 'lifecycle only, no data; getSharedDrive has already opened that Home',
+            call: (sd) => sd.withHomeHeld(async () => {}),
+        },
         unwatchPath: {
             gate: 'ungated-by-design',
             reason: "removing one's own watch must work after a share is revoked",

@@ -105,8 +105,8 @@ export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uplo
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
 export class Drive {
-    // WebDAV locks live as long as this Drive, so they go away when the home closes.
-    public readonly lockManager = new LockManager();
+    // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
+    public readonly lockManager = new LockManager(() => this.home.hold());
 
     private readonly home: Home;
     private readonly owner: User;
@@ -168,6 +168,10 @@ export class Drive {
         return this.home.hold(onClosing);
     }
 
+    public withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        return this.home.withHomeHeld(fn);
+    }
+
     // ---- Mounts ----
 
     // The home's close only closes the mounts this Drive holds. So a closing home gets no new mount,
@@ -179,26 +183,22 @@ export class Drive {
     }
 
     private async startMount(config: MountConfig): Promise<void> {
-        if (!this.home.closing) {
-            // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
-            const mount = new Mount(
-                this.owner.id,
-                this.home.homeDir,
-                config,
-                this.home.getLocalDatabase.bind(this.home),
-                extractText,
-            );
-            await mount.init();
-            if (!this.home.closing) {
-                this.mounts.set(config.id, mount);
-                if (config.isDefault) {
-                    this.defaultMountId = config.id;
-                }
-                return;
-            }
+        this.home.refuseIfClosing();
+        // The mount gets the text extractor from here, so the document loaders stay out of the mount code.
+        const mount = new Mount(
+            this.owner.id,
+            this.home.homeDir,
+            config,
+            this.home.getLocalDatabase.bind(this.home),
+            extractText,
+        );
+        await mount.init();
+        if (this.home.closing) {
             await mount.closeAllDatabases();
+            this.home.refuseIfClosing();
         }
-        throw new ApiError(503, 'Home is closing');
+        this.mounts.set(config.id, mount);
+        if (config.isDefault) this.defaultMountId = config.id;
     }
 
     // Applies saved mount settings to the live mount, so a change takes effect without reloading the home.

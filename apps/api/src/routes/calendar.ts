@@ -37,8 +37,8 @@ import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints; everything a CalDAV
-// PUT may store caps at the resource ceiling itself, or the event a device wrote would be uneditable here.
+// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints. Anything a CalDAV PUT
+// may store is capped at the ceiling itself, or an event a device wrote could not be edited here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
 // An attendee or a reminder is one line of the file, and a file holds no more lines than it holds bytes.
@@ -427,15 +427,11 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, query.calendarId, 'write');
             // A thousand-event file writes a row apiece before this answers, longer than any server-wide idleTimeout.
-            // That can outlast the home's idle timeout too, so the import holds the home until it ends.
             server?.timeout(request, 0);
-            const release = cal.home.hold();
-            try {
+            return await cal.home.withHomeHeld(async () => {
                 const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
                 return await cal.importEvents(query.calendarId, bytes);
-            } finally {
-                release();
-            }
+            });
         },
         { query: ImportQuerySchema, auth: true, parse: 'none' },
     )
@@ -445,19 +441,16 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, body.calendarId, 'write');
-            // Same idle-timeout exemption and home hold as the raw import route: silent until the last event lands.
+            // The same idle-timeout exemption as the raw import route: silent until the last event lands.
             server?.timeout(request, 0);
-            const release = cal.home.hold();
-            try {
+            return await cal.home.withHomeHeld(async () => {
                 const bytes = await readImportSourceBytes(user, body, {
                     accepts: isIcsFile,
                     rejection: NOT_A_CALENDAR_FILE,
                     maxBytes: ICS_MAX_BYTES,
                 });
                 return await cal.importEvents(body.calendarId, bytes);
-            } finally {
-                release();
-            }
+            });
         },
         {
             body: ImportFromDriveIcsSchema,

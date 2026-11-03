@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
 import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
@@ -9,6 +10,8 @@ import { getTestContext } from '../setup';
 // getHome must not open a replacement Home on the same database files while the outgoing home is
 // still closing them. It awaits close() before installing the replacement, and close() runs once, so
 // the idle timer and an explicit close() can't close the databases twice.
+const USER_IDLE_MS = 5 * 60_000;
+
 describe('getHome teardown race', () => {
     beforeAll(async () => {
         await getTestContext();
@@ -154,6 +157,62 @@ describe('getHome teardown race', () => {
         errors.mockRestore();
         expect(heard).toEqual(['held, parts closed: 0', 'after the failure']);
         expect(atHome(userId)).toBe(false);
+    });
+
+    // A database that failed to open has nothing to close, so the close must not open it again. The next
+    // call that asks for it does try again.
+    test('a database whose open failed opens again on the next call, and the close skips it', async () => {
+        const userId = await createHomeUser('close-skips-failed-db@test.eigen.is');
+        const home = await getHome(userId);
+        let opens = 0;
+        const broken: DatabaseConfig<SchemaType> = {
+            name: 'broken-probe',
+            currentVersion: 1,
+            schema: {},
+            migrations: [
+                {
+                    version: 1,
+                    up: () => {
+                        opens++;
+                        throw new Error('broken migration');
+                    },
+                },
+            ],
+        };
+        await expect(home.getLocalDatabase(broken, 'broken-probe.db')).rejects.toThrow('broken migration');
+        await expect(home.getLocalDatabase(broken, 'broken-probe.db')).rejects.toThrow('broken migration');
+        expect(opens).toBe(2);
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await home.close();
+            expect(opens).toBe(2);
+            expect(errors.mock.calls.some(([line]) => String(line).includes('broken-probe.db'))).toBe(false);
+        } finally {
+            errors.mockRestore();
+        }
+    });
+
+    // A long request, such as an upload, holds its home while it runs and lets go however it ends.
+    test('withHomeHeld keeps the home open past its idle, and lets go when the work throws', async () => {
+        const userId = await createHomeUser('with-home-held@test.eigen.is');
+        const home = await getHome(userId);
+        let closingMidWork: boolean | undefined;
+        jest.useFakeTimers();
+        try {
+            home.touch();
+            const work = home.withHomeHeld(async () => {
+                jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+                closingMidWork = home.closing;
+                throw new Error('work failed');
+            });
+            await expect(work).rejects.toThrow('work failed');
+            expect(closingMidWork).toBe(false);
+            jest.advanceTimersByTime(USER_IDLE_MS + 60_000);
+            expect(home.closing).toBe(true);
+        } finally {
+            jest.useRealTimers();
+        }
+        await home.close();
     });
 
     // The process ends once the shutdown is done, so a Home built during it would be killed half-open.

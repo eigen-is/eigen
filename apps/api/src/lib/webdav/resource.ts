@@ -3,7 +3,7 @@
 // goes through getSharedDrive, so the Drive ACL decides access. They answer the HTTP preconditions
 // (If-Match, If-None-Match) and the WebDAV locks as the RFCs ask.
 
-import { isContainerType } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE, isContainerType } from '@workspace/lib/types/drive';
 import { enforceMaxUploadSize, getMountRoom } from '../config/enforcement';
 import { ApiError } from '../core/errors';
 import { computeEtag, matchesIfMatch, matchesIfNoneMatch, rangeResponse, scriptableInlineHeaders } from '../core/http';
@@ -27,7 +27,7 @@ export async function handleGet(args: {
     const drive = await getSharedDrive(ownerId, user);
     const path = await drive.resolvePath(mountId, pathStr);
     if (!path) throw new ApiError(404, 'Not found');
-    if (path.type !== 'file') throw new ApiError(405, 'Not a file');
+    if (path.type !== DRIVE_TYPE_FILE) throw new ApiError(405, 'Not a file');
 
     const etag = computeEtag(path);
 
@@ -65,7 +65,7 @@ export async function handleGet(args: {
         full: async () => {
             const file = await drive.downloadFile(mountId, path.id);
             if (!file) throw new ApiError(404, 'Not found');
-            // S3File can't be used as a Response body directly — stream it. BunFile works either way.
+            // An S3File can't be a Response body as it is, so it goes in as a stream. A BunFile works either way.
             return 'bucket' in file ? file.stream() : file;
         },
     });
@@ -116,10 +116,7 @@ export async function handlePut(args: {
     }
     if (existing && ifNoneMatch === '*') return new Response(null, { status: 412 });
 
-    // The write reads the body, which over a slow link can take longer than the home's idle timeout. So the
-    // PUT holds the home until it is done, or the home would close its databases under the write.
-    const release = drive.holdHome();
-    try {
+    return await drive.withHomeHeld(async () => {
         // A 0-byte PUT (Finder's name reservation) adds nothing, so it skips the quota lookup.
         const room = contentLength === 0 ? 0 : await getMountRoom(ownerId, mountId, existing?.size ?? 0);
         const withinLimits = (bytes: number) => {
@@ -154,9 +151,7 @@ export async function handlePut(args: {
             status: existing ? 204 : 201,
             headers: { ETag: etag, 'Last-Modified': path.updatedAt.toUTCString() },
         });
-    } finally {
-        release();
-    }
+    });
 }
 
 export async function handleMkcol(args: {

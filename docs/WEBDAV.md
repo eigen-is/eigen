@@ -49,7 +49,8 @@ An overwrite trashes the target first. So a request whose source and destination
 
 - A lock belongs to the user who took it. A write with another user's token is a 423. Their UNLOCK is a 403.
 - A depth-infinity lock on a folder gates writes on everything below it. Each write walks its breadcrumb for covering locks (`coveringLocks`).
-- The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state for years.
+- A live lock holds its Home, so the Home's idle close never drops a lock a WebDAV-only client such as Word still counts on: Word sends nothing between its refreshes, longer than the 5-minute idle. `LockManager` takes one hold while it has any lock and arms one timer at the latest expiry; the last lock going, by UNLOCK, DELETE, overwrite or expiry, releases the hold. A close for another reason, such as a restore, a deletion or the shutdown, drops every lock (`clear`), and a LOCK on a closing Home is a 503.
+- The TTL is 600 s unless the client asks, and never over 24 h, so a client can't pin lock state, or the Home it holds, for years.
 - One path holds at most 32 locks. Shared locks stack without conflict, so past that a LOCK is a 423 and a client can't grow the table without bound.
 - DELETE and an overwrite release the replaced path's locks.
 - The `owner` a LOCK names is the client's own XML (RFC 4918 §14.17), often an `href`. The lock keeps it serialized and every lockdiscovery writes it back as XML, never escaped into text, so the client reads back the element it sent. Each element in it declares the namespaces it uses, so an owner can serialize to many times its body; one past 64 KB is a 400, since the lock holds it for its whole life.

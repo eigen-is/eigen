@@ -451,6 +451,25 @@ describe('Drive', () => {
             expect(contents.find((item: DrivePath) => item.name === 'read-only-blocked.txt')).toBeUndefined();
         });
 
+        // A user who may not write never holds the owner's home, not even for the length of the refusal.
+        test("a refused upload never holds the owner's home", async () => {
+            const home = await getHome(ctx.alice.user.id);
+            const hold = spyOn(home, 'hold');
+            try {
+                const formData = new FormData();
+                formData.append('file', new File(['no write'], 'refused-no-hold.txt', { type: 'text/plain' }));
+                const res = await authedRequest(
+                    ctx.bob.user.sessionToken,
+                    `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${sharedFolderId}`,
+                    { method: 'POST', body: formData },
+                );
+                expect(res.status).toBe(403);
+                expect(hold).not.toHaveBeenCalled();
+            } finally {
+                hold.mockRestore();
+            }
+        });
+
         test('Bob cannot change ACL while read-only', async () => {
             await authedRequest(
                 ctx.bob.user.sessionToken,

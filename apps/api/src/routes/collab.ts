@@ -38,8 +38,8 @@ type CollabSession = {
     releaseHome?: () => void;
 };
 
-// Elysia allocates a fresh ElysiaWS per WS event; only its stable `.raw` socket keeps one identity
-// across open/message/close, and it has no typed slot for the route's own per-socket state.
+// Elysia hands each socket event a new wrapper. Only the raw socket under it stays the same from open to
+// close, and it has no typed field for this route's state, so the state lives in this map.
 const sessions = new WeakMap<ServerWebSocket<unknown>, CollabSession>();
 
 // A user may open a document in another owner's drive, such as a shared or team drive. getSharedDrive and its ACL
@@ -118,7 +118,7 @@ export const collabRouter = new Elysia({
                 throw new ApiError(403, 'No write permission');
             }
             const assignee = body.assignee ? body.assignee.toLowerCase() : null;
-            // Resolved once for validation, reused by the broadcast fan-out (it's a full ACL walk).
+            // Looked up once for the check and passed on to the broadcast, because it walks the whole ACL.
             let members: EffectiveMember[] | undefined;
             if (assignee) {
                 members = await drive.getEffectiveMembers(params.mountId, params.pathId);
@@ -170,8 +170,8 @@ export const collabRouter = new Elysia({
         },
     )
 
-    // Bun does not await async open(), so messages and close can fire before setup
-    // completes. The `opened` promise gates message/close until open() is done.
+    // Bun does not await an async open, so a message or the close can arrive before the setup is done.
+    // They wait for the `opened` promise first.
     .ws('/ws/collab/:ownerId/:mountId/:pathId', {
         auth: true,
         params: t.Object({
@@ -190,11 +190,10 @@ export const collabRouter = new Elysia({
             try {
                 const user = ws.data.user;
 
-                // Speak before any await: y-websocket closes after 30s of silence and
-                // retries, re-paying a cold open per attempt (the reconnect spiral).
-                // Cold Home init inside getSharedDrive is the slowest phase, so the
-                // heartbeat must precede it; the frame is a constant empty awareness
-                // update, so nothing leaks before the ACL check.
+                // y-websocket closes a socket that stays silent for 30 seconds and retries, and every retry
+                // pays for a cold open again. Opening a cold Home in getSharedDrive is the slowest step, so the
+                // heartbeat starts before it. Its frame is a constant empty awareness update, so it reveals
+                // nothing before the access check.
                 const rawWs = ws.raw;
                 stopHeartbeat = startLoadingHeartbeat(rawWs);
                 const loadStart = performance.now();
@@ -232,11 +231,16 @@ export const collabRouter = new Elysia({
                 session.collabDocument = document;
                 session.pingInterval = keepWebSocketAlive(user, rawWs, () => cleanupSession(session, rawWs));
             } catch (err) {
-                console.error('Error opening collab session:', err);
+                const status = err instanceof ApiError ? err.status : 500;
+                // A refusal, such as a document in the trash, is expected on every reconnect, so it gets one line.
+                if (err instanceof ApiError && status < 500) {
+                    console.log(`[collab] open refused path=${ws.data.params.pathId} status=${status}: ${err.message}`);
+                } else {
+                    console.error('Error opening collab session:', err);
+                }
                 // A failure HTTP would answer with a 5xx makes the client retry. That includes a home a restore
                 // is replacing. If the restore finishes, the reconnect names a stale epoch and the tab reloads.
                 // If it fails, the epoch stays, and the tab syncs the edits it holds.
-                const status = err instanceof ApiError ? err.status : 500;
                 if (status >= 500) {
                     ws.close(COLLAB_STORAGE_UNAVAILABLE_CLOSE, COLLAB_STORAGE_UNAVAILABLE_REASON);
                 } else if (status === 410) {
@@ -257,7 +261,7 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            // Bun delivers a binary frame as a Buffer, itself a Uint8Array; anything else is not an update.
+            // Bun delivers a binary frame as a Buffer, which is a Uint8Array. Anything else is not an update.
             if (!(message instanceof Uint8Array)) return;
 
             const session = sessions.get(ws.raw);

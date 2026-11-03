@@ -1,8 +1,8 @@
 // The event stream of one user's own Home, which the SSE route hands to a signed-in tab. It passes on every event
 // the Home broadcasts, and it holds the Home, so the Home stays open while the tab is. When the Home closes anyway,
-// such as for a restore or the shutdown, the stream ends and the browser reconnects to the next Home. It sends the
-// restart notice the server holds, or that it holds none, and the data epochs when it opens. A keepalive goes out
-// then and every 15 seconds, so a proxy keeps the connection, and the data epochs go out with each one.
+// such as for a restore or the shutdown, the stream ends and the browser reconnects to the next Home. When it opens,
+// it sends the server's restart notice, or word that there is none, and the data epochs. A keepalive every 15
+// seconds keeps a proxy from closing the connection, and the data epochs go out again with it.
 
 import type { SSEvent } from '@workspace/lib/types/sse';
 import { sse } from 'elysia';

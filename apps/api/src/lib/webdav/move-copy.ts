@@ -4,6 +4,7 @@
 // overwrite rules and the WebDAV locks as RFC 4918 asks.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
+import { DRIVE_TYPE_FILE } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { DriveLike } from '../drive/get-drive';
 import { getSharedDrive } from '../drive/get-drive';
@@ -57,24 +58,20 @@ export async function handleCopy(args: {
         verb: 'COPY',
     });
 
-    // A deep copy can outlast the home's idle timeout, so it holds the home until it lands.
-    const release = drive.holdHome();
-    try {
+    return await drive.withHomeHeld(async () => {
         if (destExisting) {
             await drive.deletePath(args.mountId, destExisting.id, args.user);
             drive.lockManager.releaseAllForPath(destExisting.id);
         }
 
         // RFC 4918 §9.8.3: Depth: 0 on a folder copies the folder without its members. A file has none.
-        if (args.depth === '0' && src.type !== 'file') {
+        if (args.depth === '0' && src.type !== DRIVE_TYPE_FILE) {
             await drive.createFolder(args.mountId, destParent.id, newName, args.user);
         } else {
             await drive.copyPath(args.mountId, src.id, destParent.id, newName, args.user);
         }
         return new Response(null, { status: destExisting ? 204 : 201 });
-    } finally {
-        release();
-    }
+    });
 }
 
 type Resolved = {

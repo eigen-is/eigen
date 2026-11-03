@@ -2,13 +2,12 @@
 // or the smaller set a team has. Every request reaches that data through getHome(ownerId), which
 // builds the Home on first use. It stays loaded while it is used or held, such as by an open tab,
 // and closes itself, databases included, after a few idle minutes. This base class owns that
-// lifecycle; each kind of home decides which parts it has.
+// lifecycle. Each kind of home decides which parts it has.
 
 import * as path from 'node:path';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
 import { PATHS } from '../config/paths';
@@ -51,7 +50,8 @@ export class Home {
     private readonly onClosed: (() => void) | undefined;
     // What the holders asked to run when the close starts, such as ending an event stream.
     private readonly holderCloseCallbacks = new Set<() => void>();
-    private readonly managedDatabases = new Map<string, () => Promise<ManagedDatabase<SchemaType>>>();
+    // The open of each database file under the home, in flight or done.
+    private readonly managedDatabases = new Map<string, Promise<ManagedDatabase<SchemaType>>>();
     private readonly sseListeners = new Set<(event: SSEvent) => void>();
 
     public constructor(user: User, homeDir: string, onClosed?: () => void) {
@@ -170,10 +170,8 @@ export class Home {
             this._notifications?.destruct().catch(logFailure('notifications')),
         ]);
         await Promise.all(
-            [...this.managedDatabases].map(([relativePath, open]) =>
-                open()
-                    .then((db) => db.close())
-                    .catch(logFailure(relativePath)),
+            [...this.managedDatabases].map(([relativePath, opening]) =>
+                opening.then((db) => db.close()).catch(logFailure(relativePath)),
             ),
         );
         this.managedDatabases.clear();
@@ -209,6 +207,17 @@ export class Home {
         };
     }
 
+    // A long request, such as an upload, an export or an import, can outlast the idle timeout, so it holds
+    // its Home until it ends.
+    public async withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        const release = this.hold();
+        try {
+            return await fn();
+        } finally {
+            release();
+        }
+    }
+
     private startIdleTimer(idleMs: number): void {
         if (this._closing || this.holds > 0) return;
         clearTimeout(this.idleTimer);
@@ -226,15 +235,22 @@ export class Home {
         relativePath: string,
     ): Promise<ManagedDatabase<S>> {
         this.refuseIfClosing();
-        let open = this.managedDatabases.get(relativePath);
-        if (!open) {
-            open = createAsyncSingleton(() => openLocalDatabase(config, path.join(this.homeDir, relativePath)));
-            this.managedDatabases.set(relativePath, open);
+        let opening = this.managedDatabases.get(relativePath);
+        if (!opening) {
+            const opened = openLocalDatabase(config, path.join(this.homeDir, relativePath));
+            // A failed open leaves no entry, so the next call tries again and the close skips it.
+            opened.catch(() => {
+                if (this.managedDatabases.get(relativePath) === opened) this.managedDatabases.delete(relativePath);
+            });
+            this.managedDatabases.set(relativePath, opened);
+            opening = opened;
         }
-        return open() as Promise<ManagedDatabase<S>>;
+        return opening as Promise<ManagedDatabase<S>>;
     }
 
-    private refuseIfClosing(): void {
+    // The one answer to work that comes too late, such as a hold or a new mount: the client retries
+    // and reaches the next home.
+    public refuseIfClosing(): void {
         if (this._closing) throw new ApiError(503, 'Home is closing');
     }
 
