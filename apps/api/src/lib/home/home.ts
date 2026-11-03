@@ -8,7 +8,6 @@ import * as path from 'node:path';
 import type { NotificationPersistInput } from '@workspace/lib/types/notification';
 import type { HomeSizeResponse, UserSettings } from '@workspace/lib/types/settings';
 import type { SSEvent } from '@workspace/lib/types/sse';
-import { createAsyncSingleton } from '../../utils/singleton';
 import { time } from '../../utils/timing';
 import type { Calendar } from '../calendar/calendar';
 import { PATHS } from '../config/paths';
@@ -51,7 +50,8 @@ export class Home {
     private readonly onClosed: (() => void) | undefined;
     // What the holders asked to run when the close starts, such as ending an event stream.
     private readonly holderCloseCallbacks = new Set<() => void>();
-    private readonly managedDatabases = new Map<string, () => Promise<ManagedDatabase<SchemaType>>>();
+    // The open of each database file under the home, in flight or done.
+    private readonly managedDatabases = new Map<string, Promise<ManagedDatabase<SchemaType>>>();
     private readonly sseListeners = new Set<(event: SSEvent) => void>();
 
     public constructor(user: User, homeDir: string, onClosed?: () => void) {
@@ -170,10 +170,8 @@ export class Home {
             this._notifications?.destruct().catch(logFailure('notifications')),
         ]);
         await Promise.all(
-            [...this.managedDatabases].map(([relativePath, open]) =>
-                open()
-                    .then((db) => db.close())
-                    .catch(logFailure(relativePath)),
+            [...this.managedDatabases].map(([relativePath, opening]) =>
+                opening.then((db) => db.close()).catch(logFailure(relativePath)),
             ),
         );
         this.managedDatabases.clear();
@@ -237,12 +235,17 @@ export class Home {
         relativePath: string,
     ): Promise<ManagedDatabase<S>> {
         this.refuseIfClosing();
-        let open = this.managedDatabases.get(relativePath);
-        if (!open) {
-            open = createAsyncSingleton(() => openLocalDatabase(config, path.join(this.homeDir, relativePath)));
-            this.managedDatabases.set(relativePath, open);
+        let opening = this.managedDatabases.get(relativePath);
+        if (!opening) {
+            const opened = openLocalDatabase(config, path.join(this.homeDir, relativePath));
+            // A failed open leaves no entry, so the next call tries again and the close skips it.
+            opened.catch(() => {
+                if (this.managedDatabases.get(relativePath) === opened) this.managedDatabases.delete(relativePath);
+            });
+            this.managedDatabases.set(relativePath, opened);
+            opening = opened;
         }
-        return open() as Promise<ManagedDatabase<S>>;
+        return opening as Promise<ManagedDatabase<S>>;
     }
 
     // The one answer to work that comes too late, such as a hold or a new mount: the client retries

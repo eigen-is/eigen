@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, jest, spyOn, test } from 'bun:test';
 import { auth } from '../../lib/auth/auth';
 import { PATHS } from '../../lib/config/paths';
+import type { DatabaseConfig, SchemaType } from '../../lib/core';
 import { SHARED_DB_CONFIG } from '../../lib/drive/db-config';
 import { atHome, evictHome, getHome, shutdownAllHomes } from '../../lib/home/get-home';
 import { createSSEStream } from '../../lib/home/sse-stream';
@@ -156,6 +157,39 @@ describe('getHome teardown race', () => {
         errors.mockRestore();
         expect(heard).toEqual(['held, parts closed: 0', 'after the failure']);
         expect(atHome(userId)).toBe(false);
+    });
+
+    // A database that failed to open has nothing to close, so the close must not open it again. The next
+    // call that asks for it does try again.
+    test('a database whose open failed opens again on the next call, and the close skips it', async () => {
+        const userId = await createHomeUser('close-skips-failed-db@test.eigen.is');
+        const home = await getHome(userId);
+        let opens = 0;
+        const broken: DatabaseConfig<SchemaType> = {
+            name: 'broken-probe',
+            currentVersion: 1,
+            schema: {},
+            migrations: [
+                {
+                    version: 1,
+                    up: () => {
+                        opens++;
+                        throw new Error('broken migration');
+                    },
+                },
+            ],
+        };
+        await expect(home.getLocalDatabase(broken, 'broken-probe.db')).rejects.toThrow('broken migration');
+        await expect(home.getLocalDatabase(broken, 'broken-probe.db')).rejects.toThrow('broken migration');
+        expect(opens).toBe(2);
+        const errors = spyOn(console, 'error').mockImplementation(() => {});
+        try {
+            await home.close();
+            expect(opens).toBe(2);
+            expect(errors.mock.calls.some(([line]) => String(line).includes('broken-probe.db'))).toBe(false);
+        } finally {
+            errors.mockRestore();
+        }
     });
 
     // A long request, such as an upload, holds its home while it runs and lets go however it ends.
