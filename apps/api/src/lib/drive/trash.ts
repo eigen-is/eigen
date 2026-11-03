@@ -1,6 +1,7 @@
-// The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good.
-// Drive methods such as deletePath check the path and then call these. They close open documents,
-// take away sharing, tell open tabs and write the history.
+// The drive side of the trash: moving a path to the trash, back out of it, and deleting it for good,
+// from the trash or, for a copy that failed, without it. Drive methods such as deletePath check the
+// path and then call these. They close open documents, take away sharing, tell open tabs and write the
+// history.
 
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { isContainerType } from '@workspace/lib/types/drive';
@@ -104,6 +105,18 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
         }
     }
     return true;
+}
+
+// A copy from another mount or drive that failed part way is deleted for good. In the trash its bytes
+// would still count against the owner's space, and a writer from another drive can't empty that trash.
+// Its open documents close first, and the tabs that saw it appear hear it went.
+export async function deleteFailedCopy(drive: Drive, mount: Mount, item: DrivePath): Promise<void> {
+    const members = await drive.getEffectiveMembers(mount.id, item.id);
+    await closeOpenDocumentsUnder(drive, mount, item.id, { skipFinalSnapshot: true });
+    await mount.deletePath(item.id);
+    drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
+        members,
+    });
 }
 
 // Closes every collab document open at or below the path. The trash goes on either way, so a close

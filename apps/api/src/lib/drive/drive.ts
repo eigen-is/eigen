@@ -96,7 +96,7 @@ import {
 import type * as sharedSchema from './sharedschema';
 import { broadcastFileHistoryUpdated, buildDriveEvent } from './sse-events';
 import { streamFilesToTemp } from './streaming';
-import { deletePath, permanentlyDelete, restorePath } from './trash';
+import { deleteFailedCopy, deletePath, permanentlyDelete, restorePath } from './trash';
 import { finalizeUpload, regenerateThumbnailAsync } from './upload';
 
 // How a content write is guarded and recorded. ifMatch is an If-Match value, checked under the file's
@@ -774,6 +774,14 @@ export class Drive {
             await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
             await this.releaseLocksUnder(mountId, item.id);
         });
+    }
+
+    // A copy from another mount or drive that failed part way leaves a folder that holds only what the copy
+    // wrote. It goes for good and not to the trash. New opens below it are refused until it is gone.
+    public async deleteFailedCopy(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const item = await mount.getActivePath(pathId);
+        await this.documents.whileTrashing(mount, item.id, () => deleteFailedCopy(this, mount, item));
     }
 
     // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks with it,

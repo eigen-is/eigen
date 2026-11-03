@@ -31,7 +31,8 @@ export function copyPathAcross(
             if (!file) throw storageGone();
             return to.drive.createFileFromData(to.mountId, parentId, fileName, src.mimeType, file, user);
         },
-        // The trash is the only delete a drive offers here, and it tells the tabs that saw the folder appear.
-        discard: (pathId) => to.drive.deletePath(to.mountId, pathId, user),
+        // Deleted for good and not trashed: in the trash its bytes would still count against the target's
+        // space, and a writer from another drive can't empty that trash before a retry.
+        discard: (pathId) => to.drive.deleteFailedCopy(to.mountId, pathId),
     });
 }

@@ -437,6 +437,55 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             });
         });
 
+        // The writer can't empty another owner's trash, so a copy that fails there leaves nothing behind
+        // that would count against that owner's space.
+        test("a failed copy into another owner's folder leaves their trash and their space as they were", async () => {
+            const { writer, owner, inbox } = await writerAndInbox();
+            const writerRoot = await driveGet(writer.sessionToken, writer.id, mountId, 'root');
+            const half = await drivePost<DrivePath>(
+                writer.sessionToken,
+                writer.id,
+                mountId,
+                `folder/${writerRoot.id}`,
+                {
+                    folderName: 'half',
+                },
+            );
+            const kept = new Uint8Array(1024 * 1024);
+            await driveUpload(writer.sessionToken, writer.id, mountId, half.id, new File([kept], 'a-kept.bin'));
+            const gone = await driveUpload(
+                writer.sessionToken,
+                writer.id,
+                mountId,
+                half.id,
+                new File(['gone'], 'z-gone.bin'),
+            );
+            const { mount } = await (await getHome(writer.id)).drive.resolveFile(mountId, gone.id);
+            expect(await mount.storage.delete(await mount.getStorageKey(gone.id))).toBe(true);
+
+            const ownerDrive = (await getHome(owner.id)).drive;
+            const used = await ownerDrive.size(mountId);
+            const copyHalf = () =>
+                copyFile(writer.sessionToken, writer.id, mountId, half.id, {
+                    targetOwnerId: owner.id,
+                    targetMountId: mountId,
+                    targetParentId: inbox.id,
+                });
+            const statuses: number[] = [];
+            for (let attempt = 0; attempt < 3; attempt++) statuses.push((await copyHalf()).status);
+
+            expect(statuses).toEqual([410, 410, 410]);
+            expect(await ownerDrive.listTrash(mountId)).toEqual([]);
+            expect(await ownerDrive.size(mountId)).toBe(used);
+            expect(await ownerDrive.getFolderContents(mountId, inbox.id)).toEqual([]);
+
+            // Once the bytes are back, the retry lands under the name it asked for.
+            await mount.storage.write(await mount.getStorageKey(gone.id), Buffer.from('gone'));
+            const copied = await assertJson<DrivePath>(await copyHalf());
+            expect(copied.name).toBe('half');
+            expect(await treeOf(owner.id, copied.id)).toEqual(['a-kept.bin', 'z-gone.bin']);
+        });
+
         // The cross-mount bridge walks a container's children itself, so its versions/ skip is
         // separate from the same-mount copy's (pinned in mount-copy.test.ts).
         test('copying a container across drives starts the copy without the source versions/', async () => {
