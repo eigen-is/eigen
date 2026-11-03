@@ -48,7 +48,7 @@ Comments and tests name these by number ("invariant 7").
 
 A row stores the staged copy's basename, resolved against the mount's current `staging/` folder, and passes an absolute legacy value through. So moving the data folder to another host, a per-home restore or a changed bind mount keeps every pending row. A whole-server restore (`./eigen restore`) replays the archive's pending uploads, except those the live mount uploaded since ([BACKUP.md](BACKUP.md#an-s3-mount-keeps-its-bucket-as-it-is)).
 
-A Home that idles out during an outage keeps its queued bytes on local disk until it is next opened. That is the same durability as the temp files: losing the host disk in that window loses them.
+A Home that idles out keeps the rows its close staged on local disk until it is next opened, and during an outage every queued row. That is the same durability as the temp files: losing the host disk in that window loses them.
 
 ## A crash temp is adopted and re-synced
 
@@ -61,7 +61,7 @@ The mount's startup sweep removes `tmp/` files older than an hour, but never one
 **Invariant: an empty or invalid working copy never overwrites a non-trivial stored object. The worst case is a transient 503, never a wipe.** Adopting a crash temp is only safe if it holds real data. A failed or empty GET leaves a 0-byte temp, which is itself a valid empty SQLite file, and `markDirty` would then upload that emptiness over the good object.
 
 - `buildDocumentDb` adopts a temp only if `isViableRecoveryTemp` passes: it has the SQLite header and is not collapsed against the size the row knows, with its `-wal` counted. Otherwise it discards the temp through `Mount.cleanupTemp`, journals included, and re-fetches. A `-wal` left beside the re-fetched file would be replayed into it.
-- `Drive.openDatabase` and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
+- An open (`Mount.holdDatabase`, `withDatabase`) and `createDatabase` pass their intent down as the mount's `mode`, which becomes `ManagedDatabase`'s `mustExist`. A `mustExist` open uses `{ create: false }` and refuses a missing or 0-byte working copy with a 503.
 - A download or a staged-copy recovery writes a `tmp/<uuid>` side file and renames it onto the working-copy path (`replaceTempFrom`). A process killed mid-GET leaves no partial temp for the next open to adopt.
 
 Which failure answers 410 and which 503 is in [STORAGE.md](STORAGE.md#a-gone-object-answers-410-an-outage-503).
@@ -94,7 +94,7 @@ A timed-out request may still land in the bucket later, so the queue tracks it a
 - A cancel re-issues the object delete when the orphan settles, so invariant 7 holds whichever of cancel and timeout comes first.
 - An ack whose orphans all settled while its own PUT was in flight re-PUTs at once. Settlement order says nothing about commit order, so a landed orphan may have committed after it.
 
-Two cases stay unrepaired. An orphan that settles after the queue's `close()` is only logged (`landed after a newer upload acked`, `cannot re-upload … queue closed`). An orphan whose fully sent body the server commits after the process died lands with no log line. Bucket versioning is the recovery for both.
+A request may hang for good, so an orphan counts as on the wire, holding the Home and keeping a close waiting, for one more `UPLOAD_PUT_TIMEOUT_MS` at most (`giving up on the timed-out PUT`). It stays tracked after that, and one that lands while the queue is open is still repaired. An orphan that settles while `close()` waits for it still re-stages the acked bytes, and the next open uploads them. Two cases stay unrepaired. An orphan that settles after `close()` stopped waiting is only logged (`landed after a newer upload acked`, `cannot re-upload … queue closed`). An orphan whose fully sent body the server commits after the process died lands with no log line. Bucket versioning is the recovery for both.
 
 ## A staged database that isn't SQLite is dropped, not uploaded
 
@@ -104,10 +104,15 @@ Before a PUT, a staged copy whose row says `isDatabase` must pass the SQLite hea
 
 A failed upload backs off with full jitter, capped (`uploadBackoffMs`), and the queue schedules its own retry for when the earliest row is due. There is no global registry of mounts and no sweep. The only process-global state is the destination-to-semaphore map (infra strings, no user data), the backoff function and the shutdown deadline.
 
+## An upload on its way holds its Home
+
+A PUT on the wire is a user of its Home, as a tab or a WebDAV lock is. The queue takes one `Home.hold` while at least one PUT runs, timed-out ones included until it gives up on them, and lets go when the last one ends. Every PUT asks for the hold, and a closing Home refuses it with its 503, so no PUT starts once a close began. The hold does not keep a Home open through an outage: a release never starts a fresh idle ([STORAGE.md](STORAGE.md#a-home-is-loaded-on-demand-and-dropped-when-idle)), so a Home whose queue retries on a failing bucket still closes its idle time after the user's last request, and its rows wait on local disk for the next open.
+
 ## Idle teardown leaves the queue, shutdown drains it
 
-- **Idle teardown** closes the queue. Its rows and staged copies replay on the next open.
-- **Process shutdown**: `server.ts` first waits for the queued ACL fan-outs and every other delivery into another home, since a delivery reopens its recipient's home (`drainDeliveriesWithin`). That wait gives up after `SHUTDOWN_DELIVERY_BOUND_MS` (10 s) and logs what is left, so a delivery stuck on a stalled bucket can't hang the shutdown. Then it sets a deadline (`SHUTDOWN_DRAIN_BUDGET_MS`, 20 s) and runs `shutdownAllHomes`. Each mount flushes its queue after its final close-time enqueues and stops waiting at the deadline, even with a PUT or a semaphore slot stalled. Then it closes the queue: no PUT starts after that, and one still in flight leaves its row. Anything undrained replays on boot.
+- **Idle teardown** never meets a PUT, because the Home closes only while no PUT holds it. The closing Home refuses the hold, so the close's final syncs stage their copies and start no PUT, and their rows replay on the next open. The queue's `close()` then finds nothing on the wire and returns at once, so a request that waits in `openHome` for the close is not held up by the bucket.
+- **An eviction** (`evictHome`, for a restore or a deletion) closes a held Home anyway. Its `close()` waits for the PUTs already on the wire, for at most `UPLOAD_PUT_TIMEOUT_MS`. A Home can reopen in the same process right after, and an old PUT that landed after the new queue acked would overwrite the newer bytes. Nobody waits in line meanwhile: a home being restored answers 503, one being deleted 404. A PUT that lands during the wait skips its ack, so its row and staged copy replay on the next open with the rest.
+- **Process shutdown**: `server.ts` first waits for the queued ACL fan-outs and every other delivery into another home, since a delivery reopens its recipient's home (`drainDeliveriesWithin`). That wait gives up after `SHUTDOWN_DELIVERY_BOUND_MS` (10 s) and logs what is left, so a delivery stuck on a stalled bucket can't hang the shutdown. Then it sets a deadline (`SHUTDOWN_DRAIN_BUDGET_MS`, 20 s) and runs `shutdownAllHomes`. Each mount flushes its queue after its final close-time enqueues and stops waiting at the deadline, even with a PUT or a semaphore slot stalled. Every Home is closing by then and refuses the hold, but the flush uploads anyway: the process ends next, so no Home reopens under a late PUT. Then it closes the queue: no PUT starts after that, the wait for one still in flight ends at the same deadline, and that PUT leaves its row. Anything undrained replays on boot.
 
 The budget covers the whole process. It starts after the transform runner closes, running backup jobs settle and the deliveries drain, so a slow delivery never leaves less of it for the mounts. A Home with several mounts drains them one after another.
 

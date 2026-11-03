@@ -117,6 +117,16 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'lock state is per-user; path ACL already checked in the WebDAV route',
             call: async (sd) => expect(sd.lockManager).toBeDefined(),
         },
+        holdHome: {
+            gate: 'ungated-by-design',
+            reason: 'lifecycle only, no data; getSharedDrive has already opened that Home',
+            call: async (sd) => sd.holdHome()(),
+        },
+        withHomeHeld: {
+            gate: 'ungated-by-design',
+            reason: 'lifecycle only, no data; getSharedDrive has already opened that Home',
+            call: (sd) => sd.withHomeHeld(async () => {}),
+        },
         unwatchPath: {
             gate: 'ungated-by-design',
             reason: "removing one's own watch must work after a share is revoked",
@@ -180,10 +190,10 @@ describe('SharedDrive gating enumeration', () => {
             reason: 'read-gated (403 unless the caller can read the path)',
             call: (sd) => sd.checkAccessForEmails(mountId, fileId, ['probe@example.com']),
         },
-        openDatabase: {
+        withDatabase: {
             gate: 'denies',
             reason: 'read-gated (opening a container db reads it)',
-            call: (sd) => sd.openDatabase(mountId, probeDbConfig, docId),
+            call: (sd) => sd.withDatabase(mountId, probeDbConfig, docId, async () => {}),
         },
         listVersions: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.listVersions(mountId, docId) },
         getFileHistory: { gate: 'denies', reason: 'read-gated', call: (sd) => sd.getFileHistory(mountId, fileId) },
@@ -243,6 +253,11 @@ describe('SharedDrive gating enumeration', () => {
             call: (sd) => sd.updateACLDelta(mountId, fileId, { add: [{ id: charlie.email, read: true, write: true }] }),
         },
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },
+        releaseLocksUnder: {
+            gate: 'denies',
+            reason: 'write-gated: it drops the locks of other users',
+            call: (sd) => sd.releaseLocksUnder(mountId, fileId),
+        },
         renamePath: {
             gate: 'denies',
             reason: 'write-gated on the parent',

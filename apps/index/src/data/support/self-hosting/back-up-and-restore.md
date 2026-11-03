@@ -111,13 +111,15 @@ Check that all is well, then delete what was kept aside:
 sudo rm -rf data.pre-restore-<date>-<time> .env.production.pre-restore-<date>-<time>
 ```
 
+Each copy of `data/` is as large as your data was. Until you delete them, `./eigen status` lists what restores kept aside, with the command that deletes them.
+
 The question also says whether the backup holds `.env.production`, the key that signs your mail, and the mail server's certificate. A backup made in the ten minutes after that certificate was renewed can miss it, and one of a server without hosted mail has neither. What a backup does not hold, the restore keeps as the server has it.
 
 A user or team that failed during the backup is not in it, and the question names them. After a restore, their data is in `data.pre-restore-<date>-<time>` only. One with warnings is in it, without the files the warning named, and the question names it with its first warning.
 
 Everyone is signed in as they were when the backup was made. Every open browser tab reloads once. After a restore, everything in the Trash stays there for the full **Trash retention (days)** period, counted from the restore. `--yes` skips the question, for scripts.
 
-Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. It also refuses a Light backup, named `server-<why>-light-<date>-<time>.tar`, which Eigen 0.4.1 and before could make: it holds no files and no mail. This version of Eigen can't restore a Light backup, on this server or on a new machine. `./eigen status` names the Light backups in `backups/` and the command that deletes them. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. Restore checks this before it stops Eigen. If a restore is cut off while it swaps the data in, Eigen stays stopped and `./eigen` says so. `./eigen restart` finishes the restore and starts Eigen. Any other `./eigen` command except `logs`, `reset-password`, and `help` finishes it too, before it does anything else.
+Restore refuses a backup of a newer Eigen than the one you run: update first, then restore. Eigen 0.4.1 and before could also make a Light backup, named `server-<why>-light-<date>-<time>.tar`. This version doesn't recognise it: restore refuses it like any file that is not a backup of this version, and `./eigen status` doesn't list it. Delete those files by hand with `sudo rm backups/server-*-light-*`. `data/` must be a plain folder inside the install folder, on the same disk, with room to unpack the backup. Restore checks this before it stops Eigen. If a restore is cut off while it swaps the data in, Eigen stays stopped and `./eigen` says so. `./eigen restart` finishes the restore and starts Eigen. Any other `./eigen` command except `logs`, `reset-password`, and `help` finishes it too, before it does anything else.
 
 To restore on a new machine, see [Move Eigen to another server](/support/self-hosting/move-to-another-server).
 

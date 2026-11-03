@@ -297,11 +297,12 @@ describe('Chat', () => {
         const { mount, path } = await (await getHome(ownerId)).drive.resolveFile(aliceMountId, chat.id);
         const dataDb = await mount.getChildByName(path.id, 'data.db');
         if (!dataDb) throw new Error('chat has no data.db');
-        const managedDb = await mount.openDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id);
-        managedDb.db
-            .update(messages)
-            .set({ createdAt: new Date('2026-10-05T12:00:00Z') })
-            .run();
+        await mount.withDatabase(CHAT_ROOM_DB_CONFIG, dataDb.id, async (managedDb) => {
+            managedDb.db
+                .update(messages)
+                .set({ createdAt: new Date('2026-10-05T12:00:00Z') })
+                .run();
+        });
 
         const page = (before: string) =>
             chatGet<ChatMessage[]>(token, ownerId, aliceMountId, `${chat.id}/messages?limit=2${before}`);

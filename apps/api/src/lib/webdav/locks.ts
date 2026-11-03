@@ -1,3 +1,7 @@
+// The WebDAV LOCK and UNLOCK methods, and the lock check every WebDAV write makes. The WebDAV router
+// calls them with the signed-in user, and each one goes through getSharedDrive, so the Drive ACL
+// decides access. The locks themselves live in the Drive's LockManager.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { ApiError } from '../core/errors';
 import type { XmlElement } from '../core/xml';
@@ -11,54 +15,9 @@ import { lockdiscoveryProp, MAX_XML_BODY_BYTES } from './xml';
 
 const DAV = DAV_NAMESPACES.D;
 
-// Cap at 24h. RFC 4918 §10.7 lets the server ignore the requested timeout, and
-// without a cap an authenticated client could pin in-memory lock state for years
-// (Second-2147483647 ≈ 68y) — the LockManager only GCs expired entries.
+// RFC 4918 §10.7 lets the server ignore the timeout a client asks for. Without this cap a client
+// could keep a lock, and the Home the lock holds open, for years (Second-2147483647 is 68 years).
 const LOCK_MAX_TTL_MS = 24 * 60 * 60 * 1000;
-
-function parseTimeoutHeader(header: string | null): number {
-    if (!header) return LOCK_DEFAULT_TTL_MS;
-    const match = header.match(/Second-(\d+)/i);
-    if (!match) return LOCK_DEFAULT_TTL_MS;
-    return Math.min(Number(match[1]) * 1000, LOCK_MAX_TTL_MS);
-}
-
-// RFC 4918 §6.2: depth-infinity locks on a collection cover every member, so a
-// write on a descendant must satisfy the ancestor lock. The breadcrumb is
-// root-to-self; we split it into the path itself (last) and ancestors (rest).
-export function assertWritable(
-    lockManager: LockManager,
-    breadcrumb: DrivePath[],
-    ifHeader: string | null,
-    userId: string,
-): void {
-    const pathId = breadcrumb[breadcrumb.length - 1].id;
-    const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
-    if (!lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
-        throw new ApiError(423, 'Locked');
-    }
-}
-
-// RFC 4918 §14.17: the owner is the client's own XML, echoed back as XML in every lockdiscovery. Each child
-// declares the bindings it uses, so an owner can outgrow its body; it is held for the lock's life, under the dead props' cap.
-function readLockOwner(lockinfo: XmlElement): string | undefined {
-    const element = xmlChild(lockinfo, DAV, 'owner');
-    const owner = element && serializeXmlChildren(element).trim();
-    if (owner && Buffer.byteLength(owner) > MAX_XML_BODY_BYTES) throw new ApiError(400, 'Lock owner too large');
-    return owner || undefined;
-}
-
-function buildLockResponse(lock: Lock): Response {
-    const body = `${XML_DECLARATION}
-<D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
-    return new Response(body, {
-        status: 200,
-        headers: {
-            'Content-Type': XML_CONTENT_TYPE,
-            'Lock-Token': `<${lock.token}>`,
-        },
-    });
-}
 
 export async function handleLock(args: {
     user: User;
@@ -79,7 +38,7 @@ export async function handleLock(args: {
     const depth: Lock['depth'] = depthHeader === '0' ? 0 : 'infinity';
     const lockinfo = parseXmlRoot(body, DAV, 'lockinfo');
 
-    // RFC 4918 §9.10.2: empty body + If header refreshes an existing lock token.
+    // RFC 4918 §9.10.2: a LOCK with no body and an If header refreshes the lock it names.
     if (!lockinfo && ifHeader) {
         for (const token of parseIfHeaderTokens(ifHeader)) {
             const refreshed = drive.lockManager.refresh(token, ttlMs);
@@ -88,8 +47,8 @@ export async function handleLock(args: {
         throw new ApiError(412, 'No matching lock to refresh');
     }
 
-    // resolvePath only checks read on SharedDrive; a fresh lock implies pending
-    // writes, so reject read-only collaborators before allocating a token.
+    // resolvePath only checks read. A new lock means writes will follow, so a reader is refused before a
+    // token is made.
     if (!(await drive.canWrite(mountId, path.id, user))) {
         throw new ApiError(403, 'No write permission');
     }
@@ -131,4 +90,48 @@ export async function handleUnlock(args: {
 
     drive.lockManager.release(token);
     return new Response(null, { status: 204 });
+}
+
+// RFC 4918 §6.2: a depth-infinity lock on a folder covers everything below it, so a write must also
+// pass the locks of its ancestors. The breadcrumb runs from the root to the path itself.
+export function assertWritable(
+    lockManager: LockManager,
+    breadcrumb: DrivePath[],
+    ifHeader: string | null,
+    userId: string,
+): void {
+    const pathId = breadcrumb[breadcrumb.length - 1].id;
+    const ancestorIds = breadcrumb.slice(0, -1).map((p) => p.id);
+    if (!lockManager.isWriteAllowed(pathId, ifHeader, userId, ancestorIds)) {
+        throw new ApiError(423, 'Locked');
+    }
+}
+
+function parseTimeoutHeader(header: string | null): number {
+    if (!header) return LOCK_DEFAULT_TTL_MS;
+    const match = header.match(/Second-(\d+)/i);
+    if (!match) return LOCK_DEFAULT_TTL_MS;
+    return Math.min(Number(match[1]) * 1000, LOCK_MAX_TTL_MS);
+}
+
+// RFC 4918 §14.17: the owner is the client's own XML, and every lockdiscovery sends it back as XML.
+// Each child declares the namespaces it uses, so an owner can grow past the size of its body. The lock
+// keeps it for its whole life, so it gets the same cap as a body.
+function readLockOwner(lockinfo: XmlElement): string | undefined {
+    const element = xmlChild(lockinfo, DAV, 'owner');
+    const owner = element && serializeXmlChildren(element).trim();
+    if (owner && Buffer.byteLength(owner) > MAX_XML_BODY_BYTES) throw new ApiError(400, 'Lock owner too large');
+    return owner || undefined;
+}
+
+function buildLockResponse(lock: Lock): Response {
+    const body = `${XML_DECLARATION}
+<D:prop xmlns:D="DAV:">${lockdiscoveryProp([lock])}</D:prop>`;
+    return new Response(body, {
+        status: 200,
+        headers: {
+            'Content-Type': XML_CONTENT_TYPE,
+            'Lock-Token': `<${lock.token}>`,
+        },
+    });
 }

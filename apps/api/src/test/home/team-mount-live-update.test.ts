@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 import { rmSync } from 'node:fs';
+import * as path from 'node:path';
 import { teamOwnerId } from '@workspace/lib/types';
+import { PATHS } from '../../lib/config/paths';
 import { getSyntheticTeamUser, TeamHome } from '../../lib/home/team-home';
-import { createMountConfig, Mount } from '../../lib/mount';
+import { createMountConfig, Mount, newMountSettings } from '../../lib/mount';
+import { SETTLE_BOUND_MS } from '../fault-storage-helpers';
 import { getTestContext } from '../setup';
 
 // AUDIT 11: TeamHome.updateMount only persisted the change to settings.json; the already-built Drive
@@ -27,6 +30,16 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         homeDirs.push(home.homeDir);
         await home.init();
         return home;
+    }
+
+    // A gate that never opens fails the test before bun's own timeout, so its finally still restores the spies.
+    function within<T>(promise: Promise<T>, ms = SETTLE_BOUND_MS): Promise<T> {
+        return Promise.race([
+            promise,
+            Bun.sleep(ms).then(() => {
+                throw new Error(`Timed out after ${ms} ms`);
+            }),
+        ]);
     }
 
     test('maxSizeMB + name update reaches the live Drive without a reload', async () => {
@@ -245,6 +258,156 @@ describe('TeamHome.updateMount live-Drive propagation (AUDIT 11)', () => {
         } finally {
             spy.mockRestore();
             await home.close();
+        }
+    });
+
+    // The close only closes the mounts the Drive knows, and the new mount is not one of them yet.
+    test('a storage change the home starts closing under leaves no mount open', async () => {
+        const home = await freshTeamHome();
+        const drive = home.drive;
+        const settings = await home.addMount({ name: 'Closing', maxSizeMB: 100 });
+        const built: Mount[] = [];
+        const { promise: opened, resolve: open } = Promise.withResolvers<void>();
+        const { promise: held, resolve: release } = Promise.withResolvers<void>();
+        const init = Mount.prototype.init;
+        const spy = spyOn(Mount.prototype, 'init').mockImplementation(async function (this: Mount) {
+            built.push(this);
+            await init.call(this);
+            open();
+            await held;
+        });
+        try {
+            const repointed = createMountConfig(settings.id, {
+                ...settings,
+                s3Config: {
+                    endpoint: 'https://s3.example.com',
+                    bucket: 'closing',
+                    prefix: '',
+                    accessKeyId: 'AK',
+                    secretAccessKey: 'SK',
+                },
+            });
+            const repointing = drive.updateMount(repointed, true);
+            await opened;
+            const closing = home.close();
+            release();
+
+            await expect(repointing).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
+            await closing;
+            expect(built).toHaveLength(1);
+            expect(built[0].closing).toBe(true);
+            expect(drive.getMounts()).toEqual([]);
+        } finally {
+            spy.mockRestore();
+            await home.close();
+        }
+    });
+
+    test('a closing home builds no new mount', async () => {
+        const home = await freshTeamHome();
+        const drive = home.drive;
+        const spy = spyOn(Mount.prototype, 'init');
+        try {
+            const closing = home.close();
+            await expect(
+                drive.addMount(createMountConfig('late', { ...newMountSettings(), name: 'Late' })),
+            ).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
+            await closing;
+            expect(spy).not.toHaveBeenCalled();
+        } finally {
+            spy.mockRestore();
+        }
+    });
+
+    test('the home close waits for the mount that addMount closes', async () => {
+        const home = await freshTeamHome();
+        const drive = home.drive;
+        const { promise: started, resolve: start } = Promise.withResolvers<Mount>();
+        const { promise: held, resolve: release } = Promise.withResolvers<void>();
+        const { promise: tearingDown, resolve: tearDown } = Promise.withResolvers<void>();
+        const { promise: torn, resolve: finishTeardown } = Promise.withResolvers<void>();
+        const init = Mount.prototype.init;
+        const initSpy = spyOn(Mount.prototype, 'init').mockImplementation(async function (this: Mount) {
+            await init.call(this);
+            start(this);
+            await held;
+        });
+        const closeAllDatabases = Mount.prototype.closeAllDatabases;
+        const closeSpy = spyOn(Mount.prototype, 'closeAllDatabases').mockImplementation(async function (this: Mount) {
+            if (this.id === 'orphan') {
+                tearDown();
+                await torn;
+            }
+            return closeAllDatabases.call(this);
+        });
+        try {
+            const adding = drive.addMount(createMountConfig('orphan', { ...newMountSettings(), name: 'Orphan' }));
+            // A failed check below must not leave this rejection unhandled in the next test.
+            adding.catch(() => {});
+            const mount = await within(started);
+            const closing = home.close();
+            release();
+            await within(tearingDown);
+
+            const first = await Promise.race([closing.then(() => 'closed'), Bun.sleep(200).then(() => 'waiting')]);
+            expect(first).toBe('waiting');
+
+            finishTeardown();
+            await expect(within(adding)).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
+            await within(closing);
+            expect(mount.closing).toBe(true);
+            expect(drive.getMounts()).toEqual([]);
+        } finally {
+            release();
+            finishTeardown();
+            initSpy.mockRestore();
+            closeSpy.mockRestore();
+            await within(home.close());
+        }
+    });
+
+    // The close begins after the open passed its closing check, so the open itself goes through.
+    test('a close that begins while metadata.db opens answers 503', async () => {
+        const home = await freshTeamHome();
+        const drive = home.drive;
+        const built: Mount[] = [];
+        const { promise: opened, resolve: open } = Promise.withResolvers<void>();
+        const { promise: held, resolve: release } = Promise.withResolvers<void>();
+        const metadataDb = path.join(PATHS.DRIVE.ROOT, 'opening', PATHS.DRIVE.METADATA_DB);
+        const getLocalDatabase = home.getLocalDatabase.bind(home);
+        const openSpy = spyOn(home, 'getLocalDatabase').mockImplementation(async (config, relativePath) => {
+            const db = await getLocalDatabase(config, relativePath);
+            if (relativePath === metadataDb) {
+                open();
+                await held;
+            }
+            return db;
+        });
+        const init = Mount.prototype.init;
+        const initSpy = spyOn(Mount.prototype, 'init').mockImplementation(function (this: Mount) {
+            built.push(this);
+            return init.call(this);
+        });
+        try {
+            const adding = drive.addMount(createMountConfig('opening', { ...newMountSettings(), name: 'Opening' }));
+            // A failed check below must not leave this rejection unhandled in the next test.
+            adding.catch(() => {});
+            await within(opened);
+            const closing = home.close();
+            // Time for a close that does not wait to close metadata.db under the mount.
+            await Bun.sleep(100);
+            release();
+
+            await expect(within(adding)).rejects.toMatchObject({ status: 503, message: 'Home is closing' });
+            await within(closing);
+            expect(built).toHaveLength(1);
+            expect(built[0].closing).toBe(true);
+            expect(drive.getMounts()).toEqual([]);
+        } finally {
+            release();
+            openSpy.mockRestore();
+            initSpy.mockRestore();
+            await within(home.close());
         }
     });
 });

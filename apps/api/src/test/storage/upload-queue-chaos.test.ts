@@ -29,6 +29,11 @@ const docConfig: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
+// The rows of a document database, read inside one withDatabase call.
+async function readItems(mount: Mount, config: DatabaseConfig<typeof docSchema>, dataDbId: string) {
+    return mount.withDatabase(config, dataDbId, async (managed) => managed.db.select().from(docSchema.items).all());
+}
+
 const createdMounts: Mount[] = [];
 
 function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
@@ -137,8 +142,7 @@ describe('orphaned-PUT reorder (performUpload timeout → trackOrphan repair)', 
         // acked, so reconcile finds nothing to replay and reopen serves the newest bytes.
         const m2 = createS3Mount('orphan-regress');
         await m2.mount.init();
-        const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(3);
+        expect(await readItems(m2.mount, docConfig, dataDbId)).toHaveLength(3);
     });
 
     test('control: a timed-out PUT with NO newer write converges — the retry re-PUTs the same bytes', async () => {
@@ -277,7 +281,6 @@ describe('corrupted staged copy (integrity check between VACUUM INTO and PUT)', 
         await mount.closeDatabase(dataDbId);
         const m2 = createS3Mount('staging-corrupt');
         await m2.mount.init();
-        const reopened = await m2.mount.openDatabase(docConfig, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(1);
+        expect(await readItems(m2.mount, docConfig, dataDbId)).toHaveLength(1);
     });
 });

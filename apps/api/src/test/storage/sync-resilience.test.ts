@@ -20,6 +20,8 @@ import {
     FaultMount,
     FaultStorage,
     provisionDoc,
+    STALL_BOUND_MS,
+    settlesWithin,
 } from '../fault-storage-helpers';
 import { createTestMountConfig } from '../mount-test-helpers';
 
@@ -46,11 +48,16 @@ const docConfigNoSnap: DatabaseConfig<typeof docSchema> = {
     migrations: [{ version: 1, up: (db) => db.exec('CREATE TABLE items (id INTEGER PRIMARY KEY, data TEXT)') }],
 };
 
+// The rows of a document database, read inside one withDatabase call.
+async function readItems(mount: Mount, config: DatabaseConfig<typeof docSchema>, dataDbId: string) {
+    return mount.withDatabase(config, dataDbId, async (managed) => managed.db.select().from(docSchema.items).all());
+}
+
 // Tracks mounts created via createS3Mount so afterEach can stop their self-scheduled retry timers.
 const createdMounts: Mount[] = [];
 
-function createS3Mount(id: string): { mount: Mount; fault: FaultStorage } {
-    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id);
+function createS3Mount(id: string, hold?: () => () => void): { mount: Mount; fault: FaultStorage } {
+    const { mount, fault } = createFaultMount(OWNER_ID, TEST_DIR, id, undefined, hold);
     createdMounts.push(mount);
     return { mount, fault };
 }
@@ -105,7 +112,7 @@ describe('crash-recovery durability', () => {
             if (existsSync(j)) unlinkSync(j);
         }
 
-        await mount.openDatabase(docConfig, dataDbId);
+        await mount.withDatabase(docConfig, dataDbId, async () => {});
         await mount.closeDatabase(dataDbId);
 
         // Without the crash-recovery markDirty(), the reopened DB looked clean and cleanupTemp dropped row 2.
@@ -194,8 +201,7 @@ describe('write-behind upload pipeline', () => {
         await m2.mount.init(); // reconcile re-enqueues the persisted pending upload
 
         // Reopening must surface the staged (newest) bytes, NOT download a stale/absent object.
-        const managed2 = await m2.mount.openDatabase(docConfig, dataDbId);
-        expect(managed2.db.select().from(docSchema.items).all()).toHaveLength(2);
+        expect(await readItems(m2.mount, docConfig, dataDbId)).toHaveLength(2);
         await m2.mount.closeDatabase(dataDbId);
 
         m2.fault.failNextWrites = 0; // outage over
@@ -393,8 +399,15 @@ describe('write-behind upload pipeline', () => {
         expect(await countBackingRows(m2.mount, dataDbId, TEST_DIR)).toBe(1);
     });
 
-    test('idle teardown during an in-flight PUT bails cleanly and leaves the row for replay', async () => {
-        const { mount, fault } = createS3Mount('idle-teardown');
+    // A PUT on the wire holds the Home, so an idle close only begins once the last one ended. A close that
+    // meets one closes a held Home, such as an eviction for a restore. It waits for the PUT, so the PUT
+    // can't land after the close, and the drain then bails without its ack and leaves the row for replay.
+    test('a PUT on the wire holds the Home, and a close that meets one waits for it', async () => {
+        let holds = 0;
+        const { mount, fault } = createS3Mount('idle-teardown', () => {
+            holds++;
+            return () => holds--;
+        });
         await mount.init();
         const { dataDbId } = await provisionDoc(mount);
         const managed = await mount.createDatabase(docConfigNoSnap, dataDbId);
@@ -404,12 +417,14 @@ describe('write-behind upload pipeline', () => {
         fault.parkWrites = true; // hold the PUT in flight
         const draining = mount.uploadQueue?.drain(); // background drain, no flush
         await fault.waitForParked(() => true);
-        // Idle teardown (no shutdown deadline): sets uploadClosing + unregisters, does NOT await the
-        // in-flight PUT. The drain must then bail via its uploadClosing guards without throwing.
-        await mount.closeAllDatabases();
+        expect(holds).toBe(1);
+        const closing = mount.closeAllDatabases();
+        expect(await settlesWithin([closing], STALL_BOUND_MS)).toBe(false);
         await fault.landAllRemaining();
-        await draining; // resolves cleanly — no DB-after-close error
+        await closing;
+        await draining;
 
+        expect(holds).toBe(0);
         expect(mount.pendingUploadCount).toBeGreaterThan(0); // row preserved for replay on reopen
     });
 });
@@ -580,8 +595,7 @@ describe('P2-6a — copy freshest-source, staging relocation, tmp-sweep recovery
 
         const m2 = createS3Mount('tmp-sweep-wal');
         await m2.mount.init();
-        const reopened = await m2.mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(700);
+        expect(await readItems(m2.mount, docConfigNoSnap, dataDbId)).toHaveLength(700);
     });
 });
 
@@ -625,8 +639,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await Bun.write(mount.getTempPath(dataDbId), new Uint8Array(0));
 
         // Reopen must recover the real object, not adopt the empty temp as a fresh doc.
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(3);
+        expect(await readItems(mount, docConfigNoSnap, dataDbId)).toHaveLength(3);
 
         await mount.closeDatabase(dataDbId);
         await mount.uploadQueue?.drain({ flushNow: true });
@@ -658,8 +671,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await emptyTemp.open(0);
         await emptyTemp.close({ skipFinalSnapshot: true });
 
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(500);
+        expect(await readItems(mount, docConfigNoSnap, dataDbId)).toHaveLength(500);
 
         await mount.closeDatabase(dataDbId);
         await mount.uploadQueue?.drain({ flushNow: true });
@@ -698,8 +710,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         renameSync(imagePath, tempPath);
         renameSync(`${imagePath}-wal`, `${tempPath}-wal`);
 
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(reopened.db.select().from(docSchema.items).all()).toHaveLength(501);
+        expect(await readItems(mount, docConfigNoSnap, dataDbId)).toHaveLength(501);
     });
 
     // A WAL an older session of the doc left beside its temp. SQLite replays a -wal into whatever main
@@ -742,14 +753,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await Bun.write(tempPath, new Uint8Array(0));
         await plantStaleWal(tempPath);
 
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(
-            reopened.db
-                .select()
-                .from(docSchema.items)
-                .all()
-                .map((row) => row.data),
-        ).toEqual(['a', 'b', 'c']);
+        expect((await readItems(mount, docConfigNoSnap, dataDbId)).map((row) => row.data)).toEqual(['a', 'b', 'c']);
     });
 
     test('a failed download takes the -wal beside its temp with it', async () => {
@@ -761,17 +765,10 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await plantStaleWal(tempPath);
         const storageKey = await mount.getStorageKey(dataDbId);
         fault.failReadKeys.add(storageKey);
-        await expect(mount.openDatabase(docConfigNoSnap, dataDbId)).rejects.toMatchObject({ status: 503 });
+        await expect(readItems(mount, docConfigNoSnap, dataDbId)).rejects.toMatchObject({ status: 503 });
         fault.failReadKeys.delete(storageKey);
 
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(
-            reopened.db
-                .select()
-                .from(docSchema.items)
-                .all()
-                .map((row) => row.data),
-        ).toEqual(['a', 'b', 'c']);
+        expect((await readItems(mount, docConfigNoSnap, dataDbId)).map((row) => row.data)).toEqual(['a', 'b', 'c']);
     });
 
     test('a download over an orphan -wal beside the temp path yields the stored object', async () => {
@@ -780,14 +777,7 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         const dataDbId = await provisionStoredAbc(mount);
         await plantStaleWal(mount.getTempPath(dataDbId));
 
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(
-            reopened.db
-                .select()
-                .from(docSchema.items)
-                .all()
-                .map((row) => row.data),
-        ).toEqual(['a', 'b', 'c']);
+        expect((await readItems(mount, docConfigNoSnap, dataDbId)).map((row) => row.data)).toEqual(['a', 'b', 'c']);
     });
 
     test('a download refuses to write when an orphan -wal beside the temp path cannot be removed', async () => {
@@ -804,28 +794,27 @@ describe('data-loss guard — crash recovery must not overwrite a good object wi
         await mount.init();
         const dataDbId = await provisionStoredAbc(mount);
         fault.failNextWrites = 9999;
-        const managed = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
+        await mount.withDatabase(docConfigNoSnap, dataDbId, async (managed) => {
+            managed.db.insert(docSchema.items).values({ id: 4, data: 'd' }).run();
+        });
         await mount.closeDatabase(dataDbId);
         await mount.uploadQueue?.drain({ flushNow: true });
         expect(mount.pendingUploadCount).toBeGreaterThan(0);
         await plantStaleWal(mount.getTempPath(dataDbId));
 
-        const reopened = await mount.openDatabase(docConfigNoSnap, dataDbId);
-        expect(
-            reopened.db
-                .select()
-                .from(docSchema.items)
-                .all()
-                .map((row) => row.data),
-        ).toEqual(['a', 'b', 'c', 'd']);
+        expect((await readItems(mount, docConfigNoSnap, dataDbId)).map((row) => row.data)).toEqual([
+            'a',
+            'b',
+            'c',
+            'd',
+        ]);
         fault.failNextWrites = 0;
     });
 });
 
 describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-timer race, PUT timeout)', () => {
     // Finding 1: closeAllDatabases must AWAIT the reindex drain before its close sweep. A late
-    // extract opens a doc DB via mount.openDatabase and relies on the mount lifecycle to close it; if
+    // extract reads a doc DB with mount.withDatabase, which leaves it open for the idle close; if
     // teardown returns before that open, the DB lands in the cache after the sweep and leaks forever.
     test('closeAllDatabases awaits the reindex drain so a late extract-opened DB is not leaked', async () => {
         let extractEntered!: () => void;
@@ -838,7 +827,7 @@ describe('P2-6b — mount lifecycle/robustness (reindex teardown order, prune-ti
         const extract: ContentExtractor = async (m) => {
             extractEntered();
             await gate;
-            await m.openDatabase(docConfigNoSnap, leakDbId);
+            await m.withDatabase(docConfigNoSnap, leakDbId, async () => {});
             return '';
         };
 

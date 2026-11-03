@@ -154,9 +154,17 @@ export const driveRouter = new Elysia({ name: 'drive' })
     .post(
         '/drive/:ownerId/:mountId/file/:pathId',
         async ({ params, request, user }) => {
-            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
             const drive = await getSharedDrive(params.ownerId, user);
-            return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
+            // Checked before the hold, so a user who may not write never holds another owner's home. A
+            // refusal resolves the folder first, so a missing one answers 404 to its owner and 403 to others.
+            if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+                await drive.resolveFile(params.mountId, params.pathId);
+                throw new ApiError(403, 'No write permission');
+            }
+            return await drive.withHomeHeld(async () => {
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize, user);
+            });
         },
         { auth: true, parse: 'none' },
     )
@@ -184,37 +192,51 @@ export const driveRouter = new Elysia({ name: 'drive' })
             const sourceDrive = await getSharedDrive(params.ownerId, user);
             const source = await sourceDrive.getPath(params.mountId, params.pathId);
             if (!source) throw new ApiError(404, 'Source not found');
+            return await sourceDrive.withHomeHeld(async () => {
+                const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
 
-            // The per-file upload cap bounds a single file. A folder or a document only has to fit in the
-            // free space.
-            if (isContainerType(source.type)) {
-                await enforceMountQuota(body.targetOwnerId, body.targetMountId, await copySize(sourceDrive, source));
-            } else if (source.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
-                throw new ApiError(413, 'Source file too large');
-            }
+                // Every copy needs read on the target folder, wherever it comes from.
+                const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
+                const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
+                if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
+                return await targetDrive.withHomeHeld(async () => {
+                    // The per-file upload cap bounds a single file. A folder or a document only has to fit in the
+                    // free space.
+                    if (isContainerType(source.type)) {
+                        await enforceMountQuota(
+                            body.targetOwnerId,
+                            body.targetMountId,
+                            await copySize(sourceDrive, source),
+                        );
+                    } else if (source.size > (await getUploadMaxSize(body.targetOwnerId, body.targetMountId))) {
+                        throw new ApiError(413, 'Source file too large');
+                    }
 
-            const sameMount = params.ownerId === body.targetOwnerId && params.mountId === body.targetMountId;
+                    // NFC first: the store keeps names NFC, so the compare below has to see the same form.
+                    const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
+                    const copyAcross = (name: string): Promise<DrivePath> =>
+                        copyPathAcross(
+                            sourceDrive,
+                            source,
+                            targetDrive,
+                            body.targetMountId,
+                            body.targetParentId,
+                            name,
+                            user,
+                        );
+                    // A file copied to another mount is uploaded there, and the upload picks its free name.
+                    if (!sameMount && !isContainerType(source.type)) return await copyAcross(desired);
 
-            // Every copy needs read on the target folder, wherever it comes from.
-            const targetDrive = sameMount ? sourceDrive : await getSharedDrive(body.targetOwnerId, user);
-            const target = await targetDrive.resolveFile(body.targetMountId, body.targetParentId);
-            if (!isContainerType(target.path.type)) throw new ApiError(404, 'Folder not found');
-
-            // NFC first: the store keeps names NFC, so the compare below has to see the same form.
-            const desired = (body.name ?? source.name).replace(/[/\\]/g, '_').normalize('NFC');
-            const copyAcross = (name: string): Promise<DrivePath> =>
-                copyPathAcross(sourceDrive, source, targetDrive, body.targetMountId, body.targetParentId, name, user);
-            // A file copied to another mount is uploaded there, and the upload picks its free name.
-            if (!sameMount && !isContainerType(source.type)) return copyAcross(desired);
-
-            // Any other copy gets a free name in the target folder here and not in Drive.copyPath, because a
-            // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
-            // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
-            return withFreeName(folderIn(target.mount, body.targetParentId), desired, (name) =>
-                sameMount
-                    ? sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user)
-                    : copyAcross(name),
-            );
+                    // Any other copy gets a free name in the target folder here and not in Drive.copyPath, because a
+                    // WebDAV COPY overwrites or answers 409 instead. Drive.copyPath refuses a copy into its own
+                    // subtree, for WebDAV too. A copy to another mount can never land in its own subtree.
+                    return await withFreeName(folderIn(target.mount, body.targetParentId), desired, (name) =>
+                        sameMount
+                            ? sourceDrive.copyPath(params.mountId, params.pathId, body.targetParentId, name, user)
+                            : copyAcross(name),
+                    );
+                });
+            });
         },
         {
             body: t.Object({
@@ -235,9 +257,9 @@ export const driveRouter = new Elysia({ name: 'drive' })
             server?.timeout(request, 0);
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            // An export nobody waits for is worth nothing, so the signal lets the runner drop the job or
-            // stop its Worker.
-            const result = await exportDocument(mount, path, params.format, request.signal);
+            // An export nobody waits for is worth nothing, so the signal lets the runner drop the job or stop
+            // its Worker.
+            const result = await drive.withHomeHeld(() => exportDocument(mount, path, params.format, request.signal));
             set.headers['Content-Type'] = result.contentType;
             set.headers['Content-Disposition'] = contentDisposition('attachment', result.fileName);
             set.headers['Content-Security-Policy'] = EXPORT_CSP;
@@ -251,16 +273,19 @@ export const driveRouter = new Elysia({ name: 'drive' })
         async ({ params, request, user, server }): Promise<DrivePath> => {
             // The same as the export route: it sends nothing while the job waits and runs.
             server?.timeout(request, 0);
-            if (!isConvertTarget(params.targetType)) {
-                throw new ApiError(400, `Conversion to "${params.targetType}" is not supported`);
+            const { targetType } = params;
+            if (!isConvertTarget(targetType)) {
+                throw new ApiError(400, `Conversion to "${targetType}" is not supported`);
             }
             const drive = await getSharedDrive(params.ownerId, user);
             const { mount, path } = await drive.resolveFile(params.mountId, params.pathId);
-            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
-            // No abort signal on purpose. A page reload aborts every fetch, and a large workbook takes a
-            // minute of transform time. So the conversion finishes anyway, and the new file shows up through
-            // the drive's SSE refresh. The previews take no signal for the same reason.
-            return await convertToDocument(drive, mount, path, params.targetType, user, maxSize);
+            return await drive.withHomeHeld(async () => {
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                // No abort signal on purpose. A page reload aborts every fetch, and a large workbook takes a
+                // minute of transform time. So the conversion finishes anyway, and the new file shows up
+                // through the drive's SSE refresh. The previews take no signal for the same reason.
+                return await convertToDocument(drive, mount, path, targetType, user, maxSize);
+            });
         },
         { auth: true },
     )
@@ -274,19 +299,21 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
-            // A Content-Length over the cap is refused before any read. A stream that goes past the cap is
-            // cancelled there.
-            const bytes = await readBoundedBodyBytes(request, maxSize);
-            const summary = await importIntoDocument(
-                drive,
-                path,
-                Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-                query,
-                user,
-                request.signal,
-            );
-            return { success: true, summary };
+            return await drive.withHomeHeld(async () => {
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                // A Content-Length over the cap is refused before any read. A stream that goes past the cap is
+                // cancelled there.
+                const bytes = await readBoundedBodyBytes(request, maxSize);
+                const summary = await importIntoDocument(
+                    drive,
+                    path,
+                    Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                    query,
+                    user,
+                    request.signal,
+                );
+                return { success: true, summary };
+            });
         },
         // The body is the file, so the mode rides in the query.
         { query: documentImportSchema, auth: true, parse: 'none' },
@@ -301,22 +328,24 @@ export const driveRouter = new Elysia({ name: 'drive' })
             if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
                 throw new ApiError(403, 'No write permission');
             }
-            const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
-            // Any plain file is a candidate: importIntoDocument's transform is what validates the bytes.
-            const bytes = await readImportSourceBytes(user, body, {
-                accepts: () => true,
-                rejection: 'Source is not a file',
-                maxBytes: maxSize,
+            return await drive.withHomeHeld(async () => {
+                const maxSize = await getUploadMaxSize(params.ownerId, params.mountId);
+                // Any plain file is a candidate: importIntoDocument's transform is what validates the bytes.
+                const bytes = await readImportSourceBytes(user, body, {
+                    accepts: () => true,
+                    rejection: 'Source is not a file',
+                    maxBytes: maxSize,
+                });
+                const summary = await importIntoDocument(
+                    drive,
+                    path,
+                    Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+                    { mode: body.mode, afterFrameId: body.afterFrameId },
+                    user,
+                    request.signal,
+                );
+                return { success: true, summary };
             });
-            const summary = await importIntoDocument(
-                drive,
-                path,
-                Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength),
-                { mode: body.mode, afterFrameId: body.afterFrameId },
-                user,
-                request.signal,
-            );
-            return { success: true, summary };
         },
         {
             body: documentImportFromDriveSchema,

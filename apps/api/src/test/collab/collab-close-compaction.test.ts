@@ -11,8 +11,10 @@ import {
 } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import type { ServerWebSocket } from 'elysia/ws/bun';
+import * as encoding from 'lib0/encoding';
+import * as syncProtocol from 'y-protocols/sync';
 import * as Y from 'yjs';
-import { CLOSE_LINGER_MS, CollabDocument } from '../../lib/collab/collab-document';
+import { CLOSE_LINGER_MS, CollabDocument, MESSAGE_SYNC } from '../../lib/collab/collab-document';
 import { readYjsStateFromFile } from '../../lib/collab/yjs-loader';
 import { ApiError } from '../../lib/core/errors';
 import { compactSheetsSnapshot } from '../../lib/document/sheets';
@@ -22,8 +24,9 @@ import { BUSY_MESSAGE, documentTransformRunner } from '../../lib/document/transf
 import { getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
 import { importIntoDocument } from '../../lib/import/import-document';
+import { waitFor } from '../fault-storage-helpers';
 import { rowsXml, xlsxFixture } from '../fixtures/xlsx';
-import { driveGet, getTestContext } from '../setup';
+import { createTestUser, driveGet, getTestContext } from '../setup';
 
 // A workbook's op log folds into its snapshot when the close timer fires: the server replays the log in the transform
 // process and swaps the result in, unless anything touched the document meanwhile.
@@ -43,6 +46,8 @@ function makeSpyConn(): SpyConn {
     };
     return conn as unknown as SpyConn;
 }
+
+const USER_IDLE_MS = 5 * 60_000;
 
 // One macrotask drains every pending promise continuation, fake timers or not.
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -91,6 +96,18 @@ function cancel(run: StubbedRun): void {
 
 function shutDown(run: StubbedRun): void {
     run.settle({ ok: false, error: { code: 'shutdown', message: 'Server is shutting down' } });
+}
+
+// The frame a socket sends for an edit that appends the batch to the op log.
+function socketEdit(doc: Y.Doc, batch: Op[]): Uint8Array {
+    const client = new Y.Doc();
+    Y.applyUpdate(client, Y.encodeStateAsUpdate(doc));
+    const before = Y.encodeStateVector(client);
+    sheetsOpLog(client).push([batch]);
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, MESSAGE_SYNC);
+    syncProtocol.writeUpdate(encoder, Y.encodeStateAsUpdate(client, before));
+    return encoding.toUint8Array(encoder);
 }
 
 describe('CollabDocument compacts a workbook at close', () => {
@@ -690,6 +707,59 @@ describe('CollabDocument compacts a workbook at close', () => {
             sheet.doc.destruct();
         }
     });
+
+    // Edits over a socket are no requests, so after a long session the Home's last request is older than its idle time.
+    // The document holds the Home while it lingers: a reload reattaches, and the workbook compacts before it closes.
+    test('a document that lingers on an idle Home keeps the Home open until the linger ends', async () => {
+        const stub = stubRunner();
+        const owner = await createTestUser('linger-holds-home@test.eigen.is', 'testpassword123', 'Linger Hold');
+        const root = await driveGet<DrivePath>(owner.sessionToken, owner.id, mountId, 'root');
+        const ownerHome = await getHome(owner.id);
+        try {
+            const created = await ownerHome.drive.create(mountId, root.id, 'linger-holds-home', 'sheets');
+            const collab = await ownerHome.drive.getCollabDocument(mountId, created.id);
+            sheetsStateMap(collab.doc).set('snapshot', encodeSheetsSnapshot(SHEETS, { computed: true }));
+            // The op log at each close, read before the destruct.
+            const opsAtClose: number[] = [];
+            const originalClose = ownerHome.drive.closeCollabDocument.bind(ownerHome.drive);
+            ownerHome.drive.closeCollabDocument = async (...args: Parameters<typeof originalClose>) => {
+                opsAtClose.push(sheetsOpLog(collab.doc).length);
+                return originalClose(...args);
+            };
+
+            const now = Date.now();
+            jest.useFakeTimers();
+            jest.setSystemTime(now - USER_IDLE_MS - 60_000);
+            ownerHome.touch();
+            jest.setSystemTime(now);
+            // A socket session as the route runs it: a hold, a subscribe, an edit, then the unsubscribe and the release.
+            const releaseSocket = ownerHome.drive.holdHome();
+            const conn = makeSpyConn();
+            collab.subscribe(ownerHome.user, conn);
+            collab.handleMessage(conn, socketEdit(collab.doc, edit(0, 0, 7)), true);
+            collab.unsubscribe(conn);
+            releaseSocket();
+
+            jest.advanceTimersByTime(CLOSE_LINGER_MS / 2);
+            expect(ownerHome.closing).toBe(false);
+            expect(await ownerHome.drive.getCollabDocument(mountId, created.id)).toBe(collab);
+            const reload = makeSpyConn();
+            collab.subscribe(ownerHome.user, reload);
+            collab.unsubscribe(reload);
+
+            jest.advanceTimersByTime(CLOSE_LINGER_MS);
+            jest.useRealTimers();
+            expect(stub.runs).toHaveLength(1);
+            expect(ownerHome.closing).toBe(false);
+            succeed(stub.runs[0]);
+            await waitFor(() => ownerHome.closing, 10_000);
+            expect(opsAtClose).toEqual([0]);
+        } finally {
+            jest.useRealTimers();
+            stub.restore();
+            await ownerHome.close();
+        }
+    }, 30_000);
 });
 
 describe('a snapshot writer starts a fresh base', () => {

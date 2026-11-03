@@ -142,7 +142,7 @@ describe('the Backup row', () => {
         }
     });
 
-    test('is followed by a row naming the Light backups in backups/, running or not, and how to delete them', async () => {
+    test('is followed by a row naming what restores kept aside in the install folder, running or not, and how to delete it', async () => {
         backup = {
             scheduleEnabled: false,
             newest: null,
@@ -152,18 +152,17 @@ describe('the Backup row', () => {
             newestGoodAt: null,
             running: [],
         };
-        const light = ['server-pre-update-light-20260101-000000.tar', 'server-manual-light-20260102-000000.tar'];
-        const listing = [...light, `${light[0]}.json`, buildServerArchiveName('manual', 'full', hoursAgo(1))];
-        const row = `▲  Light backups  ${light.join(', ')}: this version of Eigen cannot restore them; sudo rm backups/server-*-light-* deletes them and their records`;
+        const kept = ['data.pre-restore-20260101-000000', '.env.production.pre-restore-20260101-000000'];
+        const row = `▲  Kept aside   2 copies of what a restore replaced: ${kept.join(', ')}; once all is well, sudo rm -rf data.pre-restore-* .env.production.pre-restore-* deletes them`;
         const running = await runCli(
-            ['status', '--services=eigen-api\trunning\thealthy', `--backups=${listing.join('\n')}`],
-            {
-                env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET },
-            },
+            ['status', '--services=eigen-api\trunning\thealthy', `--kept-aside=${kept.join('\n')}`],
+            { env: { NO_COLOR: '1', EIGEN_CONTROL_SOCKET: SOCKET } },
         );
         expect(running.stdout).toContain(`\n${row}\n`);
-        expect((await status(`--backups=${listing.join('\n')}`)).stdout).toContain(`\n${row}\n`);
-        expect((await status(`--backups=${listing.slice(2).join('\n')}`)).stdout).not.toContain('Light');
+        expect((await status(`--kept-aside=${kept[0]}`)).stdout).toContain(
+            'Kept aside  1 copy of what a restore replaced: ',
+        );
+        expect((await status()).stdout).not.toContain('Kept aside');
     });
 
     test('names the newest archive, its age and size', async () => {

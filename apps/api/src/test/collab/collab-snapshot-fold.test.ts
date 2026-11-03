@@ -34,15 +34,16 @@ describe('a collab document folds its updates into one snapshot', () => {
             const map = collab.doc.getMap('fold');
             for (let i = 0; i < 250; i++) map.set('n', i);
 
-            const managedDb = await home.drive.openDatabase(mountId, COLLAB_DB_CONFIG, collab.dataDbPathId!);
-            const snapshots = managedDb.db.select().from(docSnapshots).all();
-            const updates = managedDb.db.select().from(docUpdates).all();
-            expect(snapshots).toHaveLength(1);
-            expect(updates).toHaveLength(50);
-            expect(updates.every((update) => update.id > snapshots[0].lastUpdateId)).toBe(true);
+            await home.drive.withDatabase(mountId, COLLAB_DB_CONFIG, collab.dataDbPathId!, async (managedDb) => {
+                const snapshots = managedDb.db.select().from(docSnapshots).all();
+                const updates = managedDb.db.select().from(docUpdates).all();
+                expect(snapshots).toHaveLength(1);
+                expect(updates).toHaveLength(50);
+                expect(updates.every((update) => update.id > snapshots[0].lastUpdateId)).toBe(true);
 
-            const { doc: loaded } = loadYjsState(managedDb);
-            expect(loaded.getMap('fold').get('n')).toBe(249);
+                const { doc: loaded } = loadYjsState(managedDb);
+                expect(loaded.getMap('fold').get('n')).toBe(249);
+            });
         } finally {
             await home.drive.closeCollabDocument(mountId, created.id);
         }

@@ -2,7 +2,7 @@
 
 This proposal keeps Eigen from failing silently when the process runs out of file descriptors. Every open Home, the data folder of one user or team, costs about 30 of them: three files per SQLite database in WAL mode, plus the mail folder watchers. A fan-out across many Homes under a small `ulimit -n` exhausts them, SQLite starts failing with `SQLITE_IOERR`, and that shows up only as skipped recipients and swallowed watcher errors. The compose deployment pins the limit high. This proposal covers the rest: a startup check that warns loudly on a small limit and deploy docs for installs without compose (phase 1, S), and an optional cap on resident Homes, least recently used first out, with one retry in `ManagedDatabase.open` (phase 2, M, only when needed). It stays small on purpose: no resource-manager framework.
 
-**Status:** nothing of it is built. Written 2026-07-05 and checked against the code on 2026-08-04, after the storage-audit fixes and the home-lifecycle changes (per-type idle windows, the collab keepalive `touchHomeIfLoaded`, `peek()`). [ROADMAP.md](../ROADMAP.md) keeps its row.
+**Status:** nothing of it is built. Written 2026-07-05 and checked against the code on 2026-08-04, after the storage-audit fixes, and the home-lifecycle program has changed it since: a socket or stream holds its Home (`Home.hold`, `Drive.holdHome`), so `holds > 0` is the live signal (see Eviction safety). [ROADMAP.md](../ROADMAP.md) keeps its row.
 
 ## Problem
 
@@ -63,8 +63,7 @@ Per-home cost is **variable**:
 - **+3 per extra mount** (each mount opens its own `metadata.db`). Homes with many mounts cost
   more; mounts on remote storage also run an `UploadQueue`/`ContentReindexQueue` (timers plus
   transient staging-file fds during `VACUUM INTO` + upload).
-- **+3–6 per open document container** — `Mount.documentDbs` caches a `ManagedDatabase` per open
-  `data.db`, and `CollabDocument` speculatively warms the sibling `comments.db`.
+- **+3–6 per open document container**: `Mount.documentDbs` caches a `ManagedDatabase` per `data.db` and `comments.db` while a reader or an open collab document holds it, and for five minutes after the last one lets go ([DATABASE.md](../DATABASE.md#a-reader-holds-a-container-database-only-while-it-runs)).
 - **TeamHome**: no mail/contacts/notifications → `calendar.db` + per-mount `metadata.db` +
   `shared.db`, ~6–12 fds. **GuestHome** ~6–9. **OrgHome** ~0 (no subsystems).
 
@@ -141,7 +140,7 @@ evict the least-recently-touched homes that pass the safety predicate via the ex
 `evictHome()` — which already does the race-guarded shutdown-then-delete.
 
 The map is typed `Map<string, AsyncSingleton<Home>>` and already exposes the read-only
-`peek()` seam that `touchHomeIfLoaded` uses — it returns the resolved instance without
+`peek()` (`loadedHome` and `broadcastToLoadedHomes` use it) — it returns the resolved instance without
 triggering the factory. The LRU sweep reuses it as-is: reading `lastTouched` and the safety
 predicate off `peek()` never resurrects a home that is still loading or already gone.
 
@@ -150,18 +149,7 @@ predicate off `peek()` never resurrects a home that is still loading or already 
 Never evict a home that:
 
 - has SSE listeners attached (expose a `hasClients` accessor over `sseListeners`);
-- hosts a live collab session — a **positive** open-connections check over the collab registry's
-  `CollabDocument` connections. The "stale `lastTouched`" half of this argument is outdated: since
-  2026-07-14 the collab keepalive tick calls `touchHomeIfLoaded(ownerId)`
-  (`../../apps/api/src/lib/home/get-home.ts`, wired from `../../apps/api/src/routes/collab.ts`), so an open
-  editor keeps the *hosting* home's `lastTouched` live even when the editor's own SSE stream is on
-  a different home — the alternative once floated in this bullet is the thing that shipped, and it
-  closed the >5-minute cross-owner-editing-session hole in the idle destruct too. What `lastTouched`
-  still cannot express is the **tick gap**: between two keepalive ticks a home with N live editors
-  looks idle, and evicting it runs `Home.destruct` → collab teardown, killing the sessions
-  server-side with no client resubscribe path. So the predicate keeps a direct
-  "does this home host any open collab connections?" check; it is now a narrow race guard over a
-  live signal, not a stand-in for a missing one;
+- has a hold: `holds > 0` on the Home. An event stream holds its Home (`Home.hold`) while the tab is open, and a collab socket holds the Home of its document's owner (`Drive.holdHome`) until it closes, as do the long requests (WebDAV PUT, convert, copy) and a running backup. That is a positive live signal and needs no keepalive tick or open-connections check over the collab registry. Expose it with a small `isHeld` accessor. An evict still closes under a hold, by design (a restore or a deletion): the hold's callback closes the socket or stream with a retry code, so the client reconnects to the next Home;
 - has a mount with a non-empty `UploadQueue` or a draining `ContentReindexQueue` — like
   `hasClients`/`lastTouched`, these need small accessors: `UploadQueue.pendingCount` is public,
   but the reindex queue's drain state, `Drive`'s mounts, and `Mount`'s queue fields are

@@ -3,18 +3,17 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as snapshotModule from '../../lib/backup/snapshot-home';
-import { atHome, evictHome, getHome, touchHomeIfLoaded } from '../../lib/home/get-home';
+import { atHome, evictHome, getHome } from '../../lib/home/get-home';
 import type { Home } from '../../lib/home/home';
-import { BACKUP_RELEASE_MS, pullHomeSnapshot } from '../../lib/home/home-relay';
+import { pullHomeSnapshot } from '../../lib/home/home-relay';
 import { createTestUser, getTestContext } from '../setup';
 
 const snapshotHome = snapshotModule.snapshotHome;
-// Past the release, well inside the five-minute idle of a user home.
-const LONG_AFTER_RELEASE_MS = BACKUP_RELEASE_MS + 60_000;
 const USER_IDLE_MS = 5 * 60_000;
 
-// A backup boots a home it found asleep only for as long as its capture, and never takes one away
-// from a user who opened it meanwhile: it hands the home a short idle instead of evicting it.
+// A backup opens a home without counting as a request and holds it while it captures, like any other
+// holder. So a home nobody requested closes when the capture lets go, and a request keeps a home open
+// until that request is its idle time ago. The backup never closes a home by force.
 describe('pullHomeSnapshot', () => {
     let ownerId: string;
     const dirs: string[] = [];
@@ -56,75 +55,90 @@ describe('pullHomeSnapshot', () => {
         for (let attempt = 0; attempt < 100 && atHome(ownerId); attempt++) await Bun.sleep(20);
     }
 
-    test('a home it booted and nobody opened goes after the short release idle', async () => {
+    // Moves the fake clock to a moment, firing every timer due by then.
+    function advanceTo(time: number): void {
+        jest.advanceTimersByTime(time - Date.now());
+    }
+
+    // The request's time on the real clock lies between the two, and the fake clock goes on from there.
+    async function request(): Promise<{ home: Home; after: number; before: number }> {
+        const before = Date.now();
+        const home = await getHome(ownerId);
+        return { home, before, after: Date.now() };
+    }
+
+    test('a home nobody requested closes when the capture lets go', async () => {
         await evictHome(ownerId);
         captureThenFakeTimers();
         await pullHomeSnapshot(ownerId, targetDir(), {});
         expect(atHome(ownerId)).toBe(true);
 
-        jest.advanceTimersByTime(BACKUP_RELEASE_MS - 1);
-        expect(atHome(ownerId)).toBe(true);
-        jest.advanceTimersByTime(2);
+        jest.advanceTimersByTime(1);
         await waitForEviction();
         expect(atHome(ownerId)).toBe(false);
     });
 
-    test('a user who opens the home mid-capture keeps it, sockets and all, as long as their keepalive ticks', async () => {
+    test('a request during the capture keeps the home open until that request is its idle time ago', async () => {
         await evictHome(ownerId);
-        let opened: Home | undefined;
+        let requested: Awaited<ReturnType<typeof request>> | undefined;
         captureThenFakeTimers(async () => {
-            opened = await getHome(ownerId);
+            requested = await request();
         });
         await pullHomeSnapshot(ownerId, targetDir(), {});
-        expect(opened).toBeDefined();
-        expect(atHome(ownerId)).toBe(true);
-        expect(opened!.closing).toBe(false);
+        if (!requested) throw new Error('the capture made no request');
 
-        // The keepalive re-arms the full idle, not the release one.
-        jest.advanceTimersByTime(15_000);
-        touchHomeIfLoaded(ownerId);
-        jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
-        expect(atHome(ownerId)).toBe(true);
-        expect(opened!.closing).toBe(false);
-        expect(await getHome(ownerId)).toBe(opened!);
-    });
-
-    test('a request that reaches the home mid-capture keeps the full idle, with no keepalive after it', async () => {
-        await evictHome(ownerId);
-        let opened: Home | undefined;
-        captureThenFakeTimers(async () => {
-            opened = await getHome(ownerId);
-        });
-        await pullHomeSnapshot(ownerId, targetDir(), {});
-
-        jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
-        expect(atHome(ownerId)).toBe(true);
-        expect(opened!.closing).toBe(false);
-        jest.advanceTimersByTime(USER_IDLE_MS);
+        advanceTo(requested.before + USER_IDLE_MS - 1);
+        expect(requested.home.closing).toBe(false);
+        advanceTo(requested.after + USER_IDLE_MS + 1);
+        expect(requested.home.closing).toBe(true);
         await waitForEviction();
         expect(atHome(ownerId)).toBe(false);
     });
 
-    test('a home that was tearing down when the capture started counts as asleep: its successor goes after the release idle', async () => {
+    test('a request before the capture keeps the home open until that request is its idle time ago', async () => {
+        await evictHome(ownerId);
+        const requested = await request();
+        captureThenFakeTimers();
+        await pullHomeSnapshot(ownerId, targetDir(), {});
+
+        advanceTo(requested.before + USER_IDLE_MS - 1);
+        expect(requested.home.closing).toBe(false);
+        advanceTo(requested.after + USER_IDLE_MS + 1);
+        expect(requested.home.closing).toBe(true);
+    });
+
+    test('a user who connects mid-capture keeps the home while the connection holds it, and no longer', async () => {
+        await evictHome(ownerId);
+        let opened: Home | undefined;
+        let releaseConnection: (() => void) | undefined;
+        captureThenFakeTimers(async () => {
+            opened = await getHome(ownerId);
+            // What an event stream or a collab socket takes when it opens.
+            releaseConnection = opened.hold();
+        });
+        await pullHomeSnapshot(ownerId, targetDir(), {});
+        if (!opened || !releaseConnection) throw new Error('the capture made no connection');
+
+        jest.advanceTimersByTime(2 * USER_IDLE_MS);
+        expect(opened.closing).toBe(false);
+
+        // The user's last request is long ago, so the connection's release closes the home at once.
+        releaseConnection();
+        jest.advanceTimersByTime(1);
+        expect(opened.closing).toBe(true);
+        await waitForEviction();
+    });
+
+    test('a home that was tearing down when the capture started counts as unrequested: its successor closes after the capture', async () => {
         const going = (await getHome(ownerId)).close();
         captureThenFakeTimers();
         await pullHomeSnapshot(ownerId, targetDir(), {});
         await going;
         expect(atHome(ownerId)).toBe(true);
 
-        jest.advanceTimersByTime(BACKUP_RELEASE_MS + 1);
+        jest.advanceTimersByTime(1);
         await waitForEviction();
         expect(atHome(ownerId)).toBe(false);
-    });
-
-    test('a home that was open before the capture keeps its full idle', async () => {
-        const open = await getHome(ownerId);
-        captureThenFakeTimers();
-        await pullHomeSnapshot(ownerId, targetDir(), {});
-
-        jest.advanceTimersByTime(LONG_AFTER_RELEASE_MS);
-        expect(atHome(ownerId)).toBe(true);
-        expect(open.closing).toBe(false);
     });
 
     test('a capture that outlasts the idle, with no file to tick on, keeps the home it reads', async () => {

@@ -1,46 +1,45 @@
+// The content reindex of one mount: it extracts the text of a changed file or container, such as a doc
+// or a chat, for Drive's content search. Its queue is the contentDirty bit on the paths row, so it reads
+// the live state when a row is due and many edits become one extract. A producer, such as a file write
+// or a container sync, sets the bit and calls kick(). One drain loop works off the request path and
+// times its own next pass for rows still inside the cap window.
+
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { settlesWithin } from '../../utils/timing';
 import { ApiError } from '../core';
 import type { Mount } from './mount';
 
-// Re-extract any one container at most once per window: an append-heavy chat or a long edit
-// session keeps re-marking the dirty bit, but the cap stops it re-extracting a big body every
-// time (reads contentIndexedAt).
+// A path is extracted at most once in this many seconds, counted from its contentIndexedAt. A busy chat
+// or a long edit session sets the dirty bit again and again, and a big body must not be read each time.
 export const CONTENT_REINDEX_CAP_SECONDS = 120;
 
-// Rows drained per loop turn — keeps the first post-migration backfill (which marks every
-// container + text file dirty) flowing in steady batches instead of one giant query.
+// The rows one turn of the loop reads. A backfill marks every container and text file dirty at once, and
+// it then runs in steady batches instead of one huge query.
 const REINDEX_BATCH = 100;
 
-// Ceiling on awaiting the in-flight drain at close. Teardown aborts the extract's storage reads, but
-// the rest of an extract has no bound of its own, and idle-home eviction has no SIGKILL backstop
-// (process shutdown does). Mirrors the upload queue's per-PUT ceiling (UPLOAD_PUT_TIMEOUT_MS);
-// generous so a genuinely slow extract still finishes.
+// How long close() waits for the drain in flight. Teardown aborts the storage reads of an extract, but
+// the rest of the extract has no bound of its own. An idle Home close has no process kill behind it, as
+// a shutdown has, so this wait is the bound. It is the same as the upload queue's PUT timeout, and long
+// enough for a slow extract to finish.
 const REINDEX_CLOSE_TIMEOUT_MS = 120_000;
 
 export type ContentExtractor = (mount: Mount, path: DrivePath) => Promise<string>;
 
-// Per-mount, self-scheduled content reindexer — the read-side mirror of UploadQueue. The durable
-// queue is the contentDirty bit on `paths` (no separate table, no staged copies: a reindex re-reads
-// live state at drain time, so there is nothing to freeze, and the bit coalesces many edits into one
-// re-extract). Producers (file writes, container onSync, copy, the v6 backfill) set the bit then
-// call kick(); a single drain loop drains due rows off the request path and self-times the next pass
-// for rows still inside the cap window. No process-global sweep.
 export class ContentReindexQueue {
     private readonly mount: Mount;
     private readonly extract: ContentExtractor;
     private readonly label: string;
 
-    // draining: one loop at a time (concurrent kicks coalesce). closing: one-way teardown gate.
+    // The one drain loop that runs. A kick while it runs joins it.
     private draining: Promise<void> | null = null;
-    // Per-path write generation. The drain compares the value it read before the extract with
-    // the one after, so a write landing mid-extract keeps the dirty bit instead of having it
-    // cleared by the older body's success. Entries live only while a path is dirty; a missing
-    // one reads as 0, which after a restart is the safe answer (the bit is still set).
+    // A count of writes per path. The drain reads it before and after an extract. When it moved, a write
+    // landed during the extract, and the dirty bit stays set, because the body misses that write. An entry
+    // lives only while its path is dirty. A missing one reads as 0, which is safe after a restart, because
+    // the bit is still set then.
     private readonly generations = new Map<string, number>();
     private retryTimer: ReturnType<typeof setTimeout> | null = null;
     private closing = false;
-    // Deadline on close()'s drain await (see REINDEX_CLOSE_TIMEOUT_MS). A field so tests can shrink it.
+    // A field, so tests can shrink REINDEX_CLOSE_TIMEOUT_MS.
     private closeTimeoutMs = REINDEX_CLOSE_TIMEOUT_MS;
 
     public constructor(deps: { mount: Mount; extract: ContentExtractor; label: string }) {
@@ -49,31 +48,30 @@ export class ContentReindexQueue {
         this.label = deps.label;
     }
 
-    // One row's body just changed: record the write and drain soon. The seam for rows
-    // CREATED by this write (no extract can be in flight for a fresh id, so ordering
-    // against the insert doesn't matter). Rows that already exist must split the two
-    // calls around their DB write instead — see bumpGeneration.
+    // Counts a write and drains soon, for a row this write created. No extract can run for a new id, so
+    // the order against the insert doesn't matter. A write to a row that exists calls bumpGeneration
+    // before it writes and kick after it.
     public markDirty(pathId: string): void {
         this.bumpGeneration(pathId);
         this.kick();
     }
 
-    // Fences an overwrite against an in-flight extract of the same path. Call BEFORE
-    // the DB write that sets the bit: an extract completing in between then sees a
-    // generation mismatch and keeps the bit — bumped after, it would compare equal and
-    // clear the newer write. kick() stays after the write, because kicked early a
-    // drain can run before the bit lands, find nothing, and nothing re-drives it.
+    // Counts an overwrite, so an extract of the same path that runs now keeps the dirty bit. It runs before
+    // the write that sets the bit. Counted after the write, an extract that ends in between would find the
+    // count unchanged and clear the bit of the newer write. kick() goes after the write: a drain kicked
+    // before it could find no dirty row, and then nothing would drain the row.
     public bumpGeneration(pathId: string): void {
         this.generations.set(pathId, (this.generations.get(pathId) ?? 0) + 1);
     }
 
-    // A dirty bit was just set (or persisted ones await on open) — drain soon. Coalesces.
+    // Drains soon, after a dirty bit was set or when a mount opens with dirty rows. A kick during a drain
+    // joins that drain.
     public kick(): void {
         if (this.closing) return;
         this.drain().catch((err) => console.error(`[content-reindex] drain failed for ${this.label}:`, err));
     }
 
-    // Drain due dirty rows now and await completion. One loop at a time; concurrent calls coalesce.
+    // Drains the dirty rows that are due, and resolves when it is done. A call during a drain joins it.
     public drain(): Promise<void> {
         if (this.draining) return this.draining;
         this.draining = this.runDrainLoop().finally(() => {
@@ -82,12 +80,11 @@ export class ContentReindexQueue {
         return this.draining;
     }
 
-    // Mount teardown: stop scheduling and AWAIT the in-flight drain so the current extract finishes.
-    // That extract opens a doc DB via mount.openDatabase and leaves it for the mount lifecycle to
-    // close; awaiting here lets closeAllDatabases close it in its sweep — otherwise an open landing
-    // after the sweep leaks. Only the current extract is drained: leftover dirty rows replay on
-    // the next mount open (the bit is the durable queue). The await is bounded by
-    // REINDEX_CLOSE_TIMEOUT_MS: past it teardown proceeds and a hung extract leaks.
+    // Mount teardown: stop scheduling and wait for the drain in flight, so the current extract
+    // finishes. That extract may hold a document database through mount.withDatabase, and the close
+    // sweep of closeAllDatabases would otherwise wait for it. Only the current extract is drained.
+    // The other dirty rows replay on the next mount open, because the bit is the durable queue. The
+    // wait ends after REINDEX_CLOSE_TIMEOUT_MS, and then teardown goes on without the extract.
     public async close(): Promise<void> {
         this.closing = true;
         if (this.retryTimer) {
@@ -101,7 +98,8 @@ export class ContentReindexQueue {
         }
     }
 
-    // Teardown aborts the mount's reads before it closes this queue; the backlog waits for the next open.
+    // Teardown aborts the mount's reads before it closes this queue. The rows still dirty wait for the
+    // next open.
     private get stopped(): boolean {
         return this.closing || this.mount.downloads.signal.aborted;
     }
@@ -116,20 +114,20 @@ export class ContentReindexQueue {
             if (batch.length === 0) break;
             for (const path of batch) {
                 if (this.stopped) return;
-                // Read before the extract: the body this job returns is the document as of now.
+                // Read before the extract, because the body it returns is the document as it is now.
                 const generation = this.generations.get(path.id) ?? 0;
                 try {
                     const body = await this.extract(this.mount, path).catch((err: unknown) => {
-                        // A gone object (410) answers every open alike: index it empty, a version restore re-marks it.
+                        // A gone object answers 410 to every open. It is indexed as empty, and a version
+                        // restore marks it dirty again.
                         if (err instanceof ApiError && err.status === 410) return '';
                         throw err;
                     });
                     if (body) this.mount.upsertPathContent(path.id, body);
                     else this.mount.clearPathContent(path.id);
-                    // Clear the dirty bit only on a completed extract (empty counts) — a throw below must
-                    // leave it set so a transient failure isn't silently dropped from body search. A write
-                    // that landed while the extract ran keeps it set too: its content is not in this body,
-                    // and the cap window defers the re-extract exactly like a failure.
+                    // Only an extract that completed clears the dirty bit, an empty one included. A write
+                    // that landed while the extract ran keeps the bit, because this body misses it. The cap
+                    // window then holds off the next extract, as it does after a failure.
                     if ((this.generations.get(path.id) ?? 0) === generation) {
                         this.generations.delete(path.id);
                         this.mount.markContentIndexed(path.id);
@@ -139,17 +137,17 @@ export class ContentReindexQueue {
                 } catch (err) {
                     // An aborted read says nothing about the body: leave the row due.
                     if (this.stopped) return;
-                    // The index is regenerable — log and move on so one bad body never stalls the loop.
-                    // Stamp the attempt but keep contentDirty = 1: the cap defers the retry to a later
-                    // drain, so a transient S3 hiccup re-extracts instead of dropping until the next write.
+                    // The index can always be built again, so one bad body only logs and never stops the
+                    // loop. The attempt is stamped and the bit stays set, so the cap holds off the retry to a
+                    // later drain. A short storage outage is then retried, not dropped until the next write.
                     console.error(`[content-reindex] extract failed for ${path.id}:`, err);
                     this.mount.markContentIndexAttempted(path.id);
                 }
             }
         }
         if (this.stopped) return;
-        // Rows re-dirtied inside the cap window aren't due yet — re-drive exactly when the earliest
-        // becomes due (our own timer, no poll). A freshly-dirtied row reads as due-now.
+        // A row marked dirty again inside the cap window is not due yet. The queue's own timer drains
+        // again when the earliest one is due. A row marked dirty for the first time is due at once.
         const dueAt = this.mount.earliestPendingReindexAt(CONTENT_REINDEX_CAP_SECONDS);
         if (dueAt !== null) this.scheduleRetry(Math.max(0, dueAt - Date.now()));
     }

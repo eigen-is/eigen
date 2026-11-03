@@ -165,11 +165,9 @@ describe('Drive content-index', () => {
         expect((await searchFile('wobblecard')).file.some((h) => h.id === stk.id)).toBe(true);
     });
 
-    // Chat flush decision: chatPost writes to the chat's data.db via ChatRoom.init() →
-    // drive.openDatabase(), which caches the ManagedDatabase in mount.documentDbs. A
-    // subsequent flushContainerDb finds the cached db and flushes it, triggering onSync →
-    // markContainerContentDirty. This is reliable because the same Home/Mount singleton
-    // is shared between the test process and the in-process API route handlers.
+    // chatPost writes the chat's data.db inside withDatabase, and the database stays open for the
+    // idle window after it. So flushContainerDb finds it open and flushes it, and its onSync marks the
+    // chat for the reindex. The test and the in-process routes share one Home and Mount.
     test('CHAT recent messages are searchable', async () => {
         const chat = await drivePost(
             ctx.alice.user.sessionToken,

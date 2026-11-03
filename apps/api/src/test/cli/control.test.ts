@@ -511,6 +511,13 @@ describe('the restart notice on the control socket', () => {
             expect(notice()).toBeNull();
         });
 
+        test("takes demo-reset, the reason of a demo box's hourly reset", async () => {
+            const { code } = await runCli(['restart-notice', '--in', '300', '--reason', 'demo-reset']);
+            expect(code).toBe(0);
+            expect(notice()).toMatchObject({ reason: 'demo-reset', message: null });
+            await runCli(['restart-notice', '--clear']);
+        });
+
         test('passes the message on with each control character a space', async () => {
             const { code } = await runCli([
                 'restart-notice',

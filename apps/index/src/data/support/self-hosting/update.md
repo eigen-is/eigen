@@ -69,8 +69,6 @@ When the version before cannot open the data, or is too old to check, the rollba
 
 When the check itself stops before it can tell, for example because the server ran out of memory or a database stayed busy, the rollback stops too, and Eigen keeps running on your data as it is. Only a database the version before finds damaged, or one too new for it, makes the rollback put the backup back. Fix what it says, then run `./eigen rollback` again. When the second check stops, Eigen starts again on the version you updated to. If you press Ctrl+C at the question, the rollback stops and changes nothing.
 
-An update made by Eigen 0.4.1 or before may have made a Light backup, without files and mail. `./eigen rollback` cannot go back from one: it names the backup and stops. To go back, put back a Full backup with `./eigen restore <file>`.
-
 `./eigen rollback --yes` skips the questions, for scripts. A rollback goes back one update, not further. To go back further, `./eigen rollback --help` lists the backups earlier updates made that Eigen kept, and `./eigen restore <file>` puts one of them back.
 
 ### After the update from 0.3.0

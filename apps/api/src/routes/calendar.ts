@@ -37,8 +37,8 @@ import { getMemberships } from '../lib/user';
 import { betterAuth } from './auth';
 import { importFromDriveSchema } from './shared-schemas';
 
-// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints; everything a CalDAV
-// PUT may store caps at the resource ceiling itself, or the event a device wrote would be uneditable here.
+// Field bounds in front of the event ceiling. TEXT is for the ids and keys Eigen mints. Anything a CalDAV PUT
+// may store is capped at the ceiling itself, or an event a device wrote could not be edited here.
 const TEXT = { maxLength: 512 };
 const FREE_TEXT = { maxLength: EVENT_MAX_BYTES };
 // An attendee or a reminder is one line of the file, and a file holds no more lines than it holds bytes.
@@ -127,7 +127,8 @@ const ImportFromDriveIcsSchema = t.Object({
 
 const ImportQuerySchema = t.Object({ calendarId: t.String({ ...TEXT, minLength: 1 }) });
 
-// A team home is the only foreign Home a transfer may touch — only the relay crosses homes — and free-busy is no read here.
+// A team home is the only foreign Home a transfer may touch, because only the relay crosses homes. Free-busy counts
+// as no read here.
 async function resolveTransferCalendar(user: User, ownerId: string, calendarId: string, need: 'read' | 'write') {
     if (parseOwnerId(ownerId).type !== 'team') requireSelf(ownerId, user.id);
     const { permission } = await checkCalendarAccess(user, ownerId, calendarId);
@@ -145,7 +146,8 @@ async function resolveAdministeredCalendar(user: User, ownerId: string) {
     return (await getHome(ownerId)).calendar;
 }
 
-// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too; the events stay on membership.
+// A team admin sets the shares of a team calendar, so the list those shares are read off is theirs too. The events
+// stay on membership.
 async function resolveListedCalendar(user: User, ownerId: string) {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type !== 'team') return resolveCalendar(user, ownerId);
@@ -226,7 +228,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
                 new Date(params.to * 1000),
             );
             if (permission === 'free-busy') {
-                // A cancelled event's existence must not leak into a free/busy view, and dropping it makes the cast valid.
+                // A cancelled event's existence must not leak into a free/busy view. Dropping it also makes the
+                // cast valid.
                 return events
                     .filter((e) => e.status !== 'cancelled')
                     .map(
@@ -293,7 +296,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         { auth: true },
     )
 
-    // Server-owned so the move keeps the organizer link, timezone and data a client cannot re-send, and declines nothing.
+    // The server moves the event, so the move keeps the organizer link, the timezone and the data a client cannot
+    // send again, and it declines nothing.
     .put(
         '/calendar/:ownerId/calendars/:calId/events/:id/move',
         async ({ params, body, user }): Promise<CalendarEvent> => {
@@ -395,7 +399,8 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, body.calendarId, 'read');
             const text = await cal.exportEvents(body.calendarId, body.ids);
-            // The clamp keeps one absurd title out of the header; contentDisposition strips path and control characters.
+            // The clamp keeps one absurd title out of the header. contentDisposition strips path and control
+            // characters.
             const only = body.ids?.length === 1 ? await cal.getEventById(body.calendarId, body.ids[0]) : null;
             const name = only?.title || (cal.calendarRow(body.calendarId)?.name ?? '');
             set.headers['Content-Type'] = ICS_CONTENT_TYPE;
@@ -423,8 +428,10 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
             const cal = await resolveTransferCalendar(user, params.ownerId, query.calendarId, 'write');
             // A thousand-event file writes a row apiece before this answers, longer than any server-wide idleTimeout.
             server?.timeout(request, 0);
-            const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
-            return cal.importEvents(query.calendarId, bytes);
+            return await cal.home.withHomeHeld(async () => {
+                const bytes = await readBoundedBodyBytes(request, ICS_MAX_BYTES);
+                return await cal.importEvents(query.calendarId, bytes);
+            });
         },
         { query: ImportQuerySchema, auth: true, parse: 'none' },
     )
@@ -434,14 +441,16 @@ export const calendarRouter = new Elysia({ name: 'calendar' })
         async ({ params, body, request, user, server }): Promise<ImportCountsResult> => {
             requireNonGuest(user);
             const cal = await resolveTransferCalendar(user, params.ownerId, body.calendarId, 'write');
-            // Same idle-timeout exemption as the raw import route: silent until the last event lands.
+            // The same idle-timeout exemption as the raw import route: silent until the last event lands.
             server?.timeout(request, 0);
-            const bytes = await readImportSourceBytes(user, body, {
-                accepts: isIcsFile,
-                rejection: NOT_A_CALENDAR_FILE,
-                maxBytes: ICS_MAX_BYTES,
+            return await cal.home.withHomeHeld(async () => {
+                const bytes = await readImportSourceBytes(user, body, {
+                    accepts: isIcsFile,
+                    rejection: NOT_A_CALENDAR_FILE,
+                    maxBytes: ICS_MAX_BYTES,
+                });
+                return await cal.importEvents(body.calendarId, bytes);
             });
-            return cal.importEvents(body.calendarId, bytes);
         },
         {
             body: ImportFromDriveIcsSchema,

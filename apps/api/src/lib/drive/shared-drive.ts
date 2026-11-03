@@ -50,6 +50,21 @@ export class SharedDrive {
         return this.drive.lockManager;
     }
 
+    // Dropping the locks of other users needs write access, the same as the move that calls it.
+    public async releaseLocksUnder(mountId: string, pathId: string): Promise<void> {
+        await this.requireWrite(mountId, pathId);
+        return this.drive.releaseLocksUnder(mountId, pathId);
+    }
+
+    // Holding the owner's home has no access check of its own: the caller checks access before it holds.
+    public holdHome(onClosing?: () => void): () => void {
+        return this.drive.holdHome(onClosing);
+    }
+
+    public withHomeHeld<T>(fn: () => Promise<T>): Promise<T> {
+        return this.drive.withHomeHeld(fn);
+    }
+
     // ---- Access checks ----
 
     public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
@@ -512,12 +527,13 @@ export class SharedDrive {
 
     // A document's databases, such as its comments.db, hold what the document holds. So opening one
     // needs read access.
-    public async openDatabase<S extends SchemaType>(
+    public async withDatabase<S extends SchemaType, T>(
         mountId: string,
         config: DatabaseConfig<S>,
         pathId: string,
-    ): Promise<ManagedDatabase<S>> {
+        fn: (db: ManagedDatabase<S>) => Promise<T>,
+    ): Promise<T> {
         await this.requireRead(mountId, pathId);
-        return this.drive.openDatabase(mountId, config, pathId);
+        return this.drive.withDatabase(mountId, config, pathId, fn);
     }
 }

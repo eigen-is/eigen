@@ -193,14 +193,23 @@ export class FaultMount extends Mount {
 
 // An s3-type mount backed by a FaultStorage over a local directory. Same `id` ⇒ same baseDir +
 // backing dir ⇒ a second call simulates a process restart that shares the prior mount's
-// metadata.db, staging dir, and "S3" object store. The caller still owns init().
+// metadata.db, staging dir, and "S3" object store. The caller still owns init(). `hold` stands in for
+// the Home hold its upload queue takes while a PUT is on the wire.
 export function createFaultMount(
     ownerId: string,
     baseDir: string,
     id: string,
     bucket?: string,
+    hold?: () => () => void,
 ): { mount: Mount; fault: FaultStorage } {
-    const mount = new FaultMount(ownerId, baseDir, createS3MountConfig(id, bucket), createGetLocalDatabase(baseDir));
+    const mount = new FaultMount(
+        ownerId,
+        baseDir,
+        createS3MountConfig(id, bucket),
+        createGetLocalDatabase(baseDir),
+        undefined,
+        hold,
+    );
     const fault = new FaultStorage(new LocalStorage(join(baseDir, `backing-${id}`)));
     mount.storage = fault;
     return { mount, fault };
@@ -211,13 +220,21 @@ export function createFaultMount(
 // `backingRoot`, outside the home. Both matter to the backup suites — snapshotHome stages every
 // mount's metadata.db through home.getLocalDatabase, so a mount rooted elsewhere would be archived
 // beside a freshly created empty one, and a `.db` object inside the home would trip its
-// unlisted-database guard. The caller still owns init() and registerFaultMount.
+// unlisted-database guard. Its upload queue holds the home, as Drive wires it too. The caller still
+// owns init() and registerFaultMount.
 export function createHomeFaultMount(
     home: Home,
     id: string,
     backingRoot: string,
 ): { mount: Mount; fault: FaultStorage } {
-    const mount = new FaultMount(home.user.id, home.homeDir, createS3MountConfig(id), home.getLocalDatabase.bind(home));
+    const mount = new FaultMount(
+        home.user.id,
+        home.homeDir,
+        createS3MountConfig(id),
+        home.getLocalDatabase.bind(home),
+        undefined,
+        () => home.hold(),
+    );
     const fault = new FaultStorage(new LocalStorage(join(backingRoot, id)));
     mount.storage = fault;
     return { mount, fault };
@@ -311,6 +328,11 @@ function queueFields(mount: Mount): QueueTestFields {
 // Holds the queue's jittered retry (see FaultMount); the test drives every retry with drain({flushNow}).
 function holdRetries(mount: Mount): void {
     queueFields(mount).backoffMs = () => 60_000;
+}
+
+// Lets the queue retry on its own, every ms, for a test of a bucket that keeps failing.
+export function shrinkRetryBackoff(mount: Mount, ms: number): void {
+    queueFields(mount).backoffMs = () => ms;
 }
 
 // Shrinks the PUT deadline so a parked PUT orphans fast. Retries are already held (FaultMount): one
