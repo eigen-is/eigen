@@ -30,7 +30,7 @@ export function DriveGrid({
 }: DriveViewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [setContainer, { width }] = useElementSize(containerRef);
-    // 0 = not yet measured; the initial scroll and scrollToIndex wait for a real column count.
+    // Zero until the grid is measured. The initial scroll and scrollToIndex wait for a real column count.
     const columns = width === 0 ? 0 : Math.max(1, Math.floor(width / TILE_MIN_WIDTH));
 
     const rowCount = Math.ceil(items.length / Math.max(columns, 1));

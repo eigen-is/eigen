@@ -257,9 +257,9 @@ export function useKeyboardListNavigation<T>({
 
             case ' ': {
                 e.preventDefault();
-                // React renders the quick-look overlay before this native event finishes bubbling,
-                // so without this the overlay's own Space-to-close hotkey (on document) would shut
-                // it again on the very press that opened it.
+                // React renders the quick-look overlay before this native event finishes bubbling. The overlay
+                // closes on Space through a hotkey on the document, so without this it would close again on the
+                // same press that opened it.
                 e.stopPropagation();
                 const index = targetIndex();
                 if (index >= 0) {
