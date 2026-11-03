@@ -34,7 +34,7 @@ test('the pencil shows on hover only, and Tab reaches and shows it', async () =>
     await router.load();
     await renderInDocument(createElement(RouterProvider, { router }));
     const button = document.querySelector('button[aria-label="Edit label"]');
-    const wrapper = button?.closest('.editButton');
+    const wrapper = button?.parentElement;
     if (!button || !wrapper) throw new Error('the label has no pencil');
     expect(revealStates(wrapper, button)).toEqual(HOVER_REVEALED);
     const classes = wrapper.className.split(' ');

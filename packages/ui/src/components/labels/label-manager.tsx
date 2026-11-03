@@ -65,7 +65,7 @@ export function LabelManager({
             >
                 {labels.map((label) => {
                     const editButton = !condensed && (
-                        <div className={cn('editButton absolute right-2', PENCIL_REVEAL_CLASS)}>
+                        <div className={cn(PENCIL_REVEAL_CLASS, 'absolute right-2')}>
                             <TooltipButton
                                 icon={Pencil}
                                 tooltipText="Edit label"
