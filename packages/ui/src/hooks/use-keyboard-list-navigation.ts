@@ -34,7 +34,7 @@ type UseKeyboardListNavigationOptions<T> = {
     itemSelector?: string;
     onDelete?: (item: T) => void;
     // Shift+F10 and the ContextMenu key call this for the row Enter would open. The list opens that row's menu at the
-    // row, as its ⋮ button would.
+    // row, as its ⋮ button would. A virtual list's call comes a frame after the row scrolled in, once it is drawn.
     onMenu?: (item: T, index: number) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
@@ -159,7 +159,11 @@ export function useKeyboardListNavigation<T>({
         if (!onMenu || index < 0) return false;
         e.preventDefault();
         scrollToRow(index);
-        onMenu(items[index], index);
+        // A virtual list draws a row scrolled out of view only once its scroll lands, which the browser handles before
+        // the next frame. The menu waits for that frame, so it opens at the row.
+        const item = items[index];
+        if (scrollToIndex) requestAnimationFrame(() => onMenu(item, index));
+        else onMenu(item, index);
         return true;
     };
 

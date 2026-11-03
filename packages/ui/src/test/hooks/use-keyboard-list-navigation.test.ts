@@ -39,7 +39,11 @@ function selectionOf(ids: string[]): UseListSelectionReturn<Row> {
 // the no-selection state every list starts in. A move opens nothing, as in Drive with no row open. Each callback is
 // recorded as `kind:id`. The list sits on a background with a menu of its own, as Drive's does, and its row opens its
 // own menu on a right-click.
-async function mountList(startIndex: number, selection?: UseListSelectionReturn<Row>) {
+async function mountList(
+    startIndex: number,
+    selection?: UseListSelectionReturn<Row>,
+    scrollToIndex?: (index: number) => void,
+) {
     const calls: string[] = [];
     function Harness() {
         const containerRef = useRef<HTMLDivElement>(null);
@@ -56,6 +60,7 @@ async function mountList(startIndex: number, selection?: UseListSelectionReturn<
             selection,
             cursorIndex,
             onCursorChange: setCursorIndex,
+            scrollToIndex,
         });
         return createElement(
             'div',
@@ -229,6 +234,33 @@ describe('useKeyboardListNavigation menu key', () => {
         const { calls, list, keydown, unmount } = await mountList(-1);
         expect((await keydown(list, 'ContextMenu')).defaultPrevented).toBe(false);
         expect(calls).toEqual([]);
+        await unmount();
+    });
+
+    // A virtual list draws a row scrolled out of view once its scroll lands: after the key's handler returns, and before
+    // the next frame. The test DOM runs a frame's callback at once, so a frame here comes after a timer.
+    test('in a virtual list, the menu opens once the row the key scrolled to is drawn', async () => {
+        const runAtOnce = globalThis.requestAnimationFrame;
+        globalThis.requestAnimationFrame = (callback) => Number(setTimeout(() => callback(performance.now()), 16));
+        const drawn = new Set<number>();
+        const scrolled: number[] = [];
+        const scrollToIndex = (index: number) => {
+            scrolled.push(index);
+            queueMicrotask(() => drawn.add(index));
+        };
+        const { calls, list, keydown, unmount } = await mountList(1, undefined, scrollToIndex);
+        const opened = new Promise<void>((resolve) => {
+            const { push } = calls;
+            calls.push = (...entries) => {
+                for (const entry of entries) push.call(calls, `${entry} ${drawn.has(1) ? 'drawn' : 'not drawn'}`);
+                resolve();
+                return calls.length;
+            };
+        });
+        await keydown(list, 'ContextMenu');
+        await act(() => opened);
+        globalThis.requestAnimationFrame = runAtOnce;
+        expect([scrolled, calls]).toEqual([[1], ['menu:b@1 drawn']]);
         await unmount();
     });
 

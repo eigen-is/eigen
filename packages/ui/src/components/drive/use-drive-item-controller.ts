@@ -103,7 +103,8 @@ export function useDriveItemController({
             : undefined,
         // The menu key opens the menu at the row or tile, as its ⋮ does. Each virtual row of the table and the grid
         // carries the virtualizer's data-index and holds its rows or tiles as children, so a grid's tile is found by
-        // its row and column. A row scrolled out of the window is not drawn, and its menu opens at the list instead.
+        // its row and column. The hook scrolls a row out of the window in and calls this a frame later, once the row
+        // is drawn. The list is only a fallback.
         onMenu: hasMenu
             ? (item, index) => {
                   const list = containerRef.current;

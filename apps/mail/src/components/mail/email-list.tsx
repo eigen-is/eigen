@@ -184,8 +184,8 @@ export function EmailList({
         reclaimFocus: !isComposing,
         cursorIndex,
         onCursorChange: setCursorIndex,
-        // The menu key opens the menu at the row, which carries the virtualizer's data-index. A row scrolled out of the
-        // window is not drawn, and its menu opens at the list instead.
+        // The menu key opens the menu at the row, which carries the virtualizer's data-index. The hook scrolls a row
+        // out of the window in and calls this a frame later, once the row is drawn. The list is only a fallback.
         onMenu: (email, index) => {
             const list = tableRef.current;
             const row = list?.querySelector(`[data-index="${index}"]`);
