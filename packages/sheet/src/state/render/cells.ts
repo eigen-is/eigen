@@ -8,7 +8,7 @@ import { INDICATOR_RED } from '@workspace/lib/constants/comment-indicator';
 import { isForcedStringNumber, normalizedAttr } from '../modules/cell';
 import { cellIndicatorRect } from '../modules/cell-glyph';
 import { checkCF } from '../modules/condition-format';
-import type { CellGlyphRect } from '../modules/data-verification';
+import type { CellGlyphRect } from '../modules/data-validation';
 import {
     CHECKBOX_LABEL_GAP,
     cellTextBox,
@@ -18,7 +18,7 @@ import {
     isCheckboxChecked,
     showsCheckboxLabel,
     validateCellData,
-} from '../modules/data-verification';
+} from '../modules/data-validation';
 import { getCellTextInfo } from '../modules/text';
 import type { Rect } from '../types';
 import { cellOverflowRender, cellTextRender } from './cell-text';

@@ -127,3 +127,21 @@ test('a rename that fails stays open with the typed name', async () => {
     expect(onAfterAction).not.toHaveBeenCalled();
     expect(nameField().value).toBe('Minutes');
 });
+
+// The palette's Rename opens the dialog with no menu around it, so no focus trap takes the focus back and selects the
+// field. The dialog itself selects the name, so every path opens alike, ready for a new name to replace it.
+test('the dialog opens with the name before the extension selected, or a name without one selected whole', async () => {
+    const selections = [];
+    for (const name of ['notes.txt', 'README', '.env']) {
+        await open(drivePath({ id: name, name, mimeType: 'text/plain' }));
+        await settle();
+        const field = nameField();
+        selections.push([document.activeElement === field, field.value, field.selectionStart, field.selectionEnd]);
+        await unmount();
+    }
+    expect(selections).toEqual([
+        [true, 'notes', 0, 5],
+        [true, 'README', 0, 6],
+        [true, '.env', 0, 4],
+    ]);
+});

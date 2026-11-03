@@ -25,7 +25,7 @@ import { FileImportPicker, ProgressDialog } from '@workspace/ui/components/drive
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem } from '@workspace/ui/components/dropdown-menu';
 import { StorageUsage } from '@workspace/ui/components/home';
 import { SidebarPrimaryButton } from '@workspace/ui/components/layout/sidebar/sidebar-primary-button';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn, SOFT_HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { CalendarDays, CalendarPlus, CalendarRange, Check, Download, Pencil, Plus, Upload } from 'lucide-react';
 import type { MouseEvent } from 'react';
 import { useMemo, useState } from 'react';
@@ -89,8 +89,7 @@ function CalendarRow({
             {!condensed && (
                 <>
                     <span className="text-sm truncate flex-1">{label}</span>
-                    {/* focus-within holds the trigger visible while its own menu is open. */}
-                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-80">
+                    <div className={cn(SOFT_HOVER_REVEAL_CLASS, 'absolute right-2')}>
                         <DropdownMenu>
                             <KebabTrigger title="Calendar options" />
                             <DropdownMenuContent align="end">

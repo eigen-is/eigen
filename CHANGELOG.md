@@ -6,7 +6,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 
 ## [0.4.2] - 2026-11-03
 
-Sheets scrolls and looks things up faster, copies and pastes validation rules and hidden rows as Excel does, and its dialogs read and behave like the rest of Eigen. Docs gets styled tables of contents, and emoji, Chinese and Korean text and equations draw the same in the apps and in downloads. Every update now makes a Full backup, `./eigen rollback` keeps today's data, and an update can warn open tabs before Eigen restarts. Three changes break old data: Vector and Slides text boxes saved by an earlier version disappear, Sheets validation rules need setting up again, and Light backups can no longer be restored. After you update, reload any tab you have open.
+Sheets scrolls and looks things up faster, copies and pastes validation rules and hidden rows as Excel does, and its dialogs read and behave like the rest of Eigen. Drive, Mail and Contacts open a row's menu from the keyboard. Docs gets styled tables of contents, and emoji, Chinese and Korean text and equations draw the same in the apps and in downloads. Every update now makes a Full backup, `./eigen rollback` keeps today's data, and an update can warn open tabs before Eigen restarts. Three changes break old data: Vector and Slides text boxes saved by an earlier version disappear, Sheets validation rules need setting up again, and Light backups can no longer be restored. After you update, reload any tab you have open.
 
 ### Added
 
@@ -15,6 +15,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Duplicate in Drive lists** — **Duplicate** is also in the menu when you browse by file type or in a document app's list, but not on a drive's top-level folder
 - **Mail several items from Drive** — with more than one item selected, the menu offers **Mail 3 items to…**
 - **Shortcuts in the Drive menu** — on a computer, the menu shows ␣ next to **Quick preview** and ⌫ next to **Move to trash** and **Remove shared item**. On a touch screen no menu shows shortcuts
+- **Row menus from the keyboard** — in the lists of Drive, Mail and Contacts, Shift+F10 (fn+Shift+F10 on most Mac keyboards) or the Menu key opens the menu of the row under the cursor. Tab no longer stops on each row's ⋮ and Share buttons
 - **Unread comments on cards** — in Stickies and in the comment panel of Docs, Sheets, Slides and Vector, a red dot marks each card with a new reply, mention or assignment for you. Opening the card clears it
 - **A warning before a restart** — `./eigen update`, `./eigen rollback` and `./eigen restore` take `--in 10m "Back at three"`, up to an hour. Every open tab counts down in a banner, then says Eigen is updating, or going back to an earlier version, while it is down. Ctrl+C or a lost SSH session cancels
 
@@ -76,6 +77,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
 - **Filters in the sidebar** — **All docs**, **All stickies**, **All slides**, **All sheets** and **All vectors** stay selected in their own app when you click an item in the list
 - **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
+- **The name in Rename** — **Rename** opens with the name selected without its extension, so typing replaces it, also from the command palette and a document's **File** menu
 - **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
 - **Email collaborators from Share in Drive** — the envelope in **Share** opens **Email collaborators** again, and the message starts with your signature even when the dialog opens before your settings have loaded
 - **Links on cards and in emails** — Enter in the link field of the text toolbar adds the link and no longer also saves the card or sends the email. Escape closes only the link field, and opening it no longer shifts the dialog sideways
@@ -87,8 +89,14 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Share on another item** — going back or forward to another document with **Share** open shows that item's people, not the ones you were editing
 - **The keyboard in Share** — Tab reaches the lock under **General access** when you can change access, and a long list of people who have access, and Enter or Space works them. The same goes for an event's guest list, the people shown on a shared item in Drive and Chat, and **Location** in **Copy to**, **Save to Drive** and **New chat**
 - **Previews opened from a card in Stickies** — the preview takes the keyboard, so Space closes it and Tab stays in it, a long preview scrolls, and a click beside it closes only the preview
-- **Hover buttons from the keyboard** — Tab and screen readers reach the buttons a row shows under the pointer: the × on a person in **New chat**, a contact's ⋮, **Edit** and **Delete** on your chat messages, a server backup's buttons in Admin, the ⋮ on a Drive tile and the pencil on a label in the Contacts sidebar, a guest's **Remove** in Calendar
+- **Hover buttons from the keyboard** — Tab and screen readers reach the buttons a row shows under the pointer: the × on a person in **New chat**, **Edit** and **Delete** on your chat messages, a server backup's buttons in Admin, the pencil on a label in the Contacts sidebar and a guest's **Remove** in Calendar. In Drive's and Contacts' lists the menu key reaches a row's ⋮ instead
 - **Keys on a row's menu button** — in Drive, Mail and contact lists, Enter and Space on a row's ⋮ button open its menu, and an arrow key after the menu closes moves on from that row
+- **The keyboard cursor in Drive and Contacts** — in Drive's list view and in contact lists, the row under the keyboard cursor shows only its colored edge, as in Mail, unless that row is open or selected
+- **Editing a chat message on a touch screen** — **Edit** in a message's long-press menu keeps the edit box open with the cursor in it, where the box could close at once while the message field had the keyboard
+- **Focus after a menu** — **File › Rename** and then Escape in Docs and Sheets puts the focus back on **File**. A menu or dialog you opened with the mouse gives the focus back without a focus ring, so a hover button such as a calendar's ⋮ hides again once the pointer leaves
+- **Rows under the column header in Drive** — a row the arrow keys scroll into view stops below the list's column header instead of behind it
+- **The copy button on a code block** — it takes no click while it is hidden, so a click on the code no longer copies it
+- **PDF downloads** — a PDF renders once, where now and then it rendered a second time, which could make a long export fail
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
 - **Permanently deleting emails in Mail** — when some emails can't be deleted, the dialog stays open on the ones worth another try and drops those the server refused, such as one already gone

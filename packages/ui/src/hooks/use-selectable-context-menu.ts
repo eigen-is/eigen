@@ -1,3 +1,8 @@
+// The context menu of a list whose rows can be selected, such as a Drive listing, the mail list or a person list. A
+// right-click, a long press, a row's ⋮ button or the menu key first pulls the row into the selection, then opens the
+// one menu. An unselected row becomes the selection. A row already selected keeps the selection it is part of, so the
+// menu acts on all of it.
+
 import type React from 'react';
 import { useContextMenu } from '../components/context-menu';
 import type { UseListSelectionReturn } from './use-list-selection';
@@ -7,10 +12,6 @@ type UseSelectableContextMenuOptions<T> = {
     getId: (item: T) => string;
 };
 
-// The select-then-open contract every list's context menu follows: right-click, touch
-// long-press, and the ⋮ button all pull the pressed row into the selection before the menu
-// opens — an unselected row becomes THE selection, an already-selected row keeps the
-// multi-selection so the menu acts on the batch.
 export function useSelectableContextMenu<T>({ selection, getId }: UseSelectableContextMenuOptions<T>) {
     const contextMenu = useContextMenu<T>();
 
@@ -23,16 +24,17 @@ export function useSelectableContextMenu<T>({ selection, getId }: UseSelectableC
         contextMenu.handleContextMenu(e, item);
     };
 
-    // For openers without a mouse position: touch long-press, keyboard-activated buttons.
+    // For an opener without a pointer position of its own, such as a long press.
     const openAt = (item: T, x: number, y: number) => {
         ensureSelected(item);
         contextMenu.openAt(item, x, y);
     };
 
-    const openFromButton = (button: HTMLElement, item: T) => {
-        const rect = button.getBoundingClientRect();
+    // Opens the menu below an element's right edge, such as a row's ⋮ button or the row the menu key acts on.
+    const openBelow = (element: HTMLElement, item: T) => {
+        const rect = element.getBoundingClientRect();
         openAt(item, rect.right, rect.bottom);
     };
 
-    return { contextMenu, handleContextMenu, openAt, openFromButton };
+    return { contextMenu, handleContextMenu, openAt, openBelow };
 }

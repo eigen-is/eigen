@@ -1,8 +1,9 @@
 import { describe, expect, spyOn, test } from 'bun:test';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { htmlToPdf, isWeasyPrintAvailable, shebangPython } from '../../lib/export/weasyprint';
+import { htmlToPdf, isWeasyPrintAvailable, shebangPython, weasyPrintPython } from '../../lib/export/weasyprint';
+import renderScript from '../../lib/export/weasyprint-render.py' with { type: 'file' };
 
 const wp = await isWeasyPrintAvailable();
 const suite = wp ? describe : describe.skip;
@@ -278,6 +279,48 @@ suite('htmlToPdf', () => {
             expect(existsSync(marker)).toBe(false);
             expect(exitCode).toBe(0);
             expect(stdout).toBe('%PDF-');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+});
+
+// Python's own exit unloads WeasyPrint's C libraries under a glib thread that may still run, which died of a SIGSEGV
+// now and then after the whole PDF was out. The script leaves before that exit: an atexit handler that ran would say
+// so. It leaves at once, so it removes the temporary folder WeasyPrint writes a document's fonts into itself.
+suite('weasyprint-render.py', () => {
+    test("a render leaves before Python's exit, its PDF whole and no temporary folder left", async () => {
+        const python = await weasyPrintPython();
+        if (python === null) throw new Error('no Python that imports WeasyPrint');
+        const font = readFileSync(
+            Bun.resolveSync('@workspace/ui/assets/fonts/inter/Inter-Variable.latin.woff2', import.meta.dir),
+        );
+        const html = `<!DOCTYPE html><html><head><style>
+@font-face { font-family: Probe; src: url(data:font/woff2;base64,${font.toString('base64')}); }
+</style></head><body><p style="font-family: Probe">x</p></body></html>`;
+        const run = `import atexit, runpy, sys
+atexit.register(lambda: sys.stderr.write('python exited'))
+sys.argv = sys.argv[1:]
+runpy.run_path(sys.argv[0], run_name='__main__')`;
+        const dir = mkdtempSync(join(tmpdir(), 'render-exit-'));
+        try {
+            const proc = Bun.spawn([python, '-I', '-c', run, renderScript], {
+                env: { ...process.env, TMPDIR: dir },
+                stdin: 'pipe',
+                stdout: 'pipe',
+                stderr: 'pipe',
+            });
+            proc.stdin.write(html);
+            await proc.stdin.end();
+            const [exitCode, pdf, stderr] = await Promise.all([
+                proc.exited,
+                new Response(proc.stdout).arrayBuffer(),
+                new Response(proc.stderr).text(),
+            ]);
+            expect(exitCode).toBe(0);
+            expect(stderr).not.toContain('python exited');
+            expect(Buffer.from(pdf).toString('latin1').trimEnd()).toEndWith('%%EOF');
+            expect(readdirSync(dir)).toEqual([]);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

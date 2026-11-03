@@ -9,7 +9,7 @@ import type { Cell, CellMatrix } from '../../engine/types';
 import { setCellValue as apiSetCellValue } from '../../state/api/cell';
 import type { Context } from '../../state/context';
 import { getCellValue, getRealCellValue, setCellValue } from '../../state/modules/cell';
-import { getDropdownList, validateCellData } from '../../state/modules/data-verification';
+import { getDropdownList, validateCellData } from '../../state/modules/data-validation';
 import { buildFilterConditionMatcher, getFilterColumnValues } from '../../state/modules/filter';
 import { removeHyperlink, saveHyperlink, showLinkCard } from '../../state/modules/hyperlink';
 import { calcSelectionInfo } from '../../state/modules/selection';

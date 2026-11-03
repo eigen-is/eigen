@@ -142,7 +142,8 @@ async function renderPdf(html: string | Uint8Array, zoom: number, signal?: Abort
     const started = Date.now();
     let result = await render(html, zoom, RENDER_TIMEOUT_MS, signal);
 
-    // WeasyPrint 68 segfaults in a glib thread now and then, and the same HTML renders the next time. One more render,
+    // A glib thread of WeasyPrint's dies of a SIGSEGV now and then, and the same HTML renders the next time. The render
+    // script skips Python's exit, where those crashes came, so one that still comes cut the PDF short. One more render,
     // in what is left of the timeout, and none once the first took most of it.
     const left = RENDER_TIMEOUT_MS - (Date.now() - started);
     if (result.signalCode === 'SIGSEGV' && left > RENDER_TIMEOUT_MS / 2 && !signal?.aborted) {

@@ -92,12 +92,33 @@ const TRANSPORT_PREFIX = /^\/ws(?=\/)/;
 
 // docs/LAYOUT.md § Hover-revealed affordances rest visible on touch: an affordance hidden until hover must rest visible
 // on touch, which has no hover. Only a hidden element is at risk, since a decorative `group-hover:scale-105` reveals
-// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string.
-// `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
+// nothing, so a hit is a hiding utility plus a revealing `group-hover:` in the same class string. A named group's
+// `group-hover/item:` counts too. `pointer-fine:group-hover:` makes the hover desktop-only on purpose and is not a gap.
 const STRING_LITERAL = /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g;
 const HIDDEN_BASE = /(?<![\w-])(?:invisible|hidden|opacity-0)(?![\w-])/;
 const HOVER_REVEAL =
-    /(?<!pointer-fine:)\bgroup-hover:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
+    /(?<!pointer-fine:)\bgroup-hover(?:\/[\w-]+)?:(visible|flex|grid|block|inline-flex|inline-block|opacity-\d+)(?![\w-])/g;
+
+// The same section keeps these controls in reach of the keyboard. Tab skips a control under `invisible` or `hidden`,
+// so a hover reveal hides with `opacity-0`. A reveal on `focus:` or `focus-within:` keeps a control shown after a mouse
+// click, once the pointer has left. So a class string is a hit when a `group-hover:` makes a bare `invisible` visible or
+// displays a bare `hidden`, or when it reveals on `focus:`, `focus-within:` or their `group-` forms. `focus-visible:`
+// and `group-has-focus-visible:` show only for the keyboard and pass. A `hidden md:flex` beside an unrelated
+// `group-hover:` reveals nothing. A hint the pointer always passes through, `pointer-events-none` with no
+// `pointer-events-auto`, holds no control.
+const TAB_SKIPPED_REVEALS = [
+    [/(?<![\w:[-])invisible(?![\w-])/, /\bgroup-hover(?:\/[\w-]+)?:visible(?![\w-])/],
+    [/(?<![\w:[-])hidden(?![\w-])/, /\bgroup-hover(?:\/[\w-]+)?:(?:flex|grid|block|inline-flex|inline-block)(?![\w-])/],
+];
+const FOCUS_REVEAL =
+    /(?<![\w-])(?:group-)?focus(?:-within)?(?:\/[\w-]+)?:(?:opacity-\d+|visible|flex|grid|block|inline-flex|inline-block)(?![\w-])/;
+const POINTER_PASSES = /(?<![\w:-])pointer-events-none(?![\w-])/;
+
+function keyboardHostileReveal(literal: string): boolean {
+    if (FOCUS_REVEAL.test(literal)) return true;
+    if (POINTER_PASSES.test(literal) && !literal.includes('pointer-events-auto')) return false;
+    return TAB_SKIPPED_REVEALS.some(([hide, reveal]) => hide.test(literal) && reveal.test(literal));
+}
 
 // docs/LAYOUT.md § A row that deletes is red and last: a row that deletes, trashes or removes is the destructive
 // variant, red with its icon, never a plain row or one tinted by a class. A row is destructive when it draws a trash
@@ -348,6 +369,13 @@ const METRICS: Metric[] = [
             }
             return hits;
         },
+    },
+    {
+        id: 'hover-hidden-from-keyboard',
+        label: 'Hover reveals Tab skips or a click keeps shown',
+        hardZero: true,
+        count: ({ text }) => (text.match(STRING_LITERAL) ?? []).filter(keyboardHostileReveal).length,
+        fix: 'Hide a hover-revealed control with HOVER_REVEAL_CLASS from @workspace/ui/lib/utils: opacity-0, shown on group-hover and on group-has-focus-visible. See docs/LAYOUT.md § Hover-revealed affordances rest visible on touch.',
     },
 ];
 

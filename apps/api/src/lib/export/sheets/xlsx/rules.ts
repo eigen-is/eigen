@@ -3,7 +3,7 @@
 
 import type {
     ConditionalFormatRule,
-    DataVerificationRule,
+    DataValidationRule,
     DefaultConditionalFormatRule,
     Sheet,
     SheetValidation,
@@ -337,14 +337,14 @@ function cutOut(range: SingleRange, above: readonly SingleRange[]): SingleRange[
     return pieces;
 }
 
-function promptOf(rule: DataVerificationRule): string {
+function promptOf(rule: DataValidationRule): string {
     return rule.hintShow && rule.hintValue ? rule.hintValue : '';
 }
 
 // A validation's type, its operator when not Excel's default between, and its formulas; relative references read
 // from the anchor, its first cell.
 function validationOf(
-    rule: DataVerificationRule,
+    rule: DataValidationRule,
     anchor: string,
 ): { type: string; operator?: string; formulas: string[] } | undefined {
     if (rule.type === 'dropdown') {

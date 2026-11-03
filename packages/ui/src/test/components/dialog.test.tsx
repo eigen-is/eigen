@@ -77,9 +77,9 @@ test('a click outside a dialog stacked on another closes the top one alone', asy
     expect(picker).not.toHaveBeenCalled();
 });
 
-// No dialog has a Radix trigger, so Radix alone would leave the focus on the page body when one closes. A dialog gives
-// it back to what had it as the dialog opened, or, if that is gone, such as a row menu's item, to what took it next
-// outside the dialog: the list the closing menu handed it back to.
+// Radix gives the focus back only to a DialogTrigger, so alone it would leave the focus on the page body when a dialog
+// opened from a menu or a button closes. A dialog gives it back to what had it as the dialog opened. If that is gone,
+// such as a menu row, a context menu hands over the list it opened from, and a menu with its own trigger focuses it.
 const pressEscape = () =>
     act(async () => {
         (document.activeElement ?? document).dispatchEvent(
@@ -146,6 +146,91 @@ test('a dialog opened from a row’s menu gives the focus back to the list', asy
     await settle();
     expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
     expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
+});
+
+// Focusing the list while the dialog is open would make the dialog's focus trap take the focus back and select all of
+// its field's text, undoing a selection such as Rename's name without its extension.
+test('a closing menu hands the list to the dialog it opened without taking the focus', async () => {
+    const { ContextMenuAnchor, useContextMenu } = await import('../../components/context-menu');
+    const { DropdownMenuItem } = await import('../../components/dropdown-menu');
+    let openMenu = () => {};
+    function Listing() {
+        const [isOpen, setOpen] = useState(false);
+        const menu = useContextMenu<string>();
+        openMenu = () => menu.openAt('notes.txt', 0, 0);
+        return createElement(
+            'div',
+            null,
+            createElement('div', { tabIndex: 0, 'data-list': '' }, 'notes.txt'),
+            createElement(ContextMenuAnchor, {
+                contextMenu: menu,
+                children: createElement(DropdownMenuItem, { onClick: () => setOpen(true) }, 'Rename'),
+            }),
+            dialog('Rename', setOpen, createElement('input', { autoFocus: true, defaultValue: 'notes.txt' }), isOpen),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Listing)));
+    document.querySelector<HTMLElement>('[data-list]')?.focus();
+    await act(async () => openMenu());
+    await settle();
+    const focused: string[] = [];
+    const record = ({ target }: FocusEvent) =>
+        target instanceof HTMLElement && focused.push(target.hasAttribute('data-list') ? 'list' : target.tagName);
+    document.addEventListener('focusin', record);
+    const row = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (r) => r.textContent === 'Rename',
+    );
+    await act(async () => row?.click());
+    const input = document.querySelector('input');
+    input?.setSelectionRange(0, 5);
+    await settle();
+    document.removeEventListener('focusin', record);
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect([input?.selectionStart, input?.selectionEnd]).toEqual([0, 5]);
+    expect(focused.slice(focused.indexOf('INPUT'))).not.toContain('list');
+    expect(document.activeElement).toBe(input);
+
+    await pressEscape();
+    await settle();
+    expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
+});
+
+// A dropdown menu with its own trigger, such as a toolbar's ⋮ menu, focuses that trigger as it closes, while the dialog
+// is open. A bar menu doesn't, and hands its trigger to the dialog instead, which the app bar menu's own test covers.
+test('a dialog opened from a menu with its own trigger gives the focus back to the trigger', async () => {
+    const { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } = await import(
+        '../../components/dropdown-menu'
+    );
+    function FileMenu() {
+        const [isOpen, setOpen] = useState(false);
+        return createElement(
+            'div',
+            null,
+            createElement(
+                DropdownMenu,
+                { defaultOpen: true },
+                createElement(DropdownMenuTrigger, { id: 'file-menu' }, 'File'),
+                createElement(
+                    DropdownMenuContent,
+                    null,
+                    createElement(DropdownMenuItem, { onClick: () => setOpen(true) }, 'Rename'),
+                ),
+            ),
+            dialog('Rename', setOpen, createElement('input', { autoFocus: true }), isOpen),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(FileMenu)));
+    await settle();
+    const row = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (r) => r.textContent === 'Rename',
+    );
+    await act(async () => row?.click());
+    await settle();
+    expect(document.activeElement?.tagName).toBe('INPUT');
+
+    await pressEscape();
+    await settle();
+    expect(document.activeElement?.id).toBe('file-menu');
 });
 
 // The sheet's handler prevents the default even when it leaves the focus alone, because a press outside put it where

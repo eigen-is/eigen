@@ -3,7 +3,7 @@ import { enablePatches, produce, produceWithPatches } from 'immer';
 import { generateAPIs } from '../../components/Workbook/api';
 import { copySheet, hideSheet, showSheet } from '../../state/api/sheet';
 import type { Context } from '../../state/context';
-import { checkboxChange, insertCheckbox } from '../../state/modules/data-verification';
+import { checkboxChange, insertCheckbox } from '../../state/modules/data-validation';
 import { createFilter } from '../../state/modules/filter';
 import { deleteRowCol, insertRowCol } from '../../state/modules/rowcol';
 import { filterPatch, patchToOp } from '../../state/utils/patch';

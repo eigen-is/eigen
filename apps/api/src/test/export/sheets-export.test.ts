@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { newSheetChartSpecParts, sampleChartSpec } from '@workspace/lib/charts';
-import type { ConditionalFormatRule, DataVerificationRule, Sheet } from '@workspace/lib/sheets';
+import type { ConditionalFormatRule, DataValidationRule, Sheet } from '@workspace/lib/sheets';
 import type { DrivePath } from '@workspace/lib/types/drive';
 import { replaySheetsOps } from '@workspace/sheet/engine';
 import type { XmlElement } from '../../lib/core/xml';
@@ -81,8 +81,8 @@ function writtenValidations(bytes: Uint8Array): Map<string, WrittenRule> {
 // Fixture rules in the exact shape the importer emits, so round-trips can assert
 // deep equality against the input.
 function dvRule(
-    partial: Partial<DataVerificationRule> & Pick<DataVerificationRule, 'type' | 'type2' | 'value1'>,
-): DataVerificationRule {
+    partial: Partial<DataValidationRule> & Pick<DataValidationRule, 'type' | 'type2' | 'value1'>,
+): DataValidationRule {
     return { value2: '', prohibitInput: false, hintShow: false, hintValue: '', ...partial };
 }
 
@@ -831,7 +831,7 @@ describe('Sheets xlsx export — data validation', () => {
     });
 
     test('exports numeric, text-length and date rules with reversed operators', async () => {
-        const rules: Record<string, DataVerificationRule> = {
+        const rules: Record<string, DataValidationRule> = {
             '0_0': dvRule({ type: 'number_integer', type2: 'between', value1: '1', value2: '10' }),
             '1_0': dvRule({ type: 'number', type2: 'moreThanThe', value1: '2.5' }),
             '2_0': dvRule({ type: 'number', type2: 'notEqualTo', value1: '0' }),

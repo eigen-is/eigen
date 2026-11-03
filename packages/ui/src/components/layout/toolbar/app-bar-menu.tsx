@@ -1,10 +1,11 @@
 // One menu of an app's bar, such as Insert, Format or Filter: a trigger with its label and the menu's rows below it.
 // It sits in a Menubar, which the bar renders around its menus, so the menus open, switch and close as one bar.
 // Menus such as FileMenu and EditMenu are built on it. Each app passes its own rows and, for an editor, the handler
-// that hands focus back to the editor as the menu closes.
+// that hands focus back to the editor as the menu closes. A dialog a row opened gives the focus back to the trigger.
 
 import type { ReactNode } from 'react';
 import { useRef } from 'react';
+import { handFocusReturnTo } from '../../../hooks/use-focus-return';
 import { MenubarContent, MenubarMenu, MenubarTrigger } from '../../menubar';
 
 type AppBarMenuProps = {
@@ -22,9 +23,11 @@ export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, c
     // press the user aimed at it. That press must not close the menu again, as a press on an open trigger does.
     const openedByHoverRef = useRef(false);
     const keepOpenPressRef = useRef<PointerEvent | null>(null);
+    const triggerRef = useRef<HTMLButtonElement>(null);
     return (
         <MenubarMenu value={value}>
             <MenubarTrigger
+                ref={triggerRef}
                 onPointerEnter={(event) => {
                     if (event.currentTarget.dataset.state === 'open') return;
                     const bar = event.currentTarget.closest('[role="menubar"]');
@@ -51,7 +54,14 @@ export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, c
             </MenubarTrigger>
             <MenubarContent
                 className={contentClassName}
-                onCloseAutoFocus={onCloseAutoFocus}
+                // A row that opened a dialog, such as File's Rename, is gone once the menu closes. The bar focuses no
+                // trigger after the focus moved into that dialog, and an editor's handler leaves the focus there, so
+                // the dialog would give it back to nothing. It gives it back to this menu's trigger instead, with a
+                // ring only where the row it opened from had one, so a menu a mouse opened leaves File unlit.
+                onCloseAutoFocus={(event) => {
+                    if (triggerRef.current) handFocusReturnTo(triggerRef.current);
+                    onCloseAutoFocus?.(event);
+                }}
                 onPointerDownOutside={(event) => {
                     if (event.detail.originalEvent === keepOpenPressRef.current) event.preventDefault();
                 }}

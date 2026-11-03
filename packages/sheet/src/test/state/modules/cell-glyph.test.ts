@@ -8,14 +8,14 @@
 import { describe, expect, test } from 'bun:test';
 import type { Context } from '../../../state/context';
 import { cellGlyphAt, cellIndicatorRect } from '../../../state/modules/cell-glyph';
-import { cellTextBox, dropdownChevronRect } from '../../../state/modules/data-verification';
-import type { DataVerificationRule } from '../../../state/types';
+import { cellTextBox, dropdownChevronRect } from '../../../state/modules/data-validation';
+import type { DataValidationRule } from '../../../state/types';
 import { contextFactory } from '../factories/context';
 import { validationsByCell } from '../factories/validations';
 
-const LIST_RULE: DataVerificationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
-const TICK_BOX: DataVerificationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
-const NUMBER_RULE: DataVerificationRule = { type: 'number', type2: 'moreThanThe', value1: '3', value2: '' };
+const LIST_RULE: DataValidationRule = { type: 'dropdown', type2: '', value1: 'Red,Green,Blue', value2: '' };
+const TICK_BOX: DataValidationRule = { type: 'checkbox', type2: '', value1: 'TRUE', value2: 'FALSE' };
+const NUMBER_RULE: DataValidationRule = { type: 'number', type2: 'moreThanThe', value1: '3', value2: '' };
 
 // A1 spans x 0..74, y 0..20 in the factory's grid; its text box is 72×18.
 const A1_BOX = cellTextBox(0, 0, 74, 20);

@@ -1,5 +1,6 @@
 // The share summary in a Drive row and the chat toolbar shows who has access. Where a click opens Share, it is a button
-// the keyboard reaches, and its click stays off the row. Elsewhere it is no control at all. On an item nobody else
+// the keyboard reaches, and its click stays off the row. In a Drive row Tab skips it, since the row's menu key reaches
+// Share. Elsewhere it is no control at all. On an item nobody else
 // has, its add-person icon shows to a mouse user on hover only, and when Tab reaches the button. The lock on a shared
 // link says who the link lets in, in the Share dialog's words.
 import { afterAll, afterEach, beforeEach, expect, mock, spyOn, test } from 'bun:test';
@@ -7,7 +8,7 @@ import type { DirectAccessItem } from '@workspace/lib/types/drive';
 import { DRIVE_MIME_DOC } from '@workspace/lib/types/drive';
 import { drivePath } from '../../drive-path';
 import { installHappyDom } from '../../happy-dom';
-import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
+import { expectKeyboardReveal } from '../../hover-reveal';
 import { pressKey } from '../../press-key';
 import { renderInDocument } from '../../render-in-document';
 
@@ -58,6 +59,7 @@ async function renderSummary(props: {
     onClick?: () => void;
     showIconOnHover?: boolean;
     visibility?: 'private' | 'public-read';
+    tabIndex?: number;
 }) {
     const onRowClick = mock(() => {});
     const path = { ...notes, visibility: props.visibility ?? 'private' };
@@ -65,7 +67,12 @@ async function renderSummary(props: {
         createElement(
             'div',
             { className: 'group', onClick: onRowClick },
-            createElement(DriveShareSummary, { path, onClick: props.onClick, showIconOnHover: props.showIconOnHover }),
+            createElement(DriveShareSummary, {
+                path,
+                onClick: props.onClick,
+                showIconOnHover: props.showIconOnHover,
+                tabIndex: props.tabIndex,
+            }),
         ),
     );
     unmount = rendered.unmount;
@@ -78,10 +85,21 @@ test('a summary that opens Share is a button the keyboard reaches, and its click
     const button = container.querySelector('button');
     expect(button?.type).toBe('button');
     expect(button?.getAttribute('aria-label')).toBe('Share');
+    expect(button?.tabIndex).toBe(0);
     if (!button) return;
     await act(async () => pressKey(button, 'Enter'));
     await act(async () => pressKey(button, ' '));
     expect(onClick).toHaveBeenCalledTimes(2);
+    expect(onRowClick).not.toHaveBeenCalled();
+});
+
+test('taken out of the Tab order, as in a Drive row, the button still opens Share on a click', async () => {
+    const onClick = mock(() => {});
+    const { container, onRowClick } = await renderSummary({ onClick, tabIndex: -1 });
+    const button = container.querySelector('button');
+    expect(button?.tabIndex).toBe(-1);
+    await act(async () => button?.click());
+    expect(onClick).toHaveBeenCalledTimes(1);
     expect(onRowClick).not.toHaveBeenCalled();
 });
 
@@ -101,10 +119,9 @@ test('a summary that shows nothing is no button, so Tab does not stop on an empt
 test('on an item nobody else has, the add-person icon shows on hover only, and when Tab reaches the button', async () => {
     entries = [OWNER];
     const { container } = await renderSummary({ onClick: () => {} });
-    const button = container.querySelector('button');
-    const icon = button?.querySelector('svg');
-    if (!button || !icon) throw new Error('the summary drew no add-person button');
-    expect(revealStates(icon, button)).toEqual(HOVER_REVEALED);
+    const icon = container.querySelector('button svg');
+    if (!icon) throw new Error('the summary drew no add-person button');
+    expectKeyboardReveal(icon);
 });
 
 test('the lock on a shared link says who the link lets in, as the Share dialog does', async () => {

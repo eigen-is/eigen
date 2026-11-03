@@ -6,7 +6,7 @@ import { formatInputDate } from '@workspace/lib/date';
 import type {
     ConditionalFormatConditionName,
     ConditionalFormatRule,
-    DataVerificationRule,
+    DataValidationRule,
     DefaultConditionalFormatRule,
     Sheet,
     SingleRange,
@@ -343,13 +343,13 @@ function mapDataValidation(
     formula1: string | undefined,
     formula2: string | undefined,
     date1904: boolean,
-): DataVerificationRule | undefined {
+): DataValidationRule | undefined {
     const type = DV_TYPE.get(xmlAttr(validation, '', 'type') ?? '');
     if (!type) return undefined;
     const flag = (name: string) => isOn(xmlAttr(validation, '', name)) === true;
     const errorStyle = xmlAttr(validation, '', 'errorStyle');
     const prompt = flag('showInputMessage') ? (xmlAttr(validation, '', 'prompt') ?? '') : '';
-    const rule: DataVerificationRule = {
+    const rule: DataValidationRule = {
         type,
         type2: '',
         value1: '',

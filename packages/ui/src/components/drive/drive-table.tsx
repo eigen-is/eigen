@@ -143,6 +143,8 @@ export function DriveTable({
         overscan: 12,
         // The list's offset in the scroller, measured on the list itself rather than the sticky header.
         scrollMargin: listRef.current?.offsetTop ?? 0,
+        // That offset is the sticky header over the view's top, so a row scrolled into view stops below it.
+        scrollPaddingStart: listRef.current?.offsetTop ?? 0,
     });
 
     const controller = useDriveItemController({
@@ -155,6 +157,7 @@ export function DriveTable({
         onQuickLook,
         onSelectionChange,
         actions,
+        hasMenu: !hideActions,
     });
 
     // One long-press for the whole list: each row binds it to its item, and a disabled row doesn't.
@@ -246,7 +249,8 @@ export function DriveTable({
                                 coarse={coarse}
                                 controller={controller}
                                 longPressBind={longPress.bind}
-                                isActive={activeItemId === item.id || controller.selectedIndex === vi.index}
+                                isActive={activeItemId === item.id}
+                                isCursor={controller.selectedIndex === vi.index}
                                 isSelected={
                                     controller.selection.isSelected(item.id) || !!externalSelectedIds?.has(item.id)
                                 }

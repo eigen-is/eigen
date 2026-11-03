@@ -245,7 +245,7 @@ type DvOperator =
     | 'greaterThanOrEqual'
     | 'lessThanOrEqual';
 
-// A data validation's operator and the engine's type2 for it (DataVerificationRule), one list both ways. A date rule
+// A data validation's operator and the engine's type2 for it (DataValidationRule), one list both ways. A date rule
 // words its comparisons as the date dialog does.
 const DV_COMMON_OPERATORS: [DvOperator, string][] = [
     ['between', 'between'],

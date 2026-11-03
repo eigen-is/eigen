@@ -2,7 +2,7 @@
 // pointer, and Tab reaches and shows it.
 import { afterAll, expect, mock, test } from 'bun:test';
 import { installHappyDom } from '../../happy-dom';
-import { HOVER_REVEALED, revealStates } from '../../keyboard-reach';
+import { expectKeyboardReveal } from '../../hover-reveal';
 import { renderInDocument } from '../../render-in-document';
 
 installHappyDom();
@@ -34,9 +34,9 @@ test('the pencil shows on hover only, and Tab reaches and shows it', async () =>
     await router.load();
     await renderInDocument(createElement(RouterProvider, { router }));
     const button = document.querySelector('button[aria-label="Edit label"]');
-    const wrapper = button?.closest('.editButton');
+    const wrapper = button?.parentElement;
     if (!button || !wrapper) throw new Error('the label has no pencil');
-    expect(revealStates(wrapper, button)).toEqual(HOVER_REVEALED);
+    expectKeyboardReveal(button);
     const classes = wrapper.className.split(' ');
     expect(classes).toContain('group-hover:opacity-80');
     expect(classes).toContain('pointer-coarse:opacity-80');

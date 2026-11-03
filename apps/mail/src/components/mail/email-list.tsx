@@ -1,3 +1,8 @@
+// Mail's message list and the search toolbar above it. The list draws the messages of the open mailbox or search in a
+// virtualized scroller and composes the shared list hooks: keyboard navigation, selection, drag and one context menu
+// for every row. The mail route owns the order and the keyboard cursor and passes both in, so the shortcuts layer
+// reads the same cursor.
+
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { MAILBOX_SENT } from '@workspace/lib/constants/mailboxes';
 import { formatDateTime } from '@workspace/lib/date';
@@ -12,16 +17,17 @@ import { useLongPress } from '@workspace/ui/hooks/use-long-press';
 import { useSelectableContextMenu } from '@workspace/ui/hooks/use-selectable-context-menu';
 import { cn } from '@workspace/ui/lib/utils';
 import { Keyboard, Paperclip, Reply, Star } from 'lucide-react';
+import type { RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import { EmailContextMenu } from './email-context-menu';
 
 type EmailListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
-    // Handle for the `/` shortcut to focus the search input.
-    inputRef?: React.RefObject<HTMLInputElement | null>;
-    // Opens the shortcuts cheat-sheet — the only discoverable entry point (`?` is gated on the
-    // default-off keyboardShortcuts setting), so the kebab shows on every viewport.
+    // The `/` shortcut focuses the search field through this.
+    inputRef?: RefObject<HTMLInputElement | null>;
+    // Opens the shortcuts cheat sheet. The `?` key opens it only while the keyboard shortcuts setting is on, and it is
+    // off by default. So this ⋮ is the one way to find the sheet, and it shows at every width.
     onShowShortcuts: () => void;
 };
 
@@ -49,23 +55,22 @@ export function EmailListToolbar({ searchQuery, onSearchChange, inputRef, onShow
 }
 
 type EmailListProps = {
-    // Controlled by MailRoute via useMailList — already filtered + sorted.
+    // The mail route holds these through useMailList, already filtered and sorted.
     orderedEmails: EmailSummary[];
     selection: UseListSelectionReturn<EmailSummary>;
     cursorIndex: number;
     setCursorIndex: (index: number) => void;
     onRowClick: (emailId: string) => void;
     activeRowId?: string;
-    // While the inline composer owns typing, the list must not grab or reclaim focus — arrows
-    // would otherwise switch conversations under a half-written reply. Same signal the
-    // shortcuts layer gates on.
+    // True while the inline composer owns typing. The list then neither takes nor reclaims the focus, or the arrows
+    // would switch conversations under a half-written reply. The shortcuts layer stands down on the same signal.
     isComposing?: boolean;
     isLoading?: boolean;
     error?: Error | null;
-    // Changes when the list's view identity changes (mailbox switch or entering/leaving search);
-    // EmailList snaps the virtualizer back to the top so its window can't stay desynced from a prior scroll.
+    // Changes when the list shows another view, such as another mailbox or a search that starts or ends. The list then
+    // scrolls back to the top, so the virtualizer's window can't stay out of step with an old scroll position.
     resetKey?: string;
-    // Infinite-scroll paging: fetch the next page as the cursor/scroll nears the loaded end.
+    // Paging: the list asks for the next page as the cursor or the scroll nears the end of what is loaded.
     hasMore?: boolean;
     isFetchingMore?: boolean;
     onLoadMore?: () => void;
@@ -106,32 +111,31 @@ export function EmailList({
 }: EmailListProps) {
     const tableRef = useRef<HTMLDivElement>(null);
 
-    // Estimate only — every row is measured, since a long sender line can wrap to a second row.
+    // An estimate only. Every row is measured, since a long sender line can wrap to a second line.
     const ROW_HEIGHT = 77;
     const virtualizer = useVirtualizer({
         count: orderedEmails.length,
         getScrollElement: () => tableRef.current,
         estimateSize: () => ROW_HEIGHT,
-        // Key the measurement cache by id so a re-sort/filter moves cached heights with their row.
+        // Key the measurement cache by id, so a new sort or filter moves the measured heights with their rows.
         getItemKey: (index) => orderedEmails[index].id,
         overscan: 12,
-        // No scrollMargin: the search toolbar lives outside this scroller, so rows start at offset 0.
+        // No scrollMargin. The search toolbar sits outside this scroller, so the rows start at offset 0.
     });
     const virtualItems = virtualizer.getVirtualItems();
 
-    // Keep the keyboard cursor in view. Covers the cursor writers that bypass the list's own
-    // key handler: j/k in the shortcuts layer, and an opened row syncing the cursor (useMailList).
+    // Keep the keyboard cursor in view. Some code moves the cursor without the list's own key handler: j and k in the
+    // shortcuts layer, and useMailList when it moves the cursor to an opened row.
     useEffect(() => {
         if (cursorIndex >= 0) virtualizer.scrollToIndex(cursorIndex);
     }, [cursorIndex, virtualizer]);
 
-    // Snap to the top when the view identity changes (mailbox switch or a change to the search query).
-    // Under a scrolled position a drastic orderedEmails size change otherwise leaves the virtual window
-    // desynced from the scroll offset (blank list until you nudge the scroll). The reset must land on
-    // the NEW rows, not during the fetch gap: search swaps the results in place (the scroller stays
-    // mounted), so firing scrollToOffset(0) while the list is momentarily empty doesn't stick once the
-    // incoming rows mount. So arm on the resetKey change and perform it on the first render that has
-    // rows — a plain scrollTop reset on the container the virtualizer then follows.
+    // Scroll to the top when the view changes, such as another mailbox or another search. In a scrolled list, a big
+    // change in the number of rows otherwise leaves the virtual window out of step with the scroll offset, and the list
+    // shows blank until the user scrolls. The reset has to happen on the new rows, not while they load. A search swaps
+    // its results in place and the scroller stays mounted, so a scroll to the top while the list is briefly empty
+    // doesn't stick once the new rows mount. So a resetKey change only marks the reset, and the first render with rows
+    // sets the container's scrollTop, which the virtualizer follows.
     const lastResetKey = useRef(resetKey);
     const pendingScrollReset = useRef(false);
     if (lastResetKey.current !== resetKey) {
@@ -145,8 +149,8 @@ export function EmailList({
         }
     }, [orderedEmails]);
 
-    // Load the next page once the last rendered row nears the loaded end — covers scroll AND
-    // j/k, since the keyboard cursor's scrollToIndex renders the end rows.
+    // Load the next page once the last drawn row nears the end of what is loaded. This covers scrolling and j and k,
+    // since the cursor's scrollToIndex draws the last rows.
     useEffect(() => {
         const last = virtualItems[virtualItems.length - 1];
         if (last && hasMore && !isFetchingMore && last.index >= orderedEmails.length - 1 - 6) {
@@ -156,12 +160,20 @@ export function EmailList({
 
     const drag = useListDrag({ selection, getId: (e) => e.id, dragType: 'email' });
 
-    // Shared keyboard model in lifted-cursor mode: MailRoute owns the cursor (id-tracked, shared
-    // with the shortcuts layer) and the virtualizer scrolls. The hook also owns list focus — the
-    // mount grab plus the body-focus reclaim that keeps the shortcuts alive after a click on
-    // non-focusable chrome — gated off while composing so a reply keeps its keystrokes.
-    // No onDelete: the Delete/Backspace bindings live in useMailShortcuts, which also covers an
-    // open conversation; the list just swallows the keypress.
+    // A right-click, a touch long-press and the menu key select the row, then open the one menu. The rows are drawn
+    // inline, with no row component to call a hook in, so one useLongPress for the list carries the pressed row
+    // through bind(email).
+    const { contextMenu, handleContextMenu, openAt, openBelow } = useSelectableContextMenu({
+        selection,
+        getId: (e) => e.id,
+    });
+    const longPress = useLongPress(openAt);
+
+    // The shared keyboard model, with the cursor lifted: the mail route owns it, tracked by id and shared with the
+    // shortcuts layer, and the virtualizer scrolls. The hook also owns the list's focus. It takes the focus on mount and
+    // takes it back from <body>, which keeps the shortcuts alive after a click on something that takes no focus. It
+    // stands down while composing, so a reply keeps its keystrokes. There is no onDelete: Delete and Backspace live in
+    // useMailShortcuts, which also covers an open conversation, and the list only swallows the key.
     const { handleKeyDown } = useKeyboardListNavigation({
         items: orderedEmails,
         getId: (e) => e.id,
@@ -172,16 +184,15 @@ export function EmailList({
         reclaimFocus: !isComposing,
         cursorIndex,
         onCursorChange: setCursorIndex,
+        // The menu key opens the menu at the row, which carries the virtualizer's data-index. The hook scrolls a row
+        // out of the window in and calls this a frame later, once the row is drawn. The list is only a fallback.
+        onMenu: (email, index) => {
+            const list = tableRef.current;
+            const row = list?.querySelector(`[data-index="${index}"]`);
+            const anchor = row instanceof HTMLElement ? row : list;
+            if (anchor) openBelow(anchor, email);
+        },
     });
-
-    // Right-click and touch long-press select-then-open the same singleton menu. Rows are mapped
-    // inline (no per-row component to hang a hook on), so one list-level useLongPress carries the
-    // pressed row via bind(email).
-    const { contextMenu, handleContextMenu, openAt } = useSelectableContextMenu({
-        selection,
-        getId: (e) => e.id,
-    });
-    const longPress = useLongPress(openAt);
 
     const contextIds = contextMenu.item
         ? selection.selectedItems.length > 1
@@ -223,9 +234,9 @@ export function EmailList({
                                         className={cn(
                                             'relative flex items-start py-2 app-gutter-x eigen-list-item',
                                             index > 0 && 'border-t border-border',
-                                            // Open row: full active treatment (stripe + wash).
+                                            // The open row gets the full active look, stripe and wash.
                                             isOpen && 'eigen-list-item-active',
-                                            // Keyboard cursor on a different row: stripe only.
+                                            // The keyboard cursor on another row gets the stripe only.
                                             !isOpen && cursorIndex === index && 'eigen-list-item-cursor',
                                             selection.isSelected(email.id) && 'eigen-list-item-selected',
                                         )}
@@ -252,9 +263,9 @@ export function EmailList({
                                             </span>
                                         )}
                                         <div className="flex-1 min-w-0">
-                                            {/* items-center (not items-baseline): the flag star is a non-text child, and
-                                                under baseline alignment its presence shifts the date up. Centering keeps
-                                                the date fixed whether or not the row is starred. */}
+                                            {/* items-center, not items-baseline: the star is no text, and under
+                                                baseline alignment it shifts the date up. Centered, the date stays put
+                                                whether or not the row is starred. */}
                                             <div className="flex justify-between items-center">
                                                 <div
                                                     className={cn(
@@ -272,8 +283,8 @@ export function EmailList({
                                                         />
                                                     )}
                                                     {email.isFlagged && (
-                                                        // Match the date's text size so a flagged row doesn't grow the
-                                                        // line box and nudge the date up (the row aligns to baseline).
+                                                        // As tall as the date's text, so a flagged row's line grows
+                                                        // no taller and the date stays put.
                                                         <Star
                                                             aria-hidden
                                                             className="h-3 w-3 shrink-0 fill-current"

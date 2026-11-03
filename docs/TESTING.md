@@ -208,9 +208,9 @@ A push to `main` runs no gates and publishes the images as `:main`, the channel 
 
 In CI arm64 only boots. Its update and rollback are proven by the harnesses on an Apple Silicon Mac.
 
-## Dependencies are bumped before a release tag
+## Dependencies are bumped right after a release tag
 
-Before a `v*` tag, bump the dependencies and read `bun audit`. Run `bun update --recursive`, because a plain run at the root updates only the root's own dependencies. Then `bun dedupe`, `bun run check` and a browser pass.
+Right after a `v*` tag, bump the dependencies and read `bun audit`, never in the days before a tag. The bump then gets its own round of review, `bun run check` and a browser pass, and an upstream break surfaces with weeks to fix it rather than hours before a release. Run `bun update --recursive`, because a plain run at the root updates only the root's own dependencies, then `bun dedupe`. The one exception before a tag is a security fix the owner asks for, as a single package bumped on its own.
 
 better-auth checks `apps/api/auth-schema.ts` against its plugins' models at startup and refuses to boot on a `SCHEMA_MISMATCH`. So a better-auth minor that adds columns lands with the column in `auth-schema.ts`, the DDL in `apps/api/src/lib/setup/setup.ts` and `ensureAuthSchemaColumns` together ([DATABASE.md](DATABASE.md)).
 

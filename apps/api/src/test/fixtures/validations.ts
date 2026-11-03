@@ -1,8 +1,8 @@
-import type { DataVerificationRule, SheetValidation } from '@workspace/lib/sheets';
+import type { DataValidationRule, SheetValidation } from '@workspace/lib/sheets';
 import { compareValidationIds, parseCellKey } from '@workspace/lib/sheets';
 
 // A sheet's validation rules given per cell: each cell its own rule, under the cell's key as its id.
-export function validationsByCell(rules: Record<string, DataVerificationRule>): Record<string, SheetValidation> {
+export function validationsByCell(rules: Record<string, DataValidationRule>): Record<string, SheetValidation> {
     return Object.fromEntries(
         Object.entries(rules).map(([key, rule]) => {
             const [r, c] = parseCellKey(key);
@@ -16,7 +16,7 @@ export function ruleAt(
     validations: Record<string, SheetValidation> | undefined,
     r: number,
     c: number,
-): DataVerificationRule | undefined {
+): DataValidationRule | undefined {
     const ids = Object.keys(validations ?? {}).sort((a, b) => compareValidationIds(b, a));
     const covers = ({ row, column }: { row: number[]; column: number[] }) =>
         r >= row[0] && r <= row[1] && c >= column[0] && c <= column[1];
@@ -27,8 +27,8 @@ export function ruleAt(
 // The rule over each cell a sheet's rules cover, keyed "r_c" in row order. Only for small ranges.
 export function rulesByCell(
     validations: Record<string, SheetValidation> | undefined,
-): Record<string, DataVerificationRule> {
-    const cells: [number, number, DataVerificationRule][] = [];
+): Record<string, DataValidationRule> {
+    const cells: [number, number, DataValidationRule][] = [];
     for (const { ranges, rule } of Object.values(validations ?? {})) {
         for (const { row, column } of ranges) {
             for (let r = row[0]; r <= row[1]; r += 1) {
