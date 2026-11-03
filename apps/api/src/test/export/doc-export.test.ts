@@ -1717,12 +1717,18 @@ describe('doc export — ordered lists', () => {
 
 const python = await weasyPrintPython();
 
-// A Python script's whole output once it has exited. WeasyPrint hits a SIGSEGV now and then while renders run side by
-// side, which the export renders once more (weasyprint.ts), so this does too; any other failure throws its stderr.
-async function pythonOutput(args: string[], input: string): Promise<string> {
+// What a script prints last, once it has run to its end.
+const SCRIPT_END = '<script end>';
+
+// The whole output of a Python script, run with `args`. On a loaded machine WeasyPrint's Python dies of a SIGSEGV now
+// and then as it exits: the exit unloads the C libraries under a glib thread that still runs. Its output is whole by
+// then, so a SIGSEGV after SCRIPT_END fails nothing. One before it runs the script once more, as the export renders
+// once more (weasyprint.ts); any other failure throws its stderr.
+async function pythonOutput(script: string, input: string, args: string[] = []): Promise<string> {
     if (python === null) throw new Error('no Python that imports WeasyPrint');
+    const ended = `${script}\nimport sys\nsys.__stdout__.write('${SCRIPT_END}')\nsys.__stdout__.flush()\n`;
     for (let attempt = 0; ; attempt++) {
-        const proc = Bun.spawn([python, '-I', ...args], { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
+        const proc = Bun.spawn([python, '-I', '-c', ended, ...args], { stdin: 'pipe', stdout: 'pipe', stderr: 'pipe' });
         proc.stdin.write(input);
         await proc.stdin.end();
         const [stdout, stderr, code] = await Promise.all([
@@ -1730,7 +1736,8 @@ async function pythonOutput(args: string[], input: string): Promise<string> {
             new Response(proc.stderr).text(),
             proc.exited,
         ]);
-        if (code === 0) return stdout;
+        if (stdout.endsWith(SCRIPT_END) && (code === 0 || proc.signalCode === 'SIGSEGV'))
+            return stdout.slice(0, -SCRIPT_END.length);
         if (proc.signalCode !== 'SIGSEGV' || attempt > 0)
             throw new Error(`python exited with ${proc.signalCode ?? code}: ${stderr}`);
     }
@@ -1749,7 +1756,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
         tag = str(getattr(box, 'element_tag', '')).split('}')[-1]
         ${line}
 `;
-    return (await pythonOutput(['-c', script], html)).trim().split('\n');
+    return (await pythonOutput(script, html)).trim().split('\n');
 }
 
 (python !== null ? describe : describe.skip)('doc export — positioned figures (WeasyPrint)', () => {
@@ -2476,7 +2483,7 @@ for page in weasyprint.HTML(string=sys.stdin.read()).render().pages:
 `;
 
 async function pageTexts(html: string): Promise<string[]> {
-    return (await pythonOutput(['-c', PAGE_TEXT_SCRIPT], html)).trim().split('\n');
+    return (await pythonOutput(PAGE_TEXT_SCRIPT, html)).trim().split('\n');
 }
 
 (python !== null ? describe : describe.skip)('doc export — headers and footers (WeasyPrint)', () => {
@@ -2574,8 +2581,8 @@ async function printedLines(
     doc: Y.Doc,
     options: { broken?: boolean } = {},
 ): Promise<{ renders: number; probes: number; pages: PrintedLines[] }> {
-    const args = ['-c', RENDER_LINES_SCRIPT, renderScript, ...(options.broken ? ['broken'] : [])];
-    return JSON.parse(await pythonOutput(args, await exported('pdf-html', doc)));
+    const args = [renderScript, ...(options.broken ? ['broken'] : [])];
+    return JSON.parse(await pythonOutput(RENDER_LINES_SCRIPT, await exported('pdf-html', doc), args));
 }
 
 const px = (mm: number) => (mm / 25.4) * 96;

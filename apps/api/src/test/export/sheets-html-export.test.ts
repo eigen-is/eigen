@@ -2144,14 +2144,17 @@ describe('Sheets HTML export — the cell cap', () => {
         ]);
     }, 30_000);
 
+    // A row taller than half a page prints a page of its own, so 2,000 of them spend the cap, the 2,000 pages it holds,
+    // where rows of the default height would take 250,000 to spend it in cells.
     test('the PDF page fits the sheets the export keeps, not one it left out', () => {
         const tall: Sheet = {
             id: 'tall',
             name: 'Tall',
             order: 0,
+            defaultRowHeight: 10_000,
             celldata: [
                 { r: 0, c: 0, v: { v: 'top' } },
-                { r: MAX_EXPORT_CELLS - 1, c: 0, v: { v: 'bottom' } },
+                { r: 1999, c: 0, v: { v: 'bottom' } },
             ],
         };
         const wide: Sheet = {

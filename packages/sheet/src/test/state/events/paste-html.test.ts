@@ -6,7 +6,9 @@ import type { Cell } from '../../../engine/types';
 import type { Context } from '../../../state/context';
 import { handleCopy } from '../../../state/events/copy';
 import { handlePaste } from '../../../state/events/paste';
+import * as cellModule from '../../../state/modules/cell';
 import { consumePendingCopy } from '../../../state/modules/clipboard';
+import * as selectionModule from '../../../state/modules/selection';
 import {
     COPY_ACTION_TABLE_MARKER,
     copy,
@@ -684,36 +686,30 @@ describe('HTML-table paste — the copy of this tab', () => {
         expect(d[0][0]).toBeNull();
     });
 
-    // The check reads the copy's cell texts and not its styles, so it takes a fraction of the time the copy took. The
-    // test compares the two because wall-clock time swings with the machine's load. Landing 40,000 cells takes far
-    // longer than the check, so the paste goes over part of a merge, which stops it right after the check.
-    it('recognises a 4,000-row copy, or turns another table away, in a fraction of the time the copy took', () => {
-        const rows = 4000;
-        const data = Array.from({ length: rows + 1 }, (_, r) =>
-            Array.from({ length: 10 }, (_, c): Cell => ({ v: r * c, m: String(r * c), bg: '#ff0000' })),
-        );
-        const ctx = contextFactory({
-            currentSheetId: 'id_1',
-            sheets: [{ name: 'sheet', id: 'id_1', order: 0, data }],
-        }) as Context;
-        const range = rangeSel(0, rows - 1, 0, 9);
-        ctx.selections = range;
-        handleCopy(ctx);
-        const html = consumePendingCopy()?.html ?? '';
-        ctx.sheets[0].config = { merge: { [`${rows - 1}_0`]: { r: rows - 1, c: 0, rs: 2, cs: 1 } } };
+    // The check reads each copied cell's text once and styles none, which is why a paste of a large copy costs a
+    // fraction of what the copy took, and it turns a table of another shape away before it reads any text. The test
+    // counts the styles and the texts, not the time, which swings with the machine's load.
+    it('recognises its own copy without styling a cell, and turns another shape away before reading a text', () => {
+        const ctx = makeCtx(20, 20);
+        const styles = spyOn(cellModule, 'getStyleByCell');
+        const texts = spyOn(selectionModule, 'copiedCellText');
+        const html = copyCells(ctx, 10, 10);
+        const copied = { styles: styles.mock.calls.length, texts: texts.mock.calls.length };
 
-        // The fastest of three runs, so a busy moment doesn't fail the test.
-        function fastest(run: () => void): number {
-            const times = [0, 1, 2].map(() => {
-                const start = performance.now();
-                run();
-                return performance.now() - start;
-            });
-            return Math.min(...times);
-        }
-        const copyTime = fastest(() => rangeValueToClipboard(ctx, 'id_1', range));
-        for (const table of [html, markedTable([['1']])]) {
-            expect(fastest(() => pasteAt(ctx, table, 0, 0))).toBeLessThan(copyTime / 2);
-        }
+        styles.mockClear();
+        texts.mockClear();
+        pasteAt(ctx, html, 10, 10);
+        const own = { styles: styles.mock.calls.length, texts: texts.mock.calls.length };
+
+        texts.mockClear();
+        pasteAt(ctx, markedTable([['1']]), 0, 0);
+        const other = texts.mock.calls.length;
+        styles.mockRestore();
+        texts.mockRestore();
+
+        expect(copied).toEqual({ styles: 100, texts: 100 });
+        expect(own).toEqual({ styles: 0, texts: 100 });
+        expect(ctx.sheets[0].data?.[19][19]?.f).toBe('=100');
+        expect(other).toBe(0);
     });
 });
