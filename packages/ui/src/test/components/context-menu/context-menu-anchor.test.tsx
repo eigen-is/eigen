@@ -53,9 +53,12 @@ test('the menu draws the rows the host passed', async () => {
 // right-click inside the menu keeps the browser's own menu, as before.
 test('a key’s contextmenu inside the menu opens no browser menu over it, and a pointer’s stays the browser’s', async () => {
     const { cleanup } = await mountInTransformedHost();
-    const row = document.querySelector('[role="menuitem"]');
+    const row = document.querySelector<HTMLElement>('[role="menuitem"]');
     if (!row) throw new Error('no menu row');
-    const sent = [...KEY_SOURCES, ...POINTER_SOURCES].map((source) => {
+    // A key's contextmenu goes to the row with the focus, and a long press to the row under the finger.
+    const sent = [...KEY_SOURCES, ...POINTER_SOURCES, 'old-firefox-long-press' as const].map((source) => {
+        if (source === 'old-firefox-long-press') row.blur();
+        else row.focus();
         const event = contextMenuEvent(source);
         row.dispatchEvent(event);
         return [source, event.defaultPrevented];
@@ -68,6 +71,7 @@ test('a key’s contextmenu inside the menu opens no browser menu over it, and a
         ['right-click', false],
         ['ctrl-click', false],
         ['long-press', false],
+        ['old-firefox-long-press', false],
     ]);
 });
 

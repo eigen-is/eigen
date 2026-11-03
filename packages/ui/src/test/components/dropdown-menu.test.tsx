@@ -84,22 +84,44 @@ test('a toggle is checked when on, and a set some of a selection has draws a das
     ]);
 });
 
+const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+const pressEscape = () =>
+    act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+const pressOutside = (button: number) =>
+    act(async () => {
+        document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button }));
+    });
+const menuOpen = () => document.querySelector('[role="menu"]') !== null;
+
+// A ⋮ with one row, and the focus() calls its trigger gets, each read as its focusVisible option.
+async function renderKebab(menu: Partial<Parameters<typeof DropdownMenu>[0]> = {}, content = {}) {
+    ({ unmount } = await renderInDocument(
+        createElement(
+            DropdownMenu,
+            menu,
+            createElement(DropdownMenuTrigger, null, '⋮'),
+            createElement(DropdownMenuContent, content, createElement(DropdownMenuItem, null, 'Edit calendar')),
+        ),
+    ));
+    const trigger = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
+    if (!trigger) throw new Error('no trigger');
+    const calls = recordFocus(trigger);
+    const pointerOpen = () =>
+        act(async () => {
+            trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+        });
+    return { trigger, calls, pointerOpen, rings: () => calls.map((options) => options?.focusVisible ?? 'default') };
+}
+
 // Radix focuses a menu's trigger as the menu closes, and a browser then draws a ring after Escape, even when a mouse
 // opened the menu. A hover-revealed ⋮, such as a calendar's, would stay shown after the pointer left. A menu the
 // pointer opened gives the focus back without a ring, and one the keyboard opened as Radix does. A right-click
 // outside leaves the focus where it lands, as Radix does.
 test('a menu a pointer opened gives its trigger the focus back without a ring', async () => {
-    const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
-    const pressEscape = () =>
-        act(async () => {
-            document.activeElement?.dispatchEvent(
-                new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
-            );
-        });
-    const pressOutside = (button: number) =>
-        act(async () => {
-            document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button }));
-        });
     const restored = [];
     for (const [opener, closer] of [
         ['pointer', 'Escape'],
@@ -107,32 +129,22 @@ test('a menu a pointer opened gives its trigger the focus back without a ring', 
         ['pointer', 'right-click outside'],
         ['Enter', 'Escape'],
     ] as const) {
-        ({ unmount } = await renderInDocument(
-            createElement(
-                DropdownMenu,
-                null,
-                createElement(DropdownMenuTrigger, null, '⋮'),
-                createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, null, 'Edit calendar')),
-            ),
-        ));
-        const trigger = document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
-        if (!trigger) throw new Error('no trigger');
-        const calls = recordFocus(trigger);
-        await act(async () => {
-            if (opener === 'pointer') {
-                trigger.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
-            } else {
-                trigger.focus();
-                calls.length = 0;
+        const { trigger, calls, pointerOpen, rings } = await renderKebab();
+        if (opener === 'pointer') {
+            await pointerOpen();
+        } else {
+            trigger.focus();
+            calls.length = 0;
+            await act(async () => {
                 trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-            }
-        });
+            });
+        }
         await settle();
-        expect(document.querySelector('[role="menu"]')).not.toBeNull();
+        expect(menuOpen()).toBe(true);
         if (closer === 'Escape') await pressEscape();
         else await pressOutside(closer === 'click outside' ? 0 : 2);
         await settle();
-        restored.push([opener, closer, calls.map((options) => options?.focusVisible ?? 'default')]);
+        restored.push([opener, closer, rings()]);
         await unmount();
     }
     expect(restored).toEqual([
@@ -141,4 +153,84 @@ test('a menu a pointer opened gives its trigger the focus back without a ring', 
         ['pointer', 'right-click outside', []],
         ['Enter', 'Escape', ['default']],
     ]);
+});
+
+// A caller that prevents an outside press keeps the menu open, and Radix then ignores the press. So does the focus
+// once the menu closes: a menu the pointer opened still gives its trigger the focus back without a ring.
+test('an outside press the caller prevented leaves the focus to the menu’s own close', async () => {
+    const restored = [];
+    for (const [modal, button, handler] of [
+        [false, 0, 'onInteractOutside'],
+        [true, 2, 'onPointerDownOutside'],
+    ] as const) {
+        const { pointerOpen, rings } = await renderKebab(
+            { modal },
+            { [handler]: (event: Event) => event.preventDefault() },
+        );
+        await pointerOpen();
+        await settle();
+        await pressOutside(button);
+        await settle();
+        expect(menuOpen()).toBe(true);
+        await pressEscape();
+        await settle();
+        restored.push([handler, rings()]);
+        await unmount();
+    }
+    expect(restored).toEqual([
+        ['onInteractOutside', [false]],
+        ['onPointerDownOutside', [false]],
+    ]);
+});
+
+// What a press on the trigger noted lasts until the menu closes. A menu its owner opens, such as from a shortcut, had
+// no press, and gives the focus back as Radix does. A trigger drawn again while the menu was open, such as a list row
+// re-rendered, gets it from Radix too, where the trigger that was pressed is gone.
+test('a menu gives the focus back by what opened it this time, to the trigger on the page', async () => {
+    const { useState } = await import('react');
+    const owner = { setOpen: (_open: boolean) => {}, redraw: () => {} };
+    function Owned() {
+        const [open, setOpen] = useState(false);
+        const [version, setVersion] = useState(0);
+        owner.setOpen = setOpen;
+        owner.redraw = () => setVersion((v) => v + 1);
+        return createElement(
+            DropdownMenu,
+            { open, onOpenChange: setOpen },
+            createElement(DropdownMenuTrigger, { key: version }, '⋮'),
+            createElement(DropdownMenuContent, null, createElement(DropdownMenuItem, null, 'Edit calendar')),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Owned)));
+    const trigger = () => document.querySelector<HTMLElement>('[data-slot="dropdown-menu-trigger"]');
+    const first = trigger();
+    if (!first) throw new Error('no trigger');
+    const calls = recordFocus(first);
+    const rings = () => calls.map((options) => options?.focusVisible ?? 'default');
+
+    await act(async () => {
+        first.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await settle();
+    await pressEscape();
+    await settle();
+    expect(rings()).toEqual([false]);
+
+    await act(async () => owner.setOpen(true));
+    await settle();
+    expect(menuOpen()).toBe(true);
+    await pressEscape();
+    await settle();
+    expect(rings()).toEqual([false, 'default']);
+
+    await act(async () => {
+        first.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }));
+    });
+    await settle();
+    await act(async () => owner.redraw());
+    const second = trigger();
+    expect(second === first || !second).toBe(false);
+    await pressEscape();
+    await settle();
+    expect(document.activeElement).toBe(second);
 });

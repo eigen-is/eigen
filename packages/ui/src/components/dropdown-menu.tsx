@@ -69,9 +69,11 @@ const MenuPartsContext = createContext<MenuParts>(DropdownMenuPrimitive);
 // focus ring on it after Escape even when a mouse opened the menu, so a hover-revealed ⋮, such as a calendar's, would
 // stay shown after the pointer left. A menu a pointer opened focuses the trigger itself, without a ring. A menu the
 // keyboard opened leaves it to Radix. Radix focuses no trigger after a right-click outside, or after any press or
-// focus outside a menu that isn't modal, and neither does this.
-type TriggerFocus = { trigger: HTMLElement | null; byPointer: boolean; keepsFocusOutside: boolean; modal: boolean };
-const TriggerFocusContext = createContext<RefObject<TriggerFocus> | null>(null);
+// focus outside a menu that isn't modal, and neither does this. What the trigger's press noted lasts until the menu
+// closes, so a menu its owner opens without a press, or whose trigger was drawn again, leaves the focus to Radix.
+type TriggerFocus = { trigger: HTMLElement | null; byPointer: boolean; keepsFocusOutside: boolean };
+const NO_TRIGGER_FOCUS: TriggerFocus = { trigger: null, byPointer: false, keepsFocusOutside: false };
+const TriggerFocusContext = createContext<{ state: RefObject<TriggerFocus>; modal: boolean } | null>(null);
 
 const subTriggerClassName =
     "focus:bg-accent focus:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground flex cursor-default items-center gap-4 rounded-sm px-2 py-1.5 text-sm whitespace-nowrap outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[inset]:pl-10 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4";
@@ -124,13 +126,9 @@ function useMobileMenu(): { value: MobileMenuState; reset: () => void } {
 function DropdownMenu({ ...props }: React.ComponentProps<typeof DropdownMenuPrimitive.Root>) {
     const isMobile = useIsMobile();
     const { value, reset } = useMobileMenu();
-    const triggerFocus = useRef<TriggerFocus>({
-        trigger: null,
-        byPointer: false,
-        keepsFocusOutside: false,
-        modal: true,
-    });
-    triggerFocus.current.modal = props.modal ?? true;
+    const triggerFocusState = useRef<TriggerFocus>({ ...NO_TRIGGER_FOCUS });
+    const modal = props.modal ?? true;
+    const triggerFocus = useMemo(() => ({ state: triggerFocusState, modal }), [modal]);
 
     // A controlled menu can close when its owner sets open to false, which fires no onOpenChange. A context
     // menu whose plain button rows call close() does that. Reset, so the next open starts at the root page.
@@ -187,7 +185,7 @@ function DropdownMenuTrigger({
 }: React.ComponentProps<typeof DropdownMenuPrimitive.Trigger>) {
     const triggerFocus = useContext(TriggerFocusContext);
     const noteOpener = (trigger: HTMLElement, byPointer: boolean) => {
-        if (triggerFocus) Object.assign(triggerFocus.current, { trigger, byPointer });
+        if (triggerFocus) Object.assign(triggerFocus.state.current, { trigger, byPointer });
     };
     return (
         <DropdownMenuPrimitive.Trigger
@@ -221,21 +219,22 @@ function DropdownMenuContent({
             <DropdownMenuPrimitive.Content
                 data-slot="dropdown-menu-content"
                 sideOffset={sideOffset}
-                // The same outside presses after which Radix focuses no trigger.
+                // The same outside presses after which Radix focuses no trigger. Radix skips a press the caller
+                // prevented, such as one that keeps the menu open, and so does this.
                 onInteractOutside={(event) => {
                     onInteractOutside?.(event);
-                    if (!triggerFocus) return;
+                    if (event.defaultPrevented || !triggerFocus) return;
                     const press = event.detail.originalEvent;
                     const rightClick =
                         press instanceof MouseEvent && (press.button === 2 || (press.button === 0 && press.ctrlKey));
-                    if (!triggerFocus.current.modal || rightClick) triggerFocus.current.keepsFocusOutside = true;
+                    if (!triggerFocus.modal || rightClick) triggerFocus.state.current.keepsFocusOutside = true;
                 }}
                 onCloseAutoFocus={(event) => {
                     onCloseAutoFocus?.(event);
                     if (!triggerFocus) return;
-                    const { trigger, byPointer, keepsFocusOutside } = triggerFocus.current;
-                    triggerFocus.current.keepsFocusOutside = false;
-                    if (event.defaultPrevented || !trigger || !byPointer || keepsFocusOutside) return;
+                    const { trigger, byPointer, keepsFocusOutside } = triggerFocus.state.current;
+                    triggerFocus.state.current = { ...NO_TRIGGER_FOCUS };
+                    if (event.defaultPrevented || !trigger?.isConnected || !byPointer || keepsFocusOutside) return;
                     event.preventDefault();
                     trigger.focus({ focusVisible: false });
                 }}

@@ -52,9 +52,11 @@ export function useContextMenu<T>() {
 // event reports no button, which reads as 0, and a right-click reports 2. Chrome and Firefox agree on that, also where
 // the event is a plain MouseEvent, as in Firefox before 129. pointerType alone can't tell, because Chrome gives a key's
 // event the mouse's. A Mac's Ctrl+click and a long press report 0 too, so the Ctrl key and a touch or pen pointerType
-// keep those the pointer's. Safari sends a key's contextmenu as a right-click on the element under the focus, so it
-// reads as a pointer's and opens the menu of what it lands on.
+// keep those the pointer's. A long press sent as a plain MouseEvent, as in Firefox for Android before 129, has neither,
+// so a key's event must also land on the element with the focus, where a press lands on the row under the finger.
+// Safari sends a key's contextmenu as a right-click on the element under the focus, so it reads as a pointer's and
+// opens the menu of what it lands on.
 export function isKeyboardContextMenu(event: MouseEvent): boolean {
-    if (event.button !== 0 || event.ctrlKey) return false;
+    if (event.button !== 0 || event.ctrlKey || event.target !== document.activeElement) return false;
     return !(event instanceof PointerEvent) || event.pointerType === '' || event.pointerType === 'mouse';
 }

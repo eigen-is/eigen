@@ -72,6 +72,7 @@ async function mountList(
                     'div',
                     {
                         'data-row': '',
+                        tabIndex: -1,
                         onContextMenu: (e: ReactMouseEvent) => {
                             e.preventDefault();
                             e.stopPropagation();
@@ -97,11 +98,13 @@ async function mountList(
         });
         return event;
     };
-    // A pointer presses down before its contextmenu, a key doesn't.
+    // A pointer presses down before its contextmenu, a key doesn't. A key's goes to the element with the focus.
     const contextmenu = async (target: Element, source: ContextMenuSource) => {
         const event = contextMenuEvent(source);
+        const byKey = KEY_SOURCES.some((key) => key === source);
         await act(async () => {
-            if (event instanceof PointerEvent && !KEY_SOURCES.some((key) => key === source)) {
+            if (byKey && target instanceof HTMLElement) target.focus();
+            if (event instanceof PointerEvent && !byKey) {
                 const { pointerType, button } = event;
                 target.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType, button }));
             }
@@ -293,6 +296,16 @@ describe('useKeyboardListNavigation menu key', () => {
             expect(calls).toEqual(['menu:b@1', 'menu:b@1']);
             await unmount();
         }
+    });
+
+    // Firefox for Android before 129 sends a long press as a plain MouseEvent with button 0, as it sends a key's. The
+    // press lands on the row under the finger while the list holds the focus, so it stays the row's.
+    test('a long press sent as a plain MouseEvent on a row without the focus stays the row’s', async () => {
+        const { calls, list, row, contextmenu, unmount } = await mountList(1);
+        if (list instanceof HTMLElement) list.focus();
+        await contextmenu(row, 'old-firefox-long-press');
+        expect(calls).toEqual(['row']);
+        await unmount();
     });
 
     test('with no row to act on, a key’s contextmenu reaches the background', async () => {

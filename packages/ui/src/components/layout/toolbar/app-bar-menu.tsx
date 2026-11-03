@@ -56,7 +56,8 @@ export function AppBarMenu({ label, value, contentClassName, onCloseAutoFocus, c
                 className={contentClassName}
                 // A row that opened a dialog, such as File's Rename, is gone once the menu closes. The bar focuses no
                 // trigger after the focus moved into that dialog, and an editor's handler leaves the focus there, so
-                // the dialog would give it back to nothing. It gives it back to this menu's trigger instead.
+                // the dialog would give it back to nothing. It gives it back to this menu's trigger instead, with a
+                // ring only where the row it opened from had one, so a menu a mouse opened leaves File unlit.
                 onCloseAutoFocus={(event) => {
                     if (triggerRef.current) handFocusReturnTo(triggerRef.current);
                     onCloseAutoFocus?.(event);

@@ -349,3 +349,39 @@ test('Escape from a dialog that a bar menu’s row opened gives the focus back t
         await unmount();
     }
 });
+
+// A browser draws a focus ring on a row the keyboard reached and none on one the mouse moved onto, and the dialog the
+// row opened gives the focus back to File the same way. A ring on File after a mouse opened it would light it up.
+test('the dialog gives File the focus back with a ring only when the keyboard opened the menu', async () => {
+    const { recordFocus } = await import('../../../focus-calls');
+    const restored = [];
+    for (const opener of ['press', 'Enter'] as const) {
+        await renderFileMenu();
+        const file = trigger('File');
+        if (!(file instanceof HTMLElement)) throw new Error('no File trigger');
+        if (opener === 'press') {
+            await press('File');
+        } else {
+            file.focus();
+            await key('Enter');
+        }
+        await settle();
+        const row = document.activeElement;
+        if (opener === 'press' && row instanceof HTMLElement) recordFocus(row, { withoutRing: true });
+        await clickRow('Rename');
+        await settle();
+        const calls = recordFocus(file);
+        await key('Escape');
+        await settle();
+        restored.push([
+            opener,
+            document.activeElement === file,
+            calls.map((options) => options?.focusVisible ?? 'default'),
+        ]);
+        await unmount();
+    }
+    expect(restored).toEqual([
+        ['press', true, [false]],
+        ['Enter', true, ['default']],
+    ]);
+});

@@ -1929,7 +1929,8 @@ describe('Sheets HTML export — the cell cap', () => {
     const halfPageRow = MAX_PDF_PAGE_PX / 2 + 1;
     // The pages MAX_EXPORT_CELLS holds in a PDF, read off a sheet whose every row prints a page: it keeps that many
     // rows. A test that spends the cap in pages builds its sheet on this, so it still spends the cap when the cap or a
-    // page's charge changes.
+    // page's charge changes. A cap that kept no row or every row would make such a test agree with itself, so the
+    // count is checked here.
     const pdfCapPages = () => {
         const sheet: Sheet = {
             id: 'pages',
@@ -1941,7 +1942,10 @@ describe('Sheets HTML export — the cell cap', () => {
                 { r: REFERENCE_ROW_COUNT - 1, c: 0, v: { v: 'last' } },
             ],
         };
-        return trs(renderSheetsHtml([sheet], NO_MEDIA, 'pdf', NO_PIXELS).html);
+        const pages = trs(renderSheetsHtml([sheet], NO_MEDIA, 'pdf', NO_PIXELS).html);
+        expect(pages).toBeGreaterThan(0);
+        expect(pages).toBeLessThan(REFERENCE_ROW_COUNT);
+        return pages;
     };
 
     test('a wide sheet keeps every row and the columns from the left that fit with them', () => {

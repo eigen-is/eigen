@@ -71,18 +71,19 @@ export function useFocusReturn(
 // opened would make its focus trap take it back and select its text. The row that opened that dialog is gone, so the
 // dialog gives the focus back to `target` when it closes. Pass ring false for a target that had no focus ring as it
 // left, and none is drawn.
-export function returnFocusTo(target: HTMLElement, ring = true) {
+export function returnFocusTo(target: HTMLElement, ring?: boolean) {
     if (focusedElement()) handFocusReturnTo(target, ring);
     // A list taller than the window keeps its scroll, as Radix's own focus does.
-    else target.focus({ preventScroll: true, ...(ring ? {} : { focusVisible: false }) });
+    else target.focus({ preventScroll: true, ...(ring === false ? { focusVisible: false } : {}) });
 }
 
 // Makes `target` where the dialog that holds the focus gives it back, if what had the focus as that dialog opened is
-// gone, such as the menu row that opened it. The focus itself stays where it is.
-export function handFocusReturnTo(target: HTMLElement, ring = true) {
+// gone, such as the menu row that opened it. The focus itself stays where it is. Without `ring` the dialog keeps the
+// ring of the row, which a browser drew for a key and not for a mouse, so the menu's opener decides.
+export function handFocusReturnTo(target: HTMLElement, ring?: boolean) {
     const focused = focusedElement();
     const holder = focused && [...openDialogs].find((open) => open.content.current?.contains(focused));
     if (!holder || holder.target?.isConnected) return;
     holder.target = target;
-    holder.ring = ring;
+    holder.ring = ring ?? holder.ring;
 }
