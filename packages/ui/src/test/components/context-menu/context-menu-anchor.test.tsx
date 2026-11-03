@@ -46,3 +46,40 @@ test('the menu draws the rows the host passed', async () => {
     expect(labels).toEqual(['Quick preview']);
     await cleanup();
 });
+
+test('Escape from the menu gives the focus back to the list it opened from', async () => {
+    const { useContextMenu } = await import('../../../components/context-menu/use-context-menu');
+    let openMenu = () => {};
+    function Listing() {
+        const menu = useContextMenu<string>();
+        openMenu = () => menu.openAt('notes.txt', 0, 0);
+        return createElement(
+            'div',
+            null,
+            createElement('div', { tabIndex: 0, 'data-list': '' }, 'notes.txt'),
+            createElement(ContextMenuAnchor, {
+                contextMenu: menu,
+                children: createElement(DropdownMenuItem, { children: 'Rename' }),
+            }),
+        );
+    }
+    const container = document.createElement('div');
+    document.body.append(container);
+    const root = createRoot(container);
+    await act(async () => root.render(createElement(Listing)));
+    document.querySelector<HTMLElement>('[data-list]')?.focus();
+    await act(async () => openMenu());
+    const settle = () => act(async () => new Promise((resolve) => setTimeout(resolve, 10)));
+    await settle();
+    expect(document.activeElement?.closest('[role="menu"]')).not.toBeNull();
+    await act(async () => {
+        document.activeElement?.dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+    await settle();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
+    await act(async () => root.unmount());
+    container.remove();
+});

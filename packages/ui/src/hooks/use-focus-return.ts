@@ -1,7 +1,8 @@
 // Gives the focus back when a Radix dialog closes, such as a DialogContent or the file preview. Radix gives the focus
 // back only to a DialogTrigger. A dialog opened from a menu or by a key would leave it on the page body, and a list's
 // arrow keys would then do nothing until a click. The dialog calls this hook as it opens and passes what it returns as
-// its onCloseAutoFocus.
+// its onCloseAutoFocus. A closing context menu calls returnFocusTo, which hands its list to a dialog one of its rows
+// opened.
 
 import type { RefObject } from 'react';
 import { useLayoutEffect, useState } from 'react';
@@ -27,9 +28,10 @@ export function useFocusReturn(
     // Read as the dialog renders, before a field's autoFocus or Radix moves the focus into it.
     const [entry] = useState<FocusReturn>(() => ({ content, target: focusedElement() }));
 
-    // A menu row that opened the dialog is gone a moment later, and the menu gives the focus back to the list it came
-    // from as it closes. The first element outside every open dialog that takes the focus then becomes the target. A
-    // target still on the page stays, and a field in a dialog opened over this one never becomes it.
+    // A menu row that opened the dialog is gone a moment later. A context menu hands its list over through
+    // returnFocusTo, but a menu with its own Radix trigger focuses that trigger as it closes. The first element outside
+    // every open dialog that takes the focus then becomes the target. A target still on the page stays, and a field in
+    // a dialog opened over this one never becomes it.
     useLayoutEffect(() => {
         const replaceLostTarget = (event: FocusEvent) => {
             const focused = event.target;
@@ -49,17 +51,22 @@ export function useFocusReturn(
         onCloseAutoFocus?.(event);
         const { target } = entry;
         if (event.defaultPrevented || !target?.isConnected) return;
-        // Pulling the focus out of a dialog that just opened makes its focus trap take it back and select its text.
-        // So whatever took the focus as this dialog closed keeps it, such as a dialog that a palette row opened.
-        // The row that opened that dialog is gone, so that dialog gives the focus back to this one's target instead.
-        const focused = focusedElement();
-        if (focused) {
-            const holder = [...openDialogs].find((open) => open.content.current?.contains(focused));
-            if (holder && !holder.target?.isConnected) holder.target = target;
-            return;
-        }
         event.preventDefault();
-        // A list taller than the window keeps its scroll, as Radix's own focus does.
-        target.focus({ preventScroll: true });
+        returnFocusTo(target);
     };
+}
+
+// Gives the focus back to `target` as a dialog or a menu closes. Whatever took the focus meanwhile keeps it, such as a
+// dialog that a menu or palette row opened, or a field the row focused. Pulling the focus out of a dialog that just
+// opened would make its focus trap take it back and select its text. The row that opened that dialog is gone, so the
+// dialog gives the focus back to `target` when it closes.
+export function returnFocusTo(target: HTMLElement) {
+    const focused = focusedElement();
+    if (focused) {
+        const holder = [...openDialogs].find((open) => open.content.current?.contains(focused));
+        if (holder && !holder.target?.isConnected) holder.target = target;
+        return;
+    }
+    // A list taller than the window keeps its scroll, as Radix's own focus does.
+    target.focus({ preventScroll: true });
 }
