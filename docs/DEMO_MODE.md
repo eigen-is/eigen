@@ -43,7 +43,7 @@ Creating or leaving an organization needs no demo guard. `allowUserToCreateOrgan
 Swapping database files under open handles is the `SQLITE_IOERR_VNODE` hazard, so the reset stops the API instead of running on an in-app scheduler. `scripts/demo-reset.sh` refuses unless `.env.production` holds the line `EIGEN_DEMO=1`, so it cannot wipe a real box. Then it:
 
 1. Takes the launcher's lock, `.eigen/lock`. While an `./eigen` command such as an update or a restore holds it, the reset refuses and the next hourly run retries.
-2. If `eigen-api` is running, warns every open tab with `restart-notice --in 300 --reason demo-reset`, the way the launcher's `api_cli` reaches it (`docker compose exec` into the container), and waits five minutes with the lock held. The banner reads "This demo resets in 4:59. Everything made here will be wiped." If the API is not running or refuses the notice, nobody is there to warn and the wait is skipped. A failure or signal before the stop takes the notice back with `restart-notice --clear`.
+2. Warns every open tab with `restart-notice --in 300 --reason demo-reset`, the way the launcher's `api_cli` reaches it (`docker compose exec` into the container), and waits five minutes with the lock held. The banner reads "This demo resets in 4:59. Everything made here will be wiped." If the API is not running or refuses the notice, nobody is there to warn and the wait is skipped. A failure or signal before the stop takes the notice back with `restart-notice --clear`.
 3. Stops `eigen-api`.
 4. Removes `data/server`, `data/home`, `data/team`, `data/org` and `data/guest`, an explicit list and never a wildcard, so `data/certs` and `data/dkim` survive.
 5. Runs the seeder in a throwaway container off the current image.
@@ -61,7 +61,7 @@ systemctl daemon-reload
 systemctl enable --now eigen-demo-reset.timer
 ```
 
-`./eigen update` rewrites the copies in `scripts/` but never installs them. The units assume `/opt/eigen`. The timer fires at minute 55 (`OnCalendar=*:55`), so the five-minute warning ends and the wipe lands on the hour. It is `Persistent=true`, so starting it after a pause runs one catch-up reset at once, which warns for five minutes first and then stops `eigen-api` for about a minute: wait until `systemctl show -p ActiveState eigen-demo-reset.service` says `inactive` before you check the site.
+`./eigen update` rewrites the copies in `scripts/` but never installs them, so after an update that changed a unit, copy it to `/etc/systemd/system/` again and run `systemctl daemon-reload`; the script itself runs from `scripts/` and is live at once. The units assume `/opt/eigen`. The timer fires at minute 55 (`OnCalendar=*:55`, `AccuracySec=1s`), so the five-minute warning ends and the wipe lands on the hour. From :55 until the reset is done the reset holds `.eigen/lock`, so an `./eigen` command run then is refused and is run again after. It is `Persistent=true`, so starting it after a pause runs one catch-up reset at once. That run warns only when the API is already up, which right after a reboot it often is not, and then stops `eigen-api` for about a minute: wait until `systemctl show -p ActiveState eigen-demo-reset.service` says `inactive` before you check the site.
 
 A server backup runs inside the API and holds no `.eigen/lock` ([BACKUP.md](BACKUP.md#the-whole-server-backup-runs-inside-the-api)), so a reset that starts while one runs stops the API under it, and the archive's record says it failed. A demo box has nothing worth backing up: the next reset wipes it anyway.
 

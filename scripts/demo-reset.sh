@@ -1,4 +1,7 @@
 #!/bin/bash
+# The hourly reset of a demo box: warns the open tabs five minutes ahead, then stops the API, wipes every home and
+# the server's databases, reseeds the demo world and starts the API again. The systemd timer runs it as root; it
+# refuses on any box whose .env.production does not say EIGEN_DEMO=1, and shares the launcher's lock.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -61,8 +64,7 @@ trap 'exit 143' HUP INT TERM
 
 # Warn the open tabs five minutes ahead, with the lock held so no ./eigen command slips in. With no API running or one
 # that cannot take the notice, nobody is there to warn and the wait is skipped.
-if dc ps --status running --services 2>/dev/null | grep -qx eigen-api &&
-    api_cli restart-notice --in 300 --reason demo-reset >/dev/null 2>&1; then
+if api_cli restart-notice --in 300 --reason demo-reset >/dev/null 2>&1; then
     announced=1
     echo "[demo-reset] Told the open tabs; waiting 5 minutes before the reset..."
     # Waited on, so a signal's trap runs at once.
@@ -78,6 +80,8 @@ dc stop eigen-api
 
 # Explicit list — never a wildcard. data/certs (Caddy) and data/dkim (mail) must survive.
 echo "[demo-reset] Wiping per-home + server data..."
+# The marker goes first, so a wipe cut off halfway never lets finish start the API on a half-wiped root.
+rm -f data/server/.demo-seeded
 rm -rf data/server data/home data/team data/org data/guest
 
 # Reseed in a throwaway container off the current image (--rm --no-deps). Absolute path: the

@@ -4,7 +4,9 @@ Description=Run the Eigen demo reset every hour
 [Timer]
 # Five minutes before the hour: the script warns the open tabs, waits five minutes, and the wipe lands on the hour.
 OnCalendar=*:55
-# Catch up a run missed while the box was down (e.g. after a reboot). It warns for five minutes too.
+# systemd may fire up to a minute late by default; the wipe should land on the hour.
+AccuracySec=1s
+# Catch up a run missed while the box was down (e.g. after a reboot). It warns only if the API is already up.
 Persistent=true
 
 [Install]
