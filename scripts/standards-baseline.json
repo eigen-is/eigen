@@ -69,7 +69,6 @@
     "packages/ui/src/components/form.tsx": 2,
     "packages/ui/src/components/input-group.tsx": 1,
     "packages/ui/src/components/layout/app/column-layout.tsx": 1,
-    "packages/ui/src/components/layout/app/command-palette/command-palette.tsx": 2,
     "packages/ui/src/components/layout/pages/login-route.tsx": 1,
     "packages/ui/src/components/notes/note-card-dialog.tsx": 1,
     "packages/ui/src/components/notes/note-card.tsx": 1,

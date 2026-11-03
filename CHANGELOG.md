@@ -59,6 +59,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 ### Fixed
 
 - **Odd font names in Sheets** — a font name with a semicolon, a bracket, a quote, a backslash or a control character draws and exports as Inter, so a name like O'Neill falls back
+- **Function suggestions in Sheets** — the list of functions under a formula closes when you click another cell to finish the edit, instead of staying on screen
 - **Printing** — printing a document, an email or a contact waits for its fonts, and a few seconds at most for its pictures, so they show on the page
 - **Moving equations in Docs** — drag an equation to move it, as you drag an image. One that had a line to itself leaves no empty line behind
 - **Equation drafts in Docs** — what you type in the **Equation** panel stays when someone else types above the equation, instead of jumping back to the saved equation
@@ -67,6 +68,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Pictures and text boxes from Word files** — stay on the paper and line up by the size Word draws them at, in a resized drawing group too. Older Word drawings keep their theme-colored fills and outlines and their wrap side
 - **The Format menu in Docs** — **Format › Text** shows the shortcuts for **Bold**, **Italic** and **Underline**, and **Format › Align and indent** marks the current alignment, as the toolbar does
 - **Dialogs in Calendar** — Enter in an event's title saves it, **Edit event** stays open while it saves, a calendar's name can't be left blank, and **+** beside the sharing field in **Edit calendar** adds the person without saving and closing the dialog
+- **Filters in the sidebar** — **All docs**, **All stickies**, **All slides**, **All sheets** and **All vectors** stay selected in their own app when you click an item in the list
 - **Rename field in Drive** — the field reads **File name** or **Folder name**, not **Rename name**
 - **Cancel in Share** — Cancel stays after a save fails, so you can still close the dialog
 - **Email collaborators from Share in Drive** — the envelope in **Share** opens **Email collaborators** again, and the message starts with your signature even when the dialog opens before your settings have loaded
@@ -79,6 +81,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Share on another item** — going back or forward to another document with **Share** open shows that item's people, not the ones you were editing
 - **The keyboard in Share** — Tab reaches the lock under **General access** when you can change access, and a long list of people who have access, and Enter or Space works them. The same goes for an event's guest list, the people shown on a shared item in Drive and Chat, and **Location** in **Copy to**, **Save to Drive** and **New chat**
 - **Previews opened from a card in Stickies** — the preview takes the keyboard, so Space closes it and Tab stays in it, a long preview scrolls, and a click beside it closes only the preview
+- **Hover buttons from the keyboard** — Tab and screen readers reach the buttons a row shows under the pointer: the × on a person in **New chat**, a contact's ⋮, **Edit** and **Delete** on your chat messages, a server backup's buttons in Admin, the ⋮ on a Drive tile and the pencil on a label in the sidebar
 - **Keys on a row's menu button** — in Drive, Mail and contact lists, Enter and Space on a row's ⋮ button open its menu, and an arrow key after the menu closes moves on from that row
 - **Creating users and teams in Admin** — **Create** stays grayed out until the form is filled in: a name, a username and a password of at least 8 characters for a user, a name for a team
 - **Labels in Contacts** — **Save** stays off until the label has a name, and the delete confirmation opens on top of **Edit label**, so a cancel keeps your changes
@@ -109,6 +112,7 @@ All notable user-visible changes to Eigen are documented in this file. Format fo
 - **Dragging in Drive** — folders no longer light up as drop targets in views where you can't move items
 - **Duplicate on shared files** — Drive no longer offers **Duplicate** on a file someone shared with you, or on a selection with one in it, which then failed
 - **The command palette after a rename** — the palette shows an item's new name, and its **Watch** row shows when you already watch it
+- **Keys after a dialog** — closing a dialog, the command palette or a preview puts the focus back where you were, so the arrow keys work without a click
 - **Pictures in PowerPoint files** — a picture set to Fit or Fill downloads as one picture and comes back looking the same. An imported picture cropped evenly on two sides comes in as Fit or Fill, and the import message counts any other crop
 - **Pasting text boxes in Vector and Slides** — a pasted text box in Chinese, emoji or bold text fits its text, and one undo removes the paste instead of first shrinking the box
 - **Arrow labels in Vector and Slides** — a label's gap in its arrow fits the label after undo, redo and a late-loading font

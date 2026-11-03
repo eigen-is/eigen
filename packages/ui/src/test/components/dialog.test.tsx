@@ -76,3 +76,107 @@ test('a click outside a dialog stacked on another closes the top one alone', asy
     expect(newFolder.mock.calls).toEqual([[false]]);
     expect(picker).not.toHaveBeenCalled();
 });
+
+// No dialog has a Radix trigger, so Radix alone would leave the focus on the page body when one closes. A dialog gives
+// it back to what had it as the dialog opened, or, if that is gone, such as a row menu's item, to what took it next
+// outside the dialog: the list the closing menu handed it back to.
+const pressEscape = () =>
+    act(async () => {
+        (document.activeElement ?? document).dispatchEvent(
+            new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
+        );
+    });
+
+test('Escape from a dialog opened by a button gives the focus back to the button', async () => {
+    let open = () => {};
+    function Page() {
+        const [isOpen, setOpen] = useState(false);
+        open = () => setOpen(true);
+        return createElement(
+            'div',
+            null,
+            createElement('button', { 'data-opener': '' }, 'Rename'),
+            dialog('Rename', setOpen, createElement('input', { autoFocus: true }), isOpen),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Page)));
+    document.querySelector<HTMLElement>('[data-opener]')?.focus();
+    await act(async () => open());
+    await settle();
+    expect(document.activeElement?.tagName).toBe('INPUT');
+
+    await pressEscape();
+    await settle();
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    expect(document.activeElement?.hasAttribute('data-opener')).toBe(true);
+});
+
+test('a dialog opened from a row’s menu gives the focus back to the list', async () => {
+    const { ContextMenuAnchor, useContextMenu } = await import('../../components/context-menu');
+    const { DropdownMenuItem } = await import('../../components/dropdown-menu');
+    let openMenu = () => {};
+    function Listing() {
+        const [isOpen, setOpen] = useState(false);
+        const menu = useContextMenu<string>();
+        openMenu = () => menu.openAt('notes.txt', 0, 0);
+        return createElement(
+            'div',
+            null,
+            createElement('div', { tabIndex: 0, 'data-list': '' }, 'notes.txt'),
+            createElement(ContextMenuAnchor, {
+                contextMenu: menu,
+                children: createElement(DropdownMenuItem, { onClick: () => setOpen(true) }, 'Rename'),
+            }),
+            dialog('Rename', setOpen, createElement('input', { autoFocus: true }), isOpen),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Listing)));
+    document.querySelector<HTMLElement>('[data-list]')?.focus();
+    await act(async () => openMenu());
+    await settle();
+    const row = [...document.querySelectorAll<HTMLElement>('[role="menuitem"]')].find(
+        (r) => r.textContent === 'Rename',
+    );
+    await act(async () => row?.click());
+    await settle();
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement?.tagName).toBe('INPUT');
+
+    await pressEscape();
+    await settle();
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    expect(document.activeElement?.hasAttribute('data-list')).toBe(true);
+});
+
+// The sheet's handler prevents the default even when it leaves the focus alone, because a press outside put it where
+// the user wanted it.
+test('a caller that prevents the default on close decides where the focus goes', async () => {
+    let open = () => {};
+    const keepFocus = (event: Event) => event.preventDefault();
+    function Page() {
+        const [isOpen, setOpen] = useState(false);
+        open = () => setOpen(true);
+        return createElement(
+            'div',
+            null,
+            createElement('button', { 'data-opener': '' }, 'Insert'),
+            createElement(
+                Dialog,
+                { open: isOpen, onOpenChange: setOpen },
+                createElement(
+                    DialogContent,
+                    { 'aria-describedby': undefined, onCloseAutoFocus: keepFocus },
+                    createElement(DialogTitle, null, 'Insert'),
+                ),
+            ),
+        );
+    }
+    ({ unmount } = await renderInDocument(createElement(Page)));
+    document.querySelector<HTMLElement>('[data-opener]')?.focus();
+    await act(async () => open());
+    await settle();
+    await pressEscape();
+    await settle();
+    expect(document.querySelector('[data-slot="dialog-content"]')).toBeNull();
+    expect(document.activeElement?.hasAttribute('data-opener')).toBe(false);
+});

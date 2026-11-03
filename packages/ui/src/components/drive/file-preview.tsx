@@ -17,6 +17,7 @@ import { cn, IMAGE_CHECKERBOARD_STYLE } from '@workspace/ui/lib/utils';
 import { ArrowRight, ChevronLeft, ChevronRight, FolderDown, X } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { useRef, useState } from 'react';
+import { useFocusReturn } from '../../hooks/use-focus-return';
 import { EigenLoader } from '../braket/eigen-loader';
 import { useFileActionRunner } from '../file-actions/use-file-action-runner';
 import { EmlPreviewContent, MailEmlPreviewContent } from './eml-preview-content';
@@ -78,9 +79,7 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
     useHotkey('ArrowRight', goNext);
     useHotkey('ArrowDown', goNext);
 
-    // The preview has no Radix trigger to give the focus back to, so it returns it to whatever opened it, such as an
-    // attachment chip in a Stickies card.
-    const [opener] = useState(() => document.activeElement);
+    const returnFocus = useFocusReturn(contentRef);
 
     const openUrl = drive ? getDriveItemUrl(drive) : undefined;
     const downloadableSiblings = siblings.filter((sibling) => !!subjectInfo(sibling).downloadUrl);
@@ -99,16 +98,12 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         e.preventDefault();
                         contentRef.current?.focus();
                     }}
-                    onCloseAutoFocus={(e) => {
-                        e.preventDefault();
-                        if (opener instanceof HTMLElement) opener.focus();
-                    }}
+                    onCloseAutoFocus={returnFocus}
                     // React passes a click in a dialog the preview opened, such as Save to Drive, up to here too.
                     onClick={(e) => {
                         if (e.target === e.currentTarget) onClose();
                     }}
                 >
-                    {/* Header */}
                     <div
                         className="flex items-center justify-between px-4 py-2 bg-black/40 text-white shrink-0"
                         onClick={(e) => e.stopPropagation()}
@@ -131,7 +126,6 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         </div>
                     </div>
 
-                    {/* Content */}
                     <div
                         className="flex-1 flex items-center justify-center overflow-hidden min-h-0"
                         onClick={onClose}
@@ -200,7 +194,6 @@ export function FilePreview({ subject, siblings, onClose, onPrev, onNext }: File
                         </div>
                     </div>
 
-                    {/* Footer */}
                     <div
                         className="flex items-center justify-center gap-2 px-4 py-2 bg-black/40 shrink-0"
                         onClick={(e) => e.stopPropagation()}

@@ -81,6 +81,7 @@
     "./test/canvas-image": "./src/test/canvas-image.ts",
     "./test/drive-path": "./src/test/drive-path.ts",
     "./test/happy-dom": "./src/test/happy-dom.ts",
+    "./test/keyboard-reach": "./src/test/keyboard-reach.ts",
     "./test/menu-rows": "./src/test/menu-rows.ts",
     "./test/press-enter": "./src/test/press-enter.ts",
     "./test/render-in-document": "./src/test/render-in-document.ts"

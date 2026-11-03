@@ -3,7 +3,7 @@
 
 import { getDriveItemThumbnail } from '@workspace/lib/api';
 import type { DrivePath } from '@workspace/lib/types/drive';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import { MoreVertical } from 'lucide-react';
 import { useState } from 'react';
 import type { useLongPress } from '../../hooks/use-long-press';
@@ -103,7 +103,10 @@ export function DriveTile({
                         e.stopPropagation();
                         openContextMenuFromButton(e.currentTarget, item);
                     }}
-                    className="ml-auto flex-shrink-0 h-6 w-6 rounded hover:bg-accent flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 pointer-coarse:opacity-100"
+                    className={cn(
+                        HOVER_REVEAL_CLASS,
+                        'ml-auto flex-shrink-0 h-6 w-6 rounded hover:bg-accent flex items-center justify-center text-muted-foreground',
+                    )}
                 >
                     <MoreVertical className="h-4 w-4" />
                 </button>

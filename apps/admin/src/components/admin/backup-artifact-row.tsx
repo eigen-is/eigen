@@ -4,7 +4,7 @@
 import { formatDateTime } from '@workspace/lib/date';
 import type { BackupVerifyRecord } from '@workspace/lib/types/backup';
 import { Badge } from '@workspace/ui/components/badge';
-import { cn } from '@workspace/ui/lib/utils';
+import { cn, HOVER_REVEAL_CLASS } from '@workspace/ui/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import { Archive } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -74,7 +74,7 @@ export function BackupArtifactRow({
                     <div className="text-xs text-muted-foreground truncate">{detail}</div>
                 </div>
                 {badges}
-                <div className="flex items-center invisible group-hover:visible pointer-coarse:visible">{actions}</div>
+                <div className={cn(HOVER_REVEAL_CLASS, 'flex items-center')}>{actions}</div>
             </div>
             {children}
         </div>
