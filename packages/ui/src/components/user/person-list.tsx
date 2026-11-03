@@ -88,12 +88,10 @@ export function PersonList<T>({
         onDelete: onDelete
             ? (item) => onDelete(selection.selectedCount > 1 ? selection.selectedItems : [item])
             : undefined,
-        // The menu key opens the menu at the row, as its ⋮ does. The list is not virtualized, so every row is drawn,
-        // and the cursor's index is the row's place among them.
+        // The menu key opens the menu at the row, as its ⋮ does. The list draws every row, so the hook hands it over.
         onMenu: renderMenuItems
-            ? (item, index) => {
-                  const row = listRef.current?.querySelectorAll('.eigen-list-item')[index];
-                  if (row instanceof HTMLElement) openBelow(row, item);
+            ? (item, _index, row) => {
+                  if (row) openBelow(row, item);
               }
             : undefined,
     });

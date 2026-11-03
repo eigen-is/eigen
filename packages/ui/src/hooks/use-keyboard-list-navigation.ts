@@ -34,8 +34,9 @@ type UseKeyboardListNavigationOptions<T> = {
     itemSelector?: string;
     onDelete?: (item: T) => void;
     // Shift+F10 and the ContextMenu key call this for the row Enter would open. The list opens that row's menu at the
-    // row, as its ⋮ button would. A virtual list's call comes a frame after the row scrolled in, once it is drawn.
-    onMenu?: (item: T, index: number) => void;
+    // row, as its ⋮ button would. In a list that draws every row, row is that row's element. A virtual list finds its
+    // own, and its call comes a frame after the row scrolled in, once the row is drawn.
+    onMenu?: (item: T, index: number, row: HTMLElement | undefined) => void;
     shouldNotify?: (item: T, index: number) => boolean;
     selection?: UseListSelectionReturn<T>;
     columns?: number;
@@ -115,15 +116,22 @@ export function useKeyboardListNavigation<T>({
         };
     }, [containerRef, reclaimFocus]);
 
+    // A list that draws every row holds the cursor's row at the cursor's place among its rows. A virtual list draws only
+    // the rows near the window.
+    const drawnRow = (index: number) => {
+        if (scrollToIndex) return undefined;
+        const row = containerRef.current?.querySelectorAll(itemSelector)[index];
+        return row instanceof HTMLElement ? row : undefined;
+    };
+
     const scrollToRow = (index: number) => {
         if (scrollToIndex) {
             scrollToIndex(index);
             return;
         }
         const container = containerRef.current;
-        if (!container) return;
-        const item = container.querySelectorAll(itemSelector)[index];
-        if (!(item instanceof HTMLElement)) return;
+        const item = drawnRow(index);
+        if (!container || !item) return;
         const itemTop = item.offsetTop;
         const itemBottom = itemTop + item.offsetHeight;
         if (itemTop < container.scrollTop) {
@@ -162,8 +170,8 @@ export function useKeyboardListNavigation<T>({
         // A virtual list draws a row scrolled out of view only once its scroll lands, which the browser handles before
         // the next frame. The menu waits for that frame, so it opens at the row.
         const item = items[index];
-        if (scrollToIndex) requestAnimationFrame(() => onMenu(item, index));
-        else onMenu(item, index);
+        if (scrollToIndex) requestAnimationFrame(() => onMenu(item, index, undefined));
+        else onMenu(item, index, drawnRow(index));
         return true;
     };
 
