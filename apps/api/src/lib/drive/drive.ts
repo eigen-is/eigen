@@ -105,8 +105,8 @@ export type ContentWriteOptions = { user?: User; ifMatch?: string; event?: 'uplo
 export type ContentWriteResult = { path: DrivePath; etag: string };
 
 export class Drive {
-    // WebDAV locks live as long as this Drive, so they go away when the home closes.
-    public readonly lockManager = new LockManager();
+    // A live WebDAV lock holds the home, so only a close for another reason, such as a restore, drops it.
+    public readonly lockManager = new LockManager(() => this.home.hold());
 
     private readonly home: Home;
     private readonly owner: User;
