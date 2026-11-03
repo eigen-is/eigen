@@ -42,7 +42,7 @@ import { validateACLEntries, validateEmailAddress } from '@workspace/lib/validat
 import type { BunSQLiteDatabase } from 'drizzle-orm/bun-sqlite';
 import { assertCommentChatExists, ChatRoom, withCommentIndex } from '../chat';
 import { CollabDocument } from '../collab/collab-document';
-import { enforceMountQuota, getUploadMaxSize } from '../config/enforcement';
+import { enforceMaxUploadSize, enforceMountQuota } from '../config/enforcement';
 import { getServerSettings } from '../config/server-settings';
 import type { DatabaseConfig, ManagedDatabase, SchemaType } from '../core';
 import { ApiError, computeEtag } from '../core';
@@ -52,6 +52,7 @@ import { composeCollaboratorsEmail } from '../mailer/mail-composers';
 import { sendMail } from '../mailer/mailer';
 import type { DatabaseHold } from '../mount';
 import { createMountConfig, DEFAULT_MOUNT_ID, Mount } from '../mount';
+import type { CopyTree } from '../mount/copy';
 import { copySize } from '../mount/copy';
 import { validateName } from '../mount/names';
 import { extractText } from '../search/extract-text';
@@ -672,7 +673,7 @@ export class Drive {
     }
 
     // Copies a path into a folder of this mount, or with `to` into a folder of another mount or another
-    // owner's drive. The checks live here and not in a route, because WebDAV COPY calls Drive directly.
+    // owner's drive. The checks live here, below both the REST route and WebDAV COPY, so both meet them.
     public async copyPath(
         mountId: string,
         srcPathId: string,
@@ -688,25 +689,16 @@ export class Drive {
             if (!user || !(await to.drive.canWrite(to.mountId, destParentId, user))) {
                 throw new ApiError(403, 'No write permission on target folder');
             }
-        } else {
-            // RFC 4918 asks for a 409 for a folder copied into itself.
-            if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
-                throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
-            }
-            await this.getTargetFolder(mount, destParentId);
+            const tree = await this.listCopyWithinLimits(mount, srcPathId, to);
+            return copyPathAcross(this, tree, to, destParentId, name, user);
         }
 
-        // The copy writes exactly what this lists, so it never copies its own output. The per-file upload
-        // cap bounds a single file. A folder or a document only has to fit in the free space.
-        const tree = await mount.listCopy(srcPathId);
-        const limits = to ?? { ownerId: this.owner.id, mountId };
-        if (isContainerType(tree.path.type)) {
-            await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
-        } else if (tree.path.size > (await getUploadMaxSize(limits.ownerId, limits.mountId))) {
-            throw new ApiError(413, 'Source file too large');
+        // RFC 4918 asks for a 409 for a folder copied into itself.
+        if (await mount.isSelfOrDescendant(srcPathId, destParentId)) {
+            throw new ApiError(409, 'Cannot copy a folder into itself or its own descendant');
         }
-
-        if (to) return copyPathAcross(this, tree, to, destParentId, name, user);
+        await this.getTargetFolder(mount, destParentId);
+        const tree = await this.listCopyWithinLimits(mount, srcPathId, { ownerId: this.owner.id, mountId });
         const copied = await mount.copyPath(tree, destParentId, name, user);
         this.emit(
             isContainerType(copied.type) ? SSEventType.DRIVE_FOLDER_CREATED : SSEventType.DRIVE_FILE_CREATED,
@@ -725,6 +717,19 @@ export class Drive {
             this.broadcastHistoryUpdated(mountId, copied);
         }
         return copied;
+    }
+
+    // The copy writes exactly what this lists, so it never copies its own output. Every copy has to fit the
+    // target's free space, and a single file also the per-file upload cap, the same as an upload.
+    private async listCopyWithinLimits(
+        mount: Mount,
+        srcPathId: string,
+        limits: { ownerId: string; mountId: string },
+    ): Promise<CopyTree> {
+        const tree = await mount.listCopy(srcPathId);
+        if (!isContainerType(tree.path.type)) enforceMaxUploadSize(tree.path.size);
+        await enforceMountQuota(limits.ownerId, limits.mountId, copySize(tree));
+        return tree;
     }
 
     // Writes a document's open database to storage, so a copy of the container gets its latest state.
@@ -767,21 +772,34 @@ export class Drive {
     // The trash runs in the path's ACL chain. An ACL change that started first lands first, and the
     // trash then takes it away with the rest. One that comes after finds the path in the trash.
     public async deletePath(mountId: string, pathId: string, user?: User): Promise<void> {
+        return this.removePath(mountId, pathId, (mount, item) => deletePath(this, mount, item, user));
+    }
+
+    // Removes the top folder of a copy from another mount or drive that failed part way. createdIds holds
+    // every path that copy made.
+    public async deleteFailedCopy(
+        mountId: string,
+        pathId: string,
+        createdIds: ReadonlySet<string>,
+        user?: User,
+    ): Promise<void> {
+        return this.removePath(mountId, pathId, (mount, item) => deleteFailedCopy(this, mount, item, createdIds, user));
+    }
+
+    // A trash and the removal of a failed copy hold the item's ACL chain. New opens below it are refused
+    // until it is gone, and its WebDAV locks go with it.
+    private async removePath(
+        mountId: string,
+        pathId: string,
+        remove: (mount: Mount, item: DrivePath) => Promise<void>,
+    ): Promise<void> {
         const mount = this.getMount(mountId);
         return this.runInOrder(`acl:${mountId}:${pathId}`, async () => {
             const item = await mount.getActivePath(pathId);
             if (item.parentId === null) throw new ApiError(400, 'Cannot trash root folder');
-            await this.documents.whileTrashing(mount, item.id, () => deletePath(this, mount, item, user));
+            await this.documents.whileTrashing(mount, item.id, () => remove(mount, item));
             await this.releaseLocksUnder(mountId, item.id);
         });
-    }
-
-    // A copy from another mount or drive that failed part way leaves a folder that holds only what the copy
-    // wrote. It goes for good and not to the trash. New opens below it are refused until it is gone.
-    public async deleteFailedCopy(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const item = await mount.getActivePath(pathId);
-        await this.documents.whileTrashing(mount, item.id, () => deleteFailedCopy(this, mount, item));
     }
 
     // A path that leaves its place, such as by a trash or a WebDAV MOVE, takes its WebDAV locks with it,

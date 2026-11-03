@@ -255,8 +255,8 @@ describe('SharedDrive gating enumeration', () => {
         deletePath: { gate: 'denies', reason: 'write-gated', call: (sd) => sd.deletePath(mountId, fileId) },
         deleteFailedCopy: {
             gate: 'denies',
-            reason: 'write-gated: it deletes for good, without the trash',
-            call: (sd) => sd.deleteFailedCopy(mountId, folderId),
+            reason: 'write-gated: it can delete for good, without the trash',
+            call: (sd) => sd.deleteFailedCopy(mountId, folderId, new Set([folderId])),
         },
         releaseLocksUnder: {
             gate: 'denies',

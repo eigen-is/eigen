@@ -109,14 +109,31 @@ export async function permanentlyDelete(drive: Drive, mount: Mount, item: DriveP
 
 // A copy from another mount or drive that failed part way is deleted for good. In the trash its bytes
 // would still count against the owner's space, and a writer from another drive can't empty that trash.
-// Its open documents close first, and the tabs that saw it appear hear it went.
-export async function deleteFailedCopy(drive: Drive, mount: Mount, item: DrivePath): Promise<void> {
+// Someone can still have put their own path in the half-built folder, or shared a part of it. Then it
+// goes to the trash like any other path, so nothing of theirs is lost.
+export async function deleteFailedCopy(
+    drive: Drive,
+    mount: Mount,
+    item: DrivePath,
+    createdIds: ReadonlySet<string>,
+    user?: User,
+): Promise<void> {
+    if (!(await holdsOnlyCopy(mount, item, createdIds))) return deletePath(drive, mount, item, user);
     const members = await drive.getEffectiveMembers(mount.id, item.id);
     await closeOpenDocumentsUnder(drive, mount, item.id, { skipFinalSnapshot: true });
     await mount.deletePath(item.id);
     drive.emit(isContainerType(item.type) ? SSEventType.DRIVE_FOLDER_DELETED : SSEventType.DRIVE_FILE_DELETED, item, {
         members,
     });
+}
+
+// True when the copy made the path and everything below it, and nobody shared any of it since.
+async function holdsOnlyCopy(mount: Mount, item: DrivePath, createdIds: ReadonlySet<string>): Promise<boolean> {
+    if (!createdIds.has(item.id) || item.acl?.length) return false;
+    for (const child of await mount.listFolderAll(item.id)) {
+        if (!(await holdsOnlyCopy(mount, child, createdIds))) return false;
+    }
+    return true;
 }
 
 // Closes every collab document open at or below the path. The trash goes on either way, so a close

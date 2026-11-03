@@ -136,7 +136,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             expect(res.status).toBe(404);
         });
 
-        test('returns 413 when the source file exceeds the target quota', async () => {
+        test('returns 413 when the source file exceeds the per-file upload cap', async () => {
             const content = 'x'.repeat(2 * 1024 * 1024);
             const file = new File([content], 'big-source.txt', { type: 'text/plain' });
             const source = await driveUpload<DrivePath>(
@@ -158,6 +158,29 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             } finally {
                 await setMaxUploadSizeMB(ctx.alice.user.sessionToken, 35);
             }
+        });
+
+        // A file under the per-file cap that doesn't fit the free space is a full drive, as an upload is.
+        test('returns 507 when the source file is under the upload cap but past the free space', async () => {
+            const before = getServerSettings().quotas.defaultMountMaxSizeMB;
+            await updateServerSettings({ quotas: { defaultMountMaxSizeMB: 30 } });
+            let user: TestUser;
+            try {
+                user = await createTestUser(`copy-full-${crypto.randomUUID()}@test.eigen.is`, 'pw-12345678', 'F');
+                await getHome(user.id);
+            } finally {
+                await updateServerSettings({ quotas: { defaultMountMaxSizeMB: before } });
+            }
+            const rootId = (await driveGet(user.sessionToken, user.id, mountId, 'root')).id;
+            const twenty = new File([new Uint8Array(20 * 1024 * 1024)], 'twenty.bin');
+            const source = await driveUpload<DrivePath>(user.sessionToken, user.id, mountId, rootId, twenty);
+
+            const res = await copyFile(user.sessionToken, user.id, mountId, source.id, {
+                targetOwnerId: user.id,
+                targetMountId: mountId,
+                targetParentId: rootId,
+            });
+            expect(res.status).toBe(507);
         });
 
         describe('a folder whose child has lost its bytes', () => {
@@ -486,8 +509,69 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
             expect(await treeOf(owner.id, copied.id)).toEqual(['a-kept.bin', 'z-gone.bin']);
         });
 
-        // The cross-mount bridge walks a container's children itself, so its versions/ skip is
-        // separate from the same-mount copy's (pinned in mount-copy.test.ts).
+        // A failed copy deletes for good only what it wrote. A file the owner moved into the half-built
+        // folder meanwhile goes to the trash with the folder, so the owner can still restore it.
+        test("a failed copy into another owner's folder keeps a file the owner moved into it", async () => {
+            const { writer, owner, inbox } = await writerAndInbox();
+            const writerRoot = await driveGet(writer.sessionToken, writer.id, mountId, 'root');
+            const half = await drivePost<DrivePath>(
+                writer.sessionToken,
+                writer.id,
+                mountId,
+                `folder/${writerRoot.id}`,
+                {
+                    folderName: 'half',
+                },
+            );
+            await driveUpload(writer.sessionToken, writer.id, mountId, half.id, new File(['kept'], 'a-kept.bin'));
+            const gone = await driveUpload(
+                writer.sessionToken,
+                writer.id,
+                mountId,
+                half.id,
+                new File(['gone'], 'z-gone.bin'),
+            );
+            const { mount } = await (await getHome(writer.id)).drive.resolveFile(mountId, gone.id);
+            expect(await mount.storage.delete(await mount.getStorageKey(gone.id))).toBe(true);
+
+            const ownerRoot = await driveGet(owner.sessionToken, owner.id, mountId, 'root');
+            const mine = await driveUpload<DrivePath>(
+                owner.sessionToken,
+                owner.id,
+                mountId,
+                ownerRoot.id,
+                new File(['mine'], 'mine.txt'),
+            );
+            const ownerUser = await getUserById(owner.id);
+            if (!ownerUser) throw new Error('the owner has no user row');
+            const ownerDrive = (await getHome(owner.id)).drive;
+            const createFileFromData = ownerDrive.createFileFromData.bind(ownerDrive);
+            const moveIn = spyOn(ownerDrive, 'createFileFromData').mockImplementationOnce(async (...args) => {
+                const created = await createFileFromData(...args);
+                if (!created.parentId) throw new Error('the copied file has no folder');
+                await ownerDrive.movePath(mountId, mine.id, created.parentId, ownerUser);
+                return created;
+            });
+            let res: Response;
+            try {
+                res = await copyFile(writer.sessionToken, writer.id, mountId, half.id, {
+                    targetOwnerId: owner.id,
+                    targetMountId: mountId,
+                    targetParentId: inbox.id,
+                });
+            } finally {
+                moveIn.mockRestore();
+            }
+
+            expect(res.status).toBe(410);
+            const trashed = await ownerDrive.listTrash(mountId);
+            expect(trashed.map((path) => path.name)).toEqual(['half']);
+            await ownerDrive.restorePath(mountId, trashed[0].id, ownerUser);
+            expect(await treeOf(owner.id, inbox.id)).toEqual(['half', 'half/a-kept.bin', 'half/mine.txt']);
+        });
+
+        // A copy to another drive writes the same listing as a copy in one mount, so it leaves versions/
+        // behind too. mount-copy.test.ts pins the copy in one mount.
         test('copying a container across drives starts the copy without the source versions/', async () => {
             const token = ctx.alice.user.sessionToken;
             const ownerId = ctx.alice.user.id;
@@ -528,7 +612,7 @@ describe.skipIf(isWindows)('Drive — /copy and /import-from-drive', () => {
                 callerRoot.id,
                 new File(['mine'], 'mine.txt', { type: 'text/plain' }),
             );
-            const readLimit = spyOn(enforcement, 'getUploadMaxSize');
+            const readLimit = spyOn(enforcement, 'enforceMountQuota');
             try {
                 const res = await copyFile(caller.sessionToken, caller.id, mountId, source.id, {
                     targetOwnerId: owner.id,

@@ -122,7 +122,7 @@ Sheets scrolls and looks things up faster, copies and pastes validation rules an
 - **Copying large folders in Drive** — copying a folder or document larger than the upload size limit works, as long as it fits in the free space
 - **Copying items with the same name** — copying any number of items with the same name into one folder lands every one of them at once, each under its own name
 - **Several screenshots in one message** — a message with any number of pasted screenshots of the same name posts with all of them, each under its own name, in Chat and in the comments of Docs, Sheets, Slides, Stickies and Vector
-- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target or in its Trash. When only some items copy, the message says why the others failed
+- **A copy that fails in Drive** — a folder or document copy that fails part way leaves no half-copied folder in the target or in its Trash. If someone added their own files to that folder meanwhile, it goes to the Trash, so they can be restored. When only some items copy, the message says why the others failed
 - **A copy that never ends in Drive** — a folder copy takes only what the folder held when it began. Moving the target into the folder meanwhile, or two copies between drives in opposite directions, no longer copy on until the drive is full
 - **Copying over WebDAV** — a WebDAV copy meets the drive's free space and the upload size limit, as a copy in Drive does, and writes nothing past them
 - **Read-only views in Drive** — the **Share** submenu stays in Watched and in folders shared for viewing only, with **Copy link** and **Mail to…**

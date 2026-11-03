@@ -21,7 +21,7 @@ export function copyPathAcross(
     to: CopyTarget,
     destParentId: string,
     name: string,
-    user?: User,
+    user: User,
 ): Promise<DrivePath> {
     return writeCopy(tree, destParentId, name, {
         createFolder: (parentId, folderName, type) =>
@@ -31,8 +31,6 @@ export function copyPathAcross(
             if (!file) throw storageGone();
             return to.drive.createFileFromData(to.mountId, parentId, fileName, src.mimeType, file, user);
         },
-        // Deleted for good and not trashed: in the trash its bytes would still count against the target's
-        // space, and a writer from another drive can't empty that trash before a retry.
-        discard: (pathId) => to.drive.deleteFailedCopy(to.mountId, pathId),
+        discard: (pathId, createdIds) => to.drive.deleteFailedCopy(to.mountId, pathId, createdIds, user),
     });
 }

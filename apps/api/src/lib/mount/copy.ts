@@ -22,8 +22,8 @@ type CopyWriter = {
     copyFile: (parentId: string, name: string, src: DrivePath) => Promise<DrivePath>;
     // Runs once everything inside a copied folder or document has landed.
     folderCopied?: (copy: DrivePath, src: DrivePath) => void;
-    // Removes the top folder of a copy that failed part way.
-    discard: (pathId: string) => Promise<void>;
+    // Removes the top folder of a copy that failed part way. createdIds holds every path the copy made.
+    discard: (pathId: string, createdIds: ReadonlySet<string>) => Promise<void>;
 };
 
 // A copied Eigen document keeps its type but leaves its version history behind, so its versions/ is
@@ -54,15 +54,15 @@ export async function writeCopy(
     writer: CopyWriter,
 ): Promise<DrivePath> {
     // The walk creates the top folder before anything else, so it is the first one here.
-    const createdFolderIds: string[] = [];
+    const createdIds = new Set<string>();
     try {
-        return await writeTree(tree, destParentId, name, writer, createdFolderIds);
+        return await writeTree(tree, destParentId, name, writer, createdIds);
     } catch (e) {
         // A copy that fails part way removes its folder, so each retry does not leave another half-built
-        // one. The source is untouched and the folder holds only this copy, so there is nothing to keep.
-        const topId = createdFolderIds[0];
+        // one. The source is untouched, so nothing the copy wrote needs keeping.
+        const [topId] = createdIds;
         if (topId) {
-            await writer.discard(topId).catch((cleanupErr: unknown) => {
+            await writer.discard(topId, createdIds).catch((cleanupErr: unknown) => {
                 console.warn(`[copy] Could not remove the failed copy ${topId}:`, cleanupErr);
             });
         }
@@ -95,9 +95,36 @@ export async function copyPath(
             return mount.getActivePath(newId);
         },
         copyFile: async (parentId, fileName, src) => {
-            const copy = await copyFile(mount, src.id, parentId, fileName);
-            recordCopied(copy.id, src);
-            return copy;
+            // readFile reads the freshest copy, such as the staged bytes of an upload the bucket has not
+            // acknowledged yet. For a document's data.db, the flush of its container put the latest edits there.
+            const tempId = crypto.randomUUID();
+            try {
+                // The read holds the tree lock shared. On `local` a rename of a folder above it would otherwise
+                // make the file read as gone.
+                const { size, hash } = await mount.withTreeShared(async () => {
+                    const srcFile = await mount.readFile(src.id);
+                    if (!srcFile) throw storageGone();
+                    return writeTempWithHash(mount.getTempPath(tempId), srcFile);
+                });
+                const newId = await mount.createFileFromTemp(parentId, fileName, src.mimeType, size, hash, tempId);
+                // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
+                // The rest of details stays behind: originalName names the source's own downloads and
+                // webdavProps are its client's dead properties.
+                const details = {
+                    ...(src.details?.width !== undefined && { width: src.details.width }),
+                    ...(src.details?.height !== undefined && { height: src.details.height }),
+                    ...(src.details?.duration !== undefined && { duration: src.details.duration }),
+                };
+                const hasDetails = Object.keys(details).length > 0;
+                const thumbnail = src.thumbnail ? await copyThumbnail(mount.thumbsDir, src.thumbnail, newId) : null;
+                if (thumbnail || hasDetails) {
+                    await mount.updatePath(newId, { ...(thumbnail && { thumbnail }), ...(hasDetails && { details }) });
+                }
+                recordCopied(newId, src);
+                return await mount.getActivePath(newId);
+            } finally {
+                await mount.cleanupTemp(tempId);
+            }
         },
         // The data.db arrives as plain bytes, so no sync tells search about the new document. It is
         // marked for the reindexer here instead.
@@ -118,49 +145,19 @@ async function writeTree(
     parentId: string,
     name: string,
     writer: CopyWriter,
-    createdFolderIds: string[],
+    createdIds: Set<string>,
 ): Promise<DrivePath> {
     const src = tree.path;
-    if (!isContainerType(src.type)) return writer.copyFile(parentId, name, src);
+    if (!isContainerType(src.type)) {
+        const copy = await writer.copyFile(parentId, name, src);
+        createdIds.add(copy.id);
+        return copy;
+    }
     const copy = await writer.createFolder(parentId, name, src.type, src);
-    createdFolderIds.push(copy.id);
+    createdIds.add(copy.id);
     for (const child of tree.children) {
-        await writeTree(child, copy.id, child.path.name, writer, createdFolderIds);
+        await writeTree(child, copy.id, child.path.name, writer, createdIds);
     }
     writer.folderCopied?.(copy, src);
     return copy;
-}
-
-async function copyFile(mount: Mount, srcPathId: string, destParentId: string, name: string): Promise<DrivePath> {
-    // The row is read again, as the listing can be a while ago. A thumbnail made since then comes along.
-    const src = await mount.getActivePath(srcPathId);
-    // readFile reads the freshest copy, such as the staged bytes of an upload the bucket has not
-    // acknowledged yet. For a document's data.db, the flush of its container put the latest edits there.
-    const tempId = crypto.randomUUID();
-    try {
-        // The read holds the tree lock shared. On `local` a rename of a folder above it would otherwise
-        // make the file read as gone.
-        const { size, hash } = await mount.withTreeShared(async () => {
-            const srcFile = await mount.readFile(srcPathId);
-            if (!srcFile) throw storageGone();
-            return writeTempWithHash(mount.getTempPath(tempId), srcFile);
-        });
-        const newId = await mount.createFileFromTemp(destParentId, name, src.mimeType, size, hash, tempId);
-        // The media facts the upload path derives from the bytes travel with them, thumbnail or not.
-        // The rest of details stays behind: originalName names the source's own downloads and
-        // webdavProps are its client's dead properties.
-        const details = {
-            ...(src.details?.width !== undefined && { width: src.details.width }),
-            ...(src.details?.height !== undefined && { height: src.details.height }),
-            ...(src.details?.duration !== undefined && { duration: src.details.duration }),
-        };
-        const hasDetails = Object.keys(details).length > 0;
-        const thumbnail = src.thumbnail ? await copyThumbnail(mount.thumbsDir, src.thumbnail, newId) : null;
-        if (thumbnail || hasDetails) {
-            await mount.updatePath(newId, { ...(thumbnail && { thumbnail }), ...(hasDetails && { details }) });
-        }
-        return await mount.getActivePath(newId);
-    } finally {
-        await mount.cleanupTemp(tempId);
-    }
 }

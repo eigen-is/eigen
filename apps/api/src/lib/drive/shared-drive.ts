@@ -308,10 +308,15 @@ export class SharedDrive {
         return this.drive.deletePath(mountId, pathId, this.user);
     }
 
-    // A failed copy goes for good and not to the trash. It needs write access, the same as a trash.
-    public async deleteFailedCopy(mountId: string, pathId: string): Promise<void> {
+    // Removing a failed copy needs write access, the same as a trash.
+    public async deleteFailedCopy(
+        mountId: string,
+        pathId: string,
+        createdIds: ReadonlySet<string>,
+        _user?: User,
+    ): Promise<void> {
         await this.requireWrite(mountId, pathId);
-        return this.drive.deleteFailedCopy(mountId, pathId);
+        return this.drive.deleteFailedCopy(mountId, pathId, createdIds, this.user);
     }
 
     public async restorePath(mountId: string, pathId: string, _user?: User): Promise<void> {

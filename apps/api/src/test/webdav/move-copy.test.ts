@@ -195,5 +195,12 @@ describe('WebDAV MOVE/COPY', () => {
             const second = await webdavRequest(user.email, 'PROPFIND', `${href}/big-2`, { headers: { Depth: '0' } });
             expect(second.status).toBe(404);
         });
+
+        test('a file past the free space but under the per-file limit is a 507, as a PUT is', async () => {
+            // 18 MB is free, and the 20 MB file is under the 35 MB per-file limit.
+            expect((await copyTo('big/a.bin', 'a-copy.bin')).status).toBe(507);
+            expect(await used()).toBe(82 * MB);
+            expect((await webdavRequest(user.email, 'GET', `${href}/a-copy.bin`)).status).toBe(404);
+        });
     });
 });
